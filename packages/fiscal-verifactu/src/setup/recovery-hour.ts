@@ -41,13 +41,13 @@ export const promotionWords = {
   emergency: {
     en: {
       secondClockDo:
-        "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.",
+        "Open this page on a till or phone on the venue's network, sign in and press Try again, or let the box keep its time over the internet.",
       secondClockEnds:
         "It carries on by itself once the box keeps its time over the internet, while this page stays open.",
     },
     es: {
       secondClockDo:
-        "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
+        "Abre esta página en una caja o un móvil del local, identifícate y pulsa Volver a intentarlo, o deja que el servidor se ponga en hora por internet.",
       secondClockEnds:
         "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
     },
@@ -175,6 +175,15 @@ function focusFallen(): boolean {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
   return active === null || active === document.body;
+}
+/**
+ * Moves focus to the clock question as `focusNewScreen` does, and also from the heading of the page
+ * around the step, where the page put focus when the pressed button went.
+ */
+function focusNewAsk(host: HTMLElement, root: ShadowRoot, target: HTMLElement): void {
+  if ((host.getRootNode() as Document | ShadowRoot).activeElement instanceof HTMLHeadingElement)
+    target.focus();
+  else focusNewScreen(root, target);
 }
 const isEmergency = (context: Context) => isPromotion(context) && context.scenario === "emergency";
 interface Draft {
@@ -360,7 +369,7 @@ export class RecoveryHourEntry extends LitElement {
     const answered = isEmergency(this.context) && this.#wait.answered;
     const clockShown = `${this.#wait.problem?.kind}:${answered}`;
     const fallen = focusFallen();
-    if (heading && !this.#clockAsked) focusNewScreen(root, heading);
+    if (heading && !this.#clockAsked) focusNewAsk(this, root, heading);
     else if (answered && !this.#clockAnswered) focusNewScreen(root, compare);
     // A change that removed what had focus in the step hands focus to what the step now offers.
     else if (

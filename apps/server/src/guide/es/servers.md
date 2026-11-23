@@ -138,7 +138,7 @@ servidor de reserva se uniera a su principal actual.
 Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
 reserva antes de volver a elegir la copia de seguridad.
 
-En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige **Cambiar a este servidor**. **Cambiando a este servidor** comprueba entonces la hora de este
+En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige **Cambiar a este servidor**. La página **Cambiando a este servidor** comprueba entonces la hora de este
 servidor e inicia el local por sí sola; mantén la página abierta mientras se reinicia el servidor.
 Solo si este servidor no puede comprobar su hora por internet muestra **Comprueba la hora** con la
 hora de este servidor y la de este dispositivo. Si las dos son correctas, elige **Confirmar la
@@ -160,11 +160,10 @@ dispositivo se encuentra el cambio; identifícate y elige **Volver a intentarlo*
 ofrece su página de progreso. Si no se puede verificar la copia con el cambio guardado, para y
 conserva los datos de ambos servidores.
 
-Cuando el local se haya iniciado, **Este servidor lleva ahora el local** te pide que no reinicies el
-servidor principal antiguo: puede tener datos que este servidor todavía necesita, y cuando se vuelva
-a encender los enviará aquí y se retirará. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
-para él en la página Servidores de este servidor, en el panel. **Abrir la caja** te devuelve a la
-caja.
+Cuando el local se haya iniciado, **Este servidor lleva ahora el local** te pide que no restablezcas el
+servidor principal antiguo: puede tener datos que este servidor no tiene. Cuando se vuelva a
+encender, devuelve aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
+para él en la página Servidores de este servidor, en el panel.
 
 Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
 

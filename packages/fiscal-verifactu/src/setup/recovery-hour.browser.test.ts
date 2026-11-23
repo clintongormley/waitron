@@ -1713,7 +1713,7 @@ async function mountPromotion(
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
 const SWITCH_PAGE_DO =
-  "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.";
+  "Open this page on a till or phone on the venue's network, sign in and press Try again, or let the box keep its time over the internet.";
 const SWITCH_PAGE_ENDS =
   "It carries on by itself once the box keeps its time over the internet, while this page stays open.";
 
@@ -2093,7 +2093,7 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
   await el.updateComplete;
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
+      "Abre esta página en una caja o un móvil del local, identifícate y pulsa Volver a intentarlo, o deja que el servidor se ponga en hora por internet.",
     ),
   );
   // The emergency step has no title of its own: the page's progress names the start.
@@ -2854,7 +2854,6 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
   );
   await el.updateComplete;
   // The page's own progress says the time is being checked, so the step draws nothing meanwhile.
-  expect(statusLines(el)).toEqual([]);
   expect(text(el).trim()).toBe("");
   expect(el.shadowRoot!.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
   expect(text(el)).not.toContain("These details are correct.");
@@ -2882,7 +2881,7 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
   el.starting = true;
   await el.updateComplete;
   // The page says it is starting the venue; the step claims no check of its own meanwhile.
-  expect(statusLines(el)).toEqual([]);
+  expect(text(el).trim()).toBe("");
   el.clear();
   await el.updateComplete;
   expect(el.readOperation()).toBeNull();
@@ -2906,7 +2905,6 @@ it("a Spanish emergency switch leaves saying it is checking the box's time to th
   const el = await mountPromotion(prepare, "emergency", { locale: "es" });
   await vi.waitFor(() => expect(promotionActions(prepare)).toHaveLength(2));
   await el.updateComplete;
-  expect(statusLines(el)).toEqual([]);
   expect(text(el).trim()).toBe("");
 });
 it("a context change restarts an emergency switch's check, and the old answer is dropped", async () => {
@@ -2959,7 +2957,10 @@ it.each([
     const rows = detailRows(el, "clock-times");
     expect(rows.map(([label]) => label)).toEqual(labels);
     for (const [, value] of rows) expect(value).toMatch(zone);
-    expect(statusLines(el)).toEqual([]);
+    // The step announces only its question, never that it is checking.
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[role=status]")].map((p) => p.textContent!.trim()),
+    ).toEqual([lead]);
     expect(promotionSelects(prepare)).toEqual([]);
     await userEvent.click(button(el, "confirm-time"));
     await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
@@ -3179,6 +3180,29 @@ it.each([
     await vi.waitFor(() =>
       expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(selector)),
     );
+  },
+);
+it.each([
+  ["the page's heading, where the page put it", "h1", true],
+  ["a field on the page", "input", false],
+] as const)(
+  "on an emergency switch, with focus on %s, Check the time takes it when the clock asks: %s",
+  async (_where, tag, moves) => {
+    const { prepare, release } = emergencyPrepare(() => deviceOnly);
+    const el = await mountPromotion(prepare, "emergency");
+    const before = document.createElement(tag);
+    before.tabIndex = -1;
+    el.before(before);
+    before.focus();
+    release();
+    const heading = await vi.waitFor(() => {
+      const found = el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-heading]");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    await el.updateComplete;
+    expect(document.activeElement).toBe(moves ? el : before);
+    expect(el.shadowRoot!.activeElement).toBe(moves ? heading : null);
   },
 );
 it("on an emergency switch, focus moved elsewhere while Confirm the time is answered stays there", async () => {

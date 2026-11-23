@@ -1013,6 +1013,29 @@ it("Enter on Switch to this box moves focus to the clock step's heading when the
   expect(heading.textContent!.trim()).toBe("Check the time");
 });
 
+it("Enter on Switch to this box, with the clock's answer awaited, moves focus to Switching to this box, then to Check the time once the step asks", async () => {
+  const clock = gate();
+  const { el } = await mount({ noInternetTime: true, preparationGate: () => clock.opened });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").shadowRoot!.querySelector("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(q(el, "[data-test=step-switch]")).not.toBeNull());
+  expect(heading(el)).toBe(t("handover.emergency.switching_to"));
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
+  clock.open();
+  const entry = await vi.waitFor(() => {
+    const found = q<LitElement>(el, "vf-recovery-hour");
+    expect(found && q(found, "[data-test=confirm-time]")).not.toBeNull();
+    return found;
+  });
+  const clockHeading = q(entry, "[data-test=clock-heading]");
+  await vi.waitFor(() => {
+    expect(el.shadowRoot!.activeElement).toBe(entry);
+    expect(entry.shadowRoot!.activeElement).toBe(clockHeading);
+  });
+});
+
 it("an automatic start the box refuses for want of the passkey opens no prompt; Try again, focused, opens one", async () => {
   const get = stubPasskey();
   const { el, posts } = await mount({ proof: newProof(), proofLapsesAtActivate: true });
@@ -2050,7 +2073,7 @@ it("a switch at the venue address ignores a return to a sibling box", async () =
     await stopAndContinueLinks(
       "https://waitron.local/handover/emergency?back=https%3A%2F%2Fbox-b.waitron.local%2Ftill%2F",
     ),
-  ).toEqual({ stop: "/", proceed: "/" });
+  ).toEqual({ stop: "/", proceed: "https://waitron.local/till/" });
 });
 
 it.each([
@@ -2060,7 +2083,17 @@ it.each([
   "https://box-b.waitron.local/",
   "not a url",
 ])("a back on another site, or not https, is ignored: %s", async (back) => {
-  expect(await stopAndContinueLinks(spareSwitchPage(back))).toEqual({ stop: "/", proceed: "/" });
+  expect(await stopAndContinueLinks(spareSwitchPage(back))).toEqual({
+    stop: "/",
+    proceed: "https://box-b.waitron.local/till/",
+  });
+});
+
+it("opened with no till to go back to, the done page's Open the till opens this box's own till", async () => {
+  expect(await stopAndContinueLinks("https://box-b.waitron.local/handover/emergency")).toEqual({
+    stop: "/",
+    proceed: "https://box-b.waitron.local/till/",
+  });
 });
 
 async function declareAndReload(pageUrl: string) {
@@ -2103,7 +2136,7 @@ it("a back that was ignored is not carried into the operation's address", async 
   const { address, stop } = await declareAndReload(spareSwitchPage("https://evil.example/"));
   expect(address.pathname).toBe(`/handover/${saved.operationId}`);
   expect(address.search).toBe("");
-  expect(stop).toBe("/");
+  expect(stop).toBe("https://box-b.waitron.local/till/");
 });
 
 async function mainAnsweringRefusal(el: SetupHandoverScreen) {
@@ -4010,7 +4043,7 @@ const doneWords = {
   },
   "es-ES": {
     heading: "Este servidor lleva ahora el local",
-    warning: "¡No reinicies el servidor principal antiguo!",
+    warning: "¡No restablezcas el servidor principal antiguo!",
     oldBox:
       "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará a este servidor los datos pendientes y después se retirará.",
     afterwards: "Después, puedes elegir Borrar y retirar en la página Servidores del panel.",
@@ -4077,5 +4110,44 @@ it.each([
     const again = entry ? q(entry, "[data-test=compare]") : q(el, "[data-test=authenticate]");
     expect(line).toContain(again.textContent!.trim());
     expect(again.textContent!.trim()).toBe(t("handover.try_again"));
+  },
+);
+
+it.each([
+  [
+    "en-GB",
+    "The old main box answered. Open its Servers page, or switch it off and sign in again.",
+  ],
+  [
+    "es-ES",
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a identificarte.",
+  ],
+] as const)(
+  "on a switch reopened to finish it, the old main box answering the sign-in names the sign-in on screen (%s)",
+  async (locale, line) => {
+    setLocale(locale);
+    const { el: first } = await mount({ saved: true, refusal: "handover.source_still_answering" });
+    const api = first.api;
+    cleanupWidgets();
+    const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+      api,
+      operationId: saved.operationId,
+    });
+    await vi.waitFor(() => expect(q(el, '[name="handover-email"]')).not.toBeNull());
+    expect(heading(el)).toBe(t("handover.emergency.switching_heading"));
+    await passwordSignIn(el, signIn.email, signIn.password, signIn.totp);
+    await vi.waitFor(() => expect(q(el, "p a")?.textContent).toBe(t("handover.emergency.servers")));
+    expect(heading(el)).toBe(t("handover.emergency.switching_heading"));
+    const buttons = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>("wt-button"),
+    ];
+    // The page offers only the sign-in; no Check again or Try again is drawn.
+    expect(buttons.map((button) => button.textContent!.trim())).toEqual([
+      t("handover.emergency.change_email"),
+      t("handover.emergency.use_passkey"),
+      t("handover.emergency.sign_in_password"),
+    ]);
+    expect(buttons.every((button) => !button.disabled)).toBe(true);
+    expect(actions(el)).toBe(line);
   },
 );

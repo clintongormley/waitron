@@ -82,6 +82,12 @@ const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
   "handover.emergency.throttled",
   "handover.emergency.permission",
 ]);
+/** Focus is on nothing, or on the page itself, as when the focused control was removed. */
+function focusFallen(): boolean {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active === null || active === document.body;
+}
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
 const PROOF_REFUSALS = new Set(["password.invalid", "passkey.challenge_expired"]);
 class PasskeyNotUsed extends Error {}
@@ -992,7 +998,9 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "handover.source_still_answering")
       return this.#switching
         ? "handover.emergency.source_answered_try"
-        : "handover.emergency.source_answered";
+        : this.#declared && !this.copyPreview
+          ? "handover.emergency.source_answered_sign_in"
+          : "handover.emergency.source_answered";
     if (code === "handover.controlled_unresolved") return "handover.emergency.controlled";
     if (code === "handover.copy_predates_destination") return "handover.emergency.backup_too_old";
     if (code === "restore.archive_resource_limit") return "shell.restore.archive_resource_limit";
@@ -1029,6 +1037,7 @@ export class SetupHandoverScreen extends LitElement {
     const controller = this.#controller;
     this.operationId = operationId;
     this.declarationSaved = true;
+    void this.#focusHeading(() => this.isConnected && focusFallen());
     const back = this.#back;
     history.replaceState(
       null,
@@ -1427,7 +1436,6 @@ export class SetupHandoverScreen extends LitElement {
         ? "handover.emergency.followed"
         : "handover.emergency.copy";
   }
-  /** After Switch: the switch is saved, and what was declared folds behind Details. */
   /**
    * The sign-in: on a controlled handover email, password and code together; on an emergency switch
    * the email first, then how to sign in. `inline` adds the step's own button where the sign-in
@@ -1916,6 +1924,7 @@ export class SetupHandoverScreen extends LitElement {
   /** The switch has finished: what to leave alone, what to do afterwards, and the way to the till. */
   #donePage() {
     const servers = new URL("/servers", this.pageUrl).href;
+    const till = this.#back ?? new URL("/till/", this.pageUrl).href;
     const afterwards = t("handover.emergency.done_afterwards")
       .split(/(\{action\}|\{page\})/)
       .map((part) =>
@@ -1931,7 +1940,7 @@ export class SetupHandoverScreen extends LitElement {
         <p>${afterwards}</p>
       </section>
       <div class="choices">
-        <a class="button primary" data-test="open-till" href=${this.#leaveHref}
+        <a class="button primary" data-test="open-till" href=${till}
           >${t("handover.emergency.open_till")}</a
         >
       </div>`;

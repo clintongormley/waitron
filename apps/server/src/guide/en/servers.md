@@ -146,9 +146,9 @@ opening the address on another device finds the switch; sign in and choose **Try
 against the saved switch, stop and keep both boxes’ data intact.
 
 When the venue has started, **This box now runs the venue** says not to reset the old main box: it
-may hold data this box still needs, and when it is switched on again it sends that data here and
-stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
-box's Servers page in the dashboard. **Open the till** takes you back to the till.
+may hold data this box does not have. When it is switched on again, it returns its invoice records
+here by itself and stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
+box's Servers page in the dashboard.
 
 If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 

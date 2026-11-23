@@ -172,6 +172,8 @@ export const handoverEn = {
   "handover.emergency.keep_open_restart": "Keep this page open while this box restarts.",
   "handover.emergency.source_answered_try":
     "The old main box answered. Open its Servers page, or switch it off and press Try again.",
+  "handover.emergency.source_answered_sign_in":
+    "The old main box answered. Open its Servers page, or switch it off and sign in again.",
   "handover.emergency.done_heading": "This box now runs the venue",
   "handover.emergency.done_warning": "Do not reset the old main box!",
   "handover.emergency.done_old_box":
@@ -361,8 +363,10 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Mantén esta página abierta mientras se reinicia el servidor.",
   "handover.emergency.source_answered_try":
     "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y pulsa Volver a intentarlo.",
+  "handover.emergency.source_answered_sign_in":
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a identificarte.",
   "handover.emergency.done_heading": "Este servidor lleva ahora el local",
-  "handover.emergency.done_warning": "¡No reinicies el servidor principal antiguo!",
+  "handover.emergency.done_warning": "¡No restablezcas el servidor principal antiguo!",
   "handover.emergency.done_old_box":
     "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará a este servidor los datos pendientes y después se retirará.",
   "handover.emergency.done_afterwards": "Después, puedes elegir {action} en la {page} del panel.",
