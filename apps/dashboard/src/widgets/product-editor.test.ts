@@ -26,7 +26,7 @@ import type { InheritedValues } from "@waitron/shared";
 import { formatMoney } from "@waitron/shared";
 import { es } from "../i18n/strings.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/domain.js";
+import { allergenName, vatRateText } from "../i18n/domain.js";
 
 // The app registers these at startup; without them every icon in the editor — the "+" chip, both
 // chevrons, the drag grips, the row menus — renders EMPTY, and a suite that never draws the chrome
@@ -40,7 +40,7 @@ it.each([0, 150])(
   "keeps unreviewed allergens null when only a dietary label is saved (press %s ms)",
   async (delay) => {
     const el = await mountPricing({ ...saved, allergens: null, dietaryDeclarations: [] });
-    await openSection(el, "nutrition");
+    await openSection(el, "details");
     const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
     await picker.updateComplete;
     await userEvent.click(
@@ -206,23 +206,12 @@ it.each([false, true])("A647 starts consistent sections with variants=%s", async
     ),
   ];
   expect(folds.map((fold) => fold.dataset.section)).toEqual([
-    "selling",
-    "kitchen",
-    "descriptors",
-    "nutrition",
+    "details",
     "price",
     "variants",
     "modifiers",
   ]);
-  expect(folds.map((fold) => fold.open)).toEqual([
-    false,
-    true,
-    false,
-    false,
-    !hasVariants,
-    hasVariants,
-    false,
-  ]);
+  expect(folds.map((fold) => fold.open)).toEqual([false, !hasVariants, hasVariants, false]);
   expect(folds.every((fold) => fold.ruled)).toBe(true);
   for (const fold of folds) {
     await fold.updateComplete;
@@ -230,7 +219,7 @@ it.each([false, true])("A647 starts consistent sections with variants=%s", async
     expect(getComputedStyle(title).borderBottomWidth).toBe("1px");
   }
   await input(el, "name", "Draft coffee");
-  expect(folded(el, "selling").open).toBe(false);
+  expect(folded(el, "details").open).toBe(false);
   expect(folded(el, "price").open).toBe(!hasVariants);
 });
 
@@ -247,13 +236,13 @@ it("A647 keeps attached modifiers open and summarises their names when closed", 
   expect(fold.summary).toContain("Sauces");
 });
 
-it("A647 offers three visible ordering choices and only the selected explanation inside Selling", async () => {
+it("A647 offers three visible ordering choices and only the selected explanation inside Details", async () => {
   const before = currentLocale();
   setLocale("en-GB");
   try {
     const el = await mountPricing(saved);
-    expect(folded(el, "selling")).not.toBeNull();
-    await openSection(el, "selling");
+    expect(folded(el, "details")).not.toBeNull();
+    await openSection(el, "details");
     const choices =
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
         '[name="ordering"]',
@@ -277,35 +266,18 @@ it("A647 offers three visible ordering choices and only the selected explanation
   }
 });
 
-it("A647 paints the closed unavailable summary with the warning token", async () => {
-  const el = await mountPricing({ ...saved, available: false });
-  const selling = folded(el, "selling");
-  expect(selling).not.toBeNull();
-  expect(summaryOf(el, "selling")[0]).toEqual({
-    label: t("editor.available_label"),
-    value: t("product.unavailable_badge"),
-    warning: true,
-  });
-  el.style.setProperty("--wt-color-warning", "rgb(11, 12, 13)");
-  selling.open = false;
-  await selling.updateComplete;
-  const unavailable = selling.shadowRoot!.querySelector(".summary-warning");
-  expect(unavailable).not.toBeNull();
-  expect(unavailable!.textContent!.trim()).toBe(t("product.unavailable_badge"));
-  expect(getComputedStyle(unavailable!).color).toBe("rgb(11, 12, 13)");
-});
-
-it("names a product's sale and ordering on the Selling line, and a variant's sale alone", async () => {
-  const el = await mountPricing({ ...saved, available: true, ordering: "staff_only" });
-  expect(summaryOf(el, "selling")).toEqual([
-    { label: t("editor.available_label"), value: t("editor.available") },
-    { label: t("editor.ordered_on_own"), value: t("product.ordering_staff_only") },
-  ]);
+it("names a product's ordering on the Details line, and a variant's not at all", async () => {
+  const el = await mountPricing({ ...saved, available: false, ordering: "staff_only" });
+  const ordering = { label: t("editor.ordered_on_own"), value: t("product.ordering_staff_only") };
+  expect(summaryOf(el, "details").at(-1)).toEqual(ordering);
+  expect(summaryOf(el, "details").map(({ value }) => value)).not.toContain(
+    t("product.unavailable_badge"),
+  );
   cleanupWidgets();
   const variant = await mountVariant();
-  expect(summaryOf(variant, "selling")).toEqual([
-    { label: t("editor.available_label"), value: t("editor.available") },
-  ]);
+  expect(summaryOf(variant, "details").map(({ label }) => label)).not.toContain(
+    t("editor.ordered_on_own"),
+  );
 });
 
 async function input(el: ProductEditor, name: string, value: string) {
@@ -345,6 +317,17 @@ function folded(el: ProductEditor, name: string) {
 /** The named values a section's closed line shows. */
 function summaryOf(el: ProductEditor, name: string) {
   return folded(el, name).summaryFields;
+}
+/** The labels each group inside Details contributes to its closed line. */
+const DETAILS_PART_LABELS = {
+  kitchen: () => [t("editor.kitchen_name"), t("editor.summary_course")],
+  descriptors: () => [t("editor.customer_name"), t("editor.description")],
+  nutrition: () => [t("modifiers.allergens"), t("editor.nutrition.dietary")],
+};
+/** The named values one group contributes to the Details line, in the line's order. */
+function detailsPart(el: ProductEditor, part: keyof typeof DETAILS_PART_LABELS) {
+  const labels = DETAILS_PART_LABELS[part]();
+  return summaryOf(el, "details").filter(({ label }) => labels.includes(label));
 }
 async function openSection(el: ProductEditor, name: string) {
   const disclosure = section(el, name);
@@ -548,7 +531,7 @@ it.each([
 
 it("uses direct nutritional chips with an explicit None choice", async () => {
   const el = await mountPricing({ ...saved, allergens: {}, dietaryDeclarations: ["no_meat"] });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   expect(picker).not.toBeNull();
@@ -967,7 +950,7 @@ it("draws no unit chooser on a variant's page, whose unit is its product's", asy
   expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
 });
 
-it("renders the sections in the designed order, with the price above the VAT rate", async () => {
+it("renders the sections in the designed order, with VAT in Details", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: product,
@@ -975,38 +958,155 @@ it("renders the sections in the designed order, with the price above the VAT rat
     units: [unit],
     dineInVatRate: "10.00",
   });
+  el.style.setProperty("--wt-space-5", "24px");
   expect(
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".form > [data-section]")].map(
       (node) => node.dataset.section,
     ),
-  ).toEqual([
-    "categories",
-    "name",
-    "selling",
+  ).toEqual(["categories", "name", "available", "details", "price", "variants", "modifiers"]);
+  const groups = [
+    ...section(el, "details").querySelectorAll<HTMLFieldSetElement>("fieldset[data-group]"),
+  ];
+  expect(groups.map((group) => group.dataset.group)).toEqual([
     "kitchen",
-    "descriptors",
+    "menu",
     "nutrition",
-    "price",
-    "variants",
-    "modifiers",
+    "vat",
+    "ordering",
   ]);
-  const tax = el.shadowRoot!.querySelector("[data-test=dine-in-vat]")!;
-  const price = el.shadowRoot!.querySelector("[name=unit-price]")!;
-  expect(price.compareDocumentPosition(tax) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    groups.map((group) => group.querySelector(":scope > legend")!.textContent!.trim()),
+  ).toEqual([
+    t("editor.section_kitchen"),
+    t("editor.group_menu"),
+    t("editor.group_nutrition"),
+    t("product.vat"),
+    t("editor.ordered_on_own_group"),
+  ]);
+  const vat = groups.find((group) => group.dataset.group === "vat")!;
+  expect(vat.querySelector("[data-test=dine-in-vat]")).not.toBeNull();
   const pricing = section(el, "price");
+  expect(pricing.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(pricing.querySelector("wt-combobox")).toBeNull();
   expect(pricing.getAttribute("heading")).toBe(t("editor.pricing"));
   expect(parseFloat(getComputedStyle(pricing).borderTopWidth)).toBe(0);
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".form")!).rowGap).toBe("24px");
 });
 
-it("opens Kitchen while Descriptors and Nutritional info start collapsed", async () => {
+it("Details starts closed on an existing product and open on a new one", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: product,
     locales: ["en"],
     units: [unit],
   });
-  expect(section(el, "kitchen").open).toBe(true);
-  for (const name of ["descriptors", "nutrition"]) expect(section(el, name).open, name).toBe(false);
+  expect(section(el, "details").open).toBe(false);
+  cleanupWidgets();
+  const { el: created } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: null,
+    locales: ["en"],
+    units: [unit],
+  });
+  expect(section(created, "details").open).toBe(true);
+});
+
+it("Details closes again when the editor moves to another existing product", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+  });
+  await openSection(el, "details");
+  expect(section(el, "details").open).toBe(true);
+  el.value = { ...product, id: "product-b", name: "Tea" };
+  await el.updateComplete;
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(false);
+});
+
+it("Details opens again for a second new product", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: null,
+    locales: ["en"],
+    units: [unit],
+  });
+  const details = section(el, "details");
+  await details.updateComplete;
+  details.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await details.updateComplete;
+  expect(details.open).toBe(false);
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(true);
+});
+
+it.each([
+  "takeaway-tax",
+  "ordering",
+  "customer-name-en",
+  "description-en",
+  "kitchen-name",
+  "product-course",
+  "allergens",
+])("a refusal inside closed Details opens it and focuses the field: %s", async (name) => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    courses: [{ id: "course-1", name: "Starters" }],
+    takeawayVat: true,
+    vatRates: ["10.00", "21.00"],
+  });
+  expect(section(el, "details").open).toBe(false);
+  el.fieldErrors = { [name]: t("editor.field_rejected") };
+  await el.updateComplete;
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(true);
+  if (name === "allergens") {
+    const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+    await expect
+      .poll(() => picker.shadowRoot!.activeElement?.getAttribute("name"))
+      .toBe("allergens");
+  } else {
+    await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
+  }
+});
+
+it("a variant's page has no Ordering group and keeps Available under Name", async () => {
+  const el = await mountVariant();
+  const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".form > [data-section]")].map(
+    (node) => node.dataset.section,
+  );
+  expect(sections).toEqual(["categories", "name", "available", "details", "price"]);
+  expect(section(el, "available").querySelector("[name=available]")).not.toBeNull();
+  expect(section(el, "details").querySelector('fieldset[data-group="ordering"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector("[name=ordering]")).toBeNull();
+});
+
+it("with neither a dine-in rate nor takeaway VAT, Details has no VAT group", async () => {
+  const el = await mountPricing(saved, { dineInVatRate: "", takeawayVat: false });
+  expect(section(el, "details").querySelector('fieldset[data-group="vat"]')).toBeNull();
+  expect(summaryOf(el, "details").map(({ label }) => label)).not.toContain(
+    t("editor.takeaway_vat"),
+  );
+});
+
+it("the takeaway VAT appears in Details' line, not Pricing's", async () => {
+  const el = await mountPricing(
+    { ...saved, takeawayVatRate: "10.00" },
+    { takeawayVat: true, vatRates: ["10.00", "21.00"] },
+  );
+  const takeaway = { label: t("editor.takeaway_vat"), value: vatRateText("10.00") };
+  expect(summaryOf(el, "details")).toContainEqual(takeaway);
+  expect(summaryOf(el, "price")).not.toContainEqual(takeaway);
+  expect(summaryOf(el, "price").map(({ label }) => label)).toEqual([t("editor.base_price")]);
 });
 
 it("keeps the staff name, customer name, description and kitchen name independent", async () => {
@@ -1019,10 +1119,10 @@ it("keeps the staff name, customer name, description and kitchen name independen
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await input(el, "name", "Espresso");
-  await openSection(el, "descriptors");
+  await openSection(el, "details");
   await input(el, "customer-name-en", "Single espresso");
   await input(el, "description-en", "Dark roast");
-  await openSection(el, "kitchen");
+  await openSection(el, "details");
   await input(el, "kitchen-name", "BAR ESPRESSO");
   save(el);
   expect(submit).toHaveBeenCalledOnce();
@@ -1044,7 +1144,7 @@ it("drops a customer name left blank in every language rather than submitting em
   });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await openSection(el, "descriptors");
+  await openSection(el, "details");
   await input(el, "customer-name-en", "   ");
   save(el);
   expect(submit.mock.calls[0]![0].detail.value.customerName).toBeNull();
@@ -1222,9 +1322,9 @@ it("puts a refusal for a folded field under it, opening its section, until that 
   await edit(el);
   el.fieldErrors = { "description-en": t("editor.field_rejected") };
   await el.updateComplete;
-  await section(el, "descriptors").updateComplete;
+  await section(el, "details").updateComplete;
 
-  expect(section(el, "descriptors").open).toBe(true);
+  expect(section(el, "details").open).toBe(true);
   // The text box and the sentence describing it both live inside the shared text area.
   const area = el.shadowRoot!.querySelector("wt-textarea[name=description-en]")!;
   const description = area.shadowRoot!.querySelector("textarea")!;
@@ -1293,8 +1393,8 @@ it.each([["product-course", "courseId"]])(
     await edit(el);
     el.fieldErrors = { [name]: "That one is gone" };
     await el.updateComplete;
-    await section(el, "kitchen").updateComplete;
-    expect(section(el, "kitchen").open).toBe(true);
+    await section(el, "details").updateComplete;
+    expect(section(el, "details").open).toBe(true);
     // The dropdown's own button carries the marking, and the sentence it names is inside it.
     const box = combobox(el, name)!;
     await (box as unknown as { updateComplete: Promise<unknown> }).updateComplete;
@@ -1395,11 +1495,11 @@ it("opens the section holding a reported error, puts focus in the field and leav
     locales: ["en"],
     units: [unit],
   });
-  expect(section(el, "descriptors").open).toBe(false);
+  expect(section(el, "details").open).toBe(false);
   el.fieldErrors = { "customer-name-en": "That language is no longer enabled" };
   await el.updateComplete;
-  await section(el, "descriptors").updateComplete;
-  expect(section(el, "descriptors").open).toBe(true);
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(true);
   await expect
     .poll(() => el.shadowRoot!.activeElement?.getAttribute("name"))
     .toBe("customer-name-en");
@@ -1407,11 +1507,11 @@ it("opens the section holding a reported error, puts focus in the field and leav
   // would hide the field they just corrected. See the decision comment in wt-disclosure.
   el.fieldErrors = {};
   await el.updateComplete;
-  await section(el, "descriptors").updateComplete;
-  expect(section(el, "descriptors").open).toBe(true);
-  section(el, "descriptors").shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
-  await section(el, "descriptors").updateComplete;
-  expect(section(el, "descriptors").open).toBe(false);
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(true);
+  section(el, "details").shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await section(el, "details").updateComplete;
+  expect(section(el, "details").open).toBe(false);
 });
 
 it("retains a compact-picker allergen selection across an unrelated edit", async () => {
@@ -1421,7 +1521,7 @@ it("retains a compact-picker allergen selection across an unrelated edit", async
     locales: ["en"],
     units: [unit],
   });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   picker.dispatchEvent(
     new CustomEvent("wt-nutrition-change", {
@@ -1443,7 +1543,7 @@ it("restores explicit kinds when they are removed then re-added", async () => {
     locales: ["en"],
     units: [unit],
   });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   for (const allergens of [[], ["gluten:wheat", "gluten:barley"]]) {
     picker.dispatchEvent(
@@ -1466,7 +1566,7 @@ it("keeps stored kinds when another allergen is added", async () => {
     locales: ["en"],
     units: [unit],
   });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!.dispatchEvent(
     new CustomEvent("wt-nutrition-change", {
       detail: {
@@ -2879,7 +2979,7 @@ it("activates a nutritional chip with Enter without saving or closing the window
     submit = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
   el.addEventListener("wt-submit", submit);
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="allergen-eggs"]')!.focus();
@@ -2896,7 +2996,7 @@ it("saves a cereal clicked in the chips after the nutrition section is collapsed
   const el = await mountPricing({ ...saved, allergens: {} });
   const cancelled = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   await userEvent.click(
@@ -2908,12 +3008,12 @@ it("saves a cereal clicked in the chips after the nutrition section is collapsed
     picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="kind-gluten-wheat"]')!,
   );
   await el.updateComplete;
-  const fold = folded(el, "nutrition");
+  const fold = folded(el, "details");
   await fold.updateComplete;
   await userEvent.click(fold.shadowRoot!.querySelector<HTMLElement>("button.header")!);
   await fold.updateComplete;
   expect(fold.open).toBe(false);
-  expect(summaryOf(el, "nutrition")[0]!.value).toContain(allergenName("gluten"));
+  expect(detailsPart(el, "nutrition")[0]!.value).toContain(allergenName("gluten"));
   expect(cancelled).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
     true,
@@ -2928,7 +3028,7 @@ it("saves a cereal clicked in the chips after the nutrition section is collapsed
 });
 it("offers all six product dietary declarations without changing the saved set", async () => {
   const el = await mountPricing({ ...saved, dietaryDeclarations: ["vegan", "halal"] });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   expect(
@@ -3079,7 +3179,7 @@ it("saves course with a new product, without a separate routing event", async ()
   el.addEventListener("wt-set-product-course", routed);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await openSection(el, "kitchen");
+  await openSection(el, "details");
   await input(el, "name", "Omelette");
   await chooseOption(combobox(el, "product-course")!, "course-1");
   await el.updateComplete;
@@ -3120,7 +3220,7 @@ it("preselects the saved course", async () => {
       { id: "course-2", name: "Mains" },
     ],
   });
-  await openSection(el, "kitchen");
+  await openSection(el, "details");
   const course = combobox(el, "product-course")!;
   expect(course.value).toBe("course-1");
   expect(await shownIn(el, "product-course")).toBe("Starters");
@@ -3169,7 +3269,7 @@ it("sends the Available switch as available and leaves active as it was", async 
 
 /** Reads the three visible choices and the chosen explanation in Selling. */
 async function orderingTexts(el: ProductEditor): Promise<[string, string][]> {
-  await openSection(el, "selling");
+  await openSection(el, "details");
   const field = sharedField(el, "wt-combobox", "ordering");
   await field.updateComplete;
   const rows = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="radio"]')];
@@ -3194,7 +3294,7 @@ it("offers who may order the product on its own as three choices, the saved one 
     units: [unit],
   });
   const field = sharedField(el, "wt-combobox", "ordering");
-  expect(section(el, "selling").contains(field)).toBe(true);
+  expect(section(el, "details").contains(field)).toBe(true);
   expect(field.label).toBe(t("editor.ordered_on_own"));
   expect(field.options.map((option) => option.value)).toEqual([
     "public",
@@ -3220,7 +3320,7 @@ it("shows only the chosen ordering's explanation underneath the choices", async 
     locales: ["en"],
     units: [unit],
   });
-  await openSection(el, "selling");
+  await openSection(el, "details");
   const field = sharedField(el, "wt-combobox", "ordering");
   await field.updateComplete;
   expect(field.shadowRoot!.querySelector(".hint")!.textContent!.trim()).toBe(
@@ -3374,12 +3474,12 @@ it("summarises each collapsed section from its filled-in values", async () => {
     units: [unit],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(summaryOf(el, "kitchen")).toEqual([
+  expect(detailsPart(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: "BAR" },
     { label: t("editor.summary_course"), value: "Starters" },
   ]);
   // The image is not on the line: the photo sits beside Name.
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "EN: House coffee · ES: Café de la casa" },
     {
       label: t("editor.description"),
@@ -3387,7 +3487,7 @@ it("summarises each collapsed section from its filled-in values", async () => {
     },
   ]);
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
-  expect(summaryOf(el, "nutrition")).toEqual([
+  expect(detailsPart(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk") },
     {
       label: t("editor.nutrition.dietary"),
@@ -3407,14 +3507,14 @@ it("keeps stored regional names and descriptions separate when editing main-lang
     locales: ["en", "es"],
     units: [unit],
   });
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: t("modifiers.none_specified") },
     {
       label: t("editor.description"),
       value: t("modifiers.none_specified"),
     },
   ]);
-  await openSection(el, "descriptors");
+  await openSection(el, "details");
   expect(control<HTMLInputElement>(el, "customer-name-en").value).toBe("");
   expect(control<HTMLTextAreaElement>(el, "description-en").value).toBe("");
   const submit = vi.fn();
@@ -4186,7 +4286,7 @@ function firstOption(el: ProductEditor, name: string) {
   return combobox(el, name)!.options[0]!;
 }
 function inheritedNutrition(el: ProductEditor, name: string) {
-  const field = summaryOf(el, "nutrition")[name === "allergens" ? 0 : 1]!;
+  const field = detailsPart(el, "nutrition")[name === "allergens" ? 0 : 1]!;
   return field.placeholder ? `${field.label}: ${field.value}` : undefined;
 }
 
@@ -4612,7 +4712,7 @@ it.each([
 
 it("draws inherited nutritional values as quiet italic chips with read-only allergens", async () => {
   const el = await mountVariant();
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   el.style.setProperty("--wt-color-surface-lifted", "rgb(7, 8, 9)");
@@ -4974,7 +5074,7 @@ it("picks the course from a shared dropdown, with none as a chosen value and a r
         { id: "course-2", name: "Mains" },
       ],
     });
-    await openSection(el, "kitchen");
+    await openSection(el, "details");
     const course = sharedField(el, "wt-combobox", "product-course");
     expect(course).not.toBeNull();
     expect(course.label).toBe(t("product.course"));
@@ -5015,7 +5115,7 @@ async function mountCourses(value: ProductEditorDraft = { ...product, courseId: 
       { id: "course-2", name: "Mains" },
     ],
   });
-  await openSection(el, "kitchen");
+  await openSection(el, "details");
   return el;
 }
 /** Opens the course dropdown and clicks the row with this label, the way a person does. */
@@ -5100,7 +5200,7 @@ it("describes the product in a shared text area per language, the language in it
     locales: ["en", "es"],
     units: [unit],
   });
-  await openSection(el, "descriptors");
+  await openSection(el, "details");
   const english = sharedField(el, "wt-textarea", "description-en");
   const spanish = sharedField(el, "wt-textarea", "description-es");
   expect(english).not.toBeNull();
@@ -5391,6 +5491,8 @@ type Fold = HTMLElement & {
   updateComplete: Promise<unknown>;
 };
 const pricing = (el: ProductEditor) => section(el, "price") as unknown as Fold;
+const takeawayOnDetails = (el: ProductEditor) =>
+  summaryOf(el, "details").filter(({ label }) => label === t("editor.takeaway_vat"));
 const showInactiveLink = (el: ProductEditor) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-inactive]");
 const followsInDocument = (first: Element, second: Element) =>
@@ -5401,9 +5503,7 @@ it("keeps consecutive closed Product editor sections close enough to read as one
   const assertGap = (before: string, after: string) => {
     const first = folded(el, before);
     const next = folded(el, after);
-    const summary = first.shadowRoot!.querySelector(
-      before === "nutrition" ? ".summary-slot" : ".summary",
-    )!;
+    const summary = first.shadowRoot!.querySelector(".summary")!;
     const heading = next.shadowRoot!.querySelector(".heading")!;
     const textGap = heading.getBoundingClientRect().top - summary.getBoundingClientRect().bottom;
     expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -5412,16 +5512,16 @@ it("keeps consecutive closed Product editor sections close enough to read as one
     expect(textGap).toBeGreaterThanOrEqual(24);
     expect(textGap).toBeLessThanOrEqual(42);
   };
-  assertGap("descriptors", "nutrition");
-  assertGap("nutrition", "price");
+  assertGap("details", "price");
 });
 
-it("keeps normal section spacing when Descriptors opens", async () => {
+it("keeps normal section spacing when Details opens", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
-  await openSection(el, "descriptors");
-  const descriptors = folded(el, "descriptors").getBoundingClientRect();
-  const nutrition = folded(el, "nutrition").getBoundingClientRect();
-  expect(nutrition.top - descriptors.bottom).toBe(16);
+  el.style.setProperty("--wt-space-5", "24px");
+  await openSection(el, "details");
+  const details = folded(el, "details").getBoundingClientRect();
+  const price = folded(el, "price").getBoundingClientRect();
+  expect(price.top - details.bottom).toBe(24);
 });
 
 it("separates Add variant from the Modifiers heading", async () => {
@@ -5430,7 +5530,7 @@ it("separates Add variant from the Modifiers heading", async () => {
   const heading = section(el, "modifiers").shadowRoot!.querySelector(".heading")!;
   const gap = heading.getBoundingClientRect().top - add.getBoundingClientRect().bottom;
   expect(gap).toBeGreaterThanOrEqual(20);
-  expect(gap).toBeLessThanOrEqual(32);
+  expect(gap).toBeLessThanOrEqual(40);
 });
 
 it("names the offered lists and menus before saving a product unit change", async () => {
@@ -5498,7 +5598,7 @@ it("drops a unit-usage reply after the editor is reseeded for another product", 
   expect(el.shadowRoot!.querySelector("[data-test=unit-usage-warning]")).toBeNull();
 });
 
-it("draws Pricing with no box, headed like the editor's other open sections, the price above VAT", async () => {
+it("draws Pricing with no box, headed like the editor's other open sections, VAT in Details", async () => {
   const el = await mountPricing(saved);
   const section = pricing(el);
   expect(section.tagName).toBe("WT-DISCLOSURE");
@@ -5514,12 +5614,12 @@ it("draws Pricing with no box, headed like the editor's other open sections, the
     expect(getComputedStyle(heading)[property], property).toBe(
       getComputedStyle(modifiers)[property],
     );
-  const price = section.querySelector("[name=unit-price]")!;
-  const tax = section.querySelector("[data-test=dine-in-vat]")!;
-  expect(followsInDocument(price, tax)).toBe(true);
+  expect(section.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(section.querySelector("[data-test=dine-in-vat]")).toBeNull();
+  expect(folded(el, "details").querySelector("[data-test=dine-in-vat]")).not.toBeNull();
 });
 
-it("folds Pricing once the product has an active variant, its closed line the base price then VAT", async () => {
+it("folds Pricing once the product has an active variant, its closed line the base price", async () => {
   const el = await mountPricing({ ...saved, variants: [small, large] });
   const fold = pricing(el);
   expect(fold.tagName).toBe("WT-DISCLOSURE");
@@ -5531,36 +5631,32 @@ it("folds Pricing once the product has an active variant, its closed line the ba
       value: `${formatMoney("9.00", currentLocale())} ${t("editor.per_unit").replace("{unit}", "ea")}`,
     },
   ]);
-  const price = fold.querySelector("[name=unit-price]")!;
-  expect(followsInDocument(price, fold.querySelector("[data-test=dine-in-vat]")!)).toBe(true);
+  expect(fold.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(fold.querySelector("[data-test=dine-in-vat]")).toBeNull();
 });
 
-it("adds a takeaway VAT rate of its own to the closed Pricing line, and leaves an empty one out", async () => {
+it("adds a takeaway VAT rate of its own to the closed Details line, and leaves an empty one out", async () => {
   inLocale("en-GB");
   const el = await mountPricing(
     { ...saved, variants: [small], takeawayVatRate: "4.00" },
     { takeawayVat: true, vatRates: pickableRates },
   );
-  expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("editor.takeaway_vat"), value: "4%" },
-  ]);
+  expect(takeawayOnDetails(el)).toEqual([{ label: t("editor.takeaway_vat"), value: "4%" }]);
   el.value = { ...saved, id: "tea", variants: [small], takeawayVatRate: "" };
   await el.updateComplete;
-  expect(pricing(el).summaryFields.slice(1)).toEqual([]);
+  expect(takeawayOnDetails(el)).toEqual([]);
 });
 
-it("leaves a takeaway VAT rate the form does not offer off the closed Pricing line", async () => {
+it("leaves a takeaway VAT rate the form does not offer off the closed Details line", async () => {
   inLocale("en-GB");
   const el = await mountPricing(
     { ...saved, variants: [small], takeawayVatRate: "21.00" },
     { takeawayVat: true, vatRates: pickableRates },
   );
-  expect(pricing(el).summaryFields.slice(1)).toEqual([
-    { label: t("editor.takeaway_vat"), value: "21%" },
-  ]);
+  expect(takeawayOnDetails(el)).toEqual([{ label: t("editor.takeaway_vat"), value: "21%" }]);
   el.value = { ...saved, id: "tea", variants: [small], takeawayVatRate: "5.00" };
   await el.updateComplete;
-  expect(pricing(el).summaryFields.slice(1)).toEqual([]);
+  expect(takeawayOnDetails(el)).toEqual([]);
 });
 
 it.each([
@@ -5636,7 +5732,7 @@ it("starts Pricing closed on an unsaved product with variants and honours a late
   expect(pricing(el).open).toBe(true);
 });
 
-it.each(["unit-price", "takeaway-tax", "unit"])(
+it.each(["unit-price", "unit"])(
   "opens the folded Pricing section when the server refuses %s",
   async (name) => {
     const el = await mountPricing(
@@ -5764,18 +5860,14 @@ it("keeps focus on the only saved row after Archive so Keep remains reachable", 
   expect(table.shadowRoot!.querySelector("[data-test=restore-0]")).not.toBeNull();
 });
 
-it("draws a variant's page with Pricing open, the price above VAT, and no Variants section", async () => {
+it("draws a variant's page with Pricing open, VAT in Details, and no Variants section", async () => {
   const el = await mountVariant();
   const section = pricing(el);
   expect(section.tagName).toBe("WT-DISCLOSURE");
   expect(section.open).toBe(true);
   expect(section.getAttribute("heading")).toBe(t("editor.pricing"));
-  expect(
-    followsInDocument(
-      section.querySelector("[name=unit-price]")!,
-      section.querySelector("[data-test=dine-in-vat]")!,
-    ),
-  ).toBe(true);
+  expect(section.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(folded(el, "details").querySelector("[data-test=dine-in-vat]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[data-section="variants"]')).toBeNull();
 });
 
@@ -5834,7 +5926,7 @@ it("holds Save while the image picker is open", async () => {
 
 it("leaves Descriptors closed on a refused photo, says why beside it, and puts focus on the photo", async () => {
   const el = await mountWithPhoto();
-  expect(section(el, "descriptors").open).toBe(false);
+  expect(section(el, "details").open).toBe(false);
   el.fieldErrors = { image: "The photo is gone" };
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=image-error]")!.textContent!.trim()).toBe(
@@ -5843,7 +5935,7 @@ it("leaves Descriptors closed on a refused photo, says why beside it, and puts f
   await expect
     .poll(() => photoControl(el).shadowRoot!.activeElement?.getAttribute("data-test"))
     .toBe("choose-image");
-  expect(section(el, "descriptors").open).toBe(false);
+  expect(section(el, "details").open).toBe(false);
 });
 
 it("refuses a variant with no name on its row, and saves nothing", async () => {
@@ -6027,7 +6119,7 @@ it.each([
       courses: [{ id: "course-1", name: "Starters" }],
     });
     const none = t("modifiers.none_specified");
-    expect(summaryOf(el, "kitchen")).toEqual([
+    expect(detailsPart(el, "kitchen")).toEqual([
       { label: t("editor.kitchen_name"), value: shown.includes("kitchen") ? "BAR" : none },
       { label: t("editor.summary_course"), value: shown.includes("course") ? "Starters" : none },
     ]);
@@ -6037,26 +6129,31 @@ it.each([
 it.each([
   ["en-GB", "Prep station name: BAR · Course: Starters"],
   ["es-ES", "Nombre de estación de preparación: BAR · Curso: Starters"],
-] as const)("draws the Kitchen line's field names in bold, in %s", async (locale, line) => {
-  setLocale(locale);
-  try {
-    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-      open: true,
-      value: { ...product, courseId: "course-1" },
-      locales: ["en"],
-      units: [unit],
-      courses: [{ id: "course-1", name: "Starters" }],
-    });
-    const kitchen = folded(el, "kitchen");
-    kitchen.open = false;
-    await kitchen.updateComplete;
-    const summary = kitchen.shadowRoot!.querySelector(".summary")!;
-    expect(summary.textContent!.replace(/\s+/g, " ").trim()).toBe(line);
-    expect(summary.querySelectorAll(".summary-label")).toHaveLength(2);
-  } finally {
-    setLocale("es-ES");
-  }
-});
+] as const)(
+  "starts the Details line with the Kitchen fields, their names marked as names, in %s",
+  async (locale, line) => {
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: { ...product, courseId: "course-1" },
+        locales: ["en"],
+        units: [unit],
+        courses: [{ id: "course-1", name: "Starters" }],
+      });
+      const details = folded(el, "details");
+      details.open = false;
+      await details.updateComplete;
+      const summary = details.shadowRoot!.querySelector(".summary")!;
+      expect(summary.textContent!.replace(/\s+/g, " ").trim().startsWith(`${line} · `)).toBe(true);
+      expect(summary.querySelectorAll(".summary-label")).toHaveLength(
+        summaryOf(el, "details").length,
+      );
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
 
 it("rows each language's customer-facing name and description in the languages' order, a blank one as none specified", async () => {
   const mountWith = async (value: Partial<ProductEditorDraft>) =>
@@ -6073,17 +6170,17 @@ it("rows each language's customer-facing name and description in the languages' 
     description: { es: " ", en: "Seared" },
   });
   const none = t("modifiers.none_specified");
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "ES: Solomillo de ternera · EN: Beef tenderloin" },
     { label: t("editor.description"), value: `ES: ${none} · EN: Seared` },
   ]);
   el = await mountWith({ customerName: { es: " " }, description: { es: "Sellado" } });
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: none },
     { label: t("editor.description"), value: `ES: Sellado · EN: ${none}` },
   ]);
   el = await mountWith({ customerName: null, description: null });
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: none },
     { label: t("editor.description"), value: none },
   ]);
@@ -6101,14 +6198,14 @@ it("draws the Descriptors line as named values, only the field names marked as n
     locales: ["en", "es"],
     units: [unit],
   });
-  const descriptors = folded(el, "descriptors");
+  const descriptors = folded(el, "details");
   descriptors.open = false;
   await descriptors.updateComplete;
   expect(descriptors.shadowRoot!.querySelectorAll(".summary-row")).toHaveLength(0);
   const summary = descriptors.shadowRoot!.querySelector<HTMLElement>(".summary")!;
-  expect([...summary.querySelectorAll(".summary-label")].map((label) => label.textContent)).toEqual(
-    [`${t("editor.customer_name")}:`, `${t("editor.description")}:`],
-  );
+  expect(
+    [...summary.querySelectorAll(".summary-label")].map((label) => label.textContent).slice(2, 4),
+  ).toEqual([`${t("editor.customer_name")}:`, `${t("editor.description")}:`]);
   // The language codes are plain text: only the field names are marked.
   expect(summary.textContent).toContain("EN: ");
 });
@@ -6137,19 +6234,16 @@ const bare: ProductEditorDraft = {
   allergens: null,
   dietaryDeclarations: [],
 };
-/** Each folded line as a person reads it, with the values drawn as placeholders in brackets. */
-async function foldedLines(el: ProductEditor): Promise<Record<string, string>> {
-  const lines: Record<string, string> = {};
-  for (const name of ["kitchen", "descriptors", "nutrition"]) {
-    const fold = folded(el, name);
-    fold.open = false;
-    await fold.updateComplete;
-    const summary = fold.shadowRoot!.querySelector(".summary")!.cloneNode(true) as HTMLElement;
-    for (const value of summary.querySelectorAll(".summary-placeholder"))
-      value.textContent = `[${value.textContent}]`;
-    lines[name] = summary.textContent!.replace(/\s+/g, " ").trim();
-  }
-  return lines;
+/** The folded Details line as a person reads it, with the values drawn as placeholders in
+ * brackets. */
+async function foldedLine(el: ProductEditor): Promise<string> {
+  const fold = folded(el, "details");
+  fold.open = false;
+  await fold.updateComplete;
+  const summary = fold.shadowRoot!.querySelector(".summary")!.cloneNode(true) as HTMLElement;
+  for (const value of summary.querySelectorAll(".summary-placeholder"))
+    value.textContent = `[${value.textContent}]`;
+  return summary.textContent!.replace(/\s+/g, " ").trim();
 }
 
 it.each([
@@ -6167,7 +6261,7 @@ it.each([
   },
 ])(
   "names every field of a product with nothing set on its folded line, in $locale",
-  async ({ locale, ...expected }) => {
+  async ({ locale, kitchen, descriptors, nutrition }) => {
     setLocale(locale as "en-GB" | "es-ES");
     try {
       const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -6177,7 +6271,8 @@ it.each([
         units: [unit],
         courses: [{ id: "course-1", name: "Starters" }],
       });
-      expect(await foldedLines(el)).toEqual(expected);
+      const ordering = `${t("editor.ordered_on_own")}: ${t(`product.ordering_${bare.ordering}`)}`;
+      expect(await foldedLine(el)).toBe([kitchen, descriptors, nutrition, ordering].join(" · "));
     } finally {
       setLocale("es-ES");
     }
@@ -6189,7 +6284,7 @@ it.each<{ label: string; allergens: ProductEditorDraft["allergens"] }>([
   { label: "reviewed and empty", allergens: {} },
 ])("reads a product's allergens $label distinctly while closed and open", async ({ allergens }) => {
   const el = await mountPricing({ ...saved, allergens });
-  const closed = summaryOf(el, "nutrition")[0]!;
+  const closed = detailsPart(el, "nutrition")[0]!;
   expect(closed).toEqual({
     label: t("modifiers.allergens"),
     value: t(
@@ -6197,7 +6292,7 @@ it.each<{ label: string; allergens: ProductEditorDraft["allergens"] }>([
     ),
     ...(allergens === null ? { warning: true } : {}),
   });
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   expect(
@@ -6211,14 +6306,14 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
     allergens: { milk: {}, eggs: {} },
     dietaryDeclarations: ["vegetarian", "vegan"],
   });
-  expect(summaryOf(el, "nutrition")).toEqual([
+  expect(detailsPart(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: `${allergenName("milk")}, ${allergenName("eggs")}` },
     {
       label: t("editor.nutrition.dietary"),
       value: `${t("editor.diet.vegan")}, ${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}`,
     },
   ]);
-  await openSection(el, "nutrition");
+  await openSection(el, "details");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
   await picker.updateComplete;
   for (const choice of [
@@ -6237,15 +6332,15 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
 it("shows a variant's blank fields folded as its parent's values, as placeholders; its names stay its own", async () => {
   const el = await mountVariant({ ...glass, kitchenName: null, customerName: null });
   const none = t("modifiers.none_specified");
-  expect(summaryOf(el, "kitchen")).toEqual([
+  expect(detailsPart(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: none },
     { label: t("editor.summary_course"), value: "Mains", placeholder: true },
   ]);
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: none },
     { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
   ]);
-  expect(summaryOf(el, "nutrition")).toEqual([
+  expect(detailsPart(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk"), placeholder: true },
     {
       label: t("editor.nutrition.dietary"),
@@ -6253,11 +6348,13 @@ it("shows a variant's blank fields folded as its parent's values, as placeholder
       placeholder: true,
     },
   ]);
-  expect(await foldedLines(el)).toEqual({
-    kitchen: `${t("editor.kitchen_name")}: ${none} · ${t("editor.summary_course")}: [Mains]`,
-    descriptors: `${t("editor.customer_name")}: ${none} · ${t("editor.description")}: [EN: Roasted in house]`,
-    nutrition: `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
-  });
+  expect(await foldedLine(el)).toBe(
+    [
+      `${t("editor.kitchen_name")}: ${none} · ${t("editor.summary_course")}: [Mains]`,
+      `${t("editor.customer_name")}: ${none} · ${t("editor.description")}: [EN: Roasted in house]`,
+      `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
+    ].join(" · "),
+  );
 });
 
 it("shows folded what a variant will use where its parent has nothing set either", async () => {
@@ -6270,17 +6367,17 @@ it("shows folded what a variant will use where its parent has nothing set either
     allergens: {},
     dietaryDeclarations: [],
   });
-  expect(summaryOf(el, "kitchen")[1]).toEqual({
+  expect(detailsPart(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: none,
     placeholder: true,
   });
-  expect(summaryOf(el, "descriptors")[1]).toEqual({
+  expect(detailsPart(el, "descriptors")[1]).toEqual({
     label: t("editor.description"),
     value: none,
     placeholder: true,
   });
-  expect(summaryOf(el, "nutrition")).toEqual([
+  expect(detailsPart(el, "nutrition")).toEqual([
     {
       label: t("modifiers.allergens"),
       value: t("editor.nutrition.allergens_none"),
@@ -6294,18 +6391,18 @@ it("shows folded what a variant will use where its parent has nothing set either
   ]);
   cleanupWidgets();
   el = await mountWith({ allergens: null, courseId: "gone", description: { en: " " } });
-  expect(summaryOf(el, "nutrition")[0]).toEqual({
+  expect(detailsPart(el, "nutrition")[0]).toEqual({
     label: t("modifiers.allergens"),
     value: t("editor.allergens_unreviewed"),
     placeholder: true,
     warning: true,
   });
-  expect(summaryOf(el, "kitchen")[1]).toEqual({
+  expect(detailsPart(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: t("editor.missing_choice"),
     placeholder: true,
   });
-  expect(summaryOf(el, "descriptors")[1]!.value).toBe(none);
+  expect(detailsPart(el, "descriptors")[1]!.value).toBe(none);
 });
 
 it("shows a variant's own values folded as its own, never as placeholders", async () => {
@@ -6316,15 +6413,15 @@ it("shows a variant's own values folded as its own, never as placeholders", asyn
     allergens: { eggs: {} },
     dietaryDeclarations: ["vegan"],
   });
-  expect(summaryOf(el, "kitchen")).toEqual([
+  expect(detailsPart(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: "GLS" },
     { label: t("editor.summary_course"), value: "Desserts" },
   ]);
-  expect(summaryOf(el, "descriptors")).toEqual([
+  expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "EN: A glass" },
     { label: t("editor.description"), value: "EN: Iced" },
   ]);
-  expect(summaryOf(el, "nutrition")).toEqual([
+  expect(detailsPart(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("eggs") },
     {
       label: t("editor.nutrition.dietary"),
@@ -6341,7 +6438,7 @@ it("names a product's course missing from the course list as unavailable on the 
     units: [unit],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(summaryOf(el, "kitchen")[1]).toEqual({
+  expect(detailsPart(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: t("editor.missing_choice"),
   });
@@ -6350,14 +6447,16 @@ it("names a product's course missing from the course list as unavailable on the 
 it("draws a variant's inherited folded values in grey italic, its own upright", async () => {
   const el = await mountVariant();
   el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  const kitchen = folded(el, "kitchen");
-  kitchen.open = false;
-  await kitchen.updateComplete;
-  const inherited = kitchen.shadowRoot!.querySelector(".summary-placeholder")!;
+  const details = folded(el, "details");
+  details.open = false;
+  await details.updateComplete;
+  const inherited = details.shadowRoot!.querySelector(".summary-placeholder")!;
   expect(inherited.textContent).toBe("Mains");
   expect(getComputedStyle(inherited).fontStyle).toBe("italic");
   expect(getComputedStyle(inherited).color).toBe("rgb(7, 8, 9)");
-  expect(kitchen.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(1);
+  expect(details.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(
+    summaryOf(el, "details").filter((field) => "placeholder" in field && field.placeholder).length,
+  );
 });
 
 // --- Window widths (W70) ---
@@ -6562,13 +6661,13 @@ it("saves selected cereal and nut kinds and preserves them on a later diet edit"
   });
 });
 
-it("opens Nutrition for a refused allergen kind, marks the picker and allows retry", async () => {
+it("opens Details for a refused allergen kind, marks the picker and allows retry", async () => {
   const el = await mountPricing(saved);
   await edit(el);
   el.fieldErrors = { allergens: "Choose which cereals" };
   await el.updateComplete;
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-section="nutrition"]',
+    '[data-section="details"]',
   )!;
   await fold.updateComplete;
   expect(fold.open).toBe(true);
@@ -6614,7 +6713,7 @@ describe("help mode", () => {
   async function mountOpen(value: ProductEditorDraft = saved) {
     const el = await mountPricing(value, { courses: [{ id: "course-1", name: "Starters" }] });
     await openSection(el, "price");
-    await openSection(el, "kitchen");
+    await openSection(el, "details");
     return el;
   }
 
@@ -6834,7 +6933,7 @@ it("submits only entered regional product names and clearing a version restores 
     { ...saved, name: "chips", customerName: { en: "chips" } },
     { locales: ["en", "en-US", "es"] },
   );
-  await openSection(el, "descriptors");
+  await openSection(el, "details");
   const us = control<HTMLInputElement>(el, "customer-name-en-US");
   expect([us.value, us.placeholder]).toEqual(["", "chips"]);
   await input(el, "customer-name-en-US", "fries");
@@ -6849,7 +6948,7 @@ it("submits only entered regional product names and clearing a version restores 
     { ...saved, name: "chips", customerName: { en: "chips", "en-US": "fries" } },
     { locales: ["en", "en-US", "es"] },
   );
-  await openSection(edited, "descriptors");
+  await openSection(edited, "details");
   await input(edited, "customer-name-en-US", "");
   const cleared = vi.fn();
   edited.addEventListener("wt-submit", cleared);

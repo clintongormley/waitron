@@ -111,11 +111,16 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
-  kitchen: ["kitchen-name", "product-course"],
-  nutrition: ["allergens"],
-  descriptors: ["customer-name-", "description-"],
-  price: ["takeaway-tax", "unit", "unit-price"],
-  selling: ["ordering", "available"],
+  details: [
+    "kitchen-name",
+    "product-course",
+    "allergens",
+    "customer-name-",
+    "description-",
+    "takeaway-tax",
+    "ordering",
+  ],
+  price: ["unit", "unit-price"],
   modifiers: ["modifier"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -225,8 +230,9 @@ export class ProductEditor extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-3);
       }
-      .form {
-        gap: var(--wt-space-4);
+      .form,
+      .details {
+        gap: var(--wt-space-5);
       }
       wt-disclosure::part(section) {
         padding-block: 0;
@@ -255,16 +261,11 @@ export class ProductEditor extends LitElement {
         padding: 0;
         margin-block-end: var(--wt-space-3);
       }
-      .row,
-      .chips {
+      .row {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
-      }
-      wt-button.link::part(button) {
-        font-weight: var(--wt-font-weight-normal);
-        text-decoration: underline;
       }
       .error {
         color: var(--wt-color-danger);
@@ -286,10 +287,6 @@ export class ProductEditor extends LitElement {
         inline-size: fit-content;
         padding-inline-end: calc(var(--wt-help-badge-target) / 2);
       }
-      .notice {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-      }
       /* As tall as the product page's Change link, so the form below starts at the same height. */
       .category-path {
         display: flex;
@@ -299,12 +296,6 @@ export class ProductEditor extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         overflow-wrap: anywhere;
-      }
-      .badge {
-        padding: var(--wt-space-1) var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        font-size: var(--wt-font-size-sm);
       }
       th {
         font-weight: var(--wt-font-weight-bold);
@@ -409,6 +400,7 @@ export class ProductEditor extends LitElement {
   /** Whether the Pricing fold starts open: on a product never saved, whose price and VAT are still
    * being set. Read once per product, so a fold the person closes stays closed. */
   #pricingStartsOpen = false;
+  #detailsStartOpen = false;
   #variantsStartOpen = false;
   #modifiersStartOpen = false;
   private submitted = false;
@@ -489,6 +481,7 @@ export class ProductEditor extends LitElement {
       this.variantIndex = null;
       this.#pricingStartsOpen = !this.hasActiveVariant;
       this.#variantsStartOpen = this.hasActiveVariant;
+      this.#detailsStartOpen = this.value === null;
       this.#modifiersStartOpen = this.draft.modifiers.length > 0;
       this.#variantProblems = new Map();
       if (this.open && this.initialField === "image") this.#focusField = this.initialField;
@@ -555,7 +548,7 @@ export class ProductEditor extends LitElement {
     }
     if (name.startsWith("allergens")) {
       const section = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-        '[data-section="nutrition"]',
+        '[data-section="details"]',
       );
       await section?.updateComplete;
       const picker = this.shadowRoot?.querySelector("dashboard-product-nutrition-picker");
@@ -1084,27 +1077,19 @@ export class ProductEditor extends LitElement {
   }
 
   private renderKitchen() {
-    return html`<wt-disclosure
-      ruled
-      open
-      data-section="kitchen"
-      heading=${t("editor.section_kitchen")}
-      .summaryFields=${this.kitchenSummary()}
-      ?has-error=${this.sectionHasError("kitchen")}
-    >
-      <div class="group">
-        ${textField(
-          this.fields(),
-          "kitchen-name",
-          t("editor.kitchen_name"),
-          this.draft.kitchenName ?? "",
-          (value) => this.change("kitchenName", value),
-          false,
-          this.draft.name,
-        )}
-        ${this.renderCourse()}
-      </div>
-    </wt-disclosure>`;
+    return html`<fieldset class="group" data-group="kitchen">
+      <legend class="group-label">${t("editor.section_kitchen")}</legend>
+      ${textField(
+        this.fields(),
+        "kitchen-name",
+        t("editor.kitchen_name"),
+        this.draft.kitchenName ?? "",
+        (value) => this.change("kitchenName", value),
+        false,
+        this.draft.name,
+      )}
+      ${this.renderCourse()}
+    </fieldset>`;
   }
 
   /** What a routing dropdown's empty choice means: none, on a product of its own; the parent's
@@ -1270,42 +1255,35 @@ export class ProductEditor extends LitElement {
         ? languageText(hintSource, locale)
         : defaultLanguageHint(hintSource, locale, this.language);
     };
-    return html`<wt-disclosure
-      ruled
-      data-section="descriptors"
-      heading=${t("editor.section_descriptors")}
-      .summaryFields=${this.descriptorsSummary()}
-      ?has-error=${this.sectionHasError("descriptors")}
-    >
-      <div class="group">
-        ${optionalTextFields(
-          this.fields(),
-          "customer-name",
-          t("editor.customer_name"),
-          this.draft.customerName ?? {},
-          (value) => this.change("customerName", value),
-          this.draft.name,
-          this.language,
-        )}
-        ${this.locales.map((locale) => {
-          return html`<wt-textarea
-            name=${`description-${locale}`}
-            label=${`${t("editor.description")} (${locale})`}
-            placeholder=${descriptionHint(locale)}
-            .value=${languageText(this.draft.description ?? {}, locale)}
-            .disabled=${this.busy}
-            error=${this.error(`description-${locale}`)}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.change(
-                "description",
-                withLanguageText(this.draft.description ?? {}, locale, event.detail.value),
-              );
-            }}
-          ></wt-textarea>`;
-        })}
-      </div>
-    </wt-disclosure>`;
+    return html`<fieldset class="group" data-group="menu">
+      <legend class="group-label">${t("editor.group_menu")}</legend>
+      ${optionalTextFields(
+        this.fields(),
+        "customer-name",
+        t("editor.customer_name"),
+        this.draft.customerName ?? {},
+        (value) => this.change("customerName", value),
+        this.draft.name,
+        this.language,
+      )}
+      ${this.locales.map((locale) => {
+        return html`<wt-textarea
+          name=${`description-${locale}`}
+          label=${`${t("editor.description")} (${locale})`}
+          placeholder=${descriptionHint(locale)}
+          .value=${languageText(this.draft.description ?? {}, locale)}
+          .disabled=${this.busy}
+          error=${this.error(`description-${locale}`)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.change(
+              "description",
+              withLanguageText(this.draft.description ?? {}, locale, event.detail.value),
+            );
+          }}
+        ></wt-textarea>`;
+      })}
+    </fieldset>`;
   }
 
   private nutritionSummary(): SummaryField[] {
@@ -1345,13 +1323,8 @@ export class ProductEditor extends LitElement {
     const nutritionErrors = Object.fromEntries(
       Object.entries(this.#errorsNow).filter(([key]) => key.startsWith("allergens")),
     );
-    return html`<wt-disclosure
-      ruled
-      data-section="nutrition"
-      heading=${t("editor.section_nutrition")}
-      .summaryFields=${this.nutritionSummary()}
-      ?has-error=${this.sectionHasError("nutrition")}
-    >
+    return html`<fieldset class="group" data-group="nutrition">
+      <legend class="group-label">${t("editor.group_nutrition")}</legend>
       <dashboard-product-nutrition-picker
         name="allergens"
         .value=${{ allergens: this.draft.allergens, dietaryDeclarations: this.draft.dietaryDeclarations }}
@@ -1369,42 +1342,65 @@ export class ProductEditor extends LitElement {
           this.#draftScope?.changed();
         }}
       ></dashboard-product-nutrition-picker>
-    </wt-disclosure>`;
+    </fieldset>`;
   }
 
-  private sellingSummary(): SummaryField[] {
+  /** A variant is ordered as its product is, so it has no ordering of its own. */
+  private orderingSummary(): SummaryField[] {
+    if (this.inherited) return [];
     return [
-      this.draft.available
-        ? { label: t("editor.available_label"), value: t("editor.available") }
-        : {
-            label: t("editor.available_label"),
-            value: t("product.unavailable_badge"),
-            warning: true,
-          },
-      ...(this.inherited
-        ? []
-        : [
-            {
-              label: t("editor.ordered_on_own"),
-              value: t(`product.ordering_${this.draft.ordering}`),
-            },
-          ]),
+      { label: t("editor.ordered_on_own"), value: t(`product.ordering_${this.draft.ordering}`) },
     ];
   }
 
-  private renderSelling() {
-    return html`<wt-disclosure
-      ruled
-      data-section="selling"
-      heading=${t("editor.selling")}
-      .summaryFields=${this.sellingSummary()}
-      ?has-error=${this.sectionHasError("selling")}
-    >
-      <div class="group">
-        ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
-        ${this.inherited ? nothing : this.renderOrdering()}
-      </div>
-    </wt-disclosure>`;
+  private detailsSummary(): SummaryField[] {
+    return [
+      ...this.kitchenSummary(),
+      ...this.descriptorsSummary(),
+      ...this.nutritionSummary(),
+      ...this.takeawayVatSummary(),
+      ...this.orderingSummary(),
+    ];
+  }
+
+  private renderAvailable() {
+    return html`<div class="group" data-section="available">
+      ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
+    </div>`;
+  }
+
+  private renderDetails() {
+    return keyed(
+      this.generation,
+      html`<wt-disclosure
+        ruled
+        data-section="details"
+        heading=${t("editor.section_details")}
+        .summaryFields=${this.detailsSummary()}
+        ?open=${this.#detailsStartOpen}
+        ?has-error=${this.sectionHasError("details")}
+      >
+        <div class="group details">
+          ${this.renderKitchen()} ${this.renderDescriptors()} ${this.renderNutrition()}
+          ${
+            this.dineInVatRate || this.takeawayVat
+              ? html`<fieldset class="group" data-group="vat">
+                  <legend class="group-label">${t("product.vat")}</legend>
+                  ${this.renderTax()}
+                </fieldset>`
+              : nothing
+          }
+          ${
+            this.inherited
+              ? nothing
+              : html`<fieldset class="group" data-group="ordering">
+                  <legend class="group-label">${t("editor.ordered_on_own_group")}</legend>
+                  ${this.renderOrdering()}
+                </fieldset>`
+          }
+        </div>
+      </wt-disclosure>`,
+    );
   }
 
   private renderOrdering() {
@@ -1567,7 +1563,6 @@ export class ProductEditor extends LitElement {
             },
           ]
         : []),
-      ...this.takeawayVatSummary(),
     ];
   }
 
@@ -1627,8 +1622,7 @@ export class ProductEditor extends LitElement {
         this.unitUsageUnavailable
           ? html`<p data-test="unit-usage-unavailable">${t("editor.unit_usage_unavailable")}</p>`
           : nothing
-      }
-      ${this.renderTax()}`;
+      }`;
     return keyed(
       this.generation,
       html`<wt-disclosure
@@ -1966,10 +1960,8 @@ export class ProductEditor extends LitElement {
       >
         <div class="form">
           ${this.renderCategories()} ${keyed(this.generation, this.renderName(fields))}
-          ${keyed(this.generation, this.renderSelling())}
-          ${keyed(this.generation, this.renderKitchen())}
-          ${keyed(this.generation, this.renderDescriptors())}
-          ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
+          ${keyed(this.generation, this.renderAvailable())} ${this.renderDetails()}
+          ${this.renderPrice()}
           ${this.inherited ? nothing : html`${this.renderVariants()} ${this.renderModifiers()}`}
         </div>
         <wt-form-actions slot="footer" .error=${bottom}

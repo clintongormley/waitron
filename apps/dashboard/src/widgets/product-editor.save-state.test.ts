@@ -152,7 +152,7 @@ async function type(el: ProductEditor, name: string, value: string) {
   await el.updateComplete;
 }
 async function openSections(el: ProductEditor) {
-  for (const name of ["kitchen", "descriptors", "nutrition"]) {
+  for (const name of ["details"]) {
     const disclosure = el.shadowRoot!.querySelector<
       HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
     >(`[data-section="${name}"]`)!;

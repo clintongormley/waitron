@@ -239,11 +239,11 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       expect(field.value).toBe(state === "ordering" ? "staff_only" : "public");
       if (state === "ordering-refused") expect(field.error).not.toBe("");
       await field.updateComplete;
-      const selling = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-        '[data-section="selling"]',
+      const details = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        '[data-section="details"]',
       )!;
-      selling.open = true;
-      await selling.updateComplete;
+      details.open = true;
+      await details.updateComplete;
       const choices = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="radio"]')];
       expect(choices.map((choice) => choice.checkVisibility())).toEqual([true, true, true]);
       expect(field.shadowRoot!.querySelectorAll(".hint")).toHaveLength(1);
@@ -338,6 +338,11 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         HTMLElement & { error: string; updateComplete: Promise<unknown> }
       >("wt-combobox[name=takeaway-tax]")!;
       await field.updateComplete;
+      const details = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        '[data-section="details"]',
+      )!;
+      details.open = true;
+      await details.updateComplete;
       expect(field.checkVisibility()).toBe(true);
       expect(field.error !== "").toBe(state === "takeaway-refused");
       expect((field as unknown as { value: string }).value).toBe(
@@ -376,7 +381,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       expect(table.shadowRoot!.querySelector("[data-test=row-3] .inherited")).not.toBeNull();
     }
     if (state === "open-sections" || state === "variant-page") {
-      for (const name of ["kitchen", "descriptors", "nutrition"]) {
+      for (const name of ["details"]) {
         const disclosure = el.shadowRoot!.querySelector<
           HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
         >(`[data-section="${name}"]`)!;
@@ -479,7 +484,7 @@ describe.each(["light", "dark"] as const)("product editor with help on (%s)", (t
       },
       theme,
     );
-    for (const section of ["price", "kitchen"]) {
+    for (const section of ["price", "details"]) {
       const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
         `wt-disclosure[data-section="${section}"]`,
       )!;

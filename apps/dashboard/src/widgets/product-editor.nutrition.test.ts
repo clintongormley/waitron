@@ -2,17 +2,20 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 import type { ProductNutritionPicker } from "./product-nutrition-picker.js";
 
-/** The named values a section's closed line shows. */
-function summaryOf(el: ProductEditor, name: string) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    `wt-disclosure[data-section="${name}"]`,
-  )!.summaryFields;
+/** The allergen and dietary values on the closed Details line. */
+function nutritionSummary(el: ProductEditor) {
+  const labels = [t("modifiers.allergens"), t("editor.nutrition.dietary")];
+  return el
+    .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+      'wt-disclosure[data-section="details"]',
+    )!
+    .summaryFields.filter(({ label }) => labels.includes(label));
 }
 
 registerIcons(DASHBOARD_ICONS);
@@ -64,7 +67,7 @@ async function mount(value: ProductEditorDraft = product) {
     locales: ["en"],
   });
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-section="nutrition"]',
+    '[data-section="details"]',
   )!;
   await fold.updateComplete;
   const submit = vi.fn();
@@ -73,7 +76,7 @@ async function mount(value: ProductEditorDraft = product) {
 }
 async function open(el: ProductEditor) {
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    '[data-section="nutrition"]',
+    '[data-section="details"]',
   )!;
   if (!fold.open) {
     await userEvent.click(fold.shadowRoot!.querySelector("button")!);
@@ -204,7 +207,7 @@ it.each<{ allergens: ProductEditorDraft["allergens"]; want: string }>([
   },
 ])("nutrition closed summary distinguishes $want", async ({ allergens, want }) => {
   const { el } = await mount({ ...product, allergens });
-  const fields = summaryOf(el, "nutrition");
+  const fields = nutritionSummary(el);
   expect(fields.map(({ label, value }) => `${label}: ${value}`).join(" · ")).toBe(want);
   expect(fields[0]!.warning ?? false).toBe(allergens === null);
 });
@@ -216,7 +219,7 @@ it("nutrition summary lists chosen diets before implied ones, as plain text, and
     inherited: parent,
     dietaryDeclarations: ["vegan", "halal"],
   });
-  const [allergens, dietary] = summaryOf(el, "nutrition");
+  const [allergens, dietary] = nutritionSummary(el);
   expect(allergens!.placeholder).toBe(true);
   expect(dietary).toEqual({
     label: "Dietary",
