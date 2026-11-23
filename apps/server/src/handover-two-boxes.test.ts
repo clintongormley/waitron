@@ -3,6 +3,7 @@ import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { TLSSocket } from "node:tls";
+import { unzipSync } from "fflate";
 import { eq, sql } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,16 +11,24 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   devices,
   insertReservedNodeTx,
+  liveBackupQuery,
   nodes,
   readNodeMembership,
   readTaxpayer,
   openVenueDatabase,
   readDeploymentEnvironment,
+  recordActivity,
   withTransaction,
   type DeploymentEnvironment,
   writeNodeMembership,
 } from "@waitron/db";
-import { seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedKitchenStation,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
+import { seedFiredOrder } from "@waitron/reporting/test/fixtures.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
 import { endorseKey, routableServers } from "@waitron/membership";
@@ -38,6 +47,7 @@ import {
 } from "./handover-acceptance.js";
 import { captureFinalCopy, finalCopyPath } from "./handover-capture.js";
 import { compareFinalCopy } from "./handover-compare.js";
+import { latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { receivedCopyPath } from "./handover-destination-duty.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
@@ -56,6 +66,9 @@ import { FRESH, type RecoveryState } from "./recovery-state.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
 import { ASK_AFTER_REFUSAL_MS, startResetOrderDuty } from "./reset-order-duty.js";
 import { ALL_MODULES } from "./modules.js";
+import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
+import { sinceRule } from "./old-box-data-since.js";
+import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { listServers, removeStandby } from "./membership-removal.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -68,6 +81,7 @@ import { knownHandoverSuccessor, recordSupersededAtStart } from "./start-peer-ch
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fiscalRows } from "./testing/fiscal-rows.js";
+import { row, sheetNamed } from "./testing/xlsx-rows.js";
 import {
   boxRequest,
   fiscalRowsOf,
@@ -560,6 +574,7 @@ async function runOldBoxDuty(
     restart: () => void;
     fetch?: typeof fetch;
     sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+    returnPass?: () => Promise<unknown>;
     endName: string;
   },
 ) {
@@ -580,7 +595,7 @@ async function runOldBoxDuty(
     modules: boxes.main.modules,
     stateDir: mainState,
     venueDir: dirname(mainBox.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file),
-    returnPass: () => oldBoxReturnPass(boxes, newMain),
+    returnPass: options.returnPass ?? (() => oldBoxReturnPass(boxes, newMain)),
     fetch:
       options.fetch ??
       (((url: string, init: RequestInit) =>
@@ -611,7 +626,12 @@ async function runOldBoxDuty(
     clearTimeout(deadline);
     await duty.stop();
   }
-  return { logged, answer: duty.answer() };
+  return {
+    logged,
+    answer: duty.answer(),
+    mainHoldings: duty.mainHoldings(),
+    mainCopy: duty.mainCopy(),
+  };
 }
 
 /**
@@ -1358,6 +1378,178 @@ describe("a confirmed return after an emergency switch, then Wipe and remove", (
       expect((await readNodeMode(resetBox.node, rejoined.spareId)).mode).toBe("mirror");
       expect(await readDeploymentEnvironment(resetBox.db)).toBe("production");
     } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+});
+
+describe("an emergency switch whose return cannot complete, then Wipe and remove accepting the loss", () => {
+  it("the old box's page lists what the copy lacks, and the loss order sets its databases aside and raises the alert", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    let clashingRead: { mockRestore(): void } | undefined;
+    try {
+      const boxes = await joined("production");
+      const { mainId, spareId } = boxes;
+      const { b, modules } = await emergencySwitch(boxes, waitUntil, opened);
+      const copyLatest = await latestChangeAtMsFromMaxima(liveBackupQuery(b.venue));
+      expect(copyLatest).not.toBeNull();
+      const copyAt = copyLatest!;
+
+      // On the old box, after the copy: a sale, an order with a line sent two minutes after the
+      // copy's latest change, and two sign-ins, one after that and one more than ten minutes before.
+      vi.advanceTimersByTime(60_000);
+      const afterCopy = await saleOn(mainBox.db, mainId);
+      const { deviceId } = await seedDevice(mainBox.db);
+      const stationId = await seedKitchenStation(mainBox.db, { name: "Kitchen", isDefault: false });
+      const { orderId } = await seedFiredOrder(
+        mainBox.db,
+        { deviceId, nodeId: asNodeId(mainId), stationId },
+        { orderNumber: 4242, ageMinutes: 0 },
+      );
+      const sentAt = new Date(copyAt + 2 * 60_000).toISOString();
+      await mainBox.db.run(
+        sql`update working_order_lines set sent_at = ${sentAt} where working_order_id = ${orderId}`,
+      );
+      const LATE_SUBJECT = "11111111-1111-4111-8111-111111111111";
+      const EARLY_SUBJECT = "22222222-2222-4222-8222-222222222222";
+      for (const [subjectId, atMs] of [
+        [LATE_SUBJECT, copyAt + 3 * 60_000],
+        [EARLY_SUBJECT, copyAt - 11 * 60_000],
+      ] as const)
+        await withTransaction(mainBox.db, (tx) =>
+          recordActivity(tx, {
+            kind: "dashboard.signed_in",
+            subjectId,
+            personId: null,
+            data: { method: "password" },
+            at: new Date(atMs),
+          }),
+        );
+
+      const { newMain, serversRequest } = await oldBoxBackRestricted(boxes, b, modules);
+      const listed = async () =>
+        (await listServers(b.venue, b.node, spareId)).nodes.find((n) => n.nodeId === mainId);
+      expect(await listed()).toMatchObject({
+        returnOutstanding: true,
+        canReset: false,
+        canWipeWithLoss: true,
+      });
+
+      // The return cannot complete: the old box sends its pre-copy record changed, so it clashes.
+      const seat = boxes.main.modules.find((m) => m.handover?.returnRecords !== undefined)!
+        .handover!.returnRecords!;
+      const realRead = seat.read.bind(seat);
+      const read = vi.spyOn(seat, "read").mockImplementation(async (db, nodeId) => {
+        const chains = await realRead(db, nodeId);
+        const [preCopy] = (chains[0] as unknown as { records: Array<{ offset_minutos: number }> })
+          .records;
+        preCopy!.offset_minutos = preCopy!.offset_minutos === 0 ? 60 : 0;
+        return chains;
+      });
+      clashingRead = read;
+      expect(await oldBoxReturnPass(boxes, newMain)).toBe("record-clash");
+      expect(await listed()).toMatchObject({ returnOutstanding: true, canWipeWithLoss: true });
+
+      // The duty runs until its first answer, which orders nothing.
+      let firstAnswer!: () => void;
+      const answered = new Promise<void>((resolve) => (firstAnswer = resolve));
+      const heard = await runOldBoxDuty(boxes, newMain, {
+        end: answered,
+        restart: () => {
+          throw new Error("no order yet");
+        },
+        endName: "answered",
+        sleep: async (_ms, signal) => {
+          firstAnswer();
+          await new Promise((resolve) => signal.addEventListener("abort", resolve));
+        },
+      });
+      expect(heard.answer).toMatchObject({ order: null });
+      expect(heard.mainCopy).toEqual({ lastChangeAtMs: copyAt });
+      expect(heard.mainHoldings).not.toBeNull();
+
+      // The download as the old box's page makes it.
+      const since = await sinceRule(mainBox.db, heard.mainCopy);
+      expect(since).toEqual({ kind: "copy", fromMs: copyAt - 10 * 60_000 });
+      const files = unzipSync(
+        await buildOldBoxWorkbook({
+          db: mainBox.db,
+          modules: boxes.main.modules,
+          mainHoldings: heard.mainHoldings,
+          madeAt: new Date(),
+          language: "en",
+          since,
+        }),
+      );
+      const words = OLD_BOX_DATA_WORDS.en;
+      const tab = (name: string) => sheetNamed(files, name)!;
+      const dataRows = (xml: string) => {
+        const rows: string[][] = [];
+        for (let n = 3; row(xml, n).length > 0; n++) rows.push(row(xml, n));
+        return rows;
+      };
+      const invoices = dataRows(tab(words.invoiceSheet));
+      expect(invoices).toHaveLength(1);
+      expect(invoices[0]).toContain(afterCopy.record.num_serie_factura);
+      const cutoffMinute = `${new Date(copyAt - 10 * 60_000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+      for (const name of [
+        words.ordersSheet,
+        words.paymentsSheet,
+        words.hoursSheet,
+        words.activitySheet,
+      ])
+        expect(row(tab(name), 1), name).toEqual([
+          words.sinceCopyIntro.replace("{time}", cutoffMinute),
+        ]);
+      expect(dataRows(tab(words.ordersSheet))).toEqual([expect.arrayContaining(["4242", sentAt])]);
+      const activity = dataRows(tab(words.activitySheet)).flat();
+      expect(activity).toContain(LATE_SUBJECT);
+      expect(activity).not.toContain(EARLY_SUBJECT);
+
+      // Wipe and remove, accepting the loss.
+      const ordered = await serversRequest(`/management-api/servers/${mainId}/reset`, {
+        acceptLoss: true,
+      });
+      expect(ordered.status, JSON.stringify(ordered.body)).toBe(200);
+      expect(ordered.body).toMatchObject({ acceptLoss: true });
+      const { orderId: resetOrderId } = ordered.body as { orderId: string };
+      expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
+        "return_abandoned",
+      );
+
+      // The duty runs until it asks for a restart; its extra return pass still clashes.
+      const passes: unknown[] = [];
+      let restartAsked!: () => void;
+      const restarted = new Promise<void>((resolve) => (restartAsked = resolve));
+      await runOldBoxDuty(boxes, newMain, {
+        end: restarted,
+        restart: () => restartAsked(),
+        endName: "asked for a restart",
+        returnPass: async () => passes.push(await oldBoxReturnPass(boxes, newMain)),
+      });
+      expect(passes).toEqual(["record-clash"]);
+      expect(read).toHaveBeenCalled();
+      expect(JSON.parse(await readFile(join(mainState, REPLACED_RESET_FILE), "utf8"))).toEqual({
+        phase: "wiping",
+        setAside: true,
+      });
+      const chart = (await readNodeMembership(b.venue))!.body;
+      expect(chart.nodes.some((n) => n.nodeId === mainId)).toBe(false);
+      expect(chart.revoked).toContain(mainId);
+      // The post-copy record is still missing here, so the alert is raised, naming the order.
+      expect(
+        b.venue
+          .all<{ params: string }>(
+            sql`select params from incidents where code = 'chain.set_aside_on_reset'`,
+          )
+          .map((incident) => JSON.parse(incident.params) as unknown),
+      ).toEqual([expect.objectContaining({ orderId: resetOrderId })]);
+    } finally {
+      clashingRead?.mockRestore();
       for (const store of opened) await store.close();
     }
   }, 120_000);
