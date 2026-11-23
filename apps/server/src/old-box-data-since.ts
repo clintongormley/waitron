@@ -22,7 +22,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
+import { LATEST_CHANGE_COLUMNS, latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
 import type { HeardCopy } from "./old-box-holdings.js";
 
 // Text order is time order here only while every writer of these columns stores `toISOString()`'s spelling.
@@ -140,9 +140,12 @@ export interface OrderRow {
   servedAt: string | null;
 }
 
+const ORDER_TIMES = LATEST_CHANGE_COLUMNS.filter((column) => column.table === workingOrders);
+const LINE_TIMES = LATEST_CHANGE_COLUMNS.filter((column) => column.table === workingOrderLines);
+
 /**
- * Every line of each order opened, settled or collected from the rule's start, or with a line sent
- * or served from it (the times the emergency switch's latest-change read takes); reads only.
+ * Every line of each order with one of the emergency switch's latest-change times (opened,
+ * settled or collected, or a line sent or served) from the rule's start; reads only.
  */
 export async function readOrdersSince(db: Database, rule: SinceRule): Promise<OrderRow[]> {
   const from = rule.kind === "all" ? null : new Date(rule.fromMs).toISOString();
@@ -169,17 +172,13 @@ export async function readOrdersSince(db: Database, rule: SinceRule): Promise<Or
       from === null
         ? undefined
         : or(
-            gte(workingOrders.openedAt, from),
-            gte(workingOrders.settledAt, from),
-            gte(workingOrders.collectedAt, from),
+            ...ORDER_TIMES.map((column) => gte(column, from)),
             inArray(
               workingOrders.id,
               db
                 .select({ id: workingOrderLines.workingOrderId })
                 .from(workingOrderLines)
-                .where(
-                  or(gte(workingOrderLines.sentAt, from), gte(workingOrderLines.servedAt, from)),
-                ),
+                .where(or(...LINE_TIMES.map((column) => gte(column, from)))),
             ),
           ),
     )
