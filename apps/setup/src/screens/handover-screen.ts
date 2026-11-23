@@ -19,6 +19,8 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import {
+  autofillUsername,
+  autofillUsernameStyles,
   baseStyles,
   pageTitleStyles,
   focusFirstInvalid,
@@ -100,6 +102,7 @@ type Unlock = "prompt" | "ask" | "none";
 export class SetupHandoverScreen extends LitElement {
   static override styles = [
     baseStyles,
+    autofillUsernameStyles,
     pageTitleStyles,
     formMessageStyles,
     css`
@@ -226,15 +229,6 @@ export class SetupHandoverScreen extends LitElement {
       a,
       summary {
         color: var(--wt-color-primary-text);
-      }
-      .autofill-username {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        border: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
       }
     `,
   ];
@@ -1500,19 +1494,7 @@ export class SetupHandoverScreen extends LitElement {
           >
         </p>`
       : field("email", "handover.email");
-    // Tells a password manager whose saved login the password field wants.
-    const username = this.#emailValid
-      ? html`<input
-          class="autofill-username"
-          name="username"
-          type="email"
-          autocomplete="username"
-          .value=${this.email}
-          tabindex="-1"
-          aria-hidden="true"
-          readonly
-        />`
-      : nothing;
+    const username = this.#emailValid ? autofillUsername(this.email) : nothing;
     const password = html`${username}${field("password", "handover.password")}${field("code", "handover.code")}`;
     if (this.#choosesOnly)
       return html`${this.usePasskey && !this.#emailValid ? nothing : email}

@@ -122,6 +122,7 @@ export { UndoHistory } from "./history.js";
 export { modalOpen, surfaceOutside, underModal } from "./modal-layer.js";
 export { inInertTree, renderedParent } from "./tabbable.js";
 export { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
+export { autofillUsername, autofillUsernameStyles } from "./autofill-username.js";
 export { FormFeedback, bottomMessage } from "./form-feedback.js";
 export {
   ContentLanguageController,

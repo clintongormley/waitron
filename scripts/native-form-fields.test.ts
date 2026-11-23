@@ -43,7 +43,7 @@ const EXEMPT_FILES = new Set([
 /** Fields that are not fields: the list shrinks; it does not grow. */
 const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = [
   {
-    file: "apps/dashboard/src/widgets/autofill-username.ts",
+    file: "packages/ui/src/autofill-username.ts",
     lines: 1,
     reason: "hidden username input for the browser's password manager",
   },

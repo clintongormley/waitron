@@ -13,6 +13,8 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import {
+  autofillUsername,
+  autofillUsernameStyles,
   focusFirstInvalid,
   formMessage,
   formMessageStyles,
@@ -29,7 +31,6 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
 import type { DashboardApi, PasskeyOptions } from "../api/client.js";
-import { autofillUsername, autofillUsernameStyles } from "../widgets/autofill-username.js";
 import { signalUnknownPasskey } from "../passkey-signals.js";
 import { preparePermissionReturn } from "../permission-continuation.js";
 import {
