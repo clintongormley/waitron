@@ -328,7 +328,13 @@ describe("a box holding a handover restriction starts restricted", () => {
         method,
         headers: { cookie: venue.managerCookie, origin: "https://dashboard.example" },
       });
-      expect({ path, status: response.status }).toEqual({ path, status: 404 });
+      if (path.startsWith("/management-api/")) {
+        expect({ path, status: response.status, body: await response.json() }).toEqual({
+          path,
+          status: 503,
+          body: { error: { code: "handover.stepping_down", params: {} } },
+        });
+      } else expect({ path, status: response.status }).toEqual({ path, status: 404 });
     }
   }, 60_000);
 
@@ -975,7 +981,10 @@ describe("a full start's stepdown, through its test seam", () => {
         "/management-api/handover",
         handoverRequest(cookie),
       );
-      expect(post.status).toBe(404);
+      expect(post).toEqual({
+        status: 503,
+        body: { error: { code: "handover.stepping_down", params: {} } },
+      });
     }, 90_000);
 
     it("a stepdown whose write fails restarts the box as a normal one, whose start leaves it `abandoned`", async () => {

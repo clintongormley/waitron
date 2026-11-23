@@ -1118,7 +1118,8 @@ describe("login-screen", () => {
 
   it("shows an error key when login is rejected", async () => {
     const api = stubApi({ login: vi.fn().mockRejectedValue({ code: "password.invalid" }) });
-    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const reload = vi.fn();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
     await el.updateComplete;
     await openPassword(el);
     (el as unknown as { password: string }).password = "wrong";
@@ -1132,6 +1133,7 @@ describe("login-screen", () => {
     expect(
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!.error,
     ).toBe("");
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it("reads the email first, then the password chosen as another way", async () => {
@@ -4326,4 +4328,73 @@ it("A403 offers passkey enrollment without asking for a name", async () => {
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=setup-passkey]")!
       .disabled,
   ).toBe(false);
+});
+
+describe("login-screen: a box that no longer runs the venue", () => {
+  const steppingDown = () => vi.fn().mockRejectedValue({ code: "handover.stepping_down" });
+
+  it("reloads once, showing no refusal, when a password sign-in is refused", async () => {
+    const reload = vi.fn();
+    const api = stubApi({ login: steppingDown() });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
+    await flush(el);
+    await openPassword(el);
+    input(el, "password", "correct horse battery");
+    click(el, "submit");
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("reloads once, showing no refusal, when a passkey sign-in is refused", async () => {
+    const reload = vi.fn();
+    const api = stubApi({ passkeyAuthOptions: steppingDown() });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
+    await continueWithEmail(el);
+    click(el, "passkey-login");
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("reloads once, showing no refusal, when a Google start is refused", async () => {
+    const reload = vi.fn();
+    const navigate = vi.fn();
+    const api = stubApi({ beginGoogleLogin: steppingDown() });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api,
+      reload,
+      navigate,
+    });
+    await flush(el);
+    await openPassword(el);
+    click(el, "google-login");
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("reloads once when both reads the screen makes on opening are refused", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const reload = vi.fn();
+    const api = stubApi({ getGoogleConfig: steppingDown(), passkeyAuthOptions: steppingDown() });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
+    await vi.waitFor(() => expect(api.passkeyAuthOptions).toHaveBeenCalled());
+    await flush(el);
+    expect(api.getGoogleConfig).toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledOnce();
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("reloads once, showing no refusal, when an account link's check is refused", async () => {
+    history.replaceState(null, "", "/account?token=token-1&purpose=invitation");
+    onTestFinished(() => history.replaceState(null, "", "/"));
+    const reload = vi.fn();
+    const api = stubApi({ inspectAccountAction: steppingDown() });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api, reload });
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBeNull();
+  });
 });

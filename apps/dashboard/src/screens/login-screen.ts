@@ -319,6 +319,18 @@ export class LoginScreen extends LitElement {
 
   #generation = 0;
   #connection = 0;
+  #reloaded = false;
+
+  /** A box that no longer runs the venue serves its own page in place of this one, so a refusal
+   * saying so reloads, at most once, rather than showing. */
+  #reloadIfSteppingDown(error: unknown): boolean {
+    if (codeOf(error) !== "handover.stepping_down") return false;
+    if (!this.#reloaded) {
+      this.#reloaded = true;
+      this.reload();
+    }
+    return true;
+  }
 
   #current(generation: number): boolean {
     return this.isConnected && generation === this.#generation;
@@ -379,7 +391,9 @@ export class LoginScreen extends LitElement {
           this.privacyNoticeUrl = privacyNoticeUrl ?? "";
         }
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (this.isConnected) this.#reloadIfSteppingDown(error);
+      });
   }
 
   override disconnectedCallback(): void {
@@ -659,6 +673,7 @@ export class LoginScreen extends LitElement {
       this.#focusField("new-password");
     } catch (error) {
       if (!this.#current(generation)) return;
+      if (this.#reloadIfSteppingDown(error)) return;
       this.errorKey = codeOf(error);
     } finally {
       if (this.#current(generation)) this.busy = false;
@@ -715,6 +730,7 @@ export class LoginScreen extends LitElement {
       else this.#announceLogin(detail);
     } catch (error) {
       if (!this.#current(generation)) return;
+      if (this.#reloadIfSteppingDown(error)) return;
       const code = codeOf(error);
       if (code === "totp.required") {
         this.step = "factor";
@@ -941,6 +957,7 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      if (this.#reloadIfSteppingDown(error)) return;
       const passkey = classifyPasskeySignInError(error);
       if (passkey === "cancelled") {
         this.errorKey = null;
@@ -1032,6 +1049,7 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      if (this.#reloadIfSteppingDown(error)) return;
       // Before a passkey is picked nobody asked for this attempt, so an earlier message stays.
       this.errorKey ??= codeOf(error, "passkey.verification_failed");
     }
@@ -1053,6 +1071,7 @@ export class LoginScreen extends LitElement {
       this.navigate(authorizationUrl);
     } catch (error) {
       if (!this.#current(generation)) return;
+      if (this.#reloadIfSteppingDown(error)) return;
       this.errorKey = codeOf(error);
       if (this.isConnected && this.step === "email") void this.#conditionalPasskeyLogin();
     } finally {
