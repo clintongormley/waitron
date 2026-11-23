@@ -91,7 +91,7 @@ bajo **Opciones**, y cada grupo empieza con su propia entrada para crear una nue
 de extras…** o **Añadir lista de opciones…**, así puedes crear una lista sin abandonar el producto
 que estás editando.
 
-Si la unidad del plato no permite extras, esta sección te lo indica antes de adjuntar una lista.
+Si la unidad del plato no permite extras, este grupo te lo indica antes de adjuntar una lista.
 
 Cada oferta de una carta lleva las listas de extras y de opciones del producto en el orden que fijas
 aquí. Un extra usa el precio por porción de su elemento de la lista cuando lo fijas. Con el precio en
@@ -127,7 +127,7 @@ Cuando la estación ya ha empezado un plato, o ya se ha servido parte de él, no
 El plato conserva el precio al que se vendió.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o
-quítala de la sección Modificadores de ese producto concreto.
+quítala del grupo Modificadores de ese producto concreto.
 
 ## Alérgenos e información dietética {#allergens}
 

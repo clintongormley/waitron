@@ -98,6 +98,8 @@ elsewhere in the site".
 
     Pricing no longer folds when a variant is active, and Variants and Modifiers are always open.
     This supersedes decision 4 for those three, and the 2026-10-02 Pricing fold (A219, #1065).
+    The cards sit `--wt-space-4` (16px) apart, as the plan's Task 5b sets; this supersedes
+    decision 7, and is the plan's choice, not a recorded owner decision.
 12. **Each Details row is cut after two lines,** and a wrapped line is indented under its first
     line. This supersedes decision 10's one-line cut.
 13. **The card style is shared:**

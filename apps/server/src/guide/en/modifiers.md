@@ -83,7 +83,7 @@ an **Extras** heading and options lists under **Options**, and each group starts
 to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without
 abandoning the product you are editing.
 
-If the dish's unit prevents extras, this section tells you before you attach a list.
+If the dish's unit prevents extras, this group tells you before you attach a list.
 
 Every menu offer carries the product's extras and options lists in the order you set here.
 An extra uses its list entry's price per portion when you set one. With the price blank, its
@@ -116,7 +116,7 @@ changes together. To take one or more sent dishes off the bill, use **Void…**,
 The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
-that one product's Modifiers section.
+that one product's Modifiers group.
 
 ## Allergens and dietary information {#allergens}
 

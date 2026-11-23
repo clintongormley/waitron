@@ -3130,7 +3130,7 @@ it("activates a nutritional chip with Enter without saving or closing the window
     true,
   );
 });
-it("saves a cereal clicked in the chips after the nutrition section is collapsed", async () => {
+it("saves a cereal clicked in the chips after Details is collapsed", async () => {
   const el = await mountPricing({ ...saved, allergens: {} });
   const cancelled = vi.fn();
   el.addEventListener("wt-cancel", cancelled);
@@ -3598,7 +3598,7 @@ it("saves a disabled product's other edits without enabling it", async () => {
   expect(submit.mock.calls[0]![0].detail.value.kitchenName).toBe("COUNTER");
 });
 
-it("summarises each collapsed section from its filled-in values", async () => {
+it("summarises Details' groups from their filled-in values", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: {
@@ -4419,7 +4419,7 @@ function inheritedNutrition(el: ProductEditor, name: string) {
   return field?.placeholder ? `${field.label}: ${field.value}` : undefined;
 }
 
-it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
+it("titles a variant's page as a variant, with no Modifiers or Variants group", async () => {
   const el = await mountVariant();
   expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
     t("editor.edit_variant_of").replace("{name}", "Coffee"),
@@ -6046,7 +6046,7 @@ it("holds Save while the image picker is open", async () => {
   expect(saveButton(el).disabled).toBe(false);
 });
 
-it("leaves Descriptors closed on a refused photo, says why beside it, and puts focus on the photo", async () => {
+it("leaves Details closed on a refused photo, says why beside it, and puts focus on the photo", async () => {
   const el = await mountWithPhoto();
   expect(section(el, "details").open).toBe(false);
   el.fieldErrors = { image: "The photo is gone" };
@@ -6113,7 +6113,7 @@ it("keeps a chosen photo's large preview out of the compact image-and-colour pan
 const nameGroup = (el: ProductEditor) =>
   el.shadowRoot!.querySelector<HTMLElement>('[data-section="name"]')!;
 
-it("puts the photo beside Name, which takes the rest of the row, and not in Descriptors", async () => {
+it("puts the photo beside Name, which takes the rest of the row, and not in Details", async () => {
   const el = await mountWithPhoto({ value: { ...saved, image: mediaTestReference("own.png") } });
   const upload = photoControl(el) as HTMLElementTagNameMap["dashboard-image-upload"];
   expect(upload.thumbnail).toBe(false);
@@ -6305,7 +6305,7 @@ it("rows each language's customer-facing name and description in the languages' 
   expect(detailsPart(el, "descriptors")).toEqual([]);
 });
 
-it("draws the Descriptors line as named values, only the field names marked as names", async () => {
+it("draws the On the menu row as named values, only the field names marked as names", async () => {
   const long = (word: string) => Array.from({ length: 60 }, () => word).join(" ");
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,

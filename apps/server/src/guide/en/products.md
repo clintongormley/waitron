@@ -165,7 +165,7 @@ The product keeps its own price field. Once the product has an Active variant, t
 starts **Base price**, because a variant you leave without a price of its own sells at it. That
 variant's empty price shows the base price greyed out as a hint, in its window and in its row of the
 table. The unit link in the variants' Price heading opens the same unit dialog
-as the price field's unit button.
+as the unit link in the price field.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
@@ -408,7 +408,7 @@ moves to it by itself.
 ## Keep choices reusable {#reusable-choices}
 
 Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
-the product's own **Modifiers** section, in the order you want. See
+the product's own **Modifiers** group, in the order you want. See
 [Reuse choices across your products](modifiers.md) for what each kind holds, its defaults and
 limits, and extra prices.
 

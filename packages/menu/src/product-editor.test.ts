@@ -734,7 +734,7 @@ it.each([
   const { code: thrown, params } = await refusal({ ...input, ...patch });
   expect(thrown).toBe(code);
   // Nothing here says "allergens" or "dietary", so a refusal of either cannot reach a field on the
-  // editor's Nutrition section.
+  // editor's Allergens and diet group.
   expect(Object.keys(params as Record<string, unknown>)).not.toContain("field");
 });
 

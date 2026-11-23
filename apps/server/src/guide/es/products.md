@@ -174,7 +174,7 @@ El producto conserva su propio campo de precio. En cuanto el producto tiene una
 variante activa, la etiqueta del campo empieza por **Precio base**, porque una variante que dejas sin
 precio propio se vende a ese precio. El precio vacío de esa variante muestra el precio base en gris
 como pista, en su ventana y en su fila de la tabla. El enlace de la unidad en
-el encabezado Precio de las variantes abre la misma ventana de unidades que el botón de unidad del
+el encabezado Precio de las variantes abre la misma ventana de unidades que el enlace de la unidad del
 campo de precio.
 
 Arrastra una fila por el asa de su inicio para reordenarla, o enfoca el asa y usa las flechas arriba y
@@ -435,7 +435,7 @@ sin ninguna de las dos cosas, la ventana pasa sola a la versión nueva.
 ## Reutiliza las elecciones {#reusable-choices}
 
 Crea listas de extras y listas de opciones reutilizables en las dos pestañas de **Modificadores**, y
-después asígnalas en la propia sección **Modificadores** del producto, en el orden que quieras.
+después asígnalas en el propio grupo **Modificadores** del producto, en el orden que quieras.
 Consulta [Reutiliza las mismas elecciones en todos tus productos](modifiers.md) para saber qué
 contiene cada tipo, sus valores predeterminados y límites, y los precios de los extras.
 
