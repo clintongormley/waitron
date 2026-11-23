@@ -1,6 +1,7 @@
 # Menus list: where each menu is used, and archiving a menu
 
 Status: approved by the owner, 2026-11-23 (interactive design session, choices quoted below).
+Part 2 corrected the same evening: no Restore (archive is for good, Copy brings a menu back).
 Builds on PR #4158 (the menus list's Status cell, Changes column removed); start after it lands.
 
 ## Why
@@ -32,11 +33,21 @@ available for the staff", then "maybe with links to the periods".
 
 ## Part 2: archiving a menu
 
-Owner's choices: "Archive, like Products" and "Pick a replacement".
+Owner's choices (2026-11-23): "Archive, like Products", "Pick a replacement", and, after weighing
+restore against copy, "Copy under a new name". The owner also asked for filters like other lists
+rather than a separate control, and decided against an extra "needs attention" filter because
+sorting by Status already brings those menus first.
 
-- **Like Products:** the row's ⋮ menu gets **Archive…**; the list gets a **Show archived** filter;
-  an archived menu shown there has **Restore**. Follow the Products screen's archive window and
-  filter, and their wording in both languages.
+- **Archive is for good, like products** (A435, owner 2026-10-08: "Products are archived for good. No
+  way back."). The row's ⋮ menu gets **Archive…**. There is no Restore.
+- **Archiving frees the name.** `assertMenuNameFree` (`packages/menu/src/menu-names.ts`) counts
+  archived menus today, so an archived menu would block a new menu of the same name; count active
+  menus only, as products do.
+- **Show archived** is a switch at the top of the list's **Filters** panel, as on Products
+  (design-system.md, "Products: Active and Available are two different words"). Archived menus are
+  listed read-only (View, no editing, no publishing), and their ⋮ offers **Copy…**, which already
+  asks for a name no menu holds. The copy is a new menu, so it starts unpublished. This is how a
+  seasonal menu comes back.
 - **Underneath:** `deactivateMenu` (`packages/menu/src/operations.ts`) already sets `active` false
   and records `menu.archived` in the activity log; nothing calls it yet. A true delete is not
   possible once a menu has been sold from, because past orders and sales point at it.
@@ -50,9 +61,12 @@ Owner's choices: "Archive, like Products" and "Pick a replacement".
 - **A menu other menus include, or a set menu placed in full menus:** the window lists those menus and
   says they lose it the next time they are published. If the lane finds a case that would leave a
   published menu or a till broken, bring it back as a question rather than choosing.
-- **Restore** brings the menu back as it was, without its old period assignments.
+- **Archived products and a copy:** archiving a product is refused while it is on any published
+  menu, and once allowed it is taken off every menu's working copy, archived menus included
+  (`packages/menu/src/archive.ts`, `takeOffMenus`). A copy of an archived menu therefore holds no
+  archived products; check that the copy is taken from the working copy, not a published version.
 - Guide: the Menus guide section (`apps/server/src/guide/{en,es}/products.md`) gets a short
-  sentence on archiving and Show archived, in both languages.
+  sentence on archiving, Show archived and copying an archived menu, in both languages.
 
 ## Delivery
 
