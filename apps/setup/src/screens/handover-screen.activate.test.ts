@@ -5,6 +5,7 @@ import { SetupApi } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 import { setLocale } from "../i18n/t.js";
+import { handoverEs } from "../i18n/strings/handover.js";
 
 const binding = {
   module: "fiscal-verifactu",
@@ -144,7 +145,7 @@ async function mount(
     },
   };
 }
-async function select(el: SetupHandoverScreen) {
+async function select(el: SetupHandoverScreen, proceed = "Proceed") {
   const clockEntry = q<LitElement>(el, "vf-recovery-hour");
   await clockEntry.updateComplete;
   const tick = q<HTMLInputElement>(clockEntry, '[name="recovery-details-confirmed"]');
@@ -155,7 +156,7 @@ async function select(el: SetupHandoverScreen) {
       false,
     ),
   );
-  expect(q(clockEntry, "[data-test=compare]").textContent!.trim()).toBe("Proceed");
+  expect(q(clockEntry, "[data-test=compare]").textContent!.trim()).toBe(proceed);
   q(clockEntry, "[data-test=compare]").click();
 }
 const activations = (requests: { path: string }[]) =>
@@ -553,6 +554,30 @@ it.each([
     expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=authenticate]").disabled).toBe(
       false,
     );
+  },
+);
+
+it.each([
+  [
+    "en-GB",
+    "Proceed",
+    "Your sign-in did not match the prepared handover. Sign in as the person who prepared this step and check the clocks again.",
+  ],
+  ["es-ES", "Continuar", handoverEs["handover.operator_mismatch"]],
+] as const)(
+  "explains a handover operator mismatch and returns to sign-in (%s)",
+  async (locale, proceed, message) => {
+    setLocale(locale);
+    const { el } = await mount({
+      refuse: { code: "sif.allocation_invalid", params: { reason: "event_mismatch" } },
+    });
+    await select(el, proceed);
+    await continueOn(el);
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).toBeNull());
+    const actions = q<LitElement>(el, "wt-form-actions");
+    await actions.updateComplete;
+    expect(q(actions, '[role="alert"]').textContent).toBe(message);
+    expect(q(el, "[data-test=authenticate]")).not.toBeNull();
   },
 );
 

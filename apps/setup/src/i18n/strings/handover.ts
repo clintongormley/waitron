@@ -21,6 +21,8 @@ export const handoverEn = {
     "This handover ended without activating this box. Open the Servers page on the main box to see its current state.",
   "handover.sign_in":
     "Sign in as an administrator to confirm the details and start the venue here. Use a fresh authenticator code.",
+  "handover.operator_mismatch":
+    "Your sign-in did not match the prepared handover. Sign in as the person who prepared this step and check the clocks again.",
   "handover.email": "Administrator email",
   "handover.password": "Password",
   "handover.code": "Authenticator code, if set up",
@@ -243,6 +245,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Este traspaso terminó sin activar este servidor. Abre la página Servidores en el servidor principal para consultar su estado actual.",
   "handover.sign_in":
     "Identifícate como administrador para confirmar los datos e iniciar el local aquí. Usa un código nuevo del autenticador.",
+  "handover.operator_mismatch":
+    "Tu inicio de sesión no coincide con el traspaso preparado. Inicia sesión como la persona que preparó este paso y vuelve a comprobar la hora.",
   "handover.email": "Correo del administrador",
   "handover.password": "Contraseña",
   "handover.code": "Código de autenticador, si está configurado",

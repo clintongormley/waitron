@@ -841,9 +841,10 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
-      const stale =
-        (cause as { code?: unknown } | null)?.code === "sif.allocation_invalid" &&
-        (cause as { params?: { reason?: unknown } }).params?.reason === "clock_stale";
+      const error = cause as { code?: unknown; params?: { reason?: unknown } } | null;
+      const allocationReason =
+        error?.code === "sif.allocation_invalid" ? error.params?.reason : undefined;
+      const stale = allocationReason === "clock_stale";
       if (this.#isEmergency && stale && !this.#staleRetried) {
         this.#staleRetried = true;
         this.#resetSelection();
@@ -851,12 +852,14 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       refused = true;
-      if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
-      if (!this.#isEmergency || stale) this.actionError = entry.refusalMessage(cause);
-      if (
-        (cause as { code?: unknown } | null)?.code === "password.invalid" ||
-        cause instanceof PasskeyNeedsPress
-      ) {
+      if (allocationReason === "event_mismatch") {
+        this.actionError = t("handover.operator_mismatch");
+        if (this.#isEmergency) this.#reopenSignIn();
+      } else {
+        if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
+        if (!this.#isEmergency || stale) this.actionError = entry.refusalMessage(cause);
+      }
+      if (error?.code === "password.invalid" || cause instanceof PasskeyNeedsPress) {
         this.activationHeld = true;
         return;
       }
