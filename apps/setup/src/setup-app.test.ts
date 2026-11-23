@@ -2036,6 +2036,22 @@ describe("setup-app", () => {
     expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
   });
 
+  it("sends Join on the code to the server with the stored handle", async () => {
+    const api = stubApi();
+    vi.mocked(api.joinState).mockResolvedValue(WAITING);
+    sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
+    const el = await mountSetupApp(api);
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    await vi.waitFor(() =>
+      expect(connect.shadowRoot!.querySelector("[data-test=yes]")).not.toBeNull(),
+    );
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=yes]")!.click();
+    await expect.poll(() => vi.mocked(api.confirmJoin).mock.calls.length).toBe(1);
+    expect(api.confirmJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
+  });
+
   it("sends the stored handle on the join's reads and on Finish joining, and keeps the main box a read names", async () => {
     const api = stubApi();
     vi.mocked(api.joinState)

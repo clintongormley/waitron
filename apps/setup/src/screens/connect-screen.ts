@@ -84,6 +84,11 @@ const FINISH_WORDS: Record<string, StringKey> = {
   "mirror.bundle_fetch_failed": "connect.finish.bundle_fetch_failed",
 };
 
+/** Refusals of Join on the code whose words for the address view would name its address field. */
+const CONFIRM_WORDS: Record<string, StringKey> = {
+  "mirror.bundle_fetch_failed": "connect.confirm.bundle_fetch_failed",
+};
+
 type FullDetail = "retryAt" | "max" | "minutes";
 
 const FULL_WORDS: Record<string, { key: StringKey; needs: FullDetail[] }> = {
@@ -209,8 +214,15 @@ export class SetupConnectScreen extends LitElement {
 
   @state() private primaryUrl = "";
 
-  /** The last refusal of Join, No, Start again or Finish joining; its words are chosen when drawn. */
-  @state() private shownRefusal?: { refusal: Refusal; routedBack: boolean };
+  /**
+   * The last refusal of Join, No, Start again or Finish joining; its words are chosen when drawn,
+   * from `words` first, the table of the action refused.
+   */
+  @state() private shownRefusal?: {
+    refusal: Refusal;
+    routedBack: boolean;
+    words?: Record<string, StringKey>;
+  };
 
   @state() private addressRefused = false;
 
@@ -275,7 +287,7 @@ export class SetupConnectScreen extends LitElement {
         this.shownRefusal = undefined;
         void this.#read();
       } else {
-        this.shownRefusal = { refusal: this.refusal, routedBack: true };
+        this.shownRefusal = { refusal: this.refusal, routedBack: true, words: FINISH_WORDS };
       }
     }
   }
@@ -396,8 +408,11 @@ export class SetupConnectScreen extends LitElement {
     }
     this.confirming = false;
     if (!this.isConnected || handleOf(this.handle) !== handle) return;
-    if (refusal === undefined || isJoinNotApproved(refusal)) void this.#read();
-    else this.shownRefusal = { refusal, routedBack: false };
+    // A held join's words name Start again, which this view does not draw; the read finds the view
+    // that does.
+    if (refusal === undefined || isJoinNotApproved(refusal) || HELD_JOIN_CODES.has(refusal.code))
+      void this.#read();
+    else this.shownRefusal = { refusal, routedBack: false, words: CONFIRM_WORDS };
   }
 
   /** Ends the join; Start again then asks the same main box again, and No stops at the address. */
@@ -412,7 +427,13 @@ export class SetupConnectScreen extends LitElement {
     } catch (error) {
       if (generation !== this.#generation || !this.isConnected) return;
       this.busy = false;
-      this.shownRefusal = { refusal: (error ?? {}) as Refusal, routedBack: false };
+      const refusal = (error ?? {}) as Refusal;
+      // As on Join: the waiting view does not draw the Start again a held join's words name.
+      if (this.view.state === "waiting" && HELD_JOIN_CODES.has(refusal.code)) {
+        void this.#read();
+        return;
+      }
+      this.shownRefusal = { refusal, routedBack: false };
       if (this.view.state === "waiting" || this.view.state === "approved")
         this.#readLater(generation);
       return;
@@ -436,10 +457,9 @@ export class SetupConnectScreen extends LitElement {
 
   #message(): string | undefined {
     if (this.shownRefusal === undefined) return undefined;
-    const { refusal, routedBack } = this.shownRefusal;
-    const finishKey =
-      routedBack && typeof refusal.code === "string" ? FINISH_WORDS[refusal.code] : undefined;
-    if (finishKey !== undefined) return t(finishKey);
+    const { refusal, routedBack, words } = this.shownRefusal;
+    const ownKey = typeof refusal.code === "string" ? words?.[refusal.code] : undefined;
+    if (ownKey !== undefined) return t(ownKey);
     const shellWords = routedBack && this.errorMessage !== "" ? this.errorMessage : undefined;
     return refusalWords(refusal) ?? shellWords ?? t("connect.refusal.generic");
   }

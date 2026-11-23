@@ -37,6 +37,7 @@ import "./screens/admin-screen.js";
 import "./screens/venue-screen.js";
 import "./screens/cert-screen.js";
 import type { CertificateRefusal } from "./screens/cert-screen.js";
+import type { SetupConnectScreen } from "./screens/connect-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/reset-screen.js";
@@ -2203,7 +2204,7 @@ export class SetupApp extends LitElement {
   }
 
   /** The join screen's requests, keeping the main box each names for the Servers link. */
-  readonly #joinApi: Pick<SetupApi, "startJoin" | "joinState" | "cancelJoin"> = {
+  readonly #joinApi: SetupConnectScreen["api"] = {
     startJoin: async (primaryUrl, handle) => {
       const started = await this.api.startJoin(primaryUrl, handle);
       sessionStorage.setItem(JOIN_PRIMARY_KEY, primaryUrl);
@@ -2215,6 +2216,7 @@ export class SetupApp extends LitElement {
       return state;
     },
     cancelJoin: (handle) => this.api.cancelJoin(handle),
+    confirmJoin: (handle) => this.api.confirmJoin(handle),
   };
 
   #onJoinHandle(event: CustomEvent<{ handle?: string }>): void {

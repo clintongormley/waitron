@@ -98,6 +98,8 @@ export const startEn = {
   "connect.try_again": "Try again",
   "connect.finish.bundle_fetch_failed":
     "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
+  "connect.confirm.bundle_fetch_failed":
+    "The main box did not hear this box's Join. Check that the main box is switched on, then choose Join again.",
   "connect.reading": "Checking this box's join…",
   "connect.waiting.open_link": "Open the Servers page on the main box",
   "connect.waiting.open_after": " and choose Check beside this box's request.",
@@ -141,15 +143,15 @@ export const startEn = {
   "connect.refusal.join_full_listed":
     "The main box already has {max} other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
   "connect.refusal.join_full_recent":
-    "The main box has had {max} requests to join in the last {minutes} minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
+    "The main box has had {max} requests to join in the last {minutes} minutes, counting ones ended by No or Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
   "connect.refusal.join_waiting":
     "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_approving":
     "The main box is already adding this box, so the request cannot be ended from here. Wait a moment: this box then finishes joining, or this page says what went wrong.",
   "connect.refusal.join_in_use":
-    "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
+    "This box's join is open on another page or device right now. Carry on there. If that page is closed, wait 15 seconds and choose Start again here.",
   "connect.refusal.join_handle_invalid":
-    "This join was started on another page or device, so this page cannot finish it. Finish it there, or choose Start again.",
+    "This join was started on another page or device, so this page cannot finish it. Carry on there, or choose Start again.",
   "connect.refusal.unreachable":
     "This box got no usable answer from the main box at that address. Check the address and that the main box is switched on, then choose Join again.",
   "connect.refusal.clocks_apart":
@@ -337,6 +339,8 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.try_again": "Volver a intentar",
   "connect.finish.bundle_fetch_failed":
     "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
+  "connect.confirm.bundle_fetch_failed":
+    "El servidor principal no ha recibido el Unirse de este servidor. Comprueba que el servidor principal está encendido y vuelve a elegir Unirse.",
   "connect.reading": "Comprobando la unión de este servidor…",
   "connect.waiting.open_link": "Abre la página Servidores del servidor principal",
   "connect.waiting.open_after": " y elige Comprobar junto a la solicitud de este servidor.",
@@ -382,15 +386,15 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.join_full_listed":
     "Ya hay otros {max} servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y vuelve a elegir Unirse aquí.",
   "connect.refusal.join_full_recent":
-    "El servidor principal ha recibido {max} solicitudes para unirse en los últimos {minutes} minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
+    "El servidor principal ha recibido {max} solicitudes para unirse en los últimos {minutes} minutos, contando las terminadas con No o Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
   "connect.refusal.join_waiting":
     "Este servidor ya está esperando para unirse, o todavía está terminando su última solicitud. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_approving":
     "El servidor principal ya está añadiendo este servidor, así que la solicitud no se puede terminar desde aquí. Espera un momento: este servidor terminará de unirse, o esta página dirá qué ha fallado.",
   "connect.refusal.join_in_use":
-    "La unión de este servidor está abierta ahora en otra página o dispositivo. Termínala o cancélala allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
+    "La unión de este servidor está abierta ahora en otra página o dispositivo. Continúa allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
   "connect.refusal.join_handle_invalid":
-    "Esta unión se empezó en otra página o dispositivo, así que esta página no puede terminarla. Termínala allí o elige Empezar de nuevo.",
+    "Esta unión se empezó en otra página o dispositivo, así que esta página no puede terminarla. Continúa allí o elige Empezar de nuevo.",
   "connect.refusal.unreachable":
     "Este servidor no ha recibido una respuesta útil del servidor principal en esa dirección. Comprueba la dirección y que el servidor principal está encendido, y vuelve a elegir Unirse.",
   "connect.refusal.clocks_apart":
