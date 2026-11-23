@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { cardFrameStyles } from "@waitron/ui-core/components/wt-card";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -14,12 +15,21 @@ export interface SummaryField {
   warning?: boolean;
 }
 
+export interface SummaryRow {
+  fields: readonly SummaryField[];
+  /** The row is cut with an ellipsis after this many lines. */
+  lines: number;
+}
+
 const summaryPart = ({ label, value, placeholder, warning }: SummaryField) => {
   const shown = warning ? html`<span class="summary-warning">${value}</span>` : value;
   return html`<span class="summary-label">${label}:</span> ${
       placeholder ? html`<span class="summary-placeholder">${shown}</span>` : shown
     }`;
 };
+
+const summaryParts = (fields: readonly SummaryField[]) =>
+  fields.map((field, index) => html`${index ? " · " : nothing}${summaryPart(field)}`);
 
 /**
  * A section holding a validation error must not be hidden: while `has-error` is set the section is
@@ -146,6 +156,9 @@ export class WtDisclosure extends LitElement {
       }
 
       .summary-row {
+        /* A hanging indent: a row that wraps sets its later lines in from its first. */
+        padding-inline-start: var(--wt-space-4);
+        text-indent: calc(-1 * var(--wt-space-4));
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: var(--summary-row-lines);
@@ -174,6 +187,33 @@ export class WtDisclosure extends LitElement {
       :host([open]) .chevron {
         transform: rotate(180deg);
       }
+
+      [part="summary"] {
+        animation: wt-disclosure-summary-in var(--wt-duration-disclosure) ease;
+      }
+
+      @keyframes wt-disclosure-summary-in {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        [part="summary"] {
+          animation: none;
+        }
+      }
+
+      :host([card]) .section {
+        ${cardFrameStyles}
+        background: var(--wt-color-surface-raised);
+        --wt-form-actions-surface: var(--wt-color-surface-raised);
+        box-shadow: var(--wt-shadow-1);
+      }
+
+      :host([card]) .title {
+        border-bottom: 0;
+      }
     `,
   ];
 
@@ -183,15 +223,19 @@ export class WtDisclosure extends LitElement {
   /** The closed line as named values, each after its name; used instead of `summary` when it
    * holds any. */
   @property({ attribute: false }) summaryFields: readonly SummaryField[] = [];
-  /** The closed line as one row per named value, each cut with an ellipsis after its `lines`
+  /** The closed line as rows of named values, each row cut with an ellipsis after its `lines`
    * lines; used instead of `summaryFields` and `summary` when it holds any. */
-  @property({ attribute: false }) summaryRows: readonly (SummaryField & { lines: number })[] = [];
+  @property({ attribute: false }) summaryRows: readonly SummaryRow[] = [];
+  /** Drawn as a raised card, as `<wt-card raised>` is, with no line under a ruled heading. */
+  @property({ type: Boolean, reflect: true }) card = false;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
 
   private readonly bodyId = uniqueId("wt-disclosure-body");
   private bodyHidden = true;
   private openingFromHidden = false;
+  /** While a close animates, the summary waits, so it never shows over the shrinking body. */
+  private closing = false;
   private firstRender = true;
   private animationFrame = 0;
   private animationGeneration = 0;
@@ -214,6 +258,10 @@ export class WtDisclosure extends LitElement {
       body.classList.remove("animating");
       this.bodyHidden = !this.open;
       body.hidden = this.bodyHidden;
+    }
+    if (this.closing) {
+      this.closing = false;
+      this.requestUpdate();
     }
     for (const resolve of this.settlement) resolve();
     this.settlement.clear();
@@ -247,7 +295,15 @@ export class WtDisclosure extends LitElement {
     if (this.open) {
       this.openingFromHidden = this.bodyHidden;
       this.bodyHidden = false;
-    } else this.openingFromHidden = false;
+      this.closing = false;
+    } else {
+      this.openingFromHidden = false;
+      // The same tests `updated` uses to skip the animation, so a close that will not animate
+      // shows its summary in this render.
+      if (changed.has("open") && this.hasUpdated && !this.hasError && !this.motionQuery?.matches)
+        this.closing =
+          (this.shadowRoot?.querySelector(".body")?.getBoundingClientRect().height ?? 0) > 0;
+    }
   }
 
   override updated(changed: PropertyValues<this>): void {
@@ -308,20 +364,16 @@ export class WtDisclosure extends LitElement {
     if (this.summaryRows.length)
       return html`<span class="summary summary-rows"
         >${this.summaryRows.map(
-          ({ lines, ...field }) =>
+          ({ fields, lines }) =>
             html`<span
               class="summary-row"
               style=${styleMap({ "--summary-row-lines": String(lines) })}
-              >${summaryPart(field)}</span
+              >${summaryParts(fields)}</span
             >`,
         )}</span
       >`;
     if (this.summaryFields.length)
-      return html`<span class="summary"
-        >${this.summaryFields.map(
-          (field, index) => html`${index ? " · " : nothing}${summaryPart(field)}`,
-        )}</span
-      >`;
+      return html`<span class="summary">${summaryParts(this.summaryFields)}</span>`;
     return this.summary ? html`<span class="summary">${this.summary}</span>` : nothing;
   }
 
@@ -338,7 +390,7 @@ export class WtDisclosure extends LitElement {
             @click=${this.onToggle}
           >
             ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
-            ${this.open ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
+            ${this.open || this.closing ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
           </button>
           <slot name="help"></slot>
         </div>
