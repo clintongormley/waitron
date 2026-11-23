@@ -1,3 +1,4 @@
+import { deletePeriod } from "./period-delete.js";
 import { seedPerson, seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -2820,7 +2821,14 @@ describe("routing during a service period", () => {
     await tx
       .insert(routingCellPeriods)
       .values({ cellId: cell!.id, periodId: lunch, stationId: downstairs!.id });
-    return { ...f, dining: dining!.id, upstairs: upstairs!.id, downstairs: downstairs!.id };
+    return {
+      ...f,
+      dining: dining!.id,
+      upstairs: upstairs!.id,
+      downstairs: downstairs!.id,
+      lunch,
+      afternoon,
+    };
   }
   const fridayAt = (time: string) => new Date(`2026-10-02T${time}:00Z`);
   const made = (stationId: string) => ({ kind: "made", route: station(stationId) });
@@ -2846,6 +2854,63 @@ describe("routing during a service period", () => {
         new Map([[f.mojito, made(f.downstairs)]]),
       );
     }));
+
+  it("uses the agreed period for dishes and individual extra picks on the same snapshot", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      const resolver = await routingAt(tx, fridayAt("14:10"));
+      expect(await resolver.makers(f.terrace, [f.mojito], f.lunch)).toEqual(
+        new Map([[f.mojito, made(f.downstairs)]]),
+      );
+      expect(await resolver.makers(f.terrace, [f.mojito])).toEqual(
+        new Map([[f.mojito, made(f.upstairs)]]),
+      );
+      expect(
+        await resolver.extraMakers(f.terrace, [
+          { key: "late", productId: f.mojito, dishStationId: f.bar, periodId: f.lunch },
+          { key: "now", productId: f.mojito, dishStationId: f.bar },
+        ]),
+      ).toEqual(
+        new Map([
+          ["late", { kind: "made", stationId: f.downstairs }],
+          ["now", { kind: "made", stationId: f.upstairs }],
+        ]),
+      );
+    }));
+
+  it("uses the base station when the agreed period belongs to the department but the cell has no rule", async () =>
+    scoped(async (tx) => {
+      const f = await periodFixture(tx);
+      const resolver = await routingAt(tx, fridayAt("13:00"));
+      expect(await resolver.makers(f.terrace, [f.mojito], f.afternoon)).toEqual(
+        new Map([[f.mojito, made(f.upstairs)]]),
+      );
+    }));
+
+  it.each(["foreign", "deleted"] as const)(
+    "uses the running period when the agreed period is %s",
+    async (missing) =>
+      scoped(async (tx) => {
+        const f = await periodFixture(tx);
+        let periodId = f.afternoon;
+        if (missing === "foreign") {
+          const other = await createDepartment(tx, { name: "Bar", orderStart: "counter" });
+          periodId = (
+            await saveMenuPeriod(tx, other.id, {
+              name: "Staff lunch",
+              menuId: f.menu,
+              staffMenuIds: [],
+            })
+          ).id;
+        } else {
+          await deletePeriod(tx, periodId, null, fridayAt("10:00"), 1);
+        }
+        const resolver = await routingAt(tx, fridayAt("13:00"));
+        expect(await resolver.makers(f.terrace, [f.mojito], periodId)).toEqual(
+          new Map([[f.mojito, made(f.downstairs)]]),
+        );
+      }),
+  );
 
   it("reads a department's period once per routing call, however many dishes and zones", async () =>
     scoped(async (tx) => {

@@ -341,8 +341,9 @@ print one by one, since each is weighed on its own.
 
 On the till, an unsent dish whose period ended earlier the same business day shows a warning sign
 and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
-counter, the till first lists such dishes and asks you to check with the station.
-**Station agreed — send** sends them, and **Remove them** takes them off the order. On a park the
+counter, the till lists the dishes. Check with the station that handles them for the period shown.
+**Station agreed — send** sends them using that period's station rules. **Remove them** takes
+them off the order. On a park the
 button reads **Station agreed — save**. The same window opens when the box finds such a dish before
 the till has marked it.
 

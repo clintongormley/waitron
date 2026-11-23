@@ -776,6 +776,11 @@ A confirmed dish records `working_order_lines.late_period_id` when its period is
 id survives period deletion and follows the dish if the bill is split. Sends without a confirmation
 and confirmations that identify only a menu leave the id empty. Plan D19–D28.
 
+Kitchen routing uses the saved period separately for each dish and its extras. If the period
+belongs to the routing department and the venue clock is readable, its matching line on the
+cell applies. A cell with no line for that period uses its base target. A missing or foreign
+period uses the running period. Station closures and replacements apply at the time of routing.
+
 Extras added later to a dish already sent (stamped sent or holding a ticket item, held or fired)
 whose period ended earlier that day, through either
 order edit (`PUT /api/working-orders/:id` or `/lines/:lineNo`), take the same check and record

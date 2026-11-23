@@ -276,6 +276,7 @@ import { formatInvoiceNumber, recordSale, refuseOverSimplifiedLimit } from "@wai
 import type {
   FloorAnnotator,
   KitchenNoteSnapshot,
+  MakerOutcome,
   MakerResolver,
   ServiceMode,
   ZoneMenuOffer,
@@ -1912,6 +1913,30 @@ export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
   });
 }
 
+export async function makersByLine(
+  resolver: MakerResolver,
+  zoneId: string | null,
+  lines: readonly { id: string; productId: string | null; latePeriodId: string | null }[],
+): Promise<ReadonlyMap<string, MakerOutcome>> {
+  const byPeriod = new Map<string | null, { id: string; productId: string }[]>();
+  for (const { id, productId, latePeriodId } of lines) {
+    if (productId === null) continue;
+    const group = byPeriod.get(latePeriodId) ?? [];
+    group.push({ id, productId });
+    byPeriod.set(latePeriodId, group);
+  }
+  const outcomes = new Map<string, MakerOutcome>();
+  for (const [periodId, group] of byPeriod) {
+    const productIds = [...new Set(group.map(({ productId }) => productId))];
+    const routes = await resolver.makers(zoneId, productIds, periodId);
+    for (const { id, productId } of group) {
+      const route = routes.get(productId);
+      if (route !== undefined) outcomes.set(id, route);
+    }
+  }
+  return outcomes;
+}
+
 interface DishKitchenPlace {
   dishLineId: string;
   stationId: string | null;
@@ -1969,6 +1994,7 @@ export async function insertSplitExtras(
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
       quantity: workingOrderLines.quantity,
+      latePeriodId: workingOrderLines.latePeriodId,
       ticketId: ticketItems.id,
     })
     .from(workingOrderLines)
@@ -1998,6 +2024,7 @@ export async function insertSplitExtras(
       key: extra.id,
       productId: extra.productId!,
       dishStationId: byDish.get(extra.parentLineId!)!.stationId,
+      periodId: extra.latePeriodId,
     })),
   );
   const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
@@ -2412,6 +2439,7 @@ export async function fireLines(
       id: workingOrderLines.id,
       setMenuRole: workingOrderLines.setMenuRole,
       makeAtStationId: workingOrderLines.makeAtStationId,
+      latePeriodId: workingOrderLines.latePeriodId,
       stationActive: kitchenStations.active,
     })
     .from(workingOrderLines)
@@ -2438,21 +2466,24 @@ export async function fireLines(
     ),
   );
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, orderId);
-  const productIds = [
-    ...new Set(
-      lines
-        .filter((line) => !chosenStations.has(line.id))
-        .map((line) => line.productId)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-
-  const makers = await (await routing()).makers(serviceContext?.zoneId ?? null, productIds);
+  // A parked line can acquire its agreement after the caller has read the dishes to fire.
+  const agreedPeriodOf = new Map(chosenRows.map((row) => [row.id, row.latePeriodId]));
+  const makers = await makersByLine(
+    await routing(),
+    serviceContext?.zoneId ?? null,
+    lines
+      .filter((line) => !chosenStations.has(line.id))
+      .map(({ id, productId }) => ({
+        id,
+        productId,
+        latePeriodId: agreedPeriodOf.get(id) ?? null,
+      })),
+  );
   const keepStates = options.keepStations?.size ? await VENUE_SERVICE.stationStates(tx, now) : null;
   const stationFor = (line: FireableLine): string | null => {
     const chosen = chosenStations.get(line.id);
     if (chosen !== undefined) return chosen;
-    const outcome = line.productId === null ? undefined : makers.get(line.productId);
+    const outcome = makers.get(line.id);
     if (outcome?.kind === "made" && outcome.route.kind === "no_preparation") return null;
     const kept = options.keepStations?.get(line.id);
     const state = kept === undefined ? undefined : keepStates?.get(kept);
@@ -2472,7 +2503,7 @@ export async function fireLines(
         tx,
         lines.filter((line) => {
           if (line.productId === null) return !chosenStations.has(line.id);
-          const kind = makers.get(line.productId)?.kind;
+          const kind = makers.get(line.id)?.kind;
           return stationFor(line) === null && kind !== "made" && kind !== "no_replacement";
         }),
       );
@@ -2481,7 +2512,7 @@ export async function fireLines(
   const nowhere: FireableLine[] = [];
   const noReplacement: { stationId: string; productId: string }[] = [];
   lines = lines.filter((line) => {
-    const outcome = line.productId === null ? undefined : makers.get(line.productId);
+    const outcome = makers.get(line.id);
     const hasMaker =
       stationFor(line) !== null ||
       (line.productId === null ? fallbackStationId !== null : outcome?.kind === "made");
@@ -2555,7 +2586,7 @@ export async function fireLines(
   // A line with nowhere to go refuses the whole fire.
   const placed = lines
     .map((line) => {
-      const outcome = line.productId === null ? undefined : makers.get(line.productId);
+      const outcome = makers.get(line.id);
       const maker = outcome?.kind === "made" ? outcome.route : null;
       const courseId = courseByLine.get(line.id) ?? null;
       const courseFired =
@@ -2782,6 +2813,7 @@ async function heldNoRouteLines(
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
       quantity: workingOrderLines.quantity,
+      latePeriodId: workingOrderLines.latePeriodId,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -2801,15 +2833,13 @@ async function heldNoRouteLines(
     tx,
     candidates.map((line) => line.id),
   );
-  const routes = await (
-    await routing()
-  ).makers(zoneId, [...new Set(candidates.map((line) => line.productId!))]);
+  const routes = await makersByLine(await routing(), zoneId, candidates);
   return {
     zoneId,
     lines: candidates
       .filter((line) => {
         if (line.quantity <= (cancellations.get(line.id) ?? 0)) return false;
-        const outcome = routes.get(line.productId!);
+        const outcome = routes.get(line.id);
         return outcome?.kind === "made" && outcome.route.kind === "no_preparation";
       })
       .map((line) => ({ id: line.id, courseId: line.courseId })),

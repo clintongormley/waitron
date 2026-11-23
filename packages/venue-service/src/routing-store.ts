@@ -877,12 +877,24 @@ export async function routingAt(
   const rules: RoutingRules = { ...snapshotted.rules, zoneDepartment };
   const routedMoment: RoutingMoment | null = moment === null ? null : { ...moment, periods };
   const anyPeriodLines = (rules.cellPeriods?.size ?? 0) > 0;
-  const enterZone = async (zoneId: string | null) => {
+  let agreementDepartments: ReadonlyMap<string, string> | undefined;
+  const enterZone = async (zoneId: string | null, hasAgreement: boolean) => {
     if (zoneId === null) return;
     const { departmentId } = await resolveZoneContext(tx, zoneId);
     zoneDepartment.set(zoneId, departmentId);
-    if (moment !== null && anyPeriodLines && !periods.has(departmentId))
-      periods.set(departmentId, await runningPeriod(departmentId));
+    if (routedMoment === null || !anyPeriodLines) return;
+    if (!periods.has(departmentId)) periods.set(departmentId, await runningPeriod(departmentId));
+    if (hasAgreement && agreementDepartments === undefined)
+      agreementDepartments = new Map(
+        (await readPeriods(tx)).map(({ id, departmentId }) => [id, departmentId]),
+      );
+  };
+  const momentFor = (zoneId: string | null, periodId: string | null | undefined) => {
+    if (routedMoment === null || zoneId === null || periodId == null) return routedMoment;
+    const departmentId = zoneDepartment.get(zoneId);
+    if (departmentId === undefined || agreementDepartments?.get(periodId) !== departmentId)
+      return routedMoment;
+    return { ...routedMoment, periods: new Map([[departmentId, periodId]]) };
   };
   let stationNames: ReadonlyMap<string, StationTodayState> | undefined;
   const productFacts = async (productIds: readonly string[]) => {
@@ -932,13 +944,14 @@ export async function routingAt(
         ]),
       ));
     },
-    async makers(zoneId, productIds) {
+    async makers(zoneId, productIds, periodId) {
       const outcomes = new Map<string, MakerOutcome>();
       if (productIds.length === 0) return outcomes;
-      await enterZone(zoneId);
+      await enterZone(zoneId, periodId != null);
       const { spellingByUuid, facts } = await productFacts(productIds);
+      const selectedMoment = momentFor(zoneId, periodId);
       for (const [uuid, id] of spellingByUuid) {
-        const choice = chooseMaker(rules, facts.get(uuid)!, zoneId, routedMoment);
+        const choice = chooseMaker(rules, facts.get(uuid)!, zoneId, selectedMoment);
         outcomes.set(
           id,
           choice.route !== null
@@ -953,14 +966,17 @@ export async function routingAt(
     async extraMakers(zoneId, extras) {
       const outcomes = new Map<string, ExtraMakerOutcome>();
       if (extras.length === 0) return outcomes;
-      await enterZone(zoneId);
+      await enterZone(
+        zoneId,
+        extras.some((extra) => extra.periodId != null),
+      );
       const { facts } = await productFacts(extras.map((extra) => extra.productId));
       for (const extra of extras) {
         const choice = chooseExtraMaker(
           rules,
           facts.get(storedUuid(extra.productId))!,
           zoneId,
-          routedMoment,
+          momentFor(zoneId, extra.periodId),
           extra.dishStationId,
         );
         outcomes.set(extra.key, choice.outcome);
