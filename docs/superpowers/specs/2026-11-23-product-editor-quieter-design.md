@@ -108,3 +108,12 @@ elsewhere in the site".
 
     The design-system doc records the pattern so other screens can adopt it. This branch changes
     no other screen.
+
+The owner later wrote "the price doesn't line up with the Unidad button" and "the line height of the
+variant means the wrapped line is too close". To two options for the price field, they answered "b":
+
+14. **The price field's unit control is a link on the amount's line**, "Unidad ▾" ("Each ▾"),
+    drawn like the variants table's Price heading link. It replaces the bordered button and
+    reverses A647 point 6 ("the base price field's own unit button stays as it is"). This is in
+    `wt-price-input`, for every screen.
+15. **On a narrow variants table, a variant's price under its name has `--wt-space-1` above it.**
