@@ -83,8 +83,10 @@ describe("till attendance sign-in flow", () => {
   });
 
   it("shows other notices while attendance questions are open, with no buttons", async () => {
+    const openDrawer = vi.fn().mockResolvedValue(undefined);
     const f = await clockApp({
       api: {
+        openDrawer,
         getDeviceEquipment: vi.fn().mockResolvedValue({
           roles: [],
           opensDrawer: true,
@@ -136,6 +138,14 @@ describe("till attendance sign-in flow", () => {
     expect(strip.querySelector("[data-check-time]")).toBeNull();
     expect(strip.querySelector("[data-open-drawer]")).toBeNull();
     expect(strip.querySelector("wt-button")).toBeNull();
+    expect(strip.textContent).not.toContain(en["staff_notice.see_box_status"]);
+    const host = f.el.shadowRoot!.querySelector("till-notice-strip")!;
+    for (const name of ["till-check-time", "till-open-drawer"]) {
+      host.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
+    }
+    await f.el.updateComplete;
+    expect(f.el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
+    expect(openDrawer).not.toHaveBeenCalled();
   });
 
   it("shows questions before Clock in and confirmation appends once before the clock page", async () => {

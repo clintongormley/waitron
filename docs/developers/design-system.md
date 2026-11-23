@@ -6759,6 +6759,9 @@ mode line stay where they are.
 - **The PIN screen** draws its storage notices and its waiting-for-the-time line with the same line
   (`noticeLine` and `noticeLineStyles`), each inside its own `role="status"` element: the storage
   lines with their hint, the waiting line without it, and neither with an action.
+- **The clock-in and attendance pages** draw the strip above the page with `wordsOnly`: every
+  notice, no action, and no hint on a clock line whose **Check the time** the box offers, as on the
+  PIN screen. `TillApp` binds neither action's event there.
 - **Announcing.** In both forms a visually hidden `role="status"` region holds the first notice's
   main words, so a new most-serious notice is announced whether or not the strip is a button.
 - **Never in the way.** No close button, no dialog, no timer and no animation; it sends an event
@@ -6766,8 +6769,9 @@ mode line stay where they are.
   The words wrap on a phone.
 
 Cases: `apps/till/src/widgets/notice-strip.test.ts`, its `notice-strip.a11y.test.ts`, "the notices
-slot" in `apps/till/src/widgets/till-shell.test.ts`, `apps/till/src/till-app.notices.test.ts`, and
-the toned-line cases in `apps/till/src/screens/till-lock-screen.test.ts`.
+slot" in `apps/till/src/widgets/till-shell.test.ts`, `apps/till/src/till-app.notices.test.ts`, the
+notice cases in `apps/till/src/till-app.clock.test.ts` and `apps/till/src/till-app.attendance.test.ts`,
+and the toned-line cases in `apps/till/src/screens/till-lock-screen.test.ts`.
 
 ### The main-server strip (till)
 

@@ -95,6 +95,21 @@ describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["words only, the time check alone", [UNUSABLE]],
+    ["words only, the time check first, open", [UNUSABLE, EXPIRED, DISK]],
+  ])("has no violations with %s", async (_state, notices) => {
+    const { el, host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      { notices, wordsOnly: true, checkTimeOffered: true, canOpenDrawer: true },
+      theme,
+    );
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (toggle !== null) await userEvent.click(toggle);
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with three open", async () => {
     const { el, host } = await mountWidget<TillNoticeStrip>(
       "till-notice-strip",

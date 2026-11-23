@@ -218,6 +218,9 @@ export class TillNoticeStrip extends LitElement {
   @property({ attribute: false }) checkTimeOffered = false;
   @property({ attribute: false }) canOpenDrawer = false;
   @property({ attribute: false }) drawerBusy = false;
+  /** No action. A clock line whose check the box offers drops its hint, as on the PIN screen:
+   * "See Box status" would send the person elsewhere for a step that is their own. */
+  @property({ attribute: false }) wordsOnly = false;
 
   @state() private open = false;
 
@@ -233,12 +236,16 @@ export class TillNoticeStrip extends LitElement {
       </div>`;
   }
 
-  #line(notice: StaffNotice, parts: { listItem?: boolean; trailing?: TemplateResult } = {}) {
+  #parts(notice: StaffNotice): LineParts {
     const checkTime = this.checkTimeOffered;
-    return noticeLine(notice, {
-      ...parts,
+    if (this.wordsOnly) return { hint: !checksTime(notice, checkTime) };
+    return {
       action: hasAction(notice, checkTime, this) ? action(notice, checkTime, this) : undefined,
-    });
+    };
+  }
+
+  #line(notice: StaffNotice, parts: { listItem?: boolean; trailing?: TemplateResult } = {}) {
+    return noticeLine(notice, { ...parts, ...this.#parts(notice) });
   }
 
   #strip(first: StaffNotice): TemplateResult {
@@ -266,12 +273,13 @@ export class TillNoticeStrip extends LitElement {
       >
         ${content}
       </button>`;
+    const parts = this.#parts(first);
     // An action and the notice-list toggle are siblings, so a button never holds another button.
     return html`<div class="strip" data-notice-strip>
       ${
-        hasAction(first, this.checkTimeOffered, this)
-          ? this.#line(first, { trailing: toggle("toggle", moreWords) })
-          : toggle("line", lineBody(first, { trailing: moreWords }))
+        parts.action === undefined
+          ? toggle("line", lineBody(first, { ...parts, trailing: moreWords }))
+          : this.#line(first, { trailing: toggle("toggle", moreWords) })
       }
       ${
         this.open

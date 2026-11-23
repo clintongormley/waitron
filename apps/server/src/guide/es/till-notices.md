@@ -6,7 +6,7 @@ terminal de camarero muestran una línea bajo su barra superior si el servidor n
 pantalla de inicio de sesión también avisa si queda poco espacio en el disco del servidor o no se
 puede guardar nada, y si los cobros esperan a la hora del servidor.
 Después de iniciar sesión, las páginas de fichaje y de preguntas de asistencia también muestran todos
-los avisos, sin sus botones: **Abrir cajón** y **Comprobar la hora** aparecen al pasar de esas páginas. La línea dice qué ocurre y qué hacer. Nunca
+los avisos, sin **Abrir cajón** ni **Comprobar la hora**: pasa de esas páginas para usarlos. La línea dice qué ocurre y qué hacer. Nunca
 tapa tu trabajo y nunca tienes que cerrarla.
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
@@ -50,8 +50,8 @@ de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin l
 los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales están encendidos y
 conectados, aunque estén en la pantalla de inicio de sesión, y coinciden con la hora del servidor.
 Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o usa la de este
-dispositivo si lo es esa. La pantalla de inicio de sesión muestra las mismas palabras, sin
-**Comprobar la hora**: inicia sesión para usarlo.
+dispositivo si lo es esa. La pantalla de inicio de sesión y las páginas de fichaje y de asistencia muestran las mismas palabras, sin
+**Comprobar la hora**: pasa de ellas para usarlo.
 
 **Los cobros esperan: el reloj del servidor ha saltado y no puede comprobar la hora por internet.
 Esperando a que los dispositivos coincidan con su hora (0 de 2 por ahora) · Comprobar la hora** es
@@ -71,7 +71,7 @@ y cobra cuando desaparezca la línea roja.
 significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí
 mismo. Termina cualquiera de las líneas rojas de la hora de arriba. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
-cualquiera con la sesión iniciada en la caja.
+cualquiera con la sesión iniciada en la caja, una vez pasadas las páginas de fichaje y de asistencia.
 
 El diálogo muestra la hora del servidor y la de esta caja. Nadie escribe una hora: lo que se envía es
 la hora de la propia caja.

@@ -25037,16 +25037,16 @@ export class TillApp extends LitElement {
     ></till-payments-paused-dialog>`;
   }
 
-  /** With `wordsOnly`, every notice shows its words and no action. */
   #renderNoticeStrip(wordsOnly = false) {
     return html`<till-notice-strip
         slot="notices"
         .notices=${this.staffNotices}
-        .checkTimeOffered=${!wordsOnly && this.checkTimeOffered}
-        .canOpenDrawer=${!wordsOnly && this.#mayOpenDrawer}
+        .checkTimeOffered=${this.checkTimeOffered}
+        .canOpenDrawer=${this.#mayOpenDrawer}
         .drawerBusy=${this.drawerOpening}
-        @till-open-drawer=${() => void this.#onOpenDrawer()}
-        @till-check-time=${() => (this.boxTimeOpen = true)}
+        .wordsOnly=${wordsOnly}
+        @till-open-drawer=${wordsOnly ? nothing : () => void this.#onOpenDrawer()}
+        @till-check-time=${wordsOnly ? nothing : () => (this.boxTimeOpen = true)}
       ></till-notice-strip
       >${
         this.boxTimeOpen

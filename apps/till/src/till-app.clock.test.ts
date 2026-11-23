@@ -26,8 +26,10 @@ afterEach(() => {
 
 describe("till clocking integration", () => {
   it("shows every notice on the clock-in page, words only, with no Open drawer", async () => {
+    const openDrawer = vi.fn().mockResolvedValue(undefined);
     const f = await clockApp({
       api: {
+        openDrawer,
         getDeviceEquipment: vi.fn().mockResolvedValue({
           roles: [],
           opensDrawer: true,
@@ -69,6 +71,11 @@ describe("till clocking integration", () => {
     );
     expect(strip.querySelector("[data-open-drawer]")).toBeNull();
     expect(strip.querySelector("wt-button")).toBeNull();
+    f.el
+      .shadowRoot!.querySelector("till-notice-strip")!
+      .dispatchEvent(new CustomEvent("till-open-drawer", { bubbles: true, composed: true }));
+    await f.el.updateComplete;
+    expect(openDrawer).not.toHaveBeenCalled();
   });
 
   it("shows a clock notice on the clock-in page with no Check time, though the box offers it", async () => {
@@ -103,9 +110,14 @@ describe("till clocking integration", () => {
       ).toContain(en["staff_notice.clock.unusable"]),
     );
     expect((f.el as unknown as { checkTimeOffered: boolean }).checkTimeOffered).toBe(true);
-    const strip = f.el.shadowRoot!.querySelector("till-notice-strip")!.shadowRoot!;
+    const host = f.el.shadowRoot!.querySelector("till-notice-strip")!;
+    const strip = host.shadowRoot!;
     expect(strip.querySelector("[data-check-time]")).toBeNull();
     expect(strip.querySelector("wt-button")).toBeNull();
+    expect(strip.textContent).not.toContain(en["staff_notice.see_box_status"]);
+    host.dispatchEvent(new CustomEvent("till-check-time", { bubbles: true, composed: true }));
+    await f.el.updateComplete;
+    expect(f.el.shadowRoot!.querySelector("till-box-time-dialog")).toBeNull();
   });
 
   it("the initial clock page's idle deadline is not reset when work data finally loads", async () => {

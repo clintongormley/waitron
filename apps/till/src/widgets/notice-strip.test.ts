@@ -430,4 +430,64 @@ describe("till-notice-strip", () => {
       );
     });
   });
+  describe("words only", () => {
+    const DRAWER = notice("print_job.drawer_expired", "warning");
+    const offered = { wordsOnly: true, checkTimeOffered: true, canOpenDrawer: true };
+
+    it("draws every notice with no action, and no hint on a clock line whose check is offered", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [CLOCK, WAITING, DRAWER, DISK],
+        ...offered,
+      });
+      const toggle = button(el)!;
+      expect(toggle.classList.contains("line")).toBe(true);
+      expect(flat(toggle.querySelector(".words"))).toBe(en["staff_notice.clock.unusable"]);
+      await userEvent.click(toggle);
+      await settle(el);
+      expect([...list(el)!.querySelectorAll("li")].map((item) => flat(item))).toEqual([
+        en["staff_notice.clock.unconfirmed"].replace("{agreed}", "0"),
+        en["staff_notice.print_job.drawer_expired"],
+        `${en["staff_notice.storage.disk_full"]} · ${en["staff_notice.tell_manager"]}`,
+      ]);
+      expect(root(el).querySelector("wt-button")).toBeNull();
+      expect(root(el).querySelector("[data-check-time]")).toBeNull();
+      expect(root(el).querySelector("[data-open-drawer]")).toBeNull();
+      expect(flat(strip(el))).not.toContain(en["staff_notice.see_box_status"]);
+    });
+
+    it("keeps a clock line's see-Box-status hint when no check is offered", async () => {
+      const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices: [CLOCK],
+        wordsOnly: true,
+        canOpenDrawer: true,
+      });
+      expect(flat(root(el).querySelector("[data-notice-tone]"))).toBe(
+        `${en["staff_notice.clock.unusable"]} · ${en["staff_notice.see_box_status"]}`,
+      );
+    });
+
+    it.each([
+      ["one notice", [CLOCK]],
+      ["one drawer notice", [DRAWER]],
+      ["several notices", [DRAWER, CLOCK, DISK]],
+    ])("sends no action event however it is pressed, with %s", async (_form, notices) => {
+      const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+        notices,
+        ...offered,
+      });
+      let heard = 0;
+      host.addEventListener("till-check-time", () => heard++);
+      host.addEventListener("till-open-drawer", () => heard++);
+      const toggle = button(el);
+      if (toggle !== null) {
+        await userEvent.click(toggle);
+        await settle(el);
+      }
+      for (const pressable of root(el).querySelectorAll<HTMLElement>(".line, .line *")) {
+        pressable.click();
+      }
+      await settle(el);
+      expect(heard).toBe(0);
+    });
+  });
 });
