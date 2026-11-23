@@ -290,7 +290,7 @@ export class SetupHandoverScreen extends LitElement {
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
   }
-  /** Whether the backup choice is drawn with the sign-in: no other copy can be chosen otherwise. */
+  /** Whether another copy (a backup) can be chosen instead of this one. */
   get #offersOtherCopy(): boolean {
     return this.#isEmergency && !this.#declared && !this.copyPreview?.operation;
   }
@@ -1291,7 +1291,7 @@ export class SetupHandoverScreen extends LitElement {
       >
     </li>`;
   }
-  /** Page 6: brings the copy up to date and checks it; then offers it, or a backup instead. */
+  /** Preparing the venue: brings the copy up to date and checks it; then offers it, or a backup instead. */
   #preparingPage() {
     const preview = this.copyPreview;
     const working =
@@ -1442,7 +1442,7 @@ export class SetupHandoverScreen extends LitElement {
           : nothing
       }`;
   }
-  /** Page 7: the statements and the reason the switch records, then Switch to this box. */
+  /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
   #readyPage() {
     const preview = this.copyPreview!;
     return html`<section data-test="emergency-ready" data-wording-version="a1018-emergency-v2">

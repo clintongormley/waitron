@@ -1923,8 +1923,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "La descripción de la copia final no se puede leer o no corresponde a este traspaso. Consulta el progreso del traspaso en ambos servidores antes de volver a intentarlo.",
   },
   "handover.copy_check_failed": {
-    en: "This box could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, check this copy again, or use a working backup.",
-    es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, vuelve a comprobar esta copia o usa una copia de seguridad válida.",
+    en: "This box could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, choose Try again on the switch page, or use a working backup.",
+    es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, elige Volver a intentarlo en la página de cambio o usa una copia de seguridad válida.",
   },
   "handover.source_still_answering": {
     en: "The old box still answers. Switch it off before declaring an emergency handover, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",

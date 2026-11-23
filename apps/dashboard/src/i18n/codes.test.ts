@@ -1251,8 +1251,8 @@ it.each([
   ],
   [
     "handover.copy_check_failed",
-    "This box could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, check this copy again, or use a working backup.",
-    "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, vuelve a comprobar esta copia o usa una copia de seguridad válida.",
+    "This box could not finish checking the copy, so it has not taken over. A controlled handover retries by itself. In an emergency, choose Try again on the switch page, or use a working backup.",
+    "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, elige Volver a intentarlo en la página de cambio o usa una copia de seguridad válida.",
   ],
   [
     "provisioning.database_ahead",

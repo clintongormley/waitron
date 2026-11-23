@@ -83,7 +83,7 @@ volver a usar esa máquina, restablécela y añádela como un nuevo servidor de 
 
 Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el servidor principal
 anterior y mantenlo apagado, porque dos servidores principales encendidos podrían cobrar y enviar
-registros por separado. Esta declaración no se puede deshacer.
+registros por separado. El cambio no se puede deshacer.
 
 En una caja o un terminal de camarero, **El servidor principal no responde.** ocupa en rojo la
 pantalla de inicio de sesión, en lugar del teclado del PIN mientras el servidor principal no responda, y aparece
@@ -92,7 +92,7 @@ pantalla de inicio de sesión, y a quien tenga **Gestionar servidores**. Abre es
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
 más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
-que recargue; si no querías cambiar, no declares nada y recarga la página cuando el servidor
+que recargue; si no querías cambiar, no hagas el cambio y recarga la página cuando el servidor
 principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva.
@@ -106,8 +106,8 @@ averiado, apágalo y elige **Comprobar otra vez**.
 
 Si el servidor principal no responde, la página dice qué hace el cambio y, cuando el servidor de
 reserva lo sabe, desde hace cuánto. Comprueba que el servidor principal está enchufado y que su
-cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que declares, **Volver
-a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras declarar, **Salir de
+cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que elijas **Cambiar a este servidor**, **Volver
+a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras hacer el cambio, **Salir de
 esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
 
 Elige **Empezar el cambio** y después identifícate con la contraseña de una cuenta de
@@ -122,15 +122,15 @@ reserva** ofrece la copia que ya tiene, normalmente la de cuando se incorporó, 
 Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia**: puede faltar lo
 posterior. Después elige **Seguir**.
 
-Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
-reserva antes de volver a elegir la copia.
-
-Para usar una copia de seguridad cifrada, elige **Subir un archivo de copia de seguridad** en
+Para usar una copia de seguridad cifrada, elige **Subir un archivo de copia de seguridad en su lugar** en
 **Preparando el local**, elige el archivo y pulsa **Usar esta copia de seguridad**.
 Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última venta o pedido antes de elegir **Seguir**. Elige una copia hecha después de que este
 servidor de reserva se uniera a su principal actual.
+
+Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
+reserva antes de volver a elegir la copia de seguridad.
 
 En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige
 **Cambiar a este servidor**. En la comprobación del reloj, marca **Estos datos son correctos.**
@@ -148,9 +148,8 @@ motivo y las declaraciones se conservan.
 Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
 última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones.
 
-Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
-reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración
-guardada; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
+Al recargar o abrir la dirección en otro dispositivo se encuentra el cambio
+empezado; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
 ofrece su página de progreso. Si no se puede verificar la copia con la declaración, para y
 conserva los datos de ambos servidores.
 

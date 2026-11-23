@@ -79,7 +79,7 @@ it and add it as a new spare.
 ## Start here when the main box has failed {#emergency}
 
 Use a spare that has finished joining this venue. Switch off the old main box and keep it off,
-because two running main boxes could take payments and file separately. This declaration cannot
+because two running main boxes could take payments and file separately. A switch cannot
 be undone.
 
 On a till or handheld, **The main box is not answering.** fills the sign-in screen in red, in place
@@ -88,7 +88,7 @@ the spare box** on the sign-in screen, and to anyone with **Manage boxes**. It o
 spare. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
 box that restarts for longer than about 20 seconds, during an update for example, brings a
-reloading device here too; if you did not mean to switch, do not declare anything, and reload the
+reloading device here too; if you did not mean to switch, do not switch, and reload the
 page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label).
@@ -101,8 +101,8 @@ from there; if the main box is broken, switch it off and choose **Check again**.
 
 If the main box is silent, the page says what switching does and, when the spare knows, for how
 long. Check that the main box is plugged in and its network cable is connected; if it starts
-working again, keep using it. Until you declare, **Go back to the till** (**Go back** when you did
-not come from a till) leaves without switching; after declaring, **Leave this page (the switch is
+working again, keep using it. Until you choose **Switch to this box**, **Go back to the till** (**Go back** when you did
+not come from a till) leaves without switching; after switching, **Leave this page (the switch is
 saved)** or **Continue to this box** brings you back.
 
 Choose **Start switching**, then sign in with an administrator account’s password and
@@ -117,14 +117,14 @@ cannot be done, **Use the copy this spare holds** offers the copy already on it,
 from when it joined, with nothing newer. When the copy is checked, read **Latest sale or order in
 this copy**: anything newer may be missing. Then choose **Proceed**.
 
-If the page reports too little temporary space, free disk space on the spare before choosing
-the backup again.
-
 To use an encrypted backup instead, choose **Upload a backup file instead** on **Preparing the
 venue**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup
 encryption key**. The box keeps its saved key. Keep this page open while the spare restarts, then
 check **Selected backup** and its latest sale or order before you choose **Proceed**. Choose a
 backup made after this spare joined its current main box.
+
+If the page reports too little temporary space, free disk space on the spare before choosing
+the backup again.
 
 On **Ready to switch**, tick all three statements and say why you are switching. Choose **Switch
 to this box**. At the clock check, tick **These details are correct.** and choose **Proceed**:
@@ -138,8 +138,8 @@ the spare needs it, usually once, and again after 15 minutes. Your reason and st
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
 latest sale or order, choose **Proceed** and tick the three statements again.
 
-If an answer is lost, keep the page open and check the copy again before retrying. Reloading or
-opening the address on another device finds your saved declaration; sign in and continue with the
+Reloading or
+opening the address on another device finds the switch you started; sign in and continue with the
 clock check. An unfinished controlled handover offers its own progress page. If the copy cannot
 be verified against the declaration, stop and keep both boxes’ data intact.
 

@@ -84,7 +84,7 @@ export const handoverEn = {
     "The copy changed while you were reading. Check its latest sale or order, then Proceed and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest sale or order in this copy",
   "handover.emergency.declared_at": "Declared:",
-  "handover.emergency.no_date": "No dated activity was found in this copy.",
+  "handover.emergency.no_date": "This copy holds no sale or order with a date.",
   "handover.emergency.servers": "Open the Servers page on the old main box",
   "handover.emergency.sourceSwitchedOff": "The old main box is switched off.",
   "handover.emergency.noParallelRecovery": "Nobody is switching the venue anywhere else.",
@@ -121,7 +121,7 @@ export const handoverEn = {
     "The venue or handover has changed. Check progress and use the current main box.",
   "handover.emergency.trust":
     "The old main box’s identity or address could not be checked. Check its connection and address on the Servers page before trying again.",
-  "handover.emergency.failed": "This step could not finish. Try again before you go on.",
+  "handover.emergency.failed": "This step could not finish. Keep this page open and try again.",
   "handover.emergency.checking_heading": "Checking the main box",
   "handover.emergency.spare_intro":
     "This is the venue's spare box. It keeps a copy of the venue and can take over if the main box has failed.",
@@ -248,7 +248,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "La copia cambió mientras la leías. Revisa su última venta o pedido, pulsa Seguir y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última venta o pedido en esta copia",
   "handover.emergency.declared_at": "Declarado:",
-  "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
+  "handover.emergency.no_date": "Esta copia no tiene ninguna venta ni pedido con fecha.",
   "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
   "handover.emergency.sourceSwitchedOff": "El servidor principal anterior está apagado.",
   "handover.emergency.noParallelRecovery": "Nadie está cambiando el local a otro sitio.",
@@ -287,7 +287,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.trust":
     "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en la página Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
-    "No se pudo terminar este paso. Vuelve a intentarlo antes de seguir.",
+    "No se pudo terminar este paso. Mantén esta página abierta y vuelve a intentarlo.",
   "handover.emergency.checking_heading": "Comprobando el servidor principal",
   "handover.emergency.spare_intro":
     "Este es el servidor de reserva del local. Guarda una copia del local y puede tomar el relevo si el servidor principal ha fallado.",
@@ -319,7 +319,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.step_working": "En curso:",
   "handover.emergency.step_waiting": "Pendiente:",
   "handover.emergency.proceed": "Seguir",
-  "handover.emergency.upload_backup": "Subir un archivo de copia de seguridad",
+  "handover.emergency.upload_backup": "Subir un archivo de copia de seguridad en su lugar",
   "handover.emergency.keep_open":
     "Mantén esta página abierta. Este servidor puede reiniciarse; la página sigue sola.",
   "handover.emergency.ready_heading": "Listo para cambiar",
