@@ -112,25 +112,28 @@ esta página (el cambio está guardado)** o **Continuar en este servidor** te de
 
 Elige **Empezar el cambio** y después identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, o elige **Usar tu passkey**;
-después elige **Comprobar esta copia** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
-vuelve a poner al día su copia antes de que puedas intentarlo de nuevo. El servidor de reserva primero pone al día su copia y se reinicia; mantén la página
-abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de reserva** ofrece la copia que ya tiene,
-normalmente la de cuando se incorporó, sin nada posterior. Revisa la última actividad con fecha de la copia. Puede faltar la actividad posterior; si no hay
-ninguna fecha disponible, la página lo indica.
+después elige **Continuar** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
+vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
+
+**Preparando el local** aplica los cambios que el servidor de reserva ya recibió del servidor
+principal y después comprueba la copia. El servidor de reserva puede reiniciarse; mantén la página
+abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de
+reserva** ofrece la copia que ya tiene, normalmente la de cuando se incorporó, sin nada posterior.
+Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia**: puede faltar lo
+posterior. Después elige **Seguir**.
 
 Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
 reserva antes de volver a elegir la copia.
 
-Tras **Comprobar esta copia** el inicio de sesión se pliega; **Usar otra copia** lo vuelve a mostrar,
-junto con la elección de la copia de seguridad. Para usar una copia de seguridad cifrada, elige su
-archivo y pulsa **Usar esta copia de seguridad**.
+Para usar una copia de seguridad cifrada, elige **Subir un archivo de copia de seguridad** en
+**Preparando el local**, elige el archivo y pulsa **Usar esta copia de seguridad**.
 Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
-última actividad antes de declarar. Elige una copia hecha después de que este servidor de reserva
-se uniera a su principal actual.
+última venta o pedido antes de elegir **Seguir**. Elige una copia hecha después de que este
+servidor de reserva se uniera a su principal actual.
 
-Marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
-el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
+En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige
+**Cambiar a este servidor**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas y muestra
 para qué sirve cada una. Si este servidor no puede comprobar su hora por internet, la página
 muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y
@@ -142,8 +145,8 @@ passkey, la página te la pide cuando el servidor de reserva la necesita, normal
 nuevo pasados 15 minutos. El
 motivo y las declaraciones se conservan.
 
-Si la copia cambia antes de declarar, revisa la nueva actividad y vuelve a marcar las tres
-declaraciones.
+Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
+última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones.
 
 Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
 reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración

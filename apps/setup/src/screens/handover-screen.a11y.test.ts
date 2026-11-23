@@ -209,9 +209,11 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             );
             await el.updateComplete;
             await expectNoA11yViolations(host);
-            el.shadowRoot!.querySelector<HTMLElement>("[data-test=different-copy]")!.click();
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=upload-backup]")!.click();
             await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
+              expect(
+                el.shadowRoot!.querySelector('wt-file-input[name="handover-backup"]'),
+              ).not.toBeNull(),
             );
           }
           if (stage === "clock") {
@@ -236,6 +238,128 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
           }
           host.remove();
         }
+      } finally {
+        await page.viewport(1280, 720);
+      }
+    },
+  );
+});
+
+describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
+  it.each(["light", "dark"] as const)(
+    "Preparing the venue while it works and when done, Ready to switch, and a reopened switch are accessible in %s",
+    async (theme) => {
+      const { page } = await import("vitest/browser");
+      setLocale(locale);
+      /** With VITE_EMERGENCY_SHOTS=1, saves the page as a person sees it at 400px. */
+      const shoot = async (stage: string) => {
+        if (import.meta.env.VITE_EMERGENCY_SHOTS !== "1") return;
+        await page.viewport(400, 900);
+        await page.screenshot({ path: `__screenshots__/3c-${stage}-${locale}-${theme}.png` });
+      };
+      let takes = 0;
+      const statusBody = {
+        operationId: "emergency",
+        role: "destination",
+        scenario: "emergency",
+        state: "emergency_declared",
+        sourceNodeId: "old",
+        destinationNodeId: "new",
+        waitingReason: null,
+        timeZone: "Europe/Madrid",
+      };
+      const api = new SetupApi("", async (input, init) => {
+        const path = String(input);
+        if (path === "/api/node/main")
+          return new Response(JSON.stringify({ mainUrl: null, silentForMs: 65_000 }));
+        if (init?.method === "GET") return new Response(JSON.stringify({ body: statusBody }));
+        if (path.endsWith("/followed"))
+          return new Response(JSON.stringify({ state: takes++ < 1 ? "catching-up" : "taken" }));
+        if (path.endsWith("/preview"))
+          return new Response(
+            JSON.stringify({
+              sourceNodeId: "old",
+              destinationNodeId: "new",
+              sourceServersUrl: "https://main.example/servers",
+              copy: {
+                source: "followed-copy",
+                sourceId: "c".repeat(64),
+                identifier: "a".repeat(64),
+                lastChangeAtMs: 1792147200000,
+              },
+              joinedAtMs: 1789819200000,
+              operation: null,
+            }),
+          );
+        throw new Error(`Unexpected request ${path}`);
+      });
+      try {
+        await page.viewport(400, 2000);
+        const { el, host } = await mountWidget<SetupHandoverScreen>(
+          "setup-handover-screen",
+          { api, emergency: true },
+          theme,
+        );
+        const root = el.shadowRoot!;
+        await vi.waitFor(() =>
+          expect(root.querySelector("[data-test=start-switching]")).not.toBeNull(),
+        );
+        root.querySelector<HTMLElement>("[data-test=start-switching]")!.click();
+        await vi.waitFor(() =>
+          expect(root.querySelector('[name="handover-email"]')).not.toBeNull(),
+        );
+        for (const [name, value] of [
+          ["email", "owner@example.com"],
+          ["password", "synthetic-password"],
+        ]) {
+          const field = root.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+            `[name="handover-${name}"]`,
+          )!;
+          await field.updateComplete;
+          const input = field.shadowRoot!.querySelector("input")!;
+          input.value = value!;
+          input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+          await el.updateComplete;
+        }
+        root.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
+        await vi.waitFor(() =>
+          expect(
+            root.querySelector('[data-test=step-follow][data-state="working"]'),
+          ).not.toBeNull(),
+        );
+        await expectNoA11yViolations(host);
+        await shoot("06-preparing");
+        await vi.waitFor(() => expect(root.querySelector("[data-test=proceed]")).not.toBeNull(), {
+          timeout: 5000,
+        });
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        await shoot("06-done");
+        root.querySelector<HTMLElement>("[data-test=upload-backup]")!.click();
+        await vi.waitFor(() =>
+          expect(root.querySelector('wt-file-input[name="handover-backup"]')).not.toBeNull(),
+        );
+        await expectNoA11yViolations(host);
+        await shoot("06-backup");
+        root.querySelector<HTMLElement>("[data-test=proceed]")!.click();
+        await vi.waitFor(() =>
+          expect(root.querySelector("[data-test=emergency-ready]")).not.toBeNull(),
+        );
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        await shoot("07-ready");
+        host.remove();
+        const reopened = await mountWidget<SetupHandoverScreen>(
+          "setup-handover-screen",
+          { api, operationId: "emergency" },
+          theme,
+        );
+        await vi.waitFor(() =>
+          expect(reopened.el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
+        );
+        await expectNoA11yViolations(reopened.host);
+        await shoot("12-reopened");
+        reopened.host.remove();
       } finally {
         await page.viewport(1280, 720);
       }

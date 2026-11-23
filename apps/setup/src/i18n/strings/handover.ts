@@ -40,7 +40,7 @@ export const handoverEn = {
   "handover.emergency.passkey_failed":
     "Your passkey did not sign you in. Try again, or use your password.",
   "handover.emergency.passkey_lapsed":
-    "The spare took a while to catch up and your passkey sign-in expired. Choose Check this copy and use your passkey again.",
+    "The spare took a while to catch up and your passkey sign-in expired. Choose Continue and use your passkey again.",
   "handover.emergency.held_passkey_refused":
     "This spare's own copy did not accept your passkey. To use it, choose Use your password and sign in.",
   "handover.emergency.saved": "The switch is saved and cannot be undone.",
@@ -48,7 +48,6 @@ export const handoverEn = {
   "handover.emergency.copy": "Copy held on this spare",
   "handover.emergency.selected_backup": "Selected backup",
   "handover.emergency.followed": "Latest copy from the main box",
-  "handover.emergency.catching_up": "Bringing this spare's copy up to date…",
   "handover.emergency.still_catching_up":
     "This can take a while. Keep waiting, use the copy this spare holds, or choose a backup.",
   "handover.emergency.followed_restarting":
@@ -67,7 +66,7 @@ export const handoverEn = {
     "This is the copy from when this spare joined. It has nothing newer.",
   "handover.emergency.spare_joined": "This spare joined on {joined}.",
   "handover.emergency.backup_intro":
-    "To use an encrypted backup instead, choose its file. This replaces the copy on this spare and restarts it before you review and declare.",
+    "Choose an encrypted backup file. It replaces the copy on this spare, and the box restarts before you go on.",
   "handover.emergency.backup_file": "Encrypted backup file",
   "handover.emergency.backup_key": "Backup encryption key",
   "handover.emergency.use_backup": "Use this backup",
@@ -82,26 +81,21 @@ export const handoverEn = {
   "handover.emergency.backup_invalid":
     "The backup could not be opened. Check the encrypted file and its backup encryption key, then try again.",
   "handover.emergency.copy_changed":
-    "The copy changed while you were reading. Review its latest activity and confirm all three statements again.",
-  "handover.emergency.latest_activity": "Latest dated activity:",
+    "The copy changed while you were reading. Check its latest sale or order, then Proceed and confirm all three statements again.",
+  "handover.emergency.latest_activity": "Latest sale or order in this copy",
   "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "No dated activity was found in this copy.",
   "handover.emergency.servers": "Open the Servers page on the old main box",
-  "handover.emergency.warning":
-    "Switch off the old main box and keep it off, or both boxes could take payments. Keep it and its data. This cannot be undone.",
-  "handover.emergency.sourceSwitchedOff": "I have switched off the old main box.",
-  "handover.emergency.noParallelRecovery":
-    "No other box or cloud recovery is being started for this venue.",
-  "handover.emergency.missingTailAccepted":
-    "I accept that this copy may be missing the old box’s latest activity.",
-  "handover.emergency.reason": "Why are you starting the venue here?",
+  "handover.emergency.sourceSwitchedOff": "The old main box is switched off.",
+  "handover.emergency.noParallelRecovery": "Nobody is switching the venue anywhere else.",
+  "handover.emergency.missingTailAccepted": "I accept that the latest activity may be missing.",
+  "handover.emergency.reason": "Why are you switching?",
   "handover.emergency.reason_long": "Use no more than 500 characters.",
-  "handover.emergency.check": "Check this copy",
-  "handover.emergency.declare": "Declare the old main box switched off",
+  "handover.emergency.continue": "Continue",
+  "handover.emergency.declare": "Switch to this box",
   "handover.emergency.leave": "Go back",
   "handover.emergency.leave_till": "Go back to the till",
   "handover.emergency.leave_saved": "Leave this page (the switch is saved)",
-  "handover.emergency.different_copy": "Use a different copy",
   "handover.emergency.progress": "Open handover progress",
   "handover.emergency.controlled_link": "Open the unfinished handover",
   "handover.emergency.code_expired":
@@ -127,8 +121,7 @@ export const handoverEn = {
     "The venue or handover has changed. Check progress and use the current main box.",
   "handover.emergency.trust":
     "The old main box’s identity or address could not be checked. Check its connection and address on the Servers page before trying again.",
-  "handover.emergency.failed":
-    "This step could not finish. Check this copy again before trying to continue.",
+  "handover.emergency.failed": "This step could not finish. Try again before you go on.",
   "handover.emergency.checking_heading": "Checking the main box",
   "handover.emergency.spare_intro":
     "This is the venue's spare box. It keeps a copy of the venue and can take over if the main box has failed.",
@@ -152,11 +145,25 @@ export const handoverEn = {
   "handover.emergency.what_body":
     "This spare box will become the new main box. The old main box must be switched off before making the change. This cannot be undone.",
   "handover.emergency.start": "Start switching",
+  "handover.emergency.preparing_heading": "Preparing the venue",
+  "handover.emergency.step_follow":
+    "Applying the changes this box already received from the main box",
+  "handover.emergency.step_check": "Checking the copy",
+  "handover.emergency.step_done": "Done:",
+  "handover.emergency.step_working": "In progress:",
+  "handover.emergency.step_waiting": "Not started:",
+  "handover.emergency.proceed": "Proceed",
+  "handover.emergency.upload_backup": "Upload a backup file instead",
+  "handover.emergency.keep_open":
+    "Keep this page open. This box may restart; the page carries on by itself.",
+  "handover.emergency.ready_heading": "Ready to switch",
+  "handover.emergency.switching_heading": "This box is switching from spare to main box",
+  "handover.emergency.switching_body":
+    "The switch was recorded but has not finished. Sign in to finish it.",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
   "handover.emergency.followed": "Última copia del servidor principal",
-  "handover.emergency.catching_up": "Poniendo al día la copia de este servidor de reserva…",
   "handover.emergency.still_catching_up":
     "Puede tardar. Sigue esperando, usa la copia que guarda este servidor de reserva o elige una copia de seguridad.",
   "handover.emergency.followed_restarting":
@@ -176,7 +183,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Es la copia de cuando se incorporó este servidor de reserva. No tiene nada posterior.",
   "handover.emergency.spare_joined": "Este servidor de reserva se incorporó el {joined}.",
   "handover.emergency.backup_intro":
-    "Para usar una copia de seguridad cifrada, elige su archivo. Sustituye la copia de este servidor de reserva y lo reinicia antes de que la revises y hagas la declaración.",
+    "Elige un archivo de copia de seguridad cifrada. Sustituye la copia de este servidor de reserva, y el servidor se reinicia antes de que sigas.",
   "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",
   "handover.emergency.backup_key": "Clave de cifrado de copias",
   "handover.emergency.use_backup": "Usar esta copia de seguridad",
@@ -231,33 +238,28 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.passkey_failed":
     "Tu passkey no te ha identificado. Vuelve a intentarlo o usa tu contraseña.",
   "handover.emergency.passkey_lapsed":
-    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Comprobar esta copia y vuelve a usar tu passkey.",
+    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Continuar y vuelve a usar tu passkey.",
   "handover.emergency.held_passkey_refused":
     "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, elige Usar tu contraseña e identifícate.",
   "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",
   "handover.emergency.details": "Detalles",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
-    "La copia cambió mientras la leías. Revisa su última actividad y vuelve a confirmar las tres declaraciones.",
-  "handover.emergency.latest_activity": "Última actividad con fecha:",
+    "La copia cambió mientras la leías. Revisa su última venta o pedido, pulsa Seguir y vuelve a confirmar las tres declaraciones.",
+  "handover.emergency.latest_activity": "Última venta o pedido en esta copia",
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
   "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
-  "handover.emergency.warning":
-    "Apaga el servidor principal anterior y mantenlo apagado, o ambos servidores podrían cobrar. Consérvalo con sus datos. Esto no se puede deshacer.",
-  "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
-  "handover.emergency.noParallelRecovery":
-    "No se está iniciando otro servidor ni una recuperación en la nube para este local.",
-  "handover.emergency.missingTailAccepted":
-    "Acepto que esta copia puede no incluir la actividad más reciente del servidor anterior.",
-  "handover.emergency.reason": "¿Por qué vas a iniciar el local aquí?",
+  "handover.emergency.sourceSwitchedOff": "El servidor principal anterior está apagado.",
+  "handover.emergency.noParallelRecovery": "Nadie está cambiando el local a otro sitio.",
+  "handover.emergency.missingTailAccepted": "Acepto que puede faltar la actividad más reciente.",
+  "handover.emergency.reason": "¿Por qué haces el cambio?",
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
-  "handover.emergency.check": "Comprobar esta copia",
-  "handover.emergency.declare": "Declarar apagado el servidor principal anterior",
+  "handover.emergency.continue": "Continuar",
+  "handover.emergency.declare": "Cambiar a este servidor",
   "handover.emergency.leave": "Volver",
   "handover.emergency.leave_till": "Volver a la caja",
   "handover.emergency.leave_saved": "Salir de esta página (el cambio está guardado)",
-  "handover.emergency.different_copy": "Usar otra copia",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
   "handover.emergency.controlled_link": "Abrir el traspaso pendiente",
   "handover.emergency.code_expired":
@@ -285,7 +287,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.trust":
     "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en la página Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
-    "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
+    "No se pudo terminar este paso. Vuelve a intentarlo antes de seguir.",
   "handover.emergency.checking_heading": "Comprobando el servidor principal",
   "handover.emergency.spare_intro":
     "Este es el servidor de reserva del local. Guarda una copia del local y puede tomar el relevo si el servidor principal ha fallado.",
@@ -309,4 +311,19 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.what_body":
     "Este servidor de reserva pasará a ser el nuevo servidor principal. El servidor principal antiguo debe estar apagado antes de hacer el cambio. No se puede deshacer.",
   "handover.emergency.start": "Empezar el cambio",
+  "handover.emergency.preparing_heading": "Preparando el local",
+  "handover.emergency.step_follow":
+    "Aplicando los cambios que este servidor ya recibió del servidor principal",
+  "handover.emergency.step_check": "Comprobando la copia",
+  "handover.emergency.step_done": "Hecho:",
+  "handover.emergency.step_working": "En curso:",
+  "handover.emergency.step_waiting": "Pendiente:",
+  "handover.emergency.proceed": "Seguir",
+  "handover.emergency.upload_backup": "Subir un archivo de copia de seguridad",
+  "handover.emergency.keep_open":
+    "Mantén esta página abierta. Este servidor puede reiniciarse; la página sigue sola.",
+  "handover.emergency.ready_heading": "Listo para cambiar",
+  "handover.emergency.switching_heading": "Este servidor está pasando de reserva a principal",
+  "handover.emergency.switching_body":
+    "El cambio quedó registrado, pero no ha terminado. Identifícate para terminarlo.",
 };
