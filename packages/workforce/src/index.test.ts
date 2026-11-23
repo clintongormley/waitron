@@ -20,6 +20,7 @@ describe("the public surface", () => {
         "recordStaffActivity",
         "readStaffActivityFacts",
         "attendanceQuestions",
+        "attendanceAnswers",
         "enqueueAttendanceDay",
         "processAttendanceDay",
         "upsertAttendanceQuestion",

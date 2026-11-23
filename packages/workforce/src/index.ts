@@ -3,6 +3,7 @@ export { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
 export { executeAttendanceCommand, readAttendanceCommand } from "./attendance-response-commands.js";
 export { reconcileAttendanceResponses } from "./attendance-question-responses.js";
 export { staffActivity, attendanceDays, attendanceQuestions } from "./schema/attendance.js";
+export { attendanceAnswers } from "./schema/attendance-responses.js";
 export { enqueueAttendanceDay } from "./attendance-state.js";
 export { recordStaffActivity, readStaffActivityFacts } from "./staff-activity.js";
 export { processAttendanceDay } from "./end-of-day.js";

@@ -73,13 +73,21 @@ async function download(
 describe("the own personal-data download", () => {
   it("reads the identity part when identity is enabled", async () => {
     const files = await download(["core", "identity"]);
-    expect(Object.keys(files).sort()).toEqual(["README.txt", "profile.json", "sign-in.json"]);
+    expect(Object.keys(files).sort()).toEqual([
+      "README.txt",
+      "profile.json",
+      "sign-in.json",
+      "staff-actions.json",
+    ]);
     expect(files["profile.json"]).toContain("Martha Canary");
   });
 
   it("reads only the enabled modules, not every module", async () => {
     const files = await download(["core"]);
-    expect(files).toEqual({ "README.txt": expect.any(String) });
+    expect(files).toEqual({
+      "README.txt": expect.any(String),
+      "staff-actions.json": expect.any(String),
+    });
   });
 
   it("adds the working-time record when workforce and an exporter are enabled", async () => {
@@ -167,6 +175,7 @@ describe("the own personal-data download", () => {
       "profile.json",
       "sign-in.json",
       "actions.json",
+      "staff-actions.json",
     ]);
     expect(JSON.parse(strFromU8(files["actions.json"]!))).toEqual({
       counts: {
@@ -298,6 +307,7 @@ describe("the own personal-data download", () => {
         "profile.json",
         "sign-in.json",
         "adjustments.json",
+        "staff-actions.json",
       ]);
       expect(JSON.parse(files["adjustments.json"]!)).toEqual({
         counts: { cancel: 0, comp: 1, discount_percent: 0, discount_amount: 0 },
@@ -325,7 +335,12 @@ describe("the own personal-data download", () => {
 
     it("gets no adjustments.json when the adjustments module is not enabled", async () => {
       const files = await download(["core", "identity"], {}, compAskedFor);
-      expect(Object.keys(files)).toEqual(["README.txt", "profile.json", "sign-in.json"]);
+      expect(Object.keys(files)).toEqual([
+        "README.txt",
+        "profile.json",
+        "sign-in.json",
+        "staff-actions.json",
+      ]);
       expect(files["README.txt"]).not.toContain("adjustments.json");
     });
   });

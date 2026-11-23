@@ -24,6 +24,8 @@ import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
 import { serviceActionsPersonalData } from "./personal-data-service-actions.js";
+import { staffActionsPersonalData } from "./personal-data-staff-actions.js";
+import { workforceDecisionsPersonalData } from "./personal-data-workforce-decisions.js";
 import { personalDataReadme } from "./personal-data-readme.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { knownZone } from "./venue-time-zone.js";
@@ -44,6 +46,8 @@ export function personalDataServerParts(
     ...timeRecordPersonalData(modules),
     ...actionsPersonalData(db),
     ...serviceActionsPersonalData(db),
+    ...staffActionsPersonalData(db),
+    ...workforceDecisionsPersonalData(modules, db),
   ];
 }
 

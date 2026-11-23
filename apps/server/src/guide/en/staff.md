@@ -123,6 +123,11 @@ decided any payment holds, look for `payment-holds.json`.
 Check `service-actions.json` for your order and table service actions and
 `department-transfers.json` for the transfers between departments you resolved.
 
+Look in `staff-actions.json` for bills, drafts and lines attributed to you, alerts you handled,
+recorded activity, mail related to you, receipts you handed over and settings you last saved.
+If you decided absences, swaps or attendance answers for other staff, or published a rota,
+look in `workforce-decisions.json` for the record references and dates.
+
 Look in `menu-publications.json` for the menu editions you published or scheduled and the
 cancellations recorded under your name. If Bookings is on, `bookings-created.json` lists the
 bookings you created.
