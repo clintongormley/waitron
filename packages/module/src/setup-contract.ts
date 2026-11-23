@@ -90,6 +90,7 @@ export interface ModulePromotionContext {
   prepare(proposal: unknown): Promise<unknown>;
 }
 export interface ModulePromotionEntry extends HTMLElement {
+  /** Empty for an error carrying `explained: true`, which the page has already put into words. */
   refusalMessage(error: unknown): string;
   locale: "en" | "es";
   /** Set by the page while it sends the start this entry's own action asked for. */

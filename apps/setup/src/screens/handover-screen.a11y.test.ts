@@ -181,6 +181,12 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             ["email", "owner@example.com"],
             ["password", "synthetic-password"],
           ]) {
+            if (name === "password") {
+              el.shadowRoot!.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
+              await vi.waitFor(() =>
+                expect(el.shadowRoot!.querySelector('[name="handover-password"]')).not.toBeNull(),
+              );
+            }
             const field = el.shadowRoot!.querySelector<
               HTMLElement & { updateComplete: Promise<unknown> }
             >(`[name="handover-${name}"]`)!;
@@ -190,7 +196,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
             await el.updateComplete;
           }
-          el.shadowRoot!.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=sign-in-password]")!.click();
           await vi.waitFor(() => expect(Reflect.get(el, "busy")).toBe(false));
           await el.updateComplete;
           if (stage === "waiting")
@@ -249,7 +255,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
 
 describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
   it.each(["light", "dark"] as const)(
-    "Preparing the venue while it works and when done, Ready to switch, and a reopened switch are accessible in %s",
+    "the sign-in's email and method steps, Preparing the venue while it works and when done, Ready to switch, and a reopened switch are accessible in %s",
     async (theme) => {
       const { page } = await import("vitest/browser");
       setLocale(locale);
@@ -322,8 +328,20 @@ describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
           input.value = value!;
           input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
           await el.updateComplete;
+          if (name === "email") {
+            // The email step, then the step that asks how to sign in.
+            await expectNoA11yViolations(host);
+            await shoot("05-sign-in");
+            root.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
+            await vi.waitFor(() =>
+              expect(root.querySelector("[data-test=sign-in-passkey]")).not.toBeNull(),
+            );
+            await el.updateComplete;
+            await expectNoA11yViolations(host);
+            await shoot("05b-sign-in-method");
+          }
         }
-        root.querySelector<HTMLElement>("[data-test=emergency-preview]")!.click();
+        root.querySelector<HTMLElement>("[data-test=sign-in-password]")!.click();
         await vi.waitFor(() =>
           expect(
             root.querySelector('[data-test=step-follow][data-state="working"]'),
@@ -350,6 +368,17 @@ describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
         await el.updateComplete;
         await expectNoA11yViolations(host);
         await shoot("07-ready");
+        // A refused sign-in reopens it on Ready to switch, where the method is only chosen.
+        Reflect.set(el, "signInOpen", true);
+        Reflect.set(el, "signInStep", "method");
+        await vi.waitFor(() =>
+          expect(
+            root.querySelector('wt-segmented-control[name="handover-sign-in-method"]'),
+          ).not.toBeNull(),
+        );
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        await shoot("07-ready-sign-in");
         host.remove();
         const reopened = await mountWidget<SetupHandoverScreen>(
           "setup-handover-screen",

@@ -112,9 +112,10 @@ cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que 
 a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras hacer el cambio, **Salir de
 esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
 
-Elige **Empezar el cambio** y después identifícate con la contraseña de una cuenta de
-administrador y su código actual de autenticador, si está configurado, o elige **Usar tu passkey**;
-después elige **Continuar** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
+Elige **Empezar el cambio**, escribe el correo de un administrador y elige **Continuar**, o elige
+una passkey guardada que te ofrezca el campo del correo. Si escribiste el correo, elige **Usar tu passkey**, o
+escribe tu contraseña y el código actual del autenticador, si está configurado, y elige
+**Identificarse con contraseña**. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
 vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
 
 **Preparando el local** aplica los cambios que el servidor de reserva ya recibió del servidor
@@ -143,9 +144,9 @@ elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qu
 hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Elige **Continuar** otra vez para iniciar el local en este servidor. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
-passkey, la página te la pide cuando el servidor de reserva la necesita, normalmente una vez, y de
-nuevo pasados 15 minutos. El
-motivo y las declaraciones se conservan.
+passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
+normalmente una vez, y de nuevo pasados 15 minutos; si en su lugar dice que hay que volver a
+comprobar tu passkey, vuelve a elegir el paso. El motivo y las declaraciones se conservan.
 
 Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
 última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones. Si la copia no

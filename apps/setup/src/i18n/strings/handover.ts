@@ -29,20 +29,26 @@ export const handoverEn = {
   "handover.try_again": "Try again",
   "handover.fix": "Complete the highlighted fields to continue.",
   "handover.required": "Complete this field.",
+  "handover.email_invalid": "Enter a valid email address.",
   "handover.zone": "Times below are in the venue’s time zone.",
-  "handover.emergency.sign_in":
-    "Sign in as an administrator to check this spare and start the venue here. Enter your password and current authenticator code, if set up. You only need a new code if this one expires.",
+  "handover.emergency.sign_in_heading": "Sign in to switch",
+  "handover.emergency.sign_in": "An administrator needs to sign in.",
+  "handover.emergency.change_email": "Change",
+  "handover.emergency.change_email_label": "Change email address",
   "handover.emergency.sign_in_with": "Sign in with",
   "handover.emergency.use_password": "Use your password",
   "handover.emergency.use_passkey": "Use your passkey",
-  "handover.emergency.sign_in_passkey":
-    "Sign in with an administrator's passkey to check this spare and start the venue here.",
+  "handover.emergency.sign_in_password": "Sign in with password",
   "handover.emergency.passkey_failed":
     "Your passkey did not sign you in. Try again, or use your password.",
+  "handover.emergency.passkey_again":
+    "Your passkey sign-in needs checking again. Choose Use your passkey, or sign in with your password.",
+  "handover.emergency.passkey_again_step":
+    "Your passkey sign-in needs checking again. Choose the step again, or use your password.",
   "handover.emergency.passkey_lapsed":
-    "The spare took a while to catch up and your passkey sign-in expired. Choose Continue and use your passkey again.",
+    "The spare took a while to catch up and your passkey sign-in expired. Choose Use your passkey to try again.",
   "handover.emergency.held_passkey_refused":
-    "This spare's own copy did not accept your passkey. To use it, choose Use your password and sign in.",
+    "This spare's own copy did not accept your passkey. To use it, sign in with your password.",
   "handover.emergency.saved": "The switch is saved and cannot be undone.",
   "handover.emergency.details": "Details",
   "handover.emergency.copy": "Copy held on this spare",
@@ -227,20 +233,26 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.try_again": "Volver a intentarlo",
   "handover.fix": "Completa los campos resaltados para continuar.",
   "handover.required": "Completa este campo.",
+  "handover.email_invalid": "Introduce un correo electrónico válido.",
   "handover.zone": "Las horas de abajo están en la zona horaria del local.",
-  "handover.emergency.sign_in":
-    "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
+  "handover.emergency.sign_in_heading": "Identifícate para cambiar",
+  "handover.emergency.sign_in": "Un administrador tiene que identificarse.",
+  "handover.emergency.change_email": "Cambiar",
+  "handover.emergency.change_email_label": "Cambiar correo electrónico",
   "handover.emergency.sign_in_with": "Identificarse con",
   "handover.emergency.use_password": "Usar tu contraseña",
   "handover.emergency.use_passkey": "Usar tu passkey",
-  "handover.emergency.sign_in_passkey":
-    "Identifícate con la passkey de un administrador para comprobar esta copia e iniciar el local aquí.",
+  "handover.emergency.sign_in_password": "Identificarse con contraseña",
   "handover.emergency.passkey_failed":
     "Tu passkey no te ha identificado. Vuelve a intentarlo o usa tu contraseña.",
+  "handover.emergency.passkey_again":
+    "Hay que volver a comprobar tu passkey. Elige Usar tu passkey o identifícate con tu contraseña.",
+  "handover.emergency.passkey_again_step":
+    "Hay que volver a comprobar tu passkey. Vuelve a elegir el paso o usa tu contraseña.",
   "handover.emergency.passkey_lapsed":
-    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Continuar y vuelve a usar tu passkey.",
+    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Usar tu passkey para volver a intentarlo.",
   "handover.emergency.held_passkey_refused":
-    "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, elige Usar tu contraseña e identifícate.",
+    "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, identifícate con tu contraseña.",
   "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",
   "handover.emergency.details": "Detalles",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",

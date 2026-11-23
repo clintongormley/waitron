@@ -5,7 +5,7 @@ import {
   WebAuthnAbortService,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { baseStyles } from "@waitron/ui";
+import { autofillUsername, autofillUsernameStyles, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DashboardApi, FreshSignInBody, OwnProfile } from "../api/client.js";
@@ -14,7 +14,6 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { classifyPasskeySignInError } from "../passkey-errors.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { autofillUsername, autofillUsernameStyles } from "./autofill-username.js";
 
 export interface SignInWays {
   password: boolean;

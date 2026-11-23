@@ -13,18 +13,23 @@ import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import {
+  browserSupportsWebAuthnAutofill,
   startAuthentication,
+  WebAuthnAbortService,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import {
+  autofillUsername,
+  autofillUsernameStyles,
   baseStyles,
   pageTitleStyles,
   focusFirstInvalid,
   formMessage,
+  submitOnEnter,
   formMessageStyles,
   visuallyHiddenStyles,
 } from "@waitron/ui";
-import { formatDuration } from "@waitron/shared";
+import { formatDuration, isValidEmail } from "@waitron/shared";
 import {
   SetupApi,
   type HandoverStatus,
@@ -54,6 +59,8 @@ const FOLLOWED_REFUSALS: Partial<Record<string, StringKey>> = {
   "handover.copy_check_failed": "handover.emergency.followed_failed",
 };
 const HELD_OFFER_AFTER_MS = 60_000;
+/** A switch challenge lives two minutes, so a passkey picked from the field leaves at least one. */
+const AUTOFILL_RENEW_MS = 60_000;
 const MAIN_CHECK_MS = 3000;
 /** Refusals the copy the take signs in against may answer differently: it can be newer. */
 const HELD_SIGN_IN_REFUSALS = new Set([
@@ -67,6 +74,8 @@ const HELD_SIGN_IN_REFUSALS = new Set([
 /** Refusals the person answers by signing in again, so the folded sign-in opens. */
 const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
   "handover.emergency.passkey_failed",
+  "handover.emergency.passkey_again",
+  "handover.emergency.passkey_again_step",
   "handover.emergency.code_expired",
   "handover.emergency.sign_in_failed",
   "handover.emergency.throttled",
@@ -75,11 +84,25 @@ const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
 const PROOF_REFUSALS = new Set(["password.invalid", "passkey.challenge_expired"]);
 class PasskeyNotUsed extends Error {}
+/**
+ * The box wants a fresh passkey answer, but nobody pressed anything that may open the prompt. The
+ * page says so itself, so the clock step adds no words of its own.
+ */
+class PasskeyNeedsPress extends Error {
+  readonly explained = true;
+}
+/**
+ * What a step does when a fresh passkey answer could lift the spare's refusal: `prompt` opens the
+ * prompt, for a step a press started; `ask` says a press is needed; `none` passes the refusal on,
+ * to a wait that explains it itself.
+ */
+type Unlock = "prompt" | "ask" | "none";
 
 @customElement("setup-handover-screen")
 export class SetupHandoverScreen extends LitElement {
   static override styles = [
     baseStyles,
+    autofillUsernameStyles,
     pageTitleStyles,
     formMessageStyles,
     css`
@@ -323,6 +346,26 @@ export class SetupHandoverScreen extends LitElement {
   @state() private restarting = false;
   @property({ attribute: false }) contributions: readonly SetupContribution[] = SETUP_MODULES;
   @state() private usePasskey = false;
+  /** The emergency sign-in asks for the email first, then how to sign in. */
+  @state() private signInStep: "email" | "method" = "email";
+  /** Set while rendering when the emergency email step is drawn. */
+  #emailStepDrawn = false;
+  #autofillAttempt = 0;
+  #autofillOn = false;
+  /** True while this page's own passkey-autofill request is the browser's current ceremony. */
+  #autofillWaiting = false;
+  #autofillTimer?: ReturnType<typeof setTimeout>;
+  /** A renewal fell due while the email field had focus, where it might close the passkey list. */
+  #renewDue = false;
+  /** From `pagehide` until `pageshow` restores the page. */
+  #left = false;
+  #modalOpen = false;
+  /** Decided at each clock check's first request, for every request that check sends. */
+  #clockUnlock: Unlock = "ask";
+  /** The latest click through this element; its `eventPhase` is `NONE` once its dispatch ends. */
+  #click?: Event;
+  /** What a refusal that wanted a press put on screen; the clock step's next answer clears it. */
+  #passkeyAgain?: string;
   /** Sent until a step answers it; never written to storage or the address. */
   #assertion?: unknown;
   @state() private email = "";
@@ -341,6 +384,8 @@ export class SetupHandoverScreen extends LitElement {
   #signInChecked = false;
   #restorePage = (event: PageTransitionEvent): void => {
     if (!event.persisted) return;
+    this.#left = false;
+    this.requestUpdate();
     this.#restartPolling();
     if (this.#checksMain) this.#startMainCheck();
   };
@@ -349,13 +394,83 @@ export class SetupHandoverScreen extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    this.addEventListener("click", (event) => (this.#click = event), { capture: true });
   }
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#left = false;
+    if (this.hasUpdated) this.requestUpdate();
     this.#restartPolling();
     if (this.#checksMain) this.#startMainCheck();
     window.addEventListener("pagehide", this.#leavePage);
     window.addEventListener("pageshow", this.#restorePage);
+    document.addEventListener("visibilitychange", this.#visibilityChanged);
+  }
+  #visibilityChanged = (): void => {
+    if (document.visibilityState === "hidden") this.#stopAutofill();
+    else this.requestUpdate();
+  };
+  protected override updated(): void {
+    if (
+      this.#emailStepDrawn &&
+      this.isConnected &&
+      !this.#left &&
+      !this.#modalOpen &&
+      document.visibilityState !== "hidden"
+    ) {
+      if (!this.#autofillOn) void this.#autofill();
+    } else if (this.#autofillOn) this.#stopAutofill();
+  }
+  /** Offers a saved passkey in the email field, as the dashboard's login does. */
+  async #autofill(): Promise<void> {
+    this.#stopAutofill();
+    this.#autofillOn = true;
+    const attempt = this.#autofillAttempt;
+    const current = () => attempt === this.#autofillAttempt && this.isConnected;
+    try {
+      if (!(await browserSupportsWebAuthnAutofill())) return;
+    } catch {
+      return;
+    }
+    if (!current()) return;
+    this.#autofillTimer = setTimeout(() => {
+      if (!current()) return;
+      if (this.shadowRoot!.activeElement?.getAttribute("name") === "handover-email")
+        this.#renewDue = true;
+      else void this.#autofill();
+    }, AUTOFILL_RENEW_MS);
+    let response: unknown;
+    try {
+      const { options } = await this.api.switchPasskeyChallenge();
+      if (!current()) return;
+      this.#autofillWaiting = true;
+      response = await startAuthentication({
+        optionsJSON: options as PublicKeyCredentialRequestOptionsJSON,
+        useBrowserAutofill: true,
+        // The email input is in this element's shadow root, which the library's query cannot see.
+        verifyBrowserAutofillInput: false,
+      });
+    } catch {
+      return;
+    } finally {
+      if (current()) this.#autofillWaiting = false;
+    }
+    if (!current()) return;
+    this.#stopAutofill();
+    this.usePasskey = true;
+    this.#assertion = response;
+    this.actionError = "";
+    if (this.#choosesOnly) this.signInStep = "method";
+    else void this.#previewCopy(false);
+  }
+  #stopAutofill(): void {
+    this.#autofillAttempt += 1;
+    this.#autofillOn = false;
+    this.#renewDue = false;
+    clearTimeout(this.#autofillTimer);
+    this.#autofillTimer = undefined;
+    if (this.#autofillWaiting) WebAuthnAbortService.cancelCeremony();
+    this.#autofillWaiting = false;
   }
   #restartPolling(): void {
     this.#controller?.abort();
@@ -369,10 +484,13 @@ export class SetupHandoverScreen extends LitElement {
   override disconnectedCallback(): void {
     window.removeEventListener("pagehide", this.#leavePage);
     window.removeEventListener("pageshow", this.#restorePage);
+    document.removeEventListener("visibilitychange", this.#visibilityChanged);
     this.#leavePage();
     super.disconnectedCallback();
   }
   #leavePage = (): void => {
+    this.#left = true;
+    this.#stopAutofill();
     this.#controller?.abort();
     clearTimeout(this.#timer);
     this.#mainCheckController?.abort();
@@ -545,7 +663,8 @@ export class SetupHandoverScreen extends LitElement {
     if (page === "ready") return "handover.emergency.ready_heading";
     if (this.status?.scenario === "emergency" && !this.copyPreview)
       return "handover.emergency.switching_heading";
-    return this.#explaining ? "handover.emergency.silent_heading" : "handover.heading";
+    if (this.#explaining) return "handover.emergency.silent_heading";
+    return page === "sign-in" ? "handover.emergency.sign_in_heading" : "handover.heading";
   }
   #resetSelection(): void {
     this.entry?.clear();
@@ -568,7 +687,7 @@ export class SetupHandoverScreen extends LitElement {
    */
   async #step<T>(
     send: (signIn: HandoverSignIn | undefined) => Promise<T>,
-    unlock = true,
+    unlock: Unlock,
   ): Promise<T> {
     try {
       const answer = await send(this.#signIn());
@@ -578,20 +697,33 @@ export class SetupHandoverScreen extends LitElement {
     } catch (cause) {
       const code = (cause as { code?: unknown } | null)?.code;
       if (typeof code === "string") this.#assertion = undefined;
-      if (!this.usePasskey || !unlock || !PROOF_REFUSALS.has(code as string)) throw cause;
+      if (!this.usePasskey || unlock === "none" || !PROOF_REFUSALS.has(code as string)) throw cause;
+      if (unlock === "ask") throw new PasskeyNeedsPress();
     }
     try {
       const { options } = await this.api.switchPasskeyChallenge();
+      if (this.#left) throw new PasskeyNotUsed();
+      if (document.visibilityState === "hidden") throw new PasskeyNeedsPress();
+      // Every call aborts the ceremony before it, so the field's offer must not renew over this one.
+      this.#stopAutofill();
+      this.#modalOpen = true;
       this.#assertion = await startAuthentication({
         optionsJSON: options as PublicKeyCredentialRequestOptionsJSON,
       });
-    } catch {
-      throw new PasskeyNotUsed();
+    } catch (cause) {
+      throw cause instanceof PasskeyNeedsPress ? cause : new PasskeyNotUsed();
+    } finally {
+      if (this.#modalOpen) this.requestUpdate();
+      this.#modalOpen = false;
     }
-    return this.#step(send, false);
+    return this.#step(send, "none");
   }
   #valid(): boolean {
-    return this.usePasskey || (this.email.includes("@") && this.password !== "");
+    return this.usePasskey || (this.#emailValid && this.password !== "");
+  }
+  /** The emergency sign-in checks an address as the dashboard's login does. */
+  get #emailValid(): boolean {
+    return this.#isEmergency ? isValidEmail(this.email) : this.email.includes("@");
   }
   /** Marks the fields and focuses the first one that fails; false means send nothing. */
   async #checked(): Promise<boolean> {
@@ -630,6 +762,11 @@ export class SetupHandoverScreen extends LitElement {
       binding,
       timeZone: status.timeZone,
       prepare: async (proposal) => {
+        // The clock step sends a run's first request during the click that starts the run, if a
+        // click does.
+        if ((proposal as { action?: unknown } | null)?.action === "clock-challenge")
+          this.#clockUnlock =
+            this.#click !== undefined && this.#click.eventPhase !== Event.NONE ? "prompt" : "ask";
         if (!this.#valid()) {
           this.attempted = true;
           // ClockWait.settle takes a TypeError with no code as a lost request: during a wait the
@@ -638,11 +775,17 @@ export class SetupHandoverScreen extends LitElement {
           throw new TypeError("sign-in fields incomplete");
         }
         try {
-          return await this.#step((signIn) =>
-            this.api.prepareHandover(this.operationId, signIn, binding, proposal),
+          const answer = await this.#step(
+            (signIn) => this.api.prepareHandover(this.operationId, signIn, binding, proposal),
+            this.#clockUnlock,
           );
+          if (this.#passkeyAgain !== undefined && this.actionError === this.#passkeyAgain)
+            this.actionError = "";
+          this.#passkeyAgain = undefined;
+          return answer;
         } catch (cause) {
           if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
+          this.#passkeyAgain = cause instanceof PasskeyNeedsPress ? this.actionError : undefined;
           throw cause;
         }
       },
@@ -671,8 +814,9 @@ export class SetupHandoverScreen extends LitElement {
     entry.starting = !retry;
     let refused = false;
     try {
-      const answer = await this.#step((signIn) =>
-        this.api.activateHandover(this.operationId, signIn, moduleOperation),
+      const answer = await this.#step(
+        (signIn) => this.api.activateHandover(this.operationId, signIn, moduleOperation),
+        "prompt",
       );
       if (controller?.signal.aborted) return;
       this.restarting = answer.restarting;
@@ -699,7 +843,7 @@ export class SetupHandoverScreen extends LitElement {
         cause.code === "handover.copy_mismatch"
       ) {
         try {
-          await this.#readPreview();
+          await this.#readPreview("prompt");
         } catch (failure) {
           this.actionError = this.#emergencyError(failure);
         }
@@ -748,16 +892,68 @@ export class SetupHandoverScreen extends LitElement {
     ].includes(code ?? "");
     const key = this.#refusalKey(code, error, cause);
     if (SIGN_IN_REFUSAL_KEYS.has(key)) {
-      this.signInOpen = true;
+      this.#reopenSignIn();
       if (!this.copyPreview) this.preparing = false;
     }
     return t(key);
+  }
+  /** A refused sign-in is answered from the choice of method, the email kept. */
+  #reopenSignIn(): void {
+    this.signInOpen = true;
+    this.signInStep = "method";
+  }
+  /** Where a later button sends the sign-in, a method is only chosen: Ready to switch and after. */
+  get #choosesOnly(): boolean {
+    const page = this.#page;
+    return page === "ready" || (page === undefined && this.#isEmergency && !!this.copyPreview);
+  }
+  async #continueToMethod(): Promise<void> {
+    if (!this.#emailValid) {
+      this.attempted = true;
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
+    this.attempted = false;
+    this.actionError = "";
+    this.signInStep = "method";
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>(
+      this.#choosesOnly ? '[name="handover-sign-in-method"]' : "[data-test=sign-in-passkey]",
+    )?.focus();
+  }
+  async #changeEmail(): Promise<void> {
+    this.signInStep = "email";
+    this.password = this.code = "";
+    this.#assertion = undefined;
+    this.usePasskey = this.attempted = false;
+    this.actionError = "";
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>('[name="handover-email"]')?.focus();
+  }
+  async #signInWithPasskey(): Promise<void> {
+    this.usePasskey = true;
+    this.#assertion = undefined;
+    this.actionError = "";
+    await this.#previewCopy();
+  }
+  /** Starts the step in the same turn as the press, so the page is busy before it redraws. */
+  #signInWithPassword(): void {
+    this.usePasskey = false;
+    this.#assertion = undefined;
+    this.actionError = "";
+    if (this.#valid()) void this.#previewCopy();
+    else void this.#checked();
   }
   #refusalKey(
     code: string | undefined,
     error: { params?: { reason?: string } } | null,
     cause: unknown,
   ): StringKey {
+    if (cause instanceof PasskeyNeedsPress)
+      return this.#choosesOnly
+        ? "handover.emergency.passkey_again_step"
+        : "handover.emergency.passkey_again";
     if (
       cause instanceof PasskeyNotUsed ||
       (this.usePasskey &&
@@ -831,7 +1027,7 @@ export class SetupHandoverScreen extends LitElement {
     }
     if (!controller?.signal.aborted) this.#restartPolling();
   }
-  async #readPreview(unlock = true): Promise<boolean> {
+  async #readPreview(unlock: Unlock): Promise<boolean> {
     const controller = this.#controller;
     const preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn), unlock);
     if (controller?.signal.aborted) return false;
@@ -856,8 +1052,9 @@ export class SetupHandoverScreen extends LitElement {
    * A saved declaration and a placed backup show; otherwise the take decides, signing in against the
    * copy it takes, which may know a person the copy this spare holds does not.
    */
-  async #previewCopy(): Promise<void> {
+  async #previewCopy(pressed = true): Promise<void> {
     if (this.busy || this.following || this.heldWaiting || !this.#valid()) return;
+    const unlock: Unlock = pressed ? "prompt" : "ask";
     if (this.#controller?.signal.aborted) this.#restartPolling();
     const controller = this.#controller!;
     this.busy = true;
@@ -873,7 +1070,7 @@ export class SetupHandoverScreen extends LitElement {
       if (this.#checksMain && !(await this.#checkMain())) return;
       let preview: EmergencyHandoverPreview | undefined;
       try {
-        preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn));
+        preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn), unlock);
       } catch (cause) {
         if (!HELD_SIGN_IN_REFUSALS.has((cause as { code?: string } | null)?.code ?? ""))
           throw cause;
@@ -890,14 +1087,15 @@ export class SetupHandoverScreen extends LitElement {
       this.#heldTimer = setTimeout(() => {
         if (!controller.signal.aborted && this.following) this.heldOffered = true;
       }, HELD_OFFER_AFTER_MS);
-      await this.#takeFollowed(controller, true);
+      await this.#takeFollowed(controller, unlock);
     } catch (cause) {
       if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
     } finally {
       this.busy = false;
     }
   }
-  async #takeFollowed(controller: AbortController, unlock = false): Promise<void> {
+  /** `unlock` is the starting step's; a take carried on from a timer passes refusals on. */
+  async #takeFollowed(controller: AbortController, unlock: Unlock = "none"): Promise<void> {
     let answer: FollowedCopyTake;
     try {
       answer = await this.#step((signIn) => this.api.takeFollowedCopy(signIn), unlock);
@@ -910,9 +1108,9 @@ export class SetupHandoverScreen extends LitElement {
       if (refusal === undefined) {
         this.actionError = this.#emergencyError(cause);
         // A retry while catching up resends the passkey answer, whose challenge lasts two minutes.
-        if (!unlock && code === "passkey.challenge_expired") {
+        if (unlock === "none" && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
-          this.signInOpen = true;
+          this.#reopenSignIn();
           this.preparing = false;
         }
       } else {
@@ -933,7 +1131,8 @@ export class SetupHandoverScreen extends LitElement {
     if (answer.state === "taken") {
       this.busy = true;
       try {
-        await this.#readPreview();
+        // A take carried on from a timer passes refusals on; this check still asks for a press.
+        await this.#readPreview(unlock === "prompt" ? "prompt" : "ask");
       } catch (cause) {
         if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
       } finally {
@@ -949,7 +1148,7 @@ export class SetupHandoverScreen extends LitElement {
     try {
       const preview = await this.#step(
         (signIn) => this.api.previewEmergencyHandover(signIn),
-        false,
+        "none",
       );
       if (controller.signal.aborted) return;
       this.heldWaiting = false;
@@ -968,7 +1167,7 @@ export class SetupHandoverScreen extends LitElement {
       if (this.usePasskey && PROOF_REFUSALS.has(String((cause as { code: unknown }).code))) {
         if (this.heldCopy === undefined) {
           this.actionError = `${this.actionError} ${t("handover.emergency.held_passkey_refused")}`;
-          this.signInOpen = true;
+          this.#reopenSignIn();
           this.preparing = false;
         }
         return;
@@ -987,10 +1186,10 @@ export class SetupHandoverScreen extends LitElement {
     this.heldChosen = this.busy = true;
     this.copyStep = "check";
     this.actionError = "";
-    await this.#readHeldCopy(this.#controller!, true);
+    await this.#readHeldCopy(this.#controller!, "prompt");
   }
   /** The old process may still have answered the offer's check; a lost answer waits for the restart. */
-  async #readHeldCopy(controller: AbortController, unlock = false): Promise<void> {
+  async #readHeldCopy(controller: AbortController, unlock: Unlock = "none"): Promise<void> {
     try {
       await this.#readPreview(unlock);
       if (controller.signal.aborted) return;
@@ -1011,7 +1210,7 @@ export class SetupHandoverScreen extends LitElement {
     try {
       const preview = await this.#step(
         (signIn) => this.api.previewEmergencyHandover(signIn),
-        false,
+        "none",
       );
       if (controller.signal.aborted) return;
       // Until the restart places the copy, the old process may still answer with the one it held.
@@ -1041,8 +1240,9 @@ export class SetupHandoverScreen extends LitElement {
     this.actionError = "";
     try {
       const backup = this.backup;
-      await this.#step((signIn) =>
-        this.api.selectEmergencyBackup(backup, signIn, this.backupKey || undefined),
+      await this.#step(
+        (signIn) => this.api.selectEmergencyBackup(backup, signIn, this.backupKey || undefined),
+        "prompt",
       );
       this.backup = undefined;
       this.backupKey = "";
@@ -1082,7 +1282,7 @@ export class SetupHandoverScreen extends LitElement {
     let switchRefused = false;
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
-      if (this.#pendingDeclaration && (await this.#readPreview())) {
+      if (this.#pendingDeclaration && (await this.#readPreview("prompt"))) {
         this.#prepareClock();
         return;
       }
@@ -1098,8 +1298,9 @@ export class SetupHandoverScreen extends LitElement {
         },
       };
       const declaration = this.#pendingDeclaration;
-      const answer = await this.#step((signIn) =>
-        this.api.declareEmergencyHandover({ ...declaration, signIn }),
+      const answer = await this.#step(
+        (signIn) => this.api.declareEmergencyHandover({ ...declaration, signIn }),
+        "prompt",
       ).catch((cause: unknown) => {
         switchRefused = typeof (cause as { code?: unknown } | null)?.code === "string";
         throw cause;
@@ -1118,7 +1319,7 @@ export class SetupHandoverScreen extends LitElement {
       ) {
         this.#backToPreparing();
         try {
-          await this.#readPreview();
+          await this.#readPreview("prompt");
           this.actionError = t("handover.emergency.copy_changed");
         } catch (failure) {
           this.actionError = this.#emergencyError(failure);
@@ -1127,7 +1328,7 @@ export class SetupHandoverScreen extends LitElement {
       }
       if (typeof cause !== "object" || cause === null || !("code" in cause)) {
         try {
-          if (await this.#readPreview()) {
+          if (await this.#readPreview("prompt")) {
             this.#prepareClock();
             return;
           }
@@ -1210,7 +1411,12 @@ export class SetupHandoverScreen extends LitElement {
       </details>
     </section>`;
   }
-  #signInFields() {
+  /**
+   * The sign-in: on a controlled handover email, password and code together; on an emergency switch
+   * the email first, then how to sign in. `inline` adds the step's own button where the sign-in
+   * reopens inside a later page; from Ready to switch on, the method is only chosen there.
+   */
+  #signInFields(inline = false) {
     const field = (
       name: "email" | "password" | "code",
       key: "handover.email" | "handover.password" | "handover.code",
@@ -1223,11 +1429,25 @@ export class SetupHandoverScreen extends LitElement {
         label=${t(key)}
         type=${name === "password" ? "password" : name === "email" ? "email" : "text"}
         .passwordVisibility=${name === "password" ? passwordVisibility() : undefined}
-        autocomplete=${name === "code" ? "one-time-code" : name === "email" ? "username" : "current-password"}
+        autocomplete=${name === "code" ? "one-time-code" : name === "email" ? (this.#isEmergency && this.#emailStep ? "username webauthn" : "username") : "current-password"}
         .value=${this[name]}
         ?required=${name !== "code"}
         ?disabled=${this.busy}
-        .error=${this.attempted && name !== "code" && (name === "email" ? !this.email.includes("@") : !this.password) ? t("handover.required") : ""}
+        .error=${this.#fieldError(name)}
+        @keydown=${(event: KeyboardEvent) => {
+          if (this.#isEmergency)
+            submitOnEnter(
+              event,
+              this.shadowRoot!.querySelector<HTMLElement>(
+                `[data-test=${name === "email" && this.#emailStep ? "emergency-preview" : "sign-in-password"}]`,
+              ),
+            );
+        }}
+        @focusout=${() => {
+          if (!this.#renewDue) return;
+          this.#stopAutofill();
+          this.requestUpdate();
+        }}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           if (name !== "code") this.#signInChecked = false;
           if (name === "email") this.#resetSelection();
@@ -1251,48 +1471,99 @@ export class SetupHandoverScreen extends LitElement {
           this.actionError = "";
         }}
       ></wt-input>`;
-    const passkey = this.usePasskey;
-    return html`<p>
-        ${t(passkey ? "handover.emergency.sign_in_passkey" : this.#isEmergency ? "handover.emergency.sign_in" : "handover.sign_in")}
-      </p>
-      ${
-        this.#isEmergency
-          ? html`<wt-segmented-control
-              name="handover-sign-in-method"
-              label=${t("handover.emergency.sign_in_with")}
-              .value=${passkey ? "passkey" : "password"}
-              .options=${[
-                { value: "password", label: t("handover.emergency.use_password") },
-                { value: "passkey", label: t("handover.emergency.use_passkey") },
-              ]}
-              ?disabled=${this.busy}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.usePasskey = event.detail.value === "passkey";
-                this.#assertion = undefined;
-                this.actionError = "";
-              }}
-            ></wt-segmented-control>`
-          : nothing
-      }
-      ${passkey ? nothing : html`${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`}`;
+    if (!this.#isEmergency)
+      return html`<p>${t("handover.sign_in")}</p>
+        ${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`;
+    if (this.#emailStep) {
+      this.#emailStepDrawn = true;
+      return html`<p>${t("handover.emergency.sign_in")}</p>
+        ${field("email", "handover.email")}
+        ${inline ? html`<div class="choices">${this.#signInSubmit()}</div>` : nothing}`;
+    }
+    // A passkey picked from the field names no email, which only the password needs.
+    const email = this.#emailValid
+      ? html`<p data-test="sign-in-email">
+          ${this.email} ·
+          <wt-button
+            variant="link"
+            data-test="change-email"
+            aria-label=${t("handover.emergency.change_email_label")}
+            ?disabled=${this.busy}
+            @click=${() => void this.#changeEmail()}
+            >${t("handover.emergency.change_email")}</wt-button
+          >
+        </p>`
+      : field("email", "handover.email");
+    const username = this.#emailValid ? autofillUsername(this.email) : nothing;
+    const password = html`${username}${field("password", "handover.password")}${field("code", "handover.code")}`;
+    if (this.#choosesOnly)
+      return html`${this.usePasskey && !this.#emailValid ? nothing : email}
+        <wt-segmented-control
+          name="handover-sign-in-method"
+          label=${t("handover.emergency.sign_in_with")}
+          .value=${this.usePasskey ? "passkey" : "password"}
+          .options=${[
+            { value: "password", label: t("handover.emergency.use_password") },
+            { value: "passkey", label: t("handover.emergency.use_passkey") },
+          ]}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.usePasskey = event.detail.value === "passkey";
+            this.#assertion = undefined;
+            this.actionError = "";
+          }}
+        ></wt-segmented-control>
+        ${this.usePasskey ? nothing : password}`;
+    return html`${email}
+      <div class="choices">
+        <wt-button
+          data-test="sign-in-passkey"
+          variant="primary"
+          .disabled=${this.busy || this.following || this.heldWaiting}
+          @click=${() => void this.#signInWithPasskey()}
+          >${t("handover.emergency.use_passkey")}</wt-button
+        >
+      </div>
+      ${password} ${inline ? html`<div class="choices">${this.#signInSubmit()}</div>` : nothing}`;
+  }
+  #fieldError(name: "email" | "password" | "code"): string {
+    if (!this.attempted || name === "code") return "";
+    if (name === "password") return this.password ? "" : t("handover.required");
+    if (this.#emailValid) return "";
+    return this.#isEmergency && this.email.trim() !== ""
+      ? t("handover.email_invalid")
+      : t("handover.required");
+  }
+  get #emailStep(): boolean {
+    return this.signInStep === "email";
+  }
+  /** The emergency sign-in step's own button: Continue to the methods, or the password's. */
+  #signInSubmit() {
+    if (this.#emailStep)
+      return html`<wt-button
+        data-test="emergency-preview"
+        .disabled=${this.busy || (this.attempted && !this.#emailValid)}
+        variant="primary"
+        @click=${() => void this.#continueToMethod()}
+        >${t("handover.emergency.continue")}</wt-button
+      >`;
+    return html`<wt-button
+      data-test="sign-in-password"
+      variant="secondary"
+      .disabled=${this.busy || this.following || this.heldWaiting || (this.attempted && !this.password)}
+      @click=${() => this.#signInWithPassword()}
+      >${t("handover.emergency.sign_in_password")}</wt-button
+    >`;
   }
   get #formError(): string {
     return this.actionError
       ? this.actionError
-      : this.reason.length > 500 || (this.attempted && !this.#valid())
+      : this.reason.length > 500 ||
+          (this.attempted &&
+            (this.#isEmergency && this.#emailStep ? !this.#emailValid : !this.#valid()))
         ? t("handover.fix")
         : "";
-  }
-  /** Continue: on the sign-in before a switch, and on a page reopened on an unfinished one. */
-  #continueButton() {
-    return html`<wt-button
-      data-test="emergency-preview"
-      .disabled=${this.busy || this.following || this.heldWaiting || !this.#valid()}
-      variant=${this.#valid() && !this.following && !this.heldWaiting ? "primary" : "secondary"}
-      @click=${() => void this.#previewCopy()}
-      >${t("handover.emergency.continue")}</wt-button
-    >`;
   }
   #links() {
     return html`<p>
@@ -1306,9 +1577,13 @@ export class SetupHandoverScreen extends LitElement {
       : nothing;
   }
   #signInPage() {
-    return html`${this.#signInFields()}
-      <wt-form-actions .error=${this.#formError}>${this.#continueButton()}</wt-form-actions>
-      ${this.#links()}`;
+    return html`${this.#signInFields()}${this.#signInChoices()}`;
+  }
+  /** The emergency sign-in's message and full-width buttons, laid out as Ready to switch is. */
+  #signInChoices() {
+    return html`${formMessage(this.#formError)}
+      <div class="choices">${this.#signInSubmit()} ${this.#goBackButton()}</div>
+      ${this.#refusalLink()}`;
   }
   #progressRow(name: "follow" | "check", label: StringKey, state: "done" | "working" | "waiting") {
     return html`<li data-test=${`step-${name}`} data-state=${state}>
@@ -1370,7 +1645,7 @@ export class SetupHandoverScreen extends LitElement {
             </section>`
           : nothing
       }
-      ${this.#controlledLink()} ${preview && this.signInOpen ? this.#signInFields() : nothing}
+      ${this.#controlledLink()} ${preview && this.signInOpen ? this.#signInFields(true) : nothing}
       ${this.backupOpen ? this.#backupFields() : nothing} ${formMessage(this.#formError)}
       <div class="choices">
         ${
@@ -1483,13 +1758,13 @@ export class SetupHandoverScreen extends LitElement {
   }
   #goBackButton() {
     return html`<a class="button" data-test="go-back" href=${this.#leaveHref}
-      >${t(this.#leaveLabel)}</a
+      >${t(this.#declared ? "handover.emergency.leave_saved" : this.#leaveLabel)}</a
     >`;
   }
   /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
   #readyPage() {
     return html`<section data-test="emergency-ready" data-wording-version="a1018-emergency-v2">
-        ${this.#signInShown ? this.#signInFields() : nothing} ${this.#controlledLink()}
+        ${this.#signInShown ? this.#signInFields(true) : nothing} ${this.#controlledLink()}
         <div class="statements">
           ${(["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
             (key) =>
@@ -1543,8 +1818,10 @@ export class SetupHandoverScreen extends LitElement {
     if (page === "preparing") return this.#preparingPage();
     if (page === "ready") return this.#readyPage();
     const reopened = this.#isEmergency && !this.copyPreview;
-    return html`${reopened ? html`<p>${t("handover.emergency.switching_body")}</p>` : nothing}
-      ${this.#signInShown ? this.#signInFields() : nothing}
+    if (reopened)
+      return html`<p>${t("handover.emergency.switching_body")}</p>
+        ${this.#signInShown ? this.#signInFields() : nothing} ${this.#signInChoices()}`;
+    return html` ${this.#signInShown ? this.#signInFields(this.#isEmergency) : nothing}
       ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
@@ -1555,26 +1832,24 @@ export class SetupHandoverScreen extends LitElement {
       }
       <wt-form-actions .error=${this.#formError}>
         ${
-          reopened
-            ? this.#continueButton()
-            : this.entry
-              ? this.activationHeld || this.retrying
-                ? html`<wt-button
-                    data-test="retry-activation"
-                    .disabled=${!this.busy && !this.#valid()}
-                    ?loading=${this.busy}
-                    variant="primary"
-                    @click=${() => void this.#retry()}
-                    >${t("handover.try_again")}</wt-button
-                  >`
-                : nothing
-              : html`<wt-button
-                  data-test="authenticate"
-                  .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
-                  variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
-                  @click=${() => void this.#authenticate()}
-                  >${t("handover.compare")}</wt-button
+          this.entry
+            ? this.activationHeld || this.retrying
+              ? html`<wt-button
+                  data-test="retry-activation"
+                  .disabled=${!this.busy && !this.#valid()}
+                  ?loading=${this.busy}
+                  variant="primary"
+                  @click=${() => void this.#retry()}
+                  >${t("handover.try_again")}</wt-button
                 >`
+              : nothing
+            : html`<wt-button
+                data-test="authenticate"
+                .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
+                variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
+                @click=${() => void this.#authenticate()}
+                >${t("handover.compare")}</wt-button
+              >`
         }
       </wt-form-actions>
       ${this.#isEmergency ? this.#links() : nothing}`;
@@ -1599,6 +1874,7 @@ export class SetupHandoverScreen extends LitElement {
     return html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`;
   }
   override render() {
+    this.#emailStepDrawn = false;
     const status = this.status;
     return html`<main
       lang=${currentLocale()}

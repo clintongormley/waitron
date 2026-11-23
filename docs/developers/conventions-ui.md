@@ -226,7 +226,7 @@ of non-test `.ts` files under `apps/` and `packages/`, so a field made with
 file or a response), or with its tag name split across a `${…}` is invisible to it;
 the field primitives' own files, and `wt-data-table`'s (its search box), are not read at all, so a
 second field added inside one passes; and some files are allowed by name (the hidden username
-input for the browser's password manager, in `apps/dashboard/src/widgets/autofill-username.ts`, the print agent's setup page, the
+input for the browser's password manager, in `packages/ui/src/autofill-username.ts`, the print agent's setup page, the
 recovery page's password box, and the carry-on form on the page a box serves while it waits for
 its peers), each
 held to the number of LINES it draws a field on, so a field swapped for another, a hidden input

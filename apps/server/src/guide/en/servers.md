@@ -105,9 +105,9 @@ working again, keep using it. Until you choose **Switch to this box**, **Go back
 not come from a till) leaves without switching; after switching, **Leave this page (the switch is
 saved)** or **Continue to this box** brings you back.
 
-Choose **Start switching**, then sign in with an administrator account’s password and
-current authenticator code, if set up, or choose **Use your passkey**; then choose **Continue**,
-and with a passkey, use it when the page asks. Type the password
+Choose **Start switching**, enter an administrator’s email and choose **Continue**, or pick a
+saved passkey offered in the email field. If you typed the email, choose **Use your passkey**, or enter your password
+and current authenticator code, if set up, and choose **Sign in with password**. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
 again.
 
@@ -133,7 +133,9 @@ and this device's: check that both are right (both are shown in the venue's time
 the device you are using and the page carries on; after **The box** or **Both times are wrong**,
 correct this device's time and reconnect. Choose **Continue** to start the venue on this box. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
-the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
+you choose a step and the spare needs it, usually once, and again after 15 minutes; if instead it
+says your passkey sign-in needs checking again, choose the step again. Your reason and statements
+stay in place.
 
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
 latest sale or order, choose **Proceed** and tick the three statements again. If the copy fails its

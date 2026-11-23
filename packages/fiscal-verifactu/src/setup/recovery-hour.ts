@@ -325,6 +325,7 @@ export class RecoveryHourEntry extends LitElement {
   refusalMessage(cause: unknown): string {
     const words = recoveryHourStrings[this.locale];
     if (record(cause)) {
+      if (cause.explained === true) return "";
       if (cause.code === "node.operation_page_required") return words.promotionConnection;
       if (cause.code === "password.throttled") return words.promotionThrottled;
       if (cause.code === "authorization.not_permitted") return words.promotionPermission;
