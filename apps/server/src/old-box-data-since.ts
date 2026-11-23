@@ -6,6 +6,8 @@ import {
   drawerEntries,
   liveBackupQuery,
   persons,
+  refunds,
+  sales,
   tableExists,
   workingOrderLines,
   workingOrders,
@@ -210,7 +212,21 @@ export type PaymentRow = {
       partPaymentId: string | null;
     }
   | {
+      /** Money given back from a bill payment or a sale's tender, by cash or card. */
       kind: "refund";
+      tip: Decimal;
+      method: string;
+      state: string;
+      provider: string | null;
+      /** The refunded card payment's reference. */
+      reference: string | null;
+      refundReference: string | null;
+      partPaymentId: string | null;
+      personName: string | null;
+    }
+  | {
+      /** The card payments ledger's own line for a card payment's refund. */
+      kind: "cardRefund";
       state: string;
       provider: string;
       /** The refunded card payment's reference. */
@@ -222,6 +238,7 @@ export type PaymentRow = {
       kind: "drawer";
       drawerKind: string;
       partPaymentId: string | null;
+      refundId: string | null;
       personName: string | null;
     }
 );
@@ -233,9 +250,10 @@ const latest = (...times: (string | null)[]): string | null =>
   );
 
 /**
- * Part payments, card payments and their refunds (when the payments module's tables exist) and
- * cash drawer entries recorded from the rule's start, with each earlier part or card payment whose
- * outcome or state changed from then; oldest first by the time that listed it. Reads only.
+ * Part payments, refunds, card payments and their refunds (when the payments module's tables
+ * exist) and cash drawer entries recorded from the rule's start, with each earlier part payment,
+ * refund or card payment whose outcome or state changed from then; oldest first by the time that
+ * listed it. Reads only.
  */
 export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<PaymentRow[]> {
   const from = rule.kind === "all" ? null : new Date(rule.fromMs).toISOString();
@@ -290,7 +308,37 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
           ),
         )
     : [];
-  const refunds = withCards
+  const moneyBack = await db
+    .select({
+      recordedAt: refunds.createdAt,
+      sentAt: refunds.sentAt,
+      completedAt: refunds.completedAt,
+      failedAt: refunds.failedAt,
+      applied: refunds.appliedAmount,
+      tip: refunds.tipAmount,
+      method: refunds.method,
+      state: refunds.state,
+      orderNumber: workingOrders.orderNumber,
+      provider: refunds.provider,
+      reference: refunds.providerPaymentRef,
+      refundReference: refunds.providerRefundRef,
+      partPaymentId: refunds.billPaymentId,
+      personName: persons.displayName,
+      id: refunds.id,
+    })
+    .from(refunds)
+    .leftJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
+    .leftJoin(sales, eq(sales.id, refunds.saleId))
+    .leftJoin(
+      workingOrders,
+      or(
+        eq(workingOrders.id, billPayments.workingOrderId),
+        eq(workingOrders.id, sales.workingOrderId),
+      ),
+    )
+    .leftJoin(persons, eq(persons.id, refunds.requestedBy))
+    .where(since(refunds.createdAt, refunds.sentAt, refunds.completedAt, refunds.failedAt));
+  const cardRefunds = withCards
     ? await db
         .select({
           recordedAt: paymentRefunds.createdAt,
@@ -316,6 +364,7 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
       drawerKind: drawerEntries.kind,
       orderNumber: workingOrders.orderNumber,
       partPaymentId: drawerEntries.billPaymentId,
+      refundId: drawerEntries.refundId,
       personName: persons.displayName,
       id: drawerEntries.id,
     })
@@ -338,9 +387,16 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
       changedAt: latest(updatedAt, settledAt, resolvedAt, heldAt, holdDecidedAt),
       amount: centsToDecimal(amount),
     })),
-    ...refunds.map(({ amount, ...row }) => ({
+    ...moneyBack.map(({ applied, tip, sentAt, completedAt, failedAt, ...row }) => ({
       ...row,
       kind: "refund" as const,
+      changedAt: latest(sentAt, completedAt, failedAt),
+      amount: centsToDecimal(-applied),
+      tip: centsToDecimal(-tip),
+    })),
+    ...cardRefunds.map(({ amount, ...row }) => ({
+      ...row,
+      kind: "cardRefund" as const,
       changedAt: null,
       amount: centsToDecimal(-amount),
     })),
@@ -363,4 +419,4 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
   );
 }
 
-const KIND_ORDER = { part: 0, card: 1, refund: 2, drawer: 3 } as const;
+const KIND_ORDER = { part: 0, card: 1, refund: 2, cardRefund: 3, drawer: 4 } as const;

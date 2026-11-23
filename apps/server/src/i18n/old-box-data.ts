@@ -38,9 +38,9 @@ export const OLD_BOX_DATA_WORDS = {
       "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told the time of the last sale or order in the copy the new main box started from, and anything earlier is not listed. Some rows may also be on the new main box; changes made to older rows, and lines not yet sent on older orders, are not listed.",
     sinceAllIntro: "Everything this box recorded. Some rows may also be on the new main box.",
     paymentsCopyIntro:
-      "Every payment and cash movement this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from, and each earlier payment whose state changed from then. Some rows may also be on the new main box.",
+      "Every payment and cash movement this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from, and each earlier payment or refund whose state changed from then. Some rows may also be on the new main box.",
     paymentsOwnIntro:
-      "Every payment and cash movement this box recorded from {time}, 7 days before its own last sale or order, and each earlier payment whose state changed from then. This box has not been told the time of the last sale or order in the copy the new main box started from. Some rows may also be on the new main box.",
+      "Every payment and cash movement this box recorded from {time}, 7 days before its own last sale or order, and each earlier payment or refund whose state changed from then. This box has not been told the time of the last sale or order in the copy the new main box started from. Some rows may also be on the new main box.",
     ordersSheet: "Orders",
     orderColumns: [
       "Order number",
@@ -77,16 +77,23 @@ export const OLD_BOX_DATA_WORDS = {
       "Provider's reference",
       "Provider's refund reference",
       "Bill payment",
+      "Refund",
       "Person",
       "Id",
     ],
     paymentKinds: {
       part: "Payment",
       card: "Card payment",
-      refund: "Card refund",
+      refund: "Refund",
+      cardRefund: "Card refund",
       drawer: "Cash drawer",
     },
-    refundStates: { succeeded: "Refunded", failed: "Failed" } as Readonly<Record<string, string>>,
+    refundStates: { pending: "Pending", completed: "Completed", failed: "Failed" } as Readonly<
+      Record<string, string>
+    >,
+    cardRefundStates: { succeeded: "Refunded", failed: "Failed" } as Readonly<
+      Record<string, string>
+    >,
     methods: { cash: "Cash", card: "Card" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pending",
@@ -181,9 +188,9 @@ export const OLD_BOX_DATA_WORDS = {
     sinceAllIntro:
       "Todo lo que este servidor registró. Algunas filas pueden estar también en el nuevo servidor principal.",
     paymentsCopyIntro:
-      "Todos los pagos y movimientos de caja que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y cada pago anterior cuyo estado cambió desde entonces. Algunas filas pueden estar también en el nuevo servidor principal.",
+      "Todos los pagos y movimientos de caja que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y cada pago o devolución anterior cuyo estado cambió desde entonces. Algunas filas pueden estar también en el nuevo servidor principal.",
     paymentsOwnIntro:
-      "Todos los pagos y movimientos de caja que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido, y cada pago anterior cuyo estado cambió desde entonces. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal.",
+      "Todos los pagos y movimientos de caja que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido, y cada pago o devolución anterior cuyo estado cambió desde entonces. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal.",
     ordersSheet: "Pedidos",
     orderColumns: [
       "Número de pedido",
@@ -220,16 +227,23 @@ export const OLD_BOX_DATA_WORDS = {
       "Referencia del proveedor",
       "Referencia de la devolución del proveedor",
       "Pago de la cuenta",
+      "Devolución",
       "Persona",
       "Id",
     ],
     paymentKinds: {
       part: "Pago",
       card: "Pago con tarjeta",
-      refund: "Devolución con tarjeta",
+      refund: "Devolución",
+      cardRefund: "Devolución con tarjeta",
       drawer: "Cajón",
     },
-    refundStates: { succeeded: "Devuelta", failed: "Fallida" } as Readonly<Record<string, string>>,
+    refundStates: { pending: "Pendiente", completed: "Completada", failed: "Fallida" } as Readonly<
+      Record<string, string>
+    >,
+    cardRefundStates: { succeeded: "Devuelta", failed: "Fallida" } as Readonly<
+      Record<string, string>
+    >,
     methods: { cash: "Efectivo", card: "Tarjeta" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pendiente",

@@ -6,6 +6,8 @@ import {
   billPayments,
   liveBackupQuery,
   recordActivity,
+  refunds,
+  tenders,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -34,6 +36,7 @@ import { latestChangeAtMs, latestChangeAtMsFromMaxima } from "./handover-emergen
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { completeRefundReservation } from "./tender-refund-completion.js";
 import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
 const suite = useVenueDb({
@@ -520,11 +523,11 @@ describe("the old box's Payments and cash tab", () => {
     );
     // prettier-ignore
     expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n))).toEqual([
-      ["Payment", iso(CUTOFF), iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "", "Marta Ruiz", part],
-      ["Card payment", iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", "", alone],
-      ["Payment", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "Marta Ruiz", cardPart],
-      ["Card payment", iso(CUTOFF + 3 * MINUTE), iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", "", cardPart, "", named],
-      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "", "5.00", "", "", "Cash payment", "12", "", "", "", part, "Marta Ruiz", drawer],
+      ["Payment", iso(CUTOFF), iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "", "", "Marta Ruiz", part],
+      ["Card payment", iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", "", "", alone],
+      ["Payment", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", cardPart],
+      ["Card payment", iso(CUTOFF + 3 * MINUTE), iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", "", cardPart, "", "", named],
+      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "", "5.00", "", "", "Cash payment", "12", "", "", "", part, "", "Marta Ruiz", drawer],
       [],
     ]);
   });
@@ -572,8 +575,8 @@ describe("the old box's Payments and cash tab", () => {
       const xml = await paymentsTab();
       // prettier-ignore
       expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
-        ["Card payment", iso(CUTOFF + 5 * MINUTE), iso(CUTOFF + 5 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-after", "", "", "", after],
-        ["Card payment", iso(CUTOFF - MINUTE), iso(LATER), "7.00", "", "", "Captured", "12", "simulator", "late-capture", "", "", "", started!.id],
+        ["Card payment", iso(CUTOFF + 5 * MINUTE), iso(CUTOFF + 5 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-after", "", "", "", "", after],
+        ["Card payment", iso(CUTOFF - MINUTE), iso(LATER), "7.00", "", "", "Captured", "12", "simulator", "late-capture", "", "", "", "", started!.id],
         [],
       ]);
       expect(settled?.paymentRef).toBe("late-capture");
@@ -603,13 +606,137 @@ describe("the old box's Payments and cash tab", () => {
       expect(refunds.map((r) => r.state)).toEqual(["succeeded", "failed"]);
       // prettier-ignore
       expect([3, 4, 5, 6].map((n) => row(xml, n))).toEqual([
-        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-refunded", "re-1", "", "Marta Ruiz", refunds[0]!.id],
-        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-refunded", "", "", "", captured],
-        ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", refunds[1]!.id],
+        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
+        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
+        ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", "", refunds[1]!.id],
         [],
       ]);
       // Under the rule that lists everything, the capture comes first, at the time it was recorded.
       expect(row(await paymentsTab({ kind: "all" }), 3).at(-1)).toBe(captured);
+    });
+
+    it("lists each refund recorded, sent, completed or failed from the cutoff as its own line, with the drawer line and card refund that also show its money naming it or its references", async () => {
+      const marta = await namedPerson("Marta Ruiz");
+      const ana = await namedPerson("Ana Gil");
+      const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+      const paid = await partPayment(orderId, marta, CUTOFF - 30 * MINUTE, { applied: 900 });
+      // As `reserveTenderRefund` and `bill-refunds.ts` store a refund before taking it forward.
+      const reserve = async (fields: Partial<typeof refunds.$inferInsert>, at: number) => {
+        const [saved] = await suite.db
+          .insert(refunds)
+          .values({
+            submissionId: crypto.randomUUID(),
+            fingerprint: "fixture",
+            appliedAmount: 200,
+            tipAmount: 0,
+            reason: "Cold soup",
+            requestedBy: marta,
+            authorizedBy: ana,
+            source: "device",
+            deviceId: venue.deviceId,
+            nodeId: venue.nodeId,
+            method: "cash",
+            manual: false,
+            state: "pending",
+            createdAt: iso(at),
+            ...fields,
+          })
+          .returning();
+        return saved!;
+      };
+      const reading = (at: number) => ({
+        instant: new Date(at),
+        offsetMinutes: 0,
+        confident: true,
+        confidence: "anchored" as const,
+        anchorAgeSeconds: 0,
+      });
+      const cashRefund = (at: number, fields: Partial<typeof refunds.$inferInsert> = {}) =>
+        withTransaction(suite.db, async (tx) =>
+          completeRefundReservation(
+            tx,
+            {},
+            reading(at),
+            await reserve({ billPaymentId: paid, ...fields }, at),
+          ),
+        );
+      const settledBefore = await cashRefund(CUTOFF - 20 * MINUTE);
+      const cash = await cashRefund(CUTOFF + 2 * MINUTE, { tipAmount: 50 });
+      // As `recordCashDrawerRefund` writes it when the device has a drawer.
+      const drawer = await withTransaction(suite.db, async (tx) => {
+        const printer = await createPrinter(tx, {
+          name: "Refund drawer",
+          transport: "network_tcp",
+          host: "refund-drawer.test",
+          hasCashDrawer: true,
+        });
+        return appendDrawerEntry(tx, {
+          nodeId: venue.nodeId,
+          printerId: printer.id,
+          deviceId: venue.deviceId,
+          personId: marta,
+          recordedAt: cash.completedAt!,
+          kind: "cash_refund",
+          amount: -250,
+          refundId: cash.id,
+        });
+      });
+
+      const saleId = await seedSale(suite.db, venue, {
+        invoiceNumber: 1,
+        issuedAt: iso(CUTOFF - 40 * MINUTE),
+        total: "7.00",
+        lines: [{ vatRate: "10.00", lineTotal: "7.00" }],
+        workingOrderId: orderId,
+      });
+      const [tender] = await suite.db
+        .insert(tenders)
+        .values({ saleId, method: "card", amount: 700, settledAt: iso(CUTOFF - 40 * MINUTE) })
+        .returning({ id: tenders.id });
+      const captured = await cardPayment(orderId, CUTOFF - 40 * MINUTE, "ref-card", null);
+      const card = {
+        saleId,
+        tenderId: tender!.id,
+        method: "card" as const,
+        provider: "simulator",
+        providerPaymentRef: "ref-card",
+      };
+      const late = await reserve({ ...card, appliedAmount: 300 }, CUTOFF - 5 * MINUTE);
+      // As `tender-refund-sends.ts` stores a send, then the provider's answer.
+      await suite.db.run(
+        sql`update refunds set sent_at = ${iso(CUTOFF - 4 * MINUTE)}, send_count = 1 where id = ${late.id}`,
+      );
+      await withTransaction(suite.db, async (tx) => {
+        await tx.run(
+          sql`update refunds set state = 'completed', completed_at = ${iso(CUTOFF + 6 * MINUTE)}, provider_refund_ref = 're-9', provider_status = 'completed', next_retry_at = null where id = ${late.id}`,
+        );
+        await recordRefund(tx, {
+          provider: "simulator",
+          paymentRef: "ref-card",
+          amount: decimal("3.00"),
+          authorizedBy: ana,
+          providerRefundRef: "re-9",
+        });
+      });
+      const failed = await reserve({ ...card, appliedAmount: 100 }, CUTOFF + 8 * MINUTE);
+      await suite.db.run(
+        sql`update refunds set sent_at = ${iso(CUTOFF + 8 * MINUTE)}, send_count = 1, state = 'failed', failed_at = ${iso(CUTOFF + 9 * MINUTE)} where id = ${failed.id}`,
+      );
+      const [cardRefund] = await suite.db.all<{ id: string }>(sql`select id from payment_refunds`);
+
+      const xml = await paymentsTab();
+      // prettier-ignore
+      expect([3, 4, 5, 6, 7, 8, 9].map((n) => row(xml, n))).toEqual([
+        ["Refund", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "-2.00", "-0.50", "Cash", "Completed", "12", "", "", "", paid, "", "Marta Ruiz", cash.id],
+        ["Cash drawer", iso(CUTOFF + 2 * MINUTE), "", "-2.50", "", "", "Cash refund", "", "", "", "", "", cash.id, "Marta Ruiz", drawer.id],
+        ["Refund", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 6 * MINUTE), "-3.00", "0.00", "Card", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Marta Ruiz", late.id],
+        ["Refund", iso(CUTOFF + 8 * MINUTE), iso(CUTOFF + 9 * MINUTE), "-1.00", "0.00", "Card", "Failed", "12", "simulator", "ref-card", "", "", "", "Marta Ruiz", failed.id],
+        ["Card payment", iso(CUTOFF - 40 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
+        ["Card refund", iso(LATER), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
+        [],
+      ]);
+      expect(xml).not.toContain(settledBefore.id);
+      expect(settledBefore.state).toBe("completed");
     });
 
     it("lists a card payment voided, or a hold on it decided, after the cutoff", async () => {
@@ -668,8 +795,8 @@ describe("the old box's Payments and cash tab", () => {
       const xml = await paymentsTab();
       // prettier-ignore
       expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
-        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + MINUTE), "5.00", "0.00", "Card", "Failed", "12", "", "", "", "", "Marta Ruiz", failed],
-        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "Marta Ruiz", received],
+        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + MINUTE), "5.00", "0.00", "Card", "Failed", "12", "", "", "", "", "", "Marta Ruiz", failed],
+        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", received],
         [],
       ]);
       expect(xml).not.toContain(settledBefore);

@@ -70,6 +70,7 @@ const PAYMENT_KEYS = [
   "reference",
   "refundReference",
   "partPaymentId",
+  "refundId",
   "person",
   "id",
 ] as const;
@@ -102,7 +103,19 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
       break;
     case "refund":
       Object.assign(cells, {
+        tip: amount(fact.tip),
+        method: words.methods[fact.method] ?? fact.method,
         state: words.refundStates[fact.state] ?? fact.state,
+        provider: fact.provider,
+        reference: fact.reference,
+        refundReference: fact.refundReference,
+        partPaymentId: fact.partPaymentId,
+        person: fact.personName,
+      });
+      break;
+    case "cardRefund":
+      Object.assign(cells, {
+        state: words.cardRefundStates[fact.state] ?? fact.state,
         provider: fact.provider,
         reference: fact.reference,
         refundReference: fact.refundReference,
@@ -113,6 +126,7 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
       Object.assign(cells, {
         state: words.drawerKinds[fact.drawerKind] ?? fact.drawerKind,
         partPaymentId: fact.partPaymentId,
+        refundId: fact.refundId,
         person: fact.personName,
       });
       break;
