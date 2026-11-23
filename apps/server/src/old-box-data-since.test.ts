@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendDrawerEntry,
   billPayments,
@@ -11,10 +11,16 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { payments } from "@waitron/payments";
+import {
+  payments,
+  recordFailedRefund,
+  recordRefund,
+  recordVoid,
+  settleInitiated,
+} from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import { seedPerson } from "@waitron/identity/test/fixtures.js";
-import { jobOrigin } from "@waitron/shared";
+import { decimal, jobOrigin } from "@waitron/shared";
 import { appendToChain, type TimeEntryAppend } from "@waitron/workforce";
 import {
   seedFiredOrder,
@@ -209,13 +215,14 @@ describe("the old box's Activity tab", () => {
     },
   );
 
-  it("takes the 7-day rule's first line from its own words", async () => {
-    const xml = sheet(
-      await build({ kind: "own", fromMs: CUTOFF }),
-      OLD_BOX_DATA_WORDS.en.activitySheet,
-    )!;
-    expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+  it("takes the 7-day rule's first line from its own words, and the Payments and cash tab's from its own", async () => {
+    const bytes = await build({ kind: "own", fromMs: CUTOFF });
+    const en = OLD_BOX_DATA_WORDS.en;
+    expect(row(sheet(bytes, en.activitySheet)!, 1)).toEqual([
+      en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+    ]);
+    expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
+      en.paymentsOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
     ]);
   });
 
@@ -469,19 +476,169 @@ describe("the old box's Payments and cash tab", () => {
       await build({ kind: "copy", fromMs: CUTOFF }),
       OLD_BOX_DATA_WORDS.en.paymentsSheet,
     )!;
+    expect(row(xml, 1)).toEqual([
+      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+    ]);
     // `row` returns cell text as written, so the apostrophe is still escaped.
     expect(row(xml, 2)).toEqual(
       OLD_BOX_DATA_WORDS.en.paymentColumns.map((heading) => heading.replace("'", "&apos;")),
     );
     // prettier-ignore
     expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n))).toEqual([
-      ["Payment", iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "Marta Ruiz", part],
-      ["Card payment", iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", alone],
-      ["Payment", iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "Marta Ruiz", cardPart],
-      ["Card payment", iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", cardPart, "", named],
-      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "5.00", "", "", "Cash payment", "12", "", "", part, "Marta Ruiz", drawer],
+      ["Payment", iso(CUTOFF), iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "", "Marta Ruiz", part],
+      ["Card payment", iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", "", alone],
+      ["Payment", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "Marta Ruiz", cardPart],
+      ["Card payment", iso(CUTOFF + 3 * MINUTE), iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", "", cardPart, "", named],
+      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "", "5.00", "", "", "Cash payment", "12", "", "", "", part, "Marta Ruiz", drawer],
       [],
     ]);
+  });
+
+  describe("an earlier payment whose money moved from the cutoff", () => {
+    const LATER = CUTOFF + 20 * MINUTE;
+    beforeEach(() => {
+      // The payments module stamps its own changes with the current time.
+      vi.useFakeTimers({ now: LATER, toFake: ["Date"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const paymentsTab = async (since: SinceRule = { kind: "copy", fromMs: CUTOFF }) =>
+      sheet(await build(since), OLD_BOX_DATA_WORDS.en.paymentsSheet)!;
+
+    it("lists a card payment started before the cutoff and captured after it, at the time it was listed for", async () => {
+      const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+      const [started] = await suite.db
+        .insert(payments)
+        .values({
+          workingOrderId: orderId,
+          source: "device",
+          deviceId: venue.deviceId,
+          provider: "simulator",
+          paymentRef: "late-capture",
+          externalRef: "processor-late-capture",
+          amount: 700,
+          state: "initiated",
+          createdAt: iso(CUTOFF - MINUTE),
+          updatedAt: iso(CUTOFF - MINUTE),
+        })
+        .returning({ id: payments.id });
+      const before = await cardPayment(orderId, CUTOFF - 2 * MINUTE, "ref-before", null);
+      const settled = await withTransaction(suite.db, (tx) =>
+        settleInitiated(tx, {
+          provider: "simulator",
+          externalRef: "processor-late-capture",
+          settledAt: new Date(CUTOFF + 11 * MINUTE),
+        }),
+      );
+      const after = await cardPayment(orderId, CUTOFF + 5 * MINUTE, "ref-after", null);
+
+      const xml = await paymentsTab();
+      // prettier-ignore
+      expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
+        ["Card payment", iso(CUTOFF + 5 * MINUTE), iso(CUTOFF + 5 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-after", "", "", "", after],
+        ["Card payment", iso(CUTOFF - MINUTE), iso(LATER), "7.00", "", "", "Captured", "12", "simulator", "late-capture", "", "", "", started!.id],
+        [],
+      ]);
+      expect(settled?.paymentRef).toBe("late-capture");
+      expect(xml).not.toContain(before);
+    });
+
+    it("lists a card refund recorded after the cutoff against an earlier capture, as its own line naming the capture", async () => {
+      const marta = await namedPerson("Marta Ruiz");
+      const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+      const captured = await cardPayment(orderId, CUTOFF - 30 * MINUTE, "ref-refunded", null);
+      const key = { provider: "simulator", paymentRef: "ref-refunded" };
+      await withTransaction(suite.db, async (tx) => {
+        await recordRefund(tx, {
+          ...key,
+          amount: decimal("3.00"),
+          authorizedBy: marta,
+          providerRefundRef: "re-1",
+          at: new Date(CUTOFF + 10 * MINUTE),
+        });
+        await recordFailedRefund(tx, { ...key, amount: decimal("4.00") });
+      });
+
+      const xml = await paymentsTab();
+      const refunds = await suite.db.all<{ id: string; state: string }>(
+        sql`select id, state from payment_refunds order by created_at`,
+      );
+      expect(refunds.map((r) => r.state)).toEqual(["succeeded", "failed"]);
+      // prettier-ignore
+      expect([3, 4, 5, 6].map((n) => row(xml, n))).toEqual([
+        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-refunded", "re-1", "", "Marta Ruiz", refunds[0]!.id],
+        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-refunded", "", "", "", captured],
+        ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", refunds[1]!.id],
+        [],
+      ]);
+      // Under the rule that lists everything, the capture comes first, at the time it was recorded.
+      expect(row(await paymentsTab({ kind: "all" }), 3).at(-1)).toBe(captured);
+    });
+
+    it("lists a card payment voided, or a hold on it decided, after the cutoff", async () => {
+      const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+      const voided = await cardPayment(orderId, CUTOFF - 30 * MINUTE, "ref-voided", null);
+      await withTransaction(suite.db, (tx) =>
+        recordVoid(tx, { provider: "simulator", paymentRef: "ref-voided" }),
+      );
+      const held = await cardPayment(orderId, CUTOFF - 40 * MINUTE, "ref-held", null);
+      const marta = await namedPerson("Marta Ruiz");
+      await suite.db.run(
+        sql`update payments set hold_provider_amount = 900, held_at = ${iso(CUTOFF - 35 * MINUTE)}, hold_outcome = 'refunded_at_provider', hold_note = 'Refunded', hold_decided_by = ${marta}, hold_decided_at = ${iso(CUTOFF + 3 * MINUTE)} where id = ${held}`,
+      );
+
+      const xml = await paymentsTab();
+      expect([3, 4, 5].map((n) => [row(xml, n)[2], row(xml, n)[6], row(xml, n).at(-1)])).toEqual([
+        [iso(CUTOFF + 3 * MINUTE), "Captured", held],
+        [iso(LATER), "Voided", voided],
+        [undefined, undefined, undefined],
+      ]);
+    });
+
+    it("lists a part payment made before the cutoff and received or failed after it, and not one settled before it", async () => {
+      const marta = await namedPerson("Marta Ruiz");
+      const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+      const outcome = async (
+        state: "received" | "failed",
+        outcomeAt: number,
+        tendered: number | null = null,
+      ) => {
+        const [saved] = await suite.db
+          .insert(billPayments)
+          .values({
+            workingOrderId: orderId,
+            submissionId: crypto.randomUUID(),
+            fingerprint: "fixture",
+            kind: "contribution",
+            method: tendered === null ? "card" : "cash",
+            applied: 500,
+            tendered,
+            state,
+            requestedBy: marta,
+            source: "device",
+            deviceId: venue.deviceId,
+            createdAt: iso(CUTOFF - 5 * MINUTE),
+            receivedAt: state === "received" ? iso(outcomeAt) : null,
+            failedAt: state === "failed" ? iso(outcomeAt) : null,
+          })
+          .returning({ id: billPayments.id });
+        return saved!.id;
+      };
+      const settledBefore = await outcome("received", CUTOFF - 4 * MINUTE, 500);
+      const received = await outcome("received", CUTOFF + 2 * MINUTE);
+      const failed = await outcome("failed", CUTOFF + MINUTE);
+
+      const xml = await paymentsTab();
+      // prettier-ignore
+      expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
+        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + MINUTE), "5.00", "0.00", "Card", "Failed", "12", "", "", "", "", "Marta Ruiz", failed],
+        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "Marta Ruiz", received],
+        [],
+      ]);
+      expect(xml).not.toContain(settledBefore);
+    });
   });
 });
 
@@ -510,24 +667,11 @@ describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
     expect(row(orders, 3)[2]).toBe(es.orderStatuses.settled);
     const cash = sheet(bytes, es.paymentsSheet)!;
     expect(row(cash, 2)).toEqual([...es.paymentColumns]);
-    expect([3, 4, 5].map((n) => row(cash, n).slice(0, 6))).toEqual([
-      [
-        es.paymentKinds.part,
-        iso(CUTOFF),
-        "5.00",
-        "0.00",
-        es.methods.cash,
-        es.partPaymentStates.received,
-      ],
-      [es.paymentKinds.card, iso(CUTOFF + MINUTE), "7.00", "", "", es.cardPaymentStates.captured],
-      [
-        es.paymentKinds.drawer,
-        iso(CUTOFF + 2 * MINUTE),
-        "5.00",
-        "",
-        "",
-        es.drawerKinds.cash_payment,
-      ],
+    // prettier-ignore
+    expect([3, 4, 5].map((n) => row(cash, n).slice(0, 7))).toEqual([
+      [es.paymentKinds.part, iso(CUTOFF), iso(CUTOFF), "5.00", "0.00", es.methods.cash, es.partPaymentStates.received],
+      [es.paymentKinds.card, iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", es.cardPaymentStates.captured],
+      [es.paymentKinds.drawer, iso(CUTOFF + 2 * MINUTE), "", "5.00", "", "", es.drawerKinds.cash_payment],
     ]);
     // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
     expect(es.ordersSheet).not.toBe(OLD_BOX_DATA_WORDS.en.ordersSheet);
@@ -686,6 +830,6 @@ describe("the old box's Working hours tab", () => {
 
 describe("the Payments and cash tab's headings", () => {
   it("names the bill payment a row belongs to as a bill payment, not a part payment", () => {
-    expect(OLD_BOX_DATA_WORDS.en.paymentColumns[9]).toBe("Bill payment");
+    expect(OLD_BOX_DATA_WORDS.en.paymentColumns[11]).toBe("Bill payment");
   });
 });

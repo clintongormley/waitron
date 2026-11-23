@@ -84,5 +84,5 @@ it("lists part payments and drawer entries, and no card payments, when the payme
     ["Cash drawer", AT],
     [],
   ]);
-  expect(row(xml, 4)[11]).toBe(drawer.id);
+  expect(row(xml, 4).at(-1)).toBe(drawer.id);
 });

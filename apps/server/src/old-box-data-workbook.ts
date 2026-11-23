@@ -55,66 +55,77 @@ type Words = (typeof OLD_BOX_DATA_WORDS)["en" | "es"];
 
 const amount = (value: Decimal | null): Cell => (value === null ? null : { number: value });
 
+const PAYMENT_KEYS = [
+  "kind",
+  "recordedAt",
+  "changedAt",
+  "amount",
+  "tip",
+  "method",
+  "state",
+  "order",
+  "provider",
+  "reference",
+  "refundReference",
+  "partPaymentId",
+  "person",
+  "id",
+] as const;
+
 function paymentCells(fact: PaymentRow, words: Words): Cell[] {
-  const kind = words.paymentKinds[fact.kind];
-  const common = { at: fact.recordedAt, amount: amount(fact.amount), order: fact.orderNumber };
-  const order = common.order === null ? null : String(common.order);
+  const cells: Partial<Record<(typeof PAYMENT_KEYS)[number], Cell>> = {
+    kind: words.paymentKinds[fact.kind],
+    recordedAt: fact.recordedAt,
+    changedAt: fact.changedAt,
+    amount: amount(fact.amount),
+    order: fact.orderNumber === null ? null : String(fact.orderNumber),
+    id: fact.id,
+  };
   switch (fact.kind) {
     case "part":
-      return [
-        kind,
-        common.at,
-        common.amount,
-        amount(fact.tip),
-        words.methods[fact.method] ?? fact.method,
-        words.partPaymentStates[fact.state] ?? fact.state,
-        order,
-        null,
-        null,
-        null,
-        fact.personName,
-        fact.id,
-      ];
+      Object.assign(cells, {
+        tip: amount(fact.tip),
+        method: words.methods[fact.method] ?? fact.method,
+        state: words.partPaymentStates[fact.state] ?? fact.state,
+        person: fact.personName,
+      });
+      break;
     case "card":
-      return [
-        kind,
-        common.at,
-        common.amount,
-        null,
-        null,
-        words.cardPaymentStates[fact.state] ?? fact.state,
-        order,
-        fact.provider,
-        fact.reference,
-        fact.partPaymentId,
-        null,
-        fact.id,
-      ];
+      Object.assign(cells, {
+        state: words.cardPaymentStates[fact.state] ?? fact.state,
+        provider: fact.provider,
+        reference: fact.reference,
+        partPaymentId: fact.partPaymentId,
+      });
+      break;
+    case "refund":
+      Object.assign(cells, {
+        state: words.refundStates[fact.state] ?? fact.state,
+        provider: fact.provider,
+        reference: fact.reference,
+        refundReference: fact.refundReference,
+        person: fact.personName,
+      });
+      break;
     case "drawer":
-      return [
-        kind,
-        common.at,
-        common.amount,
-        null,
-        null,
-        words.drawerKinds[fact.drawerKind] ?? fact.drawerKind,
-        order,
-        null,
-        null,
-        fact.partPaymentId,
-        fact.personName,
-        fact.id,
-      ];
+      Object.assign(cells, {
+        state: words.drawerKinds[fact.drawerKind] ?? fact.drawerKind,
+        partPaymentId: fact.partPaymentId,
+        person: fact.personName,
+      });
+      break;
   }
+  return PAYMENT_KEYS.map((key) => cells[key] ?? null);
 }
 
-function sinceIntro(rule: SinceRule, words: Words): string {
+function sinceIntro(rule: SinceRule, words: Words, tab: "payments" | "other"): string {
   if (rule.kind === "all") return words.sinceAllIntro;
   const time = minute(new Date(rule.fromMs));
-  return (rule.kind === "copy" ? words.sinceCopyIntro : words.sinceOwnIntro).replace(
-    "{time}",
-    () => time,
-  );
+  const intros =
+    tab === "payments"
+      ? { copy: words.paymentsCopyIntro, own: words.paymentsOwnIntro }
+      : { copy: words.sinceCopyIntro, own: words.sinceOwnIntro };
+  return intros[rule.kind].replace("{time}", () => time);
 }
 
 type Seat = { name: string; unreturned: NonNullable<ModuleHandoverContribution["unreturned"]> };
@@ -235,7 +246,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
   ];
   const counts: OldBoxWorkbook["counts"] = { invoiceRows: rows.length };
   if (input.since !== undefined) {
-    const intro = sinceIntro(input.since, words);
+    const intro = sinceIntro(input.since, words, "other");
     const orders = await readOrdersSince(input.db, input.since);
     const facts = await readPaymentsSince(input.db, input.since);
     const hours = await readTimeEntriesSince(input.db, input.since);
@@ -269,7 +280,11 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
       },
       {
         name: words.paymentsSheet,
-        rows: [[intro], words.paymentColumns, ...facts.map((fact) => paymentCells(fact, words))],
+        rows: [
+          [sinceIntro(input.since, words, "payments")],
+          words.paymentColumns,
+          ...facts.map((fact) => paymentCells(fact, words)),
+        ],
       },
       {
         name: words.hoursSheet,

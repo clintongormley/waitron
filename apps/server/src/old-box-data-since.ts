@@ -1,4 +1,5 @@
 import { asc, eq, gte, inArray, or } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   activityLog,
   billPayments,
@@ -11,6 +12,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { payments } from "@waitron/payments";
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { timeEntries } from "@waitron/workforce";
 import {
   centsToDecimal,
@@ -170,6 +172,8 @@ export async function readOrdersSince(db: Database, rule: SinceRule): Promise<Or
 /** One payment fact; which fields are set depends on its kind. */
 export type PaymentRow = {
   recordedAt: string;
+  /** A payment's latest stored outcome or change; null on a row that never changes. */
+  changedAt: string | null;
   amount: Decimal;
   orderNumber: number | null;
   id: string;
@@ -189,6 +193,15 @@ export type PaymentRow = {
       partPaymentId: string | null;
     }
   | {
+      kind: "refund";
+      state: string;
+      provider: string;
+      /** The refunded card payment's reference. */
+      reference: string;
+      refundReference: string | null;
+      personName: string | null;
+    }
+  | {
       kind: "drawer";
       drawerKind: string;
       partPaymentId: string | null;
@@ -196,15 +209,26 @@ export type PaymentRow = {
     }
 );
 
+const latest = (...times: (string | null)[]): string | null =>
+  times.reduce<string | null>(
+    (max, t) => (t !== null && (max === null || t > max) ? t : max),
+    null,
+  );
+
 /**
- * Part payments, card payments (when the payments module's table exists) and cash drawer entries
- * from the rule's start, oldest first; reads only.
+ * Part payments, card payments and their refunds (when the payments module's tables exist) and
+ * cash drawer entries recorded from the rule's start, with each earlier part or card payment whose
+ * outcome or state changed from then; oldest first by the time that listed it. Reads only.
  */
 export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<PaymentRow[]> {
   const from = rule.kind === "all" ? null : new Date(rule.fromMs).toISOString();
+  const since = (...columns: SQLiteColumn[]) =>
+    from === null ? undefined : or(...columns.map((column) => gte(column, from)));
   const parts = await db
     .select({
       recordedAt: billPayments.createdAt,
+      receivedAt: billPayments.receivedAt,
+      failedAt: billPayments.failedAt,
       applied: billPayments.applied,
       tip: billPayments.tip,
       method: billPayments.method,
@@ -216,12 +240,17 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
     .from(billPayments)
     .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
     .leftJoin(persons, eq(persons.id, billPayments.requestedBy))
-    .where(from === null ? undefined : gte(billPayments.createdAt, from))
-    .orderBy(asc(billPayments.createdAt), asc(billPayments.id));
-  const cards = (await tableExists(db, "payments"))
+    .where(since(billPayments.createdAt, billPayments.receivedAt, billPayments.failedAt));
+  const withCards = await tableExists(db, "payments");
+  const cards = withCards
     ? await db
         .select({
           recordedAt: payments.createdAt,
+          updatedAt: payments.updatedAt,
+          settledAt: payments.settledAt,
+          resolvedAt: payments.resolvedAt,
+          heldAt: payments.heldAt,
+          holdDecidedAt: payments.holdDecidedAt,
           amount: payments.amount,
           state: payments.state,
           orderNumber: workingOrders.orderNumber,
@@ -232,8 +261,36 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
         })
         .from(payments)
         .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-        .where(from === null ? undefined : gte(payments.createdAt, from))
-        .orderBy(asc(payments.createdAt), asc(payments.id))
+        // Not every change stamps updated_at: a resolution and a hold write only their own times.
+        .where(
+          since(
+            payments.createdAt,
+            payments.updatedAt,
+            payments.settledAt,
+            payments.resolvedAt,
+            payments.heldAt,
+            payments.holdDecidedAt,
+          ),
+        )
+    : [];
+  const refunds = withCards
+    ? await db
+        .select({
+          recordedAt: paymentRefunds.createdAt,
+          amount: paymentRefunds.amount,
+          state: paymentRefunds.state,
+          orderNumber: workingOrders.orderNumber,
+          provider: payments.provider,
+          reference: payments.paymentRef,
+          refundReference: paymentRefunds.providerRefundRef,
+          personName: persons.displayName,
+          id: paymentRefunds.id,
+        })
+        .from(paymentRefunds)
+        .innerJoin(payments, eq(payments.id, paymentRefunds.paymentId))
+        .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+        .leftJoin(persons, eq(persons.id, paymentRefunds.authorizedBy))
+        .where(since(paymentRefunds.createdAt))
     : [];
   const drawer = await db
     .select({
@@ -249,28 +306,44 @@ export async function readPaymentsSince(db: Database, rule: SinceRule): Promise<
     .leftJoin(billPayments, eq(billPayments.id, drawerEntries.billPaymentId))
     .leftJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
     .leftJoin(persons, eq(persons.id, drawerEntries.personId))
-    .where(from === null ? undefined : gte(drawerEntries.recordedAt, from))
-    .orderBy(asc(drawerEntries.recordedAt), asc(drawerEntries.id));
+    .where(since(drawerEntries.recordedAt));
   const facts: PaymentRow[] = [
-    ...parts.map(({ applied, tip, ...row }) => ({
+    ...parts.map(({ applied, tip, receivedAt, failedAt, ...row }) => ({
       ...row,
       kind: "part" as const,
+      changedAt: latest(receivedAt, failedAt),
       amount: centsToDecimal(applied),
       tip: centsToDecimal(tip),
     })),
-    ...cards.map(({ amount, ...row }) => ({
+    ...cards.map(({ amount, updatedAt, settledAt, resolvedAt, heldAt, holdDecidedAt, ...row }) => ({
       ...row,
       kind: "card" as const,
+      changedAt: latest(updatedAt, settledAt, resolvedAt, heldAt, holdDecidedAt),
       amount: centsToDecimal(amount),
+    })),
+    ...refunds.map(({ amount, ...row }) => ({
+      ...row,
+      kind: "refund" as const,
+      changedAt: null,
+      amount: centsToDecimal(-amount),
     })),
     ...drawer.map(({ amount, ...row }) => ({
       ...row,
       kind: "drawer" as const,
+      changedAt: null,
       amount: centsToDecimal(amount),
     })),
   ];
-  // A stable sort keeps part, card and drawer facts recorded at one instant in that order.
-  return facts.sort((a, b) =>
-    a.recordedAt < b.recordedAt ? -1 : a.recordedAt > b.recordedAt ? 1 : 0,
+  // An earlier payment is listed at the change that brought it in.
+  const listedAt = (fact: PaymentRow) =>
+    from === null || fact.recordedAt >= from ? fact.recordedAt : fact.changedAt!;
+  const order = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return facts.sort(
+    (a, b) =>
+      order(listedAt(a), listedAt(b)) ||
+      KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
+      order(a.id, b.id),
   );
 }
+
+const KIND_ORDER = { part: 0, card: 1, refund: 2, drawer: 3 } as const;

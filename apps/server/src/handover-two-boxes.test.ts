@@ -1496,15 +1496,13 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       expect(invoices).toHaveLength(1);
       expect(invoices[0]).toContain(afterCopy.record.num_serie_factura);
       const cutoffMinute = `${new Date(copyAt - 10 * 60_000).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-      for (const name of [
-        words.ordersSheet,
-        words.paymentsSheet,
-        words.hoursSheet,
-        words.activitySheet,
-      ])
+      for (const name of [words.ordersSheet, words.hoursSheet, words.activitySheet])
         expect(row(tab(name), 1), name).toEqual([
           words.sinceCopyIntro.replace("{time}", cutoffMinute),
         ]);
+      expect(row(tab(words.paymentsSheet), 1)).toEqual([
+        words.paymentsCopyIntro.replace("{time}", cutoffMinute),
+      ]);
       expect(dataRows(tab(words.ordersSheet))).toEqual([expect.arrayContaining(["4242", sentAt])]);
       const activity = dataRows(tab(words.activitySheet)).flat();
       expect(activity).toContain(LATE_SUBJECT);
