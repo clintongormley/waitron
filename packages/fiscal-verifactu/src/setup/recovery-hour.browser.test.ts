@@ -1450,8 +1450,8 @@ it.each([
   },
 );
 it.each([
-  ["en", "The invoice series cannot be created. This is a fault in Waitron."],
-  ["es", "No se pueden crear las series de facturas. Es un fallo de Waitron."],
+  ["en", "The venue cannot be started. This is a fault in Waitron."],
+  ["es", "No se puede iniciar el local. Es un fallo de Waitron."],
 ] as const)(
   "a handover start found taken names the fault and never sends the person to a restore (%s)",
   async (locale, words) => {
@@ -1473,8 +1473,6 @@ it.each([
     }) as LitElement & ModulePromotionEntry;
     host.append(el);
     await el.updateComplete;
-    check(el, "recovery-details-confirmed");
-    await proceed(el);
     await vi.waitFor(() =>
       expect(
         el
@@ -1689,15 +1687,22 @@ it("drops a returning device's report when the selected backup scope changes", a
 type Promotion = LitElement & ModulePromotionEntry;
 const promotionBinding = { ...binding, action: "promote" };
 const promotionSelected = { ...selected, binding: promotionBinding };
-async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unknown>>) {
+async function mountPromotion(
+  prepare: Mock<(proposal: unknown) => Promise<unknown>>,
+  scenario: "controlled" | "emergency" = "controlled",
+  {
+    locale = "en",
+    timeZone = "America/New_York",
+  }: { locale?: "en" | "es"; timeZone?: string } = {},
+) {
   const host = document.createElement("main");
   applyTokens(host);
   document.body.append(host);
   hosts.push(host);
   const el = FISCAL_SETUP.createPromotion!({
-    locale: "en",
-    scenario: "emergency",
-    timeZone: "America/New_York",
+    locale,
+    scenario,
+    timeZone,
     binding: promotionBinding,
     prepare,
   }) as Promotion;
@@ -1712,7 +1717,7 @@ const SWITCH_PAGE_DO =
 const SWITCH_PAGE_ENDS =
   "It carries on by itself once the box keeps its time over the internet, while this page stays open.";
 
-it("a handover start shows the details tick and Proceed, sends nothing before Proceed, then carries on by itself to the series", async () => {
+it("an emergency switch with no second clock explains the wait, then carries on by itself to the start", async () => {
   let decision = noSecondClock;
   let compared = 0;
   const prepare = vi.fn(async (proposal: unknown) => {
@@ -1722,37 +1727,19 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
     if (action === "select") return promotionSelected;
     throw new Error("unexpected promotion proposal");
   });
-  const el = await mountPromotion(prepare);
-  const ready: boolean[] = [];
-  el.addEventListener("promotion-change", (event) =>
-    ready.push((event as CustomEvent<{ ready: boolean }>).detail.ready),
-  );
   fakeClock();
   try {
-    expect(
-      [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
-        (input) => input.name,
-      ),
-    ).toEqual(["recovery-details-confirmed"]);
-    expect(text(el)).toContain("These details are correct.");
-    expect(action(el)).toBe("Proceed");
-    expect(button(el, "compare").disabled).toBe(true);
-    check(el, "recovery-details-confirmed");
-    await el.updateComplete;
-    vi.advanceTimersByTime(200_000);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(prepare).not.toHaveBeenCalled();
-    expect(el.readOperation()).toBeNull();
-    expect(ready).not.toContain(true);
-    await proceed(el);
+    const el = await mountPromotion(prepare, "emergency");
+    const ready: boolean[] = [];
+    el.addEventListener("promotion-change", (event) =>
+      ready.push((event as CustomEvent<{ ready: boolean }>).detail.ready),
+    );
     await vi.waitFor(() => expect(text(el)).toContain(SWITCH_PAGE_DO));
     expect(text(el)).toContain(SWITCH_PAGE_ENDS);
     expect(promotionActions(prepare)).not.toContain("select");
     expect(action(el)).toBeUndefined();
     decision = clock;
     vi.advanceTimersByTime(15_000);
-    await continueOn(el);
     await vi.waitFor(() =>
       expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
     );
@@ -1770,7 +1757,7 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
     });
     await el.updateComplete;
     expect(action(el)).toBeUndefined();
-    expect(text(el)).toContain("A-0CSQW");
+    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
   } finally {
     vi.useRealTimers();
   }
@@ -1927,7 +1914,7 @@ it("a restore lists each new series with what it is for, in English and Spanish,
   ]);
   expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
 });
-it("compares and selects a promotion without a recovery key or recovery declarations, after the details tick and Proceed", async () => {
+it("compares and selects a promotion without a recovery key or recovery declarations, by itself on an emergency switch", async () => {
   let decision = clock;
   const prepare = vi.fn(async (proposal: unknown) => {
     const action = (proposal as { action: string }).action;
@@ -1968,15 +1955,8 @@ it("compares and selects a promotion without a recovery key or recovery declarat
     [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
       (input) => input.name,
     ),
-  ).toEqual(["recovery-details-confirmed"]);
+  ).toEqual([]);
   expect(el.shadowRoot!.querySelector('[data-test="device-invoices"]')).toBeNull();
-  expect(button(el, "compare").disabled).toBe(true);
-  expect(el.readOperation()).toBeNull();
-  check(el, "recovery-details-confirmed");
-  await el.updateComplete;
-  expect(button(el, "compare").disabled).toBe(false);
-  await proceed(el);
-  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
   );
@@ -1985,19 +1965,16 @@ it("compares and selects a promotion without a recovery key or recovery declarat
     "compare-clocks",
     "select",
   ]);
-  el.clear();
+  const entry = el as unknown as { context: object };
+  decision = noSecondClock;
+  entry.context = { ...entry.context };
   await el.updateComplete;
   expect(el.readOperation()).toBeNull();
-  decision = noSecondClock;
-  check(el, "recovery-details-confirmed");
-  await proceed(el);
   await vi.waitFor(() => expect(text(el)).toContain(SWITCH_PAGE_DO));
   expect(text(el)).not.toContain("has the backup");
-  el.clear();
-  await el.updateComplete;
   prepare.mockRejectedValue({ code: "password.invalid", params: {} });
-  check(el, "recovery-details-confirmed");
-  await proceed(el);
+  entry.context = { ...entry.context };
+  await el.updateComplete;
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
       "Check your password and code",
@@ -2034,8 +2011,6 @@ it.each([
   }) as LitElement & ModulePromotionEntry;
   host.append(el);
   await el.updateComplete;
-  check(el, "recovery-details-confirmed");
-  await proceed(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(message),
   );
@@ -2061,8 +2036,6 @@ it.each(["en", "es"] as const)(
     }) as LitElement & ModulePromotionEntry;
     host.append(el);
     await el.updateComplete;
-    check(el, "recovery-details-confirmed");
-    await proceed(el);
     const actions = el.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & {
       error: string;
     };
@@ -2118,9 +2091,6 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
   host.append(el);
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("h3")!.textContent).toBe("Iniciar el local en este servidor");
-  expect(text(el)).toContain("Estos datos son correctos.");
-  check(el, "recovery-details-confirmed");
-  await proceed(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
       "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
@@ -2839,4 +2809,475 @@ it("a wait after a Proceed with the internet's time that ends with only this dev
   } finally {
     vi.useRealTimers();
   }
+});
+
+/** Resolves every request with the prepare double's answer, the first compare only once `release` runs. */
+function emergencyPrepare(decision: () => typeof clock = () => clock) {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let compared = 0;
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") {
+      if (compared === 0) await held;
+      return { id: `comparison-${++compared}`, clock: decision() };
+    }
+    if (action === "select") return promotionSelected;
+    throw new Error("unexpected promotion proposal");
+  });
+  return { prepare, release };
+}
+const CHECKING = "Checking this box's time…";
+const statusLines = (el: LitElement) =>
+  [...el.shadowRoot!.querySelectorAll("[data-test=checking]")].map((p) => p.textContent!.trim());
+const zoneNote = (el: LitElement) =>
+  el.shadowRoot!.querySelector("[data-test=zone-note]")?.textContent?.replace(/\s+/g, " ").trim();
+const promotionSelects = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
+  prepare.mock.calls
+    .map(([proposal]) => proposal as { action: string })
+    .filter((proposal) => proposal.action === "select");
+const ownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const ownCity = ownZone.split("/").at(-1)!.replace(/_/g, " ");
+
+it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, checks the clocks by itself, hands the operation on at once, and after a clear starts again only when asked", async () => {
+  const { prepare, release } = emergencyPrepare();
+  const el = await mountPromotion(prepare, "emergency");
+  const ready: boolean[] = [];
+  el.addEventListener("promotion-change", (event) =>
+    ready.push((event as CustomEvent<{ ready: boolean }>).detail.ready),
+  );
+  await vi.waitFor(() =>
+    expect(promotionActions(prepare)).toEqual(["clock-challenge", "compare-clocks"]),
+  );
+  await el.updateComplete;
+  expect(statusLines(el)).toEqual([CHECKING]);
+  expect(el.shadowRoot!.querySelector("[data-test=checking]")!.getAttribute("role")).toBe("status");
+  expect(el.shadowRoot!.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+  expect(text(el)).not.toContain("These details are correct.");
+  expect(text(el)).not.toContain("Check this venue");
+  expect(el.shadowRoot!.querySelector("[data-test=venue-review]")).toBeNull();
+  for (const name of ["series-line", "edit-details", "clear", "compare", "continue"])
+    expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(promotionActions(prepare)).toEqual(["clock-challenge", "compare-clocks"]);
+  release();
+  await vi.waitFor(() =>
+    expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
+  );
+  expect(ready.at(-1)).toBe(true);
+  expect(prepare.mock.calls.at(-1)?.[0]).toEqual({
+    action: "select",
+    comparisonId: "comparison-1",
+  });
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  for (const name of ["clock-times", "clock-confirm", "clock-refused", "clock-heading"])
+    expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
+  el.starting = true;
+  await el.updateComplete;
+  // The page says it is starting the venue; the step claims no check of its own meanwhile.
+  expect(statusLines(el)).toEqual([]);
+  el.clear();
+  await el.updateComplete;
+  expect(el.readOperation()).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(promotionActions(prepare)).toEqual(["clock-challenge", "compare-clocks", "select"]);
+  expect(action(el)).toBe("Try again");
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+  expect(promotionActions(prepare)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+});
+it("a Spanish emergency switch says it is checking the box's time", async () => {
+  const { prepare } = emergencyPrepare();
+  const el = await mountPromotion(prepare, "emergency", { locale: "es" });
+  await vi.waitFor(() => expect(statusLines(el)).toEqual(["Comprobando la hora del servidor…"]));
+});
+it("a context change restarts an emergency switch's check, and the old answer is dropped", async () => {
+  const { prepare, release } = emergencyPrepare();
+  const el = await mountPromotion(prepare, "emergency");
+  await vi.waitFor(() => expect(promotionActions(prepare)).toHaveLength(2));
+  const entry = el as unknown as { context: object };
+  entry.context = { ...entry.context };
+  await el.updateComplete;
+  release();
+  await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+  expect(promotionActions(prepare)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+});
+it.each([
+  [
+    "en",
+    "Check the time",
+    "It is very important that the time on this box is correct, but it cannot currently check its time over the internet. Check that both times below are right, then press Confirm the time.",
+    ["This box", "Your device"],
+    /, New York time \(GMT-4\)$/,
+  ],
+  [
+    "es",
+    "Comprueba la hora",
+    "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.",
+    ["Este servidor", "Tu dispositivo"],
+    /, hora de New York \(GMT-4\)$/,
+  ],
+] as const)(
+  "an emergency switch without internet time asks to confirm both times in the venue's named zone (%s)",
+  async (locale, heading, lead, labels, zone) => {
+    const { prepare, release } = emergencyPrepare(() => deviceOnly);
+    release();
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=clock-heading]")?.textContent?.trim()).toBe(
+      heading,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm] p")?.textContent?.trim()).toBe(
+      lead,
+    );
+    const rows = detailRows(el, "clock-times");
+    expect(rows.map(([label]) => label)).toEqual(labels);
+    for (const [, value] of rows) expect(value).toMatch(zone);
+    expect(statusLines(el)).toEqual([]);
+    expect(promotionSelects(prepare)).toEqual([]);
+    await userEvent.click(button(el, "confirm-time"));
+    await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+    expect(promotionSelects(prepare)).toEqual([
+      { action: "select", comparisonId: "comparison-2", confirmed: true },
+    ]);
+  },
+);
+it.each([
+  [
+    "en",
+    "It is very important that the time on this box is correct, but it cannot currently check its time over the internet. Which device is correct?",
+    ["The box is correct", "Your device is correct", "Both are wrong"],
+    "Set this device's clock to the right time, then press Check again.",
+    "Check again",
+    /, New York time \(GMT-4\)$/,
+  ],
+  [
+    "es",
+    "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet. ¿Qué dispositivo tiene la hora correcta?",
+    [
+      "El servidor tiene la hora correcta",
+      "Tu dispositivo tiene la hora correcta",
+      "Las dos están mal",
+    ],
+    "Pon este dispositivo en la hora correcta y pulsa Volver a comprobar.",
+    "Volver a comprobar",
+    /, hora de New York \(GMT-4\)$/,
+  ],
+] as const)(
+  "an emergency switch whose clocks differ asks which device is correct in the owner's words (%s)",
+  async (locale, lead, labels, after, again, zone) => {
+    let decision: typeof clock = differing;
+    const { prepare, release } = emergencyPrepare(() => decision);
+    release();
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() => expect(choices(el)).toEqual(labels));
+    expect(el.shadowRoot!.querySelector("[data-test=clock-heading]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#which-correct")?.textContent?.trim()).toBe(lead);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
+        b.getAttribute("data-test"),
+      ),
+    ).toEqual(["server-correct", "device-correct", "both-wrong"]);
+    for (const [, value] of detailRows(el, "clock-times")) expect(value).toMatch(zone);
+    await userEvent.click(button(el, locale === "en" ? "server-correct" : "both-wrong"));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=correct-device]")?.textContent?.trim()).toBe(
+      after,
+    );
+    expect(action(el)).toBe(again);
+    decision = clock;
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+    expect(el.shadowRoot!.querySelector("[data-test=clock-heading]")).toBeNull();
+  },
+);
+it("an emergency switch's Your device is correct sets the box's clock from this browser and hands the operation on", async () => {
+  const answer = settable({ status: "set" }, () => promotionSelected);
+  const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+  const el = await mountPromotion(prepare, "emergency");
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() =>
+    expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
+  );
+  expect(promotionActions(prepare)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "clock-challenge",
+    "set-clock",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+});
+it("an emergency switch whose clock set fails names the button it offers", async () => {
+  const answer = settable({ status: "refused", reason: "unverified" });
+  const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+  const el = await mountPromotion(prepare, "emergency");
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() =>
+    expect(deviceLine(el)).toBe(
+      "The box could not set its clock from this device. Check this device's date and time, then press Your device is correct again.",
+    ),
+  );
+});
+it.each([
+  [
+    "en",
+    "synchronised",
+    "The box keeps its time over the internet, so its time is right. Correct the time on this device, then press Check again.",
+    "Check again",
+  ],
+  [
+    "es",
+    "synchronised",
+    "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y pulsa Volver a comprobar.",
+    "Volver a comprobar",
+  ],
+  [
+    "en",
+    "later",
+    "The box's time was not changed: this device's time is earlier than a time this venue has already used, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "Check again",
+  ],
+  [
+    "es",
+    "later",
+    "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que este local ya ha usado, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "Volver a comprobar",
+  ],
+] as const)(
+  "an emergency switch's refused clock set (%s, %s) names the button it offers",
+  async (locale, reason, line, again) => {
+    const answer = settable({ status: "refused", reason });
+    const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() => expect(deviceLine(el)).toBe(line));
+    expect(action(el)).toBe(again);
+  },
+);
+it.each([
+  [
+    "en",
+    "The venue cannot start: the box's time is now earlier than a time this venue has already used, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "Check again",
+  ],
+  [
+    "es",
+    "El local no puede iniciarse: la hora del servidor es ahora anterior a una hora que este local ya ha usado, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "Volver a comprobar",
+  ],
+] as const)(
+  "an emergency switch's later minute after the set names the button it offers (%s)",
+  async (locale, line, again) => {
+    const answer = settable({ status: "set" }, () => {
+      throw { code: "sif.allocation_invalid", params: { reason: "minute_not_later" } };
+    });
+    const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim(),
+      ).toBe(line),
+    );
+    expect(action(el)).toBe(again);
+    // The choice pressed is gone; focus moves to the button that is left.
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button(el, "compare")));
+  },
+);
+it.each(["server-correct", "both-wrong"])(
+  "on an emergency switch, answering %s moves focus from the choice it removes to Check again",
+  async (choice) => {
+    const { prepare, release } = emergencyPrepare(() => differing);
+    release();
+    const el = await mountPromotion(prepare, "emergency");
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, choice));
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button(el, "compare")));
+    expect(action(el)).toBe("Check again");
+  },
+);
+it("on an emergency switch, an answer given while focus is elsewhere on the page leaves it there", async () => {
+  const { prepare, release } = emergencyPrepare(() => differing);
+  release();
+  const el = await mountPromotion(prepare, "emergency");
+  const elsewhere = document.createElement("input");
+  document.body.append(elsewhere);
+  hosts.push(elsewhere);
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  elsewhere.focus();
+  button(el, "server-correct").click();
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.shadowRoot!.querySelector("[data-test=correct-device]")).not.toBeNull();
+  expect(document.activeElement).toBe(elsewhere);
+});
+/** The clocks agree with no internet time; after Confirm the time they differ, or select is refused. */
+function confirmedThen(answer: "disagreement" | "later" | "in-use", hold?: Promise<void>) {
+  let compared = 0;
+  return vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") {
+      compared += 1;
+      if (compared > 1) await hold;
+      const decision = compared > 1 && answer === "disagreement" ? differing : deviceOnly;
+      return { id: `comparison-${compared}`, clock: decision };
+    }
+    if (action === "select")
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: answer === "later" ? "minute_not_later" : "minute_in_use" },
+      };
+    throw new Error("unexpected promotion proposal");
+  });
+}
+it.each([
+  ["disagreement", "the Check the time heading", "[data-test=clock-heading]"],
+  ["later", "Check again", "[data-test=compare]"],
+  ["in-use", "the step's heading", "h3"],
+] as const)(
+  "on an emergency switch, Confirm the time answered %s moves focus from the button it removes to %s",
+  async (answer, _target, selector) => {
+    const el = await mountPromotion(confirmedThen(answer), "emergency");
+    await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+    await userEvent.click(button(el, "confirm-time"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull(),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(selector)),
+    );
+  },
+);
+it("on an emergency switch, focus moved elsewhere while Confirm the time is answered stays there", async () => {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  const el = await mountPromotion(confirmedThen("later", hold), "emergency");
+  const elsewhere = document.createElement("input");
+  document.body.append(elsewhere);
+  hosts.push(elsewhere);
+  await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+  await userEvent.click(button(el, "confirm-time"));
+  elsewhere.focus();
+  release();
+  await vi.waitFor(() => expect(button(el, "compare")).not.toBeNull());
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(document.activeElement).toBe(elsewhere);
+});
+it.each([
+  [
+    "en",
+    "The venue cannot start yet: this box's time is earlier than a time this venue has already used. Press Check again.",
+  ],
+  [
+    "es",
+    "El local todavía no puede iniciarse: la hora de este servidor es anterior a una hora que este local ya ha usado. Pulsa Volver a comprobar.",
+  ],
+] as const)(
+  "an emergency switch explains a time earlier than one already used without naming invoice series, naming the button it offers (%s)",
+  async (locale, later) => {
+    const el = await mountPromotion(confirmedThen("later"), "emergency", { locale });
+    await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+    await userEvent.click(button(el, "confirm-time"));
+    const line = () =>
+      el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim();
+    await vi.waitFor(() => expect(line()).toBe(later));
+    expect(later).toContain(action(el)!);
+  },
+);
+it.each([
+  [
+    "en",
+    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.",
+  ],
+  [
+    "es",
+    "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a intentarlo.",
+  ],
+] as const)(
+  "an emergency switch explains a stale clock reading by what happened and the button it offers (%s); a planned handover keeps its own words",
+  (locale, line) => {
+    const stale = { code: "sif.allocation_invalid", params: { reason: "clock_stale" } };
+    const entry = (scenario: "controlled" | "emergency") =>
+      FISCAL_SETUP.createPromotion!({
+        locale,
+        scenario,
+        timeZone: "UTC",
+        binding: promotionBinding,
+        prepare: async () => ({}),
+      });
+    expect(entry("emergency").refusalMessage(stale)).toBe(line);
+    expect(entry("controlled").refusalMessage(stale)).toBe(
+      recoveryHourStrings[locale].promotionClock,
+    );
+  },
+);
+it.each([
+  ["en", `Your device is set to ${ownCity} time; both are shown in the venue's time.`],
+  ["es", `Tu dispositivo está en la hora de ${ownCity}; las dos se muestran en la hora del local.`],
+] as const)(
+  "an emergency switch says when this device's zone differs from the venue's (%s), and not when it matches",
+  async (locale, note) => {
+    const { prepare, release } = emergencyPrepare(() => deviceOnly);
+    release();
+    const venueZone = ownZone === "Pacific/Chatham" ? "America/New_York" : "Pacific/Chatham";
+    const el = await mountPromotion(prepare, "emergency", { locale, timeZone: venueZone });
+    await vi.waitFor(() => expect(zoneNote(el)).toBe(note));
+    const second = emergencyPrepare(() => deviceOnly);
+    second.release();
+    const same = await mountPromotion(second.prepare, "emergency", { locale, timeZone: ownZone });
+    await vi.waitFor(() =>
+      expect(same.shadowRoot!.querySelector("[data-test=confirm-time]")).not.toBeNull(),
+    );
+    expect(zoneNote(same)).toBeUndefined();
+  },
+);
+it("a planned handover keeps the details tick, Proceed and the series with Continue", async () => {
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return promotionSelected;
+  });
+  const el = await mountPromotion(prepare, "controlled");
+  expect(
+    [...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map(
+      (input) => input.name,
+    ),
+  ).toEqual(["recovery-details-confirmed"]);
+  expect(button(el, "edit-details")).not.toBeNull();
+  expect(button(el, "clear")).not.toBeNull();
+  expect(prepare).not.toHaveBeenCalled();
+  check(el, "recovery-details-confirmed");
+  await proceed(el);
+  await continueOn(el);
+  expect(el.readOperation()).not.toBeNull();
+  expect(statusLines(el)).toEqual([]);
 });

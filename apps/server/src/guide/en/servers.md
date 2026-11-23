@@ -127,14 +127,16 @@ If the page reports too little temporary space, free disk space on the spare bef
 the backup again.
 
 On **Ready to switch**, tick all three statements and say why you are switching. Choose **Switch
-to this box**. At the clock check, tick **These details are correct.** and choose **Proceed**:
-the page compares the clocks, creates the new invoice series and lists each with what it is for. If this box cannot check its time over the internet, the page first shows this box's time
-and this device's: check that both are right (both are shown in the venue's time zone), then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets this box's time from
-the device you are using and the page carries on; after **The box** or **Both times are wrong**,
-correct this device's time and reconnect. Choose **Continue** to start the venue on this box. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
+to this box**. The page then checks this box's time and starts the venue by itself. If this box
+cannot check its time over the internet, it first shows **Check the time** with this box's time
+and this device's, both in the venue's time zone. If they agree and both are right, choose
+**Confirm the time**. If they differ, choose **Your device is correct** to set this box's time from
+the device you are using; after **The box is correct** or **Both are wrong**, correct this
+device's time and choose **Check again**. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
 you choose a step and the spare needs it, usually once, and again after 15 minutes; if instead it
-says your passkey sign-in needs checking again, choose the step again. Your reason and statements
+says your passkey sign-in needs checking again, choose the step again (after **Switch to this
+box**, choose **Try again**, or use your password). Your reason and statements
 stay in place.
 
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its

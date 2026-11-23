@@ -76,6 +76,7 @@ const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
   "handover.emergency.passkey_failed",
   "handover.emergency.passkey_again",
   "handover.emergency.passkey_again_step",
+  "handover.emergency.passkey_again_try",
   "handover.emergency.code_expired",
   "handover.emergency.sign_in_failed",
   "handover.emergency.throttled",
@@ -366,6 +367,8 @@ export class SetupHandoverScreen extends LitElement {
   #click?: Event;
   /** What a refusal that wanted a press put on screen; the clock step's next answer clears it. */
   #passkeyAgain?: string;
+  /** An emergency start refused for a stale clock reading was retried; a second refusal is shown. */
+  #staleRetried = false;
   /** Sent until a step answers it; never written to storage or the address. */
   #assertion?: unknown;
   @state() private email = "";
@@ -736,6 +739,7 @@ export class SetupHandoverScreen extends LitElement {
   async #authenticate(): Promise<void> {
     if (this.busy || (this.#isEmergency && this.copyRefused) || !(await this.#checked())) return;
     this.actionError = "";
+    this.#staleRetried = false;
     this.#resetSelection();
     this.#prepareClock();
   }
@@ -792,7 +796,9 @@ export class SetupHandoverScreen extends LitElement {
     });
   }
   async #retry(): Promise<void> {
-    if (!this.busy && (await this.#checked())) await this.#activate(true);
+    if (this.busy || !(await this.#checked())) return;
+    this.#staleRetried = false;
+    await this.#activate(true);
   }
   /** The button that asked for the start stays on screen, busy, until the start is answered. */
   async #activate(retry = false): Promise<void> {
@@ -814,11 +820,13 @@ export class SetupHandoverScreen extends LitElement {
     entry.starting = !retry;
     let refused = false;
     try {
+      // An emergency start that no press began may not open the passkey prompt.
       const answer = await this.#step(
         (signIn) => this.api.activateHandover(this.operationId, signIn, moduleOperation),
-        "prompt",
+        this.#isEmergency && !retry ? "ask" : "prompt",
       );
       if (controller?.signal.aborted) return;
+      this.#staleRetried = false;
       this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
@@ -826,11 +834,22 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
+      const stale =
+        (cause as { code?: unknown } | null)?.code === "sif.allocation_invalid" &&
+        (cause as { params?: { reason?: unknown } }).params?.reason === "clock_stale";
+      if (this.#isEmergency && stale && !this.#staleRetried) {
+        this.#staleRetried = true;
+        this.#resetSelection();
+        this.#prepareClock();
+        return;
+      }
       refused = true;
-      this.actionError = this.#isEmergency
-        ? this.#emergencyError(cause)
-        : entry.refusalMessage(cause);
-      if ((cause as { code?: unknown } | null)?.code === "password.invalid") {
+      if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
+      if (!this.#isEmergency || stale) this.actionError = entry.refusalMessage(cause);
+      if (
+        (cause as { code?: unknown } | null)?.code === "password.invalid" ||
+        cause instanceof PasskeyNeedsPress
+      ) {
         this.activationHeld = true;
         return;
       }
@@ -950,10 +969,13 @@ export class SetupHandoverScreen extends LitElement {
     error: { params?: { reason?: string } } | null,
     cause: unknown,
   ): StringKey {
+    // With the clock step drawn, the step's Try again or the page's is the button on screen.
     if (cause instanceof PasskeyNeedsPress)
-      return this.#choosesOnly
-        ? "handover.emergency.passkey_again_step"
-        : "handover.emergency.passkey_again";
+      return this.entry
+        ? "handover.emergency.passkey_again_try"
+        : this.#choosesOnly
+          ? "handover.emergency.passkey_again_step"
+          : "handover.emergency.passkey_again";
     if (
       cause instanceof PasskeyNotUsed ||
       (this.usePasskey &&
@@ -1825,9 +1847,8 @@ export class SetupHandoverScreen extends LitElement {
       ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
-          ? html`<p>${t("handover.zone")}</p>
-              ${this.entry}
-              ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
+          ? html`${this.#isEmergency ? nothing : html`<p>${t("handover.zone")}</p>`} ${this.entry}
+            ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
           : nothing
       }
       <wt-form-actions .error=${this.#formError}>
