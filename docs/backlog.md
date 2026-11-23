@@ -357,8 +357,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** The owner's
   answer (owner, 2026-11-18, question 5 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)) keeps the plan of two
   dated rates per product, taken on the day the meal ends; the adviser is still to confirm the details. Piece A of the
-  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is planned as four pull requests; the first two, which
-  give each product its own dated takeaway rate, have landed, and the one eat-in rate is next
+  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is planned as four pull requests; the first two give each
+  product its own dated takeaway rate, the third files everything eaten here at the one dine-in
+  rate, and the screens and guides for that rate are next
   ([plan](superpowers/plans/2026-11-22-vat-rates-a.md)). Drinks served
   without food may take 21%: unsettled, and the adviser will come back on it. [Detail](backlog/fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)
 
