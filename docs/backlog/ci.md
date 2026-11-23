@@ -357,7 +357,7 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 
 ## Decisions and deliberate limits
 
-The watcher chose a one-off sweep for stale comments, run on 2026-11-23, because a permanent guard would need an allow-list for its most common match.
+The watcher chose the one-off sweep on 2026-11-23 because the [2026-09-14 run](https://github.com/clintongormley/waitron/blob/ea2178d378813e1b680444e53137616cc4bd312b/docs/backlog/ci.md#L205-L211) found that 13 of 19 matches were valid group headings a permanent guard would need to allow.
 
 ### Remaining fixed-secret setup: measured below the conversion threshold
 
