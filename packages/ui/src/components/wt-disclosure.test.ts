@@ -969,15 +969,21 @@ test("a section forced open by an error and then closed shows its summary at onc
   expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
 });
 
-test("the summary fades in, and under reduced motion it does not", async () => {
-  const el = await mount(
-    '<wt-disclosure heading="Kitchen" summary="BAR"><p>body</p></wt-disclosure>',
-  );
-  const summary = el.shadowRoot!.querySelector<HTMLElement>("[part=summary]")!;
-  expect(getComputedStyle(summary).animationName).not.toBe("none");
+test("the summary fades in after a close, not on first render, and never under reduced motion", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR"><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const summary = () => el.shadowRoot!.querySelector<HTMLElement>("[part=summary]")!;
+  expect(getComputedStyle(summary()).animationName).toBe("none");
+  el.open = true;
+  await el.whenSettled();
+  el.open = false;
+  await el.whenSettled();
+  await el.updateComplete;
+  expect(getComputedStyle(summary()).animationName).not.toBe("none");
   await commands.emulateReducedMotion("reduce");
   try {
-    expect(getComputedStyle(summary).animationName).toBe("none");
+    expect(getComputedStyle(summary()).animationName).toBe("none");
   } finally {
     await commands.emulateReducedMotion(null);
   }

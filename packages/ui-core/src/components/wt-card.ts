@@ -11,6 +11,13 @@ export const cardFrameStyles = css`
   padding: var(--wt-space-4);
 `;
 
+/** The raised look, added to `cardFrameStyles` inside the same selector. */
+export const cardRaisedStyles = css`
+  background: var(--wt-color-surface-raised);
+  --wt-form-actions-surface: var(--wt-color-surface-raised);
+  box-shadow: var(--wt-shadow-1);
+`;
+
 @customElement("wt-card")
 export class WtCard extends LitElement {
   static override styles = [
@@ -25,9 +32,7 @@ export class WtCard extends LitElement {
       }
 
       :host([raised]) .card {
-        background: var(--wt-color-surface-raised);
-        --wt-form-actions-surface: var(--wt-color-surface-raised);
-        box-shadow: var(--wt-shadow-1);
+        ${cardRaisedStyles}
       }
 
       .header {

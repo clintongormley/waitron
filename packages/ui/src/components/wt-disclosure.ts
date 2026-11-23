@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { cardFrameStyles } from "@waitron/ui-core/components/wt-card";
+import { cardFrameStyles, cardRaisedStyles } from "@waitron/ui-core/components/wt-card";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
@@ -188,7 +188,7 @@ export class WtDisclosure extends LitElement {
         transform: rotate(180deg);
       }
 
-      [part="summary"] {
+      .summary-slot.fade-in {
         animation: wt-disclosure-summary-in var(--wt-duration-disclosure) ease;
       }
 
@@ -199,16 +199,14 @@ export class WtDisclosure extends LitElement {
       }
 
       @media (prefers-reduced-motion: reduce) {
-        [part="summary"] {
+        .summary-slot.fade-in {
           animation: none;
         }
       }
 
       :host([card]) .section {
         ${cardFrameStyles}
-        background: var(--wt-color-surface-raised);
-        --wt-form-actions-surface: var(--wt-color-surface-raised);
-        box-shadow: var(--wt-shadow-1);
+        ${cardRaisedStyles}
       }
 
       :host([card]) .title {
@@ -236,6 +234,8 @@ export class WtDisclosure extends LitElement {
   private openingFromHidden = false;
   /** While a close animates, the summary waits, so it never shows over the shrinking body. */
   private closing = false;
+  /** Set by a close, so a summary already showing when the section first draws does not fade. */
+  private summaryFades = false;
   private firstRender = true;
   private animationFrame = 0;
   private animationGeneration = 0;
@@ -298,6 +298,7 @@ export class WtDisclosure extends LitElement {
       this.closing = false;
     } else {
       this.openingFromHidden = false;
+      if (changed.has("open") && this.hasUpdated) this.summaryFades = true;
       // The same tests `updated` uses to skip the animation, so a close that will not animate
       // shows its summary in this render.
       if (changed.has("open") && this.hasUpdated && !this.hasError && !this.motionQuery?.matches)
@@ -390,7 +391,7 @@ export class WtDisclosure extends LitElement {
             @click=${this.onToggle}
           >
             ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
-            ${this.open || this.closing ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
+            ${this.open || this.closing ? nothing : html`<span class=${this.summaryFades ? "summary-slot fade-in" : "summary-slot"} part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
           </button>
           <slot name="help"></slot>
         </div>
