@@ -962,6 +962,8 @@ caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo
 tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**, en **Ajustes**. Marca **Mostrar**
 en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
+Para cerrar **Ajustes** en la caja, elige **Cerrar** o haz clic fuera de la ventana.
+
 Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
 pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
 mostrador elegidas. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las

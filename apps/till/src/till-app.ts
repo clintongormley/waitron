@@ -25438,6 +25438,7 @@ export class TillApp extends LitElement {
                 ${trackDialog()}
                 .open=${true}
                 .heading=${t("device_zones.settings")}
+                dismiss-on-backdrop
                 @wt-close=${() => (this.deviceSettingsOpen = false)}
               >
                 <wt-button
@@ -25454,6 +25455,12 @@ export class TillApp extends LitElement {
                   variant="secondary"
                   @click=${() => this.#openDeviceZones()}
                   >${t("device_zones.title")}</wt-button
+                >
+                <wt-button
+                  slot="footer"
+                  variant="secondary"
+                  @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<WtDialog>("wt-dialog")!.requestClose("cancel")}
+                  >${t("equipment.close")}</wt-button
                 >
               </wt-dialog>`
             : nothing

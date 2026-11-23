@@ -1,7 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, type WtDialog } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { dishLine } from "./dish-format.js";
 
@@ -69,6 +69,7 @@ export class TillLateSendDialog extends LitElement {
       ${trackDialog()}
       .open=${true}
       .heading=${this.#heading()}
+      dismiss-on-backdrop
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#emit("wt-late-send-cancelled");
@@ -85,6 +86,12 @@ export class TillLateSendDialog extends LitElement {
             </li>`,
         )}
       </ul>
+      <wt-button
+        slot="footer"
+        variant="secondary"
+        @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<WtDialog>("wt-dialog")!.requestClose("cancel")}
+        >${t("action.cancel")}</wt-button
+      >
       <wt-button
         slot="footer"
         data-late-remove

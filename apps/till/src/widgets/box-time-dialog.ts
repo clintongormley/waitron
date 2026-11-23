@@ -265,11 +265,18 @@ export class TillBoxTimeDialog extends LitElement {
     this.dispatchEvent(new CustomEvent("box-time-close", { bubbles: true, composed: true }));
   }
 
-  #button(name: string, label: StringKey, onClick: () => void, slot?: string): TemplateResult {
+  #button(
+    name: string,
+    label: StringKey,
+    onClick: () => void,
+    slot?: string,
+    disabled = false,
+  ): TemplateResult {
     return html`<wt-button
       slot=${slot ?? nothing}
       variant=${slot === "cancel" ? "secondary" : "primary"}
       data-box-time=${name}
+      .disabled=${disabled}
       @click=${onClick}
       >${t(label)}</wt-button
     >`;
@@ -338,9 +345,9 @@ export class TillBoxTimeDialog extends LitElement {
             </p>
           </div>
           <wt-form-actions
-            >${
+            >${this.#button("close", "box_time.close", close, "cancel", view.sending !== null)}${
               view.correcting
-                ? this.#button("close", "box_time.close", close, "cancel")
+                ? nothing
                 : differs
                   ? html`${choice(
                       "server",
@@ -374,6 +381,7 @@ export class TillBoxTimeDialog extends LitElement {
         .open=${this.active}
         .heading=${t("box_time.title")}
         .dismissible=${!(this.view.kind === "ask" && this.view.sending !== null)}
+        ?dismiss-on-backdrop=${this.view.kind === "ask" && !this.view.correcting}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (event.target === event.currentTarget) this.#close();

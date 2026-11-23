@@ -1057,6 +1057,40 @@ it("the real header's Settings click closes its menu and exposes Equipment and Z
     expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).not.toBeNull(),
   );
 });
+it.each(["button", "backdrop"])(
+  "closes Settings via the %s without changing the basket",
+  async (via) => {
+    const { el } = await mount(selection(["bar", "room"], "bar"));
+    const store = counter(el)!.store;
+    store.addProduct(counter(el)!.products[0]!, "1");
+    shell(el).dispatchEvent(new CustomEvent("open-settings", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    const native = settings.element();
+    const closed = new Promise((resolve) =>
+      native.addEventListener("close", resolve, { once: true }),
+    );
+    if (via === "button") {
+      await page.getByRole("button", { name: "Close", exact: true }).click({ timeout: 1_000 });
+    } else {
+      const outside = document.createElement("span");
+      outside.style.cssText = "position:fixed;top:4px;left:4px;width:8px;height:8px";
+      document.body.append(outside);
+      try {
+        await userEvent.click(outside, { force: true });
+        expect((native as HTMLDialogElement).open).toBe(false);
+      } finally {
+        outside.remove();
+      }
+    }
+    await closed;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-settings-zones]")).toBeNull();
+    expect(counter(el)!.store).toBe(store);
+    expect(store.lines).toHaveLength(1);
+  },
+);
+
 it("opens Equipment from Settings without replacing the basket when its read fails", async () => {
   const { el, api } = await mount(selection(["bar", "room"], "bar"), {
     getDeviceEquipment: vi.fn().mockRejectedValue(new TypeError("offline")),

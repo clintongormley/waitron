@@ -899,6 +899,8 @@ open **More** (☰), then **Settings**, then **Zones on this device**. On a phon
 **More** (☰) and choose **Zones on this device**, under **Settings**. Tick **Show** for each zone
 you want, choose the one that **Opens first**, and tap **Save**.
 
+To leave the till’s **Settings** window, choose **Close** or click outside it.
+
 The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
 all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
 phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice, a

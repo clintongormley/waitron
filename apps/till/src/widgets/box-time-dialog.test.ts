@@ -102,8 +102,9 @@ describe("till-box-time-dialog", () => {
         "Which is correct:",
       ].join(" "),
     );
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
     expect(controls(el).map((name) => flat(control(el, name)))).toEqual([
+      "Close",
       "The box",
       "This device",
       "Both times are wrong",
@@ -122,13 +123,13 @@ describe("till-box-time-dialog", () => {
         "Is this time correct:",
       ].join(" "),
     );
-    expect(controls(el)).toEqual(["no", "yes"]);
-    expect(controls(el).map((name) => flat(control(el, name)))).toEqual(["No", "Yes"]);
+    expect(controls(el)).toEqual(["close", "no", "yes"]);
+    expect(controls(el).map((name) => flat(control(el, name)))).toEqual(["Close", "No", "Yes"]);
   });
 
   it.each([
-    ["differs", BOX_BEHIND, "box_time.which_correct", ["server", "device", "both_wrong"]],
-    ["agrees", BOX_AGREES, "box_time.is_correct", ["no", "yes"]],
+    ["differs", BOX_BEHIND, "box_time.which_correct", ["close", "server", "device", "both_wrong"]],
+    ["agrees", BOX_AGREES, "box_time.is_correct", ["close", "no", "yes"]],
   ] as const)(
     "words the question in Spanish when this till %s",
     async (_case, boxAt, question, labels) => {
@@ -235,6 +236,17 @@ describe("till-box-time-dialog", () => {
     expect(api.boxClockConfirm).toHaveBeenCalledOnce();
   });
 
+  it("closes from the clock question without confirming the time", async () => {
+    const api = fakeApi(BOX_AGREES);
+    const el = await open(api);
+    const closed = new Promise((resolve) =>
+      el.addEventListener("box-time-close", resolve, { once: true }),
+    );
+    await page.getByRole("button", { name: "Close" }).click({ timeout: 500 });
+    await closed;
+    expect(api.boxClockConfirm).not.toHaveBeenCalled();
+  });
+
   it("keeps the dialog from closing while the confirm is out", async () => {
     let answer!: () => void;
     const api = fakeApi(BOX_AGREES, () => {
@@ -247,14 +259,15 @@ describe("till-box-time-dialog", () => {
     expect(box().dismissible).toBe(true);
     await press(el, "yes");
     expect(box().dismissible).toBe(false);
+    await expect.element(page.getByRole("button", { name: "Close" })).toBeDisabled();
     answer();
     await settle(el);
     expect(box().dismissible).toBe(true);
   });
 
   it.each([
-    [60_000, ["no", "yes"]],
-    [60_001, ["server", "device", "both-wrong"]],
+    [60_000, ["close", "no", "yes"]],
+    [60_001, ["close", "server", "device", "both-wrong"]],
   ] as const)("treats a till %i ms from the box as asking %j", async (gap, buttons) => {
     const el = await open(fakeApi(new Date(TILL_AT - gap).toISOString()));
     expect(controls(el)).toEqual(buttons);
@@ -421,7 +434,7 @@ describe("till-box-time-dialog", () => {
     await press(el, "check-again");
     expect(api.boxClockChallenge).toHaveBeenCalledTimes(3);
     expect(shownError(el)).toBe("");
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
   });
 
   it("closes on Close after a refusal", async () => {
@@ -478,7 +491,7 @@ describe("till-box-time-dialog", () => {
       expect(api.boxClockConfirm).not.toHaveBeenCalled();
       expect(words(el)).toContain(clockDateTime(Date.parse(BOX_BEHIND)));
       expect(words(el)).toContain(clockDateTime(TILL_AT));
-      expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+      expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
       await press(el, "device");
       expect(api.boxClockConfirm.mock.calls).toEqual([
         [{ challengeId: "c2", deviceAt: TILL_AT, override }],
@@ -628,7 +641,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
 
   it("asks the same question when they differ", async () => {
     const el = await open(waiting(BOX_BEHIND));
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
     expect(words(el)).toMatch(/Which is correct:$/);
   });
 
@@ -744,7 +757,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
   it("confirms the time, without keep, on Yes when this till agrees", async () => {
     const api = waiting(BOX_AGREES);
     const el = await open(api);
-    expect(controls(el)).toEqual(["no", "yes"]);
+    expect(controls(el)).toEqual(["close", "no", "yes"]);
     await press(el, "yes");
     expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: TILL_AT }]]);
   });
