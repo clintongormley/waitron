@@ -139,6 +139,7 @@ async function acknowledge(
   log: Logger,
   source: string,
   ack: ResetAcknowledgement,
+  lacking: Record<string, CanonicalValue[]>,
 ): Promise<void> {
   const order = await readResetOrderOperation(deps.node, deps.nodeId, source, ack.orderId);
   if (order === undefined) refuse("order");
@@ -164,7 +165,8 @@ async function acknowledge(
         personId,
         data: ack,
       });
-      if (ack.setAside && Object.values(ack.lacking).some((chains) => chains.length > 0))
+      // This box's own comparison, not the ack's list: that was taken before a loss order's extra return pass.
+      if (ack.setAside && Object.values(lacking).some((chains) => chains.length > 0))
         await raiseSetAsideOnReset(tx, {
           nodeId: source,
           orderId: ack.orderId,
@@ -244,7 +246,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
       // Read before the acknowledgement, which writes no order and is refused unless one stands.
       const order = await readResetOrderFor(deps.node, deps.nodeId, source);
       const lacking = await lackingFor(deps, holdings, order);
-      if (ack !== undefined) await acknowledge(deps, log, source, ack);
+      if (ack !== undefined) await acknowledge(deps, log, source, ack, lacking);
       c.header("Cache-Control", "no-store");
       return c.json(
         await signAsThisBox(deps, "reset-order", {

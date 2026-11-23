@@ -616,12 +616,42 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([]);
   });
 
+  it("raises no alert when the chains the acknowledgement names are held here now, as after a loss order's extra return pass", async () => {
+    const order = await ordered();
+    const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await activities("handover.reset_acknowledged")).toEqual([
+      { subject_id: oldBox, person_id: personId, data: ack },
+    ]);
+    expect(await offTheList()).toBe(true);
+    expect(await incidents()).toEqual([]);
+  });
+
+  it("raises the alert from this box's own comparison of the question's summary", async () => {
+    const order = await ordered();
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId },
+      },
+    ]);
+  });
+
   it("still removes the box and raises the alert after the ordering activity entry was pruned", async () => {
     const order = await ordered();
     await suite.db.run(sql`delete from activity_log where kind = 'handover.reset_ordered'`);
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
 
-    const res = await ask(await queryBody({ ack }));
+    const res = await ask(await queryBody({ holdings, ack }));
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect(await offTheList()).toBe(true);
@@ -634,11 +664,12 @@ describe("an acknowledgement", () => {
   it("a retry after venue.db committed but node.db failed raises no second alert, though the first was handled", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     suite.node.run(
       sql`create trigger refuse_ack before insert on node_handover_events when new.kind = 'reset_acknowledged' begin select raise(abort, 'test node write failed'); end`,
     );
     try {
-      expect((await ask(await queryBody({ ack }))).status).toBe(500);
+      expect((await ask(await queryBody({ holdings, ack }))).status).toBe(500);
     } finally {
       suite.node.run(sql`drop trigger refuse_ack`);
     }
@@ -646,7 +677,7 @@ describe("an acknowledgement", () => {
     expect(await oldStanding()).toBe("sell-only");
     await suite.db.run(sql`update incidents set acknowledged_at = '2026-11-22T10:00:00.000Z'`);
 
-    const retried = await ask(await queryBody({ ack, nonce: "retry" }));
+    const retried = await ask(await queryBody({ holdings, ack, nonce: "retry" }));
 
     expect(retried.status, JSON.stringify(await retried.clone().json())).toBe(200);
     expect(await incidents()).toHaveLength(1);
@@ -658,8 +689,9 @@ describe("an acknowledgement", () => {
   it("with set-aside chains names them, raises one alert, and a repeat records nothing more", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     const hono = app();
-    const res = await ask(await queryBody({ ack }), oldBox, hono);
+    const res = await ask(await queryBody({ holdings, ack }), oldBox, hono);
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect(await activities("handover.reset_acknowledged")).toEqual([
       { subject_id: oldBox, person_id: personId, data: ack },
@@ -673,7 +705,7 @@ describe("an acknowledgement", () => {
     expect(await offTheList()).toBe(true);
 
     // The removed box is refused, so a repeat reaches nothing that writes.
-    const repeat = await ask(await queryBody({ ack, nonce: "again" }), oldBox, hono);
+    const repeat = await ask(await queryBody({ holdings, ack, nonce: "again" }), oldBox, hono);
     expect(await refusalOf(repeat)).toEqual({
       code: "handover.reset_query_refused",
       params: { reason: "signature" },
@@ -702,9 +734,10 @@ describe("an acknowledgement", () => {
       }),
     );
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     const hono = app();
 
-    const res = await ask(await queryBody({ ack }), oldBox, hono);
+    const res = await ask(await queryBody({ holdings, ack }), oldBox, hono);
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect((await answerOf(res))?.order).toEqual(order);
@@ -720,7 +753,7 @@ describe("an acknowledgement", () => {
 
     // Handled, so the open-incident key no longer absorbs a second raise: only the order does.
     await suite.db.run(sql`update incidents set acknowledged_at = '2026-11-22T10:00:00.000Z'`);
-    const repeat = await ask(await queryBody({ ack, nonce: "again" }), oldBox, hono);
+    const repeat = await ask(await queryBody({ holdings, ack, nonce: "again" }), oldBox, hono);
     expect(repeat.status).toBe(200);
     expect(await incidents()).toHaveLength(1);
     expect(await activities("handover.reset_acknowledged")).toHaveLength(1);
@@ -731,7 +764,7 @@ describe("an acknowledgement", () => {
     suite.node.run(
       sql`update node_handover_operations set state = 'abandoned' where operation_id = ${operationId}`,
     );
-    const cleared = await ask(await queryBody({ ack, nonce: "cleared" }), oldBox, hono);
+    const cleared = await ask(await queryBody({ holdings, ack, nonce: "cleared" }), oldBox, hono);
     expect(cleared.status, JSON.stringify(await cleared.clone().json())).toBe(200);
     expect(await offTheList()).toBe(true);
     expect(await activities("membership.node_removed")).toHaveLength(1);
