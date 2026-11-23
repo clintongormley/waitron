@@ -1,6 +1,8 @@
+import { createCanvas } from "@napi-rs/canvas";
+import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { getCountryPack, receiptLabelsFor, recipientIdentifierLabel } from "@waitron/country-packs";
 import type { ReceiptLogoRaster } from "@waitron/shared";
 import { CUSTOMER_PANEL_FRACTION, layoutA4Invoice, layoutInvoiceHeader } from "./invoice-layout.js";
 import {
@@ -10,12 +12,14 @@ import {
   type InvoicePageElement,
 } from "./invoice-page.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
+import { renderInvoiceRaster } from "./invoice-raster.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptFacts } from "./receipt-facts.js";
 import { formatMoney } from "./receipt-money.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import * as receiptCases from "./testing/receipt-cases.js";
+import { sampleDocument } from "./sample-receipt.js";
 
 // Until printing switches to the new layout, the PDF test renders it through the old entry point.
 const layout = vi.hoisted(() => ({ pages: undefined as unknown }));
@@ -946,4 +950,549 @@ describe("layoutA4Invoice", () => {
       await loading.destroy();
     }
   });
+});
+
+/** Each page of the rendered PDF: its text, its glyph runs, and its pixels at two per point. */
+async function renderedPdf(input: ReceiptDocumentInput) {
+  const bytes = await renderInvoicePdf(input);
+  const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+  const pdf = await loading.promise;
+  try {
+    const pages = [];
+    for (let number = 1; number <= pdf.numPages; number++) {
+      const page = await pdf.getPage(number);
+      const content = await page.getTextContent();
+      const text = content.items
+        .flatMap((item) => ("str" in item ? [item.str] : []))
+        .join(" ")
+        .replace(/\s+/g, " ");
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const context = canvas.getContext("2d");
+      await page.render({ canvas: canvas as never, canvasContext: context as never, viewport })
+        .promise;
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      pages.push({
+        text,
+        viewport,
+        content,
+        pixels,
+        qr: jsQR(pixels.data, canvas.width, canvas.height),
+      });
+    }
+    return { bytes, pages, metadata: await pdf.getMetadata() };
+  } finally {
+    await loading.destroy();
+  }
+}
+
+const MM = 72 / 25.4;
+const QR_CODES = [
+  {
+    name: "sample sale",
+    input: () => sampleDocument(FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText!, "es-ES"),
+    modules: 33,
+  },
+  { name: "AEAT validation URL", input: fixture, modules: 45 },
+];
+
+/** A grey raster page as the RGBA image jsQR reads. */
+const rgbaOf = (page: { width: number; height: number; pixels: Buffer }) => {
+  const rgba = new Uint8ClampedArray(page.width * page.height * 4);
+  for (let pixel = 0; pixel < page.pixels.length; pixel++)
+    rgba.set([page.pixels[pixel]!, page.pixels[pixel]!, page.pixels[pixel]!, 255], pixel * 4);
+  return rgba;
+};
+
+describe("layoutA4Invoice, printed", () => {
+  it("renders A4 pages dated at the invoice's issue, the same bytes every time, with both parties", async () => {
+    const { bytes, pages, metadata } = await renderedPdf(fixture());
+    const info = metadata.info as { CreationDate: string; ModDate: string };
+    expect([info.CreationDate, info.ModDate]).toEqual(["D:20260817223400Z", "D:20260817223400Z"]);
+    expect(pages).toHaveLength(1);
+    expect(pages[0]!.viewport.width / 2).toBeCloseTo(595.28, 2);
+    expect(pages[0]!.viewport.height / 2).toBeCloseTo(841.89, 2);
+    const recipient = FULL_INVOICE_DOCUMENT_FIXTURE.result.recipient!;
+    for (const value of [issuer!.venueName, "B12345678", recipient.legalName, recipient.taxId])
+      expect(pages[0]!.text).toContain(value);
+    expect(pages[0]!.text).not.toContain(FULL_INVOICE_DOCUMENT_FIXTURE.venueAddress![0]);
+    expect((await renderedPdf(fixture())).bytes).toEqual(bytes);
+  });
+
+  it.each(QR_CODES)(
+    "draws the $name's QR on page 1 as a 35 mm square at level M that decodes to the filed text",
+    async ({ input, modules }) => {
+      const qrElement = qrOf(layoutA4Invoice(input())[0]!.elements);
+      expect(qrElement.modules).toHaveLength(modules);
+      expect(qrElement.modules.length * qrElement.moduleSize).toBeCloseTo(QR_SIZE, 6);
+
+      const { pages } = await renderedPdf(input());
+      const page = pages[0]!;
+      const qr = page.qr!;
+      expect(qr.data).toBe(input().result.qr);
+      expect(qr.version * 4 + 17).toBe(modules);
+      const dark = (row: number, col: number): boolean => {
+        const x = Math.floor(
+          qr.location.topLeftCorner.x +
+            ((col + 0.5) * (qr.location.topRightCorner.x - qr.location.topLeftCorner.x)) / modules,
+        );
+        const y = Math.floor(
+          qr.location.topLeftCorner.y +
+            ((row + 0.5) * (qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y)) /
+              modules,
+        );
+        return page.pixels.data[(y * page.pixels.width + x) * 4]! < 128;
+      };
+      let format = 0;
+      for (let bit = 0; bit < 15; bit++) {
+        const row = bit < 6 ? bit : bit < 8 ? bit + 1 : modules - 15 + bit;
+        if (dark(row, 8)) format |= 1 << bit;
+      }
+      expect((format ^ 0b101010000010010) >> 13, "drawn QR correction level M").toBe(0);
+
+      const pitch = (qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y) / modules;
+      const row = Math.floor(qr.location.topLeftCorner.y + 3.5 * pitch);
+      // Its quiet zone is clear, so dark dots within four modules of its corners are the QR's own.
+      const across: number[] = [];
+      const from = Math.ceil(qr.location.topLeftCorner.x - 4 * pitch);
+      const to = Math.floor(qr.location.topRightCorner.x + 4 * pitch);
+      for (let x = from; x < to; x++)
+        if (page.pixels.data[(row * page.pixels.width + x) * 4]! < 128) across.push(x);
+      const millimetres = (across.at(-1)! - across[0]! + 1) / 2 / MM;
+      expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
+      const legend = page.content.items.find(
+        (item) => "str" in item && item.str === FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText!.legend,
+      );
+      expect(legend && "height" in legend ? legend.height : undefined).toBeCloseTo(9, 1);
+    },
+  );
+
+  it("wraps long unbroken item names onto later pages inside the margins, drawing the QR on page 1 only", async () => {
+    const marker = "ABCDEFGHIJ".repeat(25);
+    const input = fixture();
+    input.result.lines = Array.from({ length: 35 }, (_, index) => ({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE.result.lines[0]!,
+      descriptions: { "es-ES": `Dish ${index} ${marker}` },
+    }));
+    const { pages } = await renderedPdf(input);
+    expect(pages.length).toBeGreaterThan(1);
+    const text = pages.map((page) => page.text).join(" ");
+    expect(text).toContain("Dish 34");
+    expect(text).toContain(labels.total);
+    expect(text.replace(/\s/g, "").split(marker)).toHaveLength(36);
+    expect(pages.filter((page) => page.qr !== null)).toHaveLength(1);
+    expect(pages[0]!.qr?.data).toBe(FULL_INVOICE_DOCUMENT_FIXTURE.result.qr);
+    for (const page of pages) {
+      for (const item of page.content.items) {
+        if (!("str" in item) || item.str.trim() === "") continue;
+        expect(item.transform[4]).toBeGreaterThanOrEqual(35);
+        expect(item.transform[4] + item.width).toBeLessThanOrEqual(RIGHT + 1);
+        expect(item.transform[5]).toBeGreaterThan(35);
+        expect(item.transform[5] + item.height).toBeLessThan(INVOICE_PAGE_HEIGHT - 35);
+      }
+    }
+  });
+
+  it("keeps an unbroken customer name whole and treats a whitespace-only subtitle as none", async () => {
+    const name = "ABCDEFGHIJ".repeat(90);
+    const input = fixture();
+    input.receipt.headerSubtitle = " ";
+    input.result.recipient!.legalName = name;
+    const { pages, bytes } = await renderedPdf(input);
+    expect(
+      pages
+        .map((page) => page.text)
+        .join("")
+        .replace(/\s/g, ""),
+    ).toContain(name);
+    for (const page of pages)
+      for (const item of page.content.items) {
+        if (!("str" in item) || item.str.trim() === "") continue;
+        expect(item.transform[4] + item.width).toBeLessThanOrEqual(RIGHT + 1);
+      }
+    input.receipt.headerSubtitle = "";
+    expect((await renderedPdf(input)).bytes).toEqual(bytes);
+  });
+
+  it("wraps the contact line at its separator, keeping the phone and the email whole", () => {
+    const email =
+      "reservations.private.events.and.bookings@a-long-restaurant-group-name.example.test";
+    for (const phone of ["910000000", "932 000 111"]) {
+      const input = fixture();
+      input.receipt.phone = phone;
+      input.receipt.email = email;
+      const shown = texts(header(input).elements).map((text) => text.text);
+      const at = shown.indexOf(`${labels.phone} ${phone}`);
+      expect(at, phone).toBeGreaterThan(0);
+      expect(shown[at + 1]).toBe(email);
+    }
+  });
+
+  it("word-wraps only an address too long for a line by itself, keeping the country whole and never breaking at a separator", () => {
+    const input = fixture();
+    const address = `${FULL_INVOICE_DOCUMENT_FIXTURE.result.recipient!.address!}, ${FULL_INVOICE_DOCUMENT_FIXTURE.result.recipient!.address!}`;
+    input.result.recipient!.address = address;
+    const { elements } = header(input);
+    const panel = elements.find(
+      (element): element is Box => element.kind === "box" && element.fill === "panel",
+    )!;
+    const identifier = texts(elements).find((text) =>
+      text.text.endsWith(`: ${input.result.recipient!.taxId}`),
+    )!;
+    const lines = texts(elements)
+      .filter((text) => text.y > identifier.y && text.y < panel.y + panel.height)
+      .map((text) => text.text);
+    const country = getCountryPack("ES")!.countryNames!["es-ES"]!;
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines.join(" ")).toBe(`${address} · ${country}`);
+    expect(lines.filter((line) => line.startsWith("·") || line.endsWith("·"))).toEqual([]);
+  });
+
+  it("prints the filed domicile and never the venue's current address, and no logo without a picture", () => {
+    for (const domicile of ["Filed fiscal street", undefined]) {
+      const input = fixture();
+      input.venueAddress = ["Optional current street"];
+      input.result.issuer!.domicile = domicile;
+      const pages = layoutA4Invoice(input);
+      const shown = texts(allElements(pages)).map((text) => text.text);
+      expect(shown.some((text) => text.includes("Optional current street"))).toBe(false);
+      expect(shown.includes("Filed fiscal street"), String(domicile)).toBe(domicile !== undefined);
+      expect(allElements(pages).filter((element) => element.kind === "logo")).toEqual([]);
+    }
+  });
+
+  it("draws the table's shaded bold heading at the top of every page its rows continue onto", () => {
+    const headingBox = (elements: readonly InvoicePageElement[]): Box =>
+      elements.find(
+        (element): element is Box => element.kind === "box" && element.fill === "heading",
+      )!;
+    /** The heading's words, each with its place across the page and within the shaded row. */
+    const headingCells = (elements: readonly InvoicePageElement[]) => {
+      const box = headingBox(elements);
+      return texts(elements)
+        .filter((text) => text.y > box.y && text.y < box.y + box.height)
+        .map((text) => [text.text, text.weight, text.x.toFixed(6), (text.y - box.y).toFixed(6)]);
+    };
+    const pages = layoutA4Invoice(longInvoice(80));
+    expect(pages.length).toBeGreaterThan(2);
+    let continued = 0;
+    for (const [number, page] of pages.entries()) {
+      const rows = page.elements.filter(
+        (element): element is Rule => element.kind === "rule" && element.thickness === 0.5,
+      );
+      if (rows.length === 0) continue;
+      if (number > 0) continued++;
+      const heading = headingBox(page.elements);
+      expect(heading, `page ${number + 1}`).toBeDefined();
+      expect(Math.min(...rows.map((rule) => rule.y))).toBeGreaterThan(heading.y);
+      expect(headingCells(page.elements), `page ${number + 1}`).toEqual(
+        headingCells(pages[0]!.elements),
+      );
+    }
+    expect(continued).toBeGreaterThan(0);
+    const first = headingCells(pages[0]!.elements);
+    expect(first.length).toBeGreaterThanOrEqual(6);
+    expect(first.every(([, weight]) => weight === "bold")).toBe(true);
+  });
+
+  it("keeps the VAT summary whole on the page of TOTAL, wherever the items end", () => {
+    const simplified = (count: number, headerFacts: number): ReceiptDocumentInput => {
+      const at21 = Math.ceil(count / 2);
+      const at10 = count - at21;
+      const input = fixture();
+      const { headerSubtitle: subtitle, phone, email, ...rest } = input.receipt;
+      input.receipt = {
+        ...rest,
+        ...Object.fromEntries(
+          Object.entries({ headerSubtitle: subtitle, phone, email }).slice(0, headerFacts),
+        ),
+      };
+      input.result.invoiceType = "F2";
+      input.result.recipient = undefined;
+      input.result.total = (at21 * 1.21 + at10 * 1.1).toFixed(2);
+      input.result.vatBreakdown = [
+        { rate: "21", base: `${at21}.00`, tax: (at21 * 0.21).toFixed(2) },
+        { rate: "10", base: `${at10}.00`, tax: (at10 * 0.1).toFixed(2) },
+      ];
+      input.result.lines = Array.from({ length: count }, (_, at) => ({
+        descriptions: { "es-ES": `Item ${at + 1}` },
+        quantity: "1",
+        gross: at < at21 ? "1.21" : "1.10",
+        vatRate: at < at21 ? "21.00" : "10.00",
+      }));
+      return input;
+    };
+    const pageOf = (pages: InvoicePage[], value: string): number =>
+      pages.findIndex((page) => texts(page.elements).some((text) => text.text === value));
+    let movedWhole = 0;
+    for (let count = 2; count <= 45; count++)
+      for (let headerFacts = 0; headerFacts <= 3; headerFacts++) {
+        const pages = layoutA4Invoice(simplified(count, headerFacts));
+        const at21 = Math.ceil(count / 2);
+        const heading = pageOf(pages, labels.taxRateColumn);
+        const shape = `${count} items, ${headerFacts} header lines`;
+        expect(heading, shape).toBeGreaterThanOrEqual(0);
+        expect(
+          [
+            pageOf(pages, money(`${at21}.00`)),
+            pageOf(pages, money(`${count - at21}.00`)),
+            pageOf(pages, labels.total),
+          ],
+          shape,
+        ).toEqual([heading, heading, heading]);
+        if (heading > pageOf(pages, `Item ${count}`)) movedWhole++;
+      }
+    expect(movedWhole, "inputs whose summary started a page of its own").toBeGreaterThan(0);
+  });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "prints a %s invoice in its own receipt words and country name",
+    async (locale) => {
+      const input = fixture();
+      input.invoiceLocale = locale;
+      input.result.recipient!.address = "2 Main Street, 28013 Madrid, Madrid";
+      const own = receiptLabelsFor(locale);
+      const text = (await renderedPdf(input)).pages.map((page) => page.text).join(" ");
+      for (const value of [
+        `${own.invoiceHeading} FF/1`,
+        own.total,
+        own.paymentMethodHeading,
+        "2 Main Street, 28013 Madrid, Madrid",
+        getCountryPack("ES")!.countryNames![locale]!,
+      ])
+        expect(text).toContain(value);
+      const other = locale === "en-GB" ? "es-ES" : "en-GB";
+      expect(text).not.toContain(getCountryPack("ES")!.countryNames![other]!);
+    },
+  );
+
+  it("prints a French snapshot country in Catalan, leaving the input as it was", async () => {
+    const input = fixture();
+    input.invoiceLocale = "ca-ES";
+    input.result.recipient = {
+      taxId: "Passport 123",
+      legalName: "Alex Guest",
+      address: "2 Main Street, Paris",
+      countryCode: "FR",
+    };
+    const before = structuredClone(input);
+    const text = (await renderedPdf(input)).pages.map((page) => page.text).join(" ");
+    expect(text).toContain("2 Main Street, Paris");
+    expect(text).toContain(new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!);
+    expect(text).not.toContain(new Intl.DisplayNames(["en-GB"], { type: "region" }).of("FR")!);
+    expect(input).toEqual(before);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "labels a foreign identity document by its kind in %s",
+    async (locale) => {
+      const input = fixture();
+      input.invoiceLocale = locale;
+      input.result.recipient = {
+        taxId: "Ab-09/xy",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+        legalName: "Guest",
+        countryCode: "ES",
+        address: "2 Main Street, Madrid",
+      };
+      const { pages } = await renderedPdf(input);
+      expect(pages[0]!.text).toContain(`${recipientIdentifierLabel("passport", locale)}: Ab-09/xy`);
+      expect(pages[0]!.text).not.toContain(`${receiptLabelsFor(locale).nif}: Ab-09/xy`);
+    },
+  );
+
+  it("draws a stored logo where the layout puts it, its proportions kept", async () => {
+    const input = fixture();
+    input.logo = { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) };
+    const logo = layoutA4Invoice(input)[0]!.elements.find((element) => element.kind === "logo")!;
+    const { pages } = await renderedPdf(input);
+    const page = pages[0]!;
+    const dark: { x: number; y: number }[] = [];
+    for (let y = Math.floor(logo.y * 2) - 4; y < Math.ceil((logo.y + logo.height) * 2) + 4; y++)
+      for (let x = Math.floor(logo.x * 2) - 4; x < Math.ceil((logo.x + logo.width) * 2) + 4; x++)
+        if (page.pixels.data[(y * page.pixels.width + x) * 4]! < 128) dark.push({ x, y });
+    const xs = dark.map((point) => point.x);
+    const ys = dark.map((point) => point.y);
+    expect(dark.length).toBeGreaterThan(0.9 * logo.width * logo.height * 4);
+    expect((Math.min(...xs) + Math.max(...xs) + 1) / 4).toBeCloseTo(logo.x + logo.width / 2, 0);
+    expect(
+      (Math.max(...xs) - Math.min(...xs) + 1) / (Math.max(...ys) - Math.min(...ys) + 1),
+    ).toBeCloseTo(2, 1);
+  });
+
+  it("forgets every remembered text width once the limit is reached", async () => {
+    vi.resetModules();
+    vi.doUnmock("./invoice-page.js");
+    const { invoiceFont: font } = await import("./invoice-font.js");
+    const page = await import("./invoice-page.js");
+    const measure = vi.spyOn(font, "layout");
+    try {
+      const probe = "Width bound probe text";
+      const measured = page.invoiceTextWidth(probe, 10);
+      page.invoiceTextWidth(probe, 10);
+      expect(measure.mock.calls.filter(([text]) => text === probe)).toHaveLength(1);
+      for (let index = 0; index < page.INVOICE_TEXT_WIDTH_MEMO_LIMIT; index++)
+        page.invoiceTextWidth(`bound filler ${index}`, 10);
+      expect(page.invoiceTextWidth(probe, 20)).toBeCloseTo(measured * 2);
+      expect(measure.mock.calls.filter(([text]) => text === probe)).toHaveLength(2);
+    } finally {
+      measure.mockRestore();
+      vi.resetModules();
+    }
+  });
+
+  it("lays out the same invoice a second time without measuring any text again", async () => {
+    vi.resetModules();
+    vi.doUnmock("./invoice-page.js");
+    const { invoiceFont: font } = await import("./invoice-font.js");
+    const fresh = await import("./invoice-layout.js");
+    const measure = vi.spyOn(font, "layout");
+    try {
+      const first = fresh.layoutA4Invoice(fixture());
+      expect(measure.mock.calls.length).toBeGreaterThan(0);
+      measure.mockClear();
+      const second = fresh.layoutA4Invoice(fixture());
+      expect(measure).not.toHaveBeenCalled();
+      expect(second).toEqual(first);
+    } finally {
+      measure.mockRestore();
+      vi.resetModules();
+    }
+  });
+});
+
+describe("layoutA4Invoice, on the office printer's raster", () => {
+  it.each([
+    { resolution: 300 as const, width: 2480, height: 3508, qrDots: 413 },
+    { resolution: 600 as const, width: 4960, height: 7016, qrDots: 827 },
+  ])(
+    "draws one grey A4 page with the filed QR decoding at 35 mm at $resolution dpi",
+    async ({ resolution, width, height, qrDots }) => {
+      const pages = await renderInvoiceRaster(fixture(), resolution);
+      expect(pages).toHaveLength(1);
+      const page = pages[0]!;
+      expect([page.width, page.height, page.resolution]).toEqual([width, height, resolution]);
+      expect(page.pixels).toHaveLength(width * height);
+      let ink = 0;
+      for (const value of page.pixels) if (value < 128) ink++;
+      expect(ink / (width * height)).toBeGreaterThan(0.005);
+      expect(ink / (width * height)).toBeLessThan(0.15);
+      const qr = jsQR(rgbaOf(page), width, height)!;
+      expect(qr?.data).toBe(FULL_INVOICE_DOCUMENT_FIXTURE.result.qr);
+      const modules = qr.version * 4 + 17;
+      const pitch = (qr.location.topRightCorner.x - qr.location.topLeftCorner.x) / modules;
+      expect(Math.round(pitch * modules)).toBeCloseTo(qrDots, -1);
+    },
+  );
+
+  it.each(QR_CODES)(
+    "measures the $name's QR 35 mm across at 300 dpi",
+    async ({ input, modules }) => {
+      const [page] = await renderInvoiceRaster(input(), 300);
+      const qr = jsQR(rgbaOf(page!), page!.width, page!.height)!;
+      expect(qr.data).toBe(input().result.qr);
+      expect(qr.version * 4 + 17).toBe(modules);
+      const pitch = (qr.location.bottomLeftCorner.y - qr.location.topLeftCorner.y) / modules;
+      const row = Math.floor(qr.location.topLeftCorner.y + 3.5 * pitch);
+      const dark: number[] = [];
+      const from = Math.ceil(qr.location.topLeftCorner.x - 4 * pitch);
+      const to = Math.floor(qr.location.topRightCorner.x + 4 * pitch);
+      for (let x = from; x < to; x++) if (page!.pixels[row * page!.width + x]! < 128) dark.push(x);
+      const millimetres = ((dark.at(-1)! - dark[0]! + 1) / 300) * 25.4;
+      expect(Math.abs(millimetres - 35), `${millimetres} mm`).toBeLessThanOrEqual(35 / modules / 2);
+    },
+  );
+
+  it("places text where the PDF does, including the wrapped domicile", async () => {
+    const [raster] = await renderInvoiceRaster(fixture(), 300);
+    const qr = qrOf(layoutA4Invoice(fixture())[0]!.elements);
+    const dots = 2480 / 595.28;
+    const qrBottom = Math.ceil((qr.y + qr.modules.length * qr.moduleSize) * dots) + 2;
+    const qrRight = Math.ceil((qr.x + qr.modules.length * qr.moduleSize) * dots) + 2;
+    const loading = getDocument({
+      data: Uint8Array.from(await renderInvoicePdf(fixture())),
+      useSystemFonts: false,
+    });
+    const pdf = await loading.promise;
+    try {
+      const page = await pdf.getPage(1);
+      const canvas = createCanvas(2480, 3508);
+      const context = canvas.getContext("2d");
+      await page.render({
+        canvas: canvas as never,
+        canvasContext: context as never,
+        viewport: page.getViewport({ scale: dots }),
+      }).promise;
+      const reference = context.getImageData(0, 0, 2480, 3508).data;
+      let ink = 0;
+      let matched = 0;
+      // The QR's modules are compared by the decoding tests; antialiasing may shift ink two dots.
+      for (let y = 2; y < 3506; y++) {
+        for (let x = 2; x < 2478; x++) {
+          if (y < qrBottom && x < qrRight) continue;
+          if (reference[(y * 2480 + x) * 4]! >= 128) continue;
+          ink++;
+          let present = false;
+          for (let dy = -2; dy <= 2 && !present; dy++)
+            for (let dx = -2; dx <= 2; dx++)
+              if (raster!.pixels[(y + dy) * 2480 + x + dx]! < 128) {
+                present = true;
+                break;
+              }
+          if (present) matched++;
+        }
+      }
+      expect(ink).toBeGreaterThan(20000);
+      expect(matched / ink).toBeGreaterThan(0.99);
+    } finally {
+      await loading.destroy();
+    }
+  });
+
+  it.each([300, 600] as const)(
+    "draws a stored logo solid where the layout puts it at %s dpi",
+    async (resolution) => {
+      const input = fixture();
+      input.logo = { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) };
+      const logo = layoutA4Invoice(input)[0]!.elements.find((element) => element.kind === "logo")!;
+      const [page] = await renderInvoiceRaster(input, resolution);
+      const dots = resolution / 72;
+      const [left, top] = [Math.ceil(logo.x * dots) + 2, Math.ceil(logo.y * dots) + 2];
+      const [right, bottom] = [
+        Math.floor((logo.x + logo.width) * dots) - 2,
+        Math.floor((logo.y + logo.height) * dots) - 2,
+      ];
+      let ink = 0;
+      for (let y = top; y < bottom; y++)
+        for (let x = left; x < right; x++) if (page!.pixels[y * page!.width + x]! < 128) ink++;
+      expect(ink).toBe((right - left) * (bottom - top));
+      const middle = Math.round((top + bottom) / 2) * page!.width;
+      expect(page!.pixels[middle + left - 8]).toBe(255);
+      expect(page!.pixels[middle + right + 8]).toBe(255);
+    },
+  );
+
+  it.each([300, 600] as const)(
+    "draws the rule above TOTAL across its whole width at %s dpi",
+    async (resolution) => {
+      const elements = layoutA4Invoice(fixture())[0]!.elements;
+      const total = named(elements, labels.total);
+      const rule = elements
+        .filter((element): element is Rule => element.kind === "rule" && element.y < total.y)
+        .sort((one, other) => other.y - one.y)[0]!;
+      expect(rule.thickness).toBe(1.5);
+      const [page] = await renderInvoiceRaster(fixture(), resolution);
+      const dots = resolution / 72;
+      const row = Math.floor((rule.y + rule.thickness / 2) * dots);
+      const dark = (x: number) => page!.pixels[row * page!.width + x]! < 128;
+      const left = Math.ceil(rule.x * dots);
+      const right = Math.floor((rule.x + rule.width) * dots);
+      let drawn = 0;
+      for (let x = left; x < right; x++) if (dark(x)) drawn++;
+      expect(drawn).toBe(right - left);
+      expect(dark(left - 2)).toBe(false);
+      expect(dark(right + 2)).toBe(false);
+    },
+  );
 });
