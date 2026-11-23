@@ -105,7 +105,6 @@ async function mount(value: ProductEditorDraft | null) {
         abbreviation: { en: "ea" },
       },
     ],
-    taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
     categories: [{ id: "drinks", name: "Drinks", parentId: null, color: null }],
     extraLists: [{ id: "sauces", name: "Sauces" }],
     optionLists: [{ id: "cooked", name: "Cooked" }],

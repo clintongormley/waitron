@@ -72,7 +72,9 @@ const TRANSLATION_READS = [
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
-  getMenuSettings: ["settings.menu", "settings.venue", "taxpayer"],
+  // The dine-in rate is the one in force on the venue's date: the zone dates it, and no table
+  // change reports a new date, so the query is not quiet while connected.
+  getMenuSettings: ["settings.menu", "settings.venue", "taxpayer", "settings.business_day"],
   getContentLanguages: ["settings.venue"],
   getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
@@ -470,7 +472,6 @@ export const QUERY_DEPENDENCIES = {
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
 
 export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
-  "getMenuSettings",
   "listMenus",
   "getMenuStructure",
   "getMenuStructures",

@@ -12,7 +12,14 @@ import type { MenuDefaults } from "@waitron/menu/src/settings-types.js";
 export type { MenuDefaults };
 /** The menu-settings read: the menu's defaults, whether the venue's region charges takeaway VAT, and
  * the takeaway rates a person may pick. */
-export type MenuSettingsAnswer = MenuDefaults & { takeawayVat: boolean; vatRates: string[] };
+export type MenuSettingsAnswer = MenuDefaults & {
+  takeawayVat: boolean;
+  vatRates: string[];
+  /** The one rate everything eaten here is charged today ("10.00"). */
+  dineInVatRate: string;
+};
+/** A product editor write: the editor's read still carries `vatClass`, which the save refuses. */
+export type ProductSaveBody = Omit<ProductEditorSaveBody, "vatClass">;
 import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared";
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type {
@@ -706,7 +713,6 @@ export interface VenueDefaults {
   receiptLanguage: string;
   receiptLanguageChoices: string[];
   fixedReceiptLanguage: string | null;
-  defaultProductVatClass: VatClass;
   /** The rate a new product's takeaway VAT starts at ("10.00"). */
   defaultTakeawayVatRate: string;
   /** Whether the venue's region charges takeaway VAT at its own rate. */
@@ -3979,11 +3985,11 @@ export class DashboardApi {
     return this.#request<ExtraOfferUsage[]>(`/management-api/products/${id}/extra-usage`, "GET");
   }
 
-  createProductEditor(input: ProductEditorSaveBody): Promise<ProductEditorValue> {
+  createProductEditor(input: ProductSaveBody): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>("/management-api/products/editor", "POST", input);
   }
 
-  updateProductEditor(id: string, input: ProductEditorSaveBody): Promise<ProductEditorValue> {
+  updateProductEditor(id: string, input: ProductSaveBody): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
   }
 
@@ -4267,9 +4273,7 @@ export class DashboardApi {
   }
 
   putVenueDefaults(
-    changes: Partial<
-      Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass" | "defaultTakeawayVatRate">
-    >,
+    changes: Partial<Pick<VenueDefaults, "receiptLanguage" | "defaultTakeawayVatRate">>,
   ): Promise<VenueDefaults> {
     return this.#request<VenueDefaults>("/management-api/venue-defaults", "PUT", changes);
   }

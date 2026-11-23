@@ -13,7 +13,7 @@ import type { ServiceMode } from "@waitron/module";
 import { AppError, type Dining, type DiningPolicy, type DiningStart } from "@waitron/shared";
 import "./errors.js";
 
-/** Whether the venue's region charges a different VAT class on food taken away. */
+/** Whether the venue's region charges a different VAT rate on food taken away. */
 export async function venueChargesTakeawayVat(tx: Transaction): Promise<boolean> {
   const taxpayer = await readTaxpayer(tx);
   if (taxpayer === null) return false;

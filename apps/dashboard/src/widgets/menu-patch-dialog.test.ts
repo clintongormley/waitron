@@ -4,7 +4,6 @@ import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
@@ -416,16 +415,13 @@ it("shows a dish's patchable fields and nothing else, in every content language"
     "description-es",
     "dashboard-image-upload",
     "price",
-    "tax",
   ]);
   expect(field(el, "wt-input", "name").value).toBe("Soup");
   expect(field(el, "wt-input", "name").required).toBe(true);
   expect(field(el, "wt-input", "customer-name-es").value).toBe("Soup para clientes");
   expect(field(el, "wt-input", "kitchen-name").value).toBe("SOUP KITCHEN");
   expect(field(el, "wt-price-input", "price").value).toBe("3.00");
-  expect(form(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.value).toBe(
-    "reduced",
-  );
+  expect(form(el).querySelector("wt-combobox")).toBeNull();
   expect(node(el, "Soup").getAttribute("aria-current")).toBe("true");
   expect(node(el, "Salad").hasAttribute("aria-current")).toBe(false);
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
@@ -478,11 +474,10 @@ it("stages a translated name as every content language's text", async () => {
   ]);
 });
 
-it("stages a kitchen name, a VAT class and a picture", async () => {
+it("stages a kitchen name and a picture", async () => {
   const el = await mount();
   await pick(el, "Soup");
   await type(el, "wt-input", "kitchen-name", "SOUP");
-  await chooseOption(form(el).querySelector("wt-combobox")!, "general");
   form(el)
     .querySelector("dashboard-image-upload")!
     .dispatchEvent(
@@ -495,7 +490,6 @@ it("stages a kitchen name, a VAT class and a picture", async () => {
   await el.updateComplete;
   expect(el.changes).toEqual([
     { target: soup, field: "kitchenName", value: "SOUP" },
-    { target: soup, field: "vatClass", value: "general" },
     { target: soup, field: "image", value: "media:soup" },
   ]);
   expect(form(el).querySelector("dashboard-image-upload")!.image).toBe("media:soup");
@@ -513,14 +507,14 @@ it.each([
   ["a variant", "Large"],
   ["an extras item", "Bread"],
 ] as const)(
-  "offers %s's served VAT class alone, never its takeaway VAT, whatever the live menu holds",
+  "offers no VAT for %s, served here or taken away, whatever the live menu holds",
   async (_kind, label) => {
     const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, takeawayLunch())) }));
     await pick(el, label);
-    expect(form(el).querySelectorAll("wt-combobox")).toHaveLength(1);
-    expect(fieldNames(el).at(-1)).toBe("tax");
+    expect(form(el).querySelectorAll("wt-combobox")).toHaveLength(0);
+    expect(fieldNames(el)).not.toContain("tax");
     expect(fieldNames(el)).not.toContain("takeaway-tax");
-    expect(form(el).textContent).not.toContain("VAT when taken away");
+    expect(form(el).textContent).not.toContain("VAT");
   },
 );
 
@@ -579,17 +573,6 @@ it("shows a translated name the patch refuses under the language that breaks it"
   expect(el.changes).toEqual([]);
 });
 
-it("shows a VAT class the patch refuses under the field", async () => {
-  const el = await mount();
-  await pick(el, "Soup");
-  const tax = form(el).querySelector("wt-combobox")!;
-  await chooseOption(tax, "standard");
-  await el.updateComplete;
-  await press(el, "review");
-  expect(tax.error).toBe("Check this value.");
-  expect(el.changes).toEqual([]);
-});
-
 it("stays open when a dialog inside it closes", async () => {
   const el = await mount();
   await pick(el, "Soup");
@@ -605,7 +588,7 @@ it("lists a dish's variants as links that pick them, and says it sells through t
   const el = await mount();
   await pick(el, "Lemonade");
   expect(form(el).querySelector('[data-test="variants-note"]')!.textContent!.trim()).toBe(
-    "Sold through its variants: the till charges each variant's own price and VAT class.",
+    "Sold through its variants: the till charges each variant's own price.",
   );
   const links = [...form(el).querySelectorAll<HTMLElement>('[data-test="variant-link"]')];
   expect(links.map((link) => link.textContent!.trim())).toEqual(["Small", "Large"]);
@@ -620,7 +603,6 @@ it("lists a dish's variants as links that pick them, and says it sells through t
     "kitchen-name",
     "dashboard-image-upload",
     "price",
-    "tax",
   ]);
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
 });
@@ -632,7 +614,7 @@ const variantRows = (el: MenuPatchDialog) =>
     values: row.querySelector('[data-test="variant-values"]')!.textContent!.trim(),
   }));
 
-it("lists each variant with its price and VAT class beside its link, as a patch would put them live", async () => {
+it("lists each variant with its price beside its link, as a patch would put it live", async () => {
   const document = lunch();
   const large = document.offers["mi-lemonade"]!.variants[1]!;
   large.unitPrice = "2.50";
@@ -640,28 +622,16 @@ it("lists each variant with its price and VAT class beside its link, as a patch 
   const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
   await pick(el, "Lemonade");
   expect(variantRows(el)).toEqual([
-    { link: "Small", values: "€2.00 · Reduced" },
-    { link: "Large", values: "€2.50 · General" },
+    { link: "Small", values: "€2.00" },
+    { link: "Large", values: "€2.50" },
   ]);
   await pick(el, "Small");
   await type(el, "wt-price-input", "price", "1.80");
   await pick(el, "Lemonade");
-  expect(variantRows(el)[0]).toEqual({ link: "Small", values: "€1.80 · Reduced" });
+  expect(variantRows(el)[0]).toEqual({ link: "Small", values: "€1.80" });
   setLocale("es");
   await el.updateComplete;
-  expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 € · General" });
-});
-
-it("lists a variant's price and served class beside its link, never its takeaway class", async () => {
-  const document = lunch();
-  // Large charges General here; the live copy still holds Reduced as its takeaway class.
-  document.offers["mi-lemonade"]!.variants[1]!.vatClass = "general";
-  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
-  await pick(el, "Lemonade");
-  expect(variantRows(el)).toEqual([
-    { link: "Small", values: "€2.00 · Reduced" },
-    { link: "Large", values: "€2.00 · General" },
-  ]);
+  expect(variantRows(el)[1]).toEqual({ link: "Large", values: "2,50 €" });
 });
 
 it(`fits a dish's variants and their values in the form at 390 px`, async () => {
@@ -1067,19 +1037,6 @@ it("keeps following the live menu, and its staged changes, when moved on the pag
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
 });
 
-it("gives the VAT field the same options on every redraw until the language changes", async () => {
-  const el = await mount();
-  await pick(el, "Soup");
-  const tax = () => form(el).querySelector("wt-combobox")!;
-  const first = tax().options;
-  await type(el, "wt-input", "name", "Broth");
-  expect(tax().options).toBe(first);
-  setLocale("es");
-  await el.updateComplete;
-  expect(tax().options).not.toBe(first);
-  expect(tax().options.map((option) => option.label)[1]).toContain("Reducido");
-});
-
 it("says so when the menu has never been published", async () => {
   const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => null) }));
   expect(el.shadowRoot!.querySelector('[data-test="read-error"]')!.textContent).toContain(
@@ -1298,7 +1255,7 @@ it("reviews each change as old → new with the notes that always apply, then go
   await press(el, "review");
   expect(reviewLines(el)).toEqual(["Soup: Price €3.00 → €3.50"]);
   expect(reviewNotes(el)).toEqual([
-    "Lines already on open orders keep their old price and VAT class.",
+    "Lines already on open orders keep their old price.",
     "The next normal publish from the products puts the old values back unless you fix the products too.",
   ]);
   expect(form(el)).toBeNull();

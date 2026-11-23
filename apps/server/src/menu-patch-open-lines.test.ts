@@ -140,10 +140,7 @@ async function patchBeer(v: Venue): Promise<{ before: string; after: string }> {
       tx,
       v.menuId,
       live.versionId,
-      [
-        { target: { kind: "offer", menuItemId }, field: "price", value: "3.10" },
-        { target: { kind: "offer", menuItemId }, field: "vatClass", value: "general" },
-      ],
+      [{ target: { kind: "offer", menuItemId }, field: "price", value: "3.10" }],
       EDITOR,
     );
     return { before: live.versionId, after: versionId };
@@ -167,7 +164,7 @@ async function addLine(v: Venue, id: string, menuVersionId: string) {
 }
 
 describe("a menu patch and the lines already on open orders", () => {
-  it("a parked line keeps its price and class; a line added after the patch takes the patch's", async () => {
+  it("a parked line keeps its price; a line added after the patch takes the patch's", async () => {
     const v = await setupVenue();
     const id = await park(v, one(v));
     const [opened] = await stored(id);
@@ -182,7 +179,7 @@ describe("a menu patch and the lines already on open orders", () => {
     await addLine(v, id, after);
     expect((await stored(id)).map((line) => [line.unitPriceGross, line.vatClass])).toEqual([
       [250, "reduced"],
-      [310, "general"],
+      [310, "reduced"],
     ]);
   });
 

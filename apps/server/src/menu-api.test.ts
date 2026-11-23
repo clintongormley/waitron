@@ -24,6 +24,7 @@ import {
   menuReleases,
   menuVersions,
   readTakeawayVatSchedules,
+  saveMenuSettings,
   sectionMembers,
 } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
@@ -40,6 +41,7 @@ import { createCourse } from "./kitchen.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 // The menu ROUTES end to end in-process: the body and id screens and the permission gate. The
@@ -128,7 +130,6 @@ describe("folder selection routes", () => {
             name,
             pricingUnit: "each",
             unitPrice: "2",
-            vatClass: "general",
           },
         });
         expect(created.status).toBe(201);
@@ -220,7 +221,6 @@ describe("folder selection routes", () => {
           name,
           pricingUnit: "each",
           unitPrice: "2",
-          vatClass: "general",
         },
       });
       expect(created.status).toBe(201);
@@ -359,7 +359,6 @@ describe("folder selection routes", () => {
         name: "Cola",
         pricingUnit: "each",
         unitPrice: "2",
-        vatClass: "general",
       },
     });
     expect(created.status).toBe(201);
@@ -803,7 +802,6 @@ describe("content-language configuration", () => {
         customerName: { en: "Potatoes" },
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       },
     });
     expect(created.status).toBe(201);
@@ -852,7 +850,6 @@ describe("content-language configuration", () => {
       customerName: { fr: "Pain" },
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     };
     const missing = await send(app, "POST", "/management-api/products", { body: product });
     expect(missing.status).toBe(201);
@@ -890,7 +887,6 @@ describe("content-language configuration", () => {
           customerName,
           pricingUnit: "each",
           unitPrice: "2.00",
-          vatClass: "general",
         },
       });
       expect(response.status).toBe(201);
@@ -919,7 +915,6 @@ describe("content-language configuration", () => {
           customerName,
           pricingUnit: "each",
           unitPrice: "2.00",
-          vatClass: "general",
         },
       });
       expect(response.status).toBe(400);
@@ -1030,7 +1025,6 @@ describe("the missing-translations report", () => {
         kitchenName: "KITCHEN Bread",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "reduced",
       },
     });
     expect(created.status).toBe(201);
@@ -1140,7 +1134,6 @@ async function createNamedProductVia(app: Hono, name: string): Promise<string> {
       name: name,
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     },
   });
   expect(res.status).toBe(201);
@@ -1678,7 +1671,6 @@ describe("unique category and product names", () => {
       name: name.toLowerCase(),
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     };
     await refused(
       await send(app, "POST", "/management-api/products", { body }),
@@ -1729,7 +1721,6 @@ describe("unique category and product names", () => {
       active: true,
       available: true,
       ordering: "public",
-      vatClass: "general",
       takeawayVatRate: "21.00",
       variants: [variant(name), variant(name.toLowerCase())],
       primaryCategoryId: null,
@@ -1780,7 +1771,7 @@ describe("mountMenuApi — labels", () => {
     const editorPath = `/management-api/products/${productId}/editor`;
     const value = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
     expect(value).not.toHaveProperty("labelIds");
-    expect((await send(app, "PUT", editorPath, { body: value })).status).toBe(200);
+    expect((await send(app, "PUT", editorPath, { body: saveBodyOf(value) })).status).toBe(200);
     const res = await send(app, "PUT", editorPath, { body: { ...value, labelIds: [] } });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -1813,7 +1804,6 @@ describe("mountMenuApi — products", () => {
         customerName: { en: "Negroni", es: "Negroni" },
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       },
     });
     const productId = ((await createdProduct.json()) as { id: string }).id;
@@ -1890,7 +1880,6 @@ describe("mountMenuApi — products", () => {
         name: "Stray",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       },
     });
     expect(res.status).toBe(201);
@@ -1906,7 +1895,6 @@ describe("mountMenuApi — products", () => {
         name: "Stray",
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       },
     });
     expect(res.status).toBe(400);
@@ -1935,7 +1923,6 @@ describe("mountMenuApi — products", () => {
         customerName: { es: "ES coffee con leche" },
         pricingUnit: "each",
         unitPrice: "1.20",
-        vatClass: "general",
         allergens: { milk: {} },
         image: libraryImageName("abc.png"),
       },
@@ -1999,7 +1986,6 @@ describe("mountMenuApi — products", () => {
       active: true,
       available: true,
       ordering: "public",
-      vatClass: "general",
       takeawayVatRate: "21.00",
       variants: [
         {
@@ -2124,7 +2110,7 @@ describe("mountMenuApi — products", () => {
     };
     const saved = await send(app, "PUT", editorPath, {
       body: {
-        ...editor,
+        ...saveBodyOf(editor),
         variants: [
           { ...variantDefaults, name: "Glass" },
           { ...variantDefaults, name: "Bottle" },
@@ -2241,7 +2227,6 @@ describe("mountMenuApi — products", () => {
       active: true,
       available: true,
       ordering: "public",
-      vatClass: "general",
       takeawayVatRate: "21.00",
       variants: [],
       primaryCategoryId: null,
@@ -2267,7 +2252,7 @@ describe("mountMenuApi — products", () => {
       active: true,
     };
     const created = await send(app, "POST", `/management-api/products/editor`, {
-      body: await editorBody(app, { name: "Wine", vatClass: "reduced", variants: [variant] }),
+      body: await editorBody(app, { name: "Wine", variants: [variant] }),
     });
     expect(created.status).toBe(201);
     const parent = (await created.json()) as { id: string; variants: { id: string }[] };
@@ -2291,7 +2276,6 @@ describe("mountMenuApi — products", () => {
       // No unit, which a variant's body refuses before its variants.
       body: await editorBody(app, {
         name: "Wine glass",
-        vatClass: "general",
         unitId: null,
         variants: [variant],
       }),
@@ -2307,7 +2291,7 @@ describe("mountMenuApi — products", () => {
     expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
 
     const saveParent = await send(app, "PUT", `/management-api/products/${parent.id}/editor`, {
-      body: await editorBody(app, { name: "Wine", vatClass: "reduced", variants: [variant] }),
+      body: await editorBody(app, { name: "Wine", variants: [variant] }),
     });
     expect(saveParent.status).toBe(200);
   });
@@ -2328,7 +2312,6 @@ describe("mountMenuApi — products", () => {
         kitchenName: "COFFEE",
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
-        vatClass: "reduced",
         primaryCategoryId: categoryId,
         allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
@@ -2399,7 +2382,7 @@ describe("mountMenuApi — products", () => {
         name: "ES coffee",
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
-        vatClass: "reduced",
+        vatClass: "general",
         primaryCategoryId: categoryId,
         allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
@@ -2411,9 +2394,10 @@ describe("mountMenuApi — products", () => {
     const app = mountApp("es-ES");
     const { variantId } = await parentWithVariant(app);
     const { courseId } = await seedRouting();
-    const value = (await (
+    const read = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
+    const value = saveBodyOf(read);
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
@@ -2443,7 +2427,6 @@ describe("mountMenuApi — products", () => {
     const overridden = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
       body: {
         ...value,
-        vatClass: "general",
         unitPrice: "2.60",
         allergens: { eggs: {} },
         courseId,
@@ -2451,13 +2434,13 @@ describe("mountMenuApi — products", () => {
     });
     expect(overridden.status).toBe(200);
     expect(await overridden.json()).toMatchObject({
-      vatClass: "general",
+      vatClass: null,
       unitPrice: "2.60",
       allergens: { eggs: {} },
       courseId,
     });
     expect(await stored()).toEqual({
-      vat_class: "general",
+      vat_class: null,
       unit_price: 260,
       category_id: null,
       allergens: JSON.stringify({ eggs: {} }),
@@ -2467,7 +2450,7 @@ describe("mountMenuApi — products", () => {
       body: { ...value, unitPrice: null, courseId: null },
     });
     expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ...value, unitPrice: null });
+    expect(await cleared.json()).toEqual({ ...read, unitPrice: null });
     expect(await stored()).toEqual(blank);
   });
 
@@ -2501,7 +2484,7 @@ describe("mountMenuApi — products", () => {
       });
       const put = (active: boolean) =>
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...value, active },
+          body: { ...saveBodyOf(value), active },
         });
       const removed = await put(true);
       expect(removed.status).toBe(200);
@@ -2568,7 +2551,7 @@ describe("mountMenuApi — products", () => {
       expect(value.inherited.unitId).not.toBe(kgUnitId);
       const put = (active: boolean) =>
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...value, active },
+          body: { ...saveBodyOf(value), active },
         });
       const removed = await put(true);
       expect(removed.status).toBe(200);
@@ -2610,8 +2593,8 @@ describe("mountMenuApi — products", () => {
       (await (
         await send(app, "GET", `/management-api/products/${parentId}/editor`)
       ).json()) as Editor;
-    const put = (body: unknown) =>
-      send(app, "PUT", `/management-api/products/${parentId}/editor`, { body });
+    const put = (body: Record<string, unknown>) =>
+      send(app, "PUT", `/management-api/products/${parentId}/editor`, { body: saveBodyOf(body) });
     const flags = (value: Editor) => value.variants.map(({ name, active }) => ({ name, active }));
     const shortVariant = {
       name: "Short ES coffee",
@@ -2673,7 +2656,7 @@ describe("mountMenuApi — products", () => {
     };
     const put = (active: boolean) =>
       send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-        body: { ...parent, variants: [...parent.variants, { ...french, active }] },
+        body: { ...saveBodyOf(parent), variants: [...parent.variants, { ...french, active }] },
       });
     expect((await put(false)).status).toBe(200);
     const saved = await put(true);
@@ -2703,7 +2686,7 @@ describe("mountMenuApi — products", () => {
       `/management-api/products/${activeVariant}/editor`,
       {
         body: {
-          ...(await editor(activeVariant)),
+          ...saveBodyOf(await editor(activeVariant)),
           customerName: { fr: "ES coffee double" },
           active: true,
         },
@@ -2726,7 +2709,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-          body: { ...parent, variants: [...parent.variants, french] },
+          body: { ...saveBodyOf(parent), variants: [...parent.variants, french] },
         })
       ).status,
     ).toBe(200);
@@ -2735,7 +2718,9 @@ describe("mountMenuApi — products", () => {
     )!;
     const own = await editor(id);
     const put = (active: boolean) =>
-      send(app, "PUT", `/management-api/products/${id}/editor`, { body: { ...own, active } });
+      send(app, "PUT", `/management-api/products/${id}/editor`, {
+        body: { ...saveBodyOf(own), active },
+      });
     expect(own).toMatchObject({ customerName: { fr: "FR short coffee" }, active: false });
     for (const active of [false, true]) {
       const refused = await put(active);
@@ -2750,16 +2735,16 @@ describe("mountMenuApi — products", () => {
   it("lists every variant, a removed one too, with its own price and its effective price, VAT and category", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
-    // ES double coffee sets its own price (2.40, where the parent's is 2.00) and here its own VAT class
-    // and takeaway rate (4.00, where the parent's is 21.00), and holds a stored category of its own,
-    // which it never reports; Short ES coffee, added Inactive, leaves all four blank.
+    // ES double coffee sets its own price (2.40, where the parent's is 2.00) and here its own takeaway
+    // rate (4.00, where the parent's is 21.00), and holds a stored category of its own, which it
+    // never reports; Short ES coffee, added Inactive, leaves all three blank.
     const own = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...own, vatClass: "general", takeawayVatRate: "4.00" },
+          body: { ...saveBodyOf(own), takeawayVatRate: "4.00" },
         })
       ).status,
     ).toBe(200);
@@ -2768,7 +2753,7 @@ describe("mountMenuApi — products", () => {
     );
     const parent = (await (
       await send(app, "GET", `/management-api/products/${parentId}/editor`)
-    ).json()) as { variants: unknown[] };
+    ).json()) as { variants: unknown[] } & Record<string, unknown>;
     const shortVariant = {
       name: "Short ES coffee",
       customerName: null,
@@ -2781,7 +2766,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-          body: { ...parent, variants: [...parent.variants, shortVariant] },
+          body: { ...saveBodyOf(parent), variants: [...parent.variants, shortVariant] },
         })
       ).status,
     ).toBe(200);
@@ -2793,7 +2778,7 @@ describe("mountMenuApi — products", () => {
       variants: unknown[];
     }[];
     const row = listed.find((product) => product.id === parentId)!;
-    expect(row).toMatchObject({ unitPrice: "2.00", vatClass: "reduced" });
+    expect(row).toMatchObject({ unitPrice: "2.00", vatClass: "general" });
     expect(row.variants).toEqual([
       expect.objectContaining({
         id: variantId,
@@ -2818,7 +2803,7 @@ describe("mountMenuApi — products", () => {
         effective: {
           allergens: { milk: {} },
           unitPrice: "2.00",
-          vatClass: "reduced",
+          vatClass: "general",
           takeawayVatRate: "21.00",
           primaryCategoryId: categoryId,
           courseId: null,
@@ -2877,7 +2862,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...value, unitPrice: null },
+          body: { ...saveBodyOf(value), unitPrice: null },
         })
       ).status,
     ).toBe(200);
@@ -2886,7 +2871,7 @@ describe("mountMenuApi — products", () => {
     ).json()) as { variants: { unitPrice: string | null }[] };
     expect(parent.variants.map((variant) => variant.unitPrice)).toEqual([null]);
     const saved = await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-      body: parent,
+      body: saveBodyOf(parent),
     });
     expect(saved.status).toBe(200);
     expect(
@@ -2926,8 +2911,8 @@ describe("mountMenuApi — products", () => {
       error: { code: "product.invalid", params: { field: "parentId" } },
     };
     for (const [id, body] of [
-      [variantId, { ...value, parentId: crypto.randomUUID() }],
-      [variantId, { ...value, parentId: null }],
+      [variantId, { ...saveBodyOf(value), parentId: crypto.randomUUID() }],
+      [variantId, { ...saveBodyOf(value), parentId: null }],
       [parentId, await editorBody(app, { parentId: variantId })],
     ] as const) {
       const refused = await send(app, "PUT", `/management-api/products/${id}/editor`, { body });
@@ -3151,7 +3136,6 @@ describe("mountMenuApi — products", () => {
         name: "No sellable yet",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         active: false,
       },
     });
@@ -3167,7 +3151,6 @@ describe("mountMenuApi — products", () => {
         name: "Sold out",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         available: false,
       },
     });
@@ -3183,7 +3166,6 @@ describe("mountMenuApi — products", () => {
         name: "Cola",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "reduced",
         takeawayVatRate: "21.00",
       },
     });
@@ -3209,7 +3191,6 @@ describe("mountMenuApi — products", () => {
         name: "Cola",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "reduced",
         takeawayVatRate: "5.00",
       },
     });
@@ -3227,7 +3208,6 @@ describe("mountMenuApi — products", () => {
         name: "Cola",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "reduced",
         takeawayVatClass: "general",
       },
     });
@@ -3237,6 +3217,90 @@ describe("mountMenuApi — products", () => {
     });
   });
 
+  it("POST /management-api/products refuses the retired eat-in class and saves nothing", async () => {
+    const app = mountApp();
+    const name = `Retired class ${crypto.randomUUID()}`;
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        categoryId: null,
+        name,
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "reduced",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "vatClass" } },
+    });
+    const stored = await suite.db.execute(sql`select id from products where name = ${name}`);
+    expect(stored.rows).toEqual([]);
+  });
+
+  it("POST /management-api/products without an eat-in class stores the venue's hidden default", async () => {
+    const app = mountApp();
+    await withTransaction(suite.db, (tx) =>
+      saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
+    );
+    try {
+      const res = await send(app, "POST", "/management-api/products", {
+        body: { categoryId: null, name: "Water", pricingUnit: "each", unitPrice: "1.00" },
+      });
+      expect(res.status).toBe(201);
+      const { id } = (await res.json()) as { id: string };
+      const stored = await suite.db.execute(sql`select vat_class from products where id = ${id}`);
+      expect(stored.rows).toEqual([{ vat_class: "zero" }]);
+    } finally {
+      await withTransaction(suite.db, (tx) =>
+        saveMenuSettings(tx, { defaultProductVatClass: "general" }),
+      );
+    }
+  });
+
+  it.each(["POST", "PUT"] as const)(
+    "%s on the product editor refuses a body naming the retired eat-in class",
+    async (method) => {
+      const app = mountApp();
+      const body = {
+        name: `Editor class ${crypto.randomUUID()}`,
+        customerName: null,
+        description: null,
+        kitchenName: null,
+        image: null,
+        unitId: null,
+        unitPrice: "2.00",
+        active: true,
+        available: true,
+        ordering: "public",
+        takeawayVatRate: "21.00",
+        variants: [],
+        primaryCategoryId: null,
+        modifiers: [],
+        allergens: null,
+        dietaryDeclarations: [],
+        color: null,
+      };
+      const created = await send(app, "POST", "/management-api/products/editor", { body });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const path =
+        method === "POST"
+          ? "/management-api/products/editor"
+          : `/management-api/products/${id}/editor`;
+      const res = await send(app, method, path, {
+        body: {
+          ...body,
+          ...(method === "POST" ? { name: `${body.name} 2` } : {}),
+          vatClass: "general",
+        },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "product.invalid", params: { field: "vatClass" } },
+      });
+    },
+  );
+
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
     const app = mountApp();
     const explicit = await send(app, "POST", "/management-api/products", {
@@ -3245,7 +3309,6 @@ describe("mountMenuApi — products", () => {
         name: "Explicitly active",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         active: true,
       },
     });
@@ -3258,7 +3321,6 @@ describe("mountMenuApi — products", () => {
         name: "Active by default",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       },
     });
     expect(omitted.status).toBe(201);
@@ -3273,7 +3335,6 @@ describe("mountMenuApi — products", () => {
         name: "Ingredient only",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         ordering: "not_sold_separately",
       },
     });
@@ -3287,7 +3348,6 @@ describe("mountMenuApi — products", () => {
         name: "Sellable by default",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       },
     });
     expect(omitted.status).toBe(201);
@@ -3305,7 +3365,6 @@ describe("mountMenuApi — products", () => {
             name: "Base",
             pricingUnit: "each",
             unitPrice: "1.00",
-            vatClass: "general",
           },
         });
         const productId = ((await created.json()) as { id: string }).id;
@@ -3317,7 +3376,6 @@ describe("mountMenuApi — products", () => {
                 name: "Malformed",
                 pricingUnit: "each",
                 unitPrice: "1.00",
-                vatClass: "general",
                 ...fields,
               }
             : fields;
@@ -3368,7 +3426,6 @@ describe("mountMenuApi — products", () => {
         name: "No price",
         pricingUnit: "each",
         // unitPrice omitted
-        vatClass: "general",
       },
     });
     expect(res.status).toBe(400);
@@ -3394,7 +3451,6 @@ describe("mountMenuApi — products", () => {
           name: "Bad allergen",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "general",
           allergens,
         },
       });
@@ -3413,7 +3469,6 @@ describe("mountMenuApi — products", () => {
         name: "Falafel",
         pricingUnit: "each",
         unitPrice: "5.00",
-        vatClass: "general",
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       },
     });
@@ -3448,7 +3503,6 @@ describe("mountMenuApi — products", () => {
           name: "x",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "general",
           dietOverride,
         },
       });
@@ -3465,7 +3519,6 @@ describe("mountMenuApi — products", () => {
         name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         dietOverride: "nope",
       },
     });
@@ -3484,7 +3537,6 @@ describe("mountMenuApi — product request-shape screens", () => {
     name: "x",
     pricingUnit: "each",
     unitPrice: "1.00",
-    vatClass: "general",
   };
 
   it.each([
@@ -3571,7 +3623,7 @@ async function saveEditorFixture(app: Hono, productId: string, changes: Record<s
   const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
   expect(read.status).toBe(200);
   return send(app, "PUT", `/management-api/products/${productId}/editor`, {
-    body: { ...(await read.json()), ...changes },
+    body: { ...saveBodyOf((await read.json()) as Record<string, unknown>), ...changes },
   });
 }
 
@@ -3582,7 +3634,6 @@ async function createProductVia(app: Hono): Promise<string> {
       name: "Dish with lists",
       pricingUnit: "each",
       unitPrice: "5.00",
-      vatClass: "general",
     },
   });
   expect(res.status).toBe(201);
@@ -3637,7 +3688,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
         name: "Sirloin",
         pricingUnit: "each",
         unitPrice: "18.00",
-        vatClass: "general",
         modifiers,
       },
     });
@@ -3663,7 +3713,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
         name: "Fillet steak",
         pricingUnit: "each",
         unitPrice: "21.00",
-        vatClass: "general",
         modifiers: sent,
       },
     });
@@ -3682,7 +3731,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
         name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         modifiers: [{ kind: "extras", id: "11111111-1111-4111-8111-111111111111" }],
       },
     });
@@ -3711,7 +3759,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
           name: "x",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "general",
           ...extra,
         },
       });
@@ -3736,7 +3783,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
           name: "x",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "general",
           [legacy]: [],
         },
       });
@@ -3757,7 +3803,6 @@ describe("mountMenuApi — attaching extras and options lists to products", () =
         name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         modifiers,
       },
     });
@@ -4279,7 +4324,9 @@ describe("mountMenuApi — extras lists", () => {
 describe("mountMenuApi — extras lists and products with variants", () => {
   type Editor = Record<string, unknown> & { variants: { id: string; name: string }[] };
   const editor = async (app: Hono, id: string) =>
-    (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as Editor;
+    saveBodyOf(
+      await (await send(app, "GET", `/management-api/products/${id}/editor`)).json(),
+    ) as Editor;
   const glassVariant = (active: boolean) => ({
     name: "Wine glass",
     customerName: null,
@@ -4561,7 +4608,6 @@ describe("a menu's prices", () => {
         customerName: { en: `${name} (customer)`, es: `${name} (cliente)` },
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       },
     });
     expect(product.status).toBe(201);
@@ -5119,7 +5165,6 @@ it("authors a hierarchy and requires a session to read it", async () => {
       name: "Toast",
       unitPrice: "2",
       pricingUnit: "each",
-      vatClass: "general",
     },
   });
   expect(response.status).toBe(201);
@@ -5159,7 +5204,6 @@ describe("a menu price outside the product editor's rule is refused at the reque
     categoryId: null,
     name: "Priced product",
     pricingUnit: "each",
-    vatClass: "general",
   };
 
   it.each(refusedPrices)(
@@ -5296,7 +5340,6 @@ describe("menu routes whose own checks refuse a negative price", () => {
       active: true,
       available: true,
       ordering: "public",
-      vatClass: "general",
       takeawayVatRate: "21.00",
       variants: [variant("A", "2.00"), variant("B", "3.00")],
       primaryCategoryId: null,
@@ -6450,7 +6493,7 @@ it("refuses a variants entry carrying offered, and stores a price-only entry's p
   };
   const saved = await send(app, "PUT", editorPath, {
     body: {
-      ...editor,
+      ...saveBodyOf(editor),
       variants: [
         { ...glass, name: "Glass" },
         { ...glass, name: "Bottle" },
@@ -6851,7 +6894,7 @@ describe("menu settings routes", () => {
     expect((await send(app, "GET", "/management-api/menu-settings")).status).toBe(200);
   });
 
-  it("answers whether the venue's region charges a takeaway VAT class (A1522)", async () => {
+  it("answers whether the venue's region charges takeaway its own VAT rate (A1522)", async () => {
     const app = mountApp();
     const takeawayVat = async () =>
       (await (await send(app, "GET", "/management-api/menu-settings")).json()).takeawayVat;
@@ -6896,24 +6939,54 @@ describe("menu settings routes", () => {
     expect((await read.json()).takeawayVat).toBe(true);
   });
 
-  it("saves and reloads the venue's new-product VAT class", async () => {
+  it("answers the dine-in rate in force on the venue's date, with the pickable takeaway rates", async () => {
+    const loaded = await send(mountApp(), "GET", "/management-api/menu-settings");
+    expect(loaded.status).toBe(200);
+    expect(await loaded.json()).toEqual({
+      defaultProductVatClass: "general",
+      defaultTakeawayVatRate: "10.00",
+      defaultColor: null,
+      takeawayVat: true,
+      vatRates: SPAIN_PICKABLE,
+      dineInVatRate: "10.00",
+    });
+  });
+
+  it("answers the undated dine-in rate while the saved time zone is broken", async () => {
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
+    const loaded = await send(mountApp(), "GET", "/management-api/menu-settings");
+    expect(loaded.status).toBe(200);
+    expect(await loaded.json()).toMatchObject({ dineInVatRate: "10.00" });
+  });
+
+  it("refuses the retired new-product VAT class on the venue defaults and saves nothing", async () => {
     const app = mountWithVenueDefaults();
-    for (const defaultProductVatClass of ["general", "reduced", "super_reduced", "zero"]) {
-      const saved = await send(app, "PUT", "/management-api/venue-defaults", {
-        body: { defaultProductVatClass },
-      });
-      expect(saved.status).toBe(200);
-      expect((await saved.json()).defaultProductVatClass).toBe(defaultProductVatClass);
-      const loaded = await send(app, "GET", "/management-api/menu-settings");
-      expect(loaded.status).toBe(200);
-      expect(await loaded.json()).toEqual({
-        defaultProductVatClass,
-        defaultTakeawayVatRate: "10.00",
-        defaultColor: null,
-        takeawayVat: true,
-        vatRates: SPAIN_PICKABLE,
+    const stored = async () =>
+      (await suite.db.execute(sql`select doc, revision from settings where module = 'menu'`)).rows;
+    const before = await stored();
+    for (const body of [
+      { defaultProductVatClass: "reduced" },
+      { defaultProductVatClass: "reduced", defaultTakeawayVatRate: "4.00" },
+    ]) {
+      const refused = await send(app, "PUT", "/management-api/venue-defaults", { body });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "body" } },
       });
     }
+    expect(await stored()).toEqual(before);
+    const read = await send(app, "GET", "/management-api/venue-defaults");
+    expect(await read.json()).not.toHaveProperty("defaultProductVatClass");
+  });
+
+  it("records who saved the venue's defaults", async () => {
+    const app = mountWithVenueDefaults();
+    const saved = await send(app, "PUT", "/management-api/venue-defaults", {
+      body: { defaultTakeawayVatRate: "10.00" },
+    });
+    expect(saved.status).toBe(200);
     expect(
       (
         await suite.db.execute(sql`
@@ -6945,7 +7018,6 @@ describe("menu settings routes", () => {
           name: "Cheese",
           pricingUnit: "each",
           unitPrice: "6",
-          vatClass: "general",
         },
       });
       expect(created.status).toBe(201);
@@ -6982,7 +7054,7 @@ describe("menu settings routes", () => {
 
   it.each(["GET", "PUT"] as const)("refuses unauthenticated and staff %s", async (method) => {
     const app = mountWithVenueDefaults();
-    const body = method === "PUT" ? { defaultProductVatClass: "reduced" } : undefined;
+    const body = method === "PUT" ? { defaultTakeawayVatRate: "4.00" } : undefined;
     const path =
       method === "PUT" ? "/management-api/venue-defaults" : "/management-api/menu-settings";
     const anonymous = await send(app, method, path, {
@@ -7003,9 +7075,9 @@ describe("menu settings routes", () => {
 
   it("saves, reloads and clears the venue default colour", async () => {
     const app = mountWithVenueDefaults();
-    await send(app, "PUT", "/management-api/venue-defaults", {
-      body: { defaultProductVatClass: "reduced" },
-    });
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.defaultProductVatClass', 'reduced') where module = 'menu'`,
+    );
     const saved = await send(app, "PUT", "/management-api/menu-settings/default-color", {
       body: { color: "#b12525" },
     });
@@ -7022,6 +7094,7 @@ describe("menu settings routes", () => {
       defaultColor: "#b12525",
       takeawayVat: true,
       vatRates: SPAIN_PICKABLE,
+      dineInVatRate: "10.00",
     });
 
     expect(
@@ -7048,6 +7121,7 @@ describe("menu settings routes", () => {
       defaultColor: null,
       takeawayVat: true,
       vatRates: SPAIN_PICKABLE,
+      dineInVatRate: "10.00",
     });
   });
 
@@ -7087,45 +7161,5 @@ describe("menu settings routes", () => {
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     const loaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await loaded.json()).toMatchObject({ defaultColor: null });
-  });
-
-  it("still requires an explicit class on the product create API", async () => {
-    const app = mountApp();
-    const response = await send(app, "POST", "/management-api/products", {
-      body: {
-        categoryId: null,
-        name: "Lemonade",
-        pricingUnit: "each",
-        unitPrice: "2.00",
-      },
-    });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "vatClass" } },
-    });
-    const editorInput = {
-      name: "Lemonade",
-      customerName: null,
-      description: null,
-      kitchenName: null,
-      image: null,
-      unitId: null,
-      unitPrice: "2.00",
-      active: true,
-      available: true,
-      ordering: "public",
-      variants: [],
-      primaryCategoryId: null,
-      modifiers: [],
-      allergens: null,
-      dietaryDeclarations: [],
-    };
-    const editorResponse = await send(app, "POST", `/management-api/products/editor`, {
-      body: editorInput,
-    });
-    expect(editorResponse.status).toBe(400);
-    expect(await editorResponse.json()).toMatchObject({
-      error: { code: "product.invalid", params: { field: "vatClass" } },
-    });
   });
 });

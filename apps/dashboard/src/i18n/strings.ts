@@ -1161,8 +1161,6 @@ export const en = {
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
-  "menu_settings.default_vat": "VAT class for new products",
-  "menu_settings.invalid": "Choose a VAT class for new products.",
   "menu_settings.default_takeaway_vat": "New products start at (VAT when taken away)",
   "menu_settings.takeaway_invalid": "Choose the VAT when taken away for new products.",
   "action.save": "Save",
@@ -1232,10 +1230,12 @@ export const en = {
   "help.account.settings": "Change your personal details and how you sign in.",
   "help.products.keep_variant":
     "Cancels archiving this variant. Archiving happens only when you save the product.",
+  "help.products.dine_in_vat":
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set.",
+  "help.products.dine_in_vat_takeaway":
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set. Taken away, each product is charged the rate chosen for it below.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
-  "help.products.vat":
-    "The VAT class charged when the product is eaten here. Publish the menu again to use a changed class at the tills.",
   "help.products.course":
     "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
   "help.products.variants":
@@ -2832,7 +2832,7 @@ export const en = {
   "editor.name": "Name",
   "editor.name_required": "Enter a name.",
   "editor.price_invalid": "Enter a nonnegative price with at most two decimal places.",
-  "editor.tax_required": "Choose a tax treatment.",
+  "editor.dine_in_vat": "Eaten here: {rate}% (all food and drink)",
   "editor.takeaway_vat": "VAT when taken away",
   "editor.takeaway_vat_same": "Same as {product} — {rate}%",
   "editor.takeaway_vat_required": "Choose the VAT when taken away.",
@@ -3622,7 +3622,7 @@ export const en = {
   "menus.set_menu_help":
     "The set price covers the dishes and quantities you include. Set a surcharge on a dish or variant to charge extra for it. Place the set menu in a full menu and publish that menu to send changes to the tills.",
   "menus.set_menu_terms": "Name, price and VAT",
-  "menus.set_takeaway_vat_same": "Same as served here — {tax}",
+  "menus.set_takeaway_vat_same": "Same as Eat-in VAT — {tax}",
   "menus.set_menu_price": "Price per set menu",
   "menus.set_menu_eat_in_vat": "Eat-in VAT",
   "menus.set_menu_load_error": "The set menu could not be loaded.",
@@ -3929,7 +3929,7 @@ export const en = {
   "menus.patch_live": "Patch live menu…",
   "menus.patch_live_help_label": "What a patch changes",
   "menus.patch_live_help":
-    "A patch corrects wording, prices, pictures or VAT classes in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
+    "A patch corrects wording, prices or pictures in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
   "menus.patch_live_help_guide": "More about patching the live menu",
   "menus.changes": "Changes",
   "menus.changes_link": "Unpublished changes",
@@ -4056,7 +4056,7 @@ export const en = {
   "menu_patch.changed": "Changed",
   "menu_patch.variants": "Variants",
   "menu_patch.variants_note":
-    "Sold through its variants: the till charges each variant's own price and VAT class.",
+    "Sold through its variants: the till charges each variant's own price.",
   "menu_patch.review_one": "Review 1 change",
   "menu_patch.review_many": "Review {count} changes",
   "menu_patch.review_heading": "Check the changes before putting them live",
@@ -4068,7 +4068,7 @@ export const en = {
   "menu_patch.new_image": "new image",
   "menu_patch.image_not_found":
     "This image is no longer in the image library. Choose another, or remove it.",
-  "menu_patch.open_orders_note": "Lines already on open orders keep their old price and VAT class.",
+  "menu_patch.open_orders_note": "Lines already on open orders keep their old price.",
   "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
   "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
   "menu_patch.needs_correcting": "Needs correcting",
@@ -5909,8 +5909,6 @@ export const es: Record<StringKey, string> = {
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",
-  "menu_settings.default_vat": "Clase de IVA para productos nuevos",
-  "menu_settings.invalid": "Elige una clase de IVA para productos nuevos.",
   "menu_settings.default_takeaway_vat": "Los productos nuevos empiezan con (IVA para llevar)",
   "menu_settings.takeaway_invalid": "Elige el IVA para llevar de los productos nuevos.",
   "action.save": "Guardar",
@@ -5980,10 +5978,12 @@ export const es: Record<StringKey, string> = {
   "help.account.settings": "Cambia tus datos personales y cómo inicias sesión.",
   "help.products.keep_variant":
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
+  "help.products.dine_in_vat":
+    "Todo lo que se come o se bebe aquí paga este único tipo, sea cual sea el producto. Waitron lo actualiza cuando cambia la ley; no hay nada que configurar.",
+  "help.products.dine_in_vat_takeaway":
+    "Todo lo que se come o se bebe aquí paga este único tipo, sea cual sea el producto. Waitron lo actualiza cuando cambia la ley; no hay nada que configurar. Para llevar, cada producto paga el tipo que se elige para él más abajo.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
-  "help.products.vat":
-    "La clase de IVA que se cobra cuando se consume en el local. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
@@ -7624,7 +7624,7 @@ export const es: Record<StringKey, string> = {
   "editor.name": "Nombre",
   "editor.name_required": "Introduce un nombre.",
   "editor.price_invalid": "Introduce un precio no negativo con un máximo de dos decimales.",
-  "editor.tax_required": "Elige un tratamiento fiscal.",
+  "editor.dine_in_vat": "Para comer aquí: {rate} % (toda la comida y bebida)",
   "editor.takeaway_vat": "IVA para llevar",
   "editor.takeaway_vat_same": "Igual que {product} — {rate} %",
   "editor.takeaway_vat_required": "Elige el IVA para llevar.",
@@ -8418,7 +8418,7 @@ export const es: Record<StringKey, string> = {
   "menus.set_menu_help":
     "El precio fijo cubre los platos y las cantidades que incluyas. Añade un suplemento a un plato o variante para cobrar un extra. Inserta la carta a precio fijo en una carta completa y publícala para enviar los cambios a las cajas.",
   "menus.set_menu_terms": "Nombre, precio e IVA",
-  "menus.set_takeaway_vat_same": "Igual que en el local — {tax}",
+  "menus.set_takeaway_vat_same": "Igual que el IVA para comer aquí — {tax}",
   "menus.set_menu_price": "Importe por carta a precio fijo",
   "menus.set_menu_eat_in_vat": "IVA para comer aquí",
   "menus.set_menu_load_error": "No se ha podido cargar la carta a precio fijo.",
@@ -8729,7 +8729,7 @@ export const es: Record<StringKey, string> = {
   "menus.patch_live": "Corregir la carta publicada…",
   "menus.patch_live_help_label": "Qué cambia una corrección",
   "menus.patch_live_help":
-    "Una corrección cambia textos, precios, imágenes o clases de IVA en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
+    "Una corrección cambia textos, precios o imágenes en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
   "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
   "menus.changes": "Cambios",
   "menus.changes_link": "Cambios sin publicar",
@@ -8860,7 +8860,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.changed": "Con cambios",
   "menu_patch.variants": "Variantes",
   "menu_patch.variants_note":
-    "Se vende a través de sus variantes: la caja cobra el precio y la clase de IVA de cada variante.",
+    "Se vende a través de sus variantes: la caja cobra el precio de cada variante.",
   "menu_patch.review_one": "Revisar 1 corrección",
   "menu_patch.review_many": "Revisar {count} correcciones",
   "menu_patch.review_heading": "Revisa las correcciones antes de publicarlas",
@@ -8873,7 +8873,7 @@ export const es: Record<StringKey, string> = {
   "menu_patch.image_not_found":
     "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
   "menu_patch.open_orders_note":
-    "Las líneas que ya están en pedidos abiertos mantienen su precio y su clase de IVA anteriores.",
+    "Las líneas que ya están en pedidos abiertos mantienen su precio anterior.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
   "menu_patch.queued_note_many":
     "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",

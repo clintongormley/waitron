@@ -50,7 +50,7 @@ describe("installed country packs", () => {
     expect(Object.isFrozen(findFiscalModules("ES-common"))).toBe(true);
   });
 
-  it("says which fiscal regions charge takeaway at a different VAT class", () => {
+  it("says which fiscal regions charge takeaway at a different VAT rate", () => {
     expect(chargesTakeawayVat("ES", "ES-common")).toBe(true);
     expect(chargesTakeawayVat("ES", "ES-canary")).toBe(false);
     expect(chargesTakeawayVat("GB", "GB-vat")).toBe(false);

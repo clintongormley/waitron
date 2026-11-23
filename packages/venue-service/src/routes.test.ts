@@ -1839,7 +1839,7 @@ describe("venue service management routes", () => {
     });
   });
 
-  it("says whether the venue's region charges a different VAT class on food taken away", async () => {
+  it("says whether the venue's region charges a different VAT rate on food taken away", async () => {
     const fx = await fixture();
     const read = async () =>
       (

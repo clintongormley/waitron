@@ -11,9 +11,8 @@ const MADRID: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
-  defaultProductVatClass: "reduced",
   defaultTakeawayVatRate: "10.00",
-  takeawayVat: false,
+  takeawayVat: true,
   vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
 const BARCELONA: VenueDefaults = {
@@ -60,9 +59,9 @@ it.each(cases)("Defaults card: $locale / $theme", async ({ theme, locale }) => {
     }
     const language = root.querySelector<WtCombobox>("wt-combobox[name=receiptLanguage]");
     if (state === "changed" || state === "saving") {
-      root.querySelector("wt-combobox[name=defaultProductVatClass]")!.dispatchEvent(
+      root.querySelector("wt-combobox[name=defaultTakeawayVatRate]")!.dispatchEvent(
         new CustomEvent("wt-change", {
-          detail: { value: "zero" },
+          detail: { value: "0.00" },
           bubbles: true,
           composed: true,
         }),

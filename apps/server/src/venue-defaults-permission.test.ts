@@ -83,13 +83,13 @@ const write = (cookie: string) =>
   app().request(PATH, {
     method: "PUT",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ defaultProductVatClass: "reduced" }),
+    body: JSON.stringify({ defaultTakeawayVatRate: "4.00" }),
   });
-async function storedVatClass(): Promise<string | null> {
-  const { rows } = await suite.db.execute<{ default_product_vat_class: string }>(
-    sql`select json_extract(doc, '$.defaultProductVatClass') as default_product_vat_class from settings where module = 'menu'`,
+async function storedTakeawayRate(): Promise<string | null> {
+  const { rows } = await suite.db.execute<{ default_takeaway_vat_rate: string | null }>(
+    sql`select json_extract(doc, '$.defaultTakeawayVatRate') as default_takeaway_vat_rate from settings where module = 'menu'`,
   );
-  return rows[0]?.default_product_vat_class ?? null;
+  return rows[0]?.default_takeaway_vat_rate ?? null;
 }
 const refusal = (permission: string) => ({
   error: { code: "authorization.not_permitted", params: { permission } },
@@ -101,7 +101,6 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     const answer = await read(managerCookie);
     expect(answer.status).toBe(200);
     expect(Object.keys(await answer.json()).sort()).toEqual([
-      "defaultProductVatClass",
       "defaultTakeawayVatRate",
       "fixedReceiptLanguage",
       "receiptLanguage",
@@ -112,7 +111,7 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     const refused = await write(managerCookie);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual(refusal("venue.configure"));
-    expect(await storedVatClass()).toBeNull();
+    expect(await storedTakeawayRate()).toBeNull();
   });
 
   it("serves a read and refuses a write to a real supervisor session", async () => {
@@ -122,7 +121,7 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     const refused = await write(supervisorCookie);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual(refusal("venue.configure"));
-    expect(await storedVatClass()).toBeNull();
+    expect(await storedTakeawayRate()).toBeNull();
   });
 
   it("refuses a read to a session without venue.view", async () => {
@@ -137,8 +136,8 @@ describe("venue.view gates reading the venue defaults and venue.configure gates 
     expect((await read(managerCookie)).status).toBe(200);
     const saved = await write(managerCookie);
     expect(saved.status).toBe(200);
-    expect((await saved.json()).defaultProductVatClass).toBe("reduced");
-    expect((await (await read(managerCookie)).json()).defaultProductVatClass).toBe("reduced");
-    expect(await storedVatClass()).toBe("reduced");
+    expect((await saved.json()).defaultTakeawayVatRate).toBe("4.00");
+    expect((await (await read(managerCookie)).json()).defaultTakeawayVatRate).toBe("4.00");
+    expect(await storedTakeawayRate()).toBe("4.00");
   });
 });

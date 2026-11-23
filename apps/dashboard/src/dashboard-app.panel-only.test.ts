@@ -84,9 +84,11 @@ function stubApi(modules: string[]): DashboardApi {
       modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
-    getMenuSettings: vi
-      .fn()
-      .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "reduced",
+      defaultColor: null,
+      dineInVatRate: "10.00",
+    }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),

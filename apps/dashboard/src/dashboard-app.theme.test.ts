@@ -175,9 +175,11 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-    getMenuSettings: vi
-      .fn()
-      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+      dineInVatRate: "10.00",
+    }),
     listMyShifts: vi.fn().mockResolvedValue([]),
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),

@@ -10,8 +10,6 @@ import {
   nonBlankTranslations,
   isProductOrdering,
   type ProductOrdering,
-  VAT_CLASSES,
-  type VatClass,
 } from "@waitron/shared";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -108,10 +106,6 @@ function inheritable<T>(
 ): T | null {
   return isVariant && value === null ? null : parse(value, field);
 }
-function vatClass(value: unknown, field: string): VatClass {
-  if (!VAT_CLASSES.includes(value as VatClass)) invalid(field);
-  return value as VatClass;
-}
 /** Whether the rate is one the area offers is checked in the transaction, which reads the area. */
 function rate(value: unknown, field: string): string {
   if (typeof value !== "string") invalid(field);
@@ -130,7 +124,7 @@ function emptyOnVariant<T>(values: T[], field: string, isVariant: boolean): T[] 
 export function parseProductEditorInput(
   value: unknown,
   { isVariant }: { isVariant: boolean },
-): ProductEditorSaveBody {
+): Omit<ProductEditorSaveBody, "vatClass"> {
   const body = object(value, "product");
   const parentId =
     body.parentId === undefined ? {} : { parentId: nullableId(body.parentId, "parentId") };
@@ -165,9 +159,10 @@ export function parseProductEditorInput(
   const color = colorOrNull(body.color ?? null, () => invalid("color"));
   // A variant's colour is always its parent's.
   if (isVariant && color !== null) invalid("color");
-  const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
-  // `takeawayVatRate` replaced it. Refused rather than ignored, as `soldAlone` is.
-  if (body.takeawayVatClass !== undefined) invalid("takeawayVatClass");
+  // Every line eaten here files at the area's one dine-in rate, and `takeawayVatRate` replaced the
+  // takeaway class. Refused rather than ignored, as `soldAlone` is.
+  for (const retired of ["vatClass", "takeawayVatClass"] as const)
+    if (body[retired] !== undefined) invalid(retired);
   const takeawayRate = inheritable(body.takeawayVatRate, "takeawayVatRate", isVariant, rate);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
@@ -215,7 +210,6 @@ export function parseProductEditorInput(
     unitPrice: inheritable(body.unitPrice, "unitPrice", isVariant, price),
     active: boolean(body.active, "active"),
     ...(body.available === undefined ? {} : { available: boolean(body.available, "available") }),
-    vatClass: tax,
     takeawayVatRate: takeawayRate,
     variants,
     primaryCategoryId,

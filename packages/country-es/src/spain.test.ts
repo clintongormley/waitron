@@ -141,7 +141,7 @@ describe("Spanish postcodes and provinces", () => {
     }
   });
 
-  it("charges takeaway at a different VAT class in the common territory only", () => {
+  it("charges takeaway at a different VAT rate in the common territory only", () => {
     expect(
       SPAIN.fiscalJurisdictions
         .filter(({ takeawayVat }) => takeawayVat === true)

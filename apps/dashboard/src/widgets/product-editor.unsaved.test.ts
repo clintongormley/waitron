@@ -839,11 +839,11 @@ it("incomplete allergen kinds survive reconnect and Keep, then Discard restores 
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("a change to the takeaway VAT class alone is unsaved and asks before leaving", async () => {
+it("a change to the takeaway VAT rate alone is unsaved and asks before leaving", async () => {
   const { app, editor } = await mount();
   editor.takeawayVat = true;
   await editor.updateComplete;
-  await change(editor, "[name=takeaway-tax]", "general");
+  await change(editor, "[name=takeaway-tax]", "21.00");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await userEvent.keyboard("{Escape}");
   expect(app.cancelled).toBe(0);

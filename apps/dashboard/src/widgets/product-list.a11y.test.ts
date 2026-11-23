@@ -339,7 +339,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
   it("renders accessibly with every status shown", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
-      { products },
+      { products, takeawayVat: true },
       theme,
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -352,7 +352,8 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
         .map((badge) => badge.getAttribute("data-state"))
         .sort(),
     ).toEqual(["archived", "archived", "unavailable", "unavailable"]);
-    expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).not.toBeNull();
+    expect(table.shadowRoot!.querySelector("[data-test=vat-note]")).toBeNull();
+    expect(table.shadowRoot!.querySelector("[data-test=takeaway-vat-note]")).not.toBeNull();
     expect(
       table.shadowRoot!.querySelector('[data-test="color-v2"] [data-test="thumb-placeholder"]'),
     ).not.toBeNull();

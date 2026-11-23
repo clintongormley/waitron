@@ -16,6 +16,7 @@ import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
+import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 /**
@@ -298,7 +299,6 @@ async function createProduct(app: Hono, cookie: string, name: string): Promise<s
     name,
     pricingUnit: "each",
     unitPrice: "1.00",
-    vatClass: "general",
   });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -327,7 +327,6 @@ describe("Menu API — option groups, gates, by-id FKs", () => {
         name: "Refused",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       }),
     );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -399,7 +398,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
     name: "Dish",
     pricingUnit: "each",
     unitPrice: "5.00",
-    vatClass: "reduced",
     modifiers,
   });
   expect(create.status).toBe(201);
@@ -408,7 +406,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const ordered = [...modifiers].reverse();
   const editor = await send(app, "GET", `/management-api/products/${product.id}/editor`, cookie);
   expect(editor.status).toBe(200);
-  const editorBody = (await editor.json()) as Record<string, unknown>;
+  const editorBody = saveBodyOf((await editor.json()) as Record<string, unknown>);
   delete editorBody.courseId;
   expect(
     (

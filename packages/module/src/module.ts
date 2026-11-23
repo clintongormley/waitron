@@ -936,7 +936,7 @@ export interface VenueServiceContribution {
     zone: Pick<EffectiveSalePolicy, "orderStart" | "dining" | "diningStartsAs">,
     takeawayVat: boolean,
   ): DiningStart | null;
-  /** Whether the venue's region charges a different VAT class on food taken away. */
+  /** Whether the venue's region charges a different VAT rate on food taken away. */
   venueChargesTakeawayVat(tx: Transaction): Promise<boolean>;
   /** Of the named orders, those whose department leaves the way to the till, in a region that
    *  charges takeaway VAT; read at once. */

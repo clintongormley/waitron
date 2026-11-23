@@ -121,7 +121,7 @@ Rescheduling records the old and new activation times and the acting person in
 
 A line freezes its names and its gross price when it is added and never reads them from the menu
 again, so editing a product does not rewrite yesterday's receipt. A line eaten here files at the
-dine-in rate on the day the invoice is issued, below. A line taken away,
+dine-in rate in force on the day of the sale, below. A line taken away,
 other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
 invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
 
@@ -169,7 +169,7 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
 line. Neither table has a `variant_id` column.
 
-**Eaten here, every line files at the dine-in rate in force on the day the invoice is issued.
+**Eaten here, every line files at the dine-in rate in force on the day of the sale: the day the invoice is issued, or the earlier day the meal ended (`issueMoment`, below).
 Taken away, a line files at its product's own
 takeaway rate on that day, read when the line is rated.** Each published menu version records the
 eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
@@ -782,8 +782,8 @@ become Unavailable" there). The till sends such a raise to the server and shows 
 own words ("sends a raise to the server, and words the server's refusal" in
 `apps/till/src/till-app.test.ts`); the counter does not mark that line. A table round refused
 `product.variant_unavailable` has its line marked from the offers read again ("says a sold-out
-variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the stored
-class's rate on the day of issue, and taken away, at the product's takeaway rate, as _What a sold
+variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the
+dine-in rate, and taken away, at the product's takeaway rate, as _What a sold
 line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
@@ -829,12 +829,13 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   variant (`editor.add_variant_to`, `editor.edit_variant_of`). While that name is blank it reads
   plain "Add variant" or "Edit variant". A variant's own page reads the parent's saved staff name
   in its editor response and heads "Edit variant of: Coffee"; reloading reads that name again.
-- The Pricing section holds the price field and then VAT. While at least one variant is Active the
+- The Pricing section holds the price field, then the one eat-in rate (`editor.dine_in_vat`) and,
+  where the venue charges takeaway VAT, the takeaway VAT field. While at least one variant is Active the
   price's label reads "Base price per" and the unit (`editor.base_price_unit`), or "Base price"
   alone (`editor.base_price`) for a product with no unit, a variant with no price of its own shows
   the base price as its hint, in its window and in its table row, and the Pricing section is a fold
-  whose closed line names the base price and the VAT (`pricingSummary`). The fold opens on a VAT,
-  unit or price error (`SECTION_FIELDS`). Pricing starts open without Active variants, and closed
+  whose closed line names the base price and, where it is charged, the takeaway VAT
+  (`pricingSummary`). The fold opens on a takeaway VAT, unit or price error (`SECTION_FIELDS`). Pricing starts open without Active variants, and closed
   with them. The separate Variants section starts open with Active variants and otherwise closed;
   its empty summary reads None. Opening an empty section shows Add variant.
 - An active saved row's menu offers **Open**, **Edit** and **Archive**; an unsaved row uses
@@ -899,7 +900,7 @@ photo that exists was accepted.
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section with a summary on its closed line. Prep station, Descriptors and Nutritional info name each
 field they hold, with "None specified" (`modifiers.none_specified`) for one left blank; the Pricing
-fold leaves a blank base price, and a VAT class the form does not offer, off its line. The
+fold leaves a blank base price, and a takeaway VAT rate the form does not offer, off its line. The
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
 opening the section is what shows every value. Top to bottom: the category path, Name, with the
 photo beside it as a small button that opens the image library (absent when the editor is given no
@@ -948,7 +949,7 @@ inside the same transaction the product write already opened (`apps/server/src/m
 rolls the whole product back, and you can choose a course as you create the product.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
-`null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
+`null`), `description`, `kitchenName`, `image`, `unitPrice` and `takeawayVatRate` (a body carrying the retired `vatClass` or `takeawayVatClass` is refused), `primaryCategoryId` (the
 main reporting category; on a variant it must be `null`, and any other value is refused with
 `product.invalid`; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and

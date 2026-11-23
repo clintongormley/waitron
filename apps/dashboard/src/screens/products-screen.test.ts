@@ -1,11 +1,12 @@
-import type { ProductEditorSaveBody } from "@waitron/shared";
 import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
+  MenuSettingsAnswer,
   MenuSummary,
+  ProductSaveBody,
   CategorySummary,
   Course,
   DashboardApi,
@@ -24,6 +25,7 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
+import { withoutVatClass } from "../widgets/product-editor-model.js";
 import type { ProductBrowser } from "../widgets/product-browser.js";
 import {
   cleanupWidgets,
@@ -167,6 +169,8 @@ const value: ProductEditorValue = {
   dietaryDeclarations: ["vegetarian"],
   courseId: null,
 };
+/** The editor's read without the `vatClass` the save refuses, as Archive and Save send it. */
+const readBody = withoutVatClass(value);
 
 // Drinks is on both menus. A section's customer-facing name differs from its internal one, so the
 // Add to menus step reading the wrong one shows text the assertions refuse.
@@ -244,9 +248,11 @@ const sections: SectionDetails[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
-    getMenuSettings: vi
-      .fn()
-      .mockResolvedValue({ defaultProductVatClass: "general", defaultColor: null }),
+    getMenuSettings: vi.fn().mockResolvedValue({
+      defaultProductVatClass: "general",
+      defaultColor: null,
+      dineInVatRate: "10.00",
+    }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listMenus: vi.fn().mockResolvedValue(menus),
     listCategories: vi.fn().mockResolvedValue(categories),
@@ -559,7 +565,7 @@ describe("menu-screen", () => {
     await flush(el);
     expect(api.getProductEditor).toHaveBeenCalledWith("p1");
     expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-      ...value,
+      ...readBody,
       active: false,
       available: true,
     });
@@ -762,7 +768,10 @@ describe("menu-screen", () => {
       expect(bodyOf(el)).toBe(`${warning} It comes off every menu it is on.`);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
-      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: false });
+      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
+        ...readBody,
+        active: false,
+      });
     });
 
     it("says every menu when the count cannot be read, and Archive still works", async () => {
@@ -774,7 +783,10 @@ describe("menu-screen", () => {
       expect(dialogOf(el).textContent).not.toContain(codeMessage("server.internal"));
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
-      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: false });
+      expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
+        ...readBody,
+        active: false,
+      });
       expect(dialogOf(el).getAttribute("open")).toBeNull();
     });
 
@@ -1046,7 +1058,7 @@ describe("menu-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
-    const body: ProductEditorSaveBody = { ...value };
+    const body: ProductSaveBody = { ...readBody };
     delete body.available;
     emit(editor(el), "wt-submit", { value, body });
     await flush(el);
@@ -3038,7 +3050,7 @@ describe("menu-screen", () => {
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");
       expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
-        ...variantValue,
+        ...withoutVatClass(variantValue),
         active: false,
         available: false,
       });
@@ -3079,7 +3091,7 @@ describe("menu-screen", () => {
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
-        ...variantValue,
+        ...withoutVatClass(variantValue),
         active: false,
       });
       expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
@@ -3567,21 +3579,9 @@ it("closing a guarded linked product retires its field query before opening anot
   expect(editor(el).initialField).toBe("");
 });
 
-it("waits for the venue's VAT default before enabling Add product", async () => {
-  let resolve!: (value: {
-    defaultProductVatClass: "reduced";
-    defaultTakeawayVatRate: "10.00";
-    defaultColor: null;
-    takeawayVat: false;
-    vatRates: string[];
-  }) => void;
-  const pending = new Promise<{
-    defaultProductVatClass: "reduced";
-    defaultTakeawayVatRate: "10.00";
-    defaultColor: null;
-    takeawayVat: false;
-    vatRates: string[];
-  }>((yes) => {
+it("waits for the venue's dine-in VAT rate before enabling Add product", async () => {
+  let resolve!: (value: MenuSettingsAnswer) => void;
+  const pending = new Promise<MenuSettingsAnswer>((yes) => {
     resolve = yes;
   });
   const api = stubApi({ getMenuSettings: vi.fn(() => pending) });
@@ -3603,6 +3603,7 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
     defaultColor: null,
     takeawayVat: false,
     vatRates: ["0.00", "4.00", "10.00", "21.00"],
+    dineInVatRate: "10.00",
   });
   await pending;
   await flush(el);
@@ -3610,10 +3611,10 @@ it("waits for the venue's VAT default before enabling Add product", async () => 
   (await add()).click();
   await flush(el);
   expect(editor(el).open).toBe(true);
-  expect(
-    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="tax"]')!
-      .value,
-  ).toBe("reduced");
+  expect(editor(el).shadowRoot!.querySelector('[name="tax"]')).toBeNull();
+  expect(editor(el).shadowRoot!.querySelector("[data-test=dine-in-vat]")!.textContent!.trim()).toBe(
+    "Eaten here: 10% (all food and drink)",
+  );
 });
 
 it("paints All products' square, an uncategorised product and a new product's inherited colour with the venue default, and repaints them on a live answer", async () => {
@@ -3661,6 +3662,7 @@ it("paints All products' square, an uncategorised product and a new product's in
     defaultColor: "#256bb1",
     takeawayVat: false,
     vatRates: ["0.00", "4.00", "10.00", "21.00"],
+    dineInVatRate: "10.00",
   });
   liveData.refresh();
   await expect.poll(fills).toEqual(["rgb(37, 107, 177)", "rgb(37, 107, 177)"]);
@@ -3672,9 +3674,14 @@ it("reads the venue's default into a new editor without replacing an open draft"
   const liveData = new LiveData();
   const api = Object.assign(
     stubApi({
-      getMenuSettings: vi
-        .fn()
-        .mockResolvedValue({ defaultProductVatClass: "super_reduced", defaultColor: null }),
+      getMenuSettings: vi.fn().mockResolvedValue({
+        defaultProductVatClass: "general",
+        defaultTakeawayVatRate: "4.00",
+        defaultColor: null,
+        takeawayVat: true,
+        vatRates: ["0.00", "4.00", "10.00", "21.00"],
+        dineInVatRate: "10.00",
+      }),
     }),
     { liveData },
   );
@@ -3684,38 +3691,41 @@ it("reads the venue's default into a new editor without replacing an open draft"
   await el.updateComplete;
   await editor(el).updateComplete;
   const tax = () =>
-    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="tax"]')!;
-  expect(tax().value).toBe("super_reduced");
+    editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      '[name="takeaway-tax"]',
+    )!;
+  expect(tax().value).toBe("4.00");
   tax().dispatchEvent(
     new CustomEvent("wt-change", {
-      detail: { value: "zero" },
+      detail: { value: "0.00" },
       bubbles: true,
       composed: true,
     }),
   );
   await editor(el).updateComplete;
   vi.mocked(api.getMenuSettings).mockResolvedValue({
-    defaultProductVatClass: "reduced",
-    defaultTakeawayVatRate: "10.00",
+    defaultProductVatClass: "general",
+    defaultTakeawayVatRate: "21.00",
     defaultColor: null,
-    takeawayVat: false,
+    takeawayVat: true,
     vatRates: ["0.00", "4.00", "10.00", "21.00"],
+    dineInVatRate: "10.00",
   });
   liveData.refresh();
   await expect.poll(() => vi.mocked(api.getMenuSettings).mock.calls.length).toBe(2);
   await flush(el);
   await editor(el).updateComplete;
-  expect(tax().value).toBe("zero");
+  expect(tax().value).toBe("0.00");
   emit(editor(el), "wt-cancel", {});
   await flush(el);
   emit(list(el), "add-product", { categoryId: null });
   await el.updateComplete;
   await editor(el).updateComplete;
-  expect(tax().value).toBe("reduced");
+  expect(tax().value).toBe("21.00");
 });
 
 it.each([true, false])(
-  "hands the editor whether the venue's region charges a takeaway VAT class (%s)",
+  "hands the editor whether the venue's region charges takeaway its own VAT rate (%s)",
   async (takeawayVat) => {
     const api = stubApi({
       getMenuSettings: vi

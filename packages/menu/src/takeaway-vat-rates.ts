@@ -155,9 +155,9 @@ export async function readOwnTakeawayVatSchedules(
 }
 
 /**
- * The rate each schedule holds on the venue's local date today (plan D14), keyed as given. The
- * venue's date is read only when some schedule has a dated row: without one, each schedule is its
- * one row from the beginning of time.
+ * The rate each schedule holds on the venue's local date today, from its saved time zone
+ * (`venueToday`), keyed as given. The venue's date is read only when some schedule has a dated row:
+ * without one, each schedule is its one row from the beginning of time.
  */
 export async function takeawayVatRatesToday(
   tx: Transaction,
@@ -179,6 +179,16 @@ export async function takeawayVatRatesToday(
     rates.set(productId, today === null ? schedule[0]!.rate : rateOn(schedule, today));
   }
   return rates;
+}
+
+/**
+ * The area's dine-in rate in force on the venue's local date today, read as the takeaway rate's
+ * date is. The venue's date is read only when the list has a dated entry: without one, every date
+ * gives the list's one rate, so a broken saved time zone does not refuse it.
+ */
+export async function dineInVatRateToday(tx: Transaction, rates: AreaVatRates): Promise<string> {
+  const dated = rates.dineIn.some((entry) => entry.from !== null);
+  return rateOn(rates.dineIn, dated ? await venueToday(tx) : "1970-01-01");
 }
 
 async function venueToday(tx: Transaction): Promise<string> {

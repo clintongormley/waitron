@@ -17,6 +17,7 @@ import { createCategory } from "./categories.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
+import { saveMenuSettings } from "./settings.js";
 import { readTakeawayVatSchedules } from "./takeaway-vat-rates.js";
 import {
   countingSettingsReads,
@@ -26,10 +27,12 @@ import {
   useMenuDb,
 } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
+import { saveBodyOf } from "../test/save-body.js";
 
 const fx = useMenuDb();
 beforeEach(() => seedLibraryImages(fx.db, "coffee.webp"));
-let input: ProductEditorInput;
+let input: Omit<ProductEditorInput, "vatClass">;
+
 beforeEach(async () => {
   await seedTaxpayer(fx.db);
   await seedVenueSettings(fx.db);
@@ -57,7 +60,6 @@ beforeEach(async () => {
     unitPrice: "9.00",
     active: true,
     available: false,
-    vatClass: "reduced",
     takeawayVatRate: "21.00",
     image: null,
     variants: [
@@ -178,10 +180,23 @@ it("reads a product with no unit as unitId null", async () => {
   expect(value.unitId).toBeNull();
 });
 
+it("gives a new product the eat-in class saved as the menu settings' hidden default", async () => {
+  await withTransaction(fx.db, (tx) => saveMenuSettings(tx, { defaultProductVatClass: "zero" }));
+  const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
+  expect(saved.vatClass).toBe("zero");
+  const [row] = await fx.db
+    .select({ vatClass: products.vatClass })
+    .from(products)
+    .where(eq(products.id, saved.id));
+  expect(row).toEqual({ vatClass: "zero" });
+});
+
 it("saves and reads the canonical editor shape with independent content and variants", async () => {
   const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
   expect(saved).toEqual({
     ...input,
+    // The menu settings' hidden default for new products.
+    vatClass: "general",
     id: saved.id,
     parentId: null,
     inherited: null,
@@ -194,7 +209,7 @@ it("saves and reads the canonical editor shape with independent content and vari
       tx,
       saved.id,
       {
-        ...saved,
+        ...saveBodyOf(saved),
         description: null,
         kitchenName: " ",
         available: true,
@@ -218,8 +233,8 @@ describe("a product's and a variant's takeaway VAT rate", () => {
   const saveNew = (body: unknown) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, null, body, "en"));
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
-  const save = (id: string, body: unknown) =>
-    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, body, "en"));
+  const save = (id: string, body: object) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const listedVariant = async (parentId: string, variantId: string) =>
     (await withTransaction(fx.db, (tx) => listProducts(tx)))
       .find((product) => product.id === parentId)!
@@ -391,7 +406,7 @@ it("saves a product's own colour, lists it, and clears it", async () => {
   const [listed] = await withTransaction(fx.db, (tx) => listProducts(tx));
   expect(listed).toMatchObject({ id: saved.id, color: "#256bb1" });
   const cleared = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, saved.id, { ...saved, color: null }, "en"),
+    saveProductEditor(tx, saved.id, { ...saveBodyOf(saved), color: null }, "en"),
   );
   expect(cleared.color).toBeNull();
   expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id))).toMatchObject({
@@ -409,7 +424,9 @@ it("saves a variant listed with a blank price as blank, and reads it back blank"
     ),
   );
   expect(saved.variants.map((variant) => variant.unitPrice)).toEqual([null, "3.00"]);
-  const again = await withTransaction(fx.db, (tx) => saveProductEditor(tx, saved.id, saved, "en"));
+  const again = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, saved.id, saveBodyOf(saved), "en"),
+  );
   expect(again.variants.map((variant) => variant.unitPrice)).toEqual([null, "3.00"]);
 });
 
@@ -440,8 +457,8 @@ describe("a removed variant in the parent's editor", () => {
       seedVenueSettings(tx, { defaultContentLanguage: "en", contentLanguages: ["en", "es"] }),
     );
   });
-  const save = (productId: string | null, body: unknown) =>
-    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, body, "en"));
+  const save = (productId: string | null, body: object) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, saveBodyOf(body), "en"));
   const read = (productId: string) =>
     withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
   const flags = (value: { variants: { name: string; active: boolean }[] }) =>
@@ -559,7 +576,7 @@ it("changes the product's unit on update", async () => {
     ),
   );
   const updated = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, saved.id, { ...saved, unitId: other.id }, "en"),
+    saveProductEditor(tx, saved.id, { ...saveBodyOf(saved), unitId: other.id }, "en"),
   );
   expect(updated.unitId).toBe(other.id);
 });
@@ -796,8 +813,8 @@ describe("a variant's own page", () => {
   });
 
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
-  const save = (id: string, body: unknown) =>
-    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, body, "en"));
+  const save = (id: string, body: object) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const storedRow = async (id: string) =>
     (
       await fx.db
@@ -841,7 +858,7 @@ describe("a variant's own page", () => {
         description: { en: "Freshly roasted" },
         image: libraryImageName("coffee.webp"),
         unitPrice: "9.00",
-        vatClass: "reduced",
+        vatClass: "general",
         takeawayVatRate: "21.00",
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
@@ -900,13 +917,12 @@ describe("a variant's own page", () => {
     const overridden = await save(variantId, {
       ...value,
       unitPrice: "2.50",
-      vatClass: "general",
       allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
     });
     expect(overridden).toMatchObject({
       unitPrice: "2.50",
-      vatClass: "general",
+      vatClass: null,
       allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
@@ -1010,7 +1026,7 @@ describe("a variant's own page", () => {
 
   it("leaves the parent, its variants list and its attached lists as they were", async () => {
     const before = await read(parentId);
-    await save(variantId, { ...(await read(variantId)), vatClass: "zero", active: false });
+    await save(variantId, { ...(await read(variantId)), active: false });
     const after = await read(parentId);
     expect(after).toEqual({ ...before, variants: [{ ...before.variants[0]!, active: false }] });
   });
@@ -1040,15 +1056,12 @@ describe("a variant's own page", () => {
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
   });
 
-  it.each(["vatClass", "unitPrice"] as const)(
-    "refuses a blank %s on a product with no parent",
-    async (field) => {
-      await expect(save(parentId, { ...input, [field]: null })).rejects.toMatchObject({
-        code: "product.invalid",
-        params: { field },
-      });
-    },
-  );
+  it("refuses a blank unitPrice on a product with no parent", async () => {
+    await expect(save(parentId, { ...input, unitPrice: null })).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "unitPrice" },
+    });
+  });
 
   it("refuses variants or attached lists on a variant", async () => {
     await expect(
@@ -1072,7 +1085,6 @@ describe("a variant's own page", () => {
       description: null,
       unitId: null,
       unitPrice: null,
-      vatClass: null,
       variants: [],
       allergens: null,
       dietaryDeclarations: null,
@@ -1081,8 +1093,8 @@ describe("a variant's own page", () => {
 });
 
 describe("a product an extras list offers", () => {
-  const save = (productId: string | null, body: unknown) =>
-    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, body, "en"));
+  const save = (productId: string | null, body: object) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, saveBodyOf(body), "en"));
   const read = (productId: string) =>
     withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
   const small = () => ({ ...input.variants[0]!, active: false });
@@ -1212,8 +1224,8 @@ describe("a product an extras list offers", () => {
 });
 
 describe("optional product customer translations", () => {
-  const save = (id: string | null, body: unknown) =>
-    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, body, "en"));
+  const save = (id: string | null, body: object) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
 
   beforeEach(async () => {
@@ -1345,7 +1357,7 @@ it("preserves later dish and variant availability during an unrelated editor sav
     await updateProduct(tx, loaded.id, { available: false });
     await updateProduct(tx, loaded.variants[0]!.id, { available: false });
   });
-  const body: ProductEditorSaveBody = { ...loaded };
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = saveBodyOf({ ...loaded });
   delete body.available;
   const variants: ProductEditorSaveBody["variants"] = structuredClone(loaded.variants);
   for (const variant of variants) delete variant.available;
@@ -1375,7 +1387,7 @@ it("preserves a variant's later availability on its own page and restores it exp
     readProductEditor(tx, parent.variants[0]!.id),
   );
   await withTransaction(fx.db, (tx) => updateProduct(tx, loaded.id, { available: false }));
-  const body: ProductEditorSaveBody = { ...loaded };
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = saveBodyOf({ ...loaded });
   delete body.available;
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, loaded.id, { ...body, unitPrice: "4.00" }, "en"),
@@ -1388,7 +1400,7 @@ it("preserves a variant's later availability on its own page and restores it exp
   expect(restored.available).toBe(true);
 });
 it("creates available products and variants when their save flags are absent", async () => {
-  const body: ProductEditorSaveBody = { ...input };
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = { ...input };
   delete body.available;
   const variants: ProductEditorSaveBody["variants"] = structuredClone(input.variants);
   for (const variant of variants) delete variant.available;

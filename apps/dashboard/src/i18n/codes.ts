@@ -102,6 +102,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "No full invoice names that tax number.",
     es: "Ninguna factura completa lleva ese NIF.",
   },
+  "vat_rate.area_unsupported": {
+    en: `Waitron has no VAT rates for this venue's country and fiscal territory, which were fixed when the box was set up, so trying again will not help. This is a fault in Waitron; choose ${en["problem_report.title"]} at the top of the page to report it.`,
+    es: `Waitron no tiene tipos de IVA para el país y el territorio fiscal de este local, que quedaron fijados al configurar el servidor, así que reintentarlo no servirá. Es un fallo de Waitron; elige ${es["problem_report.title"]} en la parte superior de la página para comunicarlo.`,
+  },
   "venue.time_zone_invalid": {
     en: en["zone_repair.invalid_zone"],
     es: es["zone_repair.invalid_zone"],
@@ -2014,8 +2018,8 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
     es: "Elige un tipo de IVA para consumo en el local.",
   },
   setTakeawayVatClass: {
-    en: "Choose a takeaway VAT rate or clear it to use the eat-in rate.",
-    es: "Elige un tipo de IVA para llevar o quítalo para usar el de consumo en el local.",
+    en: "Choose a takeaway VAT rate or clear it to use the Eat-in VAT.",
+    es: "Elige un tipo de IVA para llevar o quítalo para usar el IVA para comer aquí.",
   },
   lines: {
     en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",

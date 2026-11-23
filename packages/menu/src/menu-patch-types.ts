@@ -18,9 +18,9 @@ export interface MenuPatchChange {
 
 /** The only fields a patch may change, per kind of target; anything else is refused. */
 export const PATCH_FIELDS: { readonly [K in MenuPatchTarget["kind"]]: readonly string[] } = {
-  offer: ["name", "customerName", "kitchenName", "description", "image", "price", "vatClass"],
-  variant: ["name", "customerName", "kitchenName", "image", "price", "vatClass"],
-  extra: ["name", "customerName", "kitchenName", "image", "price", "vatClass"],
+  offer: ["name", "customerName", "kitchenName", "description", "image", "price"],
+  variant: ["name", "customerName", "kitchenName", "image", "price"],
+  extra: ["name", "customerName", "kitchenName", "image", "price"],
   option_label: ["name", "customerName", "kitchenName"],
   list: ["name", "customerName", "kitchenName"],
   section: ["internalName", "names", "image"],

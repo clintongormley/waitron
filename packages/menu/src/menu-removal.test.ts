@@ -23,6 +23,7 @@ import {
   updateProduct,
 } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
+import { saveBodyOf } from "../test/save-body.js";
 import { addMember, addProducts, createSectionIn, replaceMember } from "./sections.js";
 import { listProductVariants, setMenuVariantPrice, setProductVariants } from "./variants.js";
 
@@ -225,7 +226,7 @@ describe("a product made Inactive comes off every menu", () => {
     const r = await removalFixture();
     await app(async (tx) => {
       const value = await readProductEditor(tx, r.omelette);
-      await saveProductEditor(tx, r.omelette, { ...value, active: false }, "en");
+      await saveProductEditor(tx, r.omelette, { ...saveBodyOf(value), active: false }, "en");
     });
     await expectOffEveryMenu(r, r.omelette);
     await expectStillOnEveryMenu(r, r.croquette);
@@ -448,7 +449,12 @@ describe("a variant made Inactive loses its price on every menu", () => {
       (r) =>
         app(async (tx) => {
           const value = await readProductEditor(tx, r.omeletteHalf);
-          await saveProductEditor(tx, r.omeletteHalf, { ...value, active: false }, "en");
+          await saveProductEditor(
+            tx,
+            r.omeletteHalf,
+            { ...saveBodyOf(value), active: false },
+            "en",
+          );
         }),
     ],
     [
@@ -459,7 +465,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
           const variants = value.variants.map((variant) =>
             variant.id === r.omeletteHalf ? { ...variant, active: false } : variant,
           );
-          await saveProductEditor(tx, r.omelette, { ...value, variants }, "en");
+          await saveProductEditor(tx, r.omelette, { ...saveBodyOf(value), variants }, "en");
         }),
     ],
     [
@@ -562,7 +568,7 @@ describe("saving a product or variant that was Inactive already", () => {
       const editorSave = (id: string) =>
         app(async (tx) => {
           const value = await readProductEditor(tx, id);
-          await saveProductEditor(tx, id, { ...value, active: false }, "en");
+          await saveProductEditor(tx, id, { ...saveBodyOf(value), active: false }, "en");
         });
       const keepOnlyWhole = () =>
         app(async (tx) => {

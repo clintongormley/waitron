@@ -84,7 +84,7 @@ describe("applyMenuPatch", () => {
     expect(patched.offers[soup]!.grossPrice).toBeNull();
   });
 
-  it("patches a variant's price and VAT class and leaves its dish alone", async () => {
+  it("patches a variant's price and leaves its dish alone", async () => {
     const { f, document } = await liveLunch();
     const lemonade = await menuItem(f, f.lemonade);
     const before = document.offers[lemonade]!;
@@ -93,17 +93,14 @@ describe("applyMenuPatch", () => {
     const target = { kind: "variant", menuItemId: lemonade, variantId: f.large };
     const patched = applyMenuPatch(
       document,
-      parseMenuPatch([
-        { target, field: "price", value: "4.25" },
-        { target, field: "vatClass", value: "general" },
-      ]),
+      parseMenuPatch([{ target, field: "price", value: "4.25" }]),
       languages,
     );
     const offer = patched.offers[lemonade]!;
     const variant = offer.variants.find((v) => v.id === f.large)!;
     expect(variant.unitPrice).toBe("4.25");
     expect(variant.menuPrice).toBeNull();
-    expect(variant.vatClass).toBe("general");
+    expect(variant.vatClass).toBe(large.vatClass);
     expect({ ...offer, variants: [] }).toEqual({ ...before, variants: [] });
   });
 
@@ -146,7 +143,6 @@ describe("applyMenuPatch", () => {
             description: { en: "Fresh" },
             image: "soda.jpg",
             price: "9",
-            vatClass: "general",
           }[field],
         })),
       ),
@@ -161,7 +157,6 @@ describe("applyMenuPatch", () => {
       image: "soda.jpg",
       unitPrice: "9.00",
       grossPrice: "9.00",
-      vatClass: "general",
     });
   });
 
@@ -387,7 +382,6 @@ describe("applyMenuPatch on every copy", () => {
       document,
       parseMenuPatch([
         { target, field: "price", value: "0.6" },
-        { target, field: "vatClass", value: "general" },
         { target, field: "image", value: " lemon.jpg " },
       ]),
       languages,
@@ -397,7 +391,7 @@ describe("applyMenuPatch on every copy", () => {
     );
     expect(items).toHaveLength(2);
     for (const item of items) {
-      expect(item).toMatchObject({ price: "0.60", vatClass: "general", image: "lemon.jpg" });
+      expect(item).toMatchObject({ price: "0.60", image: "lemon.jpg" });
       expect(item).not.toHaveProperty("unitPrice");
       expect(item.presentation).toEqual(
         before[0]!.items.find((candidate) => candidate.productId === f.extraLemon)!.presentation,
@@ -763,39 +757,22 @@ describe("a section shown through folders fixing different languages", () => {
   });
 });
 
-describe("the takeaway VAT class", () => {
-  it("is no longer patched: a change naming it is refused as a field outside the list", () => {
-    const targets = [
-      { kind: "offer", menuItemId: "i" },
-      { kind: "variant", menuItemId: "i", variantId: "v" },
-      { kind: "extra", listId: "l", productId: "p" },
-    ];
-    for (const target of targets)
-      expect(
-        refusal(() => parseMenuPatch([{ target, field: "takeawayVatClass", value: "general" }])),
-      ).toEqual({ code: "menu_patch.invalid", params: { change: 0, field: "field" } });
-  });
-
-  it("patching only the served class leaves the takeaway class as the live menu holds it", async () => {
-    // Lemonade has no takeaway class of its own, so the menu holds its served class for both.
-    const { f, document } = await liveLunch();
-    const lemonade = await menuItem(f, f.lemonade);
-    expect(document.offers[lemonade]).toMatchObject({
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
-    });
-    const patched = applyMenuPatch(
-      document,
-      parseMenuPatch([
-        { target: { kind: "offer", menuItemId: lemonade }, field: "vatClass", value: "general" },
-      ]),
-      languages,
-    );
-    expect(patched.offers[lemonade]).toMatchObject({
-      vatClass: "general",
-      takeawayVatClass: "reduced",
-    });
-  });
+describe("the VAT classes", () => {
+  it.each(["vatClass", "takeawayVatClass"])(
+    "%s is no longer patched: a change naming it is refused as a field outside the list",
+    (field) => {
+      const targets = [
+        { kind: "offer", menuItemId: "i" },
+        { kind: "variant", menuItemId: "i", variantId: "v" },
+        { kind: "extra", listId: "l", productId: "p" },
+      ];
+      for (const target of targets)
+        expect(refusal(() => parseMenuPatch([{ target, field, value: "general" }]))).toEqual({
+          code: "menu_patch.invalid",
+          params: { change: 0, field: "field" },
+        });
+    },
+  );
 });
 
 describe("parseMenuPatch", () => {
@@ -819,7 +796,6 @@ describe("parseMenuPatch", () => {
       description: { en: "Fresh" },
       image: "a.jpg",
       price: "2",
-      vatClass: "zero",
     };
     const body = Object.entries(PATCH_FIELDS).flatMap(([kind, fields]) =>
       fields.map((field) => ({
@@ -906,8 +882,6 @@ describe("parseMenuPatch", () => {
       [offer, "price", "abc"],
       [offer, "price", "-1"],
       [offer, "price", 5],
-      [offer, "vatClass", "luxury"],
-      [offer, "vatClass", null],
       [offer, "name", "   "],
       [offer, "name", null],
       [section, "internalName", ""],

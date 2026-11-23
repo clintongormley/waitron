@@ -23,9 +23,8 @@ const MADRID: VenueDefaults = {
   receiptLanguage: "es-ES",
   receiptLanguageChoices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   fixedReceiptLanguage: null,
-  defaultProductVatClass: "reduced",
   defaultTakeawayVatRate: "10.00",
-  takeawayVat: false,
+  takeawayVat: true,
   vatRates: ["0.00", "4.00", "10.00", "21.00"],
 };
 const BARCELONA: VenueDefaults = {
@@ -91,12 +90,12 @@ const viewing = (panel: Panel) => panel.shadowRoot!.querySelector("[data-test=ed
 
 it("Keep on leaving with a changed draft keeps it", async () => {
   const { app, panel } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
   expect(unload()).toBe(true);
   const request = leave(app);
   await choose(app, "keep");
   expect(await request).toBe("kept");
-  expect(field(panel, "defaultProductVatClass")!.value).toBe("zero");
+  expect(field(panel, "defaultTakeawayVatRate")!.value).toBe("0.00");
   expect(unload()).toBe(true);
 });
 
@@ -117,26 +116,26 @@ it("Discard on leaving with a changed draft restores the saved values without a 
 
 it("a reverted draft leaves without asking", async () => {
   const { app, panel } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
-  await change(panel, "defaultProductVatClass", "reduced");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
+  await change(panel, "defaultTakeawayVatRate", "10.00");
   expect(unload()).toBe(false);
   expect(await leave(app)).toBe("proceeded");
 });
 
 it("reconnecting keeps the draft and its protection", async () => {
   const { app, panel } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
   panel.remove();
   expect(unload()).toBe(false);
   app.shadowRoot!.prepend(panel);
   await panel.updateComplete;
-  await expect.poll(() => field(panel, "defaultProductVatClass")?.value).toBe("zero");
+  await expect.poll(() => field(panel, "defaultTakeawayVatRate")?.value).toBe("0.00");
   expect(unload()).toBe(true);
 });
 
 it("removing the card releases protection", async () => {
   const { panel } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
   expect(unload()).toBe(true);
   panel.remove();
   expect(unload()).toBe(false);
@@ -144,15 +143,15 @@ it("removing the card releases protection", async () => {
 
 it("being hidden ends an unchanged edit and keeps a changed one", async () => {
   const { panel } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
   panel.dispatchEvent(new Event("venue-settings-hidden"));
   await panel.updateComplete;
-  expect(field(panel, "defaultProductVatClass")!.value).toBe("zero");
+  expect(field(panel, "defaultTakeawayVatRate")!.value).toBe("0.00");
   expect(unload()).toBe(true);
-  await change(panel, "defaultProductVatClass", "reduced");
+  await change(panel, "defaultTakeawayVatRate", "10.00");
   panel.dispatchEvent(new Event("venue-settings-hidden"));
   await panel.updateComplete;
-  expect(field(panel, "defaultProductVatClass")).toBeNull();
+  expect(field(panel, "defaultTakeawayVatRate")).toBeNull();
   expect(viewing(panel)).toBe(true);
   expect(unload()).toBe(false);
 });
@@ -207,7 +206,7 @@ it("a live read that moves an untouched draft to a newly fixed language turns pr
 
 it("turning read-only with a changed draft drops the draft and its protection", async () => {
   const { app, panel, writes } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
+  await change(panel, "defaultTakeawayVatRate", "0.00");
   expect(unload()).toBe(true);
   panel.readOnly = true;
   await panel.updateComplete;

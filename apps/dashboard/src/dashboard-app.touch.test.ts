@@ -187,7 +187,11 @@ it.each<[number, number, "capped" | "page", number]>([
       listMenus: async () => [{ id: "menu-lunch", name: "Lunch Menu", active: true }],
       listLibraryProducts: async () => products,
       listCategories: async () => [],
-      getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
+      getMenuSettings: async () => ({
+        defaultProductVatClass: "general",
+        defaultColor: null,
+        dineInVatRate: "10.00",
+      }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       getMenuStructure: async () => structure,
       getMenuStatus: async () => status,
