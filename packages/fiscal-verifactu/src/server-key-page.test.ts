@@ -24,22 +24,22 @@ const zone = { timeZone: "Atlantic/Canary" };
 describe("serverKeyPage", () => {
   it("prints the new key, its rows and the three warnings in English", () => {
     expect(serverKeyPage(document, { locale: "en", ...zone })).toEqual({
-      title: "Server key",
+      title: "Box key",
       intro:
-        "With this key and its matching backup, the venue's server can be recovered with its own identity.",
+        "With this key and its matching backup, the venue's box can be recovered with its own identity.",
       rows: [
         { label: "Legal name", value: "Waitron SL" },
         { label: "NIF", value: "89890001K" },
         { label: "Venue", value: "Local principal" },
         { label: "Environment", value: "Production" },
         { label: "Software ID", value: "W1" },
-        { label: "Server ID", value: shortNodeId(document.nodeKey.nodeId) },
+        { label: "Box ID", value: shortNodeId(document.nodeKey.nodeId) },
         { label: "Key name", value: "2026-09-02 · TEST", mono: true },
         { label: "Created", value: "18 October 2026, 13:00 WEST" },
       ],
       secret: { label: "Key", text: encodeRecoveryKey(document.nodeKey.secret), qr: true },
       notes: [
-        "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the server.",
+        "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the box.",
         "A backup in Waitron Cloud needs your Cloud login. This pack is not a backup of your sales.",
         "Keep older packs for older backups. A new key does not unlock backups made with an older key.",
       ],

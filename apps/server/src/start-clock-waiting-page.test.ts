@@ -192,7 +192,7 @@ it("with the key, shows the done screen's step with both times and their dates",
     expect(await page.getByRole("button", { name: words.thisDevice }).isVisible()).toBe(true);
   }));
 
-it("takes the server key as printed on the recovery pack, typed in lower case", () =>
+it("takes the box key as printed on the recovery pack, typed in lower case", () =>
   withPage("en-GB", async (page) => {
     await open(page, 0);
     await enterKey(page, encodeRecoveryKey(KEY).toLowerCase());

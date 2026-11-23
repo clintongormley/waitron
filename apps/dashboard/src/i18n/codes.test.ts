@@ -1172,7 +1172,7 @@ it.each([
   [
     "handover.operation_unknown",
     "That box has no record of this handover. Open the Servers page on the current main box to check the current handover.",
-    "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
+    "Ese servidor no tiene constancia de este traspaso. Abre la página Servidores en el servidor principal actual para consultar el traspaso actual.",
   ],
   [
     "handover.final_copy_changed",
@@ -1187,12 +1187,12 @@ it.each([
   [
     "handover.not_a_spare",
     "This box is not a spare and cannot accept this handover. Open the Servers page on the main box and choose a joined spare.",
-    "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
+    "Este servidor no es de reserva y no puede aceptar este traspaso. Abre la página Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   ],
   [
     "handover.membership_mismatch",
     "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check the Servers page on the current main box before trying again.",
-    "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
+    "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa la página Servidores en el servidor principal actual antes de volver a intentarlo.",
   ],
   [
     "handover.indicator_untrusted",

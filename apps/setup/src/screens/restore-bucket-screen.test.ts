@@ -159,13 +159,13 @@ describe("SetupRestoreBucketScreen", () => {
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(3); // kit, environment, confirmation
     expect(fieldMessages(el)).toEqual([
       "Choose your recovery pack or kit file, or paste the kit.",
-      "Confirm that no other running server has newer data.",
+      "Confirm that no other running box has newer data.",
     ]);
     expect((q(el, "[data-test=kit]") as unknown as { error: string }).error).toBe(
       "Choose your recovery pack or kit file, or paste the kit.",
     );
     expect(q(el, "#acknowledge-error")!.textContent).toBe(
-      "Confirm that no other running server has newer data.",
+      "Confirm that no other running box has newer data.",
     );
   });
 
@@ -403,7 +403,7 @@ describe("SetupRestoreBucketScreen", () => {
     [
       "a pack made with no bucket copy",
       () => recoveryPackPdf(null),
-      "This recovery pack holds no bucket copy code: the server had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
+      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
       "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
     ],
     [
@@ -491,11 +491,11 @@ describe("SetupRestoreBucketScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(fieldMessages(el)).toEqual(["Confirm that the old server is switched off for good."]);
+    expect(fieldMessages(el)).toEqual(["Confirm that the old box is switched off for good."]);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(
-      "Confirm that the old server is switched off for good.",
+      "Confirm that the old box is switched off for good.",
     );
     tick(el, "[data-test=old-box-gone]");
     await el.updateComplete;
@@ -775,7 +775,7 @@ describe("SetupRestoreBucketScreen", () => {
         "oldBoxGone",
         { liveSince: "2026-09-23T11:58:00.000Z" },
         "old-box-gone",
-        "Check your answer about the old server.",
+        "Check your answer about the old box.",
       ],
       [
         "venueConfirmed",
@@ -872,12 +872,12 @@ describe("SetupRestoreBucketScreen", () => {
       await el.updateComplete;
       paste(el, "k");
       await el.updateComplete;
-      expect(fieldMessages(el)).toEqual(["Confirm that no other running server has newer data."]);
+      expect(fieldMessages(el)).toEqual(["Confirm that no other running box has newer data."]);
       paste(el, " ");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([
         "Choose your recovery pack or kit file, or paste the kit.",
-        "Confirm that no other running server has newer data.",
+        "Confirm that no other running box has newer data.",
       ]);
       paste(el, "k");
       tick(el, "[data-test=acknowledge]");

@@ -153,7 +153,7 @@ const fakeClock = () =>
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
 const RESTORE_LEAD =
-  "It is very important that the server's time is correct, and it can't check its time over the Internet right now. Either:";
+  "It is very important that the box's time is correct, and it can't check its time over the Internet right now. Either:";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
 const RESTORE_FIX = "fix the Internet connection, and this page carries on by itself, or";
 const RESTORE_OPEN = "open this page on a phone or till on the venue's network, and carry on there";
@@ -162,7 +162,7 @@ const choicesOf = (el: Entry) =>
     li.textContent!.replace(/\s+/g, " ").trim(),
   );
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
-const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
+const DIFFER = "It is very important that the box's time is set correctly. Which time is correct:";
 const noSecondClock = {
   ...clock,
   usable: clock.usable.filter((r) => r.source === "box"),
@@ -784,7 +784,7 @@ it("a box clock before this release shows only the release line", async () => {
   const { el } = await mount(prepare);
   await ready(el);
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-  expect(text(el)).toContain("The server time is earlier than this Waitron release.");
+  expect(text(el)).toContain("The box's time is earlier than this Waitron release.");
   expect(formError(el)).toBe("");
 });
 it("sends no installation code", async () => {
@@ -995,7 +995,7 @@ it("a clock refusal shows each clock's reading and no countdown, and waits for C
     expect(text(el)).not.toContain(WHY_REFUSED);
     expect(text(el)).not.toMatch(/ask for help/);
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30:00"],
+      ["Box time", "18 October 2026 at 14:30:00"],
       ["This device", "18 October 2026 at 14:30:45"],
     ]);
     expect(text(el)).not.toContain(new Date(instant).toISOString());
@@ -2216,7 +2216,7 @@ it.each<[string, string | undefined, boolean, () => Promise<Entry>]>([
     async () => {
       const { el } = await pressed(undefined, { ...clock, releaseBlocked: true });
       await vi.waitFor(() =>
-        expect(text(el)).toContain("The server time is earlier than this Waitron release."),
+        expect(text(el)).toContain("The box's time is earlier than this Waitron release."),
       );
       return el;
     },
@@ -2482,7 +2482,7 @@ it.each(["", "E1"])(
     expect(detailRows(el, "venue-review")).toContainEqual(["Country", country]);
   },
 );
-it("clocks that differ show one time per clock and ask which is correct; The server and Both times are wrong send nothing", async () => {
+it("clocks that differ show one time per clock and ask which is correct; The box and Both times are wrong send nothing", async () => {
   const decision = {
     ...clock,
     usable: [
@@ -2496,7 +2496,7 @@ it("clocks that differ show one time per clock and ask which is correct; The ser
     const { el, prepare } = await pressed(undefined, decision);
     await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
     expect(detailRows(el, "clock-times")).toEqual([
-      ["Server time", "18 October 2026 at 14:30"],
+      ["Box time", "18 October 2026 at 14:30"],
       ["This device", "Unavailable"],
     ]);
     expect(text(el)).not.toMatch(/ask for help/);
@@ -2505,7 +2505,7 @@ it("clocks that differ show one time per clock and ask which is correct; The ser
     await el.updateComplete;
     expect(prepare.mock.calls).toHaveLength(sent);
     expect(text(el)).toContain(
-      "Please correct the time on this device and then reconnect to the server.",
+      "Please correct the time on this device and then reconnect to the box.",
     );
     expect(text(el)).not.toContain(DIFFER);
     expect(action(el)).toBe("Compare the clocks again");
@@ -2642,13 +2642,13 @@ const choices = (el: LitElement) =>
   );
 const deviceLine = (el: LitElement) =>
   el.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim();
-it("a restore on clocks that differ sets the server's clock from This device and makes the series with nobody pressing", async () => {
+it("a restore on clocks that differ sets the box's clock from This device and makes the series with nobody pressing", async () => {
   const answer = settable({ status: "set" });
   const prepare = vi.fn(async (request: { proposal: unknown }) => answer(request.proposal));
   const { el } = await mount(prepare);
   await ready(el);
   await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
-  expect(choices(el)).toEqual(["The server", "This device", "Both times are wrong"]);
+  expect(choices(el)).toEqual(["The box", "This device", "Both times are wrong"]);
   const before = prepare.mock.calls.length;
   await userEvent.click(button(el, "device-correct"));
   await vi.waitFor(() =>
@@ -2674,11 +2674,11 @@ it("a restore on clocks that differ sets the server's clock from This device and
 it.each([
   [
     "later",
-    "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
   ],
   [
     "unverified",
-    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
   ],
 ])("a restore's refusal for %s says what happened and what to do", async (reason, line) => {
   const answer = settable({ status: "refused", reason });
@@ -2704,10 +2704,10 @@ it("a restore's later minute after the set says this device's time is probably w
   await userEvent.click(button(el, "device-correct"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim()).toBe(
-      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
     ),
   );
-  expect(deviceLine(el)).toBe("The server's time is now set from this device.");
+  expect(deviceLine(el)).toBe("The box's time is now set from this device.");
 });
 it("a handover start sets the spare's clock from This device and carries on to the series", async () => {
   const answer = settable({ status: "set" }, () => promotionSelected);

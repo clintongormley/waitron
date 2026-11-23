@@ -1760,7 +1760,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "handover.operation_unknown": {
     en: "That box has no record of this handover. Open the Servers page on the current main box to check the current handover.",
-    es: "Ese servidor no tiene constancia de este traspaso. Abre Servidores en el servidor principal actual para consultar el traspaso actual.",
+    es: "Ese servidor no tiene constancia de este traspaso. Abre la página Servidores en el servidor principal actual para consultar el traspaso actual.",
   },
   "handover.final_copy_changed": {
     en: "The old box’s venue data changed after its final copy was made. Keep both boxes connected while the copy is requested again.",
@@ -1772,7 +1772,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "handover.not_a_spare": {
     en: "This box is not a spare and cannot accept this handover. Open the Servers page on the main box and choose a joined spare.",
-    es: "Este servidor no es de reserva y no puede aceptar este traspaso. Abre Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
+    es: "Este servidor no es de reserva y no puede aceptar este traspaso. Abre la página Servidores en el servidor principal y elige un servidor de reserva que ya se haya unido.",
   },
   "handover.promotion_running": {
     en: "This box is being made the main box right now, so it did not accept this handover. Nothing was changed. If that does not finish, start the handover again.",
@@ -1780,11 +1780,11 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "handover.membership_mismatch": {
     en: "The boxes disagree about the venue or its list of boxes, or the sender is not listed as main. Check the Servers page on the current main box before trying again.",
-    es: "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa Servidores en el servidor principal actual antes de volver a intentarlo.",
+    es: "Los servidores no coinciden en el local o en su lista de servidores, o el remitente no figura como principal. Revisa la página Servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.not_main_box": {
     en: "This box is not the main box. Open the Servers page at the main box’s address to start a handover.",
-    es: "Este servidor no es el principal. Abre Servidores en la dirección del servidor principal para iniciar un traspaso.",
+    es: "Este servidor no es el principal. Abre la página Servidores en la dirección del servidor principal para iniciar un traspaso.",
   },
   "handover.venue_not_supported": {
     en: "This venue’s way of filing invoices does not support handover yet. Choose Stop and keep using the main box.",
@@ -1816,7 +1816,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "handover.membership_changed": {
     en: "The venue’s details or its list of boxes changed during this handover. Check the Servers page on the current main box before starting a new handover.",
-    es: "Los datos del local o su lista de servidores han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
+    es: "Los datos del local o su lista de servidores han cambiado durante el traspaso. Revisa la página Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
     en: "The spare does not hold this box's backup settings, so it did not accept the handover. This box keeps selling, and sends the spare its settings by itself. Try again in a minute.",
@@ -1844,7 +1844,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "handover.settings_changed": {
     en: "This box’s settings changed during the handover. Check the Servers page on the current main box before starting a new handover.",
-    es: "Los ajustes de este servidor han cambiado durante el traspaso. Revisa Servidores en el servidor principal actual antes de iniciar otro.",
+    es: "Los ajustes de este servidor han cambiado durante el traspaso. Revisa la página Servidores en el servidor principal actual antes de iniciar otro.",
   },
   "handover.indicator_untrusted": {
     en: "The final copy’s description could not be verified as coming from the old box. Check the list of boxes on the current main box before trying again.",

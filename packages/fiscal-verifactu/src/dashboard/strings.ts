@@ -511,7 +511,7 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.dialog.busy": "Comprobando con la AEAT…",
   "aeat_certificate.refused.too_large": "Este archivo es demasiado grande para ser un certificado.",
   "aeat_certificate.refused.unavailable":
-    "La caja no pudo comprobar este certificado. Inténtalo de nuevo o pulsa Cancelar para detenerte.",
+    "El servidor no pudo comprobar este certificado. Inténtalo de nuevo o pulsa Cancelar para detenerte.",
   "aeat_certificate.refused.unreadable":
     "Waitron no puede leer este archivo. Elige el archivo .pfx o .p12.",
   "aeat_certificate.refused.old_encryption":

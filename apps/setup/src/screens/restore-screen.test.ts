@@ -325,7 +325,7 @@ describe("SetupRestoreScreen", () => {
     [
       "the confirmation",
       { artifact: true, recoveryKey: true },
-      "Confirm that no other running server has newer data.",
+      "Confirm that no other running box has newer data.",
     ],
   ])("lists only %s when it is the one decision missing", async (_, decisions, message) => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
@@ -350,10 +350,10 @@ describe("SetupRestoreScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(fieldMessages(el)).toEqual(["Confirm that the old server is switched off for good."]);
+    expect(fieldMessages(el)).toEqual(["Confirm that the old box is switched off for good."]);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(
-      "Confirm that the old server is switched off for good.",
+      "Confirm that the old box is switched off for good.",
     );
     const box = q<HTMLInputElement>(el, "[data-test=old-box-gone]")!;
     box.checked = true;
@@ -475,7 +475,7 @@ describe("SetupRestoreScreen", () => {
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
       await fill(el, { artifact: true, recoveryKey: true });
-      expect(fieldMessages(el)).toEqual(["Confirm that no other running server has newer data."]);
+      expect(fieldMessages(el)).toEqual(["Confirm that no other running box has newer data."]);
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
       await fill(el, { acknowledge: true });
       expect(fieldMessages(el)).toEqual([]);

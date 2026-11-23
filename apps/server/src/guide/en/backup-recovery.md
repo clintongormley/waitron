@@ -49,7 +49,7 @@ If the setup’s own record is damaged, the page may offer a warned **Start agai
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
 bucket**, as on a new box; restoring needs the backup encryption key (for a backup file) or the recovery kit
-(for your bucket), and that backup's server key. After
+(for your bucket), and that backup's box key. After
 **Start again**, **Reconnect** opens "Set up this box", where you choose how to set up this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
 there to restore.
@@ -75,7 +75,7 @@ Use the box's secure connection. If your browser does not trust it, choose **Set
 connection** on the repair page first. **Check again** rereads the connection without running
 a repair. **Stop** ends this attempt; you can close the tab or check again. If repair keeps
 failing, stop here. This page cannot repair every saved certificate layout or replace a separately
-installed certificate. For a separately installed certificate, check the server’s HTTPS address
+installed certificate. For a separately installed certificate, check the box’s HTTPS address
 and stop if it shows a warning. If your device blocks certificate installation, use a venue
 device that allows it.
 
@@ -89,9 +89,9 @@ choose **Join or recover** on the first screen. On "Join or recover an existing 
 **Restore from my bucket** for the continuous copy in your own storage bucket. For a Waitron Cloud
 copy, choose **Restore from backup** and then **Restore from Waitron Cloud**.
 
-**Add a mirror node**: this server joins the primary and keeps a copy of the restaurant's data.
+**Add a mirror node**: this box joins the primary and keeps a copy of the restaurant's data.
 Once it has joined, it can take over: see [Hand over to a spare box](servers.md#hand-over) and
-[Start here when the main box has failed](servers.md#emergency). A new server cannot join a primary
+[Start here when the main box has failed](servers.md#emergency). A new box cannot join a primary
 that is already gone: to recover then, choose a restore option.
 
 For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Backup encryption key**,
@@ -111,26 +111,26 @@ Choose a file no larger than 4 GiB. A slow upload can take up to 12 hours.
 If the upload does not finish, keep your selected file, improve the connection and try again.
 
 Then choose **Review backup**. The page shows the selected backup: its source, business, venue,
-date, node and server key. Check those details before continuing. Keep production and
+date, node and box key. Check those details before continuing. Keep production and
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the selected copy's **Server key** to authorise recovery. Keep the earlier pack too if it holds that key.
+Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the selected copy's **Box key** to authorise recovery. Keep the earlier pack too if it holds that key.
 
-On a test server restored from Waitron Cloud, if **Cloud services** says the saved reconnection
+On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
 approve the new request in Cloud.
 
 ## Prove access to the selected backup {#proof}
 
 At the end of Preparation, choose **Download recovery pack (PDF)**. Print the pack or keep it
-somewhere other than the server. If setup offers **Save as a file**, keep that file with your
+somewhere other than the box. If setup offers **Save as a file**, keep that file with your
 other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose your recovery pack, or an older recovery PDF,
-that holds the server key for this backup in **Recovery PDF**; or type the grouped key printed on it
-in **Server key**. If the pack does not hold the server key, the page says so and, when the pack
-records it, names the pack or the key name to look for. A pack or sheet with a newer server key may
+that holds the box key for this backup in **Recovery PDF**; or type the grouped key printed on it
+in **Box key**. If the pack does not hold the box key, the page says so and, when the pack
+records it, names the pack or the key name to look for. A pack or sheet with a newer box key may
 not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
 person recovering this taxpayer, across all venues." and "These details are correct."
 
@@ -167,7 +167,7 @@ If the box says the bucket copy is not running, open **Backups** and press **Sta
 which starts it with the settings it already has. If it stops again, choose **Change bucket** and
 press **Test** to check the bucket.
 
-If the bell or **Box status** says old copies in the bucket or on the standby server are not being
+If the bell or **Box status** says old copies in the bucket or on the standby box are not being
 tidied, they are being kept. Waitron retries daily while the copy is running normally and clears the
 warning when it finds the marker. To request a
 fresh marker sooner, a Manager or Admin can use **Box status**, **Restart the box** when you are not
@@ -186,9 +186,9 @@ browser storage is unavailable. The observations stay in this browser and are no
 recovery request. The report reads the storage available at this Waitron address; it does not
 fetch observations from other devices.
 
-Restoring replaces the database already on this server.
+Restoring replaces the database already on this box.
 
-Enter the server key, tick both statements and "These details are correct.", then choose
+Enter the box key, tick both statements and "These details are correct.", then choose
 **Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
@@ -197,25 +197,25 @@ check that both are right, then choose **Confirm the time**. It then shows
 the page stops until you choose **Proceed** again. Before **Proceed**, **Edit these details** goes
 back to choosing the backup.
 
-Tick the confirmation the page shows — "I confirm no other running server has newer restaurant
+Tick the confirmation the page shows — "I confirm no other running box has newer restaurant
 data." for a backup file or bucket copy (for a bucket copy, also "This is my business. Restore it
-onto this server."), or "I confirm the old server and surviving peers are stopped, and I accept
+onto this box."), or "I confirm the old box and surviving peers are stopped, and I accept
 losing changes after this snapshot." for a Waitron Cloud copy — and choose **Restore backup**,
 **Restore from my bucket** or **Restore this snapshot**.
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
-refuses, resolve its cause and choose **Compare the clocks again**. If the server cannot check its time over the internet and the
-clocks differ, after **Proceed** the page shows the server's time and this device's and asks which is correct: **The
-server**, **This device** or **Both times are wrong**. **This device** sets the server's time from
+refuses, resolve its cause and choose **Compare the clocks again**. If the box cannot check its time over the internet and the
+clocks differ, after **Proceed** the page shows the box's time and this device's and asks which is correct: **The
+box**, **This device** or **Both times are wrong**. **This device** sets the box's time from
 the device you are using, and the page carries on by itself. After either of the other two, correct
 this device's time, reconnect to the box, then choose **Compare the clocks again**.
 
-If, after you choose the restore button, the server needs its time confirmed again, the page where
-you chose it shows the server's time and this device's: check that both are right, then choose
-**Confirm the time**, or **This device** if the server's time is wrong. If that page was closed, open
-any of the server's pages on a phone, computer or till on the venue's network and enter the selected
-backup's server key to see the same step. The restore then carries on by
-itself. If the server instead shows a page saying it could not make its new invoice series, choose
+If, after you choose the restore button, the box needs its time confirmed again, the page where
+you chose it shows the box's time and this device's: check that both are right, then choose
+**Confirm the time**, or **This device** if the box's time is wrong. If that page was closed, open
+any of the box's pages on a phone, computer or till on the venue's network and enter the selected
+backup's box key to see the same step. The restore then carries on by
+itself. If the box instead shows a page saying it could not make its new invoice series, choose
 **Retry a normal boot**, or **Throw this restore away** where that page offers it and restore again.
 
 If the backup has no active administrator with a password, choose another backup.
@@ -224,16 +224,16 @@ If the backup has no active administrator with a password, choose another backup
 
 If the downloaded copy did not pass its checks, try again or choose another backup.
 
-If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.
+If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.
 
 Until you choose the restore button, the page keeps what you entered only while it stays open.
 Changing the file, key or environment discards what it checked, and a reload opens the page's
 first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
 restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
 restore again. If the box refuses the
-restore, the page returns to the form and you enter the server key again.
+restore, the page returns to the form and you enter the box key again.
 
-Once you choose the restore button, the page says "Provisioning this server" and asks you to keep it
+Once you choose the restore button, the page says "Provisioning this box" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start
 runs it; if it stops while writing the backup into place, every later start runs it again.
 
@@ -255,6 +255,6 @@ AEAT already has them.
 ## An invoice conflict on a running box {#invoice-conflict}
 
 If the box still has your orders and payments but stops issuing invoices after an identity
-conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with its current server
+conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with its current box
 key. That procedure switches the live identity without restoring a backup. It keeps the rejected
 record and its open case. Take any old or copied box offline before continuing.

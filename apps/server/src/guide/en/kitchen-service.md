@@ -61,7 +61,7 @@ your station still holds, you receive a correction while the original copy stays
 Read the correction alongside the original dish before you acknowledge it. For example, changing
 Alex's note to Fresh tools leaves Separate pan on the original card and puts Fresh tools in the
 notice. Acknowledging dismisses the notice; it does not rewrite the original card. An unacknowledged
-allergy notice remains available across a server restart or a new business day.
+allergy notice remains available across a box restart or a new business day.
 
 A correction covers only the quantity still to serve. Fully served or cancelled work receives no
 new allergy notice. If a dish moves to another station, its original copy follows it, together
@@ -343,7 +343,7 @@ On the till, an unsent dish whose period ended earlier the same business day sho
 and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
 counter, the till first lists such dishes and asks you to check with the station.
 **Station agreed — send** sends them, and **Remove them** takes them off the order. On a park the
-button reads **Station agreed — save**. The same window opens when the server finds such a dish before
+button reads **Station agreed — save**. The same window opens when the box finds such a dish before
 the till has marked it.
 
 A dish saved before its period ended on a parked counter order asks the same when you place it

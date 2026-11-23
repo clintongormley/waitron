@@ -17,7 +17,7 @@ cifrado moderno. Las instrucciones de exportación están en la pantalla del cer
 Si se rechaza el certificado al terminar una configuración interrumpida, corrígelo primero. Después
 se te pedirá que confirmes de nuevo que eres quien inició la configuración antes de continuar.
 
-Si la caja no pudo comprobar el certificado, pulsa **Siguiente** de nuevo en la configuración o **Guardar** de nuevo en el diálogo de sustitución. Si la comprobación no consigue terminar tras varios intentos, exporta de nuevo el certificado con cifrado moderno o elige otro archivo.
+Si el servidor no pudo comprobar el certificado, pulsa **Siguiente** de nuevo en la configuración o **Guardar** de nuevo en el diálogo de sustitución. Si la comprobación no consigue terminar tras varios intentos, exporta de nuevo el certificado con cifrado moderno o elige otro archivo.
 
 Si la configuración se detuvo después de crear las series de facturas, pulsa **Reconectar** y después **Empezar de nuevo**. Empezar de nuevo borra la configuración incompleta para que puedas introducirla otra vez.
 

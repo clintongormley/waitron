@@ -12,8 +12,8 @@ describe("stepped-down page wording", () => {
     ],
     [
       "es-ES",
-      "El local ya no funciona con este equipo",
-      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es ",
+      "El local ya no funciona con este servidor",
+      "No hace ventas ni envía nada a Hacienda. El servidor que pasa a llevar el local es ",
       "No se ha podido mostrar esta página.",
     ],
   ] as const)("provides the %s title, body and failure heading", (locale, title, body, failed) => {

@@ -5,5 +5,5 @@ import { currentLocale, t } from "./t.js";
 
 it("starts in British English", () => {
   expect(currentLocale()).toBe("en-GB");
-  expect(t("shell.document_title")).toBe("Waitron — set up your server");
+  expect(t("shell.document_title")).toBe("Waitron — set up your box");
 });

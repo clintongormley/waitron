@@ -77,7 +77,7 @@ export const initialOwnerStrings = {
     interrupted: "La configuración inicial se interrumpió",
     missingDatabase: "Falta la base de datos de configuración.",
     missingAsk:
-      "Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:",
+      "Este servidor no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:",
     reachedNotStarted: "no empezó la activación",
     reachedFiscalStarted: "empezó la activación, sin constancia de que terminara",
     reachedFiscalFinished: "terminó la activación",
@@ -97,11 +97,11 @@ export const initialOwnerStrings = {
     stopped:
       "Esta configuración está detenida y no se ha borrado nada. Reconecta: después, Empezar de nuevo y Recuperar desde una copia muestran lo que borrarían antes de borrar nada.",
     stopNotAccepted:
-      "El equipo no aceptó detener la configuración desde esta página, así que no cambió nada. Solo la detiene desde su propia página con una conexión segura, así que desde esta página Empezar de nuevo y Recuperar desde una copia se rechazan igual. Reconectar lo deja todo como está.",
+      "El servidor no aceptó detener la configuración desde esta página, así que no cambió nada. Solo la detiene desde su propia página con una conexión segura, así que desde esta página Empezar de nuevo y Recuperar desde una copia se rechazan igual. Reconectar lo deja todo como está.",
     stopUnanswered:
-      "Esta página no recibió una respuesta que pudiera leer al detener la configuración. Puede que el equipo se haya reiniciado: Reconectar vuelve a leer la configuración y muestra en qué punto está.",
+      "Esta página no recibió una respuesta que pudiera leer al detener la configuración. Puede que el servidor se haya reiniciado: Reconectar vuelve a leer la configuración y muestra en qué punto está.",
     stopReadUnanswered:
-      "Esta página no recibió una respuesta que pudiera leer del equipo, así que no se ha detenido nada. Empezar de nuevo y Recuperar desde una copia vuelven a preguntar al equipo; Reconectar vuelve a leer la configuración y muestra en qué punto está.",
+      "Esta página no recibió una respuesta que pudiera leer del servidor, así que no se ha detenido nada. Empezar de nuevo y Recuperar desde una copia vuelven a preguntar al servidor; Reconectar vuelve a leer la configuración y muestra en qué punto está.",
     heldLost:
       "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
     noInvoiceSent: "No se envió ninguna factura a la AEAT.",
@@ -114,19 +114,19 @@ export const initialOwnerStrings = {
     keptFault:
       "La base de datos de configuración guarda registros que Waitron nunca borra. Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. No se ofrece borrar esta configuración. Reconectar lo deja todo como está.",
     wipeUnavailable:
-      "Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
+      "Este servidor no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
     wipeMayHaveFiled:
-      "Este equipo no puede demostrar que esta configuración no haya enviado nada a la AEAT, así que no se ofrece borrarla. Reconectar lo deja todo como está.",
+      "Este servidor no puede demostrar que esta configuración no haya enviado nada a la AEAT, así que no se ofrece borrarla. Reconectar lo deja todo como está.",
     wipeUnexpected:
-      "Este equipo encuentra archivos o datos que no espera, así que no se ofrece borrar esta configuración. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      "Este servidor encuentra archivos o datos que no espera, así que no se ofrece borrar esta configuración. Reconectar lo deja todo como está. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     wipeTooLarge:
-      "Esta configuración guarda más de lo que Empezar de nuevo puede comprobar, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      "Esta configuración guarda más de lo que Empezar de nuevo puede comprobar, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     wipeUnreadable:
-      "Este equipo no puede leer algunos archivos de esta configuración, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      "Este servidor no puede leer algunos archivos de esta configuración, así que no se ofrece borrarla. Reconectar lo deja todo como está. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     wipeFault:
       "No se ofrece borrar esta configuración por un fallo de Waitron. Reconectar lo deja todo como está.",
     wipeInsecure:
-      "Para borrar esta configuración hace falta la conexión segura del equipo. Configúrala y abre esta página con ella.",
+      "Para borrar esta configuración hace falta la conexión segura del servidor. Configúrala y abre esta página con ella.",
     setupDatabaseUnreadable: "El proceso de configuración anterior no tuvo éxito.",
     setupFinished:
       "Esta configuración ya terminó, así que no se ofrece borrarla. Reconecta para comprobar el resultado guardado.",
@@ -135,7 +135,7 @@ export const initialOwnerStrings = {
     retired: "Intento abandonado. Su historial se conserva.",
     consumed:
       "Puede que esta configuración ya haya usado su serie de facturas. Consérvala como consumida.",
-    complete: "Configuración completa. Reconecta con el equipo.",
+    complete: "Configuración completa. Reconecta con el servidor.",
     reconnect: "Reconectar",
     secureConnection: "Configurar conexión segura",
     error: "Reconecta para comprobar el resultado guardado. No repitas la activación.",

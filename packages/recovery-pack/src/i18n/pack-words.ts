@@ -59,29 +59,29 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     anyoneHoldingBackups:
       "Anyone holding it can open the backups its restore codes or backup encryption key unlock.",
     anyoneHoldingBackupsAndServerKey:
-      "Anyone holding it can open the backups its restore codes or backup encryption key unlock, and, with its server key and a matching backup, recover the server.",
-    anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the server.",
+      "Anyone holding it can open the backups its restore codes or backup encryption key unlock, and, with its box key and a matching backup, recover the box.",
+    anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the box.",
     whichToKeep:
       "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
     serverKeyPage: (page) =>
-      `Always keep the pack that holds the server key (page ${page} says which).`,
+      `Always keep the pack that holds the box key (page ${page} says which).`,
     part: {
       bucket: "Bucket copy",
       archives: "Archives",
-      "server-key": "Server key",
+      "server-key": "Box key",
       emergency: "Emergency start",
     },
     situation: {
       emergency: "The box has died and you need to start the venue in the cloud.",
       bucket: "You are setting up a new box and want the venue back from your bucket copy.",
       archives: "You need one old archive back (for example a month-end copy).",
-      "server-key": "You are recovering the server's own key with a backup.",
+      "server-key": "You are recovering the box's own key with a backup.",
     },
     notSetUp: {
       emergency: "Cloud cannot start this venue yet.",
       bucket: "This box has no bucket copy.",
       archives: "This box makes no archives.",
-      "server-key": "This box has no server key yet.",
+      "server-key": "This box has no box key yet.",
     },
     absent: {
       emergency: "Emergency start is not available for this pack.",
@@ -90,8 +90,8 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       "server-key": "This venue files no invoices with the tax agency.",
     },
     failedTitle: (part) => `${part}: could not be drawn`,
-    thisPackHoldsKey: "This pack holds the server key.",
-    noNewKey: "This pack did not make a new server key.",
+    thisPackHoldsKey: "This pack holds the box key.",
+    noNewKey: "This pack did not make a new box key.",
     keyOnPack: (number, day) =>
       `The key itself is on recovery pack ${number}, made on ${day}. Keep that pack.`,
     keyOnUnreceivedPack: (number, day) =>
@@ -303,12 +303,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         ? `key of ${keyDay}`
         : `key of ${keyDay} · rev ${revision.slice(0, 8)}`,
     keyChangedOn: (day) => `changed on ${day}`,
-    alsoServerKey: (page) => `It also needs the server key: page ${page}, or the pack it names.`,
-    keyNotReplaced: "The server key was not replaced.",
+    alsoServerKey: (page) => `It also needs the box key: page ${page}, or the pack it names.`,
+    keyNotReplaced: "The box key was not replaced.",
     currentKeyOnPack: (number, day) =>
       `The current key, on recovery pack ${number} made on ${day}, still works.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `The current server key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
+      `The current box key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
     currentKeyOnSheet: (keyName, day) =>
       `The current key, on the recovery sheet whose key name is ${keyName}, made on ${day}, still works.`,
     failures: {
@@ -331,7 +331,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     },
     historyInvalid: {
       what: "The box's record of its invoice series disagrees with what setup recorded.",
-      todo: "Keep the pack or sheet that holds the current server key; the next pack tries this page again.",
+      todo: "Keep the pack or sheet that holds the current box key; the next pack tries this page again.",
     },
     moduleFault: {
       what: "This page could not be made. That is a fault in Waitron.",

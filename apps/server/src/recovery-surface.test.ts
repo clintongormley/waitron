@@ -405,7 +405,7 @@ describe("the producer the build does not name, or names wrongly", () => {
     "en-GB":
       "Install an official Waitron update on this box. If you build Waitron yourself, build it with your own producer's details.",
     "es-ES":
-      "Instala en este equipo una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.",
+      "Instala en este servidor una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.",
   };
   const unset = {
     "en-GB":
@@ -452,12 +452,12 @@ describe("a chain recorded under another producer", () => {
     const spanish = await pageFor("sif.producer_changed", undefined, SPANISH);
     expect(spanish).toContain(
       escapeHtml(
-        "Este equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo no venderá.",
+        "Este servidor tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el servidor no venderá.",
       ),
     );
     expect(spanish).toContain(
       escapeHtml(
-        "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este servidor. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
       ),
     );
   });
@@ -469,15 +469,17 @@ describe("a box that lost its own record", () => {
     expect(english).toContain(escapeHtml("This box has lost its record of which box it is"));
     expect(english).toContain(
       escapeHtml(
-        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. An administrator can remove this box on the main box's Servers screen, so the main box stops waiting for it. The venue's data stays on the main box.",
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. An administrator can remove this box from the Servers page on the main box, so the main box stops waiting for it. The venue's data stays on the main box.",
       ),
     );
     expect(english).toContain('<button type="submit">Retry a normal boot</button>');
     const spanish = await pageFor("node.state_missing", undefined, SPANISH);
-    expect(spanish).toContain(escapeHtml("Este equipo ha perdido el registro de qué equipo es"));
+    expect(spanish).toContain(
+      escapeHtml("Este servidor ha perdido el registro de qué servidor es"),
+    );
     expect(spanish).toContain(
       escapeHtml(
-        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como servidor principal». Un administrador puede retirar este equipo en la pantalla Servidores del equipo principal, para que el equipo principal deje de esperarlo. Los datos del local siguen en el equipo principal.",
+        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el servidor de reserva del local. El servidor principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este servidor y se detiene aquí de nuevo mientras falte el registro. Mientras este servidor esté parado, el servidor principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como servidor principal». Un administrador puede retirar este servidor en la página Servidores del servidor principal, para que el servidor principal deje de esperarlo. Los datos del local siguen en el servidor principal.",
       ),
     );
     expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
@@ -503,12 +505,12 @@ describe("a box holding an emergency copy that is not activated", () => {
     const spanish = await pageFor("node.emergency_copy_unactivated", undefined, SPANISH);
     expect(spanish).toContain(
       escapeHtml(
-        "Este equipo guarda una copia de emergencia del local que este arranque no puede usar",
+        "Este servidor guarda una copia de emergencia del local que este arranque no puede usar",
       ),
     );
     expect(spanish).toContain(
       escapeHtml(
-        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este servidor no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este servidor y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
       ),
     );
     expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
@@ -587,7 +589,7 @@ describe("curated operator text", () => {
     );
     for (const [code, text] of restoreActions) {
       expect(text["es-ES"].action, `${code} offers a restore with no fallback`).toContain(
-        "Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+        "Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       );
     }
   });
@@ -645,7 +647,7 @@ describe("curated operator text", () => {
   it("names a restored copy whose list of machines is damaged or fails its signature check, in both languages", async () => {
     const english = await pageFor("restore.membership_invalid");
     expect(english).toContain(
-      "The list of servers in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
+      "The list of boxes in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
     );
     expect(english).toContain(
       escapeHtml(
@@ -657,7 +659,7 @@ describe("curated operator text", () => {
       "La lista de servidores de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
     );
     expect(spanish).toContain(
-      "El equipo no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este equipo.",
+      "El servidor no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este servidor.",
     );
   });
 
@@ -673,11 +675,11 @@ describe("curated operator text", () => {
     );
     const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
     expect(spanish).toContain(
-      escapeHtml("El disco del equipo está lleno, así que Waitron no puede guardar nada."),
+      escapeHtml("El disco del servidor está lleno, así que Waitron no puede guardar nada."),
     );
     expect(spanish).toContain(
       escapeHtml(
-        "El equipo ha quitado los archivos que ya no necesita, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+        "El servidor ha quitado los archivos que ya no necesita, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este servidor y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       ),
     );
   });
@@ -691,10 +693,12 @@ describe("curated operator text", () => {
       ),
     );
     const spanish = await pageFor("sif.allocation_invalid", undefined, SPANISH);
-    expect(spanish).toContain(escapeHtml("El equipo no pudo crear sus nuevas series de facturas."));
+    expect(spanish).toContain(
+      escapeHtml("El servidor no pudo crear sus nuevas series de facturas."),
+    );
     expect(spanish).toContain(
       escapeHtml(
-        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este equipo.",
+        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este servidor.",
       ),
     );
   });
@@ -704,7 +708,7 @@ describe("curated operator text", () => {
     expect(english).toContain(escapeHtml("This box is running a test build."));
     expect(english).toContain(escapeHtml("Install a release."));
     const spanish = await pageFor("server.unreleased_build", undefined, SPANISH);
-    expect(spanish).toContain(escapeHtml("Este equipo ejecuta una versión de prueba."));
+    expect(spanish).toContain(escapeHtml("Este servidor ejecuta una versión de prueba."));
     expect(spanish).toContain(escapeHtml("Instala una versión publicada."));
   });
 
@@ -715,7 +719,7 @@ describe("curated operator text", () => {
     );
     const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
     expect(spanish).toContain(
-      escapeHtml("El equipo ha quitado los archivos que ya no necesita, y el disco sigue lleno."),
+      escapeHtml("El servidor ha quitado los archivos que ya no necesita, y el disco sigue lleno."),
     );
   });
 
@@ -739,10 +743,10 @@ describe("curated operator text", () => {
     );
     const spanish = await pageFor("append_only.triggers_changed", undefined, SPANISH);
     expect(spanish).toContain(
-      "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
+      "Se ha quitado o cambiado una protección de los registros permanentes del servidor.",
     );
     expect(spanish).toContain(
-      "Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron ha cambiado la base de datos del equipo.",
+      "Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron ha cambiado la base de datos del servidor.",
     );
   });
 
@@ -755,9 +759,9 @@ describe("curated operator text", () => {
       "If it still fails, this is a fault in Waitron or this box's disk: the box's database is a file on its disk, and the software cannot read it.",
     );
     expect(text!["es-ES"].action).toContain("«Reintentar un arranque normal»");
-    expect(text!["es-ES"].action).toMatch(/reinicia el equipo/i);
+    expect(text!["es-ES"].action).toMatch(/reinicia el servidor/i);
     expect(text!["es-ES"].action).toContain(
-      "Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+      "Si sigue fallando, es un fallo de Waitron o del disco de este servidor: la base de datos del servidor es un archivo en su disco, y el software no puede leerlo.",
     );
   });
 
@@ -790,7 +794,7 @@ describe("curated operator text", () => {
     expect(GENERIC_WORDS["en-GB"].action).not.toMatch(/read the reason/i);
     expect(GENERIC_WORDS["en-GB"].action).toMatch(/this is a fault in Waitron or this box/i);
     expect(GENERIC_WORDS["es-ES"].action).not.toMatch(/registro|motivo/i);
-    expect(GENERIC_WORDS["es-ES"].action).toMatch(/es un fallo de Waitron o de este equipo/i);
+    expect(GENERIC_WORDS["es-ES"].action).toMatch(/es un fallo de Waitron o de este servidor/i);
   });
 
   it("renders the generic line for a code it does not know, without throwing", async () => {
@@ -824,9 +828,9 @@ describe("curated operator text", () => {
 describe("a start refused by a holder that stopped", () => {
   const code = "provisioning.database_holder_stalled";
   const names: Record<string, [string, string]> = {
-    server: ["the Waitron server", "el servidor de Waitron"],
+    server: ["the main Waitron program", "el programa principal de Waitron"],
     restore: ["a restore from a backup", "una restauración desde una copia de seguridad"],
-    rejoin: ["a rejoin of this box to its venue", "la reincorporación de este equipo a su local"],
+    rejoin: ["a rejoin of this box to its venue", "la reincorporación de este servidor a su local"],
     provisioning: ["the Waitron setup command", "el comando de configuración de Waitron"],
     script: ["another Waitron program", "otro programa de Waitron"],
   };
@@ -848,7 +852,7 @@ describe("a start refused by a holder that stopped", () => {
       const body = await pageFor(code, kind, SPANISH);
       const [, spanish] = names[kind]!;
       expect(body).toContain(
-        escapeHtml(`La base de datos de este equipo está ocupada por ${spanish},`),
+        escapeHtml(`La base de datos de este servidor está ocupada por ${spanish},`),
       );
       for (const [other, [, otherSpanish]] of Object.entries(names)) {
         if (other !== kind) expect(body).not.toContain(`ocupada por ${otherSpanish},`);
@@ -881,7 +885,7 @@ describe("a start refused by a holder that stopped", () => {
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
     const spanish = await pageFor(code, "restore", SPANISH);
     expect(spanish).toMatch(/espera dos minutos y pulsa «Reintentar un arranque normal»/i);
-    expect(spanish).toMatch(/si vuelve a fallar, apaga y enciende el equipo/i);
+    expect(spanish).toMatch(/si vuelve a fallar, apaga y enciende el servidor/i);
     expect(spanish).not.toMatch(NEVER_WIPE_ES);
   });
 
@@ -907,27 +911,27 @@ describe("a spare's start refused while placing the copy it accepted", () => {
     [
       "handover.accepted_copy_missing",
       "The copy of the venue this box accepted is no longer on its disk.",
-      "La copia del local que este equipo aceptó ya no está en su disco.",
+      "La copia del local que este servidor aceptó ya no está en su disco.",
     ],
     [
       "handover.copy_mismatch",
       "The copy of the venue this box accepted has changed on its disk.",
-      "La copia del local que este equipo aceptó ha cambiado en su disco.",
+      "La copia del local que este servidor aceptó ha cambiado en su disco.",
     ],
     [
       "handover.preparation_state_unusable",
       "This box cannot record the old box's selections, so it did not take over.",
-      "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
+      "Este servidor no puede guardar las selecciones del servidor antiguo, así que no se ha hecho cargo.",
     ],
     [
       "handover.placement_failed",
       "This box could not put the copy of the venue it accepted in place.",
-      "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
+      "Este servidor no pudo poner en su sitio la copia del local que aceptó.",
     ],
     [
       "handover.placement_no_room",
       "This box's disk has no room for the copy of the venue it accepted.",
-      "El disco de este equipo no tiene sitio para la copia del local que aceptó.",
+      "El disco de este servidor no tiene sitio para la copia del local que aceptó.",
     ],
   ])("%s says what happened and offers the retry, in both languages", async (code, en, es) => {
     const english = await pageFor(code);
@@ -969,7 +973,9 @@ describe("a restore whose database could not be put in place, if it is the last 
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
     expect(text!["en-GB"].action).toContain("Why the last start failed");
-    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron o del disco de este equipo\. /);
+    expect(text!["es-ES"].action).toMatch(
+      /^Es un fallo de Waitron o del disco de este servidor\. /,
+    );
     expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.placement_failed");
     expect(body).toContain(escapeHtml(text!["en-GB"].action));
@@ -986,7 +992,9 @@ describe("a start refused because the only copy of the database may be in a set-
     expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
     expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].title).toMatch(/apartada/i);
-    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron o del disco de este equipo\. /);
+    expect(text!["es-ES"].action).toMatch(
+      /^Es un fallo de Waitron o del disco de este servidor\. /,
+    );
     expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.database_set_aside");
     expect(body).toContain(escapeHtml(text!["en-GB"].title));
@@ -1297,7 +1305,7 @@ describe("the full-disk page's free space and uncounted start", () => {
       `<p>${escapeHtml("Level: recovery. Failed 0 times.")}</p>\n<p>${escapeHtml("Free space on the box's disk: 1.2 MB.")}</p>`,
     );
     expect(await bodyOf(some, SPANISH)).toContain(
-      `<p>${escapeHtml("Espacio libre en el disco del equipo: 1,2 MB.")}</p>`,
+      `<p>${escapeHtml("Espacio libre en el disco del servidor: 1,2 MB.")}</p>`,
     );
     expect(await bodyOf(appWith({ freeSpace: async () => 0 }))).toContain(
       `<p>${escapeHtml("Free space on the box's disk: 0 MB.")}</p>`,
@@ -1310,7 +1318,7 @@ describe("the full-disk page's free space and uncounted start", () => {
       `<p>${escapeHtml("Free space on the box's disk: unknown.")}</p>`,
     );
     expect(await bodyOf(unknown, SPANISH)).toContain(
-      `<p>${escapeHtml("Espacio libre en el disco del equipo: desconocido.")}</p>`,
+      `<p>${escapeHtml("Espacio libre en el disco del servidor: desconocido.")}</p>`,
     );
   });
 
@@ -1411,9 +1419,9 @@ describe("a start refused before it began", () => {
       },
       "es-ES": {
         title:
-          "«Empezar de nuevo» no terminó: el equipo encontró archivos que no esperaba, o no pudo leer o borrar uno.",
+          "«Empezar de nuevo» no terminó: el servidor encontró archivos que no esperaba, o no pudo leer o borrar uno.",
         action:
-          "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
+          "El servidor no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que hay en él.",
       },
     },
     {
@@ -1424,9 +1432,9 @@ describe("a start refused before it began", () => {
           "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
       },
       "es-ES": {
-        title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+        title: "«Empezar de nuevo» no terminó y el servidor encontró archivos que no esperaba.",
         action:
-          "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+          "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este servidor archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El servidor no los ha cambiado.",
       },
     },
     {
@@ -1437,9 +1445,9 @@ describe("a start refused before it began", () => {
           "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
       },
       "es-ES": {
-        title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+        title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este servidor.",
         action:
-          "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+          "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este servidor. Si se reinstala Waitron, se pierde todo lo que hay en el servidor, también los archivos conservados.",
       },
     },
     {
@@ -1452,7 +1460,7 @@ describe("a start refused before it began", () => {
       "es-ES": {
         title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
         action:
-          "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+          "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el servidor. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el servidor empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
       },
     },
   ] as const;
@@ -1533,7 +1541,7 @@ describe("a start refused before it began", () => {
       "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again.",
     );
     expect(START_AGAIN_PAGE_WORDS["es-ES"].moveDetail).toBe(
-      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del servidor, y se quita el resto de la configuración interrumpida. Después el servidor empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
     );
   });
 

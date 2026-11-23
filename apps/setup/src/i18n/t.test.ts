@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 it("uses the active locale when none is passed, and setLocale switches it", () => {
-  expect(t("shell.document_title")).toBe("Waitron — set up your server");
+  expect(t("shell.document_title")).toBe("Waitron — set up your box");
   setLocale("es-ES");
   expect(currentLocale()).toBe("es-ES");
   expect(t("shell.document_title")).toBe("Waitron — configura tu servidor");
@@ -18,7 +18,7 @@ it("translates into the locale it is passed, whatever the active one", () => {
 });
 
 it("falls back to English for a locale it has no catalogue for", () => {
-  expect(t("shell.document_title", "fr-FR")).toBe("Waitron — set up your server");
+  expect(t("shell.document_title", "fr-FR")).toBe("Waitron — set up your box");
 });
 
 it("notifies subscribers on setLocale and stops after unsubscribe", () => {
@@ -41,12 +41,12 @@ it("fills each named placeholder, in the active locale", () => {
 
 it("inserts a value holding a replacement pattern as written", () => {
   expect(format("shell.bucket.refused_code", { code: "$&x" })).toBe(
-    "The copy could not be restored. ($&x) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The copy could not be restored. ($&x) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   );
 });
 
 it("leaves a placeholder it was given no value for as written", () => {
   expect(format("shell.bucket.refused_code", {})).toBe(
-    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
   );
 });

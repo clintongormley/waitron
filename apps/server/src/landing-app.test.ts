@@ -220,7 +220,7 @@ it("serves the discovery guide and certificate paths as aliases on the landing a
     });
     const page = await app.request("http://waitron.local/setup/trust");
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("to this Waitron server");
+    expect(await page.text()).toContain("to this Waitron box");
     const cert = await app.request("http://waitron.local/setup-api/ca.crt");
     expect(cert.status).toBe(200);
     expect(cert.headers.get("cache-control")).toBe("no-store");

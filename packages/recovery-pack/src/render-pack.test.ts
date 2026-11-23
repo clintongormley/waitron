@@ -150,10 +150,10 @@ describe("the recovery pack's cover", () => {
       "You are setting up a new box and want the venue back from your bucket copy.",
     );
     expect(text).toContain("You need one old archive back (for example a month-end copy).");
-    expect(text).toContain("You are recovering the server's own key with a backup.");
+    expect(text).toContain("You are recovering the box's own key with a backup.");
     expect(text).toContain("What is in this pack");
     expect(text).toContain("Bucket copy 20 Sept 2026 key of 20 Sep 2026 · rev 4 2");
-    expect(text).toContain("Server key 2 Sept 2026 2026-09-02 · K7QF 4");
+    expect(text).toContain("Box key 2 Sept 2026 2026-09-02 · K7QF 4");
     expect(text).toContain("Page 1 of 4");
   });
 
@@ -161,7 +161,7 @@ describe("the recovery pack's cover", () => {
     const [cover] = await rendered(await renderRecoveryPack(input()));
     expect(cover!.text).toContain("Keep this pack locked away, and off the box.");
     expect(cover!.text).toContain(
-      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when. Always keep the pack that holds the server key (page 4 says which).",
+      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when. Always keep the pack that holds the box key (page 4 says which).",
     );
   });
 
@@ -584,9 +584,7 @@ describe("a part the pack does not hold", () => {
     );
     expect(pages).toHaveLength(2);
     expect(pages[0]!.text).toContain("Bucket copy This box has no bucket copy.");
-    expect(pages[0]!.text).toContain(
-      "Server key This venue files no invoices with the tax agency.",
-    );
+    expect(pages[0]!.text).toContain("Box key This venue files no invoices with the tax agency.");
     expect(pages[0]!.text).not.toContain("page 4 says which");
     expect(pages[0]!.text).not.toContain("from your bucket copy");
   });
@@ -639,13 +637,13 @@ describe("the server-key page says where the key is", () => {
 
   it("on this pack", async () => {
     const pages = await rendered(await renderRecoveryPack(withLocation({ kind: "this-pack" })));
-    expect(pages[3]!.text).toContain("This pack holds the server key.");
+    expect(pages[3]!.text).toContain("This pack holds the box key.");
   });
 
   it("on an earlier pack a browser confirmed receiving: keep that pack", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     expect(pages[3]!.text).toContain(
-      "This pack did not make a new server key. The key itself is on recovery pack 1, made on 2 September 2026. Keep that pack.",
+      "This pack did not make a new box key. The key itself is on recovery pack 1, made on 2 September 2026. Keep that pack.",
     );
   });
 

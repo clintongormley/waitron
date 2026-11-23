@@ -61,8 +61,7 @@ export const startEn = {
   "connection.heading": "Is this page secure?",
   "connection.check_address_bar": "Look at your browser's address bar. If it says",
   "connection.warning_words": "Not secure",
-  "connection.install_before_continuing":
-    ", install this server's certificate before you continue.",
+  "connection.install_before_continuing": ", install this box's certificate before you continue.",
   "connection.install_certificate": "Install certificate",
   "connection.checking": "Checking connection…",
   "connection.continue": "Continue to setup",
@@ -71,16 +70,16 @@ export const startEn = {
 
   "role.heading": "Join or recover an existing restaurant",
   "role.intro":
-    "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. A mirror can take over only after it has joined a running primary.",
+    "Restore a backup onto this box when no other box is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old box is gone. A mirror can take over only after it has joined a running primary.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "This server joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. A new server cannot join a primary that is already gone: to recover then, choose Restore from backup or Restore from my bucket.",
+    "This box joins the primary and keeps a copy of the restaurant's data. Once it has joined, it can take over: by a handover from the primary's Servers page, or by an emergency switch if the primary fails. A new box cannot join a primary that is already gone: to recover then, choose Restore from backup or Restore from my bucket.",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
-    "Recover onto this fresh server from an encrypted Waitron backup when no other server is still running with newer restaurant data.",
+    "Recover onto this fresh box from an encrypted Waitron backup when no other box is still running with newer restaurant data.",
   "role.bucket.heading": "Restore from my bucket",
   "role.bucket.copy":
-    "Rebuild onto this fresh server from the continuous copy in your own storage bucket, when the old server is gone. You need the recovery pack or kit file.",
+    "Rebuild onto this fresh box from the continuous copy in your own storage bucket, when the old box is gone. You need the recovery pack or kit file.",
   "role.back": "Back",
 
   "connect.heading": "Join the main box",
@@ -191,7 +190,7 @@ export const startEn = {
   "mode.confirm.button": "Start a new restaurant",
 
   "admin.heading": "Your account",
-  "admin.intro": "Create the account that manages this server. You can add more people later.",
+  "admin.intro": "Create the account that manages this box. You can add more people later.",
   "admin.first_names.label": "First name(s)",
   "admin.first_names.error": "Enter your first name(s).",
   "admin.first_names.hint": "As on your ID",
@@ -220,13 +219,12 @@ export const startEn = {
   "admin.back": "Back",
   "admin.next": "Next",
 
-  "old_box.problem": "Confirm that the old server is switched off for good.",
-  "old_box.wrote_at": "The old server wrote to its bucket at",
-  "old_box.unchecked":
-    "Whether the old server is still writing to its bucket could not be checked.",
+  "old_box.problem": "Confirm that the old box is switched off for good.",
+  "old_box.wrote_at": "The old box wrote to its bucket at",
+  "old_box.unchecked": "Whether the old box is still writing to its bucket could not be checked.",
   "old_box.consequence":
-    "If it is still running, two servers would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
-  "old_box.gone": "The old server is switched off for good.",
+    "If it is still running, two boxes would sell from the same records, and that cannot be undone. Switch it off for good before you go on.",
+  "old_box.gone": "The old box is switched off for good.",
 
   // The message's 120 is `NOMBRE_RAZON_MAX` (`packages/fiscal-verifactu/src/venue-fields.ts`).
   "server_fields.legal_name":

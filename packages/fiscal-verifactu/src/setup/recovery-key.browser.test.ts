@@ -418,7 +418,7 @@ it.each([
     "en",
     { number: 1, madeOn: "2026-09-02", received: true },
     "Caja principal",
-    "This recovery pack does not hold the server key. It is on recovery pack 1, made on 2 September 2026: choose that pack, or type the key from it.",
+    "This recovery pack does not hold the box key. It is on recovery pack 1, made on 2 September 2026: choose that pack, or type the key from it.",
   ],
   [
     "es",
@@ -430,7 +430,7 @@ it.each([
     "en",
     { number: 2, madeOn: "2026-09-12", received: false },
     "Caja principal",
-    "This recovery pack does not hold the server key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. When this pack was made, the box that made it had not been told that pack 2 arrived: if you do not have it, the key cannot be read from any pack.",
+    "This recovery pack does not hold the box key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. When this pack was made, the box that made it had not been told that pack 2 arrived: if you do not have it, the key cannot be read from any pack.",
   ],
   [
     "es",
@@ -442,7 +442,7 @@ it.each([
     "en",
     null,
     "Caja principal",
-    "This recovery pack does not hold the server key: choose the pack or sheet whose key name is Caja principal.",
+    "This recovery pack does not hold the box key: choose the pack or sheet whose key name is Caja principal.",
   ],
   [
     "es",
@@ -454,7 +454,7 @@ it.each([
     "en",
     null,
     null,
-    "This recovery pack does not hold the server key: choose the pack or sheet that holds it, or type the key from it.",
+    "This recovery pack does not hold the box key: choose the pack or sheet that holds it, or type the key from it.",
   ],
   [
     "es",

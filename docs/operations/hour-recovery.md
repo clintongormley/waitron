@@ -2,7 +2,7 @@
 
 Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack or older sheet whose
 key name matches that copy. A newer pack may contain a replacement key that an older backup
-does not accept. Keep the archive password or Cloud login separate from the server key.
+does not accept. Keep the archive password or Cloud login separate from the box key.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -11,7 +11,7 @@ collections or refunds stop. Money already captured remains recorded for later c
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
-box over HTTPS. Use the current live box's server key. A dashboard sign-in, backup password or
+box over HTTPS. Use the box key of the current live box. A dashboard sign-in, backup password or
 key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
@@ -25,7 +25,7 @@ the internet, the page asks you to confirm the time again: press **Confirm the t
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
 The request limit is shared by everyone using this box's recovery route: 60 admitted requests
-per fixed one-minute window, with at most two requests running. The server key does not bypass
+per fixed one-minute window, with at most two requests running. The box key does not bypass
 that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
 bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
 venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
@@ -103,9 +103,9 @@ The page lists the backup's environment, country, taxpayer NIF and time zone one
 **Proceed**, when the box's time service is not synchronised and the clocks differ, the clock step the first-setup runbook describes
 (`recovery-hour.browser.test.ts`, "Check this venue lists the backup's details one to a row, and no
 clock rows" and
-"clocks that differ show one time per clock and ask which is correct; The server and Both times
+"clocks that differ show one time per clock and ask which is correct; The box and Both times
 are wrong send nothing"). There, **This device** sets the box's clock and the page makes the series with nobody
-pressing (the same file's "a restore on clocks that differ sets the server's clock from This device
+pressing (the same file's "a restore on clocks that differ sets the box's clock from This device
 and makes the series with nobody pressing"). Before **Proceed**, **Edit these details** sends nothing and goes back to choosing the
 backup (the same file's "Edit these details sends nothing and asks to go back to choosing the
 backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Edit these details from the restore
@@ -114,7 +114,7 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation while the internet time service vouches for the clock"). Enter the server key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the box key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box; while the button reads **Proceed** it says "Waitron will start new invoice series for this box." (the same
@@ -177,7 +177,7 @@ them and no longer shows that button (the same file's "once the series are made,
 button is gone"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (the box's time service is not synchronised, and the page is on the box
-  itself): the page says the server's time must be correct and it cannot check it over the
+  itself): the page says the box's time must be correct and it cannot check it over the
   internet, then lists two choices: fix the internet connection, or open the page at the address it
   names (the box's first network address, or `waitron.local` when it has none) on a phone or till on the venue's network and carry
   on there. It checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`,
@@ -185,7 +185,7 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
   second clock it lists the two ways on, naming the box's address, then says the box's screen does
   not count (%s)").
 - **The clocks differ by more than 30 seconds** (the box's time service is not synchronised): the
-  page shows the server's time and this device's, and asks which is correct; **The server** and
+  page shows the box's time and this device's, and asks which is correct; **The box** and
   **Both times are wrong** say to correct this device's time and reconnect to the box, and **This
   device** sets the box's clock. It does not
   retry by itself; press **Compare the clocks again**, which
@@ -247,7 +247,7 @@ waits instead of failing; a wait does not count towards the start-failure page. 
 download took makes no difference to this (0 and 31 seconds were tried while building A1385; no
 test keeps that comparison).
 
-While the start waits, the box's usual address answers every page with "The server is restoring
+While the start waits, the box's usual address answers every page with "The box is restoring
 your backup and is waiting to confirm its time." and every other request, apart from the waiting
 page's own `/restore-clock/` routes, with 503 `server.waiting_for_clock`
 (`apps/server/src/start-clock-waiting.test.ts`, "answers %s with the waiting page in English,
@@ -260,10 +260,10 @@ shows both times on the same page, with **Confirm the time** and **This device**
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "asks for the time on the screen itself when the restore's start waits for it"). If that page was
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
-node recovery key (the server key): the waiting page then shows the same step
+node recovery key (the box key): the waiting page then shows the same step
 (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
 with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
-secret the setup page sends (the same file's "takes the server key as printed on the recovery pack,
+secret the setup page sends (the same file's "takes the box key as printed on the recovery pack,
 typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves the staged key
 typed %s"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
@@ -301,8 +301,8 @@ After the restore, follow the guide's
 
 Ordinary reboot and exact completion keep the current activation.
 They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
-key each retained backup needs, and check the restored server's outcome before using the till. The
-pack setup makes holds only the server key (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`,
+key each retained backup needs, and check the restored box's outcome before using the till. The
+pack setup makes holds only the box key (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`,
 "the command path writes recovery pack 1 holding only the staged key, in %s").
 
 Signed paper allocations, Cloud allocation receipts and random emergency identities are historical

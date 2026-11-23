@@ -69,14 +69,14 @@ export const clockWaitStrings = {
     nothingToDo: "Nothing to do; keep this page open.",
     continuesIn: "Continues in",
     whySecondClock:
-      "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.",
+      "So no invoice series is ever repeated, the box checks its time over the internet, or you confirm it against this device's time.",
     onBox: "This screen is on the box itself, so it does not count.",
     whichCorrect:
-      "It is very important that the server time is set correctly. Which time is correct:",
-    theServer: "The server",
+      "It is very important that the box's time is set correctly. Which time is correct:",
+    theServer: "The box",
     bothWrong: "Both times are wrong",
-    correctDevice: "Please correct the time on this device and then reconnect to the server.",
-    serverTime: "Server time",
+    correctDevice: "Please correct the time on this device and then reconnect to the box.",
+    serverTime: "Box time",
     thisDevice: "This device",
     unavailable: "Unavailable",
     later:
@@ -85,19 +85,19 @@ export const clockWaitStrings = {
     minuteTaken:
       "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends.",
     newCodeIn: "New invoice series in",
-    deviceSet: "The server's time is now set from this device.",
+    deviceSet: "The box's time is now set from this device.",
     deviceSynchronised:
-      "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+      "The box keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the box.",
     deviceSameMachine:
-      "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+      "This screen is on the box itself, so it cannot set the box's time. Open this page on a phone or computer.",
     deviceLater:
-      "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
     deviceFailed:
-      "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+      "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
     laterAfterSet:
-      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the box and choose which time is correct again.",
     confirmWhy:
-      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+      "The box could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
     confirm: "Confirm the time",
   },
   es: {

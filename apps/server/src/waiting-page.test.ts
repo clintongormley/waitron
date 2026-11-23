@@ -79,7 +79,7 @@ function openPage(
 describe("the waiting page", () => {
   it("speaks Spanish to a Spanish browser", async () => {
     const html = await page(["Spare"], "es-ES");
-    expect(html).toContain("<h1>Este equipo está esperando a Spare</h1>");
+    expect(html).toContain("<h1>Este servidor está esperando a Spare</h1>");
     expect(html).toContain(
       "No hará ventas ni enviará nada a Hacienda hasta saber si <strong>Spare</strong> ha pasado a llevar el local. Vuelve a comprobarlo cada 15 segundos.",
     );
@@ -108,7 +108,7 @@ describe("the waiting page", () => {
       ],
       [
         "es-ES",
-        "No se ha podido mostrar el formulario para seguir como equipo principal. Vuelve a cargar esta página para intentarlo.",
+        "No se ha podido mostrar el formulario para seguir como servidor principal. Vuelve a cargar esta página para intentarlo.",
       ],
     ] as const) {
       const log = vi.fn();
@@ -125,7 +125,7 @@ describe("the waiting page", () => {
       expect(html).toContain(
         language === "en-GB"
           ? "<h1>This box is waiting for Spare</h1>"
-          : "<h1>Este equipo está esperando a Spare</h1>",
+          : "<h1>Este servidor está esperando a Spare</h1>",
       );
       expect(html).toContain(`<p>${line}</p>`);
       expect(log).toHaveBeenCalledWith("warn", "waiting_page.section_failed", {
@@ -260,7 +260,7 @@ describe("the waiting page", () => {
 
   it("a box with no name is the other box, never its id", async () => {
     expect(await page([null, null], "es-ES")).toContain(
-      "<h1>Este equipo está esperando a otro equipo</h1>",
+      "<h1>Este servidor está esperando a otro servidor</h1>",
     );
     expect(await page(["Bar", null], "en-GB")).toContain(
       "<h1>This box is waiting for Bar and the other box</h1>",

@@ -24,7 +24,7 @@ describe("setup-connection-screen", () => {
     expect(text(q(el, "h1")!)).toBe("Is this page secure?");
     expect(text(q(el, "h1")!).endsWith("?")).toBe(true); // a question, never a verdict
     expect(text(q(el, "[data-test=instructions]")!)).toBe(
-      "Look at your browser's address bar. If it says Not secure, install this server's certificate before you continue.",
+      "Look at your browser's address bar. If it says Not secure, install this box's certificate before you continue.",
     );
   });
 
@@ -83,7 +83,7 @@ describe("setup-connection-screen", () => {
   it("drops Continue but keeps Install certificate when this server cannot be set up from here", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
       setupUnavailable: true,
-      errorMessage: "This server is already set up. Reload to open it.",
+      errorMessage: "This box is already set up. Reload to open it.",
     });
     expect(q(el, "[data-test=continue]")).toBeNull();
     expect(text(q(el, "h1")!)).toBe("Is this page secure?");
@@ -93,7 +93,7 @@ describe("setup-connection-screen", () => {
 
   it("keeps Continue for a failure that is worth retrying", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
-      errorMessage: "We could not reach the server. Check its power and your network connection.",
+      errorMessage: "We could not reach the box. Check its power and your network connection.",
     });
     expect(q(el, "[data-test=continue]")).not.toBeNull();
     expect(q(el, "[data-test=trust-help]")).not.toBeNull();
@@ -135,7 +135,7 @@ describe("setup-connection-screen", () => {
 });
 
 describe("setup-connection-screen: joining or recovering", () => {
-  it("offers Join or recover beside Continue, and says a spare or recovery needs no certificate from this server", async () => {
+  it("offers Join or recover beside Continue, and says a spare or recovery needs no certificate from this box", async () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
     const join = q(el, "[data-test=join]")!;
     expect(text(join)).toBe("Join or recover");

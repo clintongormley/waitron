@@ -50,7 +50,7 @@ it.each(["pending", "refused", "offline"])(
               }
             ).errorMessage,
         )
-        .toBe("This server reported a problem. Try again in a moment.");
+        .toBe("This box reported a problem. Try again in a moment.");
     if (state === "offline")
       await expect.poll(() => app.shadowRoot!.querySelector("setup-mode-screen")).not.toBeNull();
     if (state === "offline") vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);

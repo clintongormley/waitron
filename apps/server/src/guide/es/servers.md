@@ -57,12 +57,12 @@ local y se reinicia solo como servidor de reserva. Su página muestra lo que que
 guardar la clave del servidor y, cuando se haya unido, imprimir las
 [etiquetas de cambio](servers.md#switch-label).
 
-En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
-Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
-comprueba que el equipo de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos equipos encendidos mientras se restaura la copia.
+En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del servidor de reserva en segundos y la **Última copia recibida**.
+Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
+comprueba que el servidor de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos servidores encendidos mientras se restaura la copia.
 
 Al cambiar, primero se pone al día la copia de este servidor de reserva. Comprueba la copia que ofrece la página de traspaso antes de cambiar.
-La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el equipo de reserva durante dos minutos.
+La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicación de cambios, o si no se puede contactar con el servidor de reserva durante dos minutos.
 
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
 
@@ -211,7 +211,7 @@ menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página
 servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este servidor**.
 Los pagos ya registrados se conservan en la copia transferida.
 
-Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el
+Si se pierde una respuesta en la página Servidores, mantén abierto el diálogo y elige **Consultar el
 progreso del traspaso**. En la página de traspaso del servidor de reserva puedes recargar para
 consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
 mantén los dos servidores conectados mientras vuelven a intentarlo.
@@ -229,9 +229,9 @@ En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese 
 ## Cuando el local ya no funciona con un servidor {#handed-over}
 
 Si abres la dirección de un servidor, o su caja o su panel de gestión, y ves una página titulada
-**El local ya no funciona con este equipo**, ese servidor se ha retirado. No hace ventas ni envía
+**El local ya no funciona con este servidor**, ese servidor se ha retirado. No hace ventas ni envía
 nada a Hacienda. La página indica, en negrita, el servidor que pasa a llevar el local; usa **Abrir
-el equipo que lleva el local**, si la página lo muestra, para ir a él.
+el servidor que lleva el local**, si la página lo muestra, para ir a él.
 
 Debajo, la página enumera cada paso del traspaso que este servidor ha registrado, en el orden en que
 los registró, con la fecha y la hora de cada uno en la zona horaria del local.
@@ -307,7 +307,7 @@ totales del informe.
 ## Cuando un servidor espera a otro servidor {#waiting}
 
 Cuando un servidor se inicia y no consigue contactar con el otro servidor del local, espera en lugar de
-vender, porque el otro quizá ha pasado a llevar el local. Su página, titulada **Este equipo está
+vender, porque el otro quizá ha pasado a llevar el local. Su página, titulada **Este servidor está
 esperando a** y la dirección del otro servidor, lo indica. Mientras espera no hace ventas ni envía nada
 a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro servidor responde, este se inicia con
 normalidad o, si el otro ha pasado a llevar el local, lo indica.
@@ -409,8 +409,8 @@ queden pendientes de envío.
 ## Aprobar la recuperación del propietario de Cloud {#cloud-owner-recovery}
 
 Si estás recuperando una cuenta propietaria de Cloud, verifica primero tu correo en la página de recuperación de Cloud.
-En el local, abre **Sistema → Servicios Cloud** en el equipo principal vinculado y elige **Cargar solicitudes de recuperación**.
-Debe haber iniciado sesión un administrador del equipo; usa **Entrar como administrador** si se te pide.
+En el local, abre **Sistema → Servicios Cloud** en el servidor principal vinculado y elige **Cargar solicitudes de recuperación**.
+Debe haber iniciado sesión un administrador del servidor; usa **Entrar como administrador** si se te pide.
 
 Comprueba el correo, la cuenta, la organización y el ID del local. **Aprobar recuperación** te permite terminar en la misma
 página de recuperación de Cloud y configurar de nuevo el inicio de sesión. **Rechazar recuperación** termina esa solicitud
@@ -434,7 +434,7 @@ la tarjeta, igual que salir de esta pantalla. La dirección junto al código cor
 La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
 en su perfil. La tarjeta no inicia el local.
 
-Si la caja principal deja de responder, mantén el terminal abierto. Cuando la franja roja o la pantalla roja de inicio de sesión ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la franja roja o la pantalla roja de inicio de sesión ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
 
 Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
 

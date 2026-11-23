@@ -34,3 +34,12 @@ it("does not infer Live status when no usable tag was read", () => {
   expect(text).not.toContain(INSTALLER_WORDS.es.warning);
   expect(text).not.toContain("A reinstall would");
 });
+
+it("calls the Waitron machine the box in English and servidor in Spanish", () => {
+  expect(Object.values(INSTALLER_WORDS.en).filter((words) => /\bservers?\b/i.test(words))).toEqual(
+    [],
+  );
+  expect(Object.values(INSTALLER_WORDS.es).filter((words) => /\bequipos?\b/i.test(words))).toEqual(
+    [],
+  );
+});

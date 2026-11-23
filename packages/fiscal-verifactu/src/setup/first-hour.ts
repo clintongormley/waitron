@@ -59,15 +59,15 @@ interface Selected {
   };
 }
 const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
-const strings = {
+export const firstHourStrings = {
   en: {
     ...clockWaitStrings.en,
     ...checkVenueStrings.en,
     place: "Place",
     confirmWhyProceed:
-      "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
+      "The box could not check its time over the internet. Check that both times below are right before you press Proceed.",
     confirmWhyProceedServer:
-      "The server could not check its time over the internet. Check that the server's time below is right before you press Proceed.",
+      "The box could not check its time over the internet. Check that the box's time below is right before you press Proceed.",
     seriesLine: "Waitron will start this box's invoice series.",
     secondClockDo:
       "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
@@ -75,13 +75,13 @@ const strings = {
       "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
     next: "Keep your recovery pack.",
     packWhy:
-      "The recovery pack is a PDF holding this box's server key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
+      "The recovery pack is a PDF holding the box key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
     download: "Download recovery pack",
     print: "Open to print",
     kept: "I kept the recovery pack.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
-    replace: "Make the pack again with a new server key",
+    replace: "Make the pack again with a new box key",
   },
   es: {
     ...clockWaitStrings.es,
@@ -482,7 +482,7 @@ export class FirstSetupHour extends LitElement {
   }
   override render() {
     const en = this.locale === "en";
-    const t = en ? strings.en : strings.es;
+    const t = en ? firstHourStrings.en : firstHourStrings.es;
     const venue = this.context.venue,
       clock = this.comparison?.clock;
     const result = this.#wait.result;

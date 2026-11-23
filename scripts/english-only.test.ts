@@ -280,6 +280,7 @@ describe("the lists", () => {
       "apps/server/scripts/bench/trading-day.test.ts",
       "apps/server/scripts/receipt-look.ts",
       "apps/server/src/first-setup-start-again-hour.test.ts",
+      "apps/server/src/guide-box-word.test.ts",
       "apps/server/src/invoice-corrections.test.ts",
       "apps/server/src/log-personal-data.ts",
       "apps/server/src/return-records.real.test.ts",

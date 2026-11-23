@@ -82,6 +82,11 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: VERIFACTU_NAMES,
     findings: 1,
   },
+  "apps/server/src/guide-box-word.test.ts": {
+    reason:
+      "lists the Spanish guide phrases the box-word check allows, each meaning a staff team or a piece of equipment",
+    findings: 3,
+  },
   "apps/server/src/invoice-corrections.test.ts": {
     reason: VERIFACTU_NAMES,
     findings: 8,

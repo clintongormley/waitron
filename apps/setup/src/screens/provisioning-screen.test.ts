@@ -55,7 +55,7 @@ describe("setup-provisioning-screen", () => {
 
   it("re-emits provision-requested (composed) when retry is clicked", async () => {
     const { el, host } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
-      message: "The server isn't ready yet. Wait a moment, then try again.",
+      message: "The box isn't ready yet. Wait a moment, then try again.",
       canRetry: true,
     });
     const requested = new Promise<boolean>((resolve) =>
@@ -67,7 +67,7 @@ describe("setup-provisioning-screen", () => {
 
   it("shows the message but NO retry control when canRetry is false", async () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
-      message: "This server is already set up.",
+      message: "This box is already set up.",
       canRetry: false,
     });
     expect(q(el, "[data-test=error]")!.textContent).toContain("already set up");
@@ -75,13 +75,8 @@ describe("setup-provisioning-screen", () => {
   });
 
   it.each([
-    [
-      "This server is already set up.",
-      "Reload to open the till",
-      "already set up",
-      "open the till",
-    ],
-    ["Setup is already in progress on this server.", "Reload", "already in progress", "Reload"],
+    ["This box is already set up.", "Reload to open the till", "already set up", "open the till"],
+    ["Setup is already in progress on this box.", "Reload", "already in progress", "Reload"],
   ])(
     "renders the guidance message and its reload action for a terminal state (%s)",
     async (message, reloadLabel, msgFragment, labelFragment) => {
@@ -102,7 +97,7 @@ describe("setup-provisioning-screen", () => {
   it("calls the injected reload when the terminal reload control is clicked", async () => {
     const reload = vi.fn();
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
-      message: "This server is already set up.",
+      message: "This box is already set up.",
       canRetry: false,
       reloadLabel: "Reload to open the till",
       reload,
@@ -111,7 +106,7 @@ describe("setup-provisioning-screen", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  it("offers Reset this server, which moves the wizard to the reset screen, when canReset is set", async () => {
+  it("offers Reset this box, which moves the wizard to the reset screen, when canReset is set", async () => {
     const { el, host } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
       message: "A previous attempt to join this server stopped partway.",
       canReset: true,
@@ -119,7 +114,7 @@ describe("setup-provisioning-screen", () => {
     const gotos: unknown[] = [];
     host.addEventListener("setup-goto", (e) => gotos.push((e as CustomEvent).detail));
     const reset = q(el, "[data-test=reset]")!;
-    expect(reset.textContent?.trim()).toBe("Reset this server");
+    expect(reset.textContent?.trim()).toBe("Reset this box");
     expect(q(el, "[data-test=retry]")).toBeNull();
     expect(q(el, "[data-test=reload]")).toBeNull();
     reset.click();

@@ -4579,7 +4579,7 @@ setting nothing"); a key typed as printed on the recovery pack is first turned i
 the fiscal module's `serverKeyAsTyped`. The done screen shows both times with **Confirm the time** and **This device**;
 a browser that lost the key types it on the waiting page, as printed or as the secret, which
 shows the same step (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the
-done screen's step with both times and their dates" and "takes the server key as printed on the
+done screen's step with both times and their dates" and "takes the box key as printed on the
 recovery pack, typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves
 the staged key typed %s"). A confirmation is kept only when the times agree within 30
 seconds, with the box's boot reading, and has no time limit (`start-clock-waiting.test.ts`,

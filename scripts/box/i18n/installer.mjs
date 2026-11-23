@@ -1,16 +1,17 @@
 export const INSTALLER_WORDS = {
   es: {
-    notice: "Este equipo ya tiene Waitron ({name}).",
+    notice: "Este servidor ya tiene Waitron ({name}).",
     unknownName: "Nombre del local no disponible",
     unknownStatus: "Estado Live no disponible.",
     live: "Este disco está marcado como Live.",
     warning:
-      "Una reinstalación borraría los datos, las copias de seguridad y el historial de este equipo. Para recuperar los datos del local necesitarías una copia externa o un equipo de reserva; este equipo iniciaría una nueva cadena fiscal.",
-    countdown: "El equipo instalado se iniciará en 15 segundos. Pulsa cualquier tecla para pausar.",
+      "Una reinstalación borraría los datos, las copias de seguridad y el historial de este servidor. Para recuperar los datos del local necesitarías una copia externa o un servidor de reserva; este servidor iniciaría una nueva cadena fiscal.",
+    countdown:
+      "El servidor instalado se iniciará en 15 segundos. Pulsa cualquier tecla para pausar.",
     paused:
-      "Reinstalar, borrar e inspeccionar la clave de recuperación no están disponibles. El equipo instalado se iniciará tras 120 segundos sin escribir.",
+      "Reinstalar, borrar e inspeccionar la clave de recuperación no están disponibles. El servidor instalado se iniciará tras 120 segundos sin escribir.",
     keysUnavailable: "El teclado no está disponible; el inicio automático sigue activo.",
-    failed: "No se puede iniciar el equipo instalado. Retira el USB y reinicia.",
+    failed: "No se puede iniciar el servidor instalado. Retira el USB y reinicia.",
   },
   en: {
     notice: "This box already has Waitron ({name}).",

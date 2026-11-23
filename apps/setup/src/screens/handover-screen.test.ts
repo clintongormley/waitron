@@ -369,7 +369,7 @@ describe("This device on the handover's clock step", () => {
     const { entry, posts } = await mount({ status: "refused", reason: "not_stopped" });
     await vi.waitFor(() =>
       expect(entry.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim()).toBe(
-        "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+        "The box keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the box.",
       ),
     );
     expect(actions(posts)).not.toContain("select");
@@ -435,7 +435,7 @@ it.each(["en", "es"])(
 it.each([
   [
     "en-GB",
-    "The last attempt could not complete this handover step. Check both servers’ power, connections and free disk space, and the old server’s entry in the list of servers.",
+    "The last attempt could not complete this handover step. Check both boxes’ power, connections and free disk space, and the old box’s entry in the list of boxes.",
   ],
   ["es-ES", handoverEs["handover.source"]],
 ])("describes a failed source attempt before and after acceptance in %s", async (locale, words) => {

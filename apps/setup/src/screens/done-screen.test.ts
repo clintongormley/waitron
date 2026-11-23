@@ -30,10 +30,10 @@ async function mountDone(
   return el;
 }
 
-const RESTART_EN = "The server is restarting to finish setup. Once it is back, open it here:";
-const READY_EN = "The server is ready. Open it here:";
+const RESTART_EN = "The box is restarting to finish setup. Once it is back, open it here:";
+const READY_EN = "The box is ready. Open it here:";
 const JOINING_BODY_EN =
-  "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.";
+  "The sign-in to the restaurant's primary worked. This box now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.";
 const JOINING_STATUS_EN = "Joining. This can take a few minutes.";
 const JOINING_STATUS_ES = "Uniéndose. Puede tardar unos minutos.";
 
@@ -44,8 +44,8 @@ async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
 }
 
 const WAITING_EN =
-  "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.";
-const CONFIRMED_EN = "Time confirmed. This page shows when the server is ready.";
+  "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.";
+const CONFIRMED_EN = "Time confirmed. This page shows when the box is ready.";
 const WAITING = { code: "server.waiting_for_clock", status: 503, params: { confirmed: false } };
 const WAITING_CONFIRMED = { ...WAITING, params: { confirmed: true } };
 const SERVER_MS = Date.UTC(2026, 10, 14, 9, 30, 5);
@@ -121,7 +121,7 @@ describe("setup-done-screen", () => {
   );
 
   it.each([
-    ["en-GB", "Server key 15 Oct 2026 · K7QF"],
+    ["en-GB", "Box key 15 Oct 2026 · K7QF"],
     ["es-ES", "Clave del servidor 15 oct 2026 · K7QF"],
   ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
     setLocale(locale);
@@ -136,9 +136,7 @@ describe("setup-done-screen", () => {
     setLocale(locale === "en-GB" ? "es-ES" : "en-GB");
     await el.updateComplete;
     expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
-      locale === "en-GB"
-        ? "Clave del servidor 15 oct 2026 · K7QF"
-        : "Server key 15 Oct 2026 · K7QF",
+      locale === "en-GB" ? "Clave del servidor 15 oct 2026 · K7QF" : "Box key 15 Oct 2026 · K7QF",
     );
     expect(el.breakGlassKeyName).toBe("2026-10-15 · K7QF");
   });
@@ -155,7 +153,7 @@ describe("setup-done-screen", () => {
     expect(link).not.toBeNull();
     expect(link!.textContent?.trim()).toBe("Download recovery pack (PDF)");
     expect(q(el, "[data-test=break-glass-warning]")?.textContent).toContain(
-      "The recovery pack contains the server key",
+      "The recovery pack contains the box key",
     );
     expect(link!.download).toBe("waitron-recovery-pack.pdf");
     const response = await fetch(link!.href);
@@ -472,7 +470,7 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=clock-confirm]")).not.toBeNull();
   });
 
-  it("This device sets the server's clock with the key, then confirms the set time against a fresh challenge", async () => {
+  it("This device sets the box's clock with the key, then confirms the set time against a fresh challenge", async () => {
     const clock = clockApi();
     const el = await mountWaiting(clock);
     await vi.waitFor(() => expect(q(el, "[data-test=clock-this-device]")).not.toBeNull());
@@ -525,13 +523,13 @@ describe("setup-done-screen", () => {
       "a refused This device",
       { set: { status: "refused", reason: "challenge" } },
       "clock-this-device",
-      "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+      "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
     ],
     [
-      "a screen on the server itself",
+      "a screen on the box itself",
       { compare: { result: "same_machine" } },
       undefined,
-      "This screen is on the server itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
+      "This screen is on the box itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
     ],
   ] as const)("says what happened after %s", async (_label, answers, press, line) => {
     const clock = clockApi(answers);
@@ -547,7 +545,7 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the selected backup's server key there.",
+      "The box did not accept the box key this page holds. Open any of the box's pages on a phone, computer or till on the venue's network and enter the selected backup's box key there.",
     ],
     [
       "es-ES",
@@ -610,7 +608,7 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
+      "This page could not get the two times from the box, so Confirm the time and This device stay off. Keep this page open: it asks the box again by itself.",
     ],
     [
       "es-ES",
@@ -770,7 +768,7 @@ describe("setup-done-screen", () => {
     q(el, "[data-test=clock-confirm]")!.click();
     await vi.waitFor(() =>
       expect(q(el, "[data-test=clock-note]")?.textContent?.trim()).toMatch(
-        /^This page could not get the two times from the server/,
+        /^This page could not get the two times from the box/,
       ),
     );
     expect(q(el, "[data-test=clock-server]")?.textContent).toBe("");
@@ -1115,7 +1113,7 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "This server is joining",
+      "This box is joining",
       JOINING_STATUS_EN,
       "Taking its first copy from the primary, which keeps selling.",
     ],
@@ -1139,7 +1137,7 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "Once this server has joined, open the primary's Servers page and choose Print switch label in each server's row menu. Stick each label on its server.",
+      "Once this box has joined, open the primary's Servers page and choose Print switch label in each box's row menu. Stick each label on its box.",
     ],
     [
       "es-ES",
@@ -1218,8 +1216,8 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
-      "Server key 15 Oct 2026 · K7QF",
+      "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
+      "Box key 15 Oct 2026 · K7QF",
     ],
     [
       "es-ES",
@@ -1256,7 +1254,7 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning).toContain("You need it to promote this server if the primary is unreachable.");
+    expect(warning).toContain("You need it to promote this box if the primary is unreachable.");
     expect(warning).not.toContain("take over from the primary");
   });
 
@@ -1269,7 +1267,7 @@ describe("setup-done-screen", () => {
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("will not be shown again");
     expect(warning).toContain(
-      "You will need it if this server ever has to take over from the primary.",
+      "You will need it if this box ever has to take over from the primary.",
     );
     expect(warning).not.toContain("promote");
   });
@@ -1416,13 +1414,13 @@ describe("saving the server key as a file", () => {
     expect(saves.blobs).toHaveLength(1);
     expect(saves.blobs[0]!.type).toBe("text/plain;charset=utf-8");
     expect((await saves.blobs[0]!.text()).split("\n")).toEqual([
-      "Waitron server key",
-      "Server key 15 Oct 2026 · K7QF",
+      "Waitron box key",
+      "Box key 15 Oct 2026 · K7QF",
       "",
       "key-on-paper",
       "",
-      "You need it to promote this server if the primary is unreachable.",
-      "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
+      "You need it to promote this box if the primary is unreachable.",
+      "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
@@ -1468,12 +1466,12 @@ describe("saving the server key as a file", () => {
     [
       "a spare joining the primary",
       { onboardingIntent: "prepare", mirrorJoin: true },
-      "You will need it if this server ever has to take over from the primary.",
+      "You will need it if this box ever has to take over from the primary.",
     ],
     [
       "a Live setup",
       { onboardingIntent: "live" },
-      "You need it to promote this server if the primary is unreachable.",
+      "You need it to promote this box if the primary is unreachable.",
     ],
   ] as const)(
     "says in the file of %s what the screen says the key is for",
@@ -1488,7 +1486,7 @@ describe("saving the server key as a file", () => {
       const lines = (await saves.blobs[0]!.text()).split("\n");
       expect(lines[4]).toBe(use);
       expect(lines[5]).toBe(
-        "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
+        "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
       );
     },
   );
@@ -1499,7 +1497,7 @@ describe("saving the server key as a file", () => {
     await userEvent.click(q(el, "[data-test=break-glass-save]")!);
     expect(saves.names).toEqual(["waitron-server-key.txt"]);
     expect((await saves.blobs[0]!.text()).split("\n").slice(0, 4)).toEqual([
-      "Waitron server key",
+      "Waitron box key",
       "",
       "key-on-paper",
       "",
@@ -1626,7 +1624,7 @@ describe("setup-done-screen layout", () => {
     expect(getComputedStyle(intro).color).toBe("rgb(7, 8, 9)");
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).not.toContain("trading mode");
-    expect(text).not.toContain("Once the server is trading");
+    expect(text).not.toContain("Once the box is trading");
   });
 
   it("draws the mode pill exactly as the review screen draws its own, directly under the heading", async () => {
@@ -1755,7 +1753,7 @@ describe("setup-done-screen layout", () => {
 });
 
 describe("setup-done-screen after a start that failed", () => {
-  const FAILED_EN = "The server did not start. Open it to see what went wrong and what you can do:";
+  const FAILED_EN = "The box did not start. Open it to see what went wrong and what you can do:";
   const GONE = { code: "server.internal", status: 404 };
   const RECOVERY = {
     failures: 3,
@@ -2003,7 +2001,7 @@ describe("the joining page", () => {
   };
   const SERVERS = "https://waitron.local/servers";
   const LOST_EN =
-    "This page can no longer reach this server. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's Servers page and look at this server's row.";
+    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's Servers page and look at this box's row.";
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -2067,12 +2065,12 @@ describe("the joining page", () => {
       () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 503)),
       () => Promise.resolve(json(JOINED_PROBE)),
     ]);
-    expect(q(el, "h1")!.textContent!.trim()).toBe("This server is joining");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("This box is joining");
     expect(status(el).getAttribute("role")).toBe("status");
     expect(statusText(el)).toBe(JOINING_STATUS_EN);
     expect(done(el, "join")).toBe("false");
-    await vi.waitFor(() => expect(statusText(el)).toBe("Joined. This server is now the standby."));
-    expect(q(el, "h1")!.textContent!.trim()).toBe("This server has joined");
+    await vi.waitFor(() => expect(statusText(el)).toBe("Joined. This box is now the standby."));
+    expect(q(el, "h1")!.textContent!.trim()).toBe("This box has joined");
     expect(done(el, "join")).toBe("true");
     expect(stateText(el, "join")).toBe("Done");
     expect(q(el, "[data-test=error]")).toBeNull();
@@ -2113,7 +2111,7 @@ describe("the joining page", () => {
       "Joining. Waiting for the primary to send its copy of the restaurant's data.",
     ],
     ["en-GB", "restoring", "Joining. Copying the restaurant's data from the primary."],
-    ["en-GB", "ready", "Joining. The copy is complete and this server is restarting."],
+    ["en-GB", "ready", "Joining. The copy is complete and this box is restarting."],
     [
       "es-ES",
       "waiting",
@@ -2139,7 +2137,7 @@ describe("the joining page", () => {
       Promise.resolve(json({ adoption: "pending", copy: "ready" })),
     );
     await vi.waitFor(() =>
-      expect(statusText(el)).toBe("Joining. The copy is complete and this server is restarting."),
+      expect(statusText(el)).toBe("Joining. The copy is complete and this box is restarting."),
     );
     probe = () => Promise.resolve(json({ acceptingSales: false }));
     await vi.waitFor(() => expect(statusText(el)).toBe(JOINING_STATUS_EN));
@@ -2165,7 +2163,7 @@ describe("the joining page", () => {
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
     probe = () => Promise.resolve(json(JOINED_PROBE));
     await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
-    expect(statusText(el)).toBe("Joined. This server is now the standby.");
+    expect(statusText(el)).toBe("Joined. This box is now the standby.");
   });
 
   it("goes back to the joining status when the box answers again", async () => {
@@ -2266,7 +2264,7 @@ describe("the joining page", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const { el } = await mountJoining([() => new Promise(() => {})]);
     expect(q(el, "[data-test=task-key]")!.textContent!.replace(/\s+/g, " ")).toContain(
-      "Save the server key",
+      "Save the box key",
     );
     expect(done(el, "key")).toBe("false");
     expect(stateText(el, "key")).toBe("To do");

@@ -16,14 +16,14 @@ export type OperatorWords = Readonly<
 
 /** Each kind's name on the page. `script` and an unknown holder share the last row. */
 const HOLDER_NAMES: Readonly<Record<VenueHolderKind, Readonly<Record<SupportedLocale, string>>>> = {
-  server: { "en-GB": "the Waitron server", "es-ES": "el servidor de Waitron" },
+  server: { "en-GB": "the main Waitron program", "es-ES": "el programa principal de Waitron" },
   restore: {
     "en-GB": "a restore from a backup",
     "es-ES": "una restauración desde una copia de seguridad",
   },
   rejoin: {
     "en-GB": "a rejoin of this box to its venue",
-    "es-ES": "la reincorporación de este equipo a su local",
+    "es-ES": "la reincorporación de este servidor a su local",
   },
   provisioning: {
     "en-GB": "the Waitron setup command",
@@ -96,7 +96,7 @@ export const RECOVERY_PAGE_WORDS: Readonly<
       `Nivel: ${level}. Este arranque no se ha contado: el disco está lleno.`,
     refusedAtStartStatus: (level) =>
       `Nivel: ${level}. Este arranque se rechazó antes de empezar y no se ha contado.`,
-    freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
+    freeSpace: (amount) => `Espacio libre en el disco del servidor: ${amount}.`,
     unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
     changedTriggers: (names) => `Disparadores cambiados: ${names}`,
@@ -120,9 +120,9 @@ export function holderStalledText(kind: VenueHolderKind | undefined): OperatorWo
         "Wait two minutes, then press Retry: Waitron normally ends a program of its own that stops responding within that time. If it fails again, switch the box off and on: that ends any program holding the database.",
     },
     "es-ES": {
-      title: `La base de datos de este equipo está ocupada por ${name["es-ES"]}, que parece haber dejado de responder.`,
+      title: `La base de datos de este servidor está ocupada por ${name["es-ES"]}, que parece haber dejado de responder.`,
       action:
-        "Espera dos minutos y pulsa «Reintentar un arranque normal»: Waitron normalmente cierra en ese tiempo un programa propio que deja de responder. Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
+        "Espera dos minutos y pulsa «Reintentar un arranque normal»: Waitron normalmente cierra en ese tiempo un programa propio que deja de responder. Si vuelve a fallar, apaga y enciende el servidor: así se cierra cualquier programa que tenga ocupada la base de datos.",
     },
   };
 }
@@ -150,7 +150,7 @@ const MALFORMED_PRODUCER_ES =
 const PRODUCER_ACTION_EN =
   "Install an official Waitron update on this box. If you build Waitron yourself, build it with your own producer's details.";
 const PRODUCER_ACTION_ES =
-  "Instala en este equipo una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.";
+  "Instala en este servidor una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.";
 
 /**
  * Every string in this table is fixed and chosen by code. The strings on the page that are not —
@@ -180,9 +180,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "La base de datos de este equipo la configuró una versión de Waitron distinta de la instalada.",
+        "La base de datos de este servidor la configuró una versión de Waitron distinta de la instalada.",
       action:
-        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "provisioning.schema_mismatch": {
@@ -192,9 +192,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Restore it from a backup, or reinstall. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     },
     "es-ES": {
-      title: "La base de datos del equipo no coincide con el software instalado.",
+      title: "La base de datos del servidor no coincide con el software instalado.",
       action:
-        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+        "Restáurala desde una copia de seguridad, o reinstala. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "provisioning.database_unreachable": {
@@ -205,9 +205,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, this is a fault in Waitron or this box's disk: the box's database is a file on its disk, and the software cannot read it.",
     },
     "es-ES": {
-      title: "Waitron no ha podido abrir la base de datos del equipo.",
+      title: "Waitron no ha podido abrir la base de datos del servidor.",
       action:
-        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el servidor: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este servidor: la base de datos del servidor es un archivo en su disco, y el software no puede leerlo.",
     },
   },
   "restore.manifest_invalid": {
@@ -229,9 +229,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "It ran out of temporary disk space, or could not measure the space available. Free disk space on this box, then press “Retry a normal boot”.",
     },
     "es-ES": {
-      title: "El equipo no ha podido reservar suficiente espacio temporal para abrir esta copia.",
+      title: "El servidor no ha podido reservar suficiente espacio temporal para abrir esta copia.",
       action:
-        "Se ha agotado el espacio temporal del disco, o no se ha podido medir el espacio disponible. Libera espacio en el disco de este equipo y pulsa «Reintentar un arranque normal».",
+        "Se ha agotado el espacio temporal del disco, o no se ha podido medir el espacio disponible. Libera espacio en el disco de este servidor y pulsa «Reintentar un arranque normal».",
     },
   },
   "storage.disk_full": {
@@ -241,9 +241,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "The box has deleted the files it no longer needs, and the disk is still full. Your sales and the venue's database are not touched. Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's. Once more space is free, press “Retry a normal boot”. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     },
     "es-ES": {
-      title: "El disco del equipo está lleno, así que Waitron no puede guardar nada.",
+      title: "El disco del servidor está lleno, así que Waitron no puede guardar nada.",
       action:
-        "El equipo ha quitado los archivos que ya no necesita, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+        "El servidor ha quitado los archivos que ya no necesita, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este servidor y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "migrations.incomplete": {
@@ -254,7 +254,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
     },
     "es-ES": {
-      title: "La base de datos del equipo solo se actualizó en parte.",
+      title: "La base de datos del servidor solo se actualizó en parte.",
       action:
         "Es un fallo de Waitron. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede detenerse en el mismo punto.",
     },
@@ -268,7 +268,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "es-ES": {
       title: "Empezar de nuevo no ha terminado.",
       action:
-        "Puede que algunos archivos ya estén apartados. Cada vez que este equipo arranca, intenta terminar el traslado registrado antes de la configuración inicial. Conserva estos archivos en el equipo, sin cambios.",
+        "Puede que algunos archivos ya estén apartados. Cada vez que este servidor arranca, intenta terminar el traslado registrado antes de la configuración inicial. Conserva estos archivos en el servidor, sin cambios.",
     },
   },
   "deployment.environment_mismatch": {
@@ -280,9 +280,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "Este equipo y su base de datos no pertenecen al mismo sistema: uno está configurado para ventas reales y el otro para pruebas.",
+        "Este servidor y su base de datos no pertenecen al mismo sistema: uno está configurado para ventas reales y el otro para pruebas.",
       action:
-        "Si la configuración del equipo es incorrecta, conserva estos archivos tal como están, corrige la configuración y reintenta. Si no, elige Empezar de nuevo con la conexión segura para apartar esta base de datos y empezar de cero o elegir otra copia de seguridad.",
+        "Si la configuración del servidor es incorrecta, conserva estos archivos tal como están, corrige la configuración y reintenta. Si no, elige Empezar de nuevo con la conexión segura para apartar esta base de datos y empezar de cero o elegir otra copia de seguridad.",
     },
   },
   "sif.producer_unset": {
@@ -314,21 +314,21 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "Este equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo no venderá.",
+        "Este servidor tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el servidor no venderá.",
       action:
-        "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este servidor. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
     },
   },
   "node.state_missing": {
     "en-GB": {
       title: "This box has lost its record of which box it is",
       action:
-        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. An administrator can remove this box on the main box's Servers screen, so the main box stops waiting for it. The venue's data stays on the main box.",
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. An administrator can remove this box from the Servers page on the main box, so the main box stops waiting for it. The venue's data stays on the main box.",
     },
     "es-ES": {
-      title: "Este equipo ha perdido el registro de qué equipo es",
+      title: "Este servidor ha perdido el registro de qué servidor es",
       action:
-        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como servidor principal». Un administrador puede retirar este equipo en la pantalla Servidores del equipo principal, para que el equipo principal deje de esperarlo. Los datos del local siguen en el equipo principal.",
+        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el servidor de reserva del local. El servidor principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este servidor y se detiene aquí de nuevo mientras falte el registro. Mientras este servidor esté parado, el servidor principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como servidor principal». Un administrador puede retirar este servidor en la página Servidores del servidor principal, para que el servidor principal deje de esperarlo. Los datos del local siguen en el servidor principal.",
     },
   },
   "node.emergency_copy_unactivated": {
@@ -338,9 +338,10 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "The copy has not been activated yet, or this start does not use the copy's own identity. This box does not sell or send anything to the tax agency. “Retry a normal boot” starts this box once more, and stops here again until the copy is activated and started under its own identity.",
     },
     "es-ES": {
-      title: "Este equipo guarda una copia de emergencia del local que este arranque no puede usar",
+      title:
+        "Este servidor guarda una copia de emergencia del local que este arranque no puede usar",
       action:
-        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este equipo no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
+        "La copia aún no se ha activado, o este arranque no usa la identidad propia de la copia. Este servidor no vende ni envía nada a Hacienda. «Reintentar un arranque normal» vuelve a arrancar este servidor y se detiene aquí de nuevo hasta que la copia se active y arranque con su propia identidad.",
     },
   },
   "sif.allocation_invalid": {
@@ -353,9 +354,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Press “Retry a normal boot” to try again. Where this page offers “Throw this restore away”, that throws this restore away instead, so you can restore again or set up this box.",
     },
     "es-ES": {
-      title: "El equipo no pudo crear sus nuevas series de facturas.",
+      title: "El servidor no pudo crear sus nuevas series de facturas.",
       action:
-        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este equipo.",
+        "Pulsa «Reintentar un arranque normal» para volver a intentarlo. Donde esta página ofrece «Descartar esta restauración», con ella se descarta esta restauración, para que puedas restaurar otra copia o configurar este servidor.",
     },
   },
   "server.config_missing": {
@@ -365,9 +366,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron's installation on this box: a setting the box needs is missing.",
     },
     "es-ES": {
-      title: "La configuración del equipo está incompleta.",
+      title: "La configuración del servidor está incompleta.",
       action:
-        "Es un fallo de la instalación de Waitron en este equipo: falta un ajuste que el equipo necesita.",
+        "Es un fallo de la instalación de Waitron en este servidor: falta un ajuste que el servidor necesita.",
     },
   },
   "server.unreleased_build": {
@@ -376,7 +377,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
       action: "Install a release.",
     },
     "es-ES": {
-      title: "Este equipo ejecuta una versión de prueba.",
+      title: "Este servidor ejecuta una versión de prueba.",
       action: "Instala una versión publicada.",
     },
   },
@@ -387,9 +388,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron's installation on this box: a setting the box needs is not valid.",
     },
     "es-ES": {
-      title: "La configuración del equipo no es válida.",
+      title: "La configuración del servidor no es válida.",
       action:
-        "Es un fallo de la instalación de Waitron en este equipo: un ajuste que el equipo necesita no es válido.",
+        "Es un fallo de la instalación de Waitron en este servidor: un ajuste que el servidor necesita no es válido.",
     },
   },
   [BOOT_INCOMPLETE]: {
@@ -400,7 +401,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "es-ES": {
       title: "Waitron no terminó de arrancar.",
       action:
-        "Pulsa «Reintentar un arranque normal». Si sigue fallando, es un fallo de Waitron o de este equipo.",
+        "Pulsa «Reintentar un arranque normal». Si sigue fallando, es un fallo de Waitron o de este servidor.",
     },
   },
   // These four name no next step beyond the retry: Waitron's own steps should not produce them.
@@ -411,9 +412,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron or this box's disk. This box cannot take over without that copy. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back.",
     },
     "es-ES": {
-      title: "La copia del local que este equipo aceptó ya no está en su disco.",
+      title: "La copia del local que este servidor aceptó ya no está en su disco.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. Este equipo no puede hacerse cargo sin esa copia. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio.",
+        "Es un fallo de Waitron o del disco de este servidor. Este servidor no puede hacerse cargo sin esa copia. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio.",
     },
   },
   "handover.copy_mismatch": {
@@ -423,9 +424,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron or this box's disk. This box did not put it in place, and its own database is unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back as it was.",
     },
     "es-ES": {
-      title: "La copia del local que este equipo aceptó ha cambiado en su disco.",
+      title: "La copia del local que este servidor aceptó ha cambiado en su disco.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. Este equipo no la ha puesto en su sitio, y su propia base de datos no ha cambiado. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio tal como estaba.",
+        "Es un fallo de Waitron o del disco de este servidor. Este servidor no la ha puesto en su sitio, y su propia base de datos no ha cambiado. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio tal como estaba.",
     },
   },
   "handover.preparation_state_unusable": {
@@ -436,9 +437,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
+        "Este servidor no puede guardar las selecciones del servidor antiguo, así que no se ha hecho cargo.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este equipo podría repetir un nombre que el equipo antiguo ya usó, así que su propia base de datos sigue sin cambios. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
+        "Es un fallo de Waitron o del disco de este servidor: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este servidor podría repetir un nombre que el servidor antiguo ya usó, así que su propia base de datos sigue sin cambios. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
     },
   },
   "handover.placement_failed": {
@@ -448,9 +449,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron or this box's disk. The copy is kept. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try again.",
     },
     "es-ES": {
-      title: "Este equipo no pudo poner en su sitio la copia del local que aceptó.",
+      title: "Este servidor no pudo poner en su sitio la copia del local que aceptó.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
+        "Es un fallo de Waitron o del disco de este servidor. La copia se conserva. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
     },
   },
   "handover.placement_no_room": {
@@ -460,9 +461,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "It needs room for one more whole copy of the venue, and the details below say how many bytes. Waitron cannot free more space by itself. The copy is kept. The old box has given up filing and stays stopped. Press “Retry a normal boot” to try again.",
     },
     "es-ES": {
-      title: "El disco de este equipo no tiene sitio para la copia del local que aceptó.",
+      title: "El disco de este servidor no tiene sitio para la copia del local que aceptó.",
       action:
-        "Necesita sitio para otra copia entera del local, y los detalles de abajo indican cuántos bytes. Waitron no puede liberar más espacio por sí solo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
+        "Necesita sitio para otra copia entera del local, y los detalles de abajo indican cuántos bytes. Waitron no puede liberar más espacio por sí solo. La copia se conserva. El servidor antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
     },
   },
   "restore.flow_unreadable": {
@@ -472,7 +473,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title: "No se puede leer la solicitud de restauración sin terminar.",
-      action: "El equipo no puede terminar esta restauración.",
+      action: "El servidor no puede terminar esta restauración.",
     },
   },
   "restore.placement_failed": {
@@ -484,19 +485,20 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "es-ES": {
       title: "Una restauración no pudo poner en su sitio la base de datos restaurada.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. Los detalles de «Por qué falló el último arranque», más abajo, describen el paso que falló. Una restauración iniciada desde la configuración vuelve a ejecutarse desde su copia cuando reintentas. La opción de abajo permite descartar esta restauración.",
+        "Es un fallo de Waitron o del disco de este servidor. Los detalles de «Por qué falló el último arranque», más abajo, describen el paso que falló. Una restauración iniciada desde la configuración vuelve a ejecutarse desde su copia cuando reintentas. La opción de abajo permite descartar esta restauración.",
     },
   },
   "restore.database_set_aside": {
     "en-GB": {
       title: "This box's database was moved aside by a restore that did not finish.",
       action:
-        "This is a fault in Waitron or this box's disk. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the server's own output. It must be moved back, or the restore run again, before the box can start.",
+        "This is a fault in Waitron or this box's disk. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the box's own output. It must be moved back, or the restore run again, before the box can start.",
     },
     "es-ES": {
-      title: "La base de datos de este equipo quedó apartada por una restauración que no terminó.",
+      title:
+        "La base de datos de este servidor quedó apartada por una restauración que no terminó.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
+        "Es un fallo de Waitron o del disco de este servidor. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el servidor pueda arrancar.",
     },
   },
   "append_only.triggers_changed": {
@@ -506,16 +508,16 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "This is a fault in Waitron or this box's disk, or a program other than Waitron changed the box's database.",
     },
     "es-ES": {
-      title: "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
+      title: "Se ha quitado o cambiado una protección de los registros permanentes del servidor.",
       action:
-        "Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron ha cambiado la base de datos del equipo.",
+        "Es un fallo de Waitron o del disco de este servidor, o un programa que no es Waitron ha cambiado la base de datos del servidor.",
     },
   },
   "restore.membership_invalid": {
     // No retry: the refusal leaves the copy unchanged, so the next start reads it again.
     "en-GB": {
       title:
-        "The list of servers in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
+        "The list of boxes in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
       action:
         "The box will not start from this copy. Unless it was changed after it was saved, this is a fault in Waitron or this box's disk.",
     },
@@ -523,7 +525,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
       title:
         "La lista de servidores de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
       action:
-        "El equipo no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este equipo.",
+        "El servidor no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este servidor.",
     },
   },
   "migrations.apply_failed": {
@@ -536,9 +538,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "No se ha podido actualizar la base de datos del equipo para la versión de Waitron instalada.",
+        "No se ha podido actualizar la base de datos del servidor para la versión de Waitron instalada.",
       action:
-        "Es un fallo de Waitron. El paso que falló se deshizo, así que el equipo podrá arrancar cuando se instale una versión de Waitron que lo corrija. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede fallar en el mismo punto.",
+        "Es un fallo de Waitron. El paso que falló se deshizo, así que el servidor podrá arrancar cuando se instale una versión de Waitron que lo corrija. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede fallar en el mismo punto.",
     },
   },
   "migrations.set_missing": {
@@ -548,7 +550,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title: "El software instalado está incompleto.",
-      action: "Reinstala Waitron en este equipo.",
+      action: "Reinstala Waitron en este servidor.",
     },
   },
   "setup.start_again_incomplete": {
@@ -560,9 +562,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     },
     "es-ES": {
       title:
-        "«Empezar de nuevo» no terminó: el equipo encontró archivos que no esperaba, o no pudo leer o borrar uno.",
+        "«Empezar de nuevo» no terminó: el servidor encontró archivos que no esperaba, o no pudo leer o borrar uno.",
       action:
-        "El equipo no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que hay en él.",
+        "El servidor no ha cambiado los archivos que no esperaba, porque pueden ser un local recuperado desde una copia de seguridad. Si reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que hay en él.",
     },
   },
   "setup.start_again_files_found": {
@@ -572,9 +574,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "An earlier Start again was cut off. Since then, files have appeared on this box that Start again did not create. They may be a venue restored from a backup. The box has not changed them.",
     },
     "es-ES": {
-      title: "«Empezar de nuevo» no terminó y el equipo encontró archivos que no esperaba.",
+      title: "«Empezar de nuevo» no terminó y el servidor encontró archivos que no esperaba.",
       action:
-        "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este equipo archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El equipo no los ha cambiado.",
+        "Un «Empezar de nuevo» anterior se interrumpió. Desde entonces han aparecido en este servidor archivos que «Empezar de nuevo» no creó. Pueden ser un local recuperado desde una copia de seguridad. El servidor no los ha cambiado.",
     },
   },
   "setup.start_again_kept": {
@@ -584,9 +586,9 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
         "Nothing was moved. This page stays until Waitron is reinstalled on this box. If Waitron is reinstalled, everything on this box is lost, the kept files included.",
     },
     "es-ES": {
-      title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este equipo.",
+      title: "«Empezar de nuevo» no terminó y se ha conservado todo lo que hay en este servidor.",
       action:
-        "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este equipo. Si se reinstala Waitron, se pierde todo lo que hay en el equipo, también los archivos conservados.",
+        "No se ha movido nada. Esta página sigue hasta que se reinstale Waitron en este servidor. Si se reinstala Waitron, se pierde todo lo que hay en el servidor, también los archivos conservados.",
     },
   },
   "setup.start_again_move_unfinished": {
@@ -598,7 +600,7 @@ export const OPERATOR_WORDS: Readonly<Partial<Record<RecoveryCode, OperatorWords
     "es-ES": {
       title: "«Empezar de nuevo» estaba apartando archivos y no ha terminado.",
       action:
-        "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
+        "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el servidor. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el servidor empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el servidor empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
     },
   },
   // The holder's own name, when `recovery.json` recorded one, replaces this row's in
@@ -619,7 +621,7 @@ export const GENERIC_WORDS: OperatorWords = {
   "es-ES": {
     title: "Waitron no ha podido arrancar.",
     action:
-      "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este equipo.",
+      "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, es un fallo de Waitron o de este servidor.",
   },
 };
 
@@ -649,12 +651,12 @@ export const ENVIRONMENT_RECOVERY_WORDS: Readonly<
   },
   "es-ES": {
     unavailable:
-      "Estos archivos no se pueden apartar en este equipo. No se ha cambiado nada. Puedes parar y conservarlos tal como están.",
+      "Estos archivos no se pueden apartar en este servidor. No se ha cambiado nada. Puedes parar y conservarlos tal como están.",
     move: "Empezar de nuevo",
     stop: "Parar",
-    stopped: "No se ha cambiado nada. Puedes corregir la configuración del equipo y reintentar.",
+    stopped: "No se ha cambiado nada. Puedes corregir la configuración del servidor y reintentar.",
     detail:
-      "Apartar los archivos de este local, sin cambios. El equipo empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
+      "Apartar los archivos de este local, sin cambios. El servidor empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
     wrong:
       "No se ha podido verificar la contraseña de administrador. No se ha movido nada. Revísala y vuelve a intentarlo.",
   },
@@ -679,14 +681,14 @@ export const RESTORE_DISCARD_WORDS = {
     move: "Descartar esta restauración",
     stop: "Parar",
     before:
-      "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en esta caja.",
+      "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en este servidor.",
     after:
-      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar esta caja.",
+      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar este servidor.",
     wrong: "La contraseña no coincide con la de un administrador activo de la copia seleccionada.",
     unavailable: "Ahora no se puede descartar esta restauración.",
     notFinished:
-      "No se ha podido descartar por completo la restauración. La caja sigue detenida. Vuelve a intentarlo.",
-    done: "Se ha descartado esta restauración. Puedes restaurar otra copia o configurar esta caja.",
+      "No se ha podido descartar por completo la restauración. El servidor sigue detenido. Vuelve a intentarlo.",
+    done: "Se ha descartado esta restauración. Puedes restaurar otra copia o configurar este servidor.",
     stopped: "Nada ha cambiado. Esta restauración sigue pendiente.",
   },
 } as const;
@@ -705,7 +707,7 @@ export const BOOKINGS_RECOVERY_WORDS = {
   },
   "es-ES": {
     detail:
-      "Puedes desactivar Reservas e intentar arrancar Waitron de nuevo. Las reservas guardadas permanecen en este equipo. Usa la contraseña de un administrador activo; un administrador sin contraseña no puede usar esta acción.",
+      "Puedes desactivar Reservas e intentar arrancar Waitron de nuevo. Las reservas guardadas permanecen en este servidor. Usa la contraseña de un administrador activo; un administrador sin contraseña no puede usar esta acción.",
     move: "Desactivar Reservas y volver a arrancar",
     stop: "Parar",
     wrong: "Esa contraseña no pertenece a un administrador activo.",

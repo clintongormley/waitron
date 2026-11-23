@@ -88,13 +88,13 @@ describe.each(["light", "dark"] as const)(
         "setup-restore-bucket-screen",
         {
           liveSince: "2026-09-23T11:58:00.000Z",
-          errorMessage: "Check your answer about the old server.",
+          errorMessage: "Check your answer about the old box.",
           invalidField: "oldBoxGone",
         },
         theme,
       );
       expect(el.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
-        "Check your answer about the old server.",
+        "Check your answer about the old box.",
       );
       await expectNoA11yViolations(host);
     });
@@ -120,7 +120,7 @@ describe.each(["light", "dark"] as const)(
         "setup-restore-bucket-screen",
         {
           errorMessage:
-            "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
+            "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
         },
         theme,
       );

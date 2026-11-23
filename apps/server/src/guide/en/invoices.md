@@ -21,10 +21,10 @@ Choose an invoice's number to see it as a PDF, then print or save it from there.
 invoice stays in the list, marked with the day it was cancelled. If the list ends with
 **Show more invoices**, choose it to see the rest.
 
-To hand over a whole month, choose **Download** beside the dates: the server prepares one file
+To hand over a whole month, choose **Download** beside the dates: the box prepares one file
 holding a copy of every invoice issued in the month that **Issued from** falls in, and a
 spreadsheet of those invoices. You can leave the page while it does; a notice says when to choose
-**Save the file**, and a file not saved stays on the server for an hour.
+**Save the file**, and a file not saved stays on the box for an hour.
 
 ## Give an inspector their own sign-in {#inspector-sign-in}
 

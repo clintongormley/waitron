@@ -112,20 +112,20 @@ export const WAITING_PAGE_WORDS: Readonly<
     },
   },
   "es-ES": {
-    title: ["Este equipo está esperando a ", ""],
+    title: ["Este servidor está esperando a ", ""],
     body: [
       "No hará ventas ni enviará nada a Hacienda hasta saber si ",
       " ha pasado a llevar el local. Vuelve a comprobarlo cada 15 segundos.",
     ],
-    otherBox: "otro equipo",
+    otherBox: "otro servidor",
     carryOn: {
       heading: "Seguir como servidor principal",
       bucketMain:
-        "Otro equipo ha publicado una copia de seguridad firmada más reciente para este local. Este equipo no puede seguir como principal. Abre el otro equipo para usar el local; deja este equipo esperando o apágalo.",
-      openMain: "Abrir el otro equipo",
+        "Otro servidor ha publicado una copia de seguridad firmada más reciente para este local. Este servidor no puede seguir como principal. Abre el otro servidor para usar el local; deja este servidor esperando o apágalo.",
+      openMain: "Abrir el otro servidor",
       intro: [
         "Solo si ",
-        " está apagado. Este equipo vuelve a aceptar ventas, pero se detiene si la copia de seguridad confirma que otro equipo ha pasado a llevar el local. Vuelve a preguntar al reiniciarse.",
+        " está apagado. Este servidor vuelve a aceptar ventas, pero se detiene si la copia de seguridad confirma que otro servidor ha pasado a llevar el local. Vuelve a preguntar al reiniciarse.",
       ],
       email: "Correo electrónico",
       password: "Contraseña",
@@ -133,7 +133,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       recoveryCode: "O uno de tus códigos de recuperación",
       switchedOff: ["", " está apagado"],
       noOtherRecovery:
-        "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro equipo en este momento",
+        "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
       action: "Seguir como servidor principal",
       emailMissing: "Introduce tu correo electrónico.",
       passwordMissing: "Introduce tu contraseña.",
@@ -146,29 +146,29 @@ export const WAITING_PAGE_WORDS: Readonly<
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación o uno de tus códigos de recuperación.",
       notPermitted:
-        "Tu función no te permite elegir qué equipo lleva el local. Inicia sesión aquí como administrador para seguir. No se ha cambiado nada.",
+        "Tu función no te permite elegir qué servidor lleva el local. Inicia sesión aquí como administrador para seguir. No se ha cambiado nada.",
       throttled: (minutes) =>
         `Demasiados intentos incorrectos. Espera ${minutes === 1 ? "un minuto" : `${minutes} minutos`} y vuelve a intentarlo. No se ha cambiado nada.`,
-      insecure: "Para seguir como equipo principal, abre esta página en su dirección https://.",
+      insecure: "Para seguir como servidor principal, abre esta página en su dirección https://.",
       unavailable:
-        "No se ha podido mostrar el formulario para seguir como equipo principal. Vuelve a cargar esta página para intentarlo.",
+        "No se ha podido mostrar el formulario para seguir como servidor principal. Vuelve a cargar esta página para intentarlo.",
       failed:
-        "No se ha cambiado nada: es un fallo de Waitron o de este equipo. Vuelve a intentarlo. Si vuelve a fallar, apaga y enciende este equipo y después inténtalo otra vez.",
+        "No se ha cambiado nada: es un fallo de Waitron o de este servidor. Vuelve a intentarlo. Si vuelve a fallar, apaga y enciende este servidor y después inténtalo otra vez.",
       knownHandover: [
-        "Este equipo ya ha pasado el local a ",
-        ". No puede seguir como equipo principal.",
+        "Este servidor ya ha pasado el local a ",
+        ". No puede seguir como servidor principal.",
       ],
-      back: "Volver al estado de este equipo",
-      knownTitle: "Este equipo ya ha pasado el local",
-      restartingTitle: "Este equipo se está reiniciando",
+      back: "Volver al estado de este servidor",
+      knownTitle: "Este servidor ya ha pasado el local",
+      restartingTitle: "Este servidor se está reiniciando",
       restarting:
-        "Otro equipo ha pasado a llevar el local, o este equipo se está apagando, así que no ha seguido. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
+        "Otro servidor ha pasado a llevar el local, o este servidor se está apagando, así que no ha seguido. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
       restartingAfterRecord:
-        "Tu decisión se ha registrado, pero otro equipo ha pasado a llevar el local, o este equipo se está apagando, así que no ha seguido. Vuelve a abrir esta página dentro de un minuto.",
-      peerAnsweredTitle: "El otro equipo ha respondido",
+        "Tu decisión se ha registrado, pero otro servidor ha pasado a llevar el local, o este servidor se está apagando, así que no ha seguido. Vuelve a abrir esta página dentro de un minuto.",
+      peerAnsweredTitle: "El otro servidor ha respondido",
       peerAnswered:
-        "Respondió antes de que siguieras, así que este equipo se inicia con normalidad. No se ha registrado nada. Esta página se vuelve a cargar en unos segundos.",
-      carriedOnTitle: "Este equipo sigue como equipo principal",
+        "Respondió antes de que siguieras, así que este servidor se inicia con normalidad. No se ha registrado nada. Esta página se vuelve a cargar en unos segundos.",
+      carriedOnTitle: "Este servidor sigue como servidor principal",
       carriedOnBody:
         "Está empezando a hacer ventas de nuevo. Esta página se vuelve a cargar en unos segundos.",
     },

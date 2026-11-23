@@ -7,7 +7,7 @@ export const venueEn = {
   "email.heading": "Set up email",
   "email.cloud_staff_email": "Send staff email through Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "To use Cloud for staff invitations, password resets, email-change codes and selected notices, leave the server, sender email, username and password blank. If you set up your own mail server, Waitron uses it for those messages.",
+    "To use Cloud for staff invitations, password resets, email-change codes and selected notices, leave the mail server, sender email, username and password blank. If you set up your own mail server, Waitron uses it for those messages.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
   "email.intro_optional":
@@ -167,7 +167,7 @@ export const venueEn = {
   "review.error_reports_detail":
     "Help fix Waitron by sending error codes, sources, the Waitron version, times and counts. Reports are linked to this box’s Cloud registration. You can change this choice in Cloud services.",
   "review.heading": "Review and provision",
-  "review.intro": "Check the details below, then provision this server.",
+  "review.intro": "Check the details below, then provision this box.",
   "review.demo_defaults":
     "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
   "review.country": "Country",
@@ -202,7 +202,7 @@ export const venueEn = {
   "review.cert_attached": "attached",
   "review.cert_not_attached": "not attached",
   "review.back": "Back",
-  "review.provision": "Provision this server",
+  "review.provision": "Provision this box",
 
   "cert.heading": "AEAT certificate",
   "cert.intro":
@@ -210,7 +210,7 @@ export const venueEn = {
   "cert.file_label": "Certificate file (.pfx or .p12)",
   "cert.file_help_label": "Help with certificate file",
   "cert.file_help":
-    "Choose the exported signing certificate, including its private key, so this server can sign fiscal records.",
+    "Choose the exported signing certificate, including its private key, so this box can sign fiscal records.",
   "cert.file_required": "Choose the certificate file.",
   "cert.loaded": "Certificate loaded.",
   "cert.loaded_named": "Certificate loaded — {name}.",
@@ -506,7 +506,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.passphrase_wrong": "La contraseña del certificado es incorrecta.",
   "cert.refusal.unreadable": "Elige un archivo de certificado .pfx o .p12 válido.",
   "cert.refusal.too_large": "Este archivo es demasiado grande para ser un certificado.",
-  "cert.refusal.unavailable": "La caja no pudo comprobar este certificado. Inténtalo de nuevo.",
+  "cert.refusal.unavailable": "El servidor no pudo comprobar este certificado. Inténtalo de nuevo.",
   "cert.refusal.setup_stopped":
     "La configuración se detuvo después de crear las series de facturas. No se emitió ninguna factura. Pulsa Reconectar y después Empezar de nuevo. Empezar de nuevo borra esta configuración incompleta para que puedas introducirla otra vez.",
   "cert.refusal.old_encryption": "Exporta el certificado de nuevo con un cifrado moderno.",

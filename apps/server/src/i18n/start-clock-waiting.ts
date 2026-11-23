@@ -24,22 +24,22 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   >
 > = {
   "en-GB": {
-    title: "The server is restoring your backup and is waiting to confirm its time.",
-    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's server key below to confirm the time from this device.",
-    keyLabel: "Selected backup’s server key",
-    keyRefused: "Enter the selected backup’s server key.",
+    title: "The box is restoring your backup and is waiting to confirm its time.",
+    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's box key below to confirm the time from this device.",
+    keyLabel: "Selected backup’s box key",
+    keyRefused: "Enter the selected backup’s box key.",
     keyContinue: "Continue",
     waitingForClock:
-      "Before it creates the new invoice series, the server needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the server's time is wrong, press This device to set it from this device's time.",
+      "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.",
     deviceTime: "This device's time:",
-    serverTime: "The server's time:",
+    serverTime: "The box's time:",
     confirm: "Confirm the time",
     thisDevice: "This device",
-    confirmed: "Time confirmed. The server carries on with the restore by itself.",
+    confirmed: "Time confirmed. The box carries on with the restore by itself.",
     onBox:
-      "This screen is on the server itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
+      "This screen is on the box itself, so its time does not count. Open this page on a phone, computer or till on the venue's network.",
     setRefused:
-      "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+      "The box could not set its clock from this device. Check this device's date and time, then press This device again.",
   },
   "es-ES": {
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",

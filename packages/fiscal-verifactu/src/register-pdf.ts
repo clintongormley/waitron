@@ -78,7 +78,7 @@ export async function renderRegisterPdf(
   );
   write(
     locale === "en"
-      ? "Contains server keys. Keep it in your office."
+      ? "Contains box keys. Keep it in your office."
       : "Contiene claves del servidor. Guárdalo en tu oficina.",
   );
   const paper = document.paper;
@@ -132,7 +132,7 @@ export async function renderRegisterPdf(
           write(
             locale === "en"
               ? `${event.allocationId}: Consumed - never available again. Completion unknown until the box confirms activation.`
-              : `${event.allocationId}: Consumida - nunca vuelve a estar disponible. Finalización desconocida hasta que la caja confirme la activación.`,
+              : `${event.allocationId}: Consumida - nunca vuelve a estar disponible. Finalización desconocida hasta que el servidor confirme la activación.`,
           );
         else write(`${event.allocationId}: ${event.kind} / ${event.reason}`);
       }
@@ -140,7 +140,7 @@ export async function renderRegisterPdf(
   }
   for (const node of document.nodeKeys) {
     if (pdf.y > 610) pdf.addPage();
-    title(locale === "en" ? "Server key" : "Clave del servidor");
+    title(locale === "en" ? "Box key" : "Clave del servidor");
     write(`${node.name} / ${node.nodeId}`, 12);
     const encoding = /^[A-Za-z0-9_-]{32}$/.test(node.secret) ? "raw192" : "utf8";
     const printed = await encodeNodeKey(node, scope, encoding);

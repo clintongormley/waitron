@@ -955,7 +955,7 @@ describe("startServer, against a migrated venue directory", () => {
       const trust = await fetch(`https://127.0.0.1:${httpPort()}/setup/trust`, via);
       expect(trust.status).toBe(200);
       const trustHtml = await trust.text();
-      expect(trustHtml).toContain("to this Waitron server");
+      expect(trustHtml).toContain("to this Waitron box");
       expect(trustHtml).not.toContain(NOT_SET_UP_WORDS.en);
       const connection = await fetch(
         `https://127.0.0.1:${httpPort()}/setup/connection?lang=es`,

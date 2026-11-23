@@ -7,7 +7,7 @@ archives copy the current bucket settings when you save. Later edits to the cont
 bucket copy do not move those archives.
 
 The **Recovery pack** card at the top of **Backups** makes one PDF holding the restore codes for
-the bucket copy and bucket archives, the recovery key for archives in a folder, and the server key
+the bucket copy and bucket archives, the recovery key for archives in a folder, and the box key
 or where it is: see [Make a new recovery pack](recovery-document.md). Keep the pack secret and off
 the box, outside the bucket. Keep earlier packs and keys for archives made before a replacement:
 changing the recovery key does not re-encrypt older files. After changing the recovery key, or
@@ -17,14 +17,14 @@ If rotation reports `backup.rotation_metadata_failed`, the new key is already in
 Keep that key and make a new recovery pack. Do not assume that the failed metadata step kept
 the former key active. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
-recovery keys and the server key.
+recovery keys and the box key.
 
 ## Recover from an interrupted first setup
 
 Choose **Recover from backup** on the repair page: it deletes the failed setup as Start again does,
 and after the box restarts **Reconnect** opens "Join or recover an existing restaurant", where you
 restore as on a new box ([procedure](hour-recovery.md#recover-while-first-setup-is-blocked)). Keep
-the selected copy's named server key and its recovery key or source credentials ready. A backup file
+the selected copy's named box key and its recovery key or source credentials ready. A backup file
 carries two databases, the venue's (`db.dump`) and the old box's own (`node.dump`), and a file
 without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/restore.ts`).
 

@@ -692,3 +692,42 @@ describe("createSetupApp — GET /status.json", () => {
     );
   });
 });
+
+describe("createSetupApp — the word for the venue's Waitron machine", () => {
+  // The owner's word is "box" (2026-11-22). Weaker than its name: English only, and only the pages
+  // the case below lists, not the agent's logs or other output. Attribute values are not read.
+  const visibleText = (html: string): string => html.replace(/<[^>]*>/g, " ");
+  const page = async (overrides: Partial<SetupDeps>, path = "/", init?: RequestInit) =>
+    visibleText(
+      await (await request(createSetupApp(deps(overrides)), path, init, "127.0.0.1")).text(),
+    );
+
+  it("calls it the box, never the server, on every page it draws", async () => {
+    const unreachable: AgentStatus = { phase: "unreachable", serverUrl: null, current: null };
+    const unauthorized: AgentStatus = { phase: "unauthorized", serverUrl: null, current: null };
+    const pages = [
+      await page({}),
+      await page({ envLocked: true, snapshot: async () => snapshot({ config: CONFIG }) }),
+      await page({ snapshot: async () => snapshot({ status: unreachable, config: CONFIG }) }),
+      await page({ snapshot: async () => snapshot({ status: unauthorized, config: CONFIG }) }),
+      await page({
+        snapshot: async () =>
+          snapshot({ status: unreachable, config: CONFIG, joined: true, outOfTouch: true }),
+      }),
+      await page({ envLocked: true }, "/setup", { method: "POST" }),
+      await page({
+        snapshot: async () => snapshot({ status: RUNNING, config: CONFIG, joined: true }),
+      }),
+      await page({
+        snapshot: async () =>
+          snapshot({
+            status: { ...RUNNING, phase: "spare_box", lastError: undefined },
+            config: CONFIG,
+            joined: true,
+            outOfTouch: true,
+          }),
+      }),
+    ];
+    expect(pages.filter((text) => /\bservers?\b/i.test(text))).toEqual([]);
+  });
+});

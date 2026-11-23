@@ -11,11 +11,11 @@ Before saving or removing a mail server, confirm your sign-in in the shared wind
 
 Outside Demo, open **System → Email**. With box administration (Admin by default), choose
 **Set up mail server** or **Change mail server**, enter your provider's settings and send a test
-before saving. Enter fresh login details when changing an authenticated server; Waitron never
+before saving. Enter fresh login details when changing an authenticated mail server; Waitron never
 shows the saved password.
 Managers can view the settings, but cannot save or remove them.
 
-Mail sent through your saved server and the test on this page use your venue name alongside
+Mail sent through your saved mail server and the test on this page use your venue name alongside
 the sender address. If the page says the saved sender address is not valid, choose
 **Change mail server** and correct **Sender address** before testing again.
 
@@ -25,7 +25,7 @@ without a login, use one that has a login during setup, then switch to yours in 
 where **Use authentication** can stay off. You can skip the mail server in development or when you
 [choose Cloud for staff email during test setup](email.md#cloud-staff-email). If you use your own mail server, saving it
 sends invitations and password-reset links to real inboxes. This page shows invoice email status:
-development boxes keep invoice email locally even when account email uses a saved server or Cloud.
+development boxes keep invoice email locally even when account email uses a saved mail server or Cloud.
 
 In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Admin to open captured messages.
 
@@ -60,7 +60,7 @@ the mail server you use for staff email.
 ## Account email through test Cloud {#cloud-account-email}
 
 Invitations, password-reset links and email-change codes use your saved mail server. If you
-leave the server blank and enable email through test Cloud, Cloud sends those messages.
+leave the mail server blank and enable email through test Cloud, Cloud sends those messages.
 In Demo outside development, enable Cloud email to send to the recipient's real inbox. Otherwise,
 open Demo's **Email inbox**.
 
@@ -81,22 +81,22 @@ An accepted test means the mail server took the message. Check your inbox, inclu
 If it is missing, check the recipient address and your mail provider's delivery information.
 
 If the result says the mail server name was not found, check its spelling. For a certificate
-refusal, use your provider's server name and a trusted certificate. If Waitron marks **Port**,
+refusal, use your provider's mail server name and a trusted certificate. If Waitron marks **Port**,
 check the port in your provider's settings.
 
 For an encryption refusal, follow the result's suggested encryption and port, then send another
 test. Changing encryption leaves the port you entered in place, so change that too when needed.
 
-If the server refuses the username or password, check both before testing again. For a timeout
+If the mail server refuses the username or password, check both before testing again. For a timeout
 or another refusal, check the port and encryption, then retry.
 
 If setup asks you to test email, test again after changing the settings or administrator address.
-Continue becomes available after the server accepts a test of those settings for that address.
+Continue becomes available after the mail server accepts a test of those settings for that address.
 
 ## Remove a mail server {#remove}
 
 With box administration (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
-Removing the server clears its saved login details too; enter them again if you set it up later.
+Removing the mail server clears its saved login details too; enter them again if you set it up later.
 
 Outside development, keep a mail server for receipt email, the daily report and notices that
 Cloud does not handle. If you have enabled test Cloud email, Cloud can send

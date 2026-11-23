@@ -72,12 +72,12 @@ Cuando no pasa nada, cada fila dice:
 - **Copia en el bucket**: **Al día**, y cuándo se confirmó el último envío. Dice **No
   configurada** cuando no hay ninguna copia configurada, y cuántos minutos de retraso lleva
   cuando se retrasa.
-- **Servidor de reserva**: cuando el equipo principal copia a una reserva emparejada, esta fila sustituye
+- **Servidor de reserva**: cuando el servidor principal copia a un servidor de reserva emparejado, esta fila sustituye
   a **Copia en el bucket**. Muestra el retraso medido en segundos y cuándo se recibió la
-  última copia. Deja ambos equipos encendidos cuando veas **Actualización pendiente** o
+  última copia. Deja ambos servidores encendidos cuando veas **Actualización pendiente** o
   **Reconstruyendo la copia**.
-  **Actualización desconocida** significa que la principal no puede confirmar su progreso.
-  Abre **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
+  **Actualización desconocida** significa que el servidor principal no puede confirmar su progreso.
+  Abre la página **Servidores** para comprobar el par. Al cambiar, primero se pone al día la copia de este
   servidor de reserva. La campana avisa si hay cambios pendientes durante más de un minuto o no se puede contactar con el servidor de reserva durante dos minutos.
 - **Impresoras**: **Sin problemas**, y los nombres de las impresoras configuradas.
 - **Lectores de tarjetas**: **Sin problemas**, y los nombres de los lectores configurados. Un
@@ -85,7 +85,7 @@ Cuando no pasa nada, cada fila dice:
   conexión.** Mientras la campana o esta página están abiertas, el servidor pregunta al proveedor como
   mucho cada cinco minutos, así que puede aparecer con unos minutos de retraso. Esta fila no aparece
   cuando los pagos con tarjeta están desactivados.
-- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez. Si el equipo de reserva discrepa, o un dispositivo mientras el servidor no mantiene su hora por internet, compara ambos relojes antes de elegir cuál corregir.
+- **Reloj**: **Correcto**, y cuándo comparó el servidor su hora con la de Hacienda por última vez. Si el servidor de reserva discrepa, o un dispositivo mientras el servidor no mantiene su hora por internet, compara ambos relojes antes de elegir cuál corregir.
   Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el servidor, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
@@ -261,7 +261,7 @@ espacio.
 
 Si **Configurar conexión segura** avisa del espacio en disco, libera espacio primero.
 Elige **Comprobar de nuevo** en esa página para volver a leer el espacio y sigue sus instrucciones de conexión.
-Reinstalar deja el equipo como nuevo y pierde su contenido salvo que restaures una copia de seguridad.
+Reinstalar deja el servidor como nuevo y pierde su contenido salvo que restaures una copia de seguridad.
 
 ## Reinicia el servidor {#restart}
 

@@ -36,7 +36,7 @@ type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotio
 type Context = RecoveryContext | PromotionContext;
 const isPromotion = (context: Context): context is PromotionContext => "mode" in context;
 /** A planned hand-over's main box still answers, so no till there offers the switch. */
-const promotionWords = {
+export const promotionWords = {
   emergency: {
     en: {
       secondClockDo:
@@ -75,7 +75,7 @@ interface Selected {
   identity: string;
   input: { allocation: { series: { code: string; purpose: (typeof seriesPurposes)[number] }[] } };
 }
-const strings = {
+export const recoveryHourStrings = {
   en: {
     ...clockWaitStrings.en,
     ...checkVenueStrings.en,
@@ -99,7 +99,7 @@ const strings = {
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
     secondClockLead:
-      "It is very important that the server's time is correct, and it can't check its time over the Internet right now. Either:",
+      "It is very important that the box's time is correct, and it can't check its time over the Internet right now. Either:",
     secondClockFix: "fix the Internet connection, and this page carries on by itself, or",
     secondClockOpen: (address?: string) =>
       `open this page${address ? ` on ${address}` : ""} on a phone or till on the venue's network, and carry on there`,
@@ -323,7 +323,7 @@ export class RecoveryHourEntry extends LitElement {
     };
   }
   refusalMessage(cause: unknown): string {
-    const words = strings[this.locale];
+    const words = recoveryHourStrings[this.locale];
     if (record(cause)) {
       if (cause.code === "node.operation_page_required") return words.promotionConnection;
       if (cause.code === "password.throttled") return words.promotionThrottled;
@@ -469,7 +469,7 @@ export class RecoveryHourEntry extends LitElement {
     const en = this.locale === "en";
     const context = this.context;
     const promote = isPromotion(context);
-    const baseWords = en ? strings.en : strings.es;
+    const baseWords = en ? recoveryHourStrings.en : recoveryHourStrings.es;
     const words = promote
       ? {
           ...baseWords,

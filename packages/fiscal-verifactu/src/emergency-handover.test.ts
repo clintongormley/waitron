@@ -47,7 +47,7 @@ async function expectCurrentRecord() {
   expect(text).toContain(JSON.stringify(JSON.parse(json), null, 2));
   expect(text).toContain("Emergency recovery / Recuperación de emergencia");
   expect(text).toContain("Keep this record outside the box and its backups.");
-  expect(text).toContain("Guarda este registro fuera del equipo y sus copias de seguridad.");
+  expect(text).toContain("Guarda este registro fuera del servidor y sus copias de seguridad.");
   expect(text).toContain("Check the local activation separately from this attempt result.");
   expect(text).toContain("Comprueba la activación local aparte del resultado de este intento.");
   expect((await stat(`${path}.txt`)).mode & 0o777).toBe(0o600);

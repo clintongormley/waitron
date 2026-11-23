@@ -7,23 +7,23 @@ import {
   type RecoveryDocumentPublic,
 } from "./recovery-document.js";
 
-const words = {
+export const serverKeyPageWords = {
   en: {
-    title: "Server key",
+    title: "Box key",
     intro:
-      "With this key and its matching backup, the venue's server can be recovered with its own identity.",
+      "With this key and its matching backup, the venue's box can be recovered with its own identity.",
     legalName: "Legal name",
     venue: "Venue",
     environment: "Environment",
     production: "Production",
     preproduction: "Preproduction",
     softwareId: "Software ID",
-    serverId: "Server ID",
+    serverId: "Box ID",
     keyName: "Key name",
     created: "Created",
     key: "Key",
     keepSafe:
-      "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the server.",
+      "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the box.",
     notABackup:
       "A backup in Waitron Cloud needs your Cloud login. This pack is not a backup of your sales.",
     keepOlder:
@@ -87,7 +87,7 @@ export function serverKeyPage(
   document: RecoveryDocument | RecoveryDocumentPublic,
   options: { readonly locale: "en" | "es"; readonly timeZone: string },
 ): RecoveryPackPage {
-  const w = words[options.locale];
+  const w = serverKeyPageWords[options.locale];
   const secret = "secret" in document.nodeKey ? document.nodeKey.secret : undefined;
   const created = createdWhen(
     document,

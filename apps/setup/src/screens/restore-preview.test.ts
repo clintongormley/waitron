@@ -56,7 +56,7 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("Saved venue");
   expect(text).toContain("89890001K");
   expect(text).toContain("Saved venue");
-  expect(text).toContain("Keep older server keys until no older backup remains.");
+  expect(text).toContain("Keep older box keys until no older backup remains.");
   expect(text).not.toContain("archive-secret");
   expect(child(el)!.outerHTML).not.toContain("archive-secret");
 });
@@ -160,7 +160,7 @@ it("keeps an unnamed old key explicit and updates its warnings after a language 
   review(el);
   await vi.waitFor(() =>
     expect(child(el)!.shadowRoot!.textContent).toContain(
-      "This backup's server key has no stored name.",
+      "This backup's box key has no stored name.",
     ),
   );
   setLocale("es-ES");

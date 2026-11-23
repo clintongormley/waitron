@@ -50,7 +50,7 @@ function fieldMessages(el: SetupCloudRestoreScreen): string[] {
 }
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 const ACKNOWLEDGE_PROBLEM =
-  "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.";
+  "Confirm that the old box and surviving peers are stopped, and that you accept losing changes after this snapshot.";
 
 describe("Cloud restore screen", () => {
   it("starts pairing and shows only the code, link and deadline", async () => {
@@ -320,7 +320,7 @@ describe("Cloud restore screen", () => {
   });
 });
 
-describe("Cloud restore screen asking whether the old server is gone", () => {
+describe("Cloud restore screen asking whether the old box is gone", () => {
   it("names when the old server last wrote, and restores only once the owner says it is gone", async () => {
     setLocale("es-ES");
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
@@ -489,7 +489,7 @@ describe("Cloud restore screen listing what is still unanswered", () => {
 });
 
 describe("Cloud restore screen showing the server's refusal of a detail", () => {
-  const CHECK_OLD_BOX = "Check your answer about the old server.";
+  const CHECK_OLD_BOX = "Check your answer about the old box.";
   const CHECK_POINT = "Check the approved snapshot.";
 
   it("drops the old-server refusal once the owner changes the tick box", async () => {
@@ -536,7 +536,7 @@ describe("Cloud restore screen showing the server's refusal of a detail", () => 
     expect(fieldMessages(el)).toEqual([CHECK_OLD_BOX]);
     await tick(el, "[data-test=old-box-gone]");
     expect(fieldMessages(el)).toEqual([]);
-    el.errorMessage = "Still check your answer about the old server.";
+    el.errorMessage = "Still check your answer about the old box.";
     await el.updateComplete;
     expect(fieldMessages(el)).toEqual([]);
   });

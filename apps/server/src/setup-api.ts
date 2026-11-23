@@ -257,7 +257,7 @@ function setupPhaseReached(
  * Served when no built wizard is configured, so a browser pointed at an unprovisioned box gets a
  * clear "needs setup" page rather than a blank 404.
  */
-const SETUP_PLACEHOLDER_HTML = `<!doctype html>
+export const SETUP_PLACEHOLDER_HTML = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -266,8 +266,8 @@ const SETUP_PLACEHOLDER_HTML = `<!doctype html>
   </head>
   <body>
     <main>
-      <h1>This Waitron server needs setup</h1>
-      <p>No venue is bound to this server yet. Finish setup to start trading.</p>
+      <h1>This Waitron box needs setup</h1>
+      <p>No venue is bound to this box yet. Finish setup to start trading.</p>
     </main>
   </body>
 </html>
