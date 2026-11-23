@@ -23,14 +23,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
-import {
-  parentJoin,
-  parentProducts,
-  staffPresentationName,
-  unitOwnerJoin,
-  units,
-} from "@waitron/menu";
-import { countsWholePortions } from "./order-state-counts.js";
+import { staffPresentationName } from "@waitron/menu";
 import {
   devices,
   kitchenCourses,
@@ -45,7 +38,6 @@ import {
   ticketItems,
   unpaidDepartures,
   parties,
-  products,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -2006,22 +1998,13 @@ export async function readHeldCounts(
     .select({
       partyId: orderGroups.partyId,
       quantity: workingOrderLines.quantity,
-      unitPrecision: workingOrderLines.unitPrecision,
-      unit: {
-        id: units.id,
-        hardwareUnit: units.hardwareUnit,
-        precision: units.precision,
-        measure: units.measure,
-      },
+      countAsPortions: workingOrderLines.countAsPortions,
       cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
@@ -2035,7 +2018,7 @@ export async function readHeldCounts(
   for (const line of lines) {
     const { active } = serviceQuantities(line.quantity, 0, line.cancelledQuantity);
     if (active <= 0) continue;
-    const items = !countsWholePortions(line) || active % 1000 !== 0 ? 1 : active / 1000;
+    const items = !line.countAsPortions || active % 1000 !== 0 ? 1 : active / 1000;
     counts.set(line.partyId, (counts.get(line.partyId) ?? 0) + items);
   }
   return counts;
@@ -2206,12 +2189,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       quantity: workingOrderLines.quantity,
       unitPrecision: workingOrderLines.unitPrecision,
       servedQuantity: workingOrderLines.servedQuantity,
-      unit: {
-        id: units.id,
-        hardwareUnit: units.hardwareUnit,
-        precision: units.precision,
-        measure: units.measure,
-      },
+      countAsPortions: workingOrderLines.countAsPortions,
       servedAt: workingOrderLines.servedAt,
       cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
       cancelledAt: lineServiceCancellations.cancelledAt,
@@ -2231,9 +2209,6 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(inArray(workingOrders.partyId, family), onShownBill(), notSetMenuLine()))
@@ -2355,7 +2330,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         ? { cancelledQuantity: thousandthsToDecimal(line.cancelledQuantity) }
         : {}),
       unitPrecision: line.unitPrecision,
-      countsWholePortions: countsWholePortions(line),
+      countsWholePortions: line.countAsPortions,
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
       released: dishReleased(line, heldExtras.has(line.id)),

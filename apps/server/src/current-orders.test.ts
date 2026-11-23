@@ -17,6 +17,9 @@ import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   assignMenuToVenue,
+  assignProductUnit,
+  createUnit,
+  menuItems,
   createMenu,
   createCategory,
   createExtraList,
@@ -1256,6 +1259,36 @@ async function linesByName(partyId: string) {
 }
 
 describe("readCurrentOrders (spec §4)", () => {
+  it("keeps a sent whole portion classified as such after a change to a measure", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    await inTx(async (tx) => {
+      const [offer] = await tx
+        .select({ productId: menuItems.productId })
+        .from(menuItems)
+        .where(eq(menuItems.id, v.offer("croquetas")));
+      const unit = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { [LOCALE]: "Millilitre" },
+          abbreviation: { [LOCALE]: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        LOCALE,
+      );
+      await assignProductUnit(tx, offer!.productId!, unit.id);
+    });
+
+    expect((await currentOrders(s.partyId)).groups[0]!.rows).toMatchObject([
+      { countsWholePortions: true },
+      { countsWholePortions: true },
+    ]);
+  });
+
   it.each(["queued", "preparing", "ready"] as const)(
     "A773 no dispatch state: a %s dish keeps its kitchen facts without an Away projection",
     async (state) => {

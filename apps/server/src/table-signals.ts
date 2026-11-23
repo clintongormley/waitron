@@ -1,12 +1,6 @@
 import { and, asc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import {
-  parentJoin,
-  parentProducts,
-  staffPresentationName,
-  unitOwnerJoin,
-  units,
-} from "@waitron/menu";
+import { parentJoin, parentProducts, staffPresentationName } from "@waitron/menu";
 import {
   kitchenStations,
   lineServiceCancellations,
@@ -24,7 +18,6 @@ import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 import { firedQuantity } from "./kitchen-print.js";
-import { countsWholePortions } from "./order-state-counts.js";
 import { earliestTime } from "./time-order.js";
 
 /** A fired or requested line nobody has finished serving, with its station and waiting bands. */
@@ -62,17 +55,11 @@ async function readKitchenLines(
       readyAt: ticketItems.readyAt,
       quantity: firedQuantity,
       servedQuantity: workingOrderLines.servedQuantity,
-      unitPrecision: workingOrderLines.unitPrecision,
+      countAsPortions: workingOrderLines.countAsPortions,
       dishQuantity: dish.quantity,
       dishServedQuantity: dish.servedQuantity,
       dishCancelledQuantity: lineServiceCancellations.quantity,
-      dishUnitPrecision: dish.unitPrecision,
-      unit: {
-        id: units.id,
-        hardwareUnit: units.hardwareUnit,
-        precision: units.precision,
-        measure: units.measure,
-      },
+      dishCountAsPortions: dish.countAsPortions,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -81,12 +68,6 @@ async function readKitchenLines(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
-    .leftJoin(
-      products,
-      eq(products.id, sql`coalesce(${dish.productId}, ${workingOrderLines.productId})`),
-    )
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(units, unitOwnerJoin)
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, dish.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .where(
@@ -102,12 +83,11 @@ async function readKitchenLines(
     ({
       quantity,
       servedQuantity,
-      unitPrecision,
+      countAsPortions,
       dishQuantity,
       dishServedQuantity,
       dishCancelledQuantity,
-      dishUnitPrecision,
-      unit,
+      dishCountAsPortions,
       ...line
     }) => {
       const active = (dishQuantity ?? quantity) - (dishCancelledQuantity ?? 0);
@@ -115,8 +95,7 @@ async function readKitchenLines(
       return {
         ...line,
         units:
-          !countsWholePortions({ unitPrecision: dishUnitPrecision ?? unitPrecision, unit }) ||
-          active % 1000 !== 0
+          !(dishCountAsPortions ?? countAsPortions) || active % 1000 !== 0
             ? 1
             : Math.ceil(left / 1000),
       };

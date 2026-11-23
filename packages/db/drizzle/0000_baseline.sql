@@ -84,6 +84,7 @@ CREATE TABLE `working_order_lines` (
 	`option_snapshots` text DEFAULT '[]' NOT NULL,
 	`unit_name` text,
 	`unit_precision` integer,
+	`count_as_portions` integer DEFAULT true NOT NULL,
 	`quantity` integer NOT NULL,
 	`price_quantity` integer DEFAULT 1000 NOT NULL,
 	`unit_price_gross` integer NOT NULL,
@@ -3263,6 +3264,7 @@ BEGIN
       AND new.option_snapshots IS old.option_snapshots
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
+      AND new.count_as_portions IS old.count_as_portions
       AND new.quantity IS old.quantity
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
@@ -3335,6 +3337,7 @@ BEGIN
       AND new.option_snapshots IS old.option_snapshots
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
+      AND new.count_as_portions IS old.count_as_portions
       AND new.quantity IS old.quantity
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross
@@ -3422,6 +3425,7 @@ BEGIN
       AND new.option_snapshots IS old.option_snapshots
       AND new.unit_name IS old.unit_name
       AND new.unit_precision IS old.unit_precision
+      AND new.count_as_portions IS old.count_as_portions
       AND new.quantity IS old.quantity
       AND new.price_quantity IS old.price_quantity
       AND new.unit_price_gross IS old.unit_price_gross

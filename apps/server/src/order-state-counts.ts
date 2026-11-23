@@ -37,21 +37,12 @@ export interface CountedLine extends KitchenPart {
   cancelled: number;
   servedQuantity: number;
   servedAt: string | null;
-  unitPrecision: number | null;
-  unit: { hardwareUnit: string | null; precision: number; measure: boolean } | null;
+  countAsPortions: boolean;
   sentAt: string | null;
   groupState: string | null;
 }
 
 const ZERO: OrderStateCounts = { ordered: 0, unsent: 0, held: 0, waiting: 0, ready: 0 };
-
-export function countsWholePortions(dish: Pick<CountedLine, "unitPrecision" | "unit">): boolean {
-  return takesExtras({
-    hardwareUnit: dish.unit?.hardwareUnit ?? null,
-    precision: dish.unitPrecision ?? dish.unit?.precision ?? 0,
-    measure: dish.unit?.measure,
-  });
-}
 
 /**
  * One dish's counts. A dish sold by the unit (`takesExtras`'s rule: no hardware unit, no decimal
@@ -70,7 +61,7 @@ export function dishCounts(
   const served =
     dish.servedAt !== null ? active : Math.min(Math.max(0, dish.servedQuantity), active);
   const left = collected ? 0 : active - served;
-  const asOne = !countsWholePortions(dish) || active % 1000 !== 0;
+  const asOne = !dish.countAsPortions || active % 1000 !== 0;
   const ordered = asOne ? 1 : active / 1000;
   const counts = { ...ZERO, ordered };
   if (left === 0) return counts;
@@ -122,11 +113,7 @@ export async function readOrderStateCounts(
       cancelled: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
       servedQuantity: workingOrderLines.servedQuantity,
       servedAt: workingOrderLines.servedAt,
-      unitPrecision: workingOrderLines.unitPrecision,
-      unitId: units.id,
-      hardwareUnit: units.hardwareUnit,
-      precision: units.precision,
-      measure: units.measure,
+      countAsPortions: workingOrderLines.countAsPortions,
       sentAt: workingOrderLines.sentAt,
       groupState: orderGroups.state,
       ticketId: ticketItems.id,
@@ -140,9 +127,6 @@ export async function readOrderStateCounts(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(units, unitOwnerJoin)
     .where(and(inArray(workingOrderLines.workingOrderId, [...orderIds]), notSetMenuLine()));
   const extras = new Map<string, KitchenPart[]>();
   for (const line of lines) {
@@ -157,11 +141,7 @@ export async function readOrderStateCounts(
       cancelled: line.cancelled,
       servedQuantity: line.servedQuantity,
       servedAt: line.servedAt,
-      unitPrecision: line.unitPrecision,
-      unit:
-        line.unitId === null
-          ? null
-          : { hardwareUnit: line.hardwareUnit, precision: line.precision!, measure: line.measure! },
+      countAsPortions: line.countAsPortions,
       sentAt: line.sentAt,
       groupState: line.groupState,
     };
@@ -174,7 +154,6 @@ export async function readOrderStateCounts(
     .select({
       billId: orderDrafts.billId,
       quantity: orderDraftLines.quantity,
-      unitId: units.id,
       hardwareUnit: units.hardwareUnit,
       precision: units.precision,
       measure: units.measure,
@@ -193,11 +172,11 @@ export async function readOrderStateCounts(
       cancelled: 0,
       servedQuantity: 0,
       servedAt: null,
-      unitPrecision: null,
-      unit:
-        line.unitId === null
-          ? null
-          : { hardwareUnit: line.hardwareUnit, precision: line.precision!, measure: line.measure! },
+      countAsPortions: takesExtras({
+        hardwareUnit: line.hardwareUnit,
+        precision: line.precision ?? 0,
+        measure: line.measure ?? false,
+      }),
       sentAt: null,
       groupState: null,
     };

@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   assignMenuToVenue,
   assignProductUnit,
+  clearProductUnit,
   createMenu,
   createCategory,
   createProduct,
@@ -252,6 +253,7 @@ describe("the floor's attention signals", () => {
         addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Burger"), quantity }]),
       );
       await makeReady(v, tabId, "Burger");
+      await inTx(v, (tx) => clearProductUnit(tx, v.productId("Burger")));
 
       const ready = (await floorRow(v, table)).signals.find((signal) => signal.kind === "ready");
       expect(ready).toMatchObject({ kind: "ready", byStation: [{ count: 1 }] });
@@ -292,6 +294,7 @@ describe("the floor's attention signals", () => {
         OPERATOR,
       ),
     );
+    await inTx(v, (tx) => clearProductUnit(tx, v.productId("Burger")));
     expect(await inTx(v, (tx) => readHeldCounts(tx, [seated.partyId]))).toEqual(
       new Map([[seated.partyId, 1]]),
     );

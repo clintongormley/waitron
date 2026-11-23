@@ -986,7 +986,8 @@ export async function priceOrderLines(
     // A child is priced at dish quantity × pick quantity, so on a dish sold by weight, in decimals or
     // in a measure an extra's quantity would be a weight, a fraction or a measure, not a number of
     // extras.
-    if (extraChildren.length > 0 && !takesExtras(selection.unit)) {
+    const portionable = takesExtras(selection.unit);
+    if (extraChildren.length > 0 && !portionable) {
       throw new AppError("extras.unsupported_product", {
         productId: offer.productId,
         soldBy:
@@ -1031,7 +1032,7 @@ export async function priceOrderLines(
       courseId: line.courseId ?? product.courseId ?? null,
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
-      portionable: takesExtras(selection.unit),
+      portionable,
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
@@ -1113,6 +1114,7 @@ export async function priceOrderLines(
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
+      countAsPortions: meta.kind === "parent" && meta.portionable,
       quantity: stringToThousandths(line.quantity),
       ...(line.priceQuantity === undefined
         ? {}
@@ -4932,6 +4934,7 @@ async function carveLines(
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
+      countAsPortions: workingOrderLines.countAsPortions,
       variantName: workingOrderLines.variantName,
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
@@ -5136,6 +5139,7 @@ async function carveLines(
         category: row.category,
         unitName: row.unitName,
         unitPrecision: row.unitPrecision,
+        countAsPortions: row.countAsPortions,
         variantName: row.variantName,
         variantDescriptions: row.variantDescriptions,
         variantKitchenName: row.variantKitchenName,

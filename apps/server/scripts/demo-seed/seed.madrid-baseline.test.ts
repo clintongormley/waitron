@@ -1318,6 +1318,12 @@ for (const locale of ["en", "es"] as const) {
       ].sort((a, b) => a.id - b.id);
       const orderLines = expected[phase].tables.working_order_lines!;
       orderLines.columns.splice(
+        orderLines.columns.findIndex((column) => column.name === "unit_precision") + 1,
+        0,
+        { name: "count_as_portions", type: "INTEGER", notnull: 1, dflt_value: "true", pk: 0 },
+      );
+      for (const row of Object.values(orderLines.rows)) row.count_as_portions = 1;
+      orderLines.columns.splice(
         orderLines.columns.findIndex((column) => column.name === "vat_class") + 1,
         0,
         { name: "takeaway_vat_class", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },

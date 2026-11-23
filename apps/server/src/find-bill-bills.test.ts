@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
-  products,
+  menuItems,
   workingOrders,
   workingOrderLines,
   billPayments,
@@ -45,7 +45,9 @@ import { outstandingOf } from "./bill-payment-money.js";
 import { readBillBalance, readPaymentsByBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import { endMeal } from "./meal-end.js";
-import { assignProductUnit, setProductVariants, units } from "@waitron/menu";
+import { assignProductUnit, clearProductUnit, createUnit, setProductVariants } from "@waitron/menu";
+import { parkOrder } from "./working-order.js";
+import { republishMenus } from "./testing/publish-menu.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
@@ -124,66 +126,20 @@ describe("Find Bills SQL paging", () => {
   });
 
   it.each([
-    ["g", false, 0, 0, 150000, 0, 1],
-    [null, true, 0, 0, 330000, 0, 1],
-    [null, false, 3, 0, 3000, 0, 3],
-    [null, false, 0, 3, 3000, 0, 1],
-    [null, false, 3, null, 3000, 0, 1],
-    [null, false, 0, null, 2500, 0, 1],
-    ["g", false, 0, 0, 150000, 150000, 0],
+    [false, 150000, 0, 1],
+    [true, 3000, 0, 3],
+    [true, 2500, 0, 1],
+    [false, 150000, 150000, 0],
   ] as const)(
-    "counts inherited %s/measure %s, current %s/frozen %s, quantity %s/cancelled %s as %s",
-    async (hardwareUnit, measure, precision, frozen, quantity, cancelled, want) => {
-      const id = await named("Weighed dish", "Caña");
+    "counts a saved whole-portion rule %s, quantity %s and cancelled %s as %s",
+    async (countAsPortions, quantity, cancelled, want) => {
+      const id = await named("Saved dish", "Caña");
       await inTx(venue, async (tx) => {
         const [line] = await tx
-          .select()
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, id));
-        const [gram] = await tx
-          .insert(units)
-          .values({
-            staffName: "Gram",
-            staffAbbreviation: "g",
-            name: { en: "Gram" },
-            abbreviation: { en: "g" },
-            precision,
-            hardwareUnit,
-            measure,
-          })
-          .returning({ id: units.id });
-        await assignProductUnit(tx, line!.productId!, gram!.id);
-        const [variant] = await setProductVariants(
-          tx,
-          line!.productId!,
-          [
-            {
-              name: "Large",
-              customerName: null,
-              kitchenName: null,
-              image: null,
-              unitPrice: "3.00",
-              available: true,
-            },
-          ],
-          "en",
-        );
-        const [ownUnit] = await tx
-          .insert(units)
-          .values({
-            staffName: "Variant unit",
-            staffAbbreviation: "v",
-            name: {},
-            abbreviation: {},
-            precision: 0,
-            hardwareUnit: hardwareUnit === null ? "kg" : null,
-          })
-          .returning({ id: units.id });
-        await tx.update(products).set({ unitId: ownUnit!.id }).where(eq(products.id, variant!.id));
-        await tx
           .update(workingOrderLines)
-          .set({ productId: variant!.id, quantity, unitPrecision: frozen })
-          .where(eq(workingOrderLines.id, line!.id));
+          .set({ countAsPortions, quantity })
+          .where(eq(workingOrderLines.workingOrderId, id))
+          .returning({ id: workingOrderLines.id });
         if (cancelled > 0)
           await tx.insert(lineServiceCancellations).values({
             lineId: line!.id,
@@ -196,6 +152,62 @@ describe("Find Bills SQL paging", () => {
       expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({ itemCount: want });
     },
   );
+
+  it("sorts a saved measure by its original item count after its unit changes", async () => {
+    const menuItemId = venue.offerFor("Caña");
+    const { productId, variantId } = await inTx(venue, async (tx) => {
+      const [offer] = await tx
+        .select({ productId: menuItems.productId })
+        .from(menuItems)
+        .where(eq(menuItems.id, menuItemId));
+      const unit = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        "en",
+      );
+      const productId = offer!.productId!;
+      await assignProductUnit(tx, productId, unit.id);
+      const [variant] = await setProductVariants(
+        tx,
+        productId,
+        [
+          {
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      await republishMenus(tx);
+      return { productId, variantId: variant!.id };
+    });
+    const id = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      lines: [{ menuItemId, variantId, quantity: "330" }],
+      zoneId: venue.counterZone,
+      operatorId: venue.operatorId,
+    });
+    const more = await named("Two dishes", "Tarta", "Tarta");
+    await inTx(venue, (tx) => clearProductUnit(tx, productId));
+
+    const result = await list({ sort: "items", direction: "ascending" });
+    expect(result.rows.map((row) => [row.workingOrderId, row.itemCount])).toEqual([
+      [id, 1],
+      [more, 2],
+    ]);
+  });
 
   it("sorts by item count before paging in both directions across fifty rows", async () => {
     const ids: string[] = [];

@@ -21,6 +21,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import {
   assignProductUnit,
+  clearProductUnit,
   createExtraList,
   createProduct,
   createUnit,
@@ -34,6 +35,7 @@ import {
   markCollected,
   markServed,
   parkOrder,
+  splitLinesWithinOrder,
 } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { seatTable } from "./parties.js";
@@ -227,8 +229,7 @@ function dish(overrides: Partial<CountedLine> = {}): CountedLine {
     cancelled: 0,
     servedQuantity: 0,
     servedAt: null,
-    unitPrecision: 0,
-    unit: null,
+    countAsPortions: true,
     sentAt: nowIso(),
     groupState: null,
     ticket: { madeHere: false, requestedAt: nowIso(), firedAt: nowIso(), state: "queued" },
@@ -246,22 +247,16 @@ const readyHere = {
 
 describe("dishCounts", () => {
   it.each([
-    [0, 3, 2],
-    [3, 0, 1],
+    [true, 2],
+    [false, 1],
   ] as const)(
-    "counts by saved precision %s despite current precision %s",
-    (unitPrecision, precision, ordered) => {
-      expect(
-        dishCounts(
-          dish({
-            quantity: 2000,
-            unitPrecision,
-            unit: { hardwareUnit: null, precision, measure: false },
-          }),
-          [],
-          false,
-        ),
-      ).toEqual({ ...zero, ordered, waiting: ordered });
+    "counts a dish with the saved whole-portion rule %s as %s",
+    (countAsPortions, ordered) => {
+      expect(dishCounts(dish({ quantity: 2000, countAsPortions }), [], false)).toEqual({
+        ...zero,
+        ordered,
+        waiting: ordered,
+      });
     },
   );
 
@@ -400,26 +395,8 @@ describe("dishCounts", () => {
     expect(dishCounts(dish({ quantity: 2000, cancelled: 2000 }), [], false)).toEqual(zero);
   });
 
-  it("counts a dish not sold by the unit as one", () => {
-    const grams = { hardwareUnit: "g", precision: 0, measure: false };
-    expect(dishCounts(dish({ quantity: 150_000, unit: grams }), [], false)).toEqual({
-      ...zero,
-      ordered: 1,
-      waiting: 1,
-    });
-    const tenths = { hardwareUnit: null, precision: 1, measure: false };
-    expect(
-      dishCounts(dish({ quantity: 2000, unitPrecision: null, unit: tenths }), [], false),
-    ).toEqual({ ...zero, ordered: 1, waiting: 1 });
-    expect(dishCounts(dish({ quantity: 2000, unitPrecision: 1 }), [], false)).toEqual({
-      ...zero,
-      ordered: 1,
-      waiting: 1,
-    });
-  });
-
   it("counts a fractional quantity of a dish sold by the unit as one", () => {
-    expect(dishCounts(dish({ quantity: 1500, unitPrecision: null }), [], false)).toEqual({
+    expect(dishCounts(dish({ quantity: 1500 }), [], false)).toEqual({
       ...zero,
       ordered: 1,
       waiting: 1,
@@ -429,14 +406,13 @@ describe("dishCounts", () => {
 
 describe("readOrderStateCounts", () => {
   it.each([
-    ["remaining whole portions", "Tarta", 3000, 0, 1500, 0, 2],
-    ["real cancellation", "Tarta", 3000, 0, 0, 1000, 2],
-    ["parent's hardware unit", "Paella", 150000, 0, 0, 0, 1],
-    ["parent's frozen precision", "Tarta", 3000, 3, 0, 0, 1],
-    ["fractional active dish", "Tarta", 2500, 0, 0, 0, 1],
+    ["remaining whole portions", 3000, true, 1500, 0, 2],
+    ["real cancellation", 3000, true, 0, 1000, 2],
+    ["parent's saved measure", 150000, false, 0, 0, 1],
+    ["fractional active dish", 2500, true, 0, 0, 1],
   ] as const)(
     "floor counts %s on both parent and extra stations",
-    async (_name, product, quantity, precision, served, cancel, want) => {
+    async (_name, quantity, countAsPortions, served, cancel, want) => {
       const { billId } = await seatParty();
       await sendRound(billId, [withSauce("Tarta", "3")]);
       const { dish, extra } = await kitchenItems(billId);
@@ -444,9 +420,8 @@ describe("readOrderStateCounts", () => {
         await tx
           .update(workingOrderLines)
           .set({
-            productId: await productOf(tx, product),
             quantity,
-            unitPrecision: precision,
+            countAsPortions,
             servedQuantity: served,
           })
           .where(eq(workingOrderLines.id, dish.lineId));
@@ -512,6 +487,74 @@ describe("readOrderStateCounts", () => {
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
+  it("keeps old and new parked counts tied to the menu that priced each dish", async () => {
+    const orderId = await parked([["Steak", "330"]]);
+    const one = { ...zero, ordered: 1, unsent: 1 };
+    expect(await countsOfBill(orderId)).toEqual(one);
+
+    const { steak, originalUnitId } = await inTx(venue, async (tx) => {
+      const steak = await productOf(tx, "Steak");
+      const [original] = await tx
+        .select({ id: products.unitId })
+        .from(products)
+        .where(eq(products.id, steak));
+      const whole = await createUnit(
+        tx,
+        {
+          staffName: "Portion",
+          staffAbbreviation: "ptn",
+          name: { en: "Portion" },
+          abbreviation: { en: "ptn" },
+          precision: 0,
+        },
+        "en",
+      );
+      await assignProductUnit(tx, steak, whole.id);
+      return { steak, originalUnitId: original!.id! };
+    });
+
+    try {
+      const beforePublish = await parked([["Steak", "330"]]);
+      expect(await countsOf([orderId, beforePublish])).toEqual(
+        new Map([
+          [orderId, one],
+          [beforePublish, one],
+        ]),
+      );
+
+      await inTx(venue, republishMenus);
+      const afterPublish = await parked([["Steak", "3"]]);
+      const three = { ...zero, ordered: 3, unsent: 3 };
+      expect(await countsOfBill(afterPublish)).toEqual(three);
+      await inTx(venue, (tx) => assignProductUnit(tx, steak, originalUnitId));
+      expect(await countsOfBill(afterPublish)).toEqual(three);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await assignProductUnit(tx, steak, originalUnitId);
+        await republishMenus(tx);
+      });
+    }
+  });
+
+  it("keeps a measure on both parts of a split dish", async () => {
+    const { billId } = await seatParty();
+    await sendRound(billId, [plain("Paella", "150")]);
+    await inTx(venue, (tx) =>
+      splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "50" }]),
+    );
+    expect(await countsOfBill(billId)).toMatchObject({ ordered: 2 });
+    await inTx(venue, async (tx) => {
+      const paella = await productOf(tx, "Paella");
+      const [original] = await tx
+        .select({ id: products.unitId })
+        .from(products)
+        .where(eq(products.id, paella));
+      await clearProductUnit(tx, paella);
+      expect((await readOrderStateCounts(tx, [billId])).get(billId)).toMatchObject({ ordered: 2 });
+      await assignProductUnit(tx, paella, original!.id!);
+    });
+  });
+
   it("counts a 0.450 kg dish as one", async () => {
     const id = await parked([["House salad", "0.450"]]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
@@ -544,15 +587,22 @@ describe("readOrderStateCounts", () => {
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
-  it("counts by the line's frozen places, not its unit's current ones", async () => {
+  it("counts a saved dish sold in tenths as one after changing to Each", async () => {
     const id = await parked([["Croquettes", "2"]]);
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrderLines)
-        .set({ unitPrecision: 0 })
-        .where(eq(workingOrderLines.workingOrderId, id)),
-    );
-    expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 2, unsent: 2 }]]));
+    await inTx(venue, async (tx) => {
+      const croquettes = await productOf(tx, "Croquettes");
+      const [original] = await tx
+        .select({ id: products.unitId })
+        .from(products)
+        .where(eq(products.id, croquettes));
+      await clearProductUnit(tx, croquettes);
+      expect((await readOrderStateCounts(tx, [id])).get(id)).toEqual({
+        ...zero,
+        ordered: 1,
+        unsent: 1,
+      });
+      await assignProductUnit(tx, croquettes, original!.id!);
+    });
   });
 
   it("counts whole units only, because 1.5 of a dish with no decimal places is refused", async () => {

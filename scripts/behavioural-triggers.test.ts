@@ -1155,6 +1155,7 @@ const FROZEN_LINE_COLUMNS = connection
   .map((row) => String(row.name))
   .filter((name) => !SERVED_COLUMNS.has(name));
 const CHANGED_VALUE = {
+  count_as_portions: "0",
   // Another order that is not open and resolves to the same venue, so the locale triggers accept it.
   working_order_id: `'wo-placed'`,
   descriptions: `'{"ca":"Plat nou","es":"Plato nuevo"}'`,
