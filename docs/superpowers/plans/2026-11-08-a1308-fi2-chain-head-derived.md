@@ -93,7 +93,7 @@ before this cannot be restored or imported."
 - `verifactu_records_node_secuencia_idx` dropped (`schema/verifactu-records.ts`, fi1's name for
   `registros_node_secuencia_idx`, `registros.ts:128` at the cite commit).
 - `bench grow-fiscal`, a bench command that grows a built venue's chain, sales and submissions to a
-  given number of records, chained and hashed by the module's own functions. fi3, fi4a and fi6 reuse it.
+  given number of records, chained and hashed by the module's own functions. Fi3 and Fi6 reuse it.
 - The first half of tables-fiscal §8 item 1, measured.
 
 ## What it leaves out

@@ -142,7 +142,7 @@ with the no-delete trigger, `instalacion_uq` does that job. The builder drops it
   (was `fiscal_allocations_allocation_uq`); `verifactu_identities_identity_uq` only if the owner
   keeps it; kept: `verifactu_identities_numero_ck`, `_instalacion_uq`, `_activo_uq`. Empty groups do
   not collide on the two new indexes (SQLite treats nulls in a unique index as distinct).
-- Triggers in `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (fi4a creates the file; fi6 and fi7 add to it):
+- Triggers in `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (Fi6 creates it and Fi7 extends it):
 
   ```sql
   CREATE TRIGGER verifactu_identities_guard_update BEFORE UPDATE ON verifactu_identities
@@ -489,8 +489,8 @@ trigger"); README "Additions of 6 November 2026" for the no-delete trigger.
 
 ## Needs
 
-fi8; fi6 (adds to `triggers/fiscal-verifactu.sql` and `trigger-refusals.ts`, which fi4a creates). The Cloud lane's
-fixture change, in step. (The second unique index is dropped: owner, 2026-11-09.)
+Fi8. Extend `triggers/fiscal-verifactu.sql` and `src/trigger-refusals.ts`, created by Fi6 and extended
+by Fi7. The Cloud lane's fixture changes in step. (The second unique index is dropped: owner, 2026-11-09.)
 
 W41s-9 slice 1 (2026-11-10) added a reader of `registro_sif`, which this slice reshapes:
 `packages/fiscal-verifactu/src/filing-overview.ts`, through `readActiveConflicts`, and

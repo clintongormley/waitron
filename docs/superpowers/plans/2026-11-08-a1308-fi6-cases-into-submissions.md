@@ -47,7 +47,8 @@ before this cannot be restored or imported."
 
 ## Global Constraints
 
-- Rules §1–§9 apply; fi4a's CHECK rule applies to the `case.note` CHECK.
+- Rules §1–§9 and [Fi4's CHECK convention](2026-11-08-a1308-fi4a-history-table.md#global-constraints)
+  apply. Put the `case.note` CHECK after `verifactu_history_data_ck` and check the generated order.
 - **Filing decides exactly as today.** Which records are held, probed, retried or set aside, which
   cases open, with what cause and evidence, which conflicts are active: the drain, reconcile, remedy
   and conflict suites keep every assertion.
@@ -87,9 +88,11 @@ before this cannot be restored or imported."
 - `verifactu_submissions_resolution_ck`: `(case_resolved_at is null) = (case_resolved_by is null) and (case_resolved_at is null) = (case_resolution_action is null) and (case_resolved_at is null) = (case_resolution_key is null) and (case_resolved_at is null or case_opened_at is not null) and (case_remedy_registro_id is null or (case_resolved_at is not null and case_remedy_registro_id <> registro_id))`.
 - Unique `verifactu_submissions_resolution_key_uq (case_resolution_key)`.
 - Partial index `verifactu_submissions_case_idx (case_opened_at) where case_opened_at is not null`.
-- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (created by fi4a for its one history
-  trigger, owner 2026-11-09; this plan appends to it; slice 1a's command appends a set's
-  `<package>/triggers/<set>.sql`, [1a](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-1a-baseline-rebuild.md):60), two statements:
+- Create `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`, the module's first
+  hand-written trigger file. The owner's 2026-11-09 decision covered a planned confirmation
+  guard for the clock-check link that A1420 removed. [Fi4](2026-11-08-a1308-fi4a-history-table.md) uses
+  the standard append-only triggers. The rebuild command appends the set's trigger file
+  (`apps/server/scripts/migration-baseline/rebuild.ts:209–213`). Write these two statements.
 
   ```sql
   CREATE TRIGGER verifactu_submissions_guard_update BEFORE UPDATE ON verifactu_submissions
@@ -107,26 +110,26 @@ before this cannot be restored or imported."
   BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never deleted'); END
   ```
 
-  The refusal texts are constants in `packages/fiscal-verifactu/src/trigger-refusals.ts` (created by fi4a),
+  Define the refusal constants in the new `packages/fiscal-verifactu/src/trigger-refusals.ts`,
   imported by `scripts/behavioural-triggers.test.ts` like core's (`:9-29`), each with a comment
   saying why: the case and its resolution are evidence of what a person did about a filing; the row
   is the record's outbox, and deleting it silently drops a legal filing (the A805 decision for
   `envios`).
 - **`case.note`** in `verifactu_history`: `at` = the note's time; `registro_id` = the case's record;
   `person_id`; `event_key` = `'case.note:' || <the note's action key>`; `data`: `action`.
-  `verifactu_history_note_ck`: `registro_id is not null and person_id is not null and substr(event_key, 1, 10) = 'case.note:' and length(event_key) > 10 and json_type(data, '$.action') = 'text' and ref_id is null`.
+  `verifactu_history_note_ck`: `registro_id is not null and person_id is not null and substr(event_key, 1, 10) = 'case.note:' and length(event_key) > 10 and json_type(data, '$.action') = 'text'`.
   `verifactu_history_kind_ck` gains `'case.note'`.
   **Why the prefix** (departs from tables-fiscal §3's `event_key` row, "a note's `action_key`"): the
   action key is chosen by the caller (`record-remedy-http.ts:43` reads it from the request body),
   and `verifactu_history.event_key` is one unique column shared with fi5's `lookup:<registro>` and
-  `conflict:<registro>:<attempt>:<cause>` keys and fi4a's `clock.confirmed:<check>`. fi5 writes a lookup
-  conflict with "insert or do nothing on `event_key`" (fi5 plan, `appendHistory(…, { ifAbsent: true })`;
+  `conflict:<registro>:<attempt>:<cause>` keys. Fi5 requires both `event_key` and `registro_id`
+  to be null on clock rows. Fi5 writes a lookup conflict with "insert or do nothing on
+  `event_key`" (Fi5 plan, `appendHistory(…, { ifAbsent: true })`;
   today `reconcile-conflicts.ts:18-21`'s `onConflictDoNothing` on the record), so a note stored under
   the bare key `lookup:R` would make the later lookup conflict for record `R` vanish without an
-  error, and `readActiveConflicts` would not see it. With the prefix a note's key cannot equal
-  another kind's key, because fi4a's and fi5's CHECKs tie each of their keys to its own prefix. The
-  key the API takes and returns stays the bare action key; the prefix is added on write and
-  stripped on read, in `filing-cases.ts` only.
+  error, and `readActiveConflicts` would not see it. The note and conflict CHECKs give each keyed
+  kind a distinct prefix. The API still takes and returns the bare action key. Add the prefix on
+  write and strip it on read in `filing-cases.ts` only.
 - The case API re-pointed (Interfaces): `openFilingCase`, `openAcceptedWithErrorsCase`,
   `recordCaseEvent`, `listFilingCases`, `openFilingCasesSummary`, `heldRecords`
   (`filing-cases.ts:51-304`); `readActiveConflicts` joins the submission row
@@ -238,9 +241,9 @@ inserts above).
 **Create**
 - `packages/fiscal-verifactu/src/filing-case-plans.test.ts` (the conflict check's plan).
 
-**Modify (fi4a created them)**
-- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`, `src/trigger-refusals.ts`: this plan's
-  two triggers and their constants go after fi4a's history trigger.
+**Create**
+- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` and `src/trigger-refusals.ts` for the two
+  submission guards and their refusal constants.
 
 **Modify (product)**
 - `packages/fiscal-verifactu/src/schema/verifactu-submissions.ts` (columns, CHECKs, indexes),
@@ -327,7 +330,7 @@ in `apps/server`). The files, and how each changes:
 Not counted (rules §1): the 12 deleted set-up statements and the two deleted cases. The total is at
 the cap. If the re-pointed tests run past ~350 lines, split at Task 3: fi6a lands Tasks 0–2
 (columns, guard, note kind, the A805 delete refusal and its test deletes) with its own protection
-list; fi6b lands Tasks 3–5. Stop 6 (rules §5.6) applies past ~1,200.
+list; fi6b lands Tasks 3–5. The slice rules' size stop (§5.6) applies past ~1,200.
 
 ## Finish line
 
@@ -361,8 +364,8 @@ missing index filing_cases_registro_uq
 missing table filing_case_events
 missing table filing_cases
 changed table verifactu_history.checks[verifactu_history_kind_ck].expression
-old: <fi5's four kinds>
-new: <the five kinds, with 'case.note'>
+old: <Fi5's three kinds>
+new: <four kinds, including 'case.note'>
 changed table verifactu_submissions.columnOrder
 old: [<today's twelve columns>]
 new: [<the twelve, then case_cause, case_evidence, case_opened_at, case_resolved_at, case_resolved_by, case_resolution_action, case_resolution_key, case_remedy_registro_id>]
@@ -408,6 +411,9 @@ November 2026" for `verifactu_submissions_no_delete`.
    held, probed or set aside, or to which identity or series a sale uses.
 4. A test asserting an event order in `listFilingCases` disagrees with the decided order.
 5. A1089 landed code that reads `filing_cases` and is not in this plan's file list (rules §5.5).
+6. The note CHECK accepts a bad row or a JSON-reading CHECK precedes the data CHECK. Use Fi4's
+   first stop. If the valid note and lookup fixture cannot coexist, bring the key collision to
+   the watcher.
 
 ## Needs
 
@@ -469,13 +475,15 @@ in `filing-cases.ts`. The Fiscal filing screen and its export name each case by 
   fiscal package's schema tests: each half of the two CHECKs refused (case columns half set; a blank
   cause; a resolution without a case; a remedy naming the row's own record; a remedy without a
   resolution); a duplicate resolution key refused; a `case_resolved_by` with no person refused. In
-  `verifactu-history.test.ts`: `verifactu_history_note_ck` as fi4a Task 1, plus a `case.note` whose
-  `event_key` lacks the `case.note:` prefix, or is the bare prefix, refused; and a lookup-conflict
-  row for record `R` still written after a note with action key `lookup:R` (the collision the prefix
-  prevents).
+  `verifactu-history.test.ts`: accept a note with real record and person parents. Check the
+  named note CHECK with missing `action`, non-text `action`, null `registro_id` or `person_id`,
+  and a null, unprefixed or bare-prefix `event_key`. Malformed JSON must fail the data CHECK.
+  With a real record `R`, write a note with action key `lookup:R` and then append its lookup conflict
+  with `ifAbsent: true`. Assert both rows exist and the lookup was written, with keys
+  `case.note:lookup:R` and `lookup:R`.
 - [ ] **Step 2:** Run them. FAIL.
-- [ ] **Step 3:** Add the columns, CHECKs, indexes, the trigger file, the constants and the kind.
-  Rebuild the set. Run; PASS.
+- [ ] **Step 3.** Add the columns, CHECKs, indexes and kind. Create the fiscal trigger file and
+  refusal constants. Rebuild the set and check the generated CHECK order. Run to green (stop 6).
 - [ ] **Step 4: The test deletes the trigger refuses** (Files, command 3; "Assertions that change,
   by design"): delete the 11 `drain.test.ts` statements and `migrations.test.ts:28`; delete the
   corrective "refuses a missing delivery" case and the held "refuses a missing %s delivery"

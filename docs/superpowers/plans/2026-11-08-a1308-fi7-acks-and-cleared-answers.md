@@ -39,7 +39,8 @@ before this cannot be restored or imported."
 
 ## Global Constraints
 
-- Rules §1–§9 apply; fi4a's CHECK rule applies to the new kind's CHECK.
+- Rules §1–§9 and [Fi4's CHECK convention](2026-11-08-a1308-fi4a-history-table.md#global-constraints)
+  apply. Put the cleared-answer CHECK after `verifactu_history_data_ck` and check the generated order.
 - **Sending is unchanged.** What is sent, when, and how answers are stored on the submission row: the
   drain and reconcile suites keep their assertions, except the assertions that read `acks` rows,
   which go with the table (listed in the pull request).
@@ -82,7 +83,7 @@ before this cannot be restored or imported."
 - **`aeat.answer_cleared`** in `verifactu_history`: `at` = the clearing time; `registro_id`; `data`:
   `by` (`'drain'` or `'reconcile'`: the module whose write replaced the values), `csv`, `codigoError`,
   `mensajeError`, `confirmadoEn`, the values the row held just before.
-  `verifactu_history_cleared_ck`: `registro_id is not null and json_extract(data, '$.by') in ('drain', 'reconcile') and json_type(data, '$.csv') is not null and json_type(data, '$.codigoError') is not null and json_type(data, '$.mensajeError') is not null and json_type(data, '$.confirmadoEn') is not null and ref_id is null and person_id is null and event_key is null`
+  `verifactu_history_cleared_ck`: `registro_id is not null and json_extract(data, '$.by') in ('drain', 'reconcile') and json_type(data, '$.csv') is not null and json_type(data, '$.codigoError') is not null and json_type(data, '$.mensajeError') is not null and json_type(data, '$.confirmadoEn') is not null and person_id is null and event_key is null`
   (each key present; its value may be JSON null). `verifactu_history_kind_ck` gains
   `'aeat.answer_cleared'`.
 - **Trigger** `verifactu_sending_state_no_delete` in `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`:
@@ -269,8 +270,8 @@ with fi1–fi6 applied):
 missing index acks.primary key(registro_id)
 missing table acks
 changed table verifactu_history.checks[verifactu_history_kind_ck].expression
-old: <fi6's five kinds>
-new: <the six kinds, with 'aeat.answer_cleared'>
+old: <Fi6's four kinds>
+new: <five kinds, including 'aeat.answer_cleared'>
 extra table verifactu_history.checks[verifactu_history_cleared_ck]
 extra trigger verifactu_sending_state_no_delete
 ```
@@ -312,10 +313,12 @@ not of these kinds is stop 3.
 4. Any change to the bytes of a record's hashed fields, to what is sent to AEAT, or to which identity
    or series a sale uses.
 5. A product path deletes the sending-gate row.
+6. The cleared-answer CHECK accepts a bad row or a JSON-reading CHECK precedes the data CHECK.
+   Use Fi4's first stop.
 
 ## Needs
 
-fi6 (the trigger file and refusal constants fi4a creates and fi6 adds to).
+Fi6 creates the trigger file and refusal constants. Extend both for the sending-gate guard.
 
 **Landed by: owner.**
 
@@ -327,8 +330,11 @@ fi6 (the trigger file and refusal constants fi4a creates and fi6 adds to).
 
 ### Task 1: the cleared-answer kind (test first)
 
-- [ ] **Step 1: Failing tests.** In `verifactu-history.test.ts`, the new CHECK as fi4a Task 1. In
-  `history.test.ts`: "keeps the four values before they are cleared" — a row `aceptado` with a CSV,
+- [ ] **Step 1.** In `verifactu-history.test.ts`, use a real record parent and accept a row with
+  all four answer keys present, including JSON null values. Refuse an unknown or missing `by`, any
+  missing answer key, a null `registro_id`, a non-null `person_id` or a non-null `event_key` under
+  the named cleared-answer CHECK. Malformed JSON must fail the data CHECK.
+  In `history.test.ts`: "keeps the four values before they are cleared" — a row `aceptado` with a CSV,
   then `keepAnswerBeforeClearing(…, "reconcile", all null, …)`: one history row whose data equals the
   four values and `by`; "writes nothing when there is nothing to keep" (all four null); "writes
   nothing when the write leaves every held value as it is" (a row with a CSV, `next` carrying the same
@@ -338,7 +344,8 @@ fi6 (the trigger file and refusal constants fi4a creates and fi6 adds to).
   (control for the trace): after an ordinary accept and an ordinary refusal, the history holds no
   `aeat.answer_cleared` row. What a failing keeper prints there: with its "a held value is not null"
   check removed, the drain control finds a history row and fails.
-- [ ] **Step 2:** Run; FAIL. **Step 3:** Implement; rebuild the set. Run; PASS.
+- [ ] **Step 2.** Run to red. **Step 3.** Add the kind and CHECK, implement the keeper and rebuild
+  the set. Check the generated CHECK order and run to green (stop 6).
 - [ ] **Step 4:** Commit: "Keep an AEAT answer in the fiscal history before it is cleared (A1308 fiscal 7)".
 
 ### Task 2: delete acks; the handover digest
