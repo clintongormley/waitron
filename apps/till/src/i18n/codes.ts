@@ -37,6 +37,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The other bill has no place for {dishName}. Move its set menu with it, or leave it on this bill.",
     es: "La otra cuenta no tiene sitio para {dishName}. Mueve también su menú o deja el plato en esta cuenta.",
   },
+  "set_menu.move_adjusted": {
+    en: "{dishNames} has a comp or discount, so it moves only with its set menu. Move the set menu with it, or leave it on this bill.",
+    es: "{dishNames} tiene un descuento, así que solo se mueve con su menú. Mueve también el menú o déjalo en esta cuenta.",
+  },
   "set_menu.dish_sold_by_measure": {
     en: "A dish sold by weight or measure cannot go in a set menu. Order it à la carte.",
     es: "Un plato vendido al peso o por medida no puede ir en un menú. Pídelo a la carta.",

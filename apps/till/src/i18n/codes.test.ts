@@ -1317,6 +1317,16 @@ it.each([
   expect(codeMessage(code, "es-ES", params)).toContain(spanish);
 });
 
+it("each new code is worded in English and Spanish", () => {
+  const params = { dishNames: ["Sirloin"] };
+  expect(codeMessage("set_menu.move_adjusted", "en-GB", params)).toBe(
+    "Sirloin has a comp or discount, so it moves only with its set menu. Move the set menu with it, or leave it on this bill.",
+  );
+  expect(codeMessage("set_menu.move_adjusted", "es-ES", params)).toBe(
+    "Sirloin tiene un descuento, así que solo se mueve con su menú. Mueve también el menú o déjalo en esta cuenta.",
+  );
+});
+
 it("names the set menu whose removal depends on the dishes", () => {
   const params = { setMenuName: "Daily", dishNames: ["Hake"] };
   expect(codeMessage("set_menu.needed_by_draft", "en", params)).toContain("Daily");

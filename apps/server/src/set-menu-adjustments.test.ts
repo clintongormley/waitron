@@ -10,10 +10,21 @@ import { readBillEditState } from "./bill-editing.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
 import { removeSetMenuLines } from "./set-menu-count.js";
 import { readOrderRevision } from "./working-order.js";
+import { insertPartyBill } from "./parties.js";
+import { moveDishes } from "./testing/bill-action-fixture.js";
+import { splitTable } from "./testing/table-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { REASONS } from "./testing/adjustment-venue.js";
-import { cashContribution, inTx, type PartyVenue } from "./testing/party-venue.js";
 import {
+  cashContribution,
+  commandFor,
+  inTx,
+  join,
+  seatWithNoAllergies,
+  type PartyVenue,
+} from "./testing/party-venue.js";
+import {
+  sendSpecDishes,
   setSpecCount,
   setupSetMenuSpecVenue,
   specBill,
@@ -301,4 +312,98 @@ it("an empty set menu is removed from a bill holding a contribution while the mo
     if (outcome === "accepted") expect(await total(tab.tabId)).toBe(7300);
     else expect(await specRows(spec, tab.tabId)).toEqual(before);
   }
+});
+
+/** The plan's bill, and a second bill of its party holding one Daily with both places open. */
+async function twoBills() {
+  const tab = await specBill(spec);
+  const other = await inTx(venue, (tx) => insertPartyBill(tx, venue.cfg, tab.partyId));
+  const emptyDaily = (await setSpecCount(spec, other, spec.daily, 1)).setMenus[0]!.lineId;
+  return { tab, other, emptyDaily };
+}
+
+async function moveAlone(partyId: string, from: string, to: string, lineIds: string[]) {
+  const command = await commandFor(venue, partyId);
+  return inTx(venue, (tx) => moveDishes(tx, venue.cfg, from, to, lineIds, command));
+}
+
+// Failed first: the discounted Sirloin moved alone onto the other bill's Daily.
+it("a discounted set-menu dish moves only with its set menu", async () => {
+  const { tab, other, emptyDaily } = await twoBills();
+  const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);
+  await adjust(tab.tabId, sirloin.id, { action: "discount_percent", percentBp: 5000 });
+  const before = { from: await specRows(spec, tab.tabId), to: await specRows(spec, other) };
+
+  await expect(moveAlone(tab.partyId, tab.tabId, other, [sirloin.id])).rejects.toMatchObject({
+    code: "set_menu.move_adjusted",
+    params: { dishNames: ["Sirloin"] },
+  });
+  expect(await specRows(spec, tab.tabId)).toEqual(before.from);
+  expect(await specRows(spec, other)).toEqual(before.to);
+
+  const leaving = await venue.table(crypto.randomUUID());
+  await join(venue, tab.partyId, leaving);
+  const command = await commandFor(venue, tab.partyId);
+  await expect(
+    inTx(venue, (tx) =>
+      splitTable(
+        tx,
+        venue.cfg,
+        tab.partyId,
+        leaving,
+        {
+          wholeBillIds: [],
+          loose: [
+            { billId: other, lineIds: [emptyDaily] },
+            { billId: tab.tabId, lineIds: [sirloin.id] },
+          ],
+        },
+        command,
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "set_menu.move_adjusted",
+    params: { dishNames: ["Sirloin"] },
+  });
+  expect(await specRows(spec, tab.tabId)).toEqual(before.from);
+  expect(await specRows(spec, other)).toEqual(before.to);
+});
+
+// Failed first: a comp on Bread, Soup's extra, let the Soup move alone.
+it("a dish whose extra is comped moves only with its set menu", async () => {
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await setSpecCount(spec, bill.tabId, spec.daily, 1);
+  await sendSpecDishes(spec, bill, [{ dish: "Soup", from: spec.daily, extras: [spec.bread] }]);
+  const other = await inTx(venue, (tx) => insertPartyBill(tx, venue.cfg, bill.partyId));
+  await setSpecCount(spec, other, spec.daily, 1);
+  const rows = await specRows(spec, bill.tabId);
+  const soup = rows.find(({ name }) => name === "Soup")!;
+  const bread = rows.find(({ parentLineId }) => parentLineId === soup.id)!;
+  await adjust(bill.tabId, bread.id, { action: "comp" });
+  const before = { from: await specRows(spec, bill.tabId), to: await specRows(spec, other) };
+
+  await expect(moveAlone(bill.partyId, bill.tabId, other, [soup.id])).rejects.toMatchObject({
+    code: "set_menu.move_adjusted",
+    params: { dishNames: ["Soup"] },
+  });
+  expect(await specRows(spec, bill.tabId)).toEqual(before.from);
+  expect(await specRows(spec, other)).toEqual(before.to);
+});
+
+// Passed at once: a set menu takes its dishes, and their comps, with it.
+it("the same dish moves with its set menu", async () => {
+  const { tab, other } = await twoBills();
+  const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);
+  const soup = await dishAt(tab.tabId, tab.daily[1]!, 0);
+  await adjust(tab.tabId, sirloin.id, { action: "discount_percent", percentBp: 5000 });
+
+  await moveAlone(tab.partyId, tab.tabId, other, [tab.daily[1]!, soup.id, sirloin.id]);
+  const moved = await specRows(spec, other);
+  expect(moved.find(({ id }) => id === sirloin.id)).toMatchObject({
+    setMenuLineId: tab.daily[1],
+    setMenuPlace: 1,
+    lineTotal: 250,
+  });
+  expect(moved.find(({ id }) => id === soup.id)).toMatchObject({ setMenuLineId: tab.daily[1] });
+  expect((await specRows(spec, tab.tabId)).map(({ id }) => id)).not.toContain(sirloin.id);
 });

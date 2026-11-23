@@ -257,6 +257,29 @@ export async function readBillsSetMenus(
   );
 }
 
+/** Which of `lineIds` carry a comp or discount. */
+export async function reducedLineIds(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
+  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
+  // made on.
+  const reduced = await tx
+    .select({ lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      and(
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        gt(adjustmentLines.reduction, 0),
+      ),
+    );
+  return new Set(reduced.map(({ lineId }) => lineId));
+}
+
 async function placedSetMenuDishes(
   tx: Transaction,
   placed: {
@@ -281,22 +304,13 @@ async function placedSetMenuDishes(
     .select({ lineId: adjustments.lineId, chargeKept: adjustments.chargeKept })
     .from(adjustments)
     .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
-  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
-  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
-  // made on.
-  const reduced = await tx
-    .select({ lineId: adjustmentLines.lineId })
-    .from(adjustmentLines)
-    .where(
-      and(
-        inArray(
-          adjustmentLines.lineId,
-          sql`(select value from json_each(${JSON.stringify(placed.map(({ id }) => id))}))`,
-        ),
-        gt(adjustmentLines.reduction, 0),
-      ),
-    );
-  const fixed = new Set([...payments, ...reduced].map(({ lineId }) => lineId));
+  const fixed = new Set([
+    ...payments.map(({ lineId }) => lineId),
+    ...(await reducedLineIds(
+      tx,
+      placed.map(({ id }) => id),
+    )),
+  ]);
   const cancelled = new Set<string>();
   for (const { lineId, chargeKept } of cancels) {
     if (lineId === null) continue;

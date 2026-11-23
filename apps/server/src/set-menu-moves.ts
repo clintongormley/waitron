@@ -6,7 +6,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, checkMoves, placeInOrder, type DishMove } from "@waitron/shared";
-import { readBillSetMenus, readSetMenuReservations, setMenuDishColumns } from "./set-menu-bill.js";
+import {
+  readBillSetMenus,
+  readSetMenuReservations,
+  reducedLineIds,
+  setMenuDishColumns,
+} from "./set-menu-bill.js";
 import type { TradingContext } from "./trading-context.js";
 import {
   bumpRevisionKeepingPayment,
@@ -88,6 +93,24 @@ export async function replaceMovedDishes(
   const cancelled = lines.find((line) => line.cancellationLineId !== null);
   if (cancelled !== undefined)
     throw new AppError("set_menu.no_place_on_target", { dishName: cancelled.name });
+  // A comp or discount stays with the set-menu price it was given against (owner, 2026-11-23).
+  const extras = await tx
+    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        inArray(
+          workingOrderLines.parentLineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+      ),
+    );
+  const reduced = await reducedLineIds(tx, [...lineIds, ...extras.map(({ id }) => id)]);
+  for (const extra of extras) if (reduced.has(extra.id)) reduced.add(extra.parentLineId!);
+  const adjusted = lines.filter(({ id }) => reduced.has(id));
+  if (adjusted.length > 0)
+    throw new AppError("set_menu.move_adjusted", { dishNames: adjusted.map(({ name }) => name) });
 
   const { placed, unplaced } = placeInOrder(
     { ...state, dishes: state.dishes.filter(({ lineId }) => !moving.has(lineId)) },
