@@ -3742,6 +3742,17 @@ it("focuses the Preparing heading without painting an outline", async () => {
   expect(getComputedStyle(title).outlineStyle).toBe("none");
 });
 
+it("focuses the Ready to switch heading without painting an outline", async () => {
+  const { el } = await mount();
+  await authenticate(el);
+  q(el, "[data-test=proceed]").shadowRoot!.querySelector("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(heading(el)).toBe(t("handover.emergency.ready_heading")));
+  const title = q(el, "h1");
+  expect(el.shadowRoot!.activeElement).toBe(title);
+  expect(getComputedStyle(title).outlineStyle).toBe("none");
+});
+
 it("enables no button while catching up or checking, then offers only Proceed", async () => {
   let open!: () => void;
   const { el, posts } = await mount({

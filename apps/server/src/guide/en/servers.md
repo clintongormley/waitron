@@ -54,7 +54,7 @@ Leave the new box's join page open. The new box then takes its first copy over t
 and restarts as the spare. Its page asks you to save the box key, then to print its own
 [switch label](servers.md#switch-label) and stick it on the box.
 
-On the main box, open **System → Servers** and look for the row marked **Main box**. Check the spare's delay in seconds and **Last copy received**.
+On the main box, open **System → Servers** and find the **Main box** and **Spare box** rows. On the spare's row, check its delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
 check that the spare is connected to the restaurant's network. **Rebuilding the copy** means you should leave both boxes on while the copy is restored.
 

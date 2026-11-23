@@ -58,7 +58,7 @@ copia por la red del local y se reinicia como servidor de reserva. Su página te
 del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en
 el servidor.
 
-En el servidor principal, abre **Sistema → Servidores** y busca la fila marcada **Servidor principal**. Comprueba el retraso del servidor de reserva en segundos y la **Última copia recibida**.
+En el servidor principal, abre **Sistema → Servidores** y busca las filas **Servidor principal** y **Servidor de reserva**. En la fila de reserva, comprueba su retraso en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
 comprueba que el servidor de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos servidores encendidos mientras se restaura la copia.
 

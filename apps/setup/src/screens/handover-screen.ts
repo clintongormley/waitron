@@ -174,7 +174,7 @@ export class SetupHandoverScreen extends LitElement {
       h1 {
         margin-top: 0;
       }
-      h1[data-preparing]:focus {
+      h1[data-switch-heading]:focus {
         outline: none;
       }
       .statements label {
@@ -1984,7 +1984,10 @@ export class SetupHandoverScreen extends LitElement {
         if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
-      <h1 tabindex="-1" ?data-preparing=${heading === "handover.emergency.preparing_heading"}>
+      <h1
+        tabindex="-1"
+        ?data-switch-heading=${heading === "handover.emergency.preparing_heading" || heading === "handover.emergency.ready_heading"}
+      >
         ${t(heading)}
       </h1>
       ${this.#content()}

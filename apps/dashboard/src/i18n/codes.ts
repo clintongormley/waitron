@@ -1606,11 +1606,11 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ese servidor no está en la lista de servidores del local. Actualiza la lista.",
   },
   "membership.not_primary": {
-    en: "Only the primary box can remove a box or clear it from the list. Open this page on the primary box.",
+    en: "Only the main box can remove a box or clear it from the list. Open this page on the main box.",
     es: "Solo el servidor principal puede retirar un servidor o quitarlo de la lista. Abre esta página en el servidor principal.",
   },
   "membership.node_is_primary": {
-    en: "The primary box cannot be removed or cleared from the list.",
+    en: "The main box cannot be removed or cleared from the list.",
     es: "El servidor principal no se puede retirar ni quitar de la lista.",
   },
   "membership.reset_statement_required": {
@@ -1619,7 +1619,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "membership.standby_joined": {
     en: "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now.",
-    es: "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
+    es: "Confirma que este servidor de reserva está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
   },
   "membership.node_not_removed": {
     en: "This box has not been removed, so it cannot be cleared from the list.",
