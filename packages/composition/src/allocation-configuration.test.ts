@@ -54,6 +54,7 @@ const candidate = {
     { code: "A-P000042", purpose: "standard" },
     { code: "FF-P000042", purpose: "full" },
     { code: "R-P000042", purpose: "corrective" },
+    { code: "RF-P000042", purpose: "full_corrective" },
   ],
   source: "paper" as const,
   issuedAt: "2026-10-13T10:00:00.000Z",
@@ -170,6 +171,7 @@ it("reads an independently configured historical paper source without production
       { code: "A-P000042", purpose: "standard" },
       { code: "FF-P000042", purpose: "full" },
       { code: "R-P000042", purpose: "corrective" },
+      { code: "RF-P000042", purpose: "full_corrective" },
     ]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "P000042" }]);
     expect(
@@ -372,6 +374,7 @@ it("activates the current hour through production composition without signed-fil
       { code: "A-0CNNY", purpose: "standard" },
       { code: "FF-0CNNY", purpose: "full" },
       { code: "R-0CNNY", purpose: "corrective" },
+      { code: "RF-0CNNY", purpose: "full_corrective" },
     ]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNY" }]);
     expect(
