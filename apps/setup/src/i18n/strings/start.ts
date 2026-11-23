@@ -94,24 +94,24 @@ export const startEn = {
   "connect.back": "Back",
   "connect.join": "Join",
   "connect.start_again": "Start again",
-  "connect.finish": "Finish joining",
+  "connect.no": "No",
+  "connect.try_again": "Try again",
   "connect.finish.bundle_fetch_failed":
     "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
   "connect.reading": "Checking this box's join…",
   "connect.waiting.open_link": "Open the Servers page on the main box",
-  "connect.waiting.open_after": ", choose Check beside this box's request, and tap this code:",
+  "connect.waiting.open_after": " and choose Check beside this box's request.",
+  "connect.waiting.lead": "Does the main box show this code?",
+  "connect.waiting.confirmed": "Now choose Add as spare on the main box.",
   "connect.waiting.time_left": "Time left: {minutes} min",
-  "connect.approved": "The main box approved a join with code {code}.",
-  "connect.approved.hint":
-    "Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
+  "connect.approved": "The main box added this box.",
+  "connect.approved.finishing": "This box is finishing joining…",
   "connect.elsewhere":
     "A join was started from another page or device. This page cannot show its code. Choose Start again to start one here; the other page's join then ends.",
   "connect.replaced":
-    "This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. Choose Start again for a new code.",
-  "connect.ended.wrong_code":
-    "On the main box, a code that is not this box's was chosen, so this request has ended and nothing was sent. Choose Start again for a new code.",
+    "This page's join was ended from another page or device, so its code no longer counts. Choose Start again for a new code.",
   "connect.ended.dismissed":
-    "The main box's Servers page dismissed this request. Choose Start again to ask again.",
+    "On the main box, this request was dismissed or answered No. Choose Start again to ask again.",
   "connect.ended.cancelled":
     "This request was cancelled, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.ended.stopped":
@@ -145,7 +145,7 @@ export const startEn = {
   "connect.refusal.join_waiting":
     "This box is already waiting to join, or is still ending its last request. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_approving":
-    "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
+    "The main box is already adding this box, so the request cannot be ended from here. Wait a moment: this box then finishes joining, or this page says what went wrong.",
   "connect.refusal.join_in_use":
     "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
   "connect.refusal.join_handle_invalid":
@@ -333,25 +333,24 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.back": "Volver",
   "connect.join": "Unirse",
   "connect.start_again": "Empezar de nuevo",
-  "connect.finish": "Terminar la unión",
+  "connect.no": "No",
+  "connect.try_again": "Volver a intentar",
   "connect.finish.bundle_fetch_failed":
     "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
   "connect.reading": "Comprobando la unión de este servidor…",
   "connect.waiting.open_link": "Abre la página Servidores del servidor principal",
-  "connect.waiting.open_after":
-    ", elige Comprobar junto a la solicitud de este servidor y toca este código:",
+  "connect.waiting.open_after": " y elige Comprobar junto a la solicitud de este servidor.",
+  "connect.waiting.lead": "¿El servidor principal muestra este código?",
+  "connect.waiting.confirmed": "Ahora elige Añadir como reserva en el servidor principal.",
   "connect.waiting.time_left": "Tiempo restante: {minutes} min",
-  "connect.approved": "El servidor principal aprobó una unión con el código {code}.",
-  "connect.approved.hint":
-    "Elige Terminar la unión solo si tocaste ese código en el servidor principal. Si no, elige Empezar de nuevo aquí. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista.",
+  "connect.approved": "El servidor principal ha añadido este servidor.",
+  "connect.approved.finishing": "Este servidor está terminando de unirse…",
   "connect.elsewhere":
     "Se empezó una unión desde otra página o dispositivo. Esta página no puede mostrar su código. Elige Empezar de nuevo para empezar una aquí; la unión de la otra página terminará.",
   "connect.replaced":
-    "La unión de esta página se terminó desde otra página o dispositivo, así que su código ya no vale. No lo toques en el servidor principal. Elige Empezar de nuevo para obtener un código nuevo.",
-  "connect.ended.wrong_code":
-    "En el servidor principal se eligió un código que no es el de este servidor, así que esta solicitud ha terminado y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+    "La unión de esta página se terminó desde otra página o dispositivo, así que su código ya no vale. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.dismissed":
-    "En la página Servidores del servidor principal se descartó esta solicitud. Elige Empezar de nuevo para volver a pedir la unión.",
+    "En el servidor principal se descartó esta solicitud o se respondió No. Elige Empezar de nuevo para volver a pedir la unión.",
   "connect.ended.cancelled":
     "Esta solicitud se canceló, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.stopped":
@@ -387,7 +386,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.join_waiting":
     "Este servidor ya está esperando para unirse, o todavía está terminando su última solicitud. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_approving":
-    "El servidor principal está aprobando esta unión, o acaba de dejar de aprobarla, así que no se puede detener desde aquí. Espera un momento: esta página mostrará después la respuesta del servidor principal.",
+    "El servidor principal ya está añadiendo este servidor, así que la solicitud no se puede terminar desde aquí. Espera un momento: este servidor terminará de unirse, o esta página dirá qué ha fallado.",
   "connect.refusal.join_in_use":
     "La unión de este servidor está abierta ahora en otra página o dispositivo. Termínala o cancélala allí. Si esa página está cerrada, espera 15 segundos y elige Empezar de nuevo aquí.",
   "connect.refusal.join_handle_invalid":

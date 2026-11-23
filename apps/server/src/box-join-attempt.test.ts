@@ -205,7 +205,7 @@ describe("the new box's join attempt", () => {
     await approveWith(bundle);
 
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    expect(attempt.current()).toEqual({ state: "approved" });
     const joined = attempt.joined();
     expect(joined).toEqual({
       identity: {
@@ -257,7 +257,7 @@ describe("the new box's join attempt", () => {
     lose = (path) =>
       path.endsWith("/poll") && requests.listed().length === 0 && ++approvedPolls === 1;
     const attempt = createBoxJoinAttempt(deps());
-    const shown = await attempt.start(MAIN_URL);
+    await attempt.start(MAIN_URL);
     await attempt.confirm();
     const bundle = await bundleFor();
     await approveWith(bundle);
@@ -266,7 +266,7 @@ describe("the new box's join attempt", () => {
     expect(attempt.current()).toMatchObject({ state: "waiting" });
     await vi.advanceTimersByTimeAsync(2_000);
     expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "poll"]);
-    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    expect(attempt.current()).toEqual({ state: "approved" });
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
@@ -618,7 +618,7 @@ describe("the new box's join attempt", () => {
     });
     expect(requests.approve.finish(requestId, locked)).toBe(true);
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    expect(attempt.current()).toEqual({ state: "approved" });
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
@@ -836,7 +836,7 @@ describe("the new box's join attempt", () => {
 
   it.each([
     ["a poll without the Yes", false, { state: "failed", error: "mirror.join_invalid" }],
-    ["a poll carrying the Yes", true, { state: "approved", code: expect.any(String) }],
+    ["a poll carrying the Yes", true, { state: "approved" }],
   ])("adopts an approved answer only when it answers %s", async (_name, sayYes, state) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const bundle = await bundleFor();

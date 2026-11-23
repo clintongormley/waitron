@@ -167,8 +167,15 @@ export type JoinState =
   | { state: "none" }
   | { state: "elsewhere" }
   | { state: "replaced" }
-  | { state: "waiting"; code: string; primaryUrl: string; timeLeftMs: number }
-  | { state: "approved"; code: string }
+  | {
+      state: "waiting";
+      code: string;
+      primaryUrl: string;
+      timeLeftMs: number;
+      /** This box's Join reached the main box. */
+      confirmed: boolean;
+    }
+  | { state: "approved" }
   | { state: "ended"; reason: string }
   | { state: "failed"; error: string };
 
@@ -622,6 +629,11 @@ export class SetupApi {
 
   cancelJoin(handle: string | undefined): Promise<void> {
     return this.#request("/setup-api/join/cancel", "POST", {}, joinHeaders(handle));
+  }
+
+  /** This box's Join: the person saw the same code on both boxes. */
+  confirmJoin(handle: string | undefined): Promise<void> {
+    return this.#request("/setup-api/join/confirm", "POST", {}, joinHeaders(handle));
   }
 
   /** Finish joining: the server reads nothing from the body, so every resend is the same request. */

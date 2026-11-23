@@ -2632,7 +2632,7 @@ export class SetupApp extends LitElement {
    * here for parity. Any other code the server answered (the error carries
    * an HTTP `status`) reads the saved setup first, and an adopt saved past "started" and short of
    * "complete" gets the stopped-partway message. Otherwise `setup.operation_conflict` is terminal
-   * too, and everything else routes back to the join screen, where Finish joining is chosen again.
+   * too, and everything else routes back to the join screen, whose Try again sends it again.
    */
   async #mapAdoptError(error: ApiError): Promise<void> {
     const code =

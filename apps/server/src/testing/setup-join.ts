@@ -24,7 +24,7 @@ export function approvedJoinAttempt(joined: () => JoinedBox | Promise<JoinedBox>
   return {
     start: async () => {
       held = await joined();
-      state = { state: "approved", code: CODE };
+      state = { state: "approved" };
       return { code: CODE, timeLeftMs: 900_000 };
     },
     confirm: async () => {},

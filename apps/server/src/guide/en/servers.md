@@ -46,13 +46,12 @@ Enter the main box's address by its name, `https://waitron.local`, and choose **
 address, such as `https://192.168.1.10`, is refused. The new box shows a six-digit code and a link
 to the main box's Servers page.
 
-On the main box, open **System → Servers** (the link opens it), choose **Check** beside the request,
-and tap the code the new box shows. A wrong tap ends the request; choose **Start again** on the new
-box.
+On the main box, open **System → Servers** (the link opens it) and choose **Check** beside the
+request. If both boxes show the same code, choose **Join** on the new box and **Add as spare** on the
+main box, in either order. If the codes differ, choose **No**.
 
-Back on the new box, choose **Finish joining**. The
-new box takes its first copy over the venue's network and restarts by itself as the spare. Its
-page asks you to save the box key, then to print its own
+The new box then takes its first copy over the venue's network and restarts by itself as the spare.
+Go back to the new box: its page asks you to save the box key, then to print its own
 [switch label](servers.md#switch-label) and stick it on the box.
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.

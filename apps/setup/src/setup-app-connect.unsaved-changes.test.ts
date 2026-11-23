@@ -8,7 +8,14 @@ import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
-import { MAIN, chooseFinish, forgetJoin, joinScreen, joinStubs } from "../test/join-browser.js";
+import {
+  APPROVED,
+  MAIN,
+  finishRequested,
+  forgetJoin,
+  joinScreen,
+  joinStubs,
+} from "../test/join-browser.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -129,7 +136,8 @@ describe("setup Connect unsaved changes", () => {
 
   it("Join and Finish joining go on without asking, and success clears unload", async () => {
     const { el, form, api } = await mount();
-    vi.mocked(api.joinState).mockResolvedValue({ state: "approved", code: "482913" });
+    vi.mocked(api.joinState).mockResolvedValue(APPROVED);
+    const requested = finishRequested(el);
     await edit(form, MAIN);
     expect(unload()).toBe(true);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
@@ -138,7 +146,7 @@ describe("setup Connect unsaved changes", () => {
     );
     expect(api.startJoin).toHaveBeenCalledOnce();
     expect(unload()).toBe(false);
-    await chooseFinish(el);
+    await requested;
     await expect.poll(() => screen(el)).toBe("done");
     expect(api.finishJoin).toHaveBeenCalledOnce();
     expect(warning(el).open).toBe(false);

@@ -40,13 +40,19 @@ const WAITING: JoinState = {
   code: "482913",
   primaryUrl: MAIN,
   timeLeftMs: STARTED.timeLeftMs,
+  confirmed: false,
 };
+const CONFIRMED: JoinState = { ...WAITING, confirmed: true };
+const APPROVED: JoinState = { state: "approved" };
+const OPEN_MAIN =
+  "Open the Servers page on the main box and choose Check beside this box's request.";
 
 function stubApi(state: JoinState = { state: "none" }) {
   return {
     startJoin: vi.fn().mockResolvedValue(STARTED),
     joinState: vi.fn().mockResolvedValue(state),
     cancelJoin: vi.fn().mockResolvedValue(undefined),
+    confirmJoin: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -247,9 +253,8 @@ describe("setup-connect-screen: waiting", () => {
     await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
     expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
     expect(seen).toEqual(["h1"]);
-    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
-      "Open the Servers page on the main box, choose Check beside this box's request, and tap this code:",
-    );
+    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(OPEN_MAIN);
+    expect(text(el, "[data-test=question]")).toBe("Does the main box show this code?");
     const link = q(el, "[data-test=state] a[data-test=servers-page]")!;
     expect(link.getAttribute("href")).toBe(`${MAIN}/servers`);
     expect(link.getAttribute("target")).toBe("_blank");
@@ -259,8 +264,11 @@ describe("setup-connect-screen: waiting", () => {
     expect(q(el, "[data-test=main]")).toBeNull();
     expect(el.shadowRoot!.textContent).not.toMatch(/Main box:/);
     expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
-    expect(q(el, "[data-test=start-again]")).not.toBeNull();
-    expect(q(el, "[data-test=finish]")).toBeNull();
+    expect(buttons(el)).toEqual(["no", "yes"]);
+    expect(text(el, "[data-test=no]")).toBe("No");
+    expect(text(el, "[data-test=yes]")).toBe("Join");
+    expect(q(el, "[data-test=no]")!.getAttribute("variant")).toBe("secondary");
+    expect(q(el, "[data-test=yes]")!.getAttribute("variant")).toBe("primary");
     expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();
   });
 
@@ -271,9 +279,7 @@ describe("setup-connect-screen: waiting", () => {
     });
     await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
     expect(q(el, "[data-test=state] a")).toBeNull();
-    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
-      "Open the Servers page on the main box, choose Check beside this box's request, and tap this code:",
-    );
+    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(OPEN_MAIN);
   });
 
   it("shows the instruction without a link when the main box's address is a web address of another kind", async () => {
@@ -291,7 +297,7 @@ describe("setup-connect-screen: waiting", () => {
   });
 
   it("never draws a code without the handle, even when an answer carries one", async () => {
-    for (const state of [WAITING, { state: "approved", code: "482913" } as const]) {
+    for (const state of [WAITING, APPROVED]) {
       const { el } = await mount(stubApi(state));
       expect(el.shadowRoot!.textContent).not.toMatch(/482/);
       expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
@@ -345,6 +351,9 @@ describe("setup-connect-screen: waiting", () => {
   it("reads the join every 2 seconds while it waits, but never while its own start is still waiting", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const api = stubApi(WAITING);
+    api.joinState
+      .mockResolvedValueOnce(WAITING)
+      .mockResolvedValue({ state: "ended", reason: "dismissed" });
     let finishStart!: (answer: JoinStarted) => void;
     api.startJoin.mockReturnValue(new Promise((resolve) => (finishStart = resolve)));
     const { el } = await mount(api, { handle: "h0" });
@@ -368,6 +377,10 @@ describe("setup-connect-screen: Start again", () => {
     api.startJoin.mockResolvedValue({ ...STARTED, code: "105377", handle: "h2" });
     const { el } = await mount(api, { handle: "h1" });
     const seen = handles(el);
+    api.joinState.mockResolvedValue({ state: "ended", reason: "dismissed" });
+    await vi.waitFor(() => expect(q(el, "[data-test=start-again]")).not.toBeNull(), {
+      timeout: 5_000,
+    });
     await press(el, "start-again");
     await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("105\u00a0377"));
     expect(api.cancelJoin).toHaveBeenCalledWith("h1");
@@ -427,76 +440,220 @@ describe("setup-connect-screen: the main box's join limits", () => {
   });
 });
 
-describe("setup-connect-screen: Start again while the main box approves", () => {
+describe("setup-connect-screen: No", () => {
+  it("ends the request with the handle, forgets it, and stops at the address without asking again", async () => {
+    const api = stubApi(WAITING);
+    const { el } = await mount(api, { handle: "h1" });
+    const seen = handles(el);
+    await press(el, "no");
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    expect(api.cancelJoin).toHaveBeenCalledExactlyOnceWith("h1");
+    expect(seen).toEqual([undefined]);
+    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(MAIN);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.startJoin).not.toHaveBeenCalled();
+    expect(buttons(el)).toEqual(["back", "join"]);
+  });
+
+  it("ends the request after this box's Join too", async () => {
+    const api = stubApi(CONFIRMED);
+    const { el } = await mount(api, { handle: "h1" });
+    expect(buttons(el)).toEqual(["no"]);
+    await press(el, "no");
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    expect(api.cancelJoin).toHaveBeenCalledExactlyOnceWith("h1");
+    expect(api.startJoin).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       "en-GB",
-      "The main box is approving this join, or has just stopped approving it, so it cannot be stopped from here. Wait a moment: this page then shows the main box's answer.",
+      "The main box is already adding this box, so the request cannot be ended from here. Wait a moment: this box then finishes joining, or this page says what went wrong.",
     ],
     ["es-ES", es["connect.refusal.join_approving"]],
-  ])("says so in %s, keeps the code and goes on reading", async (locale, words) => {
-    setLocale(locale as "en-GB" | "es-ES");
+  ])(
+    "says so in %s when the main box is already adding this box, keeps the code and goes on reading",
+    async (locale, words) => {
+      setLocale(locale as "en-GB" | "es-ES");
+      const api = stubApi(CONFIRMED);
+      api.cancelJoin.mockRejectedValue({ code: "mirror.join_approving" });
+      const { el } = await mount(api, { handle: "h1" });
+      const finished = vi.fn();
+      el.addEventListener("join-finish-requested", finished);
+      await press(el, "no");
+      await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+      expect(text(el, "[data-test=code]")).toBe("482 913");
+      api.joinState.mockResolvedValue(APPROVED);
+      await vi.waitFor(() => expect(finished).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    },
+  );
+});
+
+describe("setup-connect-screen: Join on the code", () => {
+  it("sends this box's Join with the handle, then asks for Add as spare on the main box", async () => {
     const api = stubApi(WAITING);
-    api.cancelJoin.mockRejectedValue({ code: "mirror.join_approving" });
     const { el } = await mount(api, { handle: "h1" });
-    await press(el, "start-again");
-    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
-    expect(text(el, "[data-test=code]")).toBe("482\u00a0913");
-    api.joinState.mockResolvedValue({ state: "approved", code: "482913" });
-    await vi.waitFor(() => expect(q(el, "[data-test=finish]")).not.toBeNull(), {
-      timeout: 5_000,
+    api.joinState.mockResolvedValue(CONFIRMED);
+    await press(el, "yes");
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=question]")).toBe("Now choose Add as spare on the main box."),
+    );
+    expect(api.confirmJoin).toHaveBeenCalledExactlyOnceWith("h1");
+    expect(text(el, "[data-test=code]")).toBe("482 913");
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
+    expect(q(el, "[data-test=servers-page]")).not.toBeNull();
+    expect(buttons(el)).toEqual(["no"]);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("shows Join working and No unavailable while the Join is out, and sends it once", async () => {
+    const api = stubApi(WAITING);
+    let answer!: () => void;
+    api.confirmJoin.mockReturnValue(new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mount(api, { handle: "h1" });
+    q(el, "[data-test=yes]")!.click();
+    q(el, "[data-test=yes]")!.click();
+    await el.updateComplete;
+    expect(api.confirmJoin).toHaveBeenCalledOnce();
+    expect((q(el, "[data-test=yes]") as HTMLElement & { loading: boolean }).loading).toBe(true);
+    expect(disabled(el, "no")).toBe(true);
+    api.joinState.mockResolvedValue(CONFIRMED);
+    answer();
+    await vi.waitFor(() => expect(buttons(el)).toEqual(["no"]));
+    expect(disabled(el, "no")).toBe(false);
+  });
+
+  it("shows a refused Join in the bottom message and offers it again", async () => {
+    const api = stubApi(WAITING);
+    api.confirmJoin.mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed" });
+    const { el } = await mount(api, { handle: "h1" });
+    await press(el, "yes");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box got no usable answer from the main box at that address. Check the address and that the main box is switched on, then choose Join again.",
+      ),
+    );
+    expect(buttons(el)).toEqual(["no", "yes"]);
+    expect(disabled(el, "yes")).toBe(false);
+    await press(el, "yes");
+    await vi.waitFor(() => expect(api.confirmJoin).toHaveBeenCalledTimes(2));
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
+  });
+
+  it("reads the join again, showing no error, when the request is no longer waiting", async () => {
+    const api = stubApi(WAITING);
+    api.confirmJoin.mockRejectedValue({
+      code: "setup.request_invalid",
+      params: { field: "join" },
     });
+    const { el } = await mount(api, { handle: "h1" });
+    api.joinState.mockResolvedValue({ state: "ended", reason: "dismissed" });
+    await press(el, "yes");
+    await vi.waitFor(() => expect(text(el, "[data-test=state]")).toMatch(/answered No/));
+    expect(await bottomOf(el)).toBe("");
   });
 });
 
-describe("setup-connect-screen: approved and Finish joining", () => {
-  it("offers Finish joining only once approved, and hands it to the shell", async () => {
-    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
-    const finished = vi.fn();
-    el.addEventListener("join-finish-requested", finished);
-    expect(text(el, "[data-test=state]")).toBe(
-      "The main box approved a join with code 482\u00a0913. Choose Finish joining only if you tapped that code on the main box. If you did not, choose Start again here. On the main box's Servers page, choose Remove in this box's row, then Clear from list.",
-    );
-    await press(el, "finish");
-    expect(finished).toHaveBeenCalledOnce();
-  });
-
-  it("reads the join again, showing no error, when Finish joining finds it no longer approved", async () => {
-    const api = stubApi({ state: "approved", code: "482913" });
+describe("setup-connect-screen: added by the main box", () => {
+  it("hands Finish joining to the shell by itself, once, however often the join is read", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const api = stubApi(WAITING);
     const { el } = await mount(api, { handle: "h1" });
-    api.joinState.mockResolvedValue({ state: "ended", reason: "dismissed" });
-    el.errorMessage = "The server rejected the details.";
-    el.refusal = { code: "setup.request_invalid", params: { field: "join" } };
-    await vi.waitFor(() => expect(text(el, "[data-test=state]")).toMatch(/dismissed/));
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=finish]")).toBeNull();
-  });
-
-  it("sends Finish joining once however often it is clicked, and shows it is working until a refusal comes back", async () => {
-    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
     const finished = vi.fn();
     el.addEventListener("join-finish-requested", finished);
+    api.joinState.mockResolvedValue(APPROVED);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await el.updateComplete;
+    expect(finished).toHaveBeenCalledOnce();
+    expect(el.finishing).toBe(true);
+    expect(text(el, "[data-test=state]")).toBe(
+      "The main box added this box. This box is finishing joining…",
+    );
+    await vi.advanceTimersByTimeAsync(6_000);
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(api.joinState.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(finished).toHaveBeenCalledOnce();
+    expect(q(el, "[data-test=finish]")).toBeNull();
+    expect(disabled(el, "start-again")).toBe(true);
+    expect(disabled(el, "back")).toBe(true);
+  });
+
+  it("does not hand it on again when a refusal comes back, but offers Try again, which does", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { el, api } = await mount(stubApi(APPROVED), { handle: "h1" });
+    const finished = vi.fn();
+    el.addEventListener("join-finish-requested", finished);
+    el.errorMessage = "The shell's words.";
+    el.refusal = { code: "mirror.vault_not_empty" };
+    await el.updateComplete;
+    await vi.advanceTimersByTimeAsync(6_000);
+    await el.updateComplete;
+    expect(api.joinState.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(finished).not.toHaveBeenCalled();
+    expect(el.finishing).toBe(false);
+    expect(text(el, "[data-test=state]")).toBe("The main box added this box.");
+    expect(await bottomOf(el)).toBe("The shell's words.");
+    expect(text(el, "[data-test=finish]")).toBe("Try again");
+    expect(disabled(el, "back")).toBe(false);
     q(el, "[data-test=finish]")!.click();
     q(el, "[data-test=finish]")!.click();
     await el.updateComplete;
     expect(finished).toHaveBeenCalledOnce();
     expect(el.finishing).toBe(true);
-    expect(disabled(el, "finish")).toBe(true);
     expect((q(el, "[data-test=finish]") as HTMLElement & { loading: boolean }).loading).toBe(true);
-    expect(disabled(el, "start-again")).toBe(true);
-    expect(disabled(el, "back")).toBe(true);
-    el.errorMessage = "The shell's words.";
-    el.refusal = { code: "mirror.vault_not_empty" };
+  });
+
+  it("does not hand it on by itself when mounted with a refusal the shell routed back", async () => {
+    const finished = vi.fn();
+    document.addEventListener("join-finish-requested", finished);
+    try {
+      const { el } = await mount(stubApi(APPROVED), {
+        handle: "h1",
+        refusal: { code: "mirror.vault_not_empty" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(finished).not.toHaveBeenCalled();
+      expect(q(el, "[data-test=finish]")).not.toBeNull();
+    } finally {
+      document.removeEventListener("join-finish-requested", finished);
+    }
+  });
+
+  it("hands Finish joining on again for a new join, which has a new handle", async () => {
+    const api = stubApi(WAITING);
+    const { el } = await mount(api, { handle: "h1" });
+    const finished = vi.fn();
+    el.addEventListener("join-finish-requested", finished);
+    api.joinState.mockResolvedValue(APPROVED);
+    await vi.waitFor(() => expect(finished).toHaveBeenCalledOnce(), { timeout: 5_000 });
+    el.refusal = { code: "mirror.bundle_fetch_failed" };
     await el.updateComplete;
-    expect(el.finishing).toBe(false);
-    expect(disabled(el, "finish")).toBe(false);
-    expect(disabled(el, "back")).toBe(false);
-    await press(el, "finish");
-    expect(finished).toHaveBeenCalledTimes(2);
+    api.joinState.mockResolvedValue({ state: "ended", reason: "stopped" });
+    await vi.waitFor(() => expect(text(el, "[data-test=state]")).toMatch(/stopped partway/), {
+      timeout: 5_000,
+    });
+    api.startJoin.mockResolvedValue({ ...STARTED, handle: "h2" });
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
+    expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
+    api.joinState.mockResolvedValue(APPROVED);
+    await vi.waitFor(() => expect(finished).toHaveBeenCalledTimes(2), { timeout: 5_000 });
+  });
+
+  it("reads the join again, showing no error, when Finish joining finds it no longer approved", async () => {
+    const api = stubApi(APPROVED);
+    const { el } = await mount(api, { handle: "h1" });
+    api.joinState.mockResolvedValue({ state: "ended", reason: "dismissed" });
+    el.errorMessage = "The server rejected the details.";
+    el.refusal = { code: "setup.request_invalid", params: { field: "join" } };
+    await vi.waitFor(() => expect(text(el, "[data-test=state]")).toMatch(/answered No/));
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=finish]")).toBeNull();
   });
 
   it("shows the generic words for a routed-back refusal that comes with no words", async () => {
-    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const { el } = await mount(stubApi(APPROVED), { handle: "h1" });
     el.refusal = { code: "mirror.vault_not_empty" };
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
@@ -512,14 +669,14 @@ describe("setup-connect-screen: approved and Finish joining", () => {
     ],
     [{ code: "mirror.vault_not_empty" }, "The shell's words."],
   ])("shows a refusal of Finish joining in the bottom message (%o)", async (refusal, words) => {
-    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const { el } = await mount(stubApi(APPROVED), { handle: "h1" });
     el.errorMessage = "The shell's words.";
     el.refusal = refusal;
     await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
   });
 
   it("names Start again, which is drawn, when Finish joining cannot check the main box's copy", async () => {
-    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const { el } = await mount(stubApi(APPROVED), { handle: "h1" });
     el.refusal = { code: "mirror.bundle_fetch_failed" };
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
@@ -544,19 +701,15 @@ describe("setup-connect-screen: the words of every state", () => {
     ],
     [
       { state: "replaced" },
-      `This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. ${START_AGAIN_FOR_CODE}`,
-    ],
-    [
-      { state: "ended", reason: "wrong_code" },
-      `On the main box, a code that is not this box's was chosen, so this request has ended and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+      `This page's join was ended from another page or device, so its code no longer counts. ${START_AGAIN_FOR_CODE}`,
     ],
     [
       { state: "ended", reason: "dismissed" },
-      "The main box's Servers page dismissed this request. Choose Start again to ask again.",
+      "On the main box, this request was dismissed or answered No. Choose Start again to ask again.",
     ],
     [
       { state: "ended", reason: "replaced" },
-      `This page's join was ended from another page or device, so its code no longer counts. Do not tap it on the main box. ${START_AGAIN_FOR_CODE}`,
+      `This page's join was ended from another page or device, so its code no longer counts. ${START_AGAIN_FOR_CODE}`,
     ],
     [
       { state: "ended", reason: "cancelled" },
@@ -778,7 +931,7 @@ describe("setup-connect-screen: nothing leaves the screen while a request is out
     expect(disabled(el, "back")).toBe(true);
     answer(STARTED);
     await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
-    expect(disabled(el, "back")).toBe(false);
+    expect(q(el, "[data-test=back]")).toBeNull();
   });
 
   it("disables Back while Start again's cancel is out", async () => {
@@ -931,12 +1084,22 @@ describe("setup-connect-screen in Spanish", () => {
     expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
       `${es["connect.waiting.open_link"]}${es["connect.waiting.open_after"]}`,
     );
+    expect(text(el, "[data-test=question]")).toBe("¿El servidor principal muestra este código?");
     expect(text(el, "[data-test=servers-page]")).toBe(es["connect.waiting.open_link"]);
     expect(q(el, "[data-test=servers-page]")!.getAttribute("href")).toBe(`${MAIN}/servers`);
     expect(q(el, "[data-test=addresses]")).toBeNull();
     expect(q(el, "[data-test=main]")).toBeNull();
     expect(text(el, "[data-test=time-left]")).toBe("Tiempo restante: 15 min");
-    expect(text(el, "[data-test=start-again]")).toBe("Empezar de nuevo");
+    expect(text(el, "[data-test=no]")).toBe("No");
+    expect(text(el, "[data-test=yes]")).toBe("Unirse");
+  });
+
+  it("asks for Add as spare on the main box in Spanish once this box said Join", async () => {
+    setLocale("es-ES");
+    const { el } = await mount(stubApi(CONFIRMED), { handle: "h1" });
+    expect(text(el, "[data-test=question]")).toBe(
+      "Ahora elige Añadir como reserva en el servidor principal.",
+    );
   });
 });
 

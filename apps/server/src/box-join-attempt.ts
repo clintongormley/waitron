@@ -83,7 +83,7 @@ export type JoinAttemptState =
       /** A poll carrying the Yes has been answered. */
       confirmed: boolean;
     }
-  | { state: "approved"; code: string }
+  | { state: "approved" }
   /** `unknown`: the main box ended the request for a reason this box does not know. */
   | { state: "ended"; reason: JoinEndReason | "unknown" }
   | { state: "failed"; error: ErrorCode };
@@ -312,7 +312,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
         return true;
       }
       attempt.bundle = bundle;
-      attempt.state = { state: "approved", code: attempt.code };
+      attempt.state = { state: "approved" };
       return true;
     }
     if (isRecord(answer) && answer.state === "ended") {

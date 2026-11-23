@@ -14,18 +14,20 @@ export const WAITING: JoinState & { state: "waiting" } = {
   code: "482913",
   primaryUrl: MAIN,
   timeLeftMs: STARTED.timeLeftMs,
+  confirmed: false,
 };
-export const APPROVED: JoinState = { state: "approved", code: "482913" };
+export const APPROVED: JoinState = { state: "approved" };
 
 /** The join requests a stub `SetupApi` needs: a tab holding a handle reads an approved join. */
 export const joinStubs = (): {
-  [K in "startJoin" | "joinState" | "cancelJoin" | "finishJoin"]: Mock<SetupApi[K]>;
+  [K in "startJoin" | "joinState" | "cancelJoin" | "confirmJoin" | "finishJoin"]: Mock<SetupApi[K]>;
 } => ({
   startJoin: vi.fn().mockResolvedValue(STARTED),
   joinState: vi.fn(async (handle?: string): Promise<JoinState> =>
     handle === undefined ? { state: "none" } : APPROVED,
   ),
   cancelJoin: vi.fn().mockResolvedValue(undefined),
+  confirmJoin: vi.fn().mockResolvedValue(undefined),
   finishJoin: vi
     .fn()
     .mockResolvedValue({ adopted: true, breakGlassSecret: "bg-default", restarting: true }),
@@ -54,12 +56,28 @@ export async function joinScreen(app: SetupApp): Promise<HTMLElement> {
   return screen!;
 }
 
+/** Resolves when the join screen next hands Finish joining to `app`. */
+export function finishRequested(app: SetupApp): Promise<void> {
+  return new Promise((resolve) =>
+    app.shadowRoot!.addEventListener("join-finish-requested", () => resolve(), {
+      once: true,
+      capture: true,
+    }),
+  );
+}
+
+async function settle(app: SetupApp): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await app.updateComplete;
+}
+
 /**
- * Opens the join screen on a join `holdJoin` holds, which the main box has approved, and chooses
- * Finish joining.
+ * Opens the join screen on a join `holdJoin` holds, which the main box has approved, and waits for
+ * the screen to hand Finish joining to the shell.
  */
 export async function finishJoining(app: SetupApp, primaryUrl: string = MAIN): Promise<void> {
   holdJoin(primaryUrl);
+  const requested = finishRequested(app);
   app.shadowRoot!.querySelector("main")!.dispatchEvent(
     new CustomEvent("setup-goto", {
       detail: { screen: "connect" },
@@ -67,24 +85,19 @@ export async function finishJoining(app: SetupApp, primaryUrl: string = MAIN): P
       composed: true,
     }),
   );
-  await app.updateComplete;
-  await chooseFinish(app);
+  await requested;
+  await settle(app);
 }
 
-/** Chooses Finish joining on the join screen showing, once it is drawn. */
-export async function chooseFinish(app: SetupApp): Promise<void> {
+/** Chooses Try again on the join screen showing, once a refused Finish joining draws it. */
+export async function chooseTryAgain(app: SetupApp): Promise<void> {
   let finish: HTMLElement | null | undefined;
-  await vi.waitFor(
-    () => {
-      finish = app
-        .shadowRoot!.querySelector("setup-connect-screen")
-        ?.shadowRoot?.querySelector<HTMLElement>("[data-test=finish]");
-      expect(finish).toBeTruthy();
-      // A waiting join is read again every 2 seconds.
-    },
-    { timeout: 5_000 },
-  );
+  await vi.waitFor(() => {
+    finish = app
+      .shadowRoot!.querySelector("setup-connect-screen")
+      ?.shadowRoot?.querySelector<HTMLElement>("[data-test=finish]");
+    expect(finish).toBeTruthy();
+  });
   finish!.click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await app.updateComplete;
+  await settle(app);
 }

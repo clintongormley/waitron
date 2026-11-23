@@ -60,7 +60,7 @@ function fakeAttempt() {
     };
   };
   const approve = (box: JoinedBox) => {
-    state = { state: "approved", code: String(100000 + started) };
+    state = { state: "approved" };
     joined = box;
   };
   return { attempt, hold, approve, set: (next: JoinAttemptState | null) => (state = next) };
@@ -320,7 +320,7 @@ describe("the setup page's join routes", () => {
         timeLeftMs: TIME_LEFT_MS,
         confirmed: true,
       },
-      { state: "approved", code: "100001" },
+      { state: "approved" },
       { state: "ended", reason: "dismissed" },
       { state: "failed", error: "mirror.join_not_found" },
     ];
