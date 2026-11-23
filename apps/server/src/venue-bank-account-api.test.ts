@@ -1,8 +1,14 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
-import { readActivityForSubject, readSettings, VENUE_SETTINGS, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import {
+  outgoingMail,
+  readActivityForSubject,
+  readSettings,
+  VENUE_SETTINGS,
+  withTransaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
@@ -20,7 +26,11 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
   const app = new Hono();
   mountVenueSettingsApi(
     app,
-    { db: suite.db, fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution! },
+    {
+      db: suite.db,
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
+      venueLanguage: "en",
+    },
     () => {},
   );
   return app.request("/management-api/venue-details/bank-account", {
@@ -29,6 +39,11 @@ function save(body: unknown, cookie: string | null = venue.managerCookie) {
     body: JSON.stringify(body),
   });
 }
+const alerts = () =>
+  suite.db
+    .select({ dedupeKey: outgoingMail.dedupeKey, code: outgoingMail.params })
+    .from(outgoingMail)
+    .where(eq(outgoingMail.kind, "box_alert"));
 const stored = async () => (await readSettings(suite.db, VENUE_SETTINGS)).doc.bankAccount;
 const valid = {
   iban: "ES91 2100 0418 4502 0005 1332",
@@ -135,5 +150,23 @@ describe("saving the venue's bank account", () => {
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_read_only", params: { field: "taxId" } },
     });
+  });
+
+  it("emails the administrators after a save, and not after a refused one", async () => {
+    expect((await save(valid)).status).toBe(200);
+    const [entry] = (
+      await readActivityForSubject(suite.db, { kind: "settings", id: "venue" })
+    ).filter((activity) => activity.kind === "venue.bank_account_changed");
+    const queued = await alerts();
+    expect(queued.length).toBeGreaterThan(0);
+    for (const row of queued) {
+      expect(row.dedupeKey.startsWith(`bank-account:${entry!.id}:`)).toBe(true);
+      expect(row.code).toMatchObject({ code: "venue.bank_account_changed" });
+    }
+    expect((await save({ ...valid, iban: "GB82WEST12345698765432" })).status).toBe(409);
+    expect((await save({ ...valid, expected: { iban: IBAN, bankName: "Openbank" } })).status).toBe(
+      400,
+    );
+    expect(await alerts()).toEqual(queued);
   });
 });

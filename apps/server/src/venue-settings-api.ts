@@ -21,8 +21,15 @@ import {
   saveBankAccount,
   savePrivacyContact,
 } from "@waitron/provisioning";
-import { AppError, hasCode, isAppError, normalizeIban } from "@waitron/shared";
+import {
+  AppError,
+  hasCode,
+  isAppError,
+  normalizeIban,
+  timeZoneOffsetMinutes,
+} from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import { queueBankAccountChangedMail } from "./bank-account-mail.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
@@ -220,6 +227,8 @@ export function mountVenueSettingsApi(
     fiscal: FiscalContribution;
     now?: () => Date;
     readBackupDeadlines?: () => VenueClockPreview["backupDeadlines"];
+    /** The administrators' email language when their own is unset; boot passes the venue's. */
+    venueLanguage?: "en" | "es";
   },
   log: Logger,
 ): void {
@@ -400,7 +409,18 @@ export function mountVenueSettingsApi(
         await requireFreshManagementSignIn(tx, sessionId);
         const change = await saveBankAccount(tx, { ...bankAccountRequest(body), personId });
         if (!change.saved) throw new AppError("venue.detail_changed", { field: "iban" });
-        return { model: await readVenueDetails(tx, (deps.now ?? (() => new Date()))()) };
+        const now = (deps.now ?? (() => new Date()))();
+        await queueBankAccountChangedMail(tx, {
+          editorId: personId,
+          at: now.toISOString(),
+          offsetMinutes: timeZoneOffsetMinutes((await readVenue(tx)).timeZone, now),
+          before: change.before,
+          after: change.after,
+          venueLanguage: deps.venueLanguage ?? "en",
+          activityId: change.activityId!,
+          now,
+        });
+        return { model: await readVenueDetails(tx, now) };
       });
       return c.json(result);
     }),
