@@ -562,6 +562,8 @@ it("reads back a completed activation after a lost response and offers no second
             name: "Olivo key",
             secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
           },
+          masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+          masterKeyName: "2026-11-23 · QZJV",
         });
       if (path.endsWith("/recovery-document") || path.endsWith("/recovery-document-kept"))
         return Response.json({ accepted: true });
@@ -647,9 +649,6 @@ it("reads back a completed activation after a lost response and offers no second
   await expect
     .poll(() => hour.shadowRoot!.querySelector("[data-test=download-pdf]"))
     .not.toBeNull();
-  await userEvent.click(
-    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-  );
   await click(hour, "kept");
   await proof();
   await expect

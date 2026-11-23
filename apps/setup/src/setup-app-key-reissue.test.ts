@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
@@ -10,8 +10,19 @@ import { setLocale } from "./i18n/t.js";
 import { wizardApi, venue, initial } from "../test/first-setup-browser.js";
 
 const hosts: HTMLElement[] = [];
-beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
+/** The files the recovery pack step has handed to the browser to save, newest last. */
+const saved: string[] = [];
+beforeEach(() => {
+  sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+  saved.length = 0;
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push(this.href);
+  });
+});
 afterEach(async () => {
+  vi.restoreAllMocks();
   hosts.splice(0).forEach((host) => host.remove());
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -123,6 +134,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
                     name: `Key ${replacement}`,
                     secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
                   },
+                  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+                  masterKeyName: "2026-11-23 · QZJV",
                 });
               }
               if (path.endsWith("/recovery-document") || path.endsWith("/recovery-document-kept"))
@@ -188,14 +201,9 @@ for (const locale of ["en-GB", "es-ES"] as const)
           });
           await password();
           await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
-          const download = control<HTMLAnchorElement>(hour, "download-pdf");
-          const bytes = new Uint8Array(await (await fetch(download.href)).arrayBuffer());
+          const bytes = new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer());
           expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
-          expect(control(hour, "kept").disabled).toBe(true);
           expect(control(shell, "next").disabled).toBe(true);
-          await userEvent.click(
-            hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-          );
           await userEvent.click(control(hour, "kept"));
           await password();
           await expect.poll(() => control(shell, "next").disabled).toBe(false);
@@ -214,10 +222,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
           expect(control(hour, "download-pdf")).toBeNull();
           await password();
           await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
-          expect(
-            hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!
-              .checked,
-          ).toBe(false);
+          expect(control(hour, "kept").disabled).toBe(false);
           expect(control(shell, "next").disabled).toBe(true);
           expect(
             requests.filter((r) => r.path.endsWith("/node-key-reissue")).map((r) => r.body),

@@ -162,6 +162,17 @@ function size(el: LitElement, token: string) {
 }
 const button = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test="${name}"]`)!;
+/** Records the files the step hands to the browser to save, and the tabs it opens. */
+function captureDownloads() {
+  const downloads: { href: string; name: string }[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloads.push({ href: this.href, name: this.download });
+  });
+  const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+  return { downloads, opened };
+}
 async function ready(el: LitElement) {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull());
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(
@@ -1086,14 +1097,15 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
   );
+  const { downloads, opened } = captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("a[data-test=download-pdf]")).not.toBeNull(),
+    expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
   );
-  const download = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]")!;
-  const print = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=print-pdf]")!;
-  expect(download.href).toBe(print.href);
-  const bytes = new Uint8Array(await (await fetch(download.href)).arrayBuffer());
+  expect(downloads).toHaveLength(1);
+  await userEvent.click(button(el, "print-pdf"));
+  expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
+  const bytes = new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer());
   expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
   const decoded = await readRecoveryPdf(bytes);
   expect(decoded.document?.nodeKey).toEqual({
@@ -1131,10 +1143,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
     },
   ]);
   expect(kept).toEqual([]);
-  expect(button(el, "kept").disabled).toBe(true);
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-  );
+  expect(el.shadowRoot!.querySelector('input[name="setup-pdf-kept"]')).toBeNull();
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() => expect(kept).toHaveLength(1));
   expect(kept[0]).toEqual({ ...(deliveries[0] as object), statement: undefined });
@@ -1161,12 +1170,14 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
     );
+    const { downloads } = captureDownloads();
     await userEvent.click(button(el, "prepare-pdf"));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
     );
-    const download = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]")!;
-    const task = openRecoveryPdf(new Uint8Array(await (await fetch(download.href)).arrayBuffer()));
+    const task = openRecoveryPdf(
+      new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer()),
+    );
     try {
       const pdf = await task.promise;
       let text = "";
@@ -1187,23 +1198,22 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
 it.each([
   [
     "en",
-    "Keep your recovery pack.",
-    "Download recovery pack",
-    "I kept the recovery pack.",
+    "Recovery pack",
+    "Download",
     "Make the pack again with a new box key",
     "Recovery pack confirmed.",
   ],
   [
     "es",
-    "Guarda el paquete de recuperación.",
-    "Descargar el paquete de recuperación",
-    "He guardado el paquete de recuperación.",
+    "Paquete de recuperación",
+    "Descargar",
     "Hacer el paquete otra vez con una nueva clave del servidor",
     "Paquete de recuperación confirmado.",
   ],
 ] as const)(
   "names the %s step's download a recovery pack and never the server key a recovery key",
-  async (locale, next, make, keptLabel, replace, complete) => {
+  async (locale, next, make, replace, complete) => {
+    const { downloads } = captureDownloads();
     const { el, api } = await mount({ locale });
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
@@ -1225,14 +1235,10 @@ it.each([
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
     );
-    expect(
-      el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]")!.download,
-    ).toBe("waitron-recovery-pack-1.pdf");
-    expect(el.shadowRoot!.textContent).toContain(keptLabel);
+    expect(downloads.map((d) => d.name)).toEqual(["waitron-recovery-pack-1.pdf"]);
+    expect(button(el, "download-pdf").textContent!.trim()).toBe(make);
+    expect(el.shadowRoot!.querySelector('input[name="setup-pdf-kept"]')).toBeNull();
     expect(button(el, "replace-key").textContent!.trim()).toBe(replace);
-    await userEvent.click(
-      el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-    );
     await userEvent.click(button(el, "kept"));
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(complete));
     expect(el.shadowRoot!.textContent).not.toMatch(/recovery key|clave de recuperación/i);
@@ -1581,7 +1587,6 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
   );
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLInputElement>('[name="setup-pdf-kept"]')!);
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).not.toBeNull(),
@@ -2368,22 +2373,25 @@ it("a taken minute's countdown says the code was used and makes the series at ze
 it.each([
   [
     "en",
-    "Keep your recovery pack.",
-    "The recovery pack is a PDF holding the box key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
+    "Recovery pack",
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+    "This is the only time the master key is shown.",
   ],
   [
     "es",
-    "Guarda el paquete de recuperación.",
-    "El paquete de recuperación es un PDF con la clave de este servidor. Si este servidor falla, restaurar las copias de este local en un servidor nuevo pide esa clave, así que guarda el paquete en un lugar seguro, lejos del servidor.",
+    "Paquete de recuperación",
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+    "Esta es la única vez que se muestra la clave maestra.",
   ],
 ] as const)(
-  "%s says under the recovery pack heading what the pack is and why to keep it",
-  async (locale, heading, why) => {
+  "%s says under the Recovery pack heading what to do with the master key, and that it is shown once",
+  async (locale, heading, lead, warning) => {
     const el = await pressed({ locale });
     await shows(el, "selected-hour");
     const section = el.shadowRoot!.querySelector(`section[aria-label="${heading}"]`)!;
     expect(section.querySelector("h3")?.textContent?.trim()).toBe(heading);
-    expect(section.querySelector("[data-test=pack-why]")?.textContent?.trim()).toBe(why);
+    expect(section.querySelector("[data-test=pack-lead]")?.textContent?.trim()).toBe(lead);
+    expect(section.querySelector("[data-test=pack-warning]")?.textContent?.trim()).toBe(warning);
   },
 );
 
@@ -2737,8 +2745,8 @@ it.each(["en", "es"] as const)(
   },
 );
 it.each([
-  ["en", "We've created these invoice series:", "Download recovery pack"],
-  ["es", "Hemos creado estas series de facturas:", "Descargar el paquete de recuperación"],
+  ["en", "We've created these invoice series:", "Download"],
+  ["es", "Hemos creado estas series de facturas:", "Descargar"],
 ] as const)(
   "%s: after Proceed the second screen lists the series, explains the pack and offers to download it",
   async (locale, heading, download) => {
@@ -2750,7 +2758,7 @@ it.each([
     expect(el.shadowRoot!.querySelector("[data-test=venue-review]")).toBeNull();
     expect(el.shadowRoot!.querySelector('input[name="setup-details-confirmed"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=pack-why]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=pack-lead]")).not.toBeNull();
     expect(button(el, "prepare-pdf").textContent?.trim()).toBe(download);
   },
 );

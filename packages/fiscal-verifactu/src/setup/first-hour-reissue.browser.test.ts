@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
@@ -51,8 +51,17 @@ const old = pair("Old key", "old", "AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 const replacement = pair("New key", "replacement", "012345AbCdEfGhIjKlMnOpQrStUvWxYz");
 const control = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`)!;
-const download = (el: LitElement) =>
-  el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]");
+const download = (el: LitElement) => el.shadowRoot!.querySelector("[data-test=download-pdf]");
+/** The files the step has handed to the browser to save, newest last. */
+const saved: string[] = [];
+beforeEach(() => {
+  saved.length = 0;
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push(this.href);
+  });
+});
 async function mount(stage = async () => old, reissue = async () => replacement) {
   const calls: { action: string; value?: unknown }[] = [];
   const instant = Date.parse("2026-10-18T12:30:00Z");
@@ -127,9 +136,6 @@ async function mount(stage = async () => old, reissue = async () => replacement)
   return { el, parent, calls, api };
 }
 async function keep(el: LitElement) {
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-  );
   await userEvent.click(control(el, "kept"));
   await expect.poll(() => control(el, "kept").disabled).toBe(true);
 }
@@ -148,7 +154,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   await userEvent.click(replace);
   await expect.poll(() => download(el)).not.toBeNull();
   const decoded = await readRecoveryPdf(
-    new Uint8Array(await (await fetch(download(el)!.href)).arrayBuffer()),
+    new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer()),
   );
   expect(decoded.document?.nodeKey).toEqual(replacement.key);
   expect(decoded.document).not.toHaveProperty("installationCodes");
@@ -169,7 +175,7 @@ it("revokes the old PDF and kept choice before replacement, and retry requires k
   });
   await userEvent.click(control(el, "prepare-pdf"));
   await expect.poll(() => download(el)).not.toBeNull();
-  const oldUrl = download(el)!.href;
+  const oldUrl = saved.at(-1)!;
   await keep(el);
   const replace = control(el, "replace-key");
   expect(replace, "replacement remains available after keeping a PDF").not.toBeNull();
@@ -182,11 +188,9 @@ it("revokes the old PDF and kept choice before replacement, and retry requires k
   expect(control(el, "replace-key").disabled).toBe(false);
   await userEvent.click(control(el, "replace-key"));
   await expect.poll(() => download(el)).not.toBeNull();
-  expect(download(el)!.href).not.toBe(oldUrl);
-  expect(
-    el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!.checked,
-  ).toBe(false);
-  expect(control(el, "kept").disabled).toBe(true);
+  expect(saved.at(-1)).not.toBe(oldUrl);
+  expect(control(el, "kept").disabled).toBe(false);
+  expect(el.shadowRoot!.textContent).not.toContain("Recovery pack confirmed.");
   const registrations = calls.filter((c) => c.action === "register");
   expect(registrations).toHaveLength(2);
   expect(registrations[1]!.value).toMatchObject({

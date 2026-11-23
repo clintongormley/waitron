@@ -70,12 +70,15 @@ export const firstHourStrings = {
       "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
       "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
-    next: "Keep your recovery pack.",
-    packWhy:
-      "The recovery pack is a PDF holding the box key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
-    download: "Download recovery pack",
-    print: "Open to print",
-    kept: "I kept the recovery pack.",
+    next: "Recovery pack",
+    packLead:
+      "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+    packWarning: "This is the only time the master key is shown.",
+    masterKey: "Master key",
+    download: "Download",
+    print: "Print",
+    copy: "Copy",
+    copied: "Copied.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
     replace: "Make the pack again with a new box key",
@@ -93,12 +96,15 @@ export const firstHourStrings = {
       "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
     secondClockEnds:
       "Sigue sola cuando el servidor se ponga en hora por internet, o en el móvil si sigues allí.",
-    next: "Guarda el paquete de recuperación.",
-    packWhy:
-      "El paquete de recuperación es un PDF con la clave de este servidor. Si este servidor falla, restaurar las copias de este local en un servidor nuevo pide esa clave, así que guarda el paquete en un lugar seguro, lejos del servidor.",
-    download: "Descargar el paquete de recuperación",
-    print: "Abrir para imprimir",
-    kept: "He guardado el paquete de recuperación.",
+    next: "Paquete de recuperación",
+    packLead:
+      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+    packWarning: "Esta es la única vez que se muestra la clave maestra.",
+    masterKey: "Clave maestra",
+    download: "Descargar",
+    print: "Imprimir",
+    copy: "Copiar",
+    copied: "Copiada.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
     replace: "Hacer el paquete otra vez con una nueva clave del servidor",
@@ -141,6 +147,45 @@ export class FirstSetupHour extends LitElement {
         display: inline-flex;
         align-items: center;
       }
+      .pack-warning {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+      }
+      .master-key {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+      .master-key-name {
+        margin: 0 0 var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .master-key code {
+        display: block;
+        font-family: var(--wt-font-family-mono);
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+      }
+      .pack-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-3) 0;
+      }
+      .pack-copied {
+        margin: 0;
+        color: var(--wt-color-success);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
     checkVenueStyles,
   ];
@@ -154,7 +199,10 @@ export class FirstSetupHour extends LitElement {
   @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private error = false;
   @state() private pdfUrl?: string;
-  @state() private pdfKept = false;
+  /** Download, Print or Copy has been used, which is what shows Continue. */
+  @state() private pdfUsed = false;
+  @state() private copied = false;
+  @state() private masterKey?: { masterKey: string; masterKeyName: string };
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
@@ -221,7 +269,9 @@ export class FirstSetupHour extends LitElement {
     this.#delivery = undefined;
     this.#reference = undefined;
     this.pdfUrl = undefined;
-    this.pdfKept = false;
+    this.pdfUsed = false;
+    this.copied = false;
+    this.masterKey = undefined;
     this.kept = false;
   }
   #clear(): void {
@@ -450,9 +500,8 @@ export class FirstSetupHour extends LitElement {
       this.#delivery = delivery;
       delivery = undefined;
       this.pdfUrl = url;
-      await this.updateComplete;
-      if (current())
-        this.shadowRoot?.querySelector<HTMLAnchorElement>("a[data-test=download-pdf]")?.click();
+      this.masterKey = { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName };
+      this.#downloadPdf();
     } catch {
       if (current()) this.error = true;
     } finally {
@@ -460,8 +509,33 @@ export class FirstSetupHour extends LitElement {
       if (current()) this.busy = false;
     }
   }
+  #downloadPdf(): void {
+    if (!this.pdfUrl) return;
+    const anchor = document.createElement("a");
+    anchor.href = this.pdfUrl;
+    anchor.download = "waitron-recovery-pack-1.pdf";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    this.pdfUsed = true;
+  }
+  #printPdf(): void {
+    if (!this.pdfUrl) return;
+    window.open(this.pdfUrl, "_blank");
+    this.pdfUsed = true;
+  }
+  async #copyKey(made: { masterKey: string }): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(made.masterKey);
+    } catch {
+      return;
+    }
+    if (made !== this.masterKey) return;
+    this.copied = true;
+    this.pdfUsed = true;
+  }
   async #keepPdf(): Promise<void> {
-    if (this.busy || !this.pdfKept || !this.#delivery || this.kept) return;
+    if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
     const generation = ++this.#generation,
       delivery = this.#delivery;
     this.busy = true;
@@ -477,6 +551,47 @@ export class FirstSetupHour extends LitElement {
     } finally {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
+  }
+  #packControls(
+    t: (typeof firstHourStrings)["en"],
+    made: { masterKey: string; masterKeyName: string },
+  ) {
+    return html`<div class="master-key">
+        <p class="master-key-name" data-test="master-key-name">
+          ${t.masterKey} · ${made.masterKeyName}
+        </p>
+        <code data-test="master-key">${made.masterKey}</code>
+      </div>
+      <div class="pack-actions">
+        <wt-button data-test="download-pdf" variant="secondary" @click=${() => this.#downloadPdf()}
+          >${t.download}</wt-button
+        >
+        <wt-button data-test="print-pdf" variant="secondary" @click=${() => this.#printPdf()}
+          >${t.print}</wt-button
+        >
+        <wt-button data-test="copy-key" variant="secondary" @click=${() => void this.#copyKey(made)}
+          >${t.copy}</wt-button
+        >
+        ${
+          this.copied
+            ? html`<p class="pack-copied" data-test="copied" role="status">${t.copied}</p>`
+            : nothing
+        }
+      </div>
+      ${
+        this.pdfUsed
+          ? html`<wt-form-actions
+              ><wt-button
+                data-test="kept"
+                variant=${this.kept ? "secondary" : "primary"}
+                ?disabled=${this.busy || this.kept}
+                @click=${() => void this.#keepPdf()}
+                >${t.confirmKept}</wt-button
+              ></wt-form-actions
+            >`
+          : nothing
+      }
+      ${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`;
   }
   override render() {
     const en = this.locale === "en";
@@ -548,43 +663,12 @@ export class FirstSetupHour extends LitElement {
           </ul>
         </section>
         <section aria-label=${t.next}>
-          <h3>${t.next}</h3>
-          <p data-test="pack-why">${t.packWhy}</p>
+          <h3 data-test="pack-heading">${t.next}</h3>
+          <p data-test="pack-lead">${t.packLead}</p>
+          <p class="pack-warning" data-test="pack-warning">${t.packWarning}</p>
           ${
-            this.pdfUrl
-              ? html`<p>
-                    <a
-                      data-test="download-pdf"
-                      href=${this.pdfUrl}
-                      download="waitron-recovery-pack-1.pdf"
-                      >${t.download}</a
-                    >
-                  </p>
-                  <p>
-                    <a data-test="print-pdf" href=${this.pdfUrl} target="_blank" rel="noopener"
-                      >${t.print}</a
-                    >
-                  </p>
-                  <label
-                    ><input
-                      type="checkbox"
-                      name="setup-pdf-kept"
-                      required
-                      .checked=${this.pdfKept}
-                      ?disabled=${this.busy || this.kept}
-                      @change=${(e: Event) => {
-                        this.pdfKept = (e.currentTarget as HTMLInputElement).checked;
-                      }}
-                    />${t.kept} *</label
-                  ><wt-form-actions
-                    ><wt-button
-                      data-test="kept"
-                      variant=${this.pdfKept && !this.kept ? "primary" : "secondary"}
-                      ?disabled=${this.busy || !this.pdfKept || this.kept}
-                      @click=${() => void this.#keepPdf()}
-                      >${t.confirmKept}</wt-button
-                    ></wt-form-actions
-                  >${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`
+            this.pdfUrl && this.masterKey
+              ? this.#packControls(t, this.masterKey)
               : html`<wt-button
                   data-test="prepare-pdf"
                   variant="primary"
