@@ -24119,7 +24119,7 @@ export class TillApp extends LitElement {
         .modal=${!this.deviceMode}
         .switchBusy=${this.spareSwitchBusy}
         .spareAnswering=${strip.spareAnswering}
-        .showSwitch=${!this.deviceMode && this.permissions.includes("node.manage")}
+        .showSwitch=${!this.deviceMode}
         .refused=${this.mainServerRefused}
         .showCloud=${this.cloudEmergency !== undefined}
         .cloudBusy=${this.cloudEmergencyBusy}

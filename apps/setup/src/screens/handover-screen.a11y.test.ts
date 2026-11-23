@@ -119,6 +119,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                   sourceNodeId: "old",
                   destinationNodeId: "new",
                   sourceServersUrl: "https://main.example/servers",
+                  timeZone: "Europe/Madrid",
                   copy: {
                     ...(stage === "declaration"
                       ? { source: "followed-copy", sourceId: "c".repeat(64) }
@@ -287,6 +288,7 @@ describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
               sourceNodeId: "old",
               destinationNodeId: "new",
               sourceServersUrl: "https://main.example/servers",
+              timeZone: "Europe/Madrid",
               copy: {
                 source: "followed-copy",
                 sourceId: "c".repeat(64),
@@ -434,6 +436,7 @@ describe.each(["en-GB", "es-ES"])("emergency switch after Switch %s", (locale) =
               sourceNodeId: "old",
               destinationNodeId: "new",
               sourceServersUrl: "https://main.example/servers",
+              timeZone: "Europe/Madrid",
               copy: { source: "mirror-copy", identifier: "a".repeat(64), lastChangeAtMs: null },
               joinedAtMs: 1789819200000,
               operation: {

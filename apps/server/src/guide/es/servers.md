@@ -93,9 +93,8 @@ registros por separado. El cambio no se puede deshacer.
 
 Si la pantalla de la caja o del terminal de camarero se pone roja, déjala abierta. Cuando el
 servidor principal vuelva a responder, podrás seguir con tu pedido. Si el servidor de reserva
-responde, elige **Cambiar al servidor de reserva** en la pantalla de acceso o con la sesión
-iniciada y el permiso **Gestionar servidores**. El botón indica que se está comprobando la
-conexión antes de abrir esta página en el servidor de reserva. Cuando el servidor
+responde, elige **Cambiar al servidor de reserva**. Para hacer el cambio, inicia sesión en el
+servidor de reserva con el permiso **Gestionar servidores**. Cuando el servidor
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
 más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
@@ -126,8 +125,8 @@ vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
 principal y después comprueba la copia. El servidor de reserva puede reiniciarse; mantén la página
 abierta. Si tarda más de un minuto o no puede, **Usar la copia que guarda este servidor de
 reserva** ofrece la copia que ya tiene, normalmente la de cuando se incorporó, sin nada posterior.
-Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia**: puede faltar lo
-posterior. Después elige **Seguir**.
+Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia** en la zona horaria
+del local. Puede faltar lo posterior. Después elige **Seguir**.
 
 Si falla la preparación automática, puedes usar una copia de seguridad cifrada. En **Preparando
 el local**, elige **Subir un archivo de copia de seguridad en su lugar**, elige el archivo y pulsa

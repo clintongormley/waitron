@@ -355,6 +355,7 @@ export interface EmergencyHandoverPreview {
   sourceNodeId: string;
   destinationNodeId: string;
   sourceServersUrl: string;
+  timeZone: string;
   copy: (
     { source: "mirror-copy" } | { source: "selected-backup" | "followed-copy"; sourceId: string }
   ) & {

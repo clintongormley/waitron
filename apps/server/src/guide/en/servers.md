@@ -83,9 +83,8 @@ because two running main boxes could take payments and file separately. A switch
 be undone.
 
 If your till or handheld turns red, keep it open. When the main box answers again, you can
-carry on with your basket. If the spare is answering, choose **Switch to the spare box** on the
-sign-in screen or while signed in with **Manage boxes**. The button shows that the till is
-checking the connection before it opens this page on the spare. Once the main box has been silent for about half a minute, a
+carry on with your basket. If the spare is answering, choose **Switch to the spare box**.
+Sign in on the spare with **Manage boxes** to take over. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
 box that restarts for longer than about 20 seconds, during an update for example, brings a
 reloading device here too; if you did not mean to switch, do not switch, and reload the
@@ -114,7 +113,7 @@ again.
 checks the copy. The spare may restart; keep the page open. If that takes more than a minute or
 cannot be done, **Use the copy this spare holds** offers the copy already on it, usually the one
 from when it joined, with nothing newer. When the copy is checked, read **Latest sale or order in
-this copy**: anything newer may be missing. Then choose **Proceed**.
+this copy** in the venue’s time zone. Anything newer may be missing. Then choose **Proceed**.
 
 If automatic preparation fails, you can use an encrypted backup. On **Preparing the venue**,
 choose **Upload a backup file instead**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup

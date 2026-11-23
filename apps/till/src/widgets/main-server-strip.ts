@@ -4,8 +4,6 @@ import { baseStyles } from "@waitron/ui";
 import { countText, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
-/** The red strip a till shows while the venue's main box has been silent too long; with `panel`, it
- * fills the screen instead. */
 @customElement("till-main-server-strip")
 export class TillMainServerStrip extends LitElement {
   constructor() {

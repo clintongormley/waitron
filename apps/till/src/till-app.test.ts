@@ -18111,7 +18111,7 @@ describe("the main-server strip", () => {
     expect(lockStrip(el)).not.toBeNull();
   });
 
-  it("offers the switch on a locked till and to a node.manage holder, not to other signed-in staff", async () => {
+  it("offers the spare’s sign-in page from the locked till and to signed-in staff", async () => {
     const locked = await mount();
     await silentFor(locked.el, locked.router, 20_000);
     expect(lockStrip(locked.el)!.showSwitch).toBe(true);
@@ -18126,8 +18126,15 @@ describe("the main-server strip", () => {
     const waiter = await mount();
     await signIn(waiter.el, ["payment.take"]);
     await silentFor(waiter.el, waiter.router, 20_000);
-    expect(shellStrip(waiter.el)).not.toBeNull();
-    expect(shellStrip(waiter.el)!.showSwitch).toBe(false);
+    const navigate = vi.fn();
+    waiter.el.navigate = navigate;
+    const outage = shellStrip(waiter.el)!;
+    await outage.updateComplete;
+    expect(outage.shadowRoot!.querySelector("[data-switch-to-spare]")).not.toBeNull();
+    (await switchControl(outage)).click();
+    await settle(waiter.el);
+    const opened = new URL(navigate.mock.calls[0]![0] as string);
+    expect(`${opened.origin}${opened.pathname}`).toBe(`${SPARE}/handover/emergency`);
   });
 
   it("a kitchen display shows the strip without the switch", async () => {
@@ -18353,7 +18360,7 @@ describe("the main-server strip", () => {
     await signIn(el, permissions);
     await silentFor(el, router, 20_000);
     expect(shellStrip(el)!.showCloud).toBe(true);
-    expect(shellStrip(el)!.showSwitch).toBe(permissions.includes("node.manage"));
+    expect(shellStrip(el)!.showSwitch).toBe(true);
   });
 
   it("shows a neutral refusal when the main returns during the Cloud precheck", async () => {
@@ -18420,6 +18427,7 @@ describe("the main-server strip", () => {
     press(lockStrip(el)!);
     await settle(el);
     expect(lockStrip(el)!.refused).toBe(true);
+    expect((await switchControl(lockStrip(el)!)).hasAttribute("aria-disabled")).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
     await router.probeNow();
     await settle(el);

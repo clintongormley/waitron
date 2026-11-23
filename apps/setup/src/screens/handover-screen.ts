@@ -1402,13 +1402,16 @@ export class SetupHandoverScreen extends LitElement {
     this.proceeded = false;
     void this.#focusHeading();
   }
+  #copyTime(ms: number, timeZone: string): string {
+    return new Date(ms).toLocaleString(currentLocale(), { timeZone, timeZoneName: "short" });
+  }
   #joinedLine(preview: EmergencyHandoverPreview) {
     return html`<p>
       ${
         preview.joinedAtMs === null
           ? t("handover.emergency.held_undated")
           : format("handover.emergency.held_joined", {
-              joined: new Date(preview.joinedAtMs).toLocaleString(currentLocale()),
+              joined: this.#copyTime(preview.joinedAtMs, preview.timeZone),
             })
       }
     </p>`;
@@ -1416,20 +1419,21 @@ export class SetupHandoverScreen extends LitElement {
   /** What the copy holds, and for a copy from the main box, when this spare joined it. */
   #copyLines(preview: EmergencyHandoverPreview) {
     if (preview.copy.source === "mirror-copy")
-      return html`${this.#joinedLine(preview)}${this.#activityLine(preview.copy.lastChangeAtMs)}`;
-    return html`${this.#activityLine(preview.copy.lastChangeAtMs)}${
+      return html`${this.#joinedLine(preview)}${this.#activityLine(preview)}`;
+    return html`${this.#activityLine(preview)}${
       preview.copy.source === "followed-copy" && preview.joinedAtMs !== null
         ? html`<p>
             ${format("handover.emergency.spare_joined", {
-              joined: new Date(preview.joinedAtMs).toLocaleString(currentLocale()),
+              joined: this.#copyTime(preview.joinedAtMs, preview.timeZone),
             })}
           </p>`
         : nothing
     }`;
   }
-  #activityLine(date: number | null) {
+  #activityLine(preview: EmergencyHandoverPreview) {
+    const date = preview.copy.lastChangeAtMs;
     return html`<p>
-      ${date === null ? t("handover.emergency.no_date") : html`<strong>${t("handover.emergency.latest_activity")}</strong> ${new Date(date).toLocaleString(currentLocale())}`}
+      ${date === null ? t("handover.emergency.no_date") : html`<strong>${t("handover.emergency.latest_activity")}</strong> ${this.#copyTime(date, preview.timeZone)}`}
     </p>`;
   }
   #copyHeading(preview: EmergencyHandoverPreview): StringKey {
@@ -1665,7 +1669,7 @@ export class SetupHandoverScreen extends LitElement {
           ? html`<section class="fact" data-test="emergency-copy">
               <h2>${t(this.#copyHeading(preview))}</h2>
               ${preview.copy.source === "mirror-copy" ? this.#joinedLine(preview) : nothing}
-              ${this.#activityLine(preview.copy.lastChangeAtMs)}
+              ${this.#activityLine(preview)}
             </section>`
           : nothing
       }

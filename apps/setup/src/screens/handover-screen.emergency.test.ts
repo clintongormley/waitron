@@ -17,7 +17,11 @@ const saved = {
   reason: "The old box has failed",
   declaredAtMs: 1792147200000,
 };
+const copyTimeZone = "Pacific/Auckland";
+const copyTime = (ms: number, locale: string) =>
+  new Date(ms).toLocaleString(locale, { timeZone: copyTimeZone, timeZoneName: "short" });
 const preview = {
+  timeZone: copyTimeZone,
   sourceNodeId: "old",
   destinationNodeId: "new",
   sourceServersUrl: "https://main.example/servers",
@@ -1262,7 +1266,7 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
   await vi.waitFor(() => expect(actions(el)).toContain("The copy changed while you were reading"));
   expect(heading(el)).toBe(t("handover.emergency.preparing_heading"));
   expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
-    new Date(1792152000000).toLocaleString("en-GB"),
+    copyTime(1792152000000, "en-GB"),
   );
   await proceed(el);
   expect(
@@ -1301,7 +1305,7 @@ it("a changed copy whose fresh check gets no answer drops the old copy and offer
   again.click();
   await vi.waitFor(() =>
     expect(q(el, "[data-test=emergency-copy]")?.textContent).toContain(
-      new Date(1792152000000).toLocaleString("en-GB"),
+      copyTime(1792152000000, "en-GB"),
     ),
   );
   expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=proceed]").disabled).toBe(false);
@@ -1521,8 +1525,8 @@ it.each(["en-GB", "es-ES"])(
     await vi.waitFor(() => expect(q(el, "[data-test=emergency-held]")).not.toBeNull(), {
       timeout: 10_000,
     });
-    const joined = new Date(preview.joinedAtMs).toLocaleString(locale);
-    const activity = new Date(heldActivityMs).toLocaleString(locale);
+    const joined = copyTime(preview.joinedAtMs, locale);
+    const activity = copyTime(heldActivityMs, locale);
     const offer = q(el, "[data-test=held-copy]").textContent!;
     expect(offer).toContain(format("handover.emergency.held_joined", { joined }));
     expect(offer).toContain(`${t("handover.emergency.latest_activity")} ${activity}`);
@@ -1708,7 +1712,7 @@ it("while a newer copy catches up, an earlier followed copy is offered as held w
   const offer = q(el, "[data-test=held-copy]").textContent!;
   expect(offer).not.toContain(
     format("handover.emergency.held_joined", {
-      joined: new Date(preview.joinedAtMs).toLocaleString("en-GB"),
+      joined: copyTime(preview.joinedAtMs, "en-GB"),
     }),
   );
   expect(offer).toContain(t("handover.emergency.no_date"));
@@ -3594,10 +3598,10 @@ it.each(["en-GB", "es-ES"])(
     await authenticate(el);
     const copy = q(el, "[data-test=emergency-copy]").textContent!;
     expect(copy).toContain(t("handover.emergency.followed"));
-    expect(copy).toContain(new Date(changed).toLocaleString(locale));
+    expect(copy).toContain("17:00:00 GMT+13");
     expect(copy).not.toContain(
       format("handover.emergency.spare_joined", {
-        joined: new Date(preview.joinedAtMs).toLocaleString(locale),
+        joined: copyTime(preview.joinedAtMs, locale),
       }),
     );
     expect(copy).not.toContain(t("handover.emergency.held_undated"));
@@ -3713,11 +3717,11 @@ it.each(["en-GB", "es-ES"])(
     expect([step(el, "follow"), step(el, "check")]).toEqual(["done", "done"]);
     const facts = q(el, "[data-test=emergency-copy]").textContent!;
     expect(facts).toContain(
-      `${t("handover.emergency.latest_activity")} ${new Date(changed).toLocaleString(locale)}`,
+      `${t("handover.emergency.latest_activity")} ${copyTime(changed, locale)}`,
     );
     expect(facts).not.toContain(
       format("handover.emergency.spare_joined", {
-        joined: new Date(preview.joinedAtMs).toLocaleString(locale),
+        joined: copyTime(preview.joinedAtMs, locale),
       }),
     );
     expect(el.shadowRoot!.querySelector(`a[href="${preview.sourceServersUrl}"]`)).toBeNull();

@@ -91,6 +91,7 @@ import {
 } from "./handover-copy-selection.js";
 import { readUpload } from "./setup-recovery-preparation-api.js";
 import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface Declaration {
   binding: HandoverBinding;
@@ -368,6 +369,7 @@ export function mountHandoverEmergencyApi(
       sourceNodeId,
       destinationNodeId: deps.nodeId,
       sourceServersUrl: new URL("/servers", originOf(source.contactUrl)).href,
+      timeZone: await venueTimeZoneIn(deps.db),
       copy,
       joinedAtMs:
         link?.role === "serves" && link.state === "copied" ? link.updatedAt.getTime() : null,

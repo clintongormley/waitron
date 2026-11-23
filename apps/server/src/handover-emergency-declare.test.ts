@@ -395,6 +395,7 @@ it("previews the checked spare copy without recording a declaration", async () =
       identifier: expect.stringMatching(/^[a-f0-9]{64}$/),
       lastChangeAtMs: null,
     },
+    timeZone: "Europe/Madrid",
     joinedAtMs: null,
     operation: null,
   });
