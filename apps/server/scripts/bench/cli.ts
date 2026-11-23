@@ -13,7 +13,8 @@ const USAGE =
   "  A stopped build resumes from its last finished day when run again with the same --out.\n" +
   "       measure --venue <built dir> --out <absolute file> [--samples 200] [--rounds 3]\n" +
   "       compare --before <file> --after <file>\n" +
-  "       grow-fiscal --venue <copied venue folder> --records <n>";
+  "       grow-fiscal --venue <copied single-box bench venue> --records <n>\n" +
+  "  Grown records keep the template record’s timestamps.";
 
 const REPOSITORY = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
 
