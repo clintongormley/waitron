@@ -5371,7 +5371,7 @@ export class TillTableOrderScreen extends LitElement {
   #payPart(way: PayWay, amount?: string): void {
     const detail: BillPayDetail = {
       way,
-      lines: payLines(this.lines, (line) => this.#nameForLine(line)),
+      lines: payLines(this.lines, (line) => this.#nameForLine(line), this.#setMenus),
       ...(amount === undefined ? {} : { amount }),
     };
     this.#dispatch("bill-pay", detail);

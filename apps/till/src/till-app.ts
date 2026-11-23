@@ -8151,7 +8151,7 @@ export class TillApp extends LitElement {
         if (this.#hasLeftCounterOrder(id, session)) return;
         const open = await this.#openBillPaying(
           "contribution",
-          payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+          this.#counterPayLines(),
           out.balance.outstanding,
           { surface: "counter", billId: id, visit: session },
         );
@@ -9474,7 +9474,7 @@ export class TillApp extends LitElement {
               const whole = unpaid && this.handheldMode;
               await this.#openBillPaying(
                 whole ? "whole" : "contribution",
-                payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+                this.#counterPayLines(),
                 unpaid && !whole ? row.stillOwed : undefined,
                 { surface: "counter", billId: row.workingOrderId, visit: session },
               );
@@ -12963,12 +12963,11 @@ export class TillApp extends LitElement {
       if (this.#hasLeftCounterOrder(open.billId, open.visit)) return;
       if (open.reread) void this.#rereadCounterDeferred(open, this.#deferredSend(open));
       else
-        void this.#openBillPaying(
-          "whole",
-          payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-          undefined,
-          { surface: "counter", billId: open.billId, visit: open.visit },
-        );
+        void this.#openBillPaying("whole", this.#counterPayLines(), undefined, {
+          surface: "counter",
+          billId: open.billId,
+          visit: open.visit,
+        });
       return;
     }
     if (this.#hasLeftOrder(open.billId, open.visit)) return;
@@ -22894,12 +22893,11 @@ export class TillApp extends LitElement {
       return;
     }
     if (this.#hasLeftCounterOrder(id, session)) return;
-    await this.#openBillPaying(
-      "whole",
-      payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-      undefined,
-      { surface: "counter", billId: id, visit: session },
-    );
+    await this.#openBillPaying("whole", this.#counterPayLines(), undefined, {
+      surface: "counter",
+      billId: id,
+      visit: session,
+    });
   }
 
   /** After an answer to a payment or a refund, the order the dialog pays is read again: the table's
@@ -22917,7 +22915,18 @@ export class TillApp extends LitElement {
 
   /** The bill on screen's lines as an item payment offers them, named as staff know them. */
   #payLinesOnScreen(): PayLine[] {
-    return payLines(this.tabLines, (line) => line.name ?? "");
+    const bill = this.partyBills.find(({ workingOrderId }) => workingOrderId === this.activeTabId);
+    return payLines(this.tabLines, (line) => line.name ?? "", bill?.setMenus);
+  }
+
+  #counterPayLines(): PayLine[] {
+    const lines = this.counterLines;
+    const bill = this.#counterSetMenuBill;
+    return payLines(
+      lines?.lines ?? [],
+      (line) => line.name ?? "",
+      bill !== undefined && bill.id === lines?.orderId ? bill.setMenus : undefined,
+    );
   }
 
   #refreshOpenPayLines(billId: string): void {
