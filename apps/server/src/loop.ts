@@ -14,7 +14,10 @@ export function sleepMsFor(
   maxTickMs: number,
 ): number {
   if (nextDueAt === null) return maxTickMs;
-  const wait = nextDueAt.getTime() - now.getTime();
+  return clampSleepMs(nextDueAt.getTime() - now.getTime(), minTickMs, maxTickMs);
+}
+
+export function clampSleepMs(wait: number, minTickMs: number, maxTickMs: number): number {
   return Math.min(maxTickMs, Math.max(minTickMs, wait));
 }
 

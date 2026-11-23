@@ -6,12 +6,12 @@ export async function driveSchedule(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
   try {
     while (!deps.signal.aborted) {
-      const { nextDueAt } = await schedule.pass(now(), deps.signal);
+      const { nextDueAt, waitMs } = await schedule.pass(now(), deps.signal);
       if (deps.signal.aborted) break;
       await deps.sleep(
         nextDueAt === null
           ? MAX_SLEEP_MS
-          : Math.min(MAX_SLEEP_MS, nextDueAt.getTime() - now().getTime()),
+          : Math.min(MAX_SLEEP_MS, waitMs ?? nextDueAt.getTime() - now().getTime()),
         deps.signal,
       );
     }

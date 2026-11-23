@@ -573,6 +573,7 @@ export async function pruneBackend(
 
 export interface BackupSchedulePass {
   nextDueAt: Date | null;
+  waitMs?: number;
 }
 
 export interface ActiveBackupRun {
@@ -597,10 +598,10 @@ export function createBackupSchedule(
   let shownAt = 0;
   let active: { run: ActiveBackupRun; settled: Promise<void> } | undefined;
 
-  function hold(at: number, wallNow: number): number {
-    steadyFireAt = steady() + (at - wallNow);
+  // `wallNow` and `steadyThen` must be read at the same moment.
+  function hold(at: number, wallNow: number, steadyThen: number): number {
+    steadyFireAt = steadyThen + (at - wallNow);
     shownAt = at;
-    deps.onScheduled?.(at);
     return at;
   }
 
@@ -631,6 +632,7 @@ export function createBackupSchedule(
     async pass(now: Date, signal: AbortSignal): Promise<BackupSchedulePass> {
       if (signal.aborted) return { nextDueAt: null };
       const nowMs = now.getTime();
+      const steadyAtPass = steady();
       if (first && deps.resumeCloudDeadline !== false && deps.cloud?.target.readCaptureState) {
         const saved = await deps.cloud.target.readCaptureState().catch(() => undefined);
         if (saved?.storedAt != null && !saved.pending) {
@@ -644,7 +646,8 @@ export function createBackupSchedule(
           ) {
             first = false;
             computedAt = nowMs;
-            fireAt = hold(resumed, nowMs);
+            fireAt = hold(resumed, nowMs, steadyAtPass);
+            deps.onScheduled?.(fireAt);
           }
         }
         if (signal.aborted) return { nextDueAt: null };
@@ -674,20 +677,23 @@ export function createBackupSchedule(
           fireAt = hold(
             nextFireMs(deps.schedule, clock, new Date(computedAt), deps.jitterSeed),
             computedAt,
+            steady(),
           );
         } catch (err) {
           if (signal.aborted) return { nextDueAt: null };
           deps.log("warn", "backup.schedule_failed", { errorCode: codeOf(err) });
           return { nextDueAt: new Date(clockNow().getTime() + MAX_SLEEP_MS) };
         }
+        deps.onScheduled?.(fireAt);
       }
       if (!interval) return { nextDueAt: new Date(fireAt) };
-      const at = clockNow().getTime() + Math.max(0, steadyFireAt - steady());
+      const waitMs = Math.max(0, steadyFireAt - steady());
+      const at = clockNow().getTime() + waitMs;
       if (Math.abs(at - shownAt) > 1000) {
         shownAt = at;
         deps.onScheduled?.(at);
       }
-      return { nextDueAt: new Date(at) };
+      return { nextDueAt: new Date(at), waitMs };
     },
   };
 }

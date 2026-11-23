@@ -643,13 +643,17 @@ describe("runOnce (fan-out)", () => {
       steadyNow: () => steady,
     });
     const signal = new AbortController().signal;
-    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: due });
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: due,
+      waitMs: interval - 3_600_000,
+    });
     expect(local.objects.size).toBe(0);
     expect(store).not.toHaveBeenCalled();
     steady += due.getTime() - now.getTime();
     now = due;
     expect(await schedule.pass(due, signal)).toEqual({
       nextDueAt: new Date(due.getTime() + interval),
+      waitMs: interval,
     });
     expect(local.objects.size).toBe(1);
     expect(store).toHaveBeenCalledTimes(1);
@@ -682,15 +686,22 @@ describe("runOnce (fan-out)", () => {
       onScheduled: (at) => shown.push(at),
     });
     const signal = new AbortController().signal;
-    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: new Date(storedAt + interval) });
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: new Date(storedAt + interval),
+      waitMs: interval - 3_600_000,
+    });
     steady += interval - 3_600_000 - 1;
     now = new Date(storedAt + interval - 1 - 400 * interval);
-    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: new Date(now.getTime() + 1) });
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: new Date(now.getTime() + 1),
+      waitMs: 1,
+    });
     expect(local.objects.size).toBe(0);
     steady += 1;
     now = new Date(now.getTime() + 1);
     expect(await schedule.pass(now, signal)).toEqual({
       nextDueAt: new Date(now.getTime() + interval),
+      waitMs: interval,
     });
     expect(local.objects.size).toBe(1);
     expect(shown).toEqual([
@@ -699,6 +710,45 @@ describe("runOnce (fan-out)", () => {
       null,
       now.getTime() + interval,
     ]);
+  });
+
+  it("takes the resumed Cloud deadline on time when reading the saved copy takes 30 seconds", async () => {
+    const storedAt = Date.parse(FIXED_MANIFEST.createdAt);
+    const interval = 86_400_000;
+    const due = storedAt + interval;
+    let now = new Date(storedAt + 3_600_000);
+    let steady = 0;
+    const local = new FakeBackend("local");
+    const shown: Array<number | null> = [];
+    const schedule = createBackupSchedule({
+      ...deps([local]),
+      schedule: { kind: "interval", ms: interval },
+      jitterSeed: BACKUP_NODE_ID,
+      readClock: async () => cloudClock,
+      cloud: {
+        target: {
+          id: "cloud",
+          roomNeeded: async () => 0,
+          store: async () => ({ stored: true, errorCode: null }),
+          readCaptureState: async () => {
+            now = new Date(now.getTime() + 30_000);
+            steady += 30_000;
+            return { storedAt, pending: false };
+          },
+        },
+        readClock: async () => cloudClock,
+      },
+      now: () => now,
+      steadyNow: () => steady,
+      onScheduled: (at) => shown.push(at),
+    });
+    const signal = new AbortController().signal;
+    expect((await schedule.pass(now, signal)).nextDueAt).toEqual(new Date(due));
+    steady += due - now.getTime();
+    now = new Date(due);
+    expect((await schedule.pass(now, signal)).nextDueAt).toEqual(new Date(due + interval));
+    expect(local.objects.size).toBe(1);
+    expect(shown).toEqual([due, null, due + interval]);
   });
 
   it("stores a Cloud-only backup without encrypting under the box key", async () => {
@@ -1028,6 +1078,56 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
     expect(clockCalls).toBeGreaterThanOrEqual(2);
   });
 
+  it("reports an interval pass's remaining wait in steady time, whatever the wall clock reads", async () => {
+    const HOUR = 3_600_000;
+    const DAY = 24 * HOUR;
+    const start = Date.parse("2026-11-03T12:00:00Z");
+    let now = new Date(start);
+    let steady = 0;
+    const schedule = createBackupSchedule(
+      loopDeps(new FakeBackend("only"), {
+        signal: new AbortController().signal,
+        schedule: { kind: "interval", ms: DAY },
+        log: vi.fn(),
+        now: () => now,
+        steadyNow: () => steady,
+        sleep: vi.fn(),
+      }),
+    );
+    const signal = new AbortController().signal;
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: new Date(start + DAY),
+      waitMs: DAY,
+    });
+    steady += HOUR;
+    now = new Date(start - 400 * DAY);
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: new Date(now.getTime() + DAY - HOUR),
+      waitMs: DAY - HOUR,
+    });
+  });
+
+  it("rejects the pass, logging no schedule failure, when telling the next calendar deadline throws", async () => {
+    const backend = new FakeBackend("only");
+    const logged: string[] = [];
+    const now = new Date("2026-09-05T00:00:00Z");
+    const schedule = createBackupSchedule(
+      loopDeps(backend, {
+        signal: new AbortController().signal,
+        schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
+        log: (_level, event) => logged.push(event),
+        now: () => now,
+        sleep: vi.fn(),
+        onScheduled: (at) => {
+          if (at !== null) throw new Error("notify failed");
+        },
+      }),
+    );
+    await expect(schedule.pass(now, new AbortController().signal)).rejects.toThrow("notify failed");
+    expect(backend.objects.size).toBe(1);
+    expect(logged).not.toContain("backup.schedule_failed");
+  });
+
   it("ends quietly when a clock read fails because the sweep is being stopped", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");
@@ -1335,11 +1435,12 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
       }
     });
 
-    for (const [direction, stepMs] of [
-      ["back", -400 * DAY],
-      ["forward", 400 * DAY],
+    for (const [direction, stepMs, clock] of [
+      ["back", -400 * DAY, "injected"],
+      ["forward", 400 * DAY, "injected"],
+      ["back", -400 * DAY, "default"],
     ] as const)
-      it(`takes the next interval archive one interval of steady time after the first when the clock steps ${direction} 400 days an hour into the wait`, async () => {
+      it(`takes the next interval archive one interval of steady time after the first when the clock steps ${direction} 400 days an hour into the wait${clock === "default" ? ", on the default steady clock" : ""}`, async () => {
         const controller = new AbortController();
         const start = Date.parse("2026-11-03T12:00:00Z");
         let now = start;
@@ -1347,11 +1448,15 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
         let waits = 0;
         const archived: Array<{ wall: number; steady: number }> = [];
         const deadlines: Array<number | null> = [];
+        const elapsed =
+          clock === "default"
+            ? vi.spyOn(performance, "now").mockImplementation(() => steady)
+            : null;
         await driveSchedule(
           loopDeps(new FakeBackend("step"), {
             signal: controller.signal,
             now: () => new Date(now),
-            steadyNow: () => steady,
+            steadyNow: clock === "default" ? undefined : () => steady,
             log: vi.fn(),
             schedule: { kind: "interval", ms: DAY },
             onScheduled: (at) => deadlines.push(at),
@@ -1368,7 +1473,7 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
               if (waits > 72) controller.abort();
             },
           }),
-        );
+        ).finally(() => elapsed?.mockRestore());
         expect(archived).toEqual([
           { wall: start, steady: 0 },
           { wall: start + stepMs + DAY, steady: DAY },

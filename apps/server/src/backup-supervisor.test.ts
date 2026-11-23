@@ -2159,10 +2159,12 @@ describe("scheduled backup passes", () => {
       const signal = new AbortController().signal;
       expect(await sup.pass(new Date("2026-11-17T12:00:00Z"), signal)).toEqual({
         nextDueAt: new Date("2026-11-17T13:00:00Z"),
+        waitMs: 3_600_000,
       });
       expect(await listArchives(dest)).toHaveLength(1);
       expect(await sup.pass(new Date("2026-11-17T12:30:00Z"), signal)).toEqual({
         nextDueAt: new Date("2026-11-17T13:00:00Z"),
+        waitMs: 3_600_000,
       });
       expect(await listArchives(dest)).toHaveLength(1);
     } finally {
@@ -2236,7 +2238,10 @@ describe("scheduled backup passes", () => {
       expect(await published.at(-1)).not.toHaveProperty("activeRun");
       expect(await listArchives(dest)).toHaveLength(2);
       now = new Date("2026-11-17T13:01:00Z");
-      expect(await pass()).toEqual({ nextDueAt: new Date("2026-11-17T14:01:00Z") });
+      expect(await pass()).toEqual({
+        nextDueAt: new Date("2026-11-17T14:01:00Z"),
+        waitMs: 3_600_000,
+      });
       expect(await listArchives(dest)).toHaveLength(3);
     } finally {
       copy.release();
