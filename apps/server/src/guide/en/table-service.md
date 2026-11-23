@@ -899,7 +899,8 @@ open **More** (☰), then **Settings**, then **Zones on this device**. On a phon
 **More** (☰) and choose **Zones on this device**, under **Settings**. Tick **Show** for each zone
 you want, choose the one that **Opens first**, and tap **Save**.
 
-To leave the till’s **Settings** window, choose **Close** or click outside it.
+If you open **Settings** while taking an order, tap outside the window to return to your order.
+Your basket stays as it was.
 
 The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
 all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A

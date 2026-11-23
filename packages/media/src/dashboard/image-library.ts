@@ -982,7 +982,6 @@ export class ImageLibrary extends LitElement {
     await this.updateComplete;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test="preview-${CSS.escape(id)}"]`)?.focus();
   }
-  /** Backdrop clicks reach the native dialog at coordinates outside its box. */
   #closeOnBackdrop(event: MouseEvent, id: string): void {
     const target = event.composedPath()[0];
     if (!(target instanceof HTMLDialogElement)) return;

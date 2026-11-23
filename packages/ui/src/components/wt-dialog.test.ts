@@ -113,7 +113,9 @@ test("an opted-in backdrop click asks the close guard and can dismiss the dialog
   el.open = true;
   el.beforeClose = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
   await el.updateComplete;
-  await userEvent.dragAndDrop(el.querySelector("button")!, outside, { force: true });
+  const inside = el.querySelector("button")!;
+  await userEvent.dragAndDrop(inside, outside, { force: true });
+  await userEvent.dragAndDrop(outside, inside, { force: true });
   expect(el.beforeClose).not.toHaveBeenCalled();
   await userEvent.click(outside, { force: true });
   expect(el.beforeClose).toHaveBeenCalledExactlyOnceWith("backdrop");

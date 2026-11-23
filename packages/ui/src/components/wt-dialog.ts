@@ -637,8 +637,7 @@ export class WtDialog extends LitElement {
   private onBackdropClick(event: MouseEvent): void {
     const startedOutside = this.backdropPress;
     this.backdropPress = false;
-    if (startedOutside && event.detail > 0 && this.isBackdropPoint(event))
-      void this.requestClose("backdrop");
+    if (startedOutside && this.isBackdropPoint(event)) void this.requestClose("backdrop");
   }
 
   private onCancel(event: Event): void {

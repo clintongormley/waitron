@@ -79,6 +79,14 @@ async function press(el: TillBoxTimeDialog, name: string): Promise<void> {
   await settle(el);
 }
 
+async function clickBackdrop(el: TillBoxTimeDialog): Promise<void> {
+  const outside = document.createElement("span");
+  outside.style.cssText = "position:fixed;top:4px;left:4px;width:8px;height:8px";
+  el.parentElement!.append(outside);
+  await userEvent.click(outside, { force: true });
+  outside.remove();
+}
+
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(TILL_AT);
 });
@@ -236,16 +244,21 @@ describe("till-box-time-dialog", () => {
     expect(api.boxClockConfirm).toHaveBeenCalledOnce();
   });
 
-  it("closes from the clock question without confirming the time", async () => {
-    const api = fakeApi(BOX_AGREES);
-    const el = await open(api);
-    const closed = new Promise((resolve) =>
-      el.addEventListener("box-time-close", resolve, { once: true }),
-    );
-    await page.getByRole("button", { name: "Close" }).click({ timeout: 500 });
-    await closed;
-    expect(api.boxClockConfirm).not.toHaveBeenCalled();
-  });
+  it.each(["Close", "backdrop"])(
+    "dismisses the clock question via %s without confirming the time",
+    async (via) => {
+      const api = fakeApi(BOX_AGREES);
+      const el = await open(api);
+      const closed = new Promise((resolve) =>
+        el.addEventListener("box-time-close", resolve, { once: true }),
+      );
+      if (via === "Close") await page.getByRole("button", { name: "Close" }).click();
+      else await clickBackdrop(el);
+      expect(root(el).querySelector("wt-dialog")!.open).toBe(false);
+      await closed;
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the dialog from closing while the confirm is out", async () => {
     let answer!: () => void;
@@ -255,11 +268,13 @@ describe("till-box-time-dialog", () => {
       });
     });
     const el = await open(api);
-    const box = () => root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!;
+    const box = () => root(el).querySelector("wt-dialog")!;
     expect(box().dismissible).toBe(true);
     await press(el, "yes");
     expect(box().dismissible).toBe(false);
     await expect.element(page.getByRole("button", { name: "Close" })).toBeDisabled();
+    await clickBackdrop(el);
+    expect(box().open).toBe(true);
     answer();
     await settle(el);
     expect(box().dismissible).toBe(true);
@@ -311,6 +326,8 @@ describe("till-box-time-dialog", () => {
     await press(el, "both-wrong");
     expect(words(el).endsWith(es["box_time.correct_device"])).toBe(true);
     expect(flat(control(el, "close"))).toBe(es["box_time.close"]);
+    await clickBackdrop(el);
+    expect(root(el).querySelector("wt-dialog")!.open).toBe(true);
   });
 
   const REFUSALS: [string, Record<string, unknown>, string, string[]][] = [

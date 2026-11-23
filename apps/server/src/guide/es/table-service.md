@@ -962,7 +962,8 @@ caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo
 tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**, en **Ajustes**. Marca **Mostrar**
 en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
-Para cerrar **Ajustes** en la caja, elige **Cerrar** o haz clic fuera de la ventana.
+Si abres **Ajustes** mientras tomas un pedido, toca fuera de la ventana para volver al pedido.
+La cesta se queda como estaba.
 
 Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
 pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
