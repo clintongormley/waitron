@@ -233,8 +233,8 @@ describe("receiptFacts", () => {
 
   it("carries the recipient's identifier type", () => {
     const input = fixture();
-    input.result.recipient!.identifierType = "03";
-    expect(receiptFacts(input).customer).toHaveProperty("identifierType", "03");
+    input.result.recipient!.identifierType = "passport";
+    expect(receiptFacts(input).customer).toHaveProperty("identifierType", "passport");
   });
 
   it("leaves out trim text that is empty", () => {
