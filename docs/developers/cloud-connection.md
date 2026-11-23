@@ -198,12 +198,15 @@ you how many were missed.
 When the box ends unfinished work because the service goes off, the local job expires,
 Cloud refuses a status or collect request as invalid, or the last page fails the accounting
 check, it asks Cloud to abandon the job. It signs the request with the original submit
-operation ID, which the box has even if it lost the submit reply. Cloud can then clear a queued or running job so you can start another Translate all
-run. If Cloud refuses the request as invalid, the box closes the job. If Cloud is unreachable,
-the box retries up to the existing 24-hour job lifetime and gives it one final attempt at expiry.
-You can start a new run once the box finishes this cleanup. Cloud may keep the job until
-its own expiry if that last attempt fails. The box closes the job locally when Cloud
-reports it already gone or when the installation is disconnected.
+operation ID, which the box has even if it lost the submit reply. Cloud acknowledges
+abandon with HTTP 200 even if the job is already gone. [Cloud integration contract](https://github.com/waitron-io/waitron-cloud/blob/a6490b62cf8e2870450f49e9660df5d398684c9e/docs/waitron-integration-contract.md#L1339-L1344).
+
+If Cloud refuses the abandon request as invalid, the box closes the job. If Cloud is
+unreachable, the box retries until the existing 24-hour job lifetime runs out and makes
+one final attempt. A pending cleanup can delay the next Translate all run. Cloud may
+keep the job until its own expiry if that last attempt fails. The box closes the job
+locally when status or collection reports it already gone, or when the installation is
+disconnected.
 
 Translation calls take the connection's lock only to renew the access lease, or to record that
 Cloud refused the installation as revoked or its proof as invalid (`leaseState` and

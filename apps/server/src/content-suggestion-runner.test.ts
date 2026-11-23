@@ -800,12 +800,14 @@ it("an invalid status request abandons by submit ID before closing as rejected",
   try {
     await venue(["STAFF Bread"]);
     await inTx((tx) => startSuggestionRun(tx, context));
+    const operationId = (await job()).id;
     await inTx((tx) =>
       tx.update(contentSuggestionJobs).set({ state: "running", cloudJobId: "not-a-job-id" }),
     );
 
     expect(await runToIdle(createContentSuggestionRunner(deps(f)))).toEqual(["again", "idle"]);
     expect(actions(f)).toEqual([STATUS, ABANDON]);
+    expect(f.calls.at(-1)?.operationId).toBe(operationId);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
     await f.close();
