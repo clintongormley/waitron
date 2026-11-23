@@ -58,7 +58,10 @@ const RESIGNED: Record<string, (body: Record<string, unknown>) => [string, JoinF
     JOIN_REVEAL_LABEL,
     revealMessageFields(Buffer.from(b.newNonce as string, "base64")),
   ],
-  "/api/node/join/poll": (b) => [JOIN_POLL_LABEL, pollMessageFields(b.at as number)],
+  "/api/node/join/poll": (b) => [
+    JOIN_POLL_LABEL,
+    pollMessageFields(b.at as number, b.confirmed as boolean),
+  ],
   "/api/node/join/cancel": () => [JOIN_CANCEL_LABEL, []],
 };
 
@@ -262,7 +265,7 @@ describe("a relay between a joining box and the main box", () => {
   );
 
   it(
-    "control: with the new box's cancel held and the main box's code tapped, the rewritten store address reaches the main box's pair link",
+    "control: with the new box's cancel held, a Yes sent through the relay and Add as spare chosen on the main box, the rewritten store address reaches the main box's pair link",
     async () => {
       const pair = await pairs.start("tapped", "preproduction", undefined);
       const relay = await startRelay(pair, { rewriteStore: true, holdCancel: true });
@@ -272,7 +275,10 @@ describe("a relay between a joining box and the main box", () => {
       // The code M shows, worked out from what crossed the relay.
       const hello = JSON.parse(crossingTo(relay, "hello")!.sent) as JoinHello;
       const opened = JSON.parse(crossingTo(relay, "hello")!.answered) as Record<string, string>;
-      const reveal = JSON.parse(crossingTo(relay, "reveal")!.sent) as { newNonce: string };
+      const reveal = JSON.parse(crossingTo(relay, "reveal")!.sent) as {
+        newNonce: string;
+        seq: number;
+      };
       const revealed = JSON.parse(crossingTo(relay, "reveal")!.answered) as { mainNonce: string };
       const code = joinCode({
         ...hello,
@@ -282,14 +288,32 @@ describe("a relay between a joining box and the main box", () => {
         newNonce: Buffer.from(reveal.newNonce, "base64"),
         mainNonce: Buffer.from(revealed.mainNonce, "base64"),
       });
+      // The relay signs the Yes with its own key, as it signs every message it forwards.
+      const yes = await fetch(`${relay.loopbackUrl}/api/node/join/poll`, {
+        ...pair.viaM,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          requestId: opened.requestId,
+          seq: reveal.seq + 1,
+          at: Date.now(),
+          confirmed: true,
+        }),
+      });
+      expect(yes.status, await yes.text()).toBe(200);
       const managing = await managementHeaders(pair.urlM, pair.boxM.origin, pair.viaM);
+      const checked = await fetch(
+        `${pair.urlM}/management-api/box-joins/${opened.requestId!}/check`,
+        { ...pair.viaM, method: "POST", headers: { ...managing, origin: pair.urlM } },
+      );
+      expect(await checked.json()).toEqual({ code, newConfirmed: true });
       const approved = await fetch(
         `${pair.urlM}/management-api/box-joins/${opened.requestId!}/approve`,
         {
           ...pair.viaM,
           method: "POST",
           headers: { ...managing, origin: pair.urlM },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({}),
         },
       );
       expect(approved.status, await approved.text()).toBe(202);

@@ -129,10 +129,13 @@ describe("the new box's join attempt", () => {
     };
   }
 
-  /** Approves the one listed request in the main box's store, its bundle locked under `signingKey`. */
-  async function approveWith(code: string, bundle: unknown, signingKey?: string) {
+  /**
+   * Approves the one listed request in the main box's store, which the new box has said Yes to, its
+   * bundle locked under `signingKey`.
+   */
+  async function approveWith(bundle: unknown, signingKey?: string) {
     const requestId = requests.listed()[0]!.id;
-    const begun = requests.approve.begin(requestId, code);
+    const begun = requests.approve.begin(requestId);
     if ("refused" in begun) throw new Error("approve refused");
     const locked = lockJoinBundle({
       requestId,
@@ -143,12 +146,12 @@ describe("the new box's join attempt", () => {
     expect(requests.approve.finish(requestId, locked)).toBe(true);
   }
 
-  /** The code the main box lists for its one request is among the three it shows. */
-  function listedChoices(): string[] {
+  /** The code the main box shows for its one listed request. */
+  function listedCode(): string {
     const [listed] = requests.listed();
     const view = requests.check(listed!.id);
     if ("refused" in view) throw new Error("not listed");
-    return view.choices;
+    return view.code;
   }
 
   /** An exchange that holds every hello until `release` is called. */
@@ -176,7 +179,7 @@ describe("the new box's join attempt", () => {
     return promise;
   }
 
-  it("says hello with its addresses, reveals, shows the code, and polls until approved", async () => {
+  it("says hello with its addresses, reveals, shows the code, says Yes and polls until approved", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
     const shown = await attempt.start(MAIN_URL);
@@ -184,20 +187,22 @@ describe("the new box's join attempt", () => {
     expect(shown).not.toHaveProperty("addresses");
     expect(sent[0]!.body.addresses).toEqual([FROM, "10.0.0.9"]);
     expect(requests.listed()).toMatchObject([{ address: FROM }]);
-    expect(listedChoices()).toContain(shown.code);
+    expect(listedCode()).toBe(shown.code);
     expect(attempt.current()).toEqual({
       state: "waiting",
       code: shown.code,
       primaryUrl: MAIN_URL,
       timeLeftMs: 15 * 60_000,
+      confirmed: false,
     });
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(paths()).toEqual(["hello", "reveal", "poll"]);
-    expect(sent[2]!.status).toBe(200);
+    expect(sent[2]!).toMatchObject({ status: 200, body: { confirmed: false } });
 
+    await attempt.confirm();
     const bundle = await bundleFor();
-    await approveWith(shown.code, bundle);
+    await approveWith(bundle);
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
@@ -213,7 +218,7 @@ describe("the new box's join attempt", () => {
     });
     expect(publicHalf(joined!.identity.privateKey)).toBe(joined!.identity.publicKey);
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "poll"]);
     await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
     expect(attempt.joined()).toEqual(joined);
   });
@@ -253,13 +258,14 @@ describe("the new box's join attempt", () => {
       path.endsWith("/poll") && requests.listed().length === 0 && ++approvedPolls === 1;
     const attempt = createBoxJoinAttempt(deps());
     const shown = await attempt.start(MAIN_URL);
+    await attempt.confirm();
     const bundle = await bundleFor();
-    await approveWith(shown.code, bundle);
+    await approveWith(bundle);
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(attempt.current()).toMatchObject({ state: "waiting" });
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "poll"]);
     expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
@@ -289,15 +295,16 @@ describe("the new box's join attempt", () => {
   ])("ends the attempt when the approved answer %s", async (_name, make) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
-    const shown = await attempt.start(MAIN_URL);
+    await attempt.start(MAIN_URL);
+    await attempt.confirm();
     const { bundle, signingKey } = await make();
-    await approveWith(shown.code, bundle, signingKey);
+    await approveWith(bundle, signingKey);
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(attempt.current()).toEqual({ state: "failed", error: "mirror.join_invalid" });
     expect(attempt.joined()).toBeNull();
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
   });
 
   it.each<[string, (requestId: string) => void, unknown]>([
@@ -413,7 +420,7 @@ describe("the new box's join attempt", () => {
     expect(reveals[1]).toEqual(reveals[0]);
     expect(reveals[2]).toEqual(reveals[0]);
     expect(reveals[0]).toMatchObject({ seq: 1 });
-    expect(listedChoices()).toContain(shown.code);
+    expect(listedCode()).toBe(shown.code);
   });
 
   it("starts each reveal try three seconds after the last began, then fails and cancels", async () => {
@@ -591,11 +598,16 @@ describe("the new box's join attempt", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
     const shown = await attempt.start(MAIN_URL);
+    await attempt.confirm();
     const requestId = requests.listed()[0]!.id;
-    expect(requests.approve.begin(requestId, shown.code)).not.toHaveProperty("refused");
+    expect(requests.approve.begin(requestId)).not.toHaveProperty("refused");
 
     await expect(attempt.cancel()).rejects.toMatchObject({ code: "mirror.join_approving" });
-    expect(attempt.current()).toMatchObject({ state: "waiting", code: shown.code });
+    expect(attempt.current()).toMatchObject({
+      state: "waiting",
+      code: shown.code,
+      confirmed: true,
+    });
 
     const bundle = await bundleFor();
     const locked = lockJoinBundle({
@@ -618,9 +630,10 @@ describe("the new box's join attempt", () => {
     async (state, make) => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       const attempt = createBoxJoinAttempt(deps());
-      const shown = await attempt.start(MAIN_URL);
+      await attempt.start(MAIN_URL);
+      await attempt.confirm();
       const { bundle, signingKey } = await make();
-      await approveWith(shown.code, bundle, signingKey);
+      await approveWith(bundle, signingKey);
       await vi.advanceTimersByTimeAsync(2_000);
       expect(attempt.current()?.state).toBe(state);
 
@@ -629,7 +642,7 @@ describe("the new box's join attempt", () => {
       expect(attempt.current()).toBeNull();
       expect(attempt.joined()).toBeNull();
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
+      expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "cancel"]);
       await attempt.start(MAIN_URL);
     },
   );
@@ -637,9 +650,10 @@ describe("the new box's join attempt", () => {
   it("keeps a waiting join when its approval stopped after listing it, and then shows the stop", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
-    const shown = await attempt.start(MAIN_URL);
+    await attempt.start(MAIN_URL);
+    await attempt.confirm();
     const requestId = requests.listed()[0]!.id;
-    requests.approve.begin(requestId, shown.code);
+    requests.approve.begin(requestId);
     requests.approve.stop(requestId);
 
     await expect(attempt.cancel()).rejects.toMatchObject({ code: "mirror.join_approving" });
@@ -705,6 +719,159 @@ describe("the new box's join attempt", () => {
     const attempt = createBoxJoinAttempt(deps());
     await attempt.cancel();
     expect(paths()).toEqual([]);
+    expect(attempt.current()).toBeNull();
+  });
+
+  it("sends the Yes in a poll at once, shows it confirmed, and carries it in every later poll", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+
+    await attempt.confirm();
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    expect(sent[2]!).toMatchObject({ status: 200, body: { confirmed: true } });
+    expect(requests.listed()).toMatchObject([{ newConfirmed: true }]);
+    expect(attempt.current()).toMatchObject({ state: "waiting", confirmed: true });
+
+    await attempt.confirm();
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    expect(sent[3]!.body).toMatchObject({ confirmed: true });
+  });
+
+  it("keeps one poll in flight when the Yes lands during a poll, and sends the Yes after it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let inFlight = 0;
+    let most = 0;
+    const holdingFirstPoll: typeof boxExchange = async (url, options) => {
+      if (!url.pathname.endsWith("/poll")) return exchange(url, options);
+      most = Math.max(most, ++inFlight);
+      try {
+        const answer = await exchange(url, options);
+        if (paths().filter((p) => p === "poll").length === 1) await held;
+        return answer;
+      } finally {
+        inFlight -= 1;
+      }
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: holdingFirstPoll }));
+    await attempt.start(MAIN_URL);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+
+    let confirmed = false;
+    const confirming = attempt.confirm().then(() => (confirmed = true));
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    expect(confirmed).toBe(false);
+
+    release();
+    await confirming;
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    expect(sent.slice(2).map((s) => s.body.confirmed)).toEqual([false, true]);
+    expect(attempt.current()).toMatchObject({ state: "waiting", confirmed: true });
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "poll"]);
+    expect(most).toBe(1);
+  });
+
+  it("refuses a Yes with no attempt, and after the main box ended the request", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    await expect(attempt.confirm()).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "join" },
+    });
+
+    await attempt.start(MAIN_URL);
+    requests.dismiss(requests.listed()[0]!.id);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual({ state: "ended", reason: "dismissed" });
+    await expect(attempt.confirm()).rejects.toMatchObject({ code: "setup.request_invalid" });
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+  });
+
+  it("answers a Yes whose poll finds the request ended with the ended state", async () => {
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+    requests.dismiss(requests.listed()[0]!.id);
+
+    await attempt.confirm();
+    expect(attempt.current()).toEqual({ state: "ended", reason: "dismissed" });
+  });
+
+  it("fails a Yes whose poll is lost, and sends it again in the next poll", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let polls = 0;
+    lose = (path) => path.endsWith("/poll") && ++polls === 1;
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+
+    await expect(attempt.confirm()).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
+    expect(attempt.current()).toMatchObject({ state: "waiting", confirmed: false });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(sent.slice(2).map((s) => s.body.confirmed)).toEqual([true, true]);
+    expect(attempt.current()).toMatchObject({ state: "waiting", confirmed: true });
+  });
+
+  it("fails a Yes whose poll the main box refuses", async () => {
+    const refusing: typeof boxExchange = async (url, options) =>
+      url.pathname.endsWith("/poll")
+        ? { status: 409, text: JSON.stringify({ error: { code: "mirror.join_invalid" } }) }
+        : exchange(url, options);
+    const attempt = createBoxJoinAttempt(deps({ exchange: refusing }));
+    await attempt.start(MAIN_URL);
+
+    await expect(attempt.confirm()).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
+    expect(attempt.current()).toMatchObject({ state: "waiting", confirmed: false });
+    await attempt.cancel();
+  });
+
+  it.each([
+    ["a poll without the Yes", false, { state: "failed", error: "mirror.join_invalid" }],
+    ["a poll carrying the Yes", true, { state: "approved", code: expect.any(String) }],
+  ])("adopts an approved answer only when it answers %s", async (_name, sayYes, state) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const bundle = await bundleFor();
+    const approvedAnswer: { text?: string } = {};
+    // A main box that answers approved whatever the poll carried.
+    const approving: typeof boxExchange = async (url, options) => {
+      const answer = await exchange(url, options);
+      if (!url.pathname.endsWith("/poll") || approvedAnswer.text === undefined) return answer;
+      return { status: 200, text: approvedAnswer.text };
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: approving }));
+    await attempt.start(MAIN_URL);
+    if (sayYes) await attempt.confirm();
+    const locked = lockJoinBundle({
+      requestId: requests.listed()[0]!.id,
+      encryptionKey: (sent[0]!.body as { encryptionKey: string }).encryptionKey,
+      bundle: Buffer.from(JSON.stringify(bundle)),
+      mainPrivateKey: await mainKey(),
+    });
+    approvedAnswer.text = JSON.stringify({ state: "approved", locked });
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual(state);
+    expect(attempt.joined()?.bundle ?? null).toEqual(sayYes ? bundle : null);
+  });
+
+  it("cancels after the Yes, and the main box ends the request", async () => {
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+    await attempt.confirm();
+
+    await attempt.cancel();
+    expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
+    expect(sent[3]!.status).toBe(200);
+    expect(requests.listed()).toEqual([]);
     expect(attempt.current()).toBeNull();
   });
 

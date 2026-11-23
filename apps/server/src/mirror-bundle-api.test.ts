@@ -369,7 +369,8 @@ let joinAddresses = 0;
 
 /**
  * A join reaching `issueMirrorBundle` through the box-join routes: the spare named in `body` asks
- * from an address of its own, and the person `body.email` names, signed in afresh, taps its code.
+ * from an address of its own and says Yes, and the person `body.email` names, signed in afresh,
+ * approves.
  * Answers with the bundle or the refusal (`joinAsBundleAnswer`). `plain` sends no module
  * operation.
  */
@@ -1814,13 +1815,13 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       const app = mountApp(designated, undefined, undefined, () => new Date(primaryAt));
       const listed = await listedSpare(app, primaryAt);
       const standbyAt = primaryAt + 11 * 60_000;
-      expect(await pollJoin(app, listed, standbyAt)).toEqual({ state: "waiting" });
+      expect(await pollJoin(app, listed, standbyAt, true)).toEqual({ state: "waiting" });
       const before = await reservedAndListed();
 
       const answer = await approveJoin(
         app,
         listed.requestId,
-        { code: listed.code },
+        {},
         { cookie: await signedInCookie(db, adminPersonId) },
       );
 
@@ -1829,10 +1830,30 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       expect(await reservedAndListed()).toEqual(before);
     });
 
+    it("refuses Add as spare before the new box's Yes, reserving nothing and ending nothing, then adds it after the Yes", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const listed = await listedSpare(app, Date.now());
+      const sent = { cookie: await signedInCookie(db, adminPersonId) };
+      const before = await reservedAndListed();
+
+      expect(await approveJoin(app, listed.requestId, {}, sent)).toEqual({
+        status: 409,
+        body: { error: { code: "mirror.join_not_confirmed", params: {} } },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+
+      expect(await pollJoin(app, listed, Date.now(), true)).toEqual({ state: "waiting" });
+      const added = await approveJoin(app, listed.requestId, {}, sent);
+      expect(added.status, JSON.stringify(added.body)).toBe(202);
+      expect(await pollJoin(app, listed, Date.now(), true)).toMatchObject({ state: "approved" });
+    });
+
     it("refuses at approve a spare whose name a box listed after its hello already has, reserving nothing", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated);
       const listed = await listedSpare(app, Date.now());
+      expect(await pollJoin(app, listed, Date.now(), true)).toEqual({ state: "waiting" });
       const newNodeId = listed.box.hello.newNodeId;
       await holdChartWithStandby(
         designated,
@@ -1843,7 +1864,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       const answer = await approveJoin(
         app,
         listed.requestId,
-        { code: listed.code },
+        {},
         { cookie: await signedInCookie(db, adminPersonId) },
       );
 

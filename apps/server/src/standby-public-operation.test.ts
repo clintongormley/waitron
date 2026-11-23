@@ -210,7 +210,7 @@ async function bundleApp() {
   });
   return app;
 }
-/** The spare asks to join and the administrator, signed in afresh, taps its code. */
+/** The spare asks to join and says Yes, and the administrator, signed in afresh, approves. */
 async function approvedJoin(
   app: Hono,
   body: ReturnType<typeof bundleBody>,

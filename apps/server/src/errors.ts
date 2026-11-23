@@ -1624,7 +1624,7 @@ declare module "@waitron/shared" {
      */
     "mirror.join_waiting": Record<string, never>;
     /**
-     * A join cancel or start without the current join's handle, while the page holding that handle
+     * A join cancel, Yes or start without the current join's handle, while the page holding that handle
      * read the join's state in the last 15 seconds.
      */
     "mirror.join_in_use": Record<string, never>;

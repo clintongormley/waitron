@@ -1238,7 +1238,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
   };
-  /** A start or cancel without the handle waits until the holding page has stopped reading. */
+  /** A start, Yes or cancel without the handle waits until the holding page has stopped reading. */
   const refuseJoinInUse = (c: Context) => {
     if (
       holderOf(c) === null &&
@@ -1297,6 +1297,17 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const ending = joinHolder;
       await joinAttempt.cancel();
       if (joinHolder === ending) joinHolder = null;
+      return c.body(null, 204);
+    });
+  });
+
+  app.post("/setup-api/join/confirm", async (c) => {
+    const joinAttempt = deps.joinAttempt;
+    if (joinAttempt === undefined) return directError(c, log, "setup.not_ready", 503);
+    return runJoin(c, log, async () => {
+      refuseJoinElsewhere(c);
+      refuseJoinInUse(c);
+      await joinAttempt.confirm();
       return c.body(null, 204);
     });
   });
