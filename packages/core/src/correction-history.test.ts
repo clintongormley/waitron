@@ -703,7 +703,7 @@ async function fileRestPreview(saleId: SaleId, gross: string, lineIds?: string[]
   return shown;
 }
 
-it("preserves the correction decisions when the meal before its advance exceeds the stored amount limit", async () => {
+it("keeps the preview refusal and accepts a checked split for a meal above the limit before its advance", async () => {
   const dish: Dish = ["0.00", "600000000000.00", "600000000000.00"];
   const rest = await sellRest(
     [dish, dish],

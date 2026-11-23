@@ -183,6 +183,7 @@ export function checkPartialCorrectionHistory(
     const original = atRate[0]!;
     const before = prior.get(rate) ?? { base: 0, gross: 0 };
     const gross = -(cents(group.base) + cents(group.tax));
+    // The original includes advances added back. The prior amounts sum advances and earlier corrections.
     const expected = correctionBaseAtRate(
       basisPointsToDecimal(rate),
       {
