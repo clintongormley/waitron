@@ -4,3 +4,7 @@ export const SUBMISSION_CHANGE_REFUSAL =
 
 // Deleting the outbox row would drop the filing.
 export const SUBMISSION_DELETE_REFUSAL = "verifactu_submissions: a submission row is never deleted";
+
+// A missing gate row lets the drainer send before AEAT's wait ends.
+export const SENDING_STATE_DELETE_REFUSAL =
+  "verifactu_sending_state: the sending gate is never deleted";

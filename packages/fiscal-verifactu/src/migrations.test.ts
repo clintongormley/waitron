@@ -112,7 +112,6 @@ describe("verifactu_sending_state migration", () => {
       `),
     );
     expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // verifactu_sending_state_singleton_ck
-    await db.execute(sql`delete from verifactu_sending_state`);
   });
 });
 

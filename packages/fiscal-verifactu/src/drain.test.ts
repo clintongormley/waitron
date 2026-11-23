@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -21,6 +21,7 @@ import {
 } from "./drain.js";
 import {
   appendPendingAlta,
+  openSendingGate,
   seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
@@ -263,10 +264,6 @@ describe("drain — flow control (verifactu_sending_state)", () => {
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
-  afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
-  });
-
   it("persists the server's TiempoEsperaEnvio into verifactu_sending_state and sets nextDueAt when a partial batch remains for next time", async () => {
     // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
@@ -354,10 +351,6 @@ describe("drain — a reply with no usable TiempoEsperaEnvio", () => {
       environment: "production",
       maxRegistrosPorEnvio: 3,
     };
-  });
-
-  afterEach(async () => {
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
   });
 
   async function flujo() {
@@ -593,7 +586,7 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
     try {
       return await drain(drainDeps(staticResolver(failing)), NOW);
     } finally {
-      await suite.db.execute(sql`delete from verifactu_sending_state`);
+      await openSendingGate(suite.db);
     }
   }
 
@@ -1789,7 +1782,7 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
     expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
     // The first drain closed the flow-control gate; clear it so the second pass is ungated.
-    await suite.db.execute(sql`delete from verifactu_sending_state`);
+    await openSendingGate(suite.db);
     await seedPendingEnvios(suite.db, { count: 1 });
     const omitted = await drain(depsWith(), NOW);
     expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);

@@ -325,3 +325,6 @@ BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a filing case and its resoluti
 --> statement-breakpoint
 CREATE TRIGGER verifactu_submissions_no_delete BEFORE DELETE ON verifactu_submissions
 BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never deleted'); END
+--> statement-breakpoint
+CREATE TRIGGER verifactu_sending_state_no_delete BEFORE DELETE ON verifactu_sending_state
+BEGIN SELECT RAISE(ABORT, 'verifactu_sending_state: the sending gate is never deleted'); END
