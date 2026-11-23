@@ -150,7 +150,7 @@ describe("setup-connect-screen: the address", () => {
 
 describe("setup-connect-screen: the address as typed", () => {
   it.each([["waitron.local"], ["ftp://waitron.local/servers"]])(
-    "sends an address that is not an http or https web address as typed (%s), for this box to refuse",
+    "sends an address that is not an http or https web address as typed (%s)",
     async (typed) => {
       const { el, api } = await mount();
       await type(el, typed);
@@ -190,11 +190,31 @@ describe("setup-connect-screen: the address as typed", () => {
   });
 });
 
+const GENERIC =
+  "This box could not do that just now. Check the address and that the main box is switched on, then try again.";
+
 describe("setup-connect-screen: refusals whose details are missing or unreadable", () => {
   it.each<[{ code?: unknown; params?: Record<string, unknown> }, string]>([
+    [{ code: "mirror.join_full", params: { limit: "recent" } }, GENERIC],
     [
-      { code: "mirror.join_full", params: { limit: "recent" } },
-      "The main box has had  requests to join in the last  minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until , then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
+      {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: "2026-11-23T10:00:00Z", max: 7 },
+      },
+      GENERIC,
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "recent", retryAt: "", max: 7, minutes: 20 } },
+      GENERIC,
+    ],
+    [{ code: "mirror.join_full", params: { limit: "listed", max: "4" } }, GENERIC],
+    [
+      { code: "mirror.join_full", params: { limit: "listed", max: 4 } },
+      "The main box already has 4 other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+    ],
+    [
+      { code: "mirror.join_full", params: { limit: "address" } },
+      "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
     ],
     [
       {
@@ -207,10 +227,7 @@ describe("setup-connect-screen: refusals whose details are missing or unreadable
       { code: "mirror.clocks_apart", params: { primaryAt: "noon", standbyAt: "half past" } },
       "The two boxes' clocks are more than 10 minutes apart (the main box reads noon, this box half past). If this box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Join again.",
     ],
-    [
-      { code: 409 },
-      "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
-    ],
+    [{ code: 409 }, GENERIC],
   ])("%o", async (refusal, words) => {
     const api = stubApi();
     api.startJoin.mockRejectedValue(refusal);
@@ -815,6 +832,29 @@ describe("setup-connect-screen: an answer that arrives after the screen moved on
     },
   );
 
+  it("keeps reading when a first read sent before the screen was taken away and shown again fails, and shows the current read's answer", async () => {
+    const older = deferred<JoinState>();
+    const current = deferred<JoinState>();
+    const api = stubApi();
+    api.joinState.mockReturnValueOnce(older.promise).mockReturnValueOnce(current.promise);
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      api,
+      handle: "h1",
+    });
+    el.remove();
+    host.appendChild(el);
+    await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
+    older.reject({ code: "server.internal" });
+    await older.promise.catch(() => {});
+    await el.updateComplete;
+    expect(text(el, "[data-test=reading]")).toBe("Checking this box's join…");
+    expect(q(el, "[data-test=primaryUrl]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    current.resolve(WAITING);
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(q(el, "[data-test=reading]")).toBeNull();
+  });
+
   it.each([
     ["answers", (start: Deferred<JoinStarted>) => start.resolve(STARTED)],
     [
@@ -834,9 +874,9 @@ describe("setup-connect-screen: an answer that arrives after the screen moved on
       el.remove();
       host.appendChild(el);
       await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
-      settle(start);
       await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      settle(start);
+      await start.promise.catch(() => {});
       await el.updateComplete;
       expect(seen).toEqual([]);
       expect(q(el, "[data-test=code]")).toBeNull();
@@ -860,7 +900,7 @@ describe("setup-connect-screen: an answer that arrives after the screen moved on
       host.appendChild(el);
       await vi.waitFor(() => expect(api.joinState).toHaveBeenCalledTimes(2));
       settle(cancel);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await cancel.promise.catch(() => {});
       await el.updateComplete;
       expect(seen).toEqual([]);
       expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);

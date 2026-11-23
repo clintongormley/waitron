@@ -84,22 +84,34 @@ const FINISH_WORDS: Record<string, StringKey> = {
   "mirror.bundle_fetch_failed": "connect.finish.bundle_fetch_failed",
 };
 
-const FULL_WORDS: Record<string, StringKey> = {
-  address: "connect.refusal.join_full_address",
-  network: "connect.refusal.join_full_network",
-  listed: "connect.refusal.join_full_listed",
-  recent: "connect.refusal.join_full_recent",
+type FullDetail = "retryAt" | "max" | "minutes";
+
+const FULL_WORDS: Record<string, { key: StringKey; needs: FullDetail[] }> = {
+  address: { key: "connect.refusal.join_full_address", needs: [] },
+  network: { key: "connect.refusal.join_full_network", needs: [] },
+  listed: { key: "connect.refusal.join_full_listed", needs: ["max"] },
+  recent: { key: "connect.refusal.join_full_recent", needs: ["max", "minutes", "retryAt"] },
 };
+
+/** A full join's words, or undefined when a detail its sentence needs is missing or of the wrong type. */
+function fullWords(
+  { key, needs }: { key: StringKey; needs: FullDetail[] },
+  { retryAt, max, minutes }: Record<string, unknown>,
+) {
+  const details: Partial<Record<FullDetail, string | number>> = {};
+  if (typeof retryAt === "string" && retryAt !== "")
+    details.retryAt = localTime(retryAt) ?? retryAt;
+  if (typeof max === "number") details.max = max;
+  if (typeof minutes === "number") details.minutes = minutes;
+  return needs.every((name) => details[name] !== undefined) ? format(key, details) : undefined;
+}
 
 /** The words for a refusal this screen knows, or undefined. */
 function refusalWords({ code, params }: Refusal): string | undefined {
-  const { limit, retryAt, primaryAt, standbyAt, max, minutes } = params ?? {};
+  const details = params ?? {};
+  const { limit, primaryAt, standbyAt } = details;
   if (code === "mirror.join_full" && typeof limit === "string" && FULL_WORDS[limit] !== undefined)
-    return format(FULL_WORDS[limit], {
-      retryAt: typeof retryAt === "string" ? (localTime(retryAt) ?? retryAt) : "",
-      max: typeof max === "number" ? max : "",
-      minutes: typeof minutes === "number" ? minutes : "",
-    });
+    return fullWords(FULL_WORDS[limit], details);
   if (
     code === "mirror.clocks_apart" &&
     typeof primaryAt === "string" &&
