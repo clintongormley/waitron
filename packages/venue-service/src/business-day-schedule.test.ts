@@ -29,6 +29,7 @@ import {
   openingHours,
   type Transaction,
   floorZones,
+  readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { type BusinessDayClock } from "@waitron/shared";
@@ -37,6 +38,7 @@ import {
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
   keptOpenConflicts,
+  writeHours,
 } from "./business-day-schedule.js";
 import { inForceClock, settledClock } from "./service-day-context.js";
 
@@ -1482,6 +1484,52 @@ describe("a waiting change checks the hours written while it waits", () => {
     expect(
       await withTransaction(suite.db, async (tx) => (await readSeasons(tx))[0]!.startsOn),
     ).toBe("12-01");
+  });
+  describe("writeHours", () => {
+    const crossing = (v: Awaited<ReturnType<typeof fixture>>) => (tx: Transaction) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] });
+    it("refuses a stale revision on a time change before writing", async () => {
+      const v = await fixture([]);
+      await waiting(v);
+      const write = vi.fn(async () => "written");
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeHours(tx, { at, changeKind: "time", expectedClockRevision: 1 }, write),
+        ),
+      ).rejects.toMatchObject({ code: "hours.clock_changed" });
+      expect(write).not.toHaveBeenCalled();
+    });
+    it("runs a metadata change's write without either check", async () => {
+      const v = await fixture([]);
+      await waiting(v);
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeHours(tx, { at, changeKind: "metadata", expectedClockRevision: 1 }, async () => {
+            await crossing(v)(tx);
+            return "written";
+          }),
+        ),
+      ).resolves.toBe("written");
+      expect(await stored(v)).toEqual(["6 21:00:00-04:30:00"]);
+    });
+    it("refuses a time change whose written hours break a waiting start", async () => {
+      const v = await fixture([]);
+      await waiting(v);
+      const write = vi.fn(async (tx: Transaction) => crossing(v)(tx));
+      await expect(
+        withTransaction(suite.db, async (tx) => {
+          const clock = await readVenueClock(tx);
+          await writeHours(tx, { at, clock, changeKind: "time", expectedClockRevision: 2 }, () =>
+            write(tx),
+          );
+        }),
+      ).rejects.toMatchObject({
+        code: "hours.clock_change_conflict",
+        params: { dayCutover: "03:00", conflictCount: 1 },
+      });
+      expect(write).toHaveBeenCalledOnce();
+      expect(await stored(v)).toEqual([]);
+    });
   });
 });
 

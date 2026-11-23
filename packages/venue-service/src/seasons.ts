@@ -2,10 +2,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 import { openingHours, departments, readVenueClock, seasons, type Transaction } from "@waitron/db";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
-import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
-} from "./business-day-schedule.js";
+import { writeHours } from "./business-day-schedule.js";
 import {
   byStart,
   DEFAULT_SEASONS,
@@ -13,6 +10,7 @@ import {
   seasonOn,
   type Season,
   type SeasonChange,
+  type SeasonEntry,
 } from "./season-rules.js";
 import {
   readDepartmentSeasonWeeks,
@@ -135,8 +133,19 @@ export async function saveSeasons(
     deleted.size > 0 ||
     added.length > 0 ||
     changed.some((entry) => entry.startsOn !== stored.get(entry.id!)!.startsOn);
-  await assertBusinessDayScheduleWrite(tx, timed ? "time" : "metadata", expectedClockRevision);
+  await writeHours(tx, { at, changeKind: timed ? "time" : "metadata", expectedClockRevision }, () =>
+    writeSeasons(tx, stored, deleted, changed, added),
+  );
+  return readSeasons(tx);
+}
 
+async function writeSeasons(
+  tx: Transaction,
+  stored: ReadonlyMap<string, Season>,
+  deleted: ReadonlySet<string>,
+  changed: readonly SeasonEntry[],
+  added: readonly (SeasonEntry & { split: string })[],
+): Promise<void> {
   const clock = await readVenueClock(tx);
   const { dayCutover } = clock;
   const only = {
@@ -178,8 +187,6 @@ export async function saveSeasons(
       if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
     }
   }
-  if (timed) await assertWaitingChangeFits(tx, at, clock);
-  return readSeasons(tx);
 }
 
 /** The departments whose painted ranges deleting the season would lose; a department holding

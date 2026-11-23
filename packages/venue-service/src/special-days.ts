@@ -12,10 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
-import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
-} from "./business-day-schedule.js";
+import { assertBusinessDayScheduleWrite, writeHours } from "./business-day-schedule.js";
 import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
@@ -878,7 +875,22 @@ export async function saveSpecialDay(
     datesKey(stored.dates) !== datesKey(parsed.dates) ||
     parsed.paint.length > 0 ||
     parsed.zonePaint.length > 0;
-  await assertBusinessDayScheduleWrite(tx, timed ? "time" : "metadata", expectedClockRevision);
+  const specialDayId = await writeHours(
+    tx,
+    { at, clock, changeKind: timed ? "time" : "metadata", expectedClockRevision },
+    () => writeSpecialDay(tx, id, at, clock, stored, parsed),
+  );
+  return readSpecialDay(tx, specialDayId);
+}
+
+async function writeSpecialDay(
+  tx: Transaction,
+  id: string | null,
+  at: Date,
+  clock: BusinessDayClock,
+  stored: SpecialDayDetail | null,
+  parsed: ReturnType<typeof parseInput>,
+): Promise<string> {
   await assertPaintOwners(
     tx,
     parsed.paint.map((entry) => entry.ownerId),
@@ -1017,8 +1029,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  if (timed) await assertWaitingChangeFits(tx, at, clock);
-  return readSpecialDay(tx, specialDayId);
+  return specialDayId;
 }
 
 /** Deletes a special day; its dates, and their paint, go with it and follow their seasons again. */
@@ -1028,9 +1039,8 @@ export async function deleteSpecialDay(
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
-  await requireSpecialDay(tx, id);
-  await tx.delete(specialDays).where(eq(specialDays.id, id));
-  const clock = await readVenueClock(tx);
-  await assertWaitingChangeFits(tx, at, clock);
+  await writeHours(tx, { at, changeKind: "time", expectedClockRevision }, async () => {
+    await requireSpecialDay(tx, id);
+    await tx.delete(specialDays).where(eq(specialDays.id, id));
+  });
 }

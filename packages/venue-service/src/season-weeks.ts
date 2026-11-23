@@ -7,11 +7,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
-  sameScheduleRanges,
-} from "./business-day-schedule.js";
+import { writeHours, sameScheduleRanges } from "./business-day-schedule.js";
 import { readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { storedTime, wireTime } from "./operations.js";
@@ -396,8 +392,13 @@ export async function saveSeasonWeeks(
       ),
     );
   }
-  const changed = [...departmentWeeks, ...zoneWeeks].some((week) => week.changed);
-  await assertBusinessDayScheduleWrite(tx, changed ? "time" : "metadata", expectedClockRevision);
-  for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  if (changed) await assertWaitingChangeFits(tx, at, clock);
+  const weeks = [...departmentWeeks, ...zoneWeeks];
+  const changed = weeks.some((week) => week.changed);
+  await writeHours(
+    tx,
+    { at, clock, changeKind: changed ? "time" : "metadata", expectedClockRevision },
+    async () => {
+      for (const week of weeks) await week.write();
+    },
+  );
 }
