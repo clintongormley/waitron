@@ -290,7 +290,8 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
-In **Structure**, select a section and copy the page address to open that same section later.
+In **Structure**, choose the photo or colour square of one of the menu’s own sections to edit it.
+Select a section row and copy the page address to open that same section later.
 If removing a row or moving it with its drag handle is refused, look above the tree for the
 list and the reason.
 

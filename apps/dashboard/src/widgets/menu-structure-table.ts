@@ -36,7 +36,7 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
-import { productMedia, productMediaStyles } from "./product-media.js";
+import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";
 import { countOf } from "./count-text.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
@@ -1231,21 +1231,24 @@ export class MenuStructureTable extends LitElement {
     }
     if (node.ref.kind === "set_menu") return nothing;
     const sectionId = node.ref.sectionId;
-    const own = ownPresentation(node);
-    const chip = swatchChip(folderPresentation(own, node.folder ?? FOLLOWING_FOLDER).color);
+    const { image, color } = folderPresentation(
+      ownPresentation(node),
+      node.folder ?? FOLLOWING_FOLDER,
+    );
+    const media = image ? productMediaFrame(image, color) : swatchChip(color);
     if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
-        >${chip}</span
+        >${media}</span
       >`;
     return html`<button
       part="swatch-button"
       type="button"
       data-test=${`color-${key}`}
-      aria-label=${fill("folders.edit_color", { name })}
+      aria-label=${fill(image ? "folders.edit_named" : "folders.edit_color", { name })}
       ?disabled=${this.busy}
       @click=${() => this.#send("wt-member-edit", { sectionId, path: row.path, swatch: true })}
     >
-      ${chip}
+      ${media}
     </button>`;
   }
 

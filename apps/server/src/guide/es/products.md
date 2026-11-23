@@ -306,7 +306,8 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
-En **Estructura**, selecciona una sección y copia la dirección de la página para volver a abrir
+En **Estructura**, pulsa la imagen o el recuadro de color de una sección propia de la carta
+para editarla. Selecciona una fila y copia la dirección de la página para volver a abrir
 esa misma sección. Si se rechaza quitar una fila o moverla con su control de arrastre, encima
 del árbol verás la lista afectada y el motivo.
 
