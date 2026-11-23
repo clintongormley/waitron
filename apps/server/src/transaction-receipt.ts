@@ -116,7 +116,14 @@ export async function readTransactionReceipt(
         setMenuRole: row.setMenuRole,
       })),
     },
-    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row) => ({
+      id: orderIds.get(row.lineNo) ?? row.id,
+      // A correction's lines take none: the bill's comps and discounts were made on the original's.
+      listUnitGross:
+        sale.correctsSaleId !== null || row.listGross === null || row.listUnitPriceGross === null
+          ? null
+          : centsToDecimal(row.listUnitPriceGross),
+    })),
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));

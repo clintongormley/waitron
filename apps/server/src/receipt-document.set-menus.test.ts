@@ -7,9 +7,14 @@ import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-docum
 import { enqueueReceiptCopy, readOriginalReceiptPrint } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket, type TillSaleLine } from "./till-sale.js";
+import { applyAdjustment } from "./adjustments-apply.js";
+import { readBillEditState } from "./bill-editing.js";
+import { readOrderRevision } from "./working-order.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { inTx, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
 import {
   printSpecBill,
@@ -18,6 +23,7 @@ import {
   setupSetMenuSpecVenue,
   specBill,
   specDeps,
+  specRows,
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
 
@@ -256,9 +262,8 @@ it.each([
   expect(elements[at + 1]).toMatchObject({ kind: "text", text: `${" ".repeat(3)}${each}` });
 });
 
-it("a reprint prints what the first print did", async () => {
-  const bill = await specBill(spec, "fire");
-  await printSpecBill(spec, bill.partyId, bill.tabId);
+/** The item rows of `bill`'s first ticket as printed, and as reprinted through each receipt read. */
+async function printedItemRows(bill: { tabId: string }) {
   const [sale] = await venue.db
     .select({ id: sales.id })
     .from(sales)
@@ -290,9 +295,63 @@ it("a reprint prints what the first print did", async () => {
     .select({ payload: printJobs.payload })
     .from(printJobs)
     .where(eq(printJobs.id, queued.jobId));
-  const original = itemLines(decodeTicket(first!.payload));
+  return {
+    saleId: sale!.id,
+    original: itemLines(decodeTicket(first!.payload)),
+    settled: await print("settled"),
+    bySaleId: await print("by sale id"),
+  };
+}
+
+it("a reprint prints what the first print did", async () => {
+  const bill = await specBill(spec, "fire");
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const { original, settled, bySaleId } = await printedItemRows(bill);
   expect(original).toHaveLength(3);
   expect(original.join("\n")).not.toMatch(/Soup|Hake|Sea bass/u);
-  expect(await print("settled")).toEqual(original);
-  expect(await print("by sale id")).toEqual(original);
+  expect(settled).toEqual(original);
+  expect(bySaleId).toEqual(original);
+});
+
+it("a comped surcharge keeps its row on both receipt reads", async () => {
+  const bill = await specBill(spec, "fire");
+  const sirloin = (await specRows(spec, bill.tabId)).find(
+    ({ name, setMenuRole, lineTotal }) =>
+      name === "Sirloin" && setMenuRole === "dish" && lineTotal > 0,
+  )!;
+  await inTx(venue, async (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        admission: testTradingAdmission(),
+        orderId: bill.tabId,
+        expectedEdit: await readBillEditState(tx, bill.tabId),
+        submissionId: crypto.randomUUID(),
+        expectedRevision: await readOrderRevision(tx, bill.tabId),
+        lineId: sirloin.id,
+        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
+        action: "comp",
+        note: null,
+        operatorId: venue.operator.personId,
+      },
+      venue.cfg.locale,
+    ),
+  );
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const { saleId, original, settled, bySaleId } = await printedItemRows(bill);
+  expect(original.filter((row) => row.includes("Sirloin"))).toHaveLength(1);
+  expect(settled).toEqual(original);
+  expect(bySaleId).toEqual(original);
+  const receipt = await inTx(venue, (tx) =>
+    readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+  );
+  expect(receipt.lines.filter((line) => line.adjustments !== undefined)).toEqual([
+    expect.objectContaining({
+      setMenuRole: "dish",
+      gross: "0.00",
+      listGross: "5.00",
+      adjustments: [{ kind: "comp", amount: "5.00" }],
+    }),
+  ]);
 });
