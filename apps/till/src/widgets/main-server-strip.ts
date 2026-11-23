@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { countText, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { trackDialog } from "./track-dialog.js";
 
 @customElement("till-main-server-strip")
 export class TillMainServerStrip extends LitElement {
@@ -221,6 +222,7 @@ export class TillMainServerStrip extends LitElement {
     </div>`;
     return this.modal
       ? html`<dialog
+          ${trackDialog()}
           aria-labelledby="outage-heading"
           closedby="none"
           @cancel=${(event: Event) => event.preventDefault()}

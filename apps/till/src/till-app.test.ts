@@ -47,6 +47,7 @@ import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillMainServerStrip } from "./widgets/main-server-strip.js";
+import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
@@ -18034,6 +18035,7 @@ describe("the main-server strip", () => {
     await panel.updateComplete;
     const overlay = panel.shadowRoot!.querySelector("dialog");
     expect(overlay?.matches(":modal")).toBe(true);
+    expect(dialogOpenUnder(el)).toBe(true);
     const cancel = new Event("cancel", { cancelable: true });
     overlay!.dispatchEvent(cancel);
     expect(cancel.defaultPrevented).toBe(true);
@@ -18042,6 +18044,7 @@ describe("the main-server strip", () => {
     await router.probeNow();
     await settle(el);
     expect(shellStrip(el)).toBeNull();
+    expect(dialogOpenUnder(el)).toBe(false);
     expect(counter(el)).toBe(sale);
     expect(counter(el)!.store.lines.map(({ quantity }) => quantity.toString())).toEqual(["2"]);
   });
