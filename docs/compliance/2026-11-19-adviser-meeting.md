@@ -3,8 +3,8 @@
 Internal copy, for the owner. Rewritten with the owner on 18 November 2026: the 26 questions of the
 earlier version became 11, written to the adviser, with internal references removed. The shared
 Google Doc "Waitron adviser meeting, 19 November 2026" holds the two parts below side by side,
-English beside Spanish; this header and everything after Part 2 are not in it. Questions 12 and
-13 were added to both parts after the meeting (see [Added after the meeting](#added-after-the-meeting)).
+English beside Spanish; this header and everything after Part 2 are not in it. Questions 12, 13
+and 14 were added to both parts after the meeting (see [Added after the meeting](#added-after-the-meeting)).
 
 **Decisions taken while rewriting (owner, 18 November).**
 
@@ -284,6 +284,10 @@ Open: which records need ten years.
 
 - **Giving back more than the table's ticket holds.** A company pays €100 ahead, with its own ticket, A/12: €90.91 plus €9.09 VAT at 10%. The dinner comes to €120, so the table's ticket, A/45, lists the dishes, takes off A/12 (−€100.00) and comes to the €20 left (€18.18 plus €1.82 VAT). The venue then agrees to give €30 back. We plan two steps. First, a corrective of A/45 gives back the €20 paid on it, at the dishes' own VAT rates, and is filed with AEAT. Second, the €10 left over comes from the part payment, whose ticket cannot be corrected once A/45 has taken it off: staff give it back as a refund of the payment on A/12, and nothing is filed for it. Its VAT, €0.91 at 10% (€9.09 base), stays declared, and the accountant's export lists the refund with that VAT. This is the owner's choice: "let's use refund a payment, but add this approach to the adviser's list for confirmation". Waitron will refuse the refund on A/12 while A/45 still holds money its corrective could give back; the amount given back on A/12 is the one staff enter, since Waitron cannot know how much is owed back. *Is this acceptable? If not, what must the venue issue or file for the €10, and may it leave the €0.91 declared for its accountant to deal with?*
 
+**14. Built since your answers: have we done this right?** (added 23 November)
+
+- **A free item on a ticket with two VAT rates** (your answer 1.10). When such a ticket holds an item given free (a comp, or a discount that takes it to zero), Waitron shares the price paid across all the items, the free one included, in proportion to their menu prices. For example, a salad at €10.00 (4%) and a water at €2.00 (21%) given free, the customer paying €10.00: Waitron files €8.33 at 4% (base €8.01, VAT €0.32) and €1.67 at 21% (base €1.38, VAT €0.29), €0.61 of VAT in all, where before it filed €10.00 at 4% (base €9.62, VAT €0.38) and nothing at 21%. When the same ticket also has a discount, what is paid after it is shared the same way, by menu price: with €1.00 off the bill as well, €7.50 at 4% (base €7.21, VAT €0.29) and €1.50 at 21% (base €1.24, VAT €0.26). On a ticket with nothing free, a discount on one item stays on that item's own rate. The guest's ticket still shows the water as given free, with the shared figures in its VAT rows; the accountant's Given free sheet still lists the water at its menu price. On a full invoice naming a customer for the same ticket, the salad's line shows its menu price less a discount of €1.61 and the water's less a discount of €0.27, though only the water was given free. *Have we done this right? Should a discount on one item also be shared when nothing is free? Is the full invoice's discount line under the salad acceptable?*
+
 ## Part 2: Español
 
 **1. Cuándo se expide el tique de la mesa** (a partir de sus respuestas 1.1, 1.3, 1.4 y 1.8)
@@ -431,6 +435,12 @@ Nota: ____
 
 Nota: ____
 
+**14. Lo que hemos hecho a partir de sus respuestas: ¿lo hemos hecho bien?** (añadida el 23 de noviembre)
+
+- **Un producto gratuito en un tique con dos tipos de IVA** (su respuesta 1.10). Cuando un tique así incluye un producto gratuito (una invitación, o un descuento que lo deja a cero), Waitron reparte el precio pagado entre todos los productos, también el gratuito, en proporción a sus precios de carta. Por ejemplo, una ensalada de 10,00 € (4 %) y un agua de 2,00 € (21 %) gratis, por las que el cliente paga 10,00 €: Waitron presenta 8,33 € al 4 % (base 8,01 €, cuota 0,32 €) y 1,67 € al 21 % (base 1,38 €, cuota 0,29 €), 0,61 € de IVA en total; antes presentaba 10,00 € al 4 % (base 9,62 €, cuota 0,38 €) y nada al 21 %. Si el mismo tique tiene además un descuento, lo pagado después se reparte igual, por precio de carta: con 1,00 € menos en la cuenta, 7,50 € al 4 % (base 7,21 €, cuota 0,29 €) y 1,50 € al 21 % (base 1,24 €, cuota 0,26 €). En un tique sin nada gratuito, un descuento en un producto se queda en el tipo de ese producto. El tique del cliente sigue mostrando el agua como invitación, con las cifras repartidas en sus líneas de IVA; la hoja de invitaciones para el gestor sigue mostrando el agua a su precio de carta. En una factura completa a nombre de un cliente para el mismo tique, la línea de la ensalada muestra su precio de carta menos un descuento de 1,61 € y la del agua menos un descuento de 0,27 €, aunque solo el agua fue gratis. *¿Lo hemos hecho bien? ¿Debería repartirse también un descuento en un producto cuando nada es gratuito? ¿Es aceptable la línea de descuento bajo la ensalada en la factura completa?*
+
+Nota: ____
+
 ## Old question numbers
 
 Plans and queues written before 18 November cite the earlier numbers. Record each answer under both.
@@ -502,3 +512,11 @@ applied to the next version's template (owner, 22 November 13:05: "Just put in w
 now, we can update it later"). It keeps the spare-server sentence, because this version can add a
 spare box and switch to it (A947); question 9's "A later version will add a standby server" and its
 Spanish «Una versión posterior añadirá un servidor de reserva» do not describe this version.
+
+Question 14, in both parts, was added on 23 November from the owner's word of 21 November that
+work built ahead of the adviser's confirmation goes on this list as "have we done this right"
+(lane L `questions.md`, "WATCHER 2026-11-21 18:17"; plan
+[2026-11-19-adviser-goodwill-corrective.md](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md)).
+Its point on a free item's share is built; that a discount on the same ticket is shared by menu
+price too is the watcher's call (O3), not the owner's. A second point, on goodwill money back,
+follows when that work lands. Copy it into the shared Google Doc before sending.

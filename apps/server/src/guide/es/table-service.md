@@ -321,6 +321,10 @@ empezado y sin marcar cuando sí. El botón principal dice entonces **Cancelar y
 importe. Sin la marca dice **Cancelar**, y la cuenta mantiene el cobro. Si no puedes hacer
 devoluciones, alguien que pueda introduce su PIN.
 
+Un plato por invitación puede volver con el último plato pagado de la cuenta: la ventana de ese
+plato lo muestra entonces y el importe lo incluye. Cancelado solo, un plato por invitación no
+devuelve dinero.
+
 La marca solo aparece cuando este dispositivo puede devolver el pago. Si el cliente pagó de una
 forma que este dispositivo no acepta, la ventana dice **Devuelve el dinero en una caja: Devolver un
 pago, en el recibo.** Después de **Cancelar y devolver**, la devolución del recibo se abre ya
@@ -336,7 +340,8 @@ Para un plato que ha pasado a la estación pero no está marcado como empezado, 
 preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
 plato cuyo dinero se devuelve; un plato empieza marcado cuando la preparación no ha empezado. Un
 solo **Motivo** sirve para todos los platos, y empieza en **No servido** si tu local conserva
-ese motivo.
+ese motivo. Un plato con **Por invitación** no tiene marca propia: su dinero vuelve con los platos
+pagados de la cuenta cuando los marcas todos.
 
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
