@@ -15,6 +15,7 @@ import {
 } from "./guide-pages.js";
 import { renderDocument } from "./html-page.js";
 import { fixedFontValue } from "./html-page-tokens.js";
+import { renderRestrictedPage } from "./restricted-page.js";
 import { renderWaitingPage } from "./waiting-page.js";
 import type { Logger } from "./logger.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
@@ -464,7 +465,7 @@ describe("the box pages' form style", () => {
     for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(head).toContain(`${name}:`);
   });
 
-  it("draws a page drawn without the box look in the box pages' typeface and colours, form included", async () => {
+  it("draws the waiting page in the box pages' typeface and colours, form included", async () => {
     const form = `<form class="box-form" method="post" action="/x">
 <p><label for="f-email">Email <span class="required">*</span></label></p>
 <p><input type="email" id="f-email" name="email"></p>
@@ -504,17 +505,13 @@ describe("the box pages' form style", () => {
   });
 
   it("lays the waiting page out as the download page: the logo over a centred column, filling a phone's width", async () => {
-    const form = `<form class="box-form" method="post" action="/x">
+    const section = `<h2>Carry on</h2>
+<p>Only if the other box is switched off.</p>
+<form class="box-form" method="post" action="/x">
 <p><label for="f-email">Email <span class="required">*</span></label></p>
 <p><input type="email" id="f-email" name="email"></p>
 </form>`;
-    // The download page's own call (restricted-page.ts `renderPage`).
-    const download = renderLogoBoxPage(
-      "en-GB",
-      "This box has handed over",
-      "<h1>This box has handed over</h1><p>Download.</p>",
-      BOX_FORM_STYLE,
-    );
+    const download = renderRestrictedPage({ returnState: "waiting", planned: true }, "en-GB", true);
     const browser = await chromium.launch();
     try {
       for (const width of [1280, 390]) {
@@ -530,12 +527,20 @@ describe("the box pages' form style", () => {
               paddingRight: s.paddingRight,
             };
           });
+        const lefts = () =>
+          Promise.all(
+            ["h2", "form"].map((selector) =>
+              page.locator(selector).evaluate((el) => el.getBoundingClientRect().left),
+            ),
+          );
         await page.setContent(download);
         const expected = await column();
-        await page.setContent(renderWaitingPage("the other box", "en-GB", form));
+        const expectedLefts = await lefts();
+        await page.setContent(renderWaitingPage("the other box", "en-GB", section));
         expect(await page.locator(".logo svg").isVisible(), `${width}`).toBe(true);
         const shown = await column();
         expect(shown, `${width}`).toEqual(expected);
+        expect(await lefts(), `${width} heading and form`).toEqual(expectedLefts);
         if (width === 1280) expect(shown.left, `${width}`).toBeGreaterThan(0);
         else expect(shown.width, `${width}`).toBe(width);
         expect(

@@ -359,7 +359,10 @@ else. The "sends no-cache and a policy that allows only the page's own script" c
 `BOX_FORM_STYLE` (in `guide-pages.ts`) draws the two server-drawn box forms in the dashboard's
 field look, with each label above its field: the replaced box's download form on the restricted
 page, and the waiting page's Carry on form. Only those two pages carry it. Both are drawn by
-`renderLogoBoxPage`, so the waiting page has the download page's logo, centred column and theme.
+`renderLogoBoxPage`, so the waiting page has the download page's logo, centred column and theme;
+the carry-on flow's own pages in `carry-on.ts` (already handed over, restarting, carrying on, the
+other box answered) are drawn by it too, without the form style. Unlike the download page's answer,
+the waiting page's and those pages' answers carry no Content-Security-Policy.
 
 The page's own words (the "Waitron guide" trail, each guide's short name, the missing-twin line, the
 404 and 500 pages) are in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`.

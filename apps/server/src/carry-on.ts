@@ -29,7 +29,8 @@ import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { isSecure } from "./encrypted-connection.js";
-import { escapeHtml, renderDocument } from "./html-page.js";
+import { escapeHtml } from "./html-page.js";
+import { renderLogoBoxPage } from "./guide-pages.js";
 import { readSuccessor, successorText } from "./restricted-page.js";
 import { knownHandoverSuccessor, type StartPeerCheckOutcome } from "./start-peer-check.js";
 import {
@@ -204,6 +205,9 @@ function postedSecurely(c: Context): boolean {
 const refresh = (destination: string) =>
   `<meta http-equiv="refresh" content="5; url=${escapeHtml(destination)}">\n`;
 
+const flowPage = (locale: SupportedLocale, title: string, body: string, head = "") =>
+  renderLogoBoxPage(locale, title, `<h1>${escapeHtml(title)}</h1>\n${body}`, "", head);
+
 /**
  * The waiting page's "Carry on as the main box": a person with `node.manage` who states that the
  * other box is switched off and that no other recovery is in progress ends the wait, for this start
@@ -233,7 +237,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       c.html(renderWaitingPage(other, locale, section, destination), status);
     const known = async (successor: string | null) =>
       c.html(
-        renderDocument(
+        flowPage(
           locale,
           words.knownTitle,
           knownBody(await successorName(successor, locale), words, true, destination),
@@ -242,13 +246,13 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       );
     const restarting = () =>
       c.html(
-        renderDocument(locale, words.restartingTitle, `<p>${escapeHtml(words.restarting)}</p>\n`),
+        flowPage(locale, words.restartingTitle, `<p>${escapeHtml(words.restarting)}</p>\n`),
         409,
       );
     const carriedOn = () => {
       c.header("Connection", "close");
       return c.html(
-        renderDocument(
+        flowPage(
           locale,
           words.carriedOnTitle,
           `<p>${escapeHtml(words.carriedOnBody)}</p>\n`,
@@ -351,7 +355,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       case "answered":
         if (turn.outcome.result === "superseded") return known(turn.outcome.successorNodeId);
         return c.html(
-          renderDocument(
+          flowPage(
             locale,
             words.peerAnsweredTitle,
             `<p>${escapeHtml(words.peerAnswered)}</p>\n`,
@@ -395,7 +399,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     }
     if (!turn.finish())
       return c.html(
-        renderDocument(
+        flowPage(
           locale,
           words.restartingTitle,
           `<p>${escapeHtml(words.restartingAfterRecord)}</p>\n`,
@@ -411,7 +415,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     const successor = await knownHandoverSuccessor(deps.node, deps.nodeId);
     if (successor !== null)
       return {
-        page: renderDocument(
+        page: flowPage(
           locale,
           words.knownTitle,
           knownBody(await successorName(successor, locale), words, false),

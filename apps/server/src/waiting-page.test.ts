@@ -92,6 +92,13 @@ describe("the waiting page", () => {
     expect(html).toContain("<h1>This box is waiting for Bar &lt;b&gt; and Terrace</h1>");
   });
 
+  it("puts a section it is given in a section element before the page's script, and draws none without one", () => {
+    expect(renderWaitingPage("Spare", "en-GB", "<p>Carry on</p>\n")).toContain(
+      "<section>\n<p>Carry on</p>\n</section>\n<script>",
+    );
+    expect(renderWaitingPage("Spare", "en-GB")).not.toContain("<section>");
+  });
+
   it("a name read that fails still answers the page, waiting for the other box", async () => {
     const log = vi.fn();
     const app = new Hono();
