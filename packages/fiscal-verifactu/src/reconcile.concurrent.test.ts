@@ -256,7 +256,14 @@ describe("reconciliation alongside filing", () => {
     await requeue();
     let newer: Awaited<ReturnType<typeof snapshot>> | undefined;
     const lookup = afterLookup(client, async () => {
-      await withTransaction(suite.db, (tx) => tx.execute(sql`delete from verifactu_submissions`));
+      await withTransaction(suite.db, (tx) => {
+        const [trigger] = tx.all<{ sql: string }>(sql`
+          select sql from sqlite_master where name = 'verifactu_submissions_no_delete'
+        `);
+        tx.run(sql`drop trigger verifactu_submissions_no_delete`);
+        tx.run(sql`delete from verifactu_submissions`);
+        tx.run(sql.raw(trigger!.sql));
+      });
       newer = await snapshot();
     });
 

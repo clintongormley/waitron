@@ -52,8 +52,7 @@ before this cannot be restored or imported."
 - **Filing decides exactly as today.** Which records are held, probed, retried or set aside, which
   cases open, with what cause and evidence, which conflicts are active: the drain, reconcile, remedy
   and conflict suites keep every assertion.
-- Every remedy route stays disabled in production (`record-remedy-routes.ts:20`, an empty set); this
-  plan changes their request shape, not whether they run.
+- Preserve the production policy and record-only requests for record correction (#3128) and replacement invoices (#3235), including the existing full-invoice switch and returned-record allowance.
 - Measurement before code (Task 1).
 
 ## Review Focus

@@ -233,7 +233,7 @@ async function readEnvio(
  * wholesale. Every caller runs after `server.close()`. */
 async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
   await appDb.execute(
-    sql`delete from verifactu_submissions where registro_id in ${seeded.registroIds}`,
+    sql`update verifactu_submissions set estado = 'aceptado' where registro_id in ${seeded.registroIds}`,
   );
   await appDb.execute(sql`delete from incidents `);
 }

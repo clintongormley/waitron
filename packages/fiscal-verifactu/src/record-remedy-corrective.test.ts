@@ -487,12 +487,6 @@ it("refuses a missing case", async () => {
   input.request.caseId = "missing-case";
   await refuses("fiscal.remedy_invalid");
 });
-it("refuses a missing delivery", async () => {
-  await suite.db
-    .delete(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, input.request.registroId));
-  await refuses("fiscal.remedy_invalid");
-});
 it.each([null, "3000", "different-code"])(
   "refuses missing or conflicting stored error %s",
   async (codigoError) => {

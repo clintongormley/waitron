@@ -486,23 +486,6 @@ it("refuses an already accepted cancellation as the claimed accepted original", 
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["current", "held"])("refuses a missing %s delivery", async (which) => {
-  await acceptCurrent();
-  await suite.db
-    .delete(verifactuSubmissions)
-    .where(
-      eq(
-        verifactuSubmissions.registroId,
-        which === "current" ? currentId : (body.registroId as string),
-      ),
-    );
-  const before = await snapshot();
-  const response = await send();
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
-  expect(await snapshot()).toEqual(before);
-});
-
 it("refuses a saved decision that belongs to another administrator", async () => {
   await acceptCurrent();
   expect((await send()).status).toBe(200);

@@ -11,6 +11,10 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { applyMigrations } from "../packages/migrations/src/apply.js";
 import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+import {
+  SUBMISSION_CHANGE_REFUSAL,
+  SUBMISSION_DELETE_REFUSAL,
+} from "../packages/fiscal-verifactu/src/trigger-refusals.js";
 // The exact words each refusing trigger raises, imported from the one place that declares them:
 // `packages/core` matches one of them (`settle-sale.ts`), and a local copy would test the
 // triggers against this file instead of against what the product reads.
@@ -144,6 +148,8 @@ const EXPECTED_TRIGGERS = [
   "refunds_no_delete",
   "invoice_corrections_guard_update",
   "invoice_corrections_no_delete",
+  "verifactu_submissions_guard_update",
+  "verifactu_submissions_no_delete",
 ];
 
 const scratch = [];
@@ -538,6 +544,57 @@ describe("invoice_series_guard_update", () => {
     } finally {
       connection.exec("pragma foreign_keys = off");
     }
+  });
+});
+
+describe("VeriFactu submission guards", () => {
+  it("retains the submission, its case and its resolution while delivery state can move", () => {
+    const row = "where registro_id = 'submission-guard'";
+    const change = (set) =>
+      refusalFor(connection, `update verifactu_submissions set ${set} ${row}`);
+    const refusal = SUBMISSION_CHANGE_REFUSAL;
+    connection.exec(`insert into verifactu_submissions (registro_id, proximo_intento_en)
+      values ('submission-guard', '${STAMP}')`);
+    expect(change("registro_id = 'other'")).toBe(refusal);
+    expect(
+      change(
+        `case_cause = 'fiscal.registro_rechazado', case_evidence = '{}', case_opened_at = '${STAMP}'`,
+      ),
+    ).toBeUndefined();
+    for (const column of ["case_cause", "case_evidence", "case_opened_at"]) {
+      expect(change(`${column} = null`), column).toBe(refusal);
+    }
+    expect(
+      change(`case_resolved_at = '${STAMP}', case_resolved_by = 'person',
+      case_resolution_action = 'corrected', case_resolution_key = 'action',
+      case_remedy_registro_id = 'remedy'`),
+    ).toBeUndefined();
+    for (const column of [
+      "case_resolved_at",
+      "case_resolved_by",
+      "case_resolution_action",
+      "case_resolution_key",
+      "case_remedy_registro_id",
+    ]) {
+      expect(change(`${column} = null`), column).toBe(refusal);
+    }
+    expect(
+      change(`estado = 'aceptado', intentos = 1, proximo_intento_en = '2026-09-22T11:00:00.000Z',
+      csv = 'csv', codigo_error = '1112', mensaje_error = 'date', enviado_en = '${STAMP}',
+      confirmado_en = '${STAMP}', incidencia = 1, technical_incidence = 1,
+      reconciled_resubmit_at = '${STAMP}'`),
+    ).toBeUndefined();
+    expect(refusalFor(connection, `delete from verifactu_submissions ${row}`)).toBe(
+      SUBMISSION_DELETE_REFUSAL,
+    );
+    expect(
+      connection
+        .prepare(`select estado, case_resolution_action from verifactu_submissions ${row}`)
+        .get(),
+    ).toEqual({
+      estado: "aceptado",
+      case_resolution_action: "corrected",
+    });
   });
 });
 

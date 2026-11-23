@@ -9,7 +9,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Database } from "@waitron/db";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 
@@ -23,9 +23,6 @@ const suite = useVenueDb({
   setup: async (db) => {
     for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
   },
-});
-afterEach(async () => {
-  await suite.db.execute(sql`delete from verifactu_submissions`);
 });
 
 /** Every table in the database, drizzle's per-package journals included, SQLite's own excluded. */

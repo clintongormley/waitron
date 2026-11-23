@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d7e32152-9548-496b-8d2c-349d3dc83638",
+  "id": "f66319a0-b72f-4e43-abc2-788753d142aa",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -984,7 +984,7 @@
         },
         "verifactu_history_kind_ck": {
           "name": "verifactu_history_kind_ck",
-          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')"
+          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')"
         },
         "verifactu_history_confirmed_source_ck": {
           "name": "verifactu_history_confirmed_source_ck",
@@ -1013,6 +1013,10 @@
         "verifactu_history_lookup_ck": {
           "name": "verifactu_history_lookup_ck",
           "value": "\"verifactu_history\".\"kind\" <> 'conflict.lookup' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_type(\"verifactu_history\".\"data\", '$.evidence') is not null\n        and \"verifactu_history\".\"person_id\" is null\n        and \"verifactu_history\".\"event_key\" = 'lookup:' || \"verifactu_history\".\"registro_id\",\n        0\n      )"
+        },
+        "verifactu_history_note_ck": {
+          "name": "verifactu_history_note_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'case.note' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null and \"verifactu_history\".\"person_id\" is not null\n        and substr(\"verifactu_history\".\"event_key\", 1, 10) = 'case.note:' and length(\"verifactu_history\".\"event_key\") > 10\n        and json_type(\"verifactu_history\".\"data\", '$.action') = 'text',\n        0\n      )"
         }
       }
     },
@@ -1769,6 +1773,62 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "case_cause": {
+          "name": "case_cause",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_evidence": {
+          "name": "case_evidence",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_opened_at": {
+          "name": "case_opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolved_at": {
+          "name": "case_resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolved_by": {
+          "name": "case_resolved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolution_action": {
+          "name": "case_resolution_action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_resolution_key": {
+          "name": "case_resolution_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "case_remedy_registro_id": {
+          "name": "case_remedy_registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1786,6 +1846,21 @@
             "confirmado_en"
           ],
           "isUnique": false
+        },
+        "verifactu_submissions_resolution_key_uq": {
+          "name": "verifactu_submissions_resolution_key_uq",
+          "columns": [
+            "case_resolution_key"
+          ],
+          "isUnique": true
+        },
+        "verifactu_submissions_case_idx": {
+          "name": "verifactu_submissions_case_idx",
+          "columns": [
+            "case_opened_at"
+          ],
+          "isUnique": false,
+          "where": "\"verifactu_submissions\".\"case_opened_at\" is not null"
         }
       },
       "foreignKeys": {
@@ -1801,6 +1876,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "verifactu_submissions_case_resolved_by_persons_id_fk": {
+          "name": "verifactu_submissions_case_resolved_by_persons_id_fk",
+          "tableFrom": "verifactu_submissions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "case_resolved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "verifactu_submissions_case_remedy_registro_id_verifactu_records_id_fk": {
+          "name": "verifactu_submissions_case_remedy_registro_id_verifactu_records_id_fk",
+          "tableFrom": "verifactu_submissions",
+          "tableTo": "verifactu_records",
+          "columnsFrom": [
+            "case_remedy_registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1809,6 +1910,14 @@
         "verifactu_submissions_estado_ck": {
           "name": "verifactu_submissions_estado_ck",
           "value": "\"verifactu_submissions\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido')"
+        },
+        "verifactu_submissions_case_ck": {
+          "name": "verifactu_submissions_case_ck",
+          "value": "(\"verifactu_submissions\".\"case_cause\" is null) = (\"verifactu_submissions\".\"case_evidence\" is null)\n        and (\"verifactu_submissions\".\"case_cause\" is null) = (\"verifactu_submissions\".\"case_opened_at\" is null)\n        and (\"verifactu_submissions\".\"case_cause\" is null or \"verifactu_submissions\".\"case_cause\" <> '')"
+        },
+        "verifactu_submissions_resolution_ck": {
+          "name": "verifactu_submissions_resolution_ck",
+          "value": "(\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolved_by\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolution_action\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null) = (\"verifactu_submissions\".\"case_resolution_key\" is null)\n        and (\"verifactu_submissions\".\"case_resolved_at\" is null or \"verifactu_submissions\".\"case_opened_at\" is not null)\n        and (\"verifactu_submissions\".\"case_remedy_registro_id\" is null or\n          (\"verifactu_submissions\".\"case_resolved_at\" is not null and \"verifactu_submissions\".\"case_remedy_registro_id\" <> \"verifactu_submissions\".\"registro_id\"))"
         }
       }
     }

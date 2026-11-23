@@ -35,7 +35,17 @@ type ConflictHistoryEntry = { nodeId: NodeId; at: Date; registroId: string } & (
   | { kind: "conflict.lookup"; data: LookupConflictData }
 );
 
-export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry;
+interface CaseNoteHistoryEntry {
+  kind: "case.note";
+  nodeId: NodeId;
+  at: Date;
+  registroId: string;
+  personId: string;
+  actionKey: string;
+  data: { action: string };
+}
+
+export type HistoryEntry = ClockHistoryEntry | ConflictHistoryEntry | CaseNoteHistoryEntry;
 
 interface StoredHistoryEntry {
   id: string;
@@ -74,6 +84,8 @@ function keyFor(entry: HistoryEntry): string | null {
       return `conflict:${entry.registroId}:${entry.data.attempt}:${entry.data.cause}`;
     case "conflict.lookup":
       return `lookup:${entry.registroId}`;
+    case "case.note":
+      return `case.note:${entry.actionKey}`;
   }
 }
 

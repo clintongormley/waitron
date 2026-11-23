@@ -29,7 +29,7 @@ export const verifactuHistory = table(
     ),
     check(
       "verifactu_history_kind_ck",
-      sql`${t.kind} in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')`,
+      sql`${t.kind} in ('clock.confirmed', 'conflict.observed', 'conflict.lookup', 'case.note')`,
     ),
     // The writer serializes an object with unique keys. For a repeated key in raw JSON, SQLite
     // checks the first value and JSON.parse reads the last.
@@ -80,6 +80,15 @@ export const verifactuHistory = table(
         and json_type(${t.data}, '$.evidence') is not null
         and ${t.personId} is null
         and ${t.eventKey} = 'lookup:' || ${t.registroId},
+        0
+      )`,
+    ),
+    check(
+      "verifactu_history_note_ck",
+      sql`${t.kind} <> 'case.note' or coalesce(
+        ${t.registroId} is not null and ${t.personId} is not null
+        and substr(${t.eventKey}, 1, 10) = 'case.note:' and length(${t.eventKey}) > 10
+        and json_type(${t.data}, '$.action') = 'text',
         0
       )`,
     ),
