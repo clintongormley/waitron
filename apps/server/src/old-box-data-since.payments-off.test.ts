@@ -82,8 +82,8 @@ it("lists part payments and drawer entries, and no card payments, when the payme
   ).bytes;
   const xml = sheetNamed(unzipSync(bytes), OLD_BOX_DATA_WORDS.en.paymentsSheet)!;
   expect([3, 4, 5].map((n) => row(xml, n).slice(0, 2))).toEqual([
-    ["Payment", "2026-11-20 11:00:00.000"],
-    ["Cash drawer", "2026-11-20 11:00:00.000"],
+    ["Payment", "2026-11-20 11:00:00.000+01:00"],
+    ["Cash drawer", "2026-11-20 11:00:00.000+01:00"],
     [],
   ]);
   expect(row(xml, 4).at(-1)).toBe(drawer.id);

@@ -213,18 +213,18 @@ describe("the old box's Activity tab", () => {
         words.activitySheet,
       )!;
       expect(row(xml, 1)).toEqual([
-        words.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
+        words.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
       ]);
       expect(row(xml, 2)).toEqual([...words.activityColumns]);
       expect(row(xml, 3)).toEqual([
-        "2026-11-20 11:00:00.000",
+        "2026-11-20 11:00:00.000+01:00",
         "dashboard.signed_in",
         "",
         "person",
         "00000000-0000-4000-8000-000000000001",
       ]);
       expect(row(xml, 4)).toEqual([
-        "2026-11-20 12:00:00.000",
+        "2026-11-20 12:00:00.000+01:00",
         "dashboard.signed_in",
         "Marta Ruiz",
         "person",
@@ -242,10 +242,10 @@ describe("the old box's Activity tab", () => {
     const bytes = await build({ kind: "own", fromMs: CUTOFF });
     const en = OLD_BOX_DATA_WORDS.en;
     expect(row(sheet(bytes, en.activitySheet)!, 1)).toEqual([
-      en.sinceOwnIntro.replace("{time}", "2026-11-20 11:00:00.000"),
+      en.sinceOwnIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
     ]);
     expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
-      en.paymentsOwnIntro.replace("{time}", "2026-11-20 11:00:00.000"),
+      en.paymentsOwnIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
     ]);
   });
 
@@ -257,14 +257,61 @@ describe("the old box's Activity tab", () => {
     const en = OLD_BOX_DATA_WORDS.en;
     for (const name of [en.ordersSheet, en.hoursSheet, en.activitySheet])
       expect(row(sheet(bytes, name)!, 1), name).toEqual([
-        en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:42.123"),
+        en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:42.123+01:00"),
       ]);
     expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
-      en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:42.123"),
+      en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:42.123+01:00"),
     ]);
     const activity = sheet(bytes, en.activitySheet)!;
-    expect(row(activity, 3)[0]).toBe("2026-11-20 11:00:42.123");
+    expect(row(activity, 3)[0]).toBe("2026-11-20 11:00:42.123+01:00");
     expect(row(activity, 4)).toEqual([]);
+  });
+
+  it("tells apart the two 02:30s of the night the clocks go back, in the rows and in the cutoff", async () => {
+    const summer = Date.parse("2026-10-25T00:30:00.000Z");
+    const winter = Date.parse("2026-10-25T01:30:00.000Z");
+    await signedIn(null, summer);
+    await signedIn(null, winter);
+    const en = OLD_BOX_DATA_WORDS.en;
+    const fromSummer = sheet(await build({ kind: "copy", fromMs: summer }), en.activitySheet)!;
+    const fromWinter = sheet(await build({ kind: "copy", fromMs: winter }), en.activitySheet)!;
+    expect(row(fromSummer, 1)).toEqual([
+      en.sinceCopyIntro.replace("{time}", "2026-10-25 02:30:00.000+02:00"),
+    ]);
+    expect([row(fromSummer, 3)[0], row(fromSummer, 4)[0], row(fromSummer, 5)]).toEqual([
+      "2026-10-25 02:30:00.000+02:00",
+      "2026-10-25 02:30:00.000+01:00",
+      [],
+    ]);
+    expect(row(fromWinter, 1)).toEqual([
+      en.sinceCopyIntro.replace("{time}", "2026-10-25 02:30:00.000+01:00"),
+    ]);
+    expect([row(fromWinter, 3)[0], row(fromWinter, 4)]).toEqual([
+      "2026-10-25 02:30:00.000+01:00",
+      [],
+    ]);
+  });
+
+  it("gives each instant its own offset on either side of the change, however many share a quarter hour", async () => {
+    // The change is at 01:00 UTC; the first two and the last two share a quarter hour each.
+    const instants = [
+      "2026-10-25T00:45:00.000Z",
+      "2026-10-25T00:59:59.999Z",
+      "2026-10-25T01:00:00.000Z",
+      "2026-10-25T01:14:59.999Z",
+      "2026-03-29T00:59:59.999Z",
+      "2026-03-29T01:00:00.000Z",
+    ];
+    for (const at of instants) await signedIn(null, Date.parse(at));
+    const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
+    expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n)[0])).toEqual([
+      "2026-03-29 01:59:59.999+01:00",
+      "2026-03-29 03:00:00.000+02:00",
+      "2026-10-25 02:45:00.000+02:00",
+      "2026-10-25 02:59:59.999+02:00",
+      "2026-10-25 02:00:00.000+01:00",
+      "2026-10-25 02:14:59.999+01:00",
+    ]);
   });
 
   it("an empty Activity tab still has its first line and headings, read without a write transaction", async () => {
@@ -282,14 +329,14 @@ describe("the old box's Activity tab", () => {
   it("lists every entry under the rule that lists everything", async () => {
     await signedIn(null, CUTOFF - 365 * DAY);
     const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
-    expect(row(xml, 3)[0]).toBe("2025-11-20 11:00:00.000");
+    expect(row(xml, 3)[0]).toBe("2025-11-20 11:00:00.000+01:00");
   });
 });
 
 const iso = (ms: number) => new Date(ms).toISOString();
 /** A November instant as the test venue's Europe/Madrid wall clock shows it, an hour ahead of UTC. */
 const shown = (ms: number) =>
-  new Date(ms + 60 * MINUTE).toISOString().slice(0, 23).replace("T", " ");
+  `${new Date(ms + 60 * MINUTE).toISOString().slice(0, 23).replace("T", " ")}+01:00`;
 
 async function order(
   number: number,
@@ -369,7 +416,7 @@ describe("the old box's Orders tab", () => {
 
     const xml = await orders({ kind: "copy", fromMs: CUTOFF });
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
     ]);
     expect(row(xml, 2)).toEqual([...OLD_BOX_DATA_WORDS.en.orderColumns]);
     // prettier-ignore
@@ -521,7 +568,7 @@ describe("the old box's Payments and cash tab", () => {
       OLD_BOX_DATA_WORDS.en.paymentsSheet,
     )!;
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
+      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
     ]);
     // `row` returns cell text as written, so the apostrophe is still escaped.
     expect(row(xml, 2)).toEqual(
@@ -902,7 +949,9 @@ describe("the old box's Working hours tab", () => {
     const atCutoff = await clocked(marta, CUTOFF, { entryKind: "out" });
     const later = await clocked(marta, CUTOFF + 60 * MINUTE, { entryKind: "break_start" });
     const xml = sheet(await build({ kind: "copy", fromMs: CUTOFF }), en.hoursSheet)!;
-    expect(row(xml, 1)).toEqual([en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000")]);
+    expect(row(xml, 1)).toEqual([
+      en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000+01:00"),
+    ]);
     expect(row(xml, 2)).toEqual([...en.hoursColumns]);
     expect(row(xml, 3)).toEqual([
       "Marta Ruiz",
@@ -973,6 +1022,18 @@ describe("the old box's Working hours tab", () => {
       en.correctionStatuses.disputed,
       "Started later",
       disputed,
+    ]);
+  });
+
+  it("shows a clock event at the offset it was recorded with, and when it was recorded at the venue's", async () => {
+    const en = OLD_BOX_DATA_WORDS.en;
+    const marta = await namedPerson("Marta Ruiz");
+    // Recorded on a November day in Madrid (+01:00), but clocked where the offset was -03:00.
+    await clocked(marta, CUTOFF, { eventOffsetMinutes: -180 });
+    const xml = sheet(await build({ kind: "all" }), en.hoursSheet)!;
+    expect(row(xml, 3).slice(2, 4)).toEqual([
+      "2026-11-20 06:59:00.000-03:00",
+      "2026-11-20 11:00:00.000+01:00",
     ]);
   });
 

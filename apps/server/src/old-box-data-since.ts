@@ -93,6 +93,8 @@ export interface TimeEntryRow {
   personName: string | null;
   entryKind: Of<typeof timeEntries, "entryKind">;
   eventAt: string;
+  /** The wall clock's offset where the event was clocked, minutes east of UTC, as recorded. */
+  eventOffsetMinutes: number;
   recordedAt: string;
   correctsEntryId: string | null;
   correctionStatus: Of<typeof timeEntries, "correctionStatus">;
@@ -107,6 +109,7 @@ export async function readTimeEntriesSince(db: Database, rule: SinceRule): Promi
       personName: persons.displayName,
       entryKind: timeEntries.entryKind,
       eventAt: timeEntries.eventAt,
+      eventOffsetMinutes: timeEntries.eventOffsetMinutes,
       recordedAt: timeEntries.recordedAt,
       correctsEntryId: timeEntries.correctsEntryId,
       correctionStatus: timeEntries.correctionStatus,

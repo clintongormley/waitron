@@ -251,39 +251,71 @@ async function readPaymentsOnAccount(
   );
 }
 
+/** The accountant's invoice columns from the id to the void, in order; each names its heading. */
+export const INVOICE_LINE_KEYS = [
+  "id",
+  "nodeId",
+  "invoiceNumber",
+  "invoiceType",
+  "issueDate",
+  "customerName",
+  "customerTaxId",
+  "customerIdentifierType",
+  "customerIdentifierCountry",
+  "customerCountry",
+  "customerAddress",
+  "vatRate",
+  "base",
+  "vat",
+  "total",
+  "correctsSaleId",
+  "originalInvoiceNumber",
+  "voidedAt",
+] as const;
+export type InvoiceLineKey = (typeof INVOICE_LINE_KEYS)[number];
+
 /**
- * The accountant's invoice columns from the id to the void, one line per VAT rate, the total on
- * the first; an invoice with no VAT groups is one line with its VAT facts blank.
+ * The {@link INVOICE_LINE_KEYS} cells, one line per VAT rate, the total on the first; an invoice
+ * with no VAT groups is one line with its VAT facts blank. `voidedAt` shows the stored void time.
  */
 export function invoiceLineCells(
   invoice: AccountantInvoice,
   words: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+  voidedAt: (stored: string | null) => Cell = (stored) => stored,
 ): Cell[][] {
   const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
-  return groups.map((vat, index) => [
-    invoice.id,
-    invoice.nodeId,
-    invoice.invoiceNumber,
-    invoice.invoiceType === "F1" || invoice.invoiceType === "F2" || invoice.invoiceType === "F3"
-      ? invoice.invoiceType
-      : words[invoice.invoiceType],
-    invoice.issueDate,
-    invoice.customerName,
-    invoice.customerTaxId,
-    invoice.customerIdentifierType === null
-      ? null
-      : words.identifierTypes[invoice.customerIdentifierType as keyof typeof words.identifierTypes],
-    invoice.customerIdentifierCountry,
-    invoice.customerCountry,
-    invoice.customerAddress,
-    vat === null ? null : numeric(vat.rate),
-    vat === null ? null : numeric(vat.base),
-    vat === null ? null : numeric(vat.tax),
-    index === 0 ? numeric(invoice.total) : null,
-    invoice.correctsSaleId,
-    invoice.originalInvoiceNumber,
-    invoice.voidedAt,
-  ]);
+  const voided = voidedAt(invoice.voidedAt);
+  return groups.map((vat, index) => {
+    const cells: Record<InvoiceLineKey, Cell> = {
+      id: invoice.id,
+      nodeId: invoice.nodeId,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceType:
+        invoice.invoiceType === "F1" || invoice.invoiceType === "F2" || invoice.invoiceType === "F3"
+          ? invoice.invoiceType
+          : words[invoice.invoiceType],
+      issueDate: invoice.issueDate,
+      customerName: invoice.customerName,
+      customerTaxId: invoice.customerTaxId,
+      customerIdentifierType:
+        invoice.customerIdentifierType === null
+          ? null
+          : words.identifierTypes[
+              invoice.customerIdentifierType as keyof typeof words.identifierTypes
+            ],
+      customerIdentifierCountry: invoice.customerIdentifierCountry,
+      customerCountry: invoice.customerCountry,
+      customerAddress: invoice.customerAddress,
+      vatRate: vat === null ? null : numeric(vat.rate),
+      base: vat === null ? null : numeric(vat.base),
+      vat: vat === null ? null : numeric(vat.tax),
+      total: index === 0 ? numeric(invoice.total) : null,
+      correctsSaleId: invoice.correctsSaleId,
+      originalInvoiceNumber: invoice.originalInvoiceNumber,
+      voidedAt: voided,
+    };
+    return INVOICE_LINE_KEYS.map((key) => cells[key]);
+  });
 }
 
 export async function renderAccountantWorkbook(
@@ -367,7 +399,12 @@ export async function renderAccountantWorkbook(
     {
       name: words.invoiceSheet,
       rows: [
-        [...words.invoiceColumns, words.saleDateColumn, words.paymentOnAccountColumn],
+        [
+          ...INVOICE_LINE_KEYS.map((key) => words.invoiceColumns[key]),
+          words.invoiceNotesColumn,
+          words.saleDateColumn,
+          words.paymentOnAccountColumn,
+        ],
         ...invoiceRows,
       ],
     },

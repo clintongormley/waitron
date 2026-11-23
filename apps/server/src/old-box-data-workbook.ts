@@ -6,7 +6,12 @@ import {
   type UnreturnedChain,
   type WaitronModule,
 } from "@waitron/module";
-import { invoiceLineCells, paymentOnAccount, readAccountantInvoices } from "./accountant-export.js";
+import {
+  INVOICE_LINE_KEYS,
+  invoiceLineCells,
+  paymentOnAccount,
+  readAccountantInvoices,
+} from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import type { HeardHoldings } from "./old-box-holdings.js";
@@ -41,6 +46,8 @@ export interface OldBoxWorkbookInput {
 /** The workbook's bytes and how many rows each tab lists, for the download's log line. */
 export interface OldBoxWorkbook {
   bytes: Uint8Array<ArrayBuffer>;
+  /** `madeAt`'s date on the venue's calendar, `YYYY-MM-DD`, for the file's name. */
+  madeOn: string;
   counts: {
     invoiceRows: number;
     orderRows?: number;
@@ -50,20 +57,55 @@ export interface OldBoxWorkbook {
   };
 }
 
-/** `at` on the venue's wall clock, as `YYYY-MM-DD HH:MM:SS.mmm`. */
-const wallClock = (at: Date, zone: string) =>
-  new Date(at.getTime() + timeZoneOffsetMinutes(zone, at) * 60_000)
+/** Minutes east of UTC at an instant. */
+type OffsetAt = (at: Date) => number;
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+/**
+ * `at` on a clock `offset` minutes east of UTC, as `YYYY-MM-DD HH:MM:SS.mmm+HH:MM`, or to the
+ * minute: the offset tells apart the two hours a clock change repeats.
+ */
+function wallClock(at: Date, offset: number, to: "ms" | "minute" = "ms"): string {
+  const local = new Date(at.getTime() + offset * 60_000)
     .toISOString()
-    .slice(0, 23)
+    .slice(0, to === "ms" ? 23 : 16)
     .replace("T", " ");
-const minute = (at: Date, zone: string) => wallClock(at, zone).slice(0, 16);
-/** The since tabs' cutoff, exact to the millisecond their reads compare. */
-const exact = (at: Date, zone: string) => wallClock(at, zone);
-/** A stored time as the venue's wall clock; text that is not a time is shown as stored. */
-function localTime(stored: string | null, zone: string): Cell {
+  const size = Math.abs(offset);
+  return `${local}${offset < 0 ? "-" : "+"}${pad(Math.floor(size / 60))}:${pad(size % 60)}`;
+}
+
+const QUARTER_HOUR_MS = 15 * 60_000;
+const LAST_DATE_MS = 8.64e15;
+
+/**
+ * The venue zone's offset, asked once per quarter hour of UTC while the quarter's first and last
+ * millisecond agree, and once per instant in a quarter holding a change.
+ */
+function zoneOffsets(zone: string): OffsetAt {
+  const quarters = new Map<number, number | null>();
+  return (at) => {
+    const quarter = Math.floor(at.getTime() / QUARTER_HOUR_MS);
+    let offset = quarters.get(quarter);
+    if (offset === undefined) {
+      const start = quarter * QUARTER_HOUR_MS;
+      const first = timeZoneOffsetMinutes(zone, new Date(start));
+      const last = timeZoneOffsetMinutes(
+        zone,
+        new Date(Math.min(start + QUARTER_HOUR_MS - 1, LAST_DATE_MS)),
+      );
+      offset = first === last ? first : null;
+      quarters.set(quarter, offset);
+    }
+    return offset ?? timeZoneOffsetMinutes(zone, at);
+  };
+}
+
+/** A stored time on the clock `offsetAt` gives; text that is not a time is shown as stored. */
+function localTime(stored: string | null, offsetAt: OffsetAt): Cell {
   if (stored === null) return null;
   const at = new Date(stored);
-  return Number.isNaN(at.getTime()) ? stored : wallClock(at, zone);
+  return Number.isNaN(at.getTime()) ? stored : wallClock(at, offsetAt(at));
 }
 
 type Words = (typeof OLD_BOX_DATA_WORDS)["en" | "es"];
@@ -92,12 +134,12 @@ function paymentCells(
   fact: PaymentRow,
   words: Words,
   accountant: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
-  zone: string,
+  offsetAt: OffsetAt,
 ): Cell[] {
   const cells: Partial<Record<(typeof PAYMENT_KEYS)[number], Cell>> = {
     kind: words.paymentKinds[fact.kind],
-    recordedAt: localTime(fact.recordedAt, zone),
-    changedAt: localTime(fact.changedAt, zone),
+    recordedAt: localTime(fact.recordedAt, offsetAt),
+    changedAt: localTime(fact.changedAt, offsetAt),
     amount: amount(fact.amount),
     order: fact.orderNumber === null ? null : String(fact.orderNumber),
     id: fact.id,
@@ -156,10 +198,11 @@ function sinceIntro(
   rule: SinceRule,
   words: Words,
   tab: "payments" | "other",
-  zone: string,
+  offsetAt: OffsetAt,
 ): string {
   if (rule.kind === "all") return words.sinceAllIntro;
-  const time = exact(new Date(rule.fromMs), zone);
+  const from = new Date(rule.fromMs);
+  const time = wallClock(from, offsetAt(from));
   const intros =
     tab === "payments"
       ? { copy: words.paymentsCopyIntro, own: words.paymentsOwnIntro }
@@ -207,7 +250,7 @@ async function wholeChains(db: Database, seats: readonly Seat[]): Promise<Unretu
 export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<OldBoxWorkbook> {
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
-  const zone = await venueTimeZoneIn(input.db);
+  const offsetAt = zoneOffsets(await venueTimeZoneIn(input.db));
   const seats = input.modules.flatMap((module) => {
     const unreturned = module.handover?.unreturned;
     return unreturned === undefined ? [] : [{ name: module.name, unreturned }];
@@ -219,10 +262,11 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
     (await readAccountantInvoices(input.db, { saleIds })).map((invoice) => [invoice.id, invoice]),
   );
   const headings: Cell[] = [
-    // The accountant's last column notes that export's own omissions, F3 among them; this tab omits
-    // none. Its voided time is the venue's wall clock here, so that heading is this tab's own.
-    ...accountant.invoiceColumns.slice(0, -2),
-    words.voidedAtColumn,
+    // The accountant's notes column names that export's own omissions, F3 among them; this tab omits
+    // none, so it has no such column.
+    ...INVOICE_LINE_KEYS.map((key) =>
+      key === "voidedAt" ? words.voidedAtColumn : accountant.invoiceColumns[key],
+    ),
     accountant.saleDateColumn,
     accountant.paymentOnAccountColumn,
     ...words.recordColumns,
@@ -237,7 +281,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
         chainName,
         String(record.number),
         words.recordTypes[record.type],
-        localTime(record.createdAt, zone),
+        localTime(record.createdAt, offsetAt),
         record.filingState === null
           ? words.notFiled
           : (words.filingStates[record.filingState] ?? record.filingState),
@@ -252,20 +296,19 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
         ]);
         continue;
       }
-      for (const cells of invoiceLineCells(invoice, accountant))
+      for (const cells of invoiceLineCells(invoice, accountant, (stored) =>
+        localTime(stored, offsetAt),
+      ))
         rows.push([
-          ...cells.slice(0, -1),
-          localTime(invoice.voidedAt, zone),
+          ...cells,
           invoice.saleDate ?? null,
           paymentOnAccount(invoice, accountant),
           ...recordCells,
         ]);
     }
   }
-  const time = minute(
-    (compared !== null ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt,
-    zone,
-  );
+  const heardAt = (compared !== null ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt;
+  const time = wallClock(heardAt, offsetAt(heardAt), "minute");
   const sheets: WorkbookSheet[] = [
     {
       name: words.invoiceSheet,
@@ -283,7 +326,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
   ];
   const counts: OldBoxWorkbook["counts"] = { invoiceRows: rows.length };
   if (input.since !== undefined) {
-    const intro = sinceIntro(input.since, words, "other", zone);
+    const intro = sinceIntro(input.since, words, "other", offsetAt);
     const orders = await readOrdersSince(input.db, input.since);
     const facts = await readPaymentsSince(input.db, input.since);
     const hours = await readTimeEntriesSince(input.db, input.since);
@@ -302,25 +345,25 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
             String(order.orderNumber),
             order.label,
             words.orderStatuses[order.status],
-            localTime(order.openedAt, zone),
-            localTime(order.settledAt, zone),
-            localTime(order.collectedAt, zone),
+            localTime(order.openedAt, offsetAt),
+            localTime(order.settledAt, offsetAt),
+            localTime(order.collectedAt, offsetAt),
             order.lineNo === null ? null : String(order.lineNo),
             order.item,
             order.quantity === null ? null : { number: order.quantity, places: 3 },
             amount(order.unitPrice),
             amount(order.lineTotal),
-            localTime(order.sentAt, zone),
-            localTime(order.servedAt, zone),
+            localTime(order.sentAt, offsetAt),
+            localTime(order.servedAt, offsetAt),
           ]),
         ],
       },
       {
         name: words.paymentsSheet,
         rows: [
-          [sinceIntro(input.since, words, "payments", zone)],
+          [sinceIntro(input.since, words, "payments", offsetAt)],
           words.paymentColumns,
-          ...facts.map((fact) => paymentCells(fact, words, accountant, zone)),
+          ...facts.map((fact) => paymentCells(fact, words, accountant, offsetAt)),
         ],
       },
       {
@@ -331,8 +374,8 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           ...hours.map((entry): Cell[] => [
             entry.personName,
             words.entryKinds[entry.entryKind],
-            localTime(entry.eventAt, zone),
-            localTime(entry.recordedAt, zone),
+            localTime(entry.eventAt, () => entry.eventOffsetMinutes),
+            localTime(entry.recordedAt, offsetAt),
             entry.correctsEntryId,
             entry.correctionStatus === null
               ? null
@@ -348,7 +391,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           [intro],
           words.activityColumns,
           ...activity.map((entry) => [
-            localTime(entry.at, zone),
+            localTime(entry.at, offsetAt),
             entry.kind,
             entry.personName,
             entry.subjectKind,
@@ -358,5 +401,6 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
       },
     );
   }
-  return { bytes: await renderWorkbook(sheets), counts };
+  const madeOn = wallClock(input.madeAt, offsetAt(input.madeAt)).slice(0, 10);
+  return { bytes: await renderWorkbook(sheets), madeOn, counts };
 }

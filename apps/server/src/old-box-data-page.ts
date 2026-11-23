@@ -163,7 +163,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
         return c.body(
           made.bytes,
           200,
-          workbookDownloadHeaders(`waitron-old-main-box-${madeAt.toISOString().slice(0, 10)}.xlsx`),
+          workbookDownloadHeaders(`waitron-old-main-box-${made.madeOn}.xlsx`),
         );
       } finally {
         making = false;

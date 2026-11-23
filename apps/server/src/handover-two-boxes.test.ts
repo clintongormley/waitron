@@ -123,7 +123,7 @@ const RING: KeyRing = loadKeyRing({
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EMERGENCY_OP = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
-/** `ms` as the test venue's Europe/Madrid wall clock, `YYYY-MM-DD HH:MM:SS.mmm`. */
+/** `ms` as the test venue's Europe/Madrid wall clock, `YYYY-MM-DD HH:MM:SS.mmm+HH:MM`. */
 function madridWallClock(ms: number): string {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -135,12 +135,14 @@ function madridWallClock(ms: number): string {
       minute: "2-digit",
       second: "2-digit",
       hourCycle: "h23",
+      timeZoneName: "longOffset",
     })
       .formatToParts(new Date(ms))
       .map(({ type, value }) => [type, value]),
   );
   const millis = String(ms % 1000).padStart(3, "0");
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${millis}`;
+  const offset = parts.timeZoneName!.slice("GMT".length);
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${millis}${offset}`;
 }
 
 const migrations = migrationOptionsFor(manifestSets(), null);

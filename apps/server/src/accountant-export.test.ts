@@ -44,6 +44,8 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
+  INVOICE_LINE_KEYS,
+  invoiceLineCells,
   linkPaymentsOnAccount,
   listAccountantExport,
   partPaymentsAmong,
@@ -54,6 +56,7 @@ import {
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { row } from "./testing/xlsx-rows.js";
+import type { Cell } from "./xlsx-workbook.js";
 
 const invoice = {
   id: "sale-1",
@@ -261,6 +264,78 @@ describe("accountant workbook", () => {
       for (const name of names) expect(name.length, name).toBeLessThanOrEqual(31);
     },
   );
+
+  it("heads the invoice columns in this order, in English and Spanish", async () => {
+    const headings = async (language: "en" | "es") =>
+      row(
+        strFromU8(
+          unzipSync(
+            await renderAccountantWorkbook(
+              { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+              language,
+            ),
+          )["xl/worksheets/sheet1.xml"]!,
+        ),
+        1,
+      );
+    const en = await headings("en");
+    expect(en.slice(0, 18)).toEqual([
+      "Invoice id",
+      "Node id",
+      "Invoice number",
+      "Type",
+      "Issue date",
+      "Customer",
+      "Customer tax number",
+      "Identifier type",
+      "Identifier country",
+      "Customer country",
+      "Customer address",
+      "VAT rate (%)",
+      "Base (EUR)",
+      "VAT (EUR)",
+      "Total (EUR)",
+      "Original invoice id",
+      "Original invoice number",
+      "Voided at (UTC)",
+    ]);
+    expect(en[18]).toMatch(/^Notes: F3 replacements omitted;/);
+    expect(en.slice(19)).toEqual([
+      "Sale date, when earlier than the issue date",
+      "Payment on account",
+    ]);
+    const es = await headings("es");
+    const spanish = ACCOUNTANT_EXPORT_WORDS.es;
+    expect([es[0], es[17], es[18], es[20], es.length]).toEqual([
+      spanish.invoiceColumns.id,
+      spanish.invoiceColumns.voidedAt,
+      spanish.invoiceNotesColumn,
+      spanish.paymentOnAccountColumn,
+      21,
+    ]);
+  });
+
+  it("shows an invoice's voided time through the formatter it is given, as stored by default", () => {
+    const words = ACCOUNTANT_EXPORT_WORDS.en;
+    const voided = { ...invoice, voidedAt: "2026-12-01T12:00:00Z" };
+    const column = INVOICE_LINE_KEYS.indexOf("voidedAt");
+    expect(invoiceLineCells(voided, words).map((cells) => cells[column])).toEqual([
+      "2026-12-01T12:00:00Z",
+      "2026-12-01T12:00:00Z",
+    ]);
+    const shown = invoiceLineCells(voided, words, (stored) => `shown ${stored}`);
+    expect(shown.map((cells) => cells[column])).toEqual([
+      "shown 2026-12-01T12:00:00Z",
+      "shown 2026-12-01T12:00:00Z",
+    ]);
+    // Every other cell is as the default gives it.
+    const others = (lines: Cell[][]) =>
+      lines.map((cells) => cells.filter((_, index) => index !== column));
+    expect(others(shown)).toEqual(others(invoiceLineCells(voided, words)));
+    expect(INVOICE_LINE_KEYS.map((key) => words.invoiceColumns[key])[column]).toBe(
+      "Voided at (UTC)",
+    );
+  });
 
   it("keeps invoice VAT groups, later voids and signed correction links, with gross only once", async () => {
     const files = unzipSync(

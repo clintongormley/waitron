@@ -2,7 +2,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { Hono } from "hono";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { recordActivity, withNodeTransaction, withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -158,7 +158,29 @@ describe("POST /old-box-data on the old box", () => {
       unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
     );
     expect(sheet).toContain(
-      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 09:15"),
+      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 09:15+01:00"),
+    );
+  });
+
+  it("dates the file on the venue's calendar, the day its first line names", async () => {
+    await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-23T23:30:00.000Z") });
+    let response: Response;
+    try {
+      response = await post(appWith(), signIn);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="waitron-old-main-box-2026-11-24.xlsx"',
+    );
+    const sheet = strFromU8(
+      unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
+    );
+    expect(sheet).toContain(
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-24 00:30+01:00"),
     );
   });
 
@@ -344,7 +366,7 @@ describe("the since tabs of POST /old-box-data", () => {
     const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
     expect(activity).toBeDefined();
     expect(row(activity!, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:50:00.000"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:50:00.000+01:00"),
     ]);
   });
 
