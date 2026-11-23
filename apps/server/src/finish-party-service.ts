@@ -225,7 +225,7 @@ async function finish(
  * The free items holding a share among `dishes` (plan 2026-11-19 §4.3.1), once their Refund ticks
  * are checked over the whole request: a free item's tick stands only when the request brings back
  * its bill's last paid dish with every paid dish of the bill in it ticked, and then every free item
- * of that bill must be ticked.
+ * of that bill must be ticked and none may have a served portion.
  */
 async function checkFreeItemPairing(
   tx: Transaction,
@@ -251,6 +251,8 @@ async function checkFreeItemPairing(
     const paidListed = paid.filter(({ line }) => listed.has(line.id));
     const returned =
       isLastPaidDish(paid, listed) && paidListed.every(({ line }) => ticked(line.id));
+    if (returned && freeItemsLeft(free).some(({ line }) => line.servedQuantity > 0))
+      throw freeItemRefusal("served");
     for (const { line } of freeItemsLeft(free)) {
       if (!listed.has(line.id)) continue;
       freeIds.add(line.id);
@@ -261,7 +263,7 @@ async function checkFreeItemPairing(
   return freeIds;
 }
 
-function freeItemRefusal(reason: "not_listed" | "free_item") {
+function freeItemRefusal(reason: "not_listed" | "free_item" | "served") {
   return new AppError("tab.free_item_with_dish", { reason });
 }
 

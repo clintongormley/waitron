@@ -9,6 +9,7 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
+  type AdjustmentStage,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -16,6 +17,7 @@ import {
   cancelRefundShare,
   centsToDecimal,
   decimal,
+  type Decimal,
   divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
@@ -28,11 +30,13 @@ import { staffPresentationName } from "@waitron/menu";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import {
-  cancellationRefundValue,
   freeItemsLeft,
   isLastPaidDish,
-  readShareHolders,
-  rowRefundValue,
+  readBillFiling,
+  refundValueIn,
+  rowRefundValueIn,
+  shareHoldersIn,
+  type BillFiling,
   type ShareHolder,
 } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
@@ -258,12 +262,15 @@ export async function cancelItem(
         ask.outcome === "keep_charge" &&
         ask.refundHandoff === true &&
         context.billStatus === "settled";
+      const [sale] = refundHandoff
+        ? await tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, bill!.id))
+        : [];
+      const filing = sale === undefined ? undefined : await readBillFiling(tx, bill!.id, sale.id);
       const comingBack = await freeItemsComingBack(
         tx,
-        bill!.id,
         taken,
         ask.withFree,
-        refundHandoff && ask.freeItemsChecked !== true,
+        ask.freeItemsChecked === true ? undefined : filing,
       );
       const freeTaken = comingBack.map((free) => ({
         dish: free.line,
@@ -436,7 +443,10 @@ export async function cancelItem(
                 .from(lineServiceCancellations)
                 .where(inArray(lineServiceCancellations.lineId, freeIds)),
         );
-        const coveredValue = (list: boolean, of: typeof families = families) =>
+        const freeStarted = comingBack.map(({ line }) =>
+          (work.get(line.id) ?? []).some((item) => isStarted(item.state)),
+        );
+        const coveredValue = (list: boolean, of: typeof families) =>
           sumDecimals(
             of.flatMap(({ family }) =>
               family.map(({ row, covered }) =>
@@ -453,17 +463,12 @@ export async function cancelItem(
               ),
             ),
           );
-        const amount = coveredValue(false);
         let refundValue = null;
         if (refundHandoff) {
-          const [sale] = await tx
-            .select({ id: sales.id })
-            .from(sales)
-            .where(eq(sales.workingOrderId, bill!.id));
-          if (sale === undefined)
+          if (filing === undefined)
             throw new AppError("working_order.not_found", { workingOrderId: bill!.id });
           if (members === null) {
-            const value = await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
+            const value = refundValueIn(filing, lineId);
             if (value !== undefined)
               refundValue = cancelRefundShare(
                 value,
@@ -471,7 +476,7 @@ export async function cancelItem(
                 ask.quantity,
               );
           } else {
-            const value = await rowRefundValue(tx, bill!.id, sale.id, dishIds);
+            const value = rowRefundValueIn(filing, dishIds);
             if (value !== undefined)
               refundValue = cancelRefundShare(
                 value,
@@ -482,95 +487,89 @@ export async function cancelItem(
               );
           }
         }
+        const cancelRecord = (cancelled: {
+          dish: Line;
+          quantity: number;
+          stage: AdjustmentStage;
+          removed: number;
+          of: typeof families;
+          started: boolean;
+          refundValue: Decimal | null;
+        }) => {
+          const { dish } = cancelled;
+          const value = coveredValue(false, cancelled.of);
+          return recordAdjustment(tx, {
+            workingOrderId: bill!.id,
+            line: {
+              id: dish.id,
+              name: staffPresentationName(dish),
+              quantity: thousandthsToDecimal(cancelled.quantity),
+              listUnitPriceGross: centsToDecimal(dish.listUnitPriceGross ?? dish.unitPriceGross),
+              creditedTo: dish.creditedTo,
+              stage: cancelled.stage,
+            },
+            quantity: thousandthsToDecimal(cancelled.removed),
+            reason: {
+              id: reason.id,
+              name: reasonNameIn(reason, actor.locale, policy.venueLocale),
+              policy: policySnapshotOf(reason, { maxBillComp: null }),
+            },
+            action: "cancel",
+            percentBp: null,
+            beforeAmount: value,
+            afterAmount: value,
+            reduction: decimal("0"),
+            nominalValue: coveredValue(true, cancelled.of),
+            requestedBy: operatorId,
+            approvedBy: refundHandoff ? (ask.refundApprovedBy ?? null) : null,
+            note: ask.note ?? null,
+            chargeKept: true,
+            preparationStarted: cancelled.started,
+            refundHandoff,
+            refundValue: cancelled.refundValue,
+          });
+        };
         const first = dishes[0]!;
         const memberWork = dishIds.flatMap((id) => work.get(id) ?? []);
-        const adjustmentId = await recordAdjustment(tx, {
-          workingOrderId: bill!.id,
-          line: {
-            id: first.id,
-            name: staffPresentationName(first),
-            quantity: thousandthsToDecimal(
-              dishes.reduce((total, dish) => total + dish.quantity, 0),
-            ),
-            listUnitPriceGross: centsToDecimal(first.listUnitPriceGross ?? first.unitPriceGross),
-            creditedTo: first.creditedTo,
-            stage: dishes.some((dish) => dish.servedQuantity > 0)
-              ? "served"
-              : (
-                    members === null
-                      ? context.components.some((item) => item.firedAt !== null)
-                      : memberWork.some((item) => item.firedAt !== null)
-                  )
-                ? "fired"
-                : dishes.some((dish) => groupOf(dish)?.state === "held")
-                  ? "held"
-                  : "unsent",
-          },
-          quantity: thousandthsToDecimal(removed),
-          reason: {
-            id: reason.id,
-            name: reasonNameIn(reason, actor.locale, policy.venueLocale),
-            policy: policySnapshotOf(reason, { maxBillComp: null }),
-          },
-          action: "cancel",
-          percentBp: null,
-          beforeAmount: amount,
-          afterAmount: amount,
-          reduction: decimal("0"),
-          nominalValue: coveredValue(true),
-          requestedBy: operatorId,
-          approvedBy: refundHandoff ? (ask.refundApprovedBy ?? null) : null,
-          note: ask.note ?? null,
-          chargeKept: true,
-          preparationStarted: started,
-          refundHandoff,
+        const adjustmentId = await cancelRecord({
+          dish: first,
+          quantity: dishes.reduce((total, dish) => total + dish.quantity, 0),
+          stage: dishes.some((dish) => dish.servedQuantity > 0)
+            ? "served"
+            : (
+                  members === null
+                    ? context.components.some((item) => item.firedAt !== null)
+                    : memberWork.some((item) => item.firedAt !== null)
+                )
+              ? "fired"
+              : dishes.some((dish) => groupOf(dish)?.state === "held")
+                ? "held"
+                : "unsent",
+          removed,
+          of: families,
+          started,
           refundValue,
         });
         const freeLinks: RefundLink[] = [];
         for (const [i, free] of comingBack.entries()) {
-          const off = freeTaken[i]!.off;
-          const of = [freeFamilies[i]!];
-          const freeAmount = coveredValue(false, of);
+          const freeWork = work.get(free.line.id) ?? [];
           freeLinks.push({
             lineId: free.line.id,
-            adjustmentId: await recordAdjustment(tx, {
-              workingOrderId: bill!.id,
-              line: {
-                id: free.line.id,
-                name: staffPresentationName(free.line),
-                quantity: thousandthsToDecimal(free.line.quantity),
-                listUnitPriceGross: centsToDecimal(
-                  free.line.listUnitPriceGross ?? free.line.unitPriceGross,
-                ),
-                creditedTo: free.line.creditedTo,
-                stage: (work.get(free.line.id) ?? []).some((item) => item.firedAt !== null)
-                  ? "fired"
-                  : groupOf(free.line)?.state === "held"
-                    ? "held"
-                    : "unsent",
-              },
-              quantity: thousandthsToDecimal(off),
-              reason: {
-                id: reason.id,
-                name: reasonNameIn(reason, actor.locale, policy.venueLocale),
-                policy: policySnapshotOf(reason, { maxBillComp: null }),
-              },
-              action: "cancel",
-              percentBp: null,
-              beforeAmount: freeAmount,
-              afterAmount: freeAmount,
-              reduction: decimal("0"),
-              nominalValue: coveredValue(true, of),
-              requestedBy: operatorId,
-              approvedBy: ask.refundApprovedBy ?? null,
-              note: ask.note ?? null,
-              chargeKept: true,
-              preparationStarted: started,
-              refundHandoff,
+            adjustmentId: await cancelRecord({
+              dish: free.line,
+              quantity: free.line.quantity,
+              stage: freeWork.some((item) => item.firedAt !== null)
+                ? "fired"
+                : groupOf(free.line)?.state === "held"
+                  ? "held"
+                  : "unsent",
+              removed: freeTaken[i]!.off,
+              of: [freeFamilies[i]!],
+              started: freeStarted[i]!,
               refundValue: cancelRefundShare(
                 free.value,
                 thousandthsToDecimal(free.cancelled),
-                thousandthsToDecimal(off),
+                thousandthsToDecimal(freeTaken[i]!.off),
               ),
             }),
           });
@@ -582,7 +581,7 @@ export async function cancelItem(
             bill!.id,
             [...families, ...freeFamilies],
             work,
-            ask.preparationStarted === true,
+            (dish) => ask.preparationStarted === true && !freeIds.includes(dish.id),
           )
         ).map(({ dish, ...correction }) => ({ ...correction, group: groupOf(dish) }));
         if (corrections.length > 0) {
@@ -619,7 +618,9 @@ export async function cancelItem(
             { kind: "HOLD CANCELLED" },
           );
         }
-        await writeServiceCancellations(tx, [...families, ...freeFamilies], operatorId, started);
+        await writeServiceCancellations(tx, families, operatorId, started);
+        for (const [i, family] of freeFamilies.entries())
+          await writeServiceCancellations(tx, [family], operatorId, freeStarted[i]!);
         await bumpRevision(tx, [bill!.id]);
         if (partyId !== null) await bumpPartyRevision(tx, partyId);
         await captureKitchenActivity(
@@ -649,20 +650,17 @@ function freeItemRefusal(reason: "not_listed" | "free_item" | "served") {
  * The free items holding a share that come back with this cancel (plan 2026-11-19 §4.3.1): with
  * the Refund tick, a free item's own cancel is refused, and the bill's last paid dish takes every
  * free item with a portion not cancelled, none of them served. `withFree` must name exactly those.
+ * `filing` is absent when no Refund tick stands or Finish table checked the pairing itself.
  */
 async function freeItemsComingBack(
   tx: Transaction,
-  billId: string,
   taken: readonly { dish: Line; off: number }[],
   withFree: readonly string[] | undefined,
-  refund: boolean,
+  filing: BillFiling | undefined,
 ): Promise<ShareHolder[]> {
   let expected: ShareHolder[] = [];
-  const [sale] = refund
-    ? await tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId))
-    : [];
-  if (sale !== undefined) {
-    const { free, paid } = await readShareHolders(tx, billId, sale.id);
+  if (filing !== undefined) {
+    const { free, paid } = await shareHoldersIn(tx, filing);
     const off = new Map(taken.map(({ dish, off }) => [dish.id, off]));
     if (free.some(({ line }) => off.has(line.id))) throw freeItemRefusal("free_item");
     if (isLastPaidDish(paid, off)) {

@@ -482,7 +482,7 @@ paid dishes, and what each has left to cancel):
 3. Every other cancel is as today.
 
 **Consent.** The cancellation read (`apps/server/src/line-cancel-api.ts:150-193`) answers
-`withFree: { lineId, name, quantity, refundValue }[]` when the dish would be the last paid dish if
+`withFree: { lineId, name, quantity, refundAmount }[]` when the dish would be the last paid dish if
 all of its cancellable portions were cancelled, and `givenFree: true` for a free item holding a
 share, so the till can show both before anything is sent.
 
@@ -491,8 +491,14 @@ finished bill is in its request (`:154-169` refuses one that leaves a dish out),
 and its unserved free items are always cancelled together; only the Refund ticks can disagree. The
 pairing is checked over the whole request before the loop at `:171`: a free item's tick is refused
 (reason `free_item`) unless the same request cancels its ticket's last paid dish with Refund ticked,
-and then each of the ticket's free items must be ticked (reason `not_listed`). The loop then cancels
-free items after paid dishes and tells `cancelItem` the pairing was checked over the request.
+and then each of the ticket's free items must be ticked (reason `not_listed`) and none may have a
+served portion (reason `served`, as for one dish's cancel: Finish writes nothing). The loop then
+cancels free items after paid dishes and tells `cancelItem` the pairing was checked over the
+request. Finish is deliberately stricter than cancelling one dish at a time when a paid dish is
+left unticked: one at a time, that dish could be cancelled without Refund and the water would then
+come back with the last one, but Finish refuses the water's tick (`free_item`); staff void the
+unticked dish first, or untick the water. The difference is deliberate: it errs towards handing
+back less.
 
 **Till.**
 
@@ -1162,13 +1168,17 @@ cancellation or kitchen correction was written:
   no `withFree`; the soup after it is the last paid dish: €5.33 and €1.78 with `withFree: [water]`;
 - a served paid dish stays: salad served, the soup's cancel with Refund is not the last paid dish,
   so it is accepted without `withFree` and the water stays;
-- part of the last paid dish (one of two salads): no `withFree`, its own share;
+- part of the last paid dish (a row of two salads, cancelled through the row): one portion alone
+  hands back €9.09 with no `withFree`; the other, with `withFree: [water]`, €9.09 and €1.82; a
+  €20.00 refund naming all three is accepted;
+- the water's cancel record and kitchen correction carry its own kitchen state, not the salad's;
 - **unchanged:** a ticket eaten here with the water comped (one rate, so the water files €0 and holds
   no share): the salad's cancel with Refund needs no `withFree`, as today;
 - **Finish table** (`apps/server/src/finish-party-service.test.ts`, on a takeaway table bill,
   `seatedTakeaway`, `apps/server/src/testing/advance-bills.ts:85-88`): salad ticked and water not,
   reason `not_listed`; water ticked and salad not, reason `free_item`; both ticked, accepted with
-  both refund links.
+  both refund links; the water fully served, and one of two water lines served, each reason
+  `served` with nothing written.
 
 Run, watch them fail. Then the change: the reader beside `refundValues`, the three rules in
 `cancelItem`, `withFree` on `CancelItemAsk` and its parsing (`apps/server/src/line-cancel-input.ts`),

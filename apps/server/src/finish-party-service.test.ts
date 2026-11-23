@@ -944,37 +944,38 @@ describe("whether a party's service can finish, read without writing", () => {
 });
 
 describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () => {
-  /** A paid takeaway table of a Salad (4%) and a comped Water (21%), both held. */
-  async function freeWaterTable() {
+  /** A paid takeaway table of a Salad (4%) and comped Waters (21%), held unless fired. */
+  async function freeWaterTable(waters = 1, release: "hold" | "fire" = "hold") {
     await takeawayRates(venue, { Salad: "4.00", Water: "21.00" });
-    const p = await billWith(venue, [{ name: "Salad" }, { name: "Water" }], {
-      release: "hold",
-      dining: "takeaway",
-    });
-    const water = (await rowsOf(venue, p.billId))[1]!;
-    await inTx(venue, async (tx) => {
-      const [order] = await tx
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, p.billId));
-      await applyAdjustment(
-        tx,
-        venue.cfg,
-        {
-          admission: testTradingAdmission(),
-          orderId: p.billId,
-          expectedEdit: await readBillEditState(tx, p.billId),
-          submissionId: randomUUID(),
-          expectedRevision: order!.revision,
-          lineId: water.id,
-          action: "comp",
-          reasonId: venue.reasonId.house,
-          note: null,
-          operatorId: venue.staffId,
-        },
-        venue.venueLocale,
-      );
-    });
+    const p = await billWith(
+      venue,
+      [{ name: "Salad" }, ...Array.from({ length: waters }, () => ({ name: "Water" }))],
+      { release, dining: "takeaway" },
+    );
+    for (const water of (await rowsOf(venue, p.billId)).slice(1))
+      await inTx(venue, async (tx) => {
+        const [order] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, p.billId));
+        await applyAdjustment(
+          tx,
+          venue.cfg,
+          {
+            admission: testTradingAdmission(),
+            orderId: p.billId,
+            expectedEdit: await readBillEditState(tx, p.billId),
+            submissionId: randomUUID(),
+            expectedRevision: order!.revision,
+            lineId: water.id,
+            action: "comp",
+            reasonId: venue.reasonId.house,
+            note: null,
+            operatorId: venue.staffId,
+          },
+          venue.venueLocale,
+        );
+      });
     await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
@@ -1047,4 +1048,38 @@ describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () =
     expect(cancelOf(p.lines[0]!.id).refundValue).toBe(833);
     expect(cancelOf(p.lines[1]!.id).refundValue).toBe(167);
   });
+
+  it.each([
+    ["fully served", 1],
+    ["partly served, one of two water lines", 2],
+  ] as const)(
+    "refuses the salad's refund, writing nothing, once the water was %s",
+    async (_, waters) => {
+      const p = await freeWaterTable(waters, "fire");
+      const served = p.lines[1]!;
+      const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+      await inTx(venue, (tx) =>
+        markServed(tx, venue.cfg, p.partyId, [{ lineId: served.id, quantity: "1" }], {
+          expectedPartyRevision: party!.revision,
+          operatorId: venue.staffId,
+          submissionId: randomUUID(),
+        }),
+      );
+      const [after] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+      p.body.expectedPartyRevision = after!.revision;
+      const confirmed = await confirm(p);
+      const body = {
+        ...confirmed,
+        cancellations: confirmed.cancellations
+          .filter((item) => item.lineId !== served.id)
+          .map((item) => ({ ...item, preparationStarted: false, refundHandoff: true })),
+      };
+      const before = await snapshot(p);
+      expect(await post(p, body, venue.cookie.manager)).toMatchObject({
+        status: 409,
+        body: { error: { code: "tab.free_item_with_dish", params: { reason: "served" } } },
+      });
+      expect(await snapshot(p)).toEqual(before);
+    },
+  );
 });

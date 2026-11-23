@@ -25,11 +25,12 @@ import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
 import {
-  cancellationRefundValue,
   freeItemsLeft,
   isLastPaidDish,
-  readShareHolders,
-  rowRefundValue,
+  readBillFiling,
+  refundValueIn,
+  rowRefundValueIn,
+  shareHoldersIn,
 } from "./cancellation-refund-value.js";
 import {
   overrideToCheck,
@@ -182,19 +183,20 @@ export function mountLineCancelApi(
           .select({ id: sales.id })
           .from(sales)
           .where(eq(sales.workingOrderId, bill!.id));
-        const refundValue =
+        const filing =
           context.billStatus === "settled" && sale !== undefined
-            ? lineIds === undefined
-              ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
-              : await rowRefundValue(tx, bill!.id, sale.id, lineIds)
+            ? await readBillFiling(tx, bill!.id, sale.id)
             : undefined;
+        const refundValue =
+          filing === undefined
+            ? undefined
+            : lineIds === undefined
+              ? refundValueIn(filing, lineId)
+              : rowRefundValueIn(filing, lineIds);
         const holders =
-          context.billStatus === "settled" && sale !== undefined
-            ? await readShareHolders(tx, bill!.id, sale.id)
-            : { free: [], paid: [] };
+          filing === undefined ? { free: [], paid: [] } : await shareHoldersIn(tx, filing);
         const subject = lineIds ?? [lineId];
         const givenFree = holders.free.some(({ line }) => subject.includes(line.id));
-        // Every cancellable portion of the subject: what is neither cancelled nor served.
         const cancellable = new Map(
           holders.paid
             .filter(({ line }) => subject.includes(line.id))
@@ -210,7 +212,7 @@ export function mountLineCancelApi(
                 lineId: line.id,
                 name: staffPresentationName(line),
                 quantity: thousandthsToDecimal(line.quantity - cancelled),
-                refundValue: cancelRefundShare(
+                refundAmount: cancelRefundShare(
                   value,
                   thousandthsToDecimal(cancelled),
                   thousandthsToDecimal(line.quantity - cancelled),

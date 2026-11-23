@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments } from "@waitron/adjustments";
 import {
@@ -8,14 +8,16 @@ import {
   printJobs,
   sales,
   tenders,
+  ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { kitchenNotices } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { markServed } from "./working-order.js";
+import { advanceTicketItem, markServed } from "./working-order.js";
 import {
   billWith,
   inTx,
@@ -116,7 +118,13 @@ function dish(t: Ticket, name: string, nth = 0) {
 function cancel(
   t: Ticket,
   line: { lineNo: number },
-  options: { refund?: boolean; withFree?: string[]; quantity?: string } = {},
+  options: {
+    refund?: boolean;
+    withFree?: string[];
+    quantity?: string;
+    lineIds?: string[];
+    preparationStarted?: boolean;
+  } = {},
 ) {
   return cancelItemHttp(
     venue.db,
@@ -130,17 +138,22 @@ function cancel(
       reasonId: venue.reasonId.houseVoid,
       ...(options.refund === false ? {} : { refundHandoff: true }),
       ...(options.withFree === undefined ? {} : { withFree: options.withFree }),
+      ...(options.lineIds === undefined ? {} : { lineIds: options.lineIds }),
+      ...(options.preparationStarted === undefined
+        ? {}
+        : { preparationStarted: options.preparationStarted }),
     },
   );
 }
 
-/** The cancellation read the Cancel item window opens with. */
-async function consent(t: Ticket, line: { id: string }) {
+/** The cancellation read the Cancel item window opens with, for a row of `lineIds` when given. */
+async function consent(t: Ticket, line: { id: string }, lineIds?: string[]) {
+  const query = lineIds === undefined ? "" : `?${lineIds.map((id) => `lineIds=${id}`).join("&")}`;
   const answer = await send(
     venue.app,
     venue.cookie.manager,
     "GET",
-    `/api/parties/${t.partyId}/lines/${line.id}/cancellation`,
+    `/api/parties/${t.partyId}/lines/${line.id}/cancellation${query}`,
   );
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   return answer.json;
@@ -203,7 +216,7 @@ describe("a free item holding a share comes back with the last paid dish", () =>
 
     expect(await consent(t, salad)).toMatchObject({
       refundValue: { quantity: "1.000", gross: "8.33" },
-      withFree: [{ lineId: water.id, name: "Water", quantity: "1.000", refundValue: "1.67" }],
+      withFree: [{ lineId: water.id, name: "Water", quantity: "1.000", refundAmount: "1.67" }],
     });
     expect(await consent(t, water)).toMatchObject({ givenFree: true });
 
@@ -302,7 +315,7 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     const first = await cancel(t, salad);
     expect(first.status, JSON.stringify(first.json)).toBe(200);
     expect(await consent(t, soup)).toMatchObject({
-      withFree: [{ lineId: water.id, refundValue: "1.78" }],
+      withFree: [{ lineId: water.id, refundAmount: "1.78" }],
     });
     const last = await cancel(t, soup, { withFree: [water.id] });
     expect(last.status, JSON.stringify(last.json)).toBe(200);
@@ -324,14 +337,96 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     expect((await written(t)).cancels).toEqual([{ lineId: soup.id, refundValue: 533 }]);
   });
 
-  it("gives part of the last paid dish its own share, the water staying", async () => {
+  it("gives one portion of a two-salad row its own share, and the other brings the water back", async () => {
     const t = await ticket([{ name: "Salad", quantity: "2" }, { name: "Water" }]);
+    const first = dish(t, "Salad", 0);
+    const second = dish(t, "Salad", 1);
+    const water = dish(t, "Water");
+    const row = [first.id, second.id];
+    expect(await consent(t, first, row)).toMatchObject({
+      refundValue: { quantity: "2.000", gross: "18.18" },
+      withFree: [{ lineId: water.id, refundAmount: "1.82" }],
+    });
+
+    const one = await cancel(t, first, { lineIds: row, quantity: "1" });
+    expect(one.status, JSON.stringify(one.json)).toBe(200);
+    expect((await written(t)).cancels).toEqual([{ lineId: first.id, refundValue: 909 }]);
+
+    const other = await cancel(t, first, { lineIds: row, quantity: "1", withFree: [water.id] });
+    expect(other.status, JSON.stringify(other.json)).toBe(200);
+    expect((await written(t)).cancels).toEqual([
+      { lineId: first.id, refundValue: 909 },
+      { lineId: first.id, refundValue: 909 },
+      { lineId: water.id, refundValue: 182 },
+    ]);
+    const ids = (
+      await venue.db
+        .select({ id: adjustments.id, action: adjustments.action })
+        .from(adjustments)
+        .where(eq(adjustments.workingOrderId, t.billId))
+    )
+      .filter((row) => row.action === "cancel")
+      .map((row) => row.id);
+    const refund = await send(
+      venue.app,
+      venue.cookie.manager,
+      "POST",
+      `/api/transactions/${t.saleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: t.tenderId,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Brought back",
+        cancellationIds: ids,
+      },
+    );
+    expect(refund.status, JSON.stringify(refund.json)).toBe(200);
+  });
+
+  it.each([
+    ["the kitchen started the salad", "kitchen"],
+    ["staff say the fired salad was started", "staff"],
+  ] as const)("records the water as not started when %s", async (_, how) => {
+    const t = await ticket(SALAD_AND_WATER);
     const salad = dish(t, "Salad");
-    const answer = await cancel(t, salad, { quantity: "1" });
+    const water = dish(t, "Water");
+    if (how === "kitchen") {
+      const [item] = await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, salad.id));
+      await inTx(venue, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
+    }
+
+    const answer = await cancel(t, salad, {
+      withFree: [water.id],
+      ...(how === "staff" ? { preparationStarted: true } : {}),
+    });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    const cancels = (await written(t)).cancels;
-    expect(cancels).toHaveLength(1);
-    expect(cancels[0]!.lineId).toBe(salad.id);
+    const records = await venue.db
+      .select({ lineId: adjustments.lineId, started: adjustments.preparationStarted })
+      .from(adjustments)
+      .where(and(eq(adjustments.workingOrderId, t.billId), eq(adjustments.action, "cancel")));
+    const service = await venue.db
+      .select({
+        lineId: lineServiceCancellations.lineId,
+        started: lineServiceCancellations.wasStarted,
+      })
+      .from(lineServiceCancellations)
+      .where(inArray(lineServiceCancellations.lineId, [salad.id, water.id]));
+    const notices = await venue.db
+      .select({ lineName: kitchenNotices.lineName, started: kitchenNotices.wasStarted })
+      .from(kitchenNotices)
+      .where(eq(kitchenNotices.workingOrderId, t.billId));
+    const startedOf = (rows: { lineId: string | null; started: boolean | null }[], id: string) =>
+      rows.find((row) => row.lineId === id)!.started;
+    expect([startedOf(records, salad.id), startedOf(records, water.id)]).toEqual([true, false]);
+    expect([startedOf(service, salad.id), startedOf(service, water.id)]).toEqual([true, false]);
+    expect(notices.sort((a, b) => a.lineName.localeCompare(b.lineName))).toEqual([
+      { lineName: "GREENS", started: true },
+      { lineName: "STILL", started: false },
+    ]);
   });
 
   it("leaves a ticket eaten here, whose water filed €0, as it was", async () => {

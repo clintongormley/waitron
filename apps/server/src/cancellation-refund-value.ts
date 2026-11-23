@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { saleLineDishes, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
 import {
   addDecimal,
@@ -14,24 +14,46 @@ import { readLineCancellations } from "./line-service-state.js";
 type Filed = typeof saleLines.$inferSelect;
 type Stored = typeof workingOrderLines.$inferSelect;
 
+type Value = { quantity: string; gross: string };
+
+/** What a settled bill's refund values are read from: its stored lines in line order, its sale's
+ * filed lines, the portions' bindings and the filed rows' links to portions. */
+export interface BillFiling {
+  stored: Stored[];
+  filed: Filed[];
+  bindings: Awaited<ReturnType<typeof readPortionBindings>>;
+  links: { saleLineId: string; dishLineId: string }[];
+}
+
 export async function cancellationRefundValue(
   tx: Transaction,
   billId: string,
   saleId: string,
   lineId: string,
-): Promise<{ quantity: string; gross: string } | undefined> {
-  return (await refundValues(tx, billId, saleId, [lineId]))[0];
+): Promise<Value | undefined> {
+  return refundValueIn(await readBillFiling(tx, billId, saleId), lineId);
 }
 
-/** A till row of identical portions valued as one grouped line (plan D32): the portions' count and
- * the sum of each one's filed value; none when any portion's value cannot be read. */
+export function refundValueIn(filing: BillFiling, lineId: string): Value | undefined {
+  return refundValues(filing, [lineId])[0];
+}
+
 export async function rowRefundValue(
   tx: Transaction,
   billId: string,
   saleId: string,
   lineIds: readonly string[],
-): Promise<{ quantity: string; gross: string } | undefined> {
-  const values = await refundValues(tx, billId, saleId, lineIds);
+): Promise<Value | undefined> {
+  return rowRefundValueIn(await readBillFiling(tx, billId, saleId), lineIds);
+}
+
+/** A till row of identical portions valued as one grouped line (plan D32): the portions' count and
+ * the sum of each one's filed value; none when any portion's value cannot be read. */
+export function rowRefundValueIn(
+  filing: BillFiling,
+  lineIds: readonly string[],
+): Value | undefined {
+  const values = refundValues(filing, lineIds);
   if (values.some((value) => value === undefined)) return undefined;
   return {
     quantity: sumDecimals(values.map((value) => decimal(value!.quantity))),
@@ -42,9 +64,14 @@ export async function rowRefundValue(
 /** A dish line of a settled bill whose filed value is above €0, and its portions cancelled so far. */
 export interface ShareHolder {
   line: Stored;
-  value: { quantity: string; gross: string };
+  value: Value;
   cancelled: number;
 }
+
+const NO_HOLDERS: { free: ShareHolder[]; paid: ShareHolder[] } = { free: [], paid: [] };
+
+const isFree = (line: Stored) =>
+  line.parentLineId === null && line.lineTotal === 0 && (line.listUnitPriceGross ?? 0) > 0;
 
 /**
  * The bill's dish lines holding a share of what its sale filed (plan 2026-11-19 §4.3.1): free items,
@@ -56,25 +83,27 @@ export async function readShareHolders(
   billId: string,
   saleId: string,
 ): Promise<{ free: ShareHolder[]; paid: ShareHolder[] }> {
-  const dishes = await tx
-    .select()
-    .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
-    )
-    .orderBy(workingOrderLines.lineNo);
-  const values = await refundValues(
-    tx,
-    billId,
-    saleId,
+  const stored = await readStored(tx, billId);
+  if (!stored.some(isFree)) return NO_HOLDERS;
+  return shareHoldersIn(tx, await readBillFiling(tx, billId, saleId, stored));
+}
+
+/** {@link readShareHolders} over a filing already read. */
+export async function shareHoldersIn(
+  tx: Transaction,
+  filing: BillFiling,
+): Promise<{ free: ShareHolder[]; paid: ShareHolder[] }> {
+  if (!filing.stored.some(isFree)) return NO_HOLDERS;
+  const dishes = filing.stored.filter((line) => line.parentLineId === null);
+  const values = refundValues(
+    filing,
     dishes.map((dish) => dish.id),
   );
   const holding = dishes.flatMap((line, i) => {
     const value = values[i];
     return value === undefined || isZeroDecimal(decimal(value.gross)) ? [] : [{ line, value }];
   });
-  const isFree = (line: Stored) => line.lineTotal === 0 && (line.listUnitPriceGross ?? 0) > 0;
-  if (!holding.some(({ line }) => isFree(line))) return { free: [], paid: [] };
+  if (!holding.some(({ line }) => isFree(line))) return NO_HOLDERS;
   const cancelled = await readLineCancellations(
     tx,
     holding.map(({ line }) => line.id),
@@ -106,17 +135,22 @@ export function freeItemsLeft(free: readonly ShareHolder[]): ShareHolder[] {
   return free.filter(({ line, cancelled }) => line.quantity - cancelled > 0);
 }
 
-async function refundValues(
-  tx: Transaction,
-  billId: string,
-  saleId: string,
-  lineIds: readonly string[],
-): Promise<({ quantity: string; gross: string } | undefined)[]> {
-  const stored = await tx
+function readStored(tx: Transaction, billId: string): Promise<Stored[]> {
+  return tx
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
+}
+
+/** The bill's filing; `stored`, when given, is the bill's stored lines in line order. */
+export async function readBillFiling(
+  tx: Transaction,
+  billId: string,
+  saleId: string,
+  stored?: Stored[],
+): Promise<BillFiling> {
+  const lines = stored ?? (await readStored(tx, billId));
   const filed = await tx
     .select()
     .from(saleLines)
@@ -124,7 +158,7 @@ async function refundValues(
     .orderBy(saleLines.lineNo);
   const bindings = await readPortionBindings(
     tx,
-    stored.filter((row) => row.parentLineId === null).map((row) => row.id),
+    lines.filter((row) => row.parentLineId === null).map((row) => row.id),
   );
   const links =
     bindings.size === 0
@@ -137,6 +171,11 @@ async function refundValues(
           .from(saleLineDishes)
           .innerJoin(saleLines, eq(saleLines.id, saleLineDishes.saleLineId))
           .where(eq(saleLines.saleId, saleId));
+  return { stored: lines, filed, bindings, links };
+}
+
+function refundValues(filing: BillFiling, lineIds: readonly string[]): (Value | undefined)[] {
+  const { stored, filed, bindings, links } = filing;
   const linked = new Set(links.map((link) => link.saleLineId));
   const unboundStored = stored.filter((row) => !bindings.has(row.parentLineId ?? row.id));
   const unlinkedFiled = filed.filter((row) => !linked.has(row.id));

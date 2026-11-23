@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { readVenueClock, saleLines, sales, workingOrders, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, type AdjustmentAction } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
@@ -100,9 +101,6 @@ async function filed(billId: string) {
       .select({ id: sales.id, vatBreakdown: sales.vatBreakdown })
       .from(sales)
       .where(eq(sales.workingOrderId, billId));
-    const records = venue.db.all<{ desglose: string }>(
-      sql`select desglose from verifactu_records where sale_id = ${sale!.id}`,
-    );
     const lines = await tx
       .select({
         gross: saleLines.lineGross,
@@ -116,18 +114,8 @@ async function filed(billId: string) {
     return {
       saleId: sale!.id,
       vatBreakdown: sale!.vatBreakdown,
-      record: records.map((row) =>
-        (
-          JSON.parse(row.desglose) as {
-            BaseImponibleOimporteNoSujeto: string;
-            TipoImpositivo: string;
-            CuotaRepercutida: string;
-          }[]
-        ).map((d) => ({
-          rate: d.TipoImpositivo,
-          base: d.BaseImponibleOimporteNoSujeto,
-          tax: d.CuotaRepercutida,
-        })),
+      record: filedInvoicesOf(venue.db, sale!.id, new Date()).map((invoice) =>
+        invoice.breakdown.map(([rate, base, tax]) => ({ rate, base, tax })),
       ),
       lines,
       integrity: await venue.backend.checkIntegrity(tx, venue.cfg.nodeId),

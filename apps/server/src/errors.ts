@@ -1088,8 +1088,9 @@ declare module "@waitron/shared" {
     "tab.cancel_context_changed": { context: CancellationContext };
     /**
      * A dish given free that holds a share of the price paid gives money back only together with
-     * the bill's last paid dish: `free_item`, its own Cancel and refund; `not_listed`, the request's
-     * free items differ from those coming back with the dish; `served`, one of those was served.
+     * the bill's last paid dish. `free_item`: its own Cancel and refund, or at Finish its tick while
+     * not every paid dish is ticked. `not_listed`: the free items named differ from those coming
+     * back, including any named on a cancel that brings none back. `served`: one of those was served.
      */
     "tab.free_item_with_dish": { reason: "not_listed" | "free_item" | "served" };
     /**
