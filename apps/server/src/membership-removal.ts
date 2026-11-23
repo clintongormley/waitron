@@ -176,6 +176,12 @@ export interface ServerListing {
      * loss: an order already stands, or this venue holds the box's completed return.
      */
     readonly canReset: boolean;
+    /**
+     * This box would accept Wipe and remove for the box only as the order that accepts the loss:
+     * no order stands, no return from it is complete here, and `orderReset` would find a takeover
+     * to name.
+     */
+    readonly canWipeWithLoss: boolean;
     /** The scenario of the takeover from the box: the one whose return completed, else the latest. */
     readonly returnScenario: "controlled" | "emergency" | null;
     /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
@@ -248,6 +254,7 @@ export async function listServers(
           ...facts,
           resetStatement,
         });
+      const refusal = resetRefusal(held, selfNodeId, n.nodeId, open, pinned);
       return {
         nodeId: n.nodeId,
         contactUrl: n.contactUrl,
@@ -262,9 +269,13 @@ export async function listServers(
         reset: order === null ? null : "ordered",
         // orderReset's test without the loss: a standing order is answered as it stands, else
         // holdsCompletedReturnFrom, which reads this same activationsBySource field.
-        canReset:
-          resetRefusal(held, selfNodeId, n.nodeId, open, pinned) === null &&
-          (order !== null || facts.returnCompleted),
+        canReset: refusal === null && (order !== null || facts.returnCompleted),
+        // The last clause is orderReset's choice of the takeover its order names.
+        canWipeWithLoss:
+          refusal === null &&
+          order === null &&
+          !facts.returnCompleted &&
+          (facts.returnOutstanding || activation !== undefined),
         returnScenario: activation?.scenario ?? null,
         recoveredRecordsBackup: facts.returnCompleted
           ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)

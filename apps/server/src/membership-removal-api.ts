@@ -137,10 +137,6 @@ export function mountMembershipRemovalApi(
       if (typeof body.acceptLoss !== "boolean") {
         throw new AppError("management.request_invalid", { field: "acceptLoss" });
       }
-      // A loss order ships with its download of unreturned records (A1558 PR 10b).
-      if (body.acceptLoss) {
-        throw new AppError("management.request_invalid", { field: "acceptLoss" });
-      }
       return c.json(
         await orderReset(deps, {
           targetNodeId: c.req.param("nodeId"),

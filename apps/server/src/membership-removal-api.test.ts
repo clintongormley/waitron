@@ -41,7 +41,6 @@ import {
 import { createTurns } from "./backup-turns.js";
 import { recordReturnBatchTx } from "./return-completion.js";
 import { returnDigest } from "./return-records.js";
-import { orderReset } from "./reset-order.js";
 import { mountStreamApi } from "./stream-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -1411,6 +1410,7 @@ describe("GET /management-api/servers", () => {
           needsResetStatement: false,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -1424,6 +1424,7 @@ describe("GET /management-api/servers", () => {
           needsResetStatement: false,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -1437,6 +1438,7 @@ describe("GET /management-api/servers", () => {
           needsResetStatement: false,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -1450,6 +1452,7 @@ describe("GET /management-api/servers", () => {
           needsResetStatement: true,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -1463,6 +1466,7 @@ describe("GET /management-api/servers", () => {
           needsResetStatement: false,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -1590,14 +1594,6 @@ describe("GET /management-api/servers", () => {
     }
 
     async function orderResetOf(p: Primary, nodeId: string, acceptLoss: boolean) {
-      // The route refuses loss orders until PR 10b, so one is made below it.
-      if (acceptLoss) {
-        await orderReset(
-          { db: p.db, node: suite.node, nodeId: p.nodeId },
-          { targetNodeId: nodeId, personId: p.adminPersonId, acceptLoss },
-        );
-        return;
-      }
       const res = await p.app.request(`/management-api/servers/${nodeId}/reset`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: p.adminCookie },
@@ -1605,6 +1601,104 @@ describe("GET /management-api/servers", () => {
       });
       expect(res.status).toBe(200);
     }
+
+    async function canWipeWithLoss(p: Primary, nodeId: string) {
+      const body = (await (await list(p, p.adminCookie)).json()) as {
+        nodes: { nodeId: string; canReset: unknown; canWipeWithLoss: unknown }[];
+      };
+      const found = body.nodes.find((n) => n.nodeId === nodeId)!;
+      return { canReset: found.canReset, canWipeWithLoss: found.canWipeWithLoss };
+    }
+
+    async function oldMainOf(p: Primary, pinned = true): Promise<string> {
+      const oldMain = former(await seedNode(p.db));
+      await holdChart(p, [self(p), oldMain]);
+      if (pinned) {
+        await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
+      }
+      return oldMain.nodeId;
+    }
+
+    async function awaitingReturnFrom(p: Primary, oldMain: string): Promise<void> {
+      const operationId = await takeover(p, oldMain, "activated", "emergency");
+      await returnFrom(p.db, oldMain, p.nodeId, "one missing", operationId);
+    }
+
+    describe("offers a wipe accepting the loss while the return is awaited and after Will not return, and not once a loss order stands, after a completed return, or for a box whose key this box did not pin", () => {
+      it("while the return is awaited, and not once the loss order stands", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p);
+        await awaitingReturnFrom(p, oldMain);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: false,
+          canWipeWithLoss: true,
+        });
+
+        await orderResetOf(p, oldMain, true);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: true,
+          canWipeWithLoss: false,
+        });
+      });
+
+      it("after Will not return", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p);
+        await awaitingReturnFrom(p, oldMain);
+        const willNotReturn = await p.app.request(
+          `/management-api/servers/${oldMain}/return-abandoned`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie: p.adminCookie },
+            body: JSON.stringify({ confirmed: true }),
+          },
+        );
+        expect(willNotReturn.status).toBe(200);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: false,
+          canWipeWithLoss: true,
+        });
+      });
+
+      it("not after a completed return", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p);
+        await returnFrom(p.db, oldMain, p.nodeId);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: true,
+          canWipeWithLoss: false,
+        });
+      });
+
+      it("while a takeover awaits the return before this venue records its activation", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p);
+        await takeover(p, oldMain, "activated", "emergency");
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: false,
+          canWipeWithLoss: true,
+        });
+      });
+
+      it("not for a box no takeover here or activation replaced", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: false,
+          canWipeWithLoss: false,
+        });
+      });
+
+      it("not for a box whose key this box did not pin", async () => {
+        const p = await primary();
+        const oldMain = await oldMainOf(p, false);
+        await awaitingReturnFrom(p, oldMain);
+        expect(await canWipeWithLoss(p, oldMain)).toEqual({
+          canReset: false,
+          canWipeWithLoss: false,
+        });
+      });
+    });
 
     it("offers no reset to a replaced former main box before its return, and offers it once an order stands", async () => {
       const p = await primary();
