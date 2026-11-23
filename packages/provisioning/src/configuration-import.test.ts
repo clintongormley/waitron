@@ -275,19 +275,35 @@ it.each(["validation", "disconnect"])(
 it("disarms the old import before replacing its ciphertext and leaves an incomplete replacement unreadable", async () => {
   const { root } = await staged();
   const uploaded = join(root, "uploaded");
+  const destination = join(root, "flows/setup/import");
+  const marker = join(destination, "marker.json");
   const replacement = configurationBundle();
   replacement.venue.legalName = "Replacement venue";
   const artifact = encodeConfigurationBundle(replacement, passphrase);
   await writeFile(uploaded, artifact);
   const actual = await vi.importActual<typeof fs>("node:fs/promises");
   const stopped = new Error("could not write key");
+  let markerRemovalSynced = false;
   vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
-    if (String(args[0]) === join(root, "flows/setup/import/key.tmp")) {
-      expect(await readFile(join(root, "flows/setup/import/artifact"))).toEqual(artifact);
+    const path = String(args[0]);
+    if (path === uploaded) {
+      expect(existsSync(marker)).toBe(false);
+      expect(markerRemovalSynced).toBe(true);
+    }
+    if (path === join(destination, "key.tmp")) {
+      expect(await readFile(join(destination, "artifact"))).toEqual(artifact);
       expect(await readStagedConfigurationImport(root, ring)).toBeNull();
       throw stopped;
     }
-    return actual.open(...args);
+    const handle = await actual.open(...args);
+    if (path === destination && !existsSync(marker)) {
+      const sync = handle.sync.bind(handle);
+      vi.spyOn(handle, "sync").mockImplementation(async () => {
+        await sync();
+        markerRemovalSynced = true;
+      });
+    }
+    return handle;
   });
 
   await expect(

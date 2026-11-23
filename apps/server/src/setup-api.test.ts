@@ -2315,14 +2315,15 @@ describe("POST /setup-api/configuration", () => {
 
   it("writes the encrypted upload as it arrives and previews the completed file", async () => {
     const root = mkdtempSync(join(tmpdir(), "configuration-upload-"));
+    const { readable, writable } = new TransformStream<Uint8Array>();
+    const uploadRequest = configurationStream(readable);
     const preview = {
       venue: { taxId: "B12345678" },
       modules: ["core"],
       reconnectModules: ["core"],
     } as never;
-    const stageConfiguration = vi.fn(async (path: string, passphrase: string) => {
+    const stageConfiguration = vi.fn(async (path: string) => {
       expect(await readFile(path)).toEqual(Buffer.from([1, 2, 3]));
-      expect(passphrase).toBe("a strong passphrase");
       return preview;
     });
     const app = new Hono();
@@ -2335,9 +2336,8 @@ describe("POST /setup-api/configuration", () => {
       },
       noopLog,
     );
-    const { readable, writable } = new TransformStream<Uint8Array>();
     const writer = writable.getWriter();
-    const request = app.request(configurationStream(readable));
+    const request = app.request(uploadRequest);
     try {
       await writer.write(Uint8Array.from([1, 2]));
       await vi.waitFor(async () => {
@@ -2355,6 +2355,11 @@ describe("POST /setup-api/configuration", () => {
     const response = await request;
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(preview);
+    expect(stageConfiguration).toHaveBeenCalledWith(
+      expect.any(String),
+      "a strong passphrase",
+      uploadRequest.signal,
+    );
   });
 
   it("refuses a chunked configuration upload over 64 MiB", async () => {
