@@ -590,6 +590,10 @@ adding the runbook's two folder names, gives this table's 151 `WAITRON_*` names.
    command (`snapshot-authorised-archive.test.ts:95`). *If any current flow stages a marker
    without them,* the server keeps the fallback and the two names are listed as "command input
    or start input".
+
+   **ENV8 decision, 2026-11-23 (watcher).** Setup can stage an archive restore without either
+   field when the server has an operation file. The inventory therefore lists both variables as
+   command or start inputs. The `restore` command also reads both.
 2. **Whether a hosted profile injects the vault key through the environment.** `box-env.ts:10-12`
    says "a cloud profile [can] inject the vault key without a `secrets.env`". In this repo only
    the Cloud fixture does that (`cloud-integration-fixture.ts:93,123`), and the `waitron-cloud`

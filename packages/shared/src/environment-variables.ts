@@ -7,6 +7,7 @@ export type VariableSource =
   | "operator"
   | "build"
   | "command"
+  | "command or start input"
   | "internal"
   | "development"
   | "test";
@@ -171,8 +172,11 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_BACKUP_KEY_ROTATED_AT: variable("backup.env", "text", server),
   WAITRON_BREAKGLASS_PASSWORD: variable("command", "text", ["break-glass"], secret),
   WAITRON_BREAKGLASS_PIN: variable("command", "text", ["break-glass"], secret),
-  WAITRON_NODE_RECOVERY_KEY: variable("command", "key", ["server", "restore", "rejoin"]),
-  WAITRON_RECOVERY_OPERATION_FILE: variable("command", "path", server),
+  WAITRON_NODE_RECOVERY_KEY: variable("command or start input", "key", ["server", "restore"]),
+  WAITRON_RECOVERY_OPERATION_FILE: variable("command or start input", "path", [
+    "server",
+    "restore",
+  ]),
   WAITRON_ADMIN_PIN: variable("command", "text", ["provisioning"], secret),
   WAITRON_ADMIN_PASSWORD: variable("command", "text", ["provisioning"], secret),
   WAITRON_INITIAL_VENUE_INPUT: variable("command", "path", ["provisioning"]),

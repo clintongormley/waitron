@@ -825,7 +825,7 @@ also qualifies the historical operation-description references in this section.
   jr13's SIGSTOP probe is a stand-in only. The shared environment inventory declares each setting's
   source, and the server reports unknown names and ignores misplaced file entries. The print agent
   uses its host name. Host-script and full-disk tests use shared roots. The SMTP connection URL and
-  bucket keys are sealed. The fiscal environment cleanup in env8 remains open.
+  bucket keys are sealed. ENV8's decision on moving the AEAT certificate kind out of the vault is open.
   Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
   proofs use the pending address without copying it into the proof row.
   Each shift now holds its own job role and area and belongs to a rota week; deleting a draft week

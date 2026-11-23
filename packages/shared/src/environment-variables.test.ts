@@ -29,6 +29,15 @@ describe("the environment list", () => {
     });
   });
 
+  it("lists the node recovery key and operation file as restore command and startup inputs", () => {
+    const { WAITRON_NODE_RECOVERY_KEY, WAITRON_RECOVERY_OPERATION_FILE } =
+      shared.ENVIRONMENT_VARIABLES;
+    for (const spec of [WAITRON_NODE_RECOVERY_KEY, WAITRON_RECOVERY_OPERATION_FILE]) {
+      expect(spec.source).toBe("command or start input");
+      expect(spec.readers).toEqual(["server", "restore"]);
+    }
+  });
+
   it("keeps key material and command secrets private and gives keys no default", () => {
     expect(shared.ENVIRONMENT_VARIABLES).toEqual(expect.any(Object));
     for (const [name, spec] of Object.entries(shared.ENVIRONMENT_VARIABLES)) {
