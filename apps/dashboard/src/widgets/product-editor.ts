@@ -237,6 +237,13 @@ export class ProductEditor extends LitElement {
       wt-disclosure::part(section) {
         padding-block: 0;
       }
+      wt-disclosure[data-section="details"]::part(summary) {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
       dashboard-product-appearance dashboard-image-upload::part(preview) {
         display: none;
       }
@@ -1051,27 +1058,26 @@ export class ProductEditor extends LitElement {
     </div>`;
   }
 
-  private foldedValue(label: string, own: string | null, inherited: () => string): SummaryField {
-    if (own !== null) return { label, value: own };
-    if (this.inherited === null) return { label, value: t("modifiers.none_specified") };
-    return { label, value: inherited(), placeholder: true };
+  /** A field's entry on a closed line: its own value, else on a variant the value it inherits as
+   * a placeholder, else nothing. An empty value counts as unset. */
+  private foldedValue(label: string, own: string, inherited: () => string): SummaryField[] {
+    if (own) return [{ label, value: own }];
+    const value = this.inherited === null ? "" : inherited();
+    return value ? [{ label, value, placeholder: true }] : [];
   }
 
   private kitchenSummary(): SummaryField[] {
     const { courseId } = this.draft;
+    // A variant's blank kitchen name falls back to its own Name, never the parent's.
+    const kitchenName = this.draft.kitchenName?.trim();
     return [
-      // A variant's blank kitchen name falls back to its own Name, never the parent's.
-      {
-        label: t("editor.kitchen_name"),
-        value: this.draft.kitchenName?.trim() || t("modifiers.none_specified"),
-      },
-      this.foldedValue(
+      ...(kitchenName ? [{ label: t("editor.kitchen_name"), value: kitchenName }] : []),
+      ...this.foldedValue(
         t("editor.summary_course"),
         courseId === null
-          ? null
+          ? ""
           : (this.courses.find(({ id }) => id === courseId)?.name ?? t("editor.missing_choice")),
-        () =>
-          this.blankChoice(t("modifiers.none_specified"), this.courses, this.inherited?.courseId),
+        () => this.blankChoice("", this.courses, this.inherited?.courseId),
       ),
     ];
   }
@@ -1146,12 +1152,15 @@ export class ProductEditor extends LitElement {
     >`;
   }
 
+  /** Each language that has text, in the languages' order; `""` when none has. */
   private languagesLine(value: LocalizedText | null): string {
-    const none = t("modifiers.none_specified");
     const text = value ?? {};
-    if (!namesLine(this.locales, text).length) return none;
+    if (!namesLine(this.locales, text).length) return "";
     return this.locales
-      .map((locale) => `${locale.toUpperCase()}: ${languageText(text, locale).trim() || none}`)
+      .flatMap((locale) => {
+        const words = languageText(text, locale).trim();
+        return words ? [`${locale.toUpperCase()}: ${words}`] : [];
+      })
       .join(SUMMARY_SEPARATOR);
   }
 
@@ -1230,13 +1239,15 @@ export class ProductEditor extends LitElement {
   }
 
   private descriptorsSummary(): SummaryField[] {
-    const described = Object.keys(nonBlankNames(this.draft.description ?? {}));
+    const customerName = this.languagesLine(this.draft.customerName);
+    // Text in any language, shown or not, is the variant's own and stops the parent's applying.
+    const described = Object.keys(nonBlankNames(this.draft.description ?? {})).length > 0;
     return [
-      { label: t("editor.customer_name"), value: this.languagesLine(this.draft.customerName) },
-      this.foldedValue(
+      ...(customerName ? [{ label: t("editor.customer_name"), value: customerName }] : []),
+      ...this.foldedValue(
         t("editor.description"),
-        described.length ? this.languagesLine(this.draft.description) : null,
-        () => this.languagesLine(this.inherited!.description),
+        this.languagesLine(this.draft.description),
+        () => (described ? "" : this.languagesLine(this.inherited!.description)),
       ),
     ];
   }
@@ -1308,13 +1319,15 @@ export class ProductEditor extends LitElement {
         ...(inheritedAllergens ? { placeholder: true } : {}),
         ...(allergens === null ? { warning: true } : {}),
       },
-      {
-        label: t("editor.nutrition.dietary"),
-        value: labels.length
-          ? labels.map((label) => t(`editor.diet.${label}`)).join(", ")
-          : t("editor.nutrition.diet_none"),
-        ...(diet.inherited ? { placeholder: true } : {}),
-      },
+      ...(labels.length
+        ? [
+            {
+              label: t("editor.nutrition.dietary"),
+              value: labels.map((label) => t(`editor.diet.${label}`)).join(", "),
+              ...(diet.inherited ? { placeholder: true } : {}),
+            },
+          ]
+        : []),
     ];
   }
 
@@ -1347,7 +1360,7 @@ export class ProductEditor extends LitElement {
 
   /** A variant is ordered as its product is, so it has no ordering of its own. */
   private orderingSummary(): SummaryField[] {
-    if (this.inherited) return [];
+    if (this.inherited || this.draft.ordering === "public") return [];
     return [
       { label: t("editor.ordered_on_own"), value: t(`product.ordering_${this.draft.ordering}`) },
     ];
@@ -1655,12 +1668,10 @@ export class ProductEditor extends LitElement {
         heading=${t("editor.variants")}
         ?open=${this.#variantsStartOpen}
         ?has-error=${Object.keys(this.#rowsNow).length > 0}
-        summary=${
-          variants
-            .filter((variant) => variant.active)
-            .map((variant) => variant.name)
-            .join(", ") || t("editor.none")
-        }
+        summary=${variants
+          .filter((variant) => variant.active)
+          .map((variant) => variant.name)
+          .join(", ")}
       >
         ${this.help(t("editor.variants"), "help.products.variants", "products.variants")}
         <div class="group">
@@ -1859,7 +1870,7 @@ export class ProductEditor extends LitElement {
         heading=${t("editor.modifiers")}
         ?open=${this.#modifiersStartOpen}
         ?has-error=${this.sectionHasError("modifiers")}
-        summary=${attached.map((ref) => this.modifierLabel(ref)).join(SUMMARY_SEPARATOR) || t("editor.none")}
+        summary=${attached.map((ref) => this.modifierLabel(ref)).join(SUMMARY_SEPARATOR)}
       >
         <div class="group">
           ${

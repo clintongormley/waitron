@@ -3481,10 +3481,7 @@ it("summarises each collapsed section from its filled-in values", async () => {
   // The image is not on the line: the photo sits beside Name.
   expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "EN: House coffee · ES: Café de la casa" },
-    {
-      label: t("editor.description"),
-      value: `EN: Freshly roasted · ES: ${t("modifiers.none_specified")}`,
-    },
+    { label: t("editor.description"), value: "EN: Freshly roasted" },
   ]);
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
   expect(detailsPart(el, "nutrition")).toEqual([
@@ -3507,13 +3504,7 @@ it("keeps stored regional names and descriptions separate when editing main-lang
     locales: ["en", "es"],
     units: [unit],
   });
-  expect(detailsPart(el, "descriptors")).toEqual([
-    { label: t("editor.customer_name"), value: t("modifiers.none_specified") },
-    {
-      label: t("editor.description"),
-      value: t("modifiers.none_specified"),
-    },
-  ]);
+  expect(detailsPart(el, "descriptors")).toEqual([]);
   await openSection(el, "details");
   expect(control<HTMLInputElement>(el, "customer-name-en").value).toBe("");
   expect(control<HTMLTextAreaElement>(el, "description-en").value).toBe("");
@@ -4286,8 +4277,9 @@ function firstOption(el: ProductEditor, name: string) {
   return combobox(el, name)!.options[0]!;
 }
 function inheritedNutrition(el: ProductEditor, name: string) {
-  const field = detailsPart(el, "nutrition")[name === "allergens" ? 0 : 1]!;
-  return field.placeholder ? `${field.label}: ${field.value}` : undefined;
+  const label = t(name === "allergens" ? "modifiers.allergens" : "editor.nutrition.dietary");
+  const field = detailsPart(el, "nutrition").find((entry) => entry.label === label);
+  return field?.placeholder ? `${field.label}: ${field.value}` : undefined;
 }
 
 it("titles a variant's page as a variant, with no Modifiers and no Variants section", async () => {
@@ -4580,9 +4572,7 @@ it("hints what a variant will actually use where its parent names nothing there"
   expect(inheritedNutrition(el, "allergens")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.nutrition.allergens_none")}`,
   );
-  expect(inheritedNutrition(el, "dietary")).toBe(
-    `${t("editor.nutrition.dietary")}: ${t("editor.nutrition.diet_none")}`,
-  );
+  expect(inheritedNutrition(el, "dietary")).toBeUndefined();
 });
 
 it("hints a parent's allergens not yet reviewed as that, never as none", async () => {
@@ -4665,7 +4655,6 @@ it.each([
     category: "No category",
     course: "None specified",
     allergens: "Allergens: None",
-    dietary: "Dietary: None",
     unreviewed: "Allergens: Not yet reviewed",
   },
   {
@@ -4674,7 +4663,6 @@ it.each([
     category: "Sin categoría",
     course: "Sin especificar",
     allergens: "Alérgenos: Ninguno",
-    dietary: "Dietética: Ninguna",
     unreviewed: "Alérgenos: Sin revisar todavía",
   },
 ])(
@@ -4697,7 +4685,7 @@ it.each([
       expect(variantPath(el)).toBe(`${t("editor.classification")}: ${expected.category}`);
       expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
       expect(inheritedNutrition(el, "allergens")).toBe(expected.allergens);
-      expect(inheritedNutrition(el, "dietary")).toBe(expected.dietary);
+      expect(inheritedNutrition(el, "dietary")).toBeUndefined();
       cleanupWidgets();
       const unreviewedEl = await mountVariant({
         ...glass,
@@ -5503,7 +5491,7 @@ it("keeps consecutive closed Product editor sections close enough to read as one
   const assertGap = (before: string, after: string) => {
     const first = folded(el, before);
     const next = folded(el, after);
-    const summary = first.shadowRoot!.querySelector(".summary")!;
+    const summary = first.shadowRoot!.querySelector('[part="summary"]')!;
     const heading = next.shadowRoot!.querySelector(".heading")!;
     const textGap = heading.getBoundingClientRect().top - summary.getBoundingClientRect().bottom;
     expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
@@ -6109,7 +6097,7 @@ it.each([
   ["the kitchen name alone", { kitchenName: "BAR", courseId: null }, ["kitchen"]],
   ["the course alone", { kitchenName: "  ", courseId: "course-1" }, ["course"]],
 ])(
-  "names %s on the Kitchen line when only it is filled, the other as none specified",
+  "names %s on the Kitchen line when only it is filled, the other left out",
   async (_, value, shown) => {
     const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
       open: true,
@@ -6118,10 +6106,11 @@ it.each([
       units: [unit],
       courses: [{ id: "course-1", name: "Starters" }],
     });
-    const none = t("modifiers.none_specified");
     expect(detailsPart(el, "kitchen")).toEqual([
-      { label: t("editor.kitchen_name"), value: shown.includes("kitchen") ? "BAR" : none },
-      { label: t("editor.summary_course"), value: shown.includes("course") ? "Starters" : none },
+      ...(shown.includes("kitchen") ? [{ label: t("editor.kitchen_name"), value: "BAR" }] : []),
+      ...(shown.includes("course")
+        ? [{ label: t("editor.summary_course"), value: "Starters" }]
+        : []),
     ]);
   },
 );
@@ -6155,7 +6144,7 @@ it.each([
   },
 );
 
-it("rows each language's customer-facing name and description in the languages' order, a blank one as none specified", async () => {
+it("rows each language's customer-facing name and description in the languages' order, leaving out a blank one", async () => {
   const mountWith = async (value: Partial<ProductEditorDraft>) =>
     (
       await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -6169,21 +6158,16 @@ it("rows each language's customer-facing name and description in the languages' 
     customerName: { en: "Beef tenderloin", es: "Solomillo de ternera" },
     description: { es: " ", en: "Seared" },
   });
-  const none = t("modifiers.none_specified");
   expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "ES: Solomillo de ternera · EN: Beef tenderloin" },
-    { label: t("editor.description"), value: `ES: ${none} · EN: Seared` },
+    { label: t("editor.description"), value: "EN: Seared" },
   ]);
   el = await mountWith({ customerName: { es: " " }, description: { es: "Sellado" } });
   expect(detailsPart(el, "descriptors")).toEqual([
-    { label: t("editor.customer_name"), value: none },
-    { label: t("editor.description"), value: `ES: Sellado · EN: ${none}` },
+    { label: t("editor.description"), value: "ES: Sellado" },
   ]);
   el = await mountWith({ customerName: null, description: null });
-  expect(detailsPart(el, "descriptors")).toEqual([
-    { label: t("editor.customer_name"), value: none },
-    { label: t("editor.description"), value: none },
-  ]);
+  expect(detailsPart(el, "descriptors")).toEqual([]);
 });
 
 it("draws the Descriptors line as named values, only the field names marked as names", async () => {
@@ -6204,7 +6188,7 @@ it("draws the Descriptors line as named values, only the field names marked as n
   expect(descriptors.shadowRoot!.querySelectorAll(".summary-row")).toHaveLength(0);
   const summary = descriptors.shadowRoot!.querySelector<HTMLElement>(".summary")!;
   expect(
-    [...summary.querySelectorAll(".summary-label")].map((label) => label.textContent).slice(2, 4),
+    [...summary.querySelectorAll(".summary-label")].map((label) => label.textContent).slice(1, 3),
   ).toEqual([`${t("editor.customer_name")}:`, `${t("editor.description")}:`]);
   // The language codes are plain text: only the field names are marked.
   expect(summary.textContent).toContain("EN: ");
@@ -6223,7 +6207,7 @@ it("starts another product with the image library closed", async () => {
   expect(saveButton(el).disabled).toBe(false);
 });
 
-// --- A folded section names every field, filled or not (A211) ---
+// --- A folded section shows only what is set ---
 
 const bare: ProductEditorDraft = {
   ...product,
@@ -6247,21 +6231,11 @@ async function foldedLine(el: ProductEditor): Promise<string> {
 }
 
 it.each([
-  {
-    locale: "en-GB",
-    kitchen: "Prep station name: None specified · Course: None specified",
-    descriptors: "Customer-facing name: None specified · Description: None specified",
-    nutrition: "Allergens: Not yet reviewed · Dietary: None",
-  },
-  {
-    locale: "es-ES",
-    kitchen: "Nombre de estación de preparación: Sin especificar · Curso: Sin especificar",
-    descriptors: "Nombre para el cliente: Sin especificar · Descripción: Sin especificar",
-    nutrition: "Alérgenos: Sin revisar todavía · Dietética: Ninguna",
-  },
+  { locale: "en-GB", line: "Allergens: Not yet reviewed" },
+  { locale: "es-ES", line: "Alérgenos: Sin revisar todavía" },
 ])(
-  "names every field of a product with nothing set on its folded line, in $locale",
-  async ({ locale, kitchen, descriptors, nutrition }) => {
+  "a product with nothing set shows only the allergen warning in Details, in $locale",
+  async ({ locale, line }) => {
     setLocale(locale as "en-GB" | "es-ES");
     try {
       const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -6271,13 +6245,116 @@ it.each([
         units: [unit],
         courses: [{ id: "course-1", name: "Starters" }],
       });
-      const ordering = `${t("editor.ordered_on_own")}: ${t(`product.ordering_${bare.ordering}`)}`;
-      expect(await foldedLine(el)).toBe([kitchen, descriptors, nutrition, ordering].join(" · "));
+      expect(summaryOf(el, "details")).toEqual([
+        { label: t("modifiers.allergens"), value: t("editor.allergens_unreviewed"), warning: true },
+      ]);
+      expect(await foldedLine(el)).toBe(line);
     } finally {
       setLocale("es-ES");
     }
   },
 );
+
+it("Details names only the languages that have text", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...bare, customerName: { en: "Battered hake" } },
+    locales: ["en", "es"],
+    units: [unit],
+  });
+  expect(detailsPart(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: Battered hake" },
+  ]);
+});
+
+it("a reviewed product with no allergens says so", async () => {
+  const el = await mountPricing({ ...bare, allergens: {} });
+  expect(detailsPart(el, "nutrition")).toEqual([
+    { label: t("modifiers.allergens"), value: t("editor.nutrition.allergens_none") },
+  ]);
+});
+
+it("Ordering appears only when it is not Anyone", async () => {
+  let el = await mountPricing({ ...saved, ordering: "public" });
+  expect(summaryOf(el, "details").map(({ label }) => label)).not.toContain(
+    t("editor.ordered_on_own"),
+  );
+  cleanupWidgets();
+  el = await mountPricing({ ...saved, ordering: "staff_only" });
+  expect(summaryOf(el, "details")).toContainEqual({
+    label: t("editor.ordered_on_own"),
+    value: t("product.ordering_staff_only"),
+  });
+});
+
+it("Variants and Modifiers show no summary line when empty", async () => {
+  const el = await mountPricing({ ...saved, variants: [], modifiers: [] });
+  for (const name of ["variants", "modifiers"]) {
+    const fold = folded(el, name);
+    expect(fold.summary, name).toBe("");
+    fold.open = false;
+    await fold.updateComplete;
+    expect(fold.shadowRoot!.querySelector(".summary"), name).toBeNull();
+  }
+});
+
+it("a variant's Details line shows inherited values in italic", async () => {
+  const el = await mountVariant();
+  const inherited = summaryOf(el, "details").filter((field) => field.placeholder);
+  expect(inherited).toEqual(
+    expect.arrayContaining([
+      { label: t("editor.summary_course"), value: "Mains", placeholder: true },
+      { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
+      {
+        label: t("modifiers.allergens"),
+        value: allergenName("milk"),
+        placeholder: true,
+      },
+    ]),
+  );
+  const details = folded(el, "details");
+  details.open = false;
+  await details.updateComplete;
+  const drawn = [...details.shadowRoot!.querySelectorAll(".summary-placeholder")];
+  expect(drawn.map((value) => value.textContent)).toEqual(
+    expect.arrayContaining(["Mains", "EN: Roasted in house", allergenName("milk")]),
+  );
+  for (const value of drawn) expect(getComputedStyle(value).fontStyle).toBe("italic");
+});
+
+it("a long Details line is cut after two lines at phone width", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  const long = (word: string) => Array.from({ length: 40 }, () => word).join(" ");
+  try {
+    await page.viewport(400, 844);
+    expect(window.innerWidth).toBe(400);
+    const { el, host } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: {
+        ...saved,
+        customerName: { en: long("tenderloin"), es: long("solomillo") },
+        description: { en: long("seared") },
+      },
+      locales: ["en", "es"],
+      units: [unit],
+    });
+    host.style.lineHeight = "20px";
+    const details = folded(el, "details");
+    details.open = false;
+    await details.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // The cut is drawn by the summary part; the inline line inside it still measures every line.
+    const summary = details.shadowRoot!.querySelector<HTMLElement>('[part="summary"]')!;
+    expect(summary.querySelector(".summary")!.getBoundingClientRect().height).toBeGreaterThan(41);
+    expect(summary.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(summary.getBoundingClientRect().height).toBeLessThanOrEqual(41);
+    const dialog = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
 
 it.each<{ label: string; allergens: ProductEditorDraft["allergens"] }>([
   { label: "never reviewed", allergens: null },
@@ -6331,13 +6408,10 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
 
 it("shows a variant's blank fields folded as its parent's values, as placeholders; its names stay its own", async () => {
   const el = await mountVariant({ ...glass, kitchenName: null, customerName: null });
-  const none = t("modifiers.none_specified");
   expect(detailsPart(el, "kitchen")).toEqual([
-    { label: t("editor.kitchen_name"), value: none },
     { label: t("editor.summary_course"), value: "Mains", placeholder: true },
   ]);
   expect(detailsPart(el, "descriptors")).toEqual([
-    { label: t("editor.customer_name"), value: none },
     { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
   ]);
   expect(detailsPart(el, "nutrition")).toEqual([
@@ -6350,15 +6424,14 @@ it("shows a variant's blank fields folded as its parent's values, as placeholder
   ]);
   expect(await foldedLine(el)).toBe(
     [
-      `${t("editor.kitchen_name")}: ${none} · ${t("editor.summary_course")}: [Mains]`,
-      `${t("editor.customer_name")}: ${none} · ${t("editor.description")}: [EN: Roasted in house]`,
+      `${t("editor.summary_course")}: [Mains]`,
+      `${t("editor.description")}: [EN: Roasted in house]`,
       `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
     ].join(" · "),
   );
 });
 
 it("shows folded what a variant will use where its parent has nothing set either", async () => {
-  const none = t("modifiers.none_specified");
   const mountWith = (inherited: Partial<InheritedValues>) =>
     mountVariant({ ...glass, inherited: { ...parentValues, ...inherited } });
   let el = await mountWith({
@@ -6367,25 +6440,14 @@ it("shows folded what a variant will use where its parent has nothing set either
     allergens: {},
     dietaryDeclarations: [],
   });
-  expect(detailsPart(el, "kitchen")[1]).toEqual({
-    label: t("editor.summary_course"),
-    value: none,
-    placeholder: true,
-  });
-  expect(detailsPart(el, "descriptors")[1]).toEqual({
-    label: t("editor.description"),
-    value: none,
-    placeholder: true,
-  });
+  expect(detailsPart(el, "kitchen")).toEqual([{ label: t("editor.kitchen_name"), value: "GLS" }]);
+  expect(detailsPart(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: A glass" },
+  ]);
   expect(detailsPart(el, "nutrition")).toEqual([
     {
       label: t("modifiers.allergens"),
       value: t("editor.nutrition.allergens_none"),
-      placeholder: true,
-    },
-    {
-      label: t("editor.nutrition.dietary"),
-      value: t("editor.nutrition.diet_none"),
       placeholder: true,
     },
   ]);
@@ -6402,7 +6464,16 @@ it("shows folded what a variant will use where its parent has nothing set either
     value: t("editor.missing_choice"),
     placeholder: true,
   });
-  expect(detailsPart(el, "descriptors")[1]!.value).toBe(none);
+  expect(detailsPart(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: A glass" },
+  ]);
+});
+
+it("shows no parent description folded for a variant described only in a language not shown", async () => {
+  const el = await mountVariant({ ...glass, description: { fr: "Glacé" } });
+  expect(detailsPart(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: A glass" },
+  ]);
 });
 
 it("shows a variant's own values folded as its own, never as placeholders", async () => {
@@ -6438,10 +6509,9 @@ it("names a product's course missing from the course list as unavailable on the 
     units: [unit],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(detailsPart(el, "kitchen")[1]).toEqual({
-    label: t("editor.summary_course"),
-    value: t("editor.missing_choice"),
-  });
+  expect(detailsPart(el, "kitchen")).toEqual([
+    { label: t("editor.summary_course"), value: t("editor.missing_choice") },
+  ]);
 });
 
 it("draws a variant's inherited folded values in grey italic, its own upright", async () => {

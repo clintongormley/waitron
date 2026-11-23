@@ -199,11 +199,11 @@ it("nutrition Same as saves null while keeping the variant's explicit diet", asy
 });
 
 it.each<{ allergens: ProductEditorDraft["allergens"]; want: string }>([
-  { allergens: null, want: "Allergens: Not yet reviewed · Dietary: None" },
-  { allergens: {}, want: "Allergens: None · Dietary: None" },
+  { allergens: null, want: "Allergens: Not yet reviewed" },
+  { allergens: {}, want: "Allergens: None" },
   {
     allergens: { gluten: { kinds: ["wheat" as const] }, eggs: {}, milk: {} },
-    want: "Allergens: Cereals containing gluten (Wheat), Eggs, Milk · Dietary: None",
+    want: "Allergens: Cereals containing gluten (Wheat), Eggs, Milk",
   },
 ])("nutrition closed summary distinguishes $want", async ({ allergens, want }) => {
   const { el } = await mount({ ...product, allergens });
