@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -12,7 +12,7 @@ import { deferredCloseVenue, type DeferredCloseKit } from "./testing/deferred-cl
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { readDeferredPayment } from "./receipt-deferred-payment.js";
+import { deferredTenderQuery, readDeferredPayment } from "./receipt-deferred-payment.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
 import { layoutInvoicePages } from "./invoice-page.js";
 import { layOutSaleReceipt } from "./receipt-print.js";
@@ -122,7 +122,6 @@ describe("readDeferredPayment", () => {
   });
 
   it("ends on substitutions that point at each other", async () => {
-    // With no deferred tender anywhere, the query need never walk the substitutions.
     await deferredSale();
     const first = await saleOf(await t.counterOrder("placed", true));
     const second = await inTx(t.venue, (tx) => substitute(tx, first));
@@ -132,6 +131,16 @@ describe("readDeferredPayment", () => {
         .values({ substitutionSaleId: first.id, substitutedSaleId: second }),
     );
     expect(await inTx(t.venue, (tx) => readDeferredPayment(tx, first.id))).toBeUndefined();
+  });
+
+  it("finds tenders through their sale's index, never by reading the whole table", async () => {
+    // A box gathers no planner statistics, so the plan is what this engine picks without them.
+    const plan = await inTx(t.venue, async (tx) =>
+      tx.execute(sql`explain query plan ${deferredTenderQuery("sale")}`),
+    );
+    const steps = plan.rows.map((row) => String(row.detail));
+    expect(steps).toContainEqual(expect.stringMatching(/^SEARCH t USING INDEX tenders_sale_idx/u));
+    expect(steps.filter((step) => /^SCAN t\b/u.test(step))).toEqual([]);
   });
 
   it("answers no account once the setting is cleared", async () => {
