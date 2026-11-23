@@ -150,35 +150,46 @@ export function rewriteSource(file, input) {
   return { text, manual: [...manual], refused: [...refused] };
 }
 
-function main() {
-  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  const check = process.argv.includes("--check");
+export function main(args, cwd = process.cwd(), output = console) {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd,
+    env,
+    encoding: "utf8",
+  }).trim();
+  const check = args.includes("--check");
   const files = execFileSync("git", ["ls-files", "-z", "--", "apps", "packages"], {
     cwd: root,
+    env,
     encoding: "utf8",
   }).split("\0");
+  let exitCode = 0;
   for (const file of files) {
     if (!file.endsWith(".ts")) continue;
     const path = resolve(root, file);
     const input = readFileSync(path, "utf8");
     if (!/invoiceSeries|invoice_series/.test(input)) continue;
     const { text, manual, refused } = rewriteSource(file, input);
-    for (const line of manual)
-      console.log(file + ":" + line + ": series counter needs a hand edit");
+    for (const line of manual) output.log(file + ":" + line + ": series counter needs a hand edit");
     for (const line of refused) {
-      console.error(
+      output.error(
         file + ":" + line + ": qualify the outer series column with nextInvoiceNumberOf",
       );
-      process.exitCode = 1;
+      exitCode = 1;
     }
     if (text === input) continue;
     if (check) {
-      console.error(file + ": supported series counter rewrites remain");
-      process.exitCode = 1;
+      output.error(file + ": supported series counter rewrites remain");
+      exitCode = 1;
     } else if (!refused.length) {
       writeFileSync(path, text);
     }
   }
+  return exitCode;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = main(process.argv.slice(2));
+}
