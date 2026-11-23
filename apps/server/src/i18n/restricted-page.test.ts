@@ -7,20 +7,23 @@ describe("stepped-down page wording", () => {
     [
       "en-GB",
       "This box no longer runs the venue",
-      "It takes no sales and sends nothing to the tax agency. The box taking over the venue is ",
+      "Open the dashboard on the new main box.",
+      "Progress",
       "This page could not be shown.",
     ],
     [
       "es-ES",
       "El local ya no funciona con este servidor",
-      "No hace ventas ni envía nada a Hacienda. El servidor que pasa a llevar el local es ",
+      "Abrir el panel en el nuevo servidor principal.",
+      "Progreso",
       "No se ha podido mostrar esta página.",
     ],
-  ] as const)("provides the %s title, body and failure heading", (locale, title, body, failed) => {
-    expect(RESTRICTED_PAGE_WORDS[locale].title).toBe(title);
-    expect(RESTRICTED_PAGE_WORDS[locale].body).toEqual([body, "."]);
-    expect(RESTRICTED_PAGE_WORDS[locale].failed).toBe(failed);
-  });
+  ] as const)(
+    "provides the %s title, dashboard link, progress link and failure heading, and nothing else",
+    (locale, title, openDashboard, progress, failed) => {
+      expect(RESTRICTED_PAGE_WORDS[locale]).toEqual({ title, openDashboard, progress, failed });
+    },
+  );
 
   it.each([
     ["en-GB", "This box is standing down", "Another box now runs the venue.", "Restarting…"],

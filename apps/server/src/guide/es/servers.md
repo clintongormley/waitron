@@ -255,13 +255,12 @@ En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese 
 
 Si abres la dirección de un servidor, o su caja o su panel de gestión, y ves una página titulada
 **El local ya no funciona con este servidor**, ese servidor se ha retirado. No hace ventas ni envía
-nada a Hacienda. La página indica, en negrita, el servidor que pasa a llevar el local; usa **Abrir
-el servidor que lleva el local**, si la página lo muestra, para ir a él.
+nada a Hacienda. Usa **Abrir el panel en el nuevo servidor principal.**, si la página lo muestra,
+para ir al servidor que lleva el local.
 
-Debajo, la página enumera cada paso del traspaso que este servidor ha registrado, en el orden en que
-los registró, con la fecha y la hora de cada uno en la zona horaria del local.
-
-Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el servidor de reserva.
+La página muestra una línea más solo mientras algo te necesita, y dice qué hacer. Mientras un
+[traspaso](servers.md#hand-over) no ha terminado, ofrece también **Progreso**: úsalo para terminar
+el traspaso en el servidor de reserva.
 
 Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
 Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en curso se devuelven
@@ -270,12 +269,12 @@ continúa en el principal. La confirmación significa que cada dato devuelto se 
 cubierto mediante una diferencia de pago aceptada expresamente; para una diferencia aceptada, el
 principal conserva sus propios datos de pago.
 
-Cuando la devolución esté confirmada, el servidor principal puede pedir a este servidor que se
-restablezca. La página lo indica entonces, y el servidor se reinicia en breve en la primera página
-de la configuración, listo para [volver a unirse como servidor de
-reserva](servers.md#adding-a-spare). El restablecimiento retira sus datos del local, incluidas las
-líneas de venta y las copias de seguridad locales, que esta devolución no incluye; conserva los
-datos del servidor anterior si los necesitas.
+Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
+servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
+página de la configuración, listo para [volver a unirse como servidor de
+reserva](servers.md#adding-a-spare). El borrado retira sus datos del local, incluidas las líneas de
+venta y las copias de seguridad locales, que esta devolución no incluye; conserva los datos del
+servidor anterior si los necesitas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
@@ -291,7 +290,7 @@ detenido para reintentarlo. Cada nuevo lote en conflicto requiere su propia acep
 cuenta el grupo exacto aceptado.
 
 Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos servidores y manténlos
-encendidos mientras se vuelve a intentar la devolución. No restablezcas el servidor anterior.
+encendidos mientras se vuelve a intentar la devolución. No borres el servidor anterior.
 
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.

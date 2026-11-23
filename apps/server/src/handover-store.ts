@@ -20,10 +20,16 @@ import {
   readHandoverEvent,
   readHandoverOperation,
   type HandoverOperation,
+  type HandoverOperationState,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
-import type { RestrictedStepKind } from "./i18n/restricted-page.js";
 import "./errors.js";
+
+/**
+ * Every event kind a source operation records: its states, the offer's event, the final copy's and
+ * the confirmed return's.
+ */
+type RestrictedStepKind = HandoverOperationState | "offer" | "final_state" | "return_confirmed";
 
 /** The `node_handover_events.kind` of each event read or written by name. */
 export const HANDOVER_EVENT = {

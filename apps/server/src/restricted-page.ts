@@ -1,13 +1,12 @@
 import type { ReturnState } from "./return-records.js";
-import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
-import { initialState } from "@waitron/handover";
+import { isOpen } from "@waitron/handover";
 import {
-  nodeHandoverEvents,
   readHandoverEvents,
   readHandoverOperation,
   readHandoverRestriction,
+  type HandoverOperation,
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron/shared";
@@ -21,11 +20,8 @@ import {
   RESTRICTED_RESET_WORDS,
   RESTRICTED_RETURN_WORDS,
   RESTRICTED_MAIN_BOX_WORDS,
-  RESTRICTED_STEP_WORDS,
-  type RestrictedStepKind,
 } from "./i18n/restricted-page.js";
 import type { ReplacedResetMarker } from "./replaced-reset.js";
-import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
   venue: Database;
@@ -38,29 +34,14 @@ export interface RestrictedPageDeps {
   resetPhase?(): Promise<ReplacedResetMarker["phase"] | null>;
 }
 
-interface Step {
-  /** A handover state's name, or another event's kind, as `node_handover_events.kind` recorded it. */
-  kind: string;
-  at: Date;
-}
-
 export type Successor =
   { kind: "id"; id: string } | { kind: "host"; host: string; main: boolean; contactUrl: string };
 
 interface RestrictedView {
   returnState: ReturnState;
-  successor: Successor;
   successorUrl?: string;
-  steps: Step[];
-  timeZone: string;
   handoverPage?: string;
   reset?: "ordered" | "setAsideRefused";
-}
-
-/** `Object.hasOwn`: the kind is read from a file, and `toString` must not find an inherited value. */
-function stepText(kind: string, locale: SupportedLocale): string {
-  if (!Object.hasOwn(RESTRICTED_STEP_WORDS, kind)) return kind;
-  return RESTRICTED_STEP_WORDS[kind as RestrictedStepKind][locale];
 }
 
 function webHost(contactUrl: string): string | undefined {
@@ -150,33 +131,37 @@ async function resetLine(
   return deps.resetOrdered?.() === true ? "ordered" : undefined;
 }
 
+/**
+ * The taking-over box's page for a planned handover, until that box has started running the venue.
+ * It sends a return receipt only once started, refusing `activating` before
+ * (`return-records-api.ts`), or when it holds no open handover from this box; either way a
+ * confirmed return, or a receipt that found a payment clash, leaves no handover unfinished.
+ */
+async function progressPage(
+  deps: RestrictedPageDeps,
+  operation: HandoverOperation,
+  returnState: ReturnState,
+): Promise<string | undefined> {
+  if (operation.scenario !== "controlled" || !isOpen(operation.state)) return undefined;
+  if (returnState === "confirmed" || returnState === "clash") return undefined;
+  const confirmed = await readHandoverEvents(
+    deps.node,
+    deps.nodeId,
+    operation.operationId,
+    "return_confirmed",
+  );
+  if (confirmed.length > 0) return undefined;
+  return await handoverPageOf({ db: deps.venue }, operation);
+}
+
 async function readView(deps: RestrictedPageDeps, requestId: string): Promise<RestrictedView> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
-  const steps: Step[] = [];
   const operation =
     restriction.operationId === null
       ? null
       : await readHandoverOperation(deps.node, deps.nodeId, restriction.operationId);
-  if (operation !== null) {
-    // The first state is written with the operation's row; only later ones are events.
-    steps.push({
-      kind: initialState(operation.role, operation.scenario),
-      at: operation.createdAt,
-    });
-    const events = await deps.node
-      .select({ kind: nodeHandoverEvents.kind, at: nodeHandoverEvents.recordedAt })
-      .from(nodeHandoverEvents)
-      .where(
-        and(
-          eq(nodeHandoverEvents.nodeId, deps.nodeId),
-          eq(nodeHandoverEvents.operationId, operation.operationId),
-        ),
-      )
-      .orderBy(asc(sql`rowid`));
-    steps.push(...events);
-  }
   // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
   const successor = (await readOrWarn(
     deps,
@@ -184,52 +169,35 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     "restricted_page.successor_link_failed",
     () => readSuccessor(deps, restriction.successorNodeId, restriction),
   )) ?? { kind: "id", id: restriction.successorNodeId };
+  const returnState = deps.returnState?.() ?? "waiting";
   return {
     successorUrl: successor.kind === "host" ? successor.contactUrl : undefined,
-    successor,
-    steps,
-    // Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and
-    // this box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
-    timeZone: await venueTimeZoneIn(deps.venue),
     handoverPage:
       operation === null
         ? undefined
         : await readOrWarn(deps, requestId, "restricted_page.progress_link_failed", () =>
-            handoverPageOf({ db: deps.venue }, operation),
+            progressPage(deps, operation, returnState),
           ),
-    returnState: deps.returnState?.() ?? "waiting",
+    returnState,
     reset: await resetLine(deps, requestId),
   };
 }
 
 function renderPage(view: RestrictedView, locale: SupportedLocale): string {
   const text = RESTRICTED_PAGE_WORDS[locale];
-  const when = new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: view.timeZone,
-  });
-  const steps =
-    view.steps.length === 0
-      ? ""
-      : `<h2>${escapeHtml(text.progress)}</h2>
-<ul>
-${view.steps
-  .map(
-    (step) => `<li>${escapeHtml(`${when.format(step.at)}: ${stepText(step.kind, locale)}`)}</li>`,
-  )
-  .join("\n")}
-</ul>
-`;
+  const line =
+    view.reset !== undefined
+      ? RESTRICTED_RESET_WORDS[locale][view.reset]
+      : view.returnState === "confirmed"
+        ? undefined
+        : RESTRICTED_RETURN_WORDS[locale][view.returnState];
   return renderLogoBoxPage(
     locale,
     text.title,
     `<h1>${escapeHtml(text.title)}</h1>
-<p>${escapeHtml(text.body[0])}${successorText(view.successor, locale)}${escapeHtml(text.body[1])}</p>
-${httpsLinkLine(view.successorUrl, text.openSuccessor)}
-${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
-${steps}
-<p>${escapeHtml(view.reset === undefined ? RESTRICTED_RETURN_WORDS[locale][view.returnState] : RESTRICTED_RESET_WORDS[locale][view.reset])}</p>`,
+${httpsLinkLine(view.successorUrl, text.openDashboard)}
+${line === undefined ? "" : `<p>${escapeHtml(line)}</p>`}
+${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}`,
   );
 }
 

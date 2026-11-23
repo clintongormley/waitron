@@ -230,13 +230,12 @@ On a till, keep the screen open; it follows the main box once that box is taking
 
 If you open a box's address, or its till or dashboard, and see a page titled **This box no longer
 runs the venue**, that box has stepped down. It takes no sales and sends nothing to the tax agency.
-The page names, in bold, the box taking over the venue; use **Open the box that runs the venue**,
-when the page shows it, to go there.
+Use **Open the dashboard on the new main box.**, when the page shows it, to go to the box that runs
+the venue.
 
-Below that, the page lists each step of the handover that this box has recorded, in the order it
-recorded them, with the date and time of each in the venue's time zone.
-
-If the page offers **Progress**, use it to finish the handover on the spare.
+The page shows one more line only while something needs you, and says what to do. While a
+[handover](servers.md#hand-over) is unfinished it also offers **Progress**: use it to finish the
+handover on the spare.
 
 Keep this box running while it returns its invoice records to the main box. Refresh the page to
 check progress. Card refunds still in progress go with their original payments so the main box
@@ -244,9 +243,9 @@ can check their outcome. Filing with the tax agency continues on the main box. C
 every returned fact was either received or covered by a specifically accepted payment difference;
 for an accepted difference, the main box keeps its own payment facts.
 
-Once the return is confirmed, the main box can ask this box to reset. The page then says so, and
-the box restarts shortly on setup's first page, ready to [join again as a
-spare](servers.md#adding-a-spare). The reset removes this box's venue data, including sale lines
+Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
+page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
+spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
 and local backups, which this return does not carry; keep the old box's data if you need them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
@@ -261,7 +260,7 @@ There is no screen for this yet. Then switch the stopped box off and on to retry
 reached clashing batch needs its own acceptance; only the exact accepted group counts.
 
 If the page reports a clock difference, check the clocks on both boxes and keep both running
-while the return retries. Do not reset the old box.
+while the return retries. Do not wipe the old box.
 
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 

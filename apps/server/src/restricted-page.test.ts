@@ -12,17 +12,21 @@ import {
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import type { HandoverBinding } from "@waitron/handover";
+import type { HandoverBinding, HandoverScenario } from "@waitron/handover";
 import type { NodeStanding } from "@waitron/membership";
 import {
   appendHandoverEventTx,
   NODE_MIGRATIONS,
-  nodeHandoverEvents,
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { ReturnState } from "./return-records.js";
-import { restrictedPageRoute, type RestrictedPageDeps } from "./restricted-page.js";
+import {
+  readSuccessor,
+  restrictedPageRoute,
+  successorText,
+  type RestrictedPageDeps,
+} from "./restricted-page.js";
 import {
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RESET_WORDS,
@@ -46,10 +50,13 @@ async function seedSuccessor(name: string | null): Promise<string> {
   return id;
 }
 
-async function handOver(successor: string): Promise<void> {
+async function handOver(
+  successor: string,
+  scenario: HandoverScenario = "controlled",
+): Promise<void> {
   const binding: HandoverBinding = {
     operationId: OP,
-    scenario: "controlled",
+    scenario,
     venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
     sourceNodeId: NODE,
     destinationNodeId: successor,
@@ -57,12 +64,12 @@ async function handOver(successor: string): Promise<void> {
   };
   const deps = { node: suite.node, nodeId: NODE };
   await beginHandover(deps, binding, "source");
-  await advanceHandover(deps, OP, "source_stepped_down", {});
+  if (scenario === "controlled") await advanceHandover(deps, OP, "source_stepped_down", {});
   await withNodeTransaction(suite.node, (tx) =>
     recordHandoverRestrictionTx(tx, {
       nodeId: NODE,
       operationId: OP,
-      kind: "handed-over",
+      kind: scenario === "controlled" ? "handed-over" : "superseded",
       successorNodeId: successor,
       membershipTerm: 3,
     }),
@@ -130,178 +137,213 @@ function inOrder(html: string, lines: readonly string[]): void {
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
 }
 
+const WORDS = {
+  "en-GB": {
+    dashboard: "Open the dashboard on the new main box.",
+    waiting:
+      "This box is still sending its invoice records to the main box. Keep it switched on and connected; it keeps trying by itself.",
+    "needs-attention":
+      "The main box did not accept this box's invoice records. Keep this box switched on; it tries again by itself.",
+    clock:
+      "The main box's clock is behind this box's invoice records. Check the time on both boxes; the return tries again by itself.",
+    clash:
+      "The return stopped: some payments on this box differ from the main box's. Keep both boxes switched on with their data. Once the main box accepts the difference, switch this box off and on.",
+    "record-clash":
+      "The return stopped: an invoice record on this box clashes with one on the main box. Carry on selling on the main box, and keep this box's data.",
+  },
+  "es-ES": {
+    dashboard: "Abrir el panel en el nuevo servidor principal.",
+    waiting:
+      "Este servidor aún está enviando sus registros de facturación al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
+    "needs-attention":
+      "El servidor principal no ha aceptado los registros de facturación de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+    clock:
+      "El reloj del servidor principal va por detrás de los registros de facturación de este servidor. Comprueba la hora de ambos servidores; la devolución se vuelve a intentar por sí misma.",
+    clash:
+      "La devolución se ha detenido: algunos pagos de este servidor no coinciden con los del servidor principal. Mantén ambos servidores encendidos con sus datos. Cuando el servidor principal acepte la diferencia, apaga y enciende este servidor.",
+    "record-clash":
+      "La devolución se ha detenido: un registro de facturación de este servidor choca con uno del servidor principal. Sigue vendiendo con el servidor principal y conserva los datos de este servidor.",
+  },
+} as const;
+
+const LANGUAGES = [
+  ["en-GB", "en-GB,en;q=0.9", "en"],
+  ["es-ES", "es-ES,es;q=0.9", "es"],
+] as const;
+
+/** Every `<p>` on the page, as written. */
+function paragraphs(html: string): string[] {
+  return [...html.matchAll(/<p>[\s\S]*?<\/p>/g)].map((match) => match[0]);
+}
+
+async function recordConfirmedReturn(destinationNodeId: string): Promise<void> {
+  await withNodeTransaction(suite.node, (tx) =>
+    appendHandoverEventTx(tx, {
+      nodeId: NODE,
+      operationId: OP,
+      kind: "return_confirmed",
+      detail: { destinationNodeId, inventory: "a".repeat(64) },
+      envelope: "{}",
+    }),
+  );
+}
+
 describe("the restricted box's own page", () => {
-  it("shows the successor and each recorded step, in English and in Spanish", async () => {
-    const successor = await seedSuccessor("Bar counter box");
-    await handOver(successor);
-    await holdChart(successor, "https://bar-counter.example");
+  it.each(LANGUAGES)(
+    "shows only the heading and the dashboard link when all is well, in %s",
+    async (locale, header, lang) => {
+      const successor = await seedSuccessor("Bar counter box");
+      // Recorded steps, a chart naming the successor main and a planned handover: the page before
+      // this change listed each step, named the successor in a sentence and linked Progress.
+      await handOver(successor);
+      await withNodeTransaction(suite.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: NODE,
+          operationId: OP,
+          kind: "final_state",
+          detail: {},
+          envelope: "{}",
+        }),
+      );
+      await holdChart(successor, "https://bar-counter.example");
+      const response = await request(header, suite.db, "confirmed");
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).toContain(`<html lang="${lang}">`);
+      inOrder(html, [
+        `<h1>${escapeHtml(RESTRICTED_PAGE_WORDS[locale].title)}</h1>`,
+        `<p><a href="https://bar-counter.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+      ]);
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://bar-counter.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+      ]);
+      expect(html).not.toContain("bar-counter.example</strong>");
+      expect(html).not.toMatch(/<h2|<ul|<li/);
+      expect(html).not.toContain(`>${RESTRICTED_PAGE_WORDS[locale].progress}<`);
+      expect(html).not.toContain("/handover/");
+      expect(html).not.toMatch(/Handover begun|Traspaso iniciado|tax agency|Hacienda/);
+    },
+  );
 
-    const english = await page("en-GB,en;q=0.9");
-    expect(english.status).toBe(200);
-    expect(english.html).toContain('<html lang="en">');
-    inOrder(english.html, [
-      "<h1>This box no longer runs the venue</h1>",
-      "It takes no sales and sends nothing to the tax agency. The box taking over the venue is <strong>bar-counter.example</strong> (main box).",
-      "Handover begun",
-      "Stopped taking sales",
-    ]);
-    expect(english.html).not.toContain("spare");
+  it.each(
+    LANGUAGES.flatMap(([locale, header]) =>
+      (["waiting", "sending", "needs-attention", "clock", "clash", "record-clash"] as const).map(
+        (state) => [locale, header, state] as const,
+      ),
+    ),
+  )(
+    "shows one line for the return while it needs the person, in %s (%s), while %s",
+    async (locale, header, state) => {
+      const successor = await seedSuccessor("Bar counter box");
+      await handOver(successor);
+      await holdChart(successor, "https://bar-counter.example");
+      await recordConfirmedReturn(successor);
+      const html = await (await request(header, suite.db, state)).text();
+      const line = WORDS[locale][state === "sending" ? "waiting" : state];
+      expect(RESTRICTED_RETURN_WORDS[locale][state]).toBe(line);
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://bar-counter.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+        `<p>${escapeHtml(line)}</p>`,
+      ]);
+    },
+  );
 
-    const spanish = await page("es-ES,es;q=0.9");
-    expect(spanish.status).toBe(200);
-    expect(spanish.html).toContain('<html lang="es">');
-    inOrder(spanish.html, [
-      "<h1>El local ya no funciona con este servidor</h1>",
-      "No hace ventas ni envía nada a Hacienda. El servidor que pasa a llevar el local es <strong>bar-counter.example</strong> (servidor principal).",
-      "Traspaso iniciado",
-      "Ha dejado de vender",
-    ]);
+  it("calls the Waitron machine a servidor in every Spanish line", () => {
+    for (const line of Object.values(RESTRICTED_RETURN_WORDS["es-ES"]))
+      expect(line).not.toMatch(/\bequipos?\b/i);
+    for (const line of Object.values(RESTRICTED_RESET_WORDS["es-ES"]))
+      expect(line).not.toMatch(/\bequipos?\b/i);
   });
 
   it.each([
     ["https://new-box.example", true],
     ["javascript:alert(1);//", false],
-  ] as const)("offers only a web handover link after restart: %s", async (contactUrl, linked) => {
+  ] as const)(
+    "links Progress during an unfinished planned handover only at a web address: %s",
+    async (contactUrl, linked) => {
+      const successor = await seedSuccessor("Counter box");
+      await handOver(successor);
+      await writeNodeMembership(suite.db, {
+        body: {
+          term: 3,
+          nodes: [
+            { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+            { nodeId: successor, contactUrl, standing: "serving-secondary" },
+          ],
+        },
+        signerNodeId: NODE,
+        signature: "not-verified-by-this-read",
+        endorsements: [],
+      });
+      for (const [locale, header] of LANGUAGES) {
+        const result = await request(header, suite.db, "waiting");
+        expect(result.status).toBe(200);
+        const html = await result.text();
+        if (linked)
+          expect(paragraphs(html)).toEqual([
+            `<p><a href="${contactUrl}">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+            `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+            `<p><a href="${contactUrl}/handover/${OP}">${RESTRICTED_PAGE_WORDS[locale].progress}</a></p>`,
+          ]);
+        else expect(html).not.toContain("<a ");
+      }
+    },
+  );
+
+  it.each(["waiting", "sending", "needs-attention", "clock", "record-clash"] as const)(
+    "keeps Progress while %s says nothing of the new main box having started",
+    async (state) => {
+      const successor = await seedSuccessor("Counter box");
+      await handOver(successor);
+      await holdChart(successor, "https://new-box.example", "serving-secondary");
+      const html = await (await request("en-GB", suite.db, state)).text();
+      expect(html).toContain(`<a href="https://new-box.example/handover/${OP}">Progress</a>`);
+    },
+  );
+
+  it.each([
+    ["the return is confirmed", "confirmed", false],
+    ["the main box answered with a payment clash", "clash", false],
+    ["this box holds the main box's confirmation from an earlier start", "waiting", true],
+  ] as const)(
+    "hides Progress once the new main box has started: %s",
+    async (_, state, recorded) => {
+      const successor = await seedSuccessor("Counter box");
+      await handOver(successor);
+      await holdChart(successor, "https://new-box.example", "serving-secondary");
+      const before = await (await request("en-GB", suite.db, "waiting")).text();
+      expect(before).toContain(`/handover/${OP}">Progress</a>`);
+      if (recorded) await recordConfirmedReturn(successor);
+      for (const [locale, header] of LANGUAGES) {
+        const html = await (await request(header, suite.db, state)).text();
+        expect(html).toContain(`<a href="https://new-box.example">`);
+        expect(html).not.toContain("/handover/");
+        expect(html).not.toContain(`>${RESTRICTED_PAGE_WORDS[locale].progress}<`);
+      }
+    },
+  );
+
+  it("never links Progress after an emergency switch", async () => {
     const successor = await seedSuccessor("Counter box");
-    await handOver(successor);
-    await writeNodeMembership(suite.db, {
-      body: {
-        term: 3,
-        nodes: [
-          { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
-          {
-            nodeId: successor,
-            contactUrl,
-            standing: "serving-secondary",
-          },
-        ],
-      },
-      signerNodeId: NODE,
-      signature: "not-verified-by-this-read",
-      endorsements: [],
-    });
-    for (const language of ["en-GB", "es-ES"]) {
-      const result = await page(language);
-      expect(result.status).toBe(200);
-      if (linked) expect(result.html).toContain(`href="${contactUrl}/handover/${OP}"`);
-      else expect(result.html).not.toContain("<a ");
+    await handOver(successor, "emergency");
+    await holdChart(successor, "https://new-box.example", "serving-secondary");
+    for (const [locale, header] of LANGUAGES) {
+      const html = await (await request(header, suite.db, "waiting")).text();
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://new-box.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+        `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+      ]);
     }
   });
 
-  it("escapes the successor's address", async () => {
-    const successor = await seedSuccessor("Bar counter box");
+  it("does not link Progress for a planned handover that was replaced", async () => {
+    const successor = await seedSuccessor("Counter box");
     await handOver(successor);
-    await holdChart(successor, "https://a&b'c.example:8443");
-    const { html } = await page("en-GB");
-    expect(html).toContain(
-      "The box taking over the venue is <strong>a&amp;b&#39;c.example:8443</strong> (main box).",
-    );
-  });
-
-  it("names the successor by its address and its role in this box's chart, never its venue name", async () => {
-    const successor = await seedSuccessor("Bar Pepe (standby)");
-    await handOver(successor);
-    await holdChart(successor, "https://box-db91.waitron.local");
-    const english = await page("en-GB");
-    expect(english.html).toContain(
-      "The box taking over the venue is <strong>box-db91.waitron.local</strong> (main box).",
-    );
-    expect(english.html).not.toContain("Bar Pepe");
-    const spanish = await page("es-ES");
-    expect(spanish.html).toContain(
-      "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong> (servidor principal).",
-    );
-    expect(spanish.html).not.toContain("Bar Pepe");
-  });
-
-  it("gives a successor this box's chart still lists as standby no role", async () => {
-    const successor = await seedSuccessor("Bar Pepe (standby)");
-    await handOver(successor);
-    await holdChart(successor, "https://box-db91.waitron.local", "serving-secondary");
-    const english = (await page("en-GB")).html;
-    expect(english).toContain(
-      "The box taking over the venue is <strong>box-db91.waitron.local</strong>.",
-    );
-    expect(english).not.toContain("spare box");
-    const spanish = (await page("es-ES")).html;
-    expect(spanish).toContain(
-      "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
-    );
-    expect(spanish).not.toContain("servidor de reserva");
-  });
-
-  it.each([
-    ["the successor", true],
-    ["another box", false],
-  ] as const)(
-    "names a successor its stale chart lists as standby the main box once it holds a confirmed return to %s",
-    async (_to, toSuccessor) => {
-      const successor = await seedSuccessor("Bar Pepe (standby)");
-      await handOver(successor);
-      await holdChart(successor, "https://box-db91.waitron.local", "serving-secondary");
-      await withNodeTransaction(suite.node, (tx) =>
-        appendHandoverEventTx(tx, {
-          nodeId: NODE,
-          operationId: OP,
-          kind: "return_confirmed",
-          detail: {
-            destinationNodeId: toSuccessor ? successor : "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            inventory: "a".repeat(64),
-          },
-          envelope: "{}",
-        }),
-      );
-      const role = toSuccessor ? " (main box)" : "";
-      expect((await page("en-GB")).html).toContain(
-        `The box taking over the venue is <strong>box-db91.waitron.local</strong>${role}.`,
-      );
-      const spanish = toSuccessor ? " (servidor principal)" : "";
-      expect((await page("es-ES")).html).toContain(
-        `El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>${spanish}.`,
-      );
-    },
-  );
-
-  it.each(["sell-only", "evicted"] as const)(
-    "gives a successor the chart lists as %s no role, even with a confirmed return to it",
-    async (standing) => {
-      const successor = await seedSuccessor("Bar Pepe (standby)");
-      await handOver(successor);
-      await holdChart(successor, "https://box-db91.waitron.local", standing);
-      await withNodeTransaction(suite.node, (tx) =>
-        appendHandoverEventTx(tx, {
-          nodeId: NODE,
-          operationId: OP,
-          kind: "return_confirmed",
-          detail: { destinationNodeId: successor, inventory: "a".repeat(64) },
-          envelope: "{}",
-        }),
-      );
-      expect((await page("en-GB")).html).toContain(
-        "The box taking over the venue is <strong>box-db91.waitron.local</strong>.",
-      );
-      expect((await page("es-ES")).html).toContain(
-        "El servidor que pasa a llevar el local es <strong>box-db91.waitron.local</strong>.",
-      );
-    },
-  );
-
-  it.each(["", "javascript:alert(1);//", "not a url"])(
-    "names the successor by its id when its chart address %j has no web host",
-    async (contactUrl) => {
-      const successor = await seedSuccessor("Bar Pepe (standby)");
-      await handOver(successor);
-      await holdChart(successor, contactUrl);
-      const { html } = await page("en-GB");
-      expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
-    },
-  );
-
-  it("names the successor by its id when this box holds no chart, whatever its venue name", async () => {
-    const successor = await seedSuccessor("Bar Pepe (standby)");
-    await handOver(successor);
-    const { html } = await page("en-GB");
-    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
+    await advanceHandover({ node: suite.node, nodeId: NODE }, OP, "replaced", {});
+    await holdChart(successor, "https://new-box.example", "serving-secondary");
+    const html = await (await request("en-GB", suite.db, "waiting")).text();
+    expect(html).toContain(`<a href="https://new-box.example">`);
+    expect(html).not.toContain("/handover/");
   });
 
   it("carries no form", async () => {
@@ -311,69 +353,6 @@ describe("the restricted box's own page", () => {
       expect(html).toContain("<h1>");
       expect(html).not.toMatch(/<form|<button|<input|<select|<textarea/);
     }
-  });
-
-  it("names the successor by its id when this box's copy holds no row for it", async () => {
-    const successor = await seedSuccessor(null);
-    await handOver(successor);
-    const { html } = await page("en-GB");
-    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
-  });
-
-  it("names the successor by its id when its recorded name is empty", async () => {
-    const successor = await seedSuccessor("");
-    await handOver(successor);
-    const { html } = await page("en-GB");
-    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
-  });
-
-  it("lists the steps in the order they were recorded, whatever their recorded times", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    await suite.node.insert(nodeHandoverEvents).values({
-      nodeId: NODE,
-      operationId: OP,
-      kind: "filing_relinquished",
-      detail: {},
-      envelope: null,
-      recordedAt: new Date("2020-01-01T00:00:00Z"),
-    });
-    const { html } = await page("en-GB");
-    inOrder(html, [
-      "Handover begun",
-      "Stopped taking sales",
-      "Stopped sending invoice records to the tax agency",
-    ]);
-  });
-
-  it("dates each step in the venue's time zone", async () => {
-    await seedVenue(suite.db, { timeZone: "Pacific/Auckland" });
-    const successor = await seedNode(suite.db);
-    await handOver(successor);
-    await suite.node.insert(nodeHandoverEvents).values({
-      nodeId: NODE,
-      operationId: OP,
-      kind: "filing_relinquished",
-      detail: {},
-      envelope: null,
-      recordedAt: new Date("2020-01-01T00:00:00Z"),
-    });
-    const { html } = await page("en-GB");
-    expect(html).toContain("1 Jan 2020, 13:00: Stopped sending invoice records to the tax agency");
-  });
-
-  it("dates each step in UTC when this box's copy holds no venue", async () => {
-    await handOver("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
-    await suite.node.insert(nodeHandoverEvents).values({
-      nodeId: NODE,
-      operationId: OP,
-      kind: "filing_relinquished",
-      detail: {},
-      envelope: null,
-      recordedAt: new Date("2020-01-01T00:00:00Z"),
-    });
-    const { status, html } = await page("en-GB");
-    expect(status).toBe(200);
-    expect(html).toContain("1 Jan 2020, 00:00: Stopped sending invoice records to the tax agency");
   });
 
   it.each([
@@ -402,8 +381,11 @@ describe("the restricted box's own page", () => {
     },
   );
 
-  it("answers a failure to read from the venue's copy with the same page", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
+  it("shows the page without its links, and logs both, when the venue's copy cannot be read", async () => {
+    const successor = await seedSuccessor("Bar counter box");
+    await handOver(successor);
+    await holdChart(successor, "https://bar-counter.example", "serving-secondary");
+    expect(await (await request("en-GB")).text()).toContain(`/handover/${OP}">Progress</a>`);
     logged.length = 0;
     const venue = new Proxy(suite.db, {
       get: (target, key) => {
@@ -417,8 +399,9 @@ describe("the restricted box's own page", () => {
       },
     });
     const response = await request("en-GB", venue);
-    expect(response.status).toBe(500);
-    expect(await response.text()).toContain("<h1>This page could not be shown.</h1>");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(paragraphs(html)).toEqual([`<p>${escapeHtml(WORDS["en-GB"].waiting)}</p>`]);
     expect(logged).toEqual([
       {
         level: "warn",
@@ -426,15 +409,16 @@ describe("the restricted box's own page", () => {
         fields: { errorCode: "unknown", requestId: "request-1" },
       },
       {
-        level: "error",
-        event: "restricted_page.failed",
+        level: "warn",
+        event: "restricted_page.progress_link_failed",
         fields: { errorCode: "unknown", requestId: "request-1" },
       },
     ]);
   });
 
-  it("lists no step for a supersession learnt from a newer list of machines alone", async () => {
+  it("links no Progress for a supersession learnt from a newer list of machines alone", async () => {
     const successor = await seedSuccessor("Bar counter box");
+    await holdChart(successor, "https://bar-counter.example");
     await withNodeTransaction(suite.node, (tx) =>
       recordHandoverRestrictionTx(tx, {
         nodeId: NODE,
@@ -445,154 +429,119 @@ describe("the restricted box's own page", () => {
       }),
     );
     const { html } = await page("en-GB");
-    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
-    expect(html).not.toContain("<li>");
-  });
-
-  it("words the final copy's step in English and in Spanish", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    await withNodeTransaction(suite.node, (tx) =>
-      appendHandoverEventTx(tx, {
-        nodeId: NODE,
-        operationId: OP,
-        kind: "final_state",
-        detail: {},
-        envelope: "{}",
-      }),
-    );
-    const english = await page("en-GB");
-    inOrder(english.html, ["Stopped taking sales", "Final copy of the venue taken"]);
-    expect(english.html).not.toContain("final_state");
-    const spanish = await page("es-ES");
-    inOrder(spanish.html, ["Ha dejado de vender", "Copia final del local hecha"]);
-    expect(spanish.html).not.toContain("final_state");
-  });
-
-  it("words the offer's step in English and in Spanish", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    await withNodeTransaction(suite.node, (tx) =>
-      appendHandoverEventTx(tx, {
-        nodeId: NODE,
-        operationId: OP,
-        kind: "offer",
-        detail: {},
-        envelope: "{}",
-      }),
-    );
-    const english = await page("en-GB");
-    expect(english.html).toContain("Handover offered");
-    expect(english.html).not.toContain(": offer<");
-    const spanish = await page("es-ES");
-    expect(spanish.html).toContain("Traspaso ofrecido");
-    expect(spanish.html).not.toContain(": offer<");
-  });
-
-  it("words the confirmed return's step in English and in Spanish", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    await withNodeTransaction(suite.node, (tx) =>
-      appendHandoverEventTx(tx, {
-        nodeId: NODE,
-        operationId: OP,
-        kind: "return_confirmed",
-        detail: {},
-        envelope: "{}",
-      }),
-    );
-    const english = await page("en-GB");
-    inOrder(english.html, ["Stopped taking sales", "Invoice records confirmed by the main box"]);
-    expect(english.html).not.toContain("return_confirmed");
-    const spanish = await page("es-ES");
-    inOrder(spanish.html, [
-      "Ha dejado de vender",
-      "Registros de facturación confirmados por el servidor principal",
+    expect(paragraphs(html)).toEqual([
+      `<p><a href="https://bar-counter.example">${escapeHtml(WORDS["en-GB"].dashboard)}</a></p>`,
+      `<p>${escapeHtml(WORDS["en-GB"].waiting)}</p>`,
     ]);
-    expect(spanish.html).not.toContain("return_confirmed");
   });
 
-  it("shows a step this version has no words for by its recorded name", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    await withNodeTransaction(suite.node, (tx) =>
-      appendHandoverEventTx(tx, {
-        nodeId: NODE,
-        operationId: OP,
-        kind: "toString",
-        detail: {},
-        envelope: null,
-      }),
-    );
-    const { status, html } = await page("en-GB");
-    expect(status).toBe(200);
-    inOrder(html, ["Stopped taking sales", ": toString</li>"]);
-  });
-});
-
-it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"] as const)(
-  "keeps data before confirmation and explains reset data loss after it: %s",
-  async (state) => {
-    await handOver(await seedSuccessor("Main box"));
-    const response = await request("en-GB", suite.db, state);
-    const html = await response.text();
-    if (state === "confirmed" || state === "clash") {
-      expect(html).toContain(
-        "Resetting this box deletes its venue data, including sale lines and local backups",
-      );
-      expect(html).not.toContain("You can reset this box.");
-      if (state === "clash") expect(html).not.toContain("Do not reset this box.");
-    } else {
-      expect(html).toContain("Do not reset this box.");
-      expect(html).not.toContain("You can reset this box.");
-      if (state === "clock") expect(html).toContain(RESTRICTED_RETURN_WORDS["en-GB"].clock);
-    }
-  },
-);
-
-it("shows the Spanish clock refusal while withholding reset permission", async () => {
-  await handOver(await seedSuccessor("Main box"));
-  const response = await request("es-ES", suite.db, "clock");
-  expect(response.status).toBe(200);
-  const html = await response.text();
-  expect(html).toContain(RESTRICTED_RETURN_WORDS["es-ES"].clock);
-  expect(html).not.toContain(RESTRICTED_RETURN_WORDS["es-ES"].confirmed);
-});
-
-it("explains reset data loss in Spanish after confirmation", async () => {
-  await handOver(await seedSuccessor("Bar counter box"));
-  const html = await (await request("es-ES", suite.db, "confirmed")).text();
-  expect(html).toContain(
-    "Restablecer este servidor borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
+  it.each(["en-GB", "es-ES"] as const)(
+    "escapes the dashboard link's address in %s",
+    async (language) => {
+      const successor = await seedSuccessor("Main <box>");
+      await handOver(successor);
+      await holdChart(successor, "https://a&b.example");
+      const html = await (await request(language, suite.db, "record-clash")).text();
+      expect(html).toContain(`<a href="https://a&amp;b.example">`);
+      expect(html).not.toContain("a&b.example");
+      expect(html).not.toContain("Main <box>");
+    },
   );
-  expect(html).not.toContain("Puedes restablecer este servidor");
 });
 
-it("distinguishes accepted payment differences from imported facts in both languages", async () => {
-  await handOver(await seedSuccessor("Main box"));
-  for (const language of ["en-GB", "es-ES"] as const) {
-    const clash = await (await request(language, suite.db, "clash")).text();
-    const confirmed = await (await request(language, suite.db, "confirmed")).text();
-    expect(clash).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
-    expect(confirmed).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].confirmed));
-    expect(RESTRICTED_RETURN_WORDS[language].clash).toContain(
-      language === "en-GB" ? "specifically accepted" : "aceptadas expresamente",
-    );
-    expect(RESTRICTED_RETURN_WORDS[language].confirmed).toContain(
-      language === "en-GB" ? "kept its own payment facts" : "conservado sus propios datos de pago",
+/** How the waiting page's "Carry on" (`carry-on.ts`) names the box this one handed over to. */
+describe("the successor's name", () => {
+  async function named(successor: string, locale: "en-GB" | "es-ES" = "en-GB"): Promise<string> {
+    return successorText(
+      await readSuccessor({ venue: suite.db, node: suite.node, nodeId: NODE }, successor),
+      locale,
     );
   }
-});
 
-it.each(["en-GB", "es-ES"] as const)(
-  "renders the record-clash stop separately from payment acceptance in %s",
-  async (language) => {
-    const successor = await seedSuccessor("Main <box>");
+  it("escapes the successor's address", async () => {
+    const successor = await seedSuccessor("Bar counter box");
     await handOver(successor);
-    await holdChart(successor, "https://a&b.example");
-    const html = await (await request(language, suite.db, "record-clash")).text();
-    expect(html).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language]["record-clash"]));
-    expect(html).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
-    expect(html).toContain("<strong>a&amp;b.example</strong>");
-    expect(html).not.toContain("a&b.example");
-  },
-);
+    await holdChart(successor, "https://a&b'c.example:8443");
+    expect(await named(successor)).toBe("<strong>a&amp;b&#39;c.example:8443</strong> (main box)");
+  });
+
+  it("names the successor by its address and its role in this box's chart, never its venue name", async () => {
+    const successor = await seedSuccessor("Bar Pepe (standby)");
+    await handOver(successor);
+    await holdChart(successor, "https://box-db91.waitron.local");
+    expect(await named(successor)).toBe("<strong>box-db91.waitron.local</strong> (main box)");
+    expect(await named(successor, "es-ES")).toBe(
+      "<strong>box-db91.waitron.local</strong> (servidor principal)",
+    );
+  });
+
+  it("gives a successor this box's chart still lists as standby no role", async () => {
+    const successor = await seedSuccessor("Bar Pepe (standby)");
+    await handOver(successor);
+    await holdChart(successor, "https://box-db91.waitron.local", "serving-secondary");
+    expect(await named(successor)).toBe("<strong>box-db91.waitron.local</strong>");
+    expect(await named(successor, "es-ES")).toBe("<strong>box-db91.waitron.local</strong>");
+  });
+
+  it.each([
+    ["the successor", true],
+    ["another box", false],
+  ] as const)(
+    "names a successor its stale chart lists as standby the main box once it holds a confirmed return to %s",
+    async (_to, toSuccessor) => {
+      const successor = await seedSuccessor("Bar Pepe (standby)");
+      await handOver(successor);
+      await holdChart(successor, "https://box-db91.waitron.local", "serving-secondary");
+      await recordConfirmedReturn(toSuccessor ? successor : "dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+      const role = toSuccessor ? " (main box)" : "";
+      expect(await named(successor)).toBe(`<strong>box-db91.waitron.local</strong>${role}`);
+      const spanish = toSuccessor ? " (servidor principal)" : "";
+      expect(await named(successor, "es-ES")).toBe(
+        `<strong>box-db91.waitron.local</strong>${spanish}`,
+      );
+    },
+  );
+
+  it.each(["sell-only", "evicted"] as const)(
+    "gives a successor the chart lists as %s no role, even with a confirmed return to it",
+    async (standing) => {
+      const successor = await seedSuccessor("Bar Pepe (standby)");
+      await handOver(successor);
+      await holdChart(successor, "https://box-db91.waitron.local", standing);
+      await recordConfirmedReturn(successor);
+      expect(await named(successor)).toBe("<strong>box-db91.waitron.local</strong>");
+      expect(await named(successor, "es-ES")).toBe("<strong>box-db91.waitron.local</strong>");
+    },
+  );
+
+  it.each(["", "javascript:alert(1);//", "not a url"])(
+    "names the successor by its id when its chart address %j has no web host",
+    async (contactUrl) => {
+      const successor = await seedSuccessor("Bar Pepe (standby)");
+      await handOver(successor);
+      await holdChart(successor, contactUrl);
+      expect(await named(successor)).toBe(`<strong>${successor}</strong>`);
+    },
+  );
+
+  it("names the successor by its id when this box holds no chart, whatever its venue name", async () => {
+    const successor = await seedSuccessor("Bar Pepe (standby)");
+    await handOver(successor);
+    expect(await named(successor)).toBe(`<strong>${successor}</strong>`);
+  });
+
+  it("names the successor by its id when this box's copy holds no row for it", async () => {
+    const successor = await seedSuccessor(null);
+    await handOver(successor);
+    expect(await named(successor)).toBe(`<strong>${successor}</strong>`);
+  });
+
+  it("names the successor by its id when its recorded name is empty", async () => {
+    const successor = await seedSuccessor("");
+    await handOver(successor);
+    expect(await named(successor)).toBe(`<strong>${successor}</strong>`);
+  });
+});
 
 async function chartNaming(successor: string, contactUrl: string): Promise<void> {
   await writeNodeMembership(suite.db, {
@@ -624,7 +573,7 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
         const html = await response.text();
         expect(html).toContain(`<h1>${escapeHtml(RESTRICTED_PAGE_WORDS[language].title)}</h1>`);
         expect(html).toContain(
-          `<a href="https://new-box.example">${escapeHtml(RESTRICTED_PAGE_WORDS[language].openSuccessor)}</a>`,
+          `<a href="https://new-box.example">${escapeHtml(WORDS[language].dashboard)}</a>`,
         );
         expect(html).not.toContain('href="https://old-box.example"');
       }
@@ -641,18 +590,20 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
   );
 
   it.each([
-    ["the chart does not list the successor", null, null],
-    ["the successor's address is plain http", "http://new-box.example", "new-box.example"],
-    ["the successor's address is empty", "", null],
-  ] as const)("offers no successor link when %s", async (_, contactUrl, shown) => {
+    ["the chart does not list the successor", null],
+    ["the successor's address is plain http", "http://new-box.example"],
+    ["the successor's address is empty", ""],
+  ] as const)("offers no dashboard link when %s", async (_, contactUrl) => {
     const successor = await seedSuccessor("Counter box");
     await handOver(successor);
     if (contactUrl !== null) await chartNaming(successor, contactUrl);
     else await chartNaming("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "https://elsewhere.example");
     const html = await (await request("en-GB", suite.db, undefined, "/till")).text();
-    expect(html).toContain(`<strong>${shown ?? successor}</strong>`);
+    expect(html).toContain(`<h1>${RESTRICTED_PAGE_WORDS["en-GB"].title}</h1>`);
     expect(html).not.toContain("Counter box");
-    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+    expect(html).not.toContain(WORDS["en-GB"].dashboard);
+    expect(html).not.toContain('<a href="http://new-box.example"');
+    expect(html).not.toContain("elsewhere.example");
   });
 
   it.each([
@@ -674,9 +625,8 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
     const response = await request("en-GB", suite.db, undefined, "/till");
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain(`<strong>${successor}</strong>`);
-    expect(html).toContain(escapeHtml(RESTRICTED_RETURN_WORDS["en-GB"].waiting));
-    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+    expect(html).toContain(`<h1>${RESTRICTED_PAGE_WORDS["en-GB"].title}</h1>`);
+    expect(paragraphs(html)).toEqual([`<p>${escapeHtml(WORDS["en-GB"].waiting)}</p>`]);
     expect(logged).toEqual([
       {
         level: "warn",
@@ -698,12 +648,10 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
     expect(response.status).toBe(200);
     const html = await response.text();
     inOrder(html, [
-      `<strong>${successor}</strong>`,
-      "Handover begun",
-      "Stopped taking sales",
-      escapeHtml(RESTRICTED_RETURN_WORDS["en-GB"].waiting),
+      `<h1>${RESTRICTED_PAGE_WORDS["en-GB"].title}</h1>`,
+      `<p>${escapeHtml(WORDS["en-GB"].waiting)}</p>`,
     ]);
-    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+    expect(html).not.toContain("Handover begun");
     expect(html).not.toContain("<a ");
     expect(logged).toEqual([
       {
@@ -744,15 +692,15 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
 
 describe("the restricted page after the main box asks this box to reset", () => {
   const ORDERED = {
-    "en-GB": "The main box asked this box to reset. It restarts shortly as a new box.",
+    "en-GB": "The main box asked this box to wipe itself. It restarts shortly as a new box.",
     "es-ES":
-      "El servidor principal ha pedido restablecer este servidor. En breve se reinicia como un servidor nuevo.",
+      "El servidor principal ha pedido a este servidor que se borre. En breve se reinicia como un servidor nuevo.",
   } as const;
   const REFUSED = {
     "en-GB":
-      "This box was asked to reset, but it could not set its records aside, so it did not reset. Nothing on it was changed or deleted. The venue runs on the main box and no longer needs this one, so you can switch it off.",
+      "This box was asked to wipe itself but could not set its records aside, so nothing on it was changed. The venue runs on the new main box; you can switch this one off.",
     "es-ES":
-      "Se pidió a este servidor que se restableciera, pero no ha podido apartar sus registros, así que no se ha restablecido. No se ha cambiado ni borrado nada en él. El local funciona con el servidor principal y ya no necesita este, así que puedes apagarlo.",
+      "Se pidió a este servidor que se borrara, pero no ha podido apartar sus registros, así que no se ha cambiado nada en él. El local funciona con el nuevo servidor principal; puedes apagar este.",
   } as const;
   const languages = [
     ["en-GB", "en-GB,en;q=0.9"],
@@ -767,7 +715,17 @@ describe("the restricted page after the main box asks this box to reset", () => 
     return request(header, suite.db, returnState, "/", "GET", extra).then((r) => r.text());
   }
   const resetBesideReturn = languages.flatMap(([locale, header]) =>
-    (["waiting", "sending"] as const).map((state) => [locale, header, state] as const),
+    (
+      [
+        "waiting",
+        "sending",
+        "needs-attention",
+        "clock",
+        "clash",
+        "record-clash",
+        "confirmed",
+      ] as const
+    ).map((state) => [locale, header, state] as const),
   );
 
   it("words both lines in English and in Spanish, naming nobody to contact", () => {
@@ -801,7 +759,7 @@ describe("the restricted page after the main box asks this box to reset", () => 
         state,
       );
       expect(page).toContain(`<p>${escapeHtml(ORDERED[locale])}</p>`);
-      expect(page).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[locale][state]));
+      expect(paragraphs(page)).toEqual([`<p>${escapeHtml(ORDERED[locale])}</p>`]);
     },
   );
 
@@ -815,7 +773,7 @@ describe("the restricted page after the main box asks this box to reset", () => 
         state,
       );
       expect(page).toContain(`<p>${escapeHtml(REFUSED[locale])}</p>`);
-      expect(page).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[locale][state]));
+      expect(paragraphs(page)).toEqual([`<p>${escapeHtml(REFUSED[locale])}</p>`]);
     },
   );
 
@@ -844,7 +802,7 @@ describe("the restricted page after the main box asks this box to reset", () => 
         const page = await html(header, extra);
         expect(page).not.toContain(escapeHtml(ORDERED[locale]));
         expect(page).not.toContain(escapeHtml(REFUSED[locale]));
-        expect(page).toContain(`<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale].waiting)}</p>`);
+        expect(page).toContain(`<p>${escapeHtml(WORDS[locale].waiting)}</p>`);
       }
     },
   );
