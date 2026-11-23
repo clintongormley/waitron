@@ -1655,7 +1655,10 @@ visible numbers alone do not imply a numbering defect.
 On a paid bill, Cancel item can cancel only the unserved remainder after earlier cancellations.
 Served food uses Refund a payment on the receipt, as
 [A758 section 3.3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
-specifies. The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
+specifies. (2026-11-23: on a receipt Correct invoice can correct, money for served food goes back
+through Correct invoice;
+[decision](fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23).)
+The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
 fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
 replay after serving. The unpaid served-food case retains its separate cancellation behavior.
 

@@ -1,8 +1,11 @@
 # A802: Correct part of a paid invoice
 
-> **2026-11-23:** policy 2's "goodwill refunds stay money-only" no longer holds: goodwill money
-> goes back through Correct invoice, and Refund a payment refuses what Correct invoice would give
-> back, on the owner's words of 18 and 21 November
+> **2026-11-23:** the owner's approval of policy 2 recorded "goodwill refunds stay money-only", and
+> this design says "An ordinary goodwill refund remains a money action" and "a served-dish goodwill
+> return can still use ordinary Refund a payment". That no longer holds: goodwill money goes back
+> through Correct invoice, on the owner's words of 18 and 21 November, and Refund a payment refuses
+> what Correct invoice would give back, the watcher's rule shown to the owner on 23 November without
+> objection
 > ([decision](../../backlog/fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23);
 > [plan](../plans/2026-11-19-adviser-goodwill-corrective.md)).
 >

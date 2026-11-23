@@ -950,11 +950,6 @@ A802 slice 5b (#3108):
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
   −€0.50. When this lands, the refund suites whose setups refund a named cancel (Task 7 of the
   goodwill plan) start filing correctives, so their counts of filed records change.
-- **Money given back as goodwill takes a corrective, built 2026-11-23.** Goodwill money goes back
-  through **Correct invoice**, and **Refund a payment** refuses what Correct invoice would give back
-  ([decision](#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23)). The
-  adviser is asked to confirm it (question 14 of the
-  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)).
 
 Also open, from before A802:
 
@@ -1146,13 +1141,14 @@ Money given back as goodwill takes a corrective: the owner's "yes" to question 6
 November, and "take this as confirmed" (lane L `questions.md`, "WATCHER 2026-11-21 18:17"). So
 **Refund a payment** refuses the payment money **Correct invoice** would give back now, and Correct
 invoice gives it back with a corrective (`plainRefundLimit`, `apps/server/src/tender-refund-reservation.ts`).
-That rule is the watcher's choice 1, cleared on 19 November at 09:05 and shown to the owner as replacing the
-A802 design's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
+That rule is the watcher's choice 1: cleared on 19 November at 09:05, parked by the owner at 10:03,
+and built on the owner's word of 21 November 18:17; shown to the owner as replacing the A802
+approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
 A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
 filing record, cancelled, not fully paid, a full invoice naming a customer, records that need
-checking), Refund a payment stays open; where it only waits (a refused filing, another refund
-pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
+checking), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
+another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still
 owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
 refund is refused before the terminal step, so staff never return money that the refund would then

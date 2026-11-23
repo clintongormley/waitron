@@ -358,9 +358,7 @@ own, with the VAT that stays declared because no corrective invoice is filed.
 Refund a payment gives money back without correcting the invoice, so it refuses money **Correct
 invoice** can give back, such as for a complaint: use Correct invoice for that. It still gives back
 a tip, what is still owed for dishes cancelled with **Cancel and refund** or **Finish table**, a part
-payment as below, and money on an invoice Correct invoice cannot correct. While the tax agency has
-refused the invoice's filing, Correct invoice gives nothing back and Refund a payment still refuses
-that money: try again once it has been sent again.
+payment as below, and money on an invoice Correct invoice cannot correct.
 
 To give back a part payment that the table's receipt already took off, first use **Correct
 invoice** on the table's receipt. Once that has given back everything paid on it, choose **Refund a
@@ -401,7 +399,7 @@ Waitron files a corrective invoice for it. On a past receipt, choose **Correct i
 **Refund a payment**. The till cannot correct a full invoice naming a customer.
 
 If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
-otherwise leave them all unticked, and it is shared across every dish by menu price. Enter the **Money back, VAT included**, and check the VAT shown
+otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
 for each rate. Choose a **Reason**, such as **Complaint**, then **Correct and refund**. If you may not correct invoices,
 someone who may enters their PIN.
 
@@ -435,7 +433,7 @@ If the till says the box is out of disk space, wait until a manager clears the s
 on the terminal: Waitron cannot record the refund while the stop holds.
 
 For a card payment keyed from a separate terminal, refund on that terminal only when the window
-asks you to, and complete that refund before choosing **Refunded on the terminal**. A supervisor
+asks you to, and complete that refund before confirming it in the window. A supervisor
 or manager then approves recording it in Waitron with their PIN.
 
 If a refund gets no answer, check the bill's payments before trying again. The first request may

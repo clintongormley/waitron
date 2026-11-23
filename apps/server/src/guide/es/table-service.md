@@ -378,9 +378,7 @@ Devolver un pago devuelve dinero sin rectificar la factura, así que rechaza el 
 **Rectificar factura** puede devolver, como por una queja: usa Rectificar factura para eso. Sigue
 devolviendo una propina, lo que falta por devolver de platos cancelados con **Cancelar y devolver** o
 **Cerrar mesa**, un pago parcial como el de abajo y el dinero de una factura que Rectificar factura no
-puede rectificar. Mientras la Agencia Tributaria haya rechazado la presentación de la factura,
-Rectificar factura no devuelve nada y Devolver un pago sigue rechazando ese dinero: vuelve a
-intentarlo cuando se haya enviado de nuevo.
+puede rectificar.
 
 Para devolver un pago parcial que el ticket de la mesa ya descontó, usa primero **Rectificar
 factura** en el ticket de la mesa. Cuando haya devuelto todo lo pagado en él, elige **Devolver un
@@ -424,7 +422,7 @@ diferencia y Waitron presenta una factura rectificativa por ella. En un recibo a
 completa a nombre de un cliente.
 
 Si el cobro de más fue en platos concretos, márcalos en **Platos que se rectifican (opcional)**; si
-no, déjalos todos sin marcar, y se reparte entre todos los platos según su precio de carta. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
+no, déjalos todos sin marcar. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
 muestra para cada tipo. Elige un **Motivo**, como **Queja**, y después **Rectificar y devolver**. Si no puedes
 rectificar facturas, alguien que pueda introduce su PIN.
 
@@ -460,7 +458,7 @@ Si el TPV indica que el servidor no tiene espacio en disco, espera a que un enca
 antes de devolver el dinero en el datáfono: Waitron no puede registrar la devolución mientras dure.
 
 Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
-cuando la ventana te lo pida, y completa allí la devolución antes de elegir **Devuelto en el datáfono**.
+cuando la ventana te lo pida, y completa allí la devolución antes de confirmarlo en la ventana.
 Después, un supervisor o encargado aprueba su registro en Waitron con su PIN.
 
 Si una devolución no recibe respuesta, revisa los pagos de la cuenta antes de intentarla otra vez.
