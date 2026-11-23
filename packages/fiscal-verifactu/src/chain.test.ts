@@ -496,7 +496,7 @@ describe("readChainHead", () => {
       const changes = () =>
         tx.all<{ count: number }>(sql`select total_changes() as count`)[0]!.count;
       const before = changes();
-      const head = await readChainHead(tx, node.nodeId, node.sifId);
+      const head = await readChainHead(tx, node.nodeId);
       expect(head).toEqual({
         secuencia: 1,
         ultimoRegistroId: record.id,

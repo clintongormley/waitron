@@ -13,7 +13,7 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { currentSif, esPrimerRegistro, writeReservedSif } from "./registro-sif.js";
+import { currentSif, writeReservedSif } from "./registro-sif.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { TAXPAYER_A, TAXPAYER_B, seedSoldRegistro, seedTaxpayers } from "../test/fixtures.js";
 
@@ -196,9 +196,6 @@ describe("a new SIF identity begins a new chain", () => {
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );
 
-    // Simulate the node having recorded a sale: the chain head now points at a real registro and carries a
-    // huella. See seedSoldRegistro's doc comment for why this must be a real
-    // verifactu_records row rather than a bare column update.
     await seedSoldRegistro(db, {
       nodeId: TAXPAYER_A.nodeId,
       sifId: first.id,
@@ -207,7 +204,8 @@ describe("a new SIF identity begins a new chain", () => {
       huella: "C".repeat(64),
     });
 
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(false);
+    const predecessor = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(predecessor.ultimoRegistroId).not.toBeNull();
 
     const second = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
@@ -221,15 +219,12 @@ describe("a new SIF identity begins a new chain", () => {
     expect(head.secuencia).toBe(7);
   });
 
-  it("reports PrimerRegistro from local state, not from a flag", async () => {
-    // AEAT returns a non-rejecting warning if PrimerRegistro="S" is claimed when records already
-    // exist for that SIF+NIF — a useful signal that a node was accidentally re-provisioned. It is
-    // only useful if the value is DERIVED. A caller-set flag would make the warning report the
-    // caller's belief back to itself.
+  it("reads a predecessor only after the current identity records a sale", async () => {
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(true);
+    const empty = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(empty.ultimoRegistroId).toBeNull();
 
     await seedSoldRegistro(db, {
       nodeId: TAXPAYER_A.nodeId,
@@ -238,7 +233,8 @@ describe("a new SIF identity begins a new chain", () => {
       secuencia: 1,
       huella: "D".repeat(64),
     });
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(false);
+    const predecessor = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(predecessor.ultimoRegistroId).not.toBeNull();
   });
 });
 

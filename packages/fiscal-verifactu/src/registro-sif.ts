@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { readChainHead } from "./chain.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 /**
@@ -151,9 +150,4 @@ export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRe
   }
 
   return { ...row, nodeId };
-}
-
-/** A chain starts when this node's latest record belongs to an earlier identity or is absent. */
-export async function esPrimerRegistro(tx: Transaction, nodeId: NodeId): Promise<boolean> {
-  return (await readChainHead(tx, nodeId)).ultimoRegistroId === null;
 }

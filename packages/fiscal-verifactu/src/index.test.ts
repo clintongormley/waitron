@@ -8,7 +8,6 @@ import {
   activateAllocation,
   currentSif,
   verifactuSubmissions,
-  esPrimerRegistro,
   fromRegistroRow,
   readChainHead,
   registerSif,
@@ -30,11 +29,10 @@ describe("package public surface (./index.js)", () => {
     expect(getTableName(verifactuRecords)).toBe("verifactu_records");
   });
 
-  it("re-exports the registration surface (registerSif, currentSif, esPrimerRegistro) from the package root", () => {
+  it("re-exports the fiscal registration operations", () => {
     expect(typeof registerSif).toBe("function");
     expect(typeof activateAllocation).toBe("function");
     expect(typeof currentSif).toBe("function");
-    expect(typeof esPrimerRegistro).toBe("function");
   });
 
   it("re-exports the chain-append surface (appendToChain, readChainHead, toRegistroRow) from the package root", () => {

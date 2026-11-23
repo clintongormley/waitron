@@ -106,23 +106,16 @@ async function selectHead(tx: Transaction, nodeId: NodeId) {
   return row;
 }
 
-export async function readChainHead(
-  tx: Transaction,
-  nodeId: NodeId,
-  sifId?: string,
-): Promise<ChainHead> {
+export async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
   const head = await selectHead(tx, nodeId);
   if (head === undefined) return { secuencia: 0, ultimoRegistroId: null, ultimaHuella: null };
 
-  if (sifId === undefined) {
-    const [active] = await tx
-      .select({ id: verifactuIdentities.id })
-      .from(verifactuIdentities)
-      .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)))
-      .limit(1);
-    sifId = active?.id;
-  }
-  const previous = head.sifId === sifId ? head : undefined;
+  const [active] = await tx
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .limit(1);
+  const previous = head.sifId === active?.id ? head : undefined;
   return {
     secuencia: head.secuencia,
     ultimoRegistroId: previous?.id ?? null,
