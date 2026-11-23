@@ -81,8 +81,7 @@ En el servidor principal, abre **Sistema → Servidores**, abre el menú de la f
 reserva y elige **Retirar del local**. Si ha terminado de unirse, apágalo primero y asegúrate de que nadie está restaurando el local desde una copia de seguridad ni pasándolo a otro servidor; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
 volver a usar esa máquina, restablécela desde un terminal y añádela como un nuevo servidor de
-reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila una
-vez que ha devuelto sus registros
+reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila
 ([más información](servers.md#old-box-returns)).
 
 ## Iniciar aquí si ha fallado el servidor principal {#emergency}
@@ -286,12 +285,12 @@ también las pestañas **Pedidos**, **Pagos y caja**, **Horas de trabajo** y **A
 lista lo que este servidor registró desde la hora que indica su primera línea, normalmente poco
 antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal.
 
-Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
-servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
+Cuando el servidor principal elige **Borrar y retirar**, este servidor se borra. La página lo indica entonces, y el servidor se reinicia en breve en la primera
 página de la configuración, listo para [volver a unirse como servidor de
 reserva](servers.md#adding-a-spare). El borrado retira sus datos del local, incluidas las líneas de
 venta y las copias de seguridad locales, que esta devolución no incluye; conserva los datos del
-servidor anterior si los necesitas.
+servidor anterior si los necesitas. Si no habían vuelto todos sus registros de facturación, aparta
+sus bases de datos en lugar de borrarlas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los

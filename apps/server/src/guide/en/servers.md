@@ -74,7 +74,7 @@ On the main box, open **System → Servers**, open the spare's row menu and choo
 spare that has finished joining, first switch it off and make sure nobody is restoring the venue from a backup or switching it to another box, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
 it from a terminal and add it as a new spare. The old main box this one took over from is wiped
-from its row once its records are back ([read more](servers.md#old-box-returns)).
+from its row ([read more](servers.md#old-box-returns)).
 
 ## Start here when the main box has failed {#emergency}
 
@@ -258,10 +258,11 @@ box holds. After an [emergency handover](servers.md#emergency), the file also ha
 from the time its first line states, normally shortly before the last sale or order in the copy
 the new main box started from.
 
-Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
+When the main box chooses **Wipe and remove**, this box wipes itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
 spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
-and local backups, which this return does not carry; keep the old box's data if you need them.
+and local backups, which this return does not carry; keep the old box's data if you need them. If its invoice
+records had not all come back, it sets its databases aside instead of deleting them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.

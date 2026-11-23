@@ -404,13 +404,14 @@ qualification remain open. A1342’s marker is now stored and returned invoices 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
 their original capture and its settled-order anchor, without order lines; the new main uses its
-existing recovery worker to check the provider outcome without sending another refund. Once the
-return is confirmed, the new main box's **Wipe and remove** orders the old box to reset; the
+existing recovery worker to check the provider outcome without sending another refund. The new
+main box's **Wipe and remove** orders the old box to reset: once the return is confirmed, or,
+accepting the loss, while it is awaited or after Will not return. The
 old box asks for that order every 30 seconds while it is restricted (every 5 minutes after a
 refusal), and resets at its next start.
 The reset deletes the old box's venue data, including the sale lines and local backups that this
-return does not carry, unless the main box lacks another box's invoice records the old box holds:
-then it sets its databases and other venue state aside in `records/` instead, and still removes
+return does not carry, unless the order accepted the loss or the main box lacks invoice records
+the old box holds: then it sets its databases and other venue state aside in `records/` instead, and still removes
 its local backups (A1558 PR 10). A box that never reaches the main
 box is reset with `waitron.sh reset --force-production`. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
