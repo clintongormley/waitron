@@ -144,10 +144,9 @@ elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qu
 hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Elige **Continuar** otra vez para iniciar el local en este servidor. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
-passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita, normalmente
-una vez, y de nuevo pasados 15 minutos; si la necesita una comprobación que la página hace por sí
-sola, elige **Usar tu passkey** y después otra vez el paso. El
-motivo y las declaraciones se conservan.
+passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
+normalmente una vez, y de nuevo pasados 15 minutos; si en su lugar dice que hay que volver a
+comprobar tu passkey, vuelve a elegir el paso. El motivo y las declaraciones se conservan.
 
 Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el local**: revisa su
 última venta o pedido, elige **Seguir** y vuelve a marcar las tres declaraciones. Si la copia no

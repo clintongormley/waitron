@@ -8,6 +8,7 @@ import type {
   ModulePromotionEntry,
 } from "@waitron/module/src/setup-contract.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
+import { recoveryHourStrings } from "./recovery-hour.js";
 
 const binding = {
   module: "fiscal-verifactu",
@@ -2040,6 +2041,39 @@ it.each([
   );
   expect(button(el, "compare").disabled).toBe(false);
 });
+
+it.each(["en", "es"] as const)(
+  "a promotion refusal the page marks explained shows no words of its own (%s), and an unmarked one still does",
+  async (locale) => {
+    const host = document.createElement("main");
+    applyTokens(host);
+    document.body.append(host);
+    hosts.push(host);
+    let explained = true;
+    const el = FISCAL_SETUP.createPromotion!({
+      locale,
+      scenario: "emergency",
+      timeZone: "UTC",
+      binding: { ...binding, action: "promote" },
+      prepare: async () => {
+        throw Object.assign(new Error("needs a press"), explained ? { explained: true } : {});
+      },
+    }) as LitElement & ModulePromotionEntry;
+    host.append(el);
+    await el.updateComplete;
+    check(el, "recovery-details-confirmed");
+    await proceed(el);
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & {
+      error: string;
+    };
+    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+    await el.updateComplete;
+    expect(actions.error).toBe("");
+    explained = false;
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(actions.error).toBe(recoveryHourStrings[locale].promotionFailed));
+  },
+);
 
 it("no handover refusal tells the person to compare clocks again", () => {
   const causes = [

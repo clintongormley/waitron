@@ -73,6 +73,7 @@ const HELD_SIGN_IN_REFUSALS = new Set([
 const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
   "handover.emergency.passkey_failed",
   "handover.emergency.passkey_again",
+  "handover.emergency.passkey_again_step",
   "handover.emergency.code_expired",
   "handover.emergency.sign_in_failed",
   "handover.emergency.throttled",
@@ -81,8 +82,19 @@ const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
 const PROOF_REFUSALS = new Set(["password.invalid", "passkey.challenge_expired"]);
 class PasskeyNotUsed extends Error {}
-/** The box wants a fresh passkey answer, but nobody pressed anything that may open the prompt. */
-class PasskeyNeedsPress extends Error {}
+/**
+ * The box wants a fresh passkey answer, but nobody pressed anything that may open the prompt. The
+ * page says so itself, so the clock step adds no words of its own.
+ */
+class PasskeyNeedsPress extends Error {
+  readonly explained = true;
+}
+/**
+ * What a step does when a fresh passkey answer could lift the spare's refusal: `prompt` opens the
+ * prompt, for a step a press started; `ask` says a press is needed; `none` passes the refusal on,
+ * to a wait that explains it itself.
+ */
+type Unlock = "prompt" | "ask" | "none";
 
 @customElement("setup-handover-screen")
 export class SetupHandoverScreen extends LitElement {
@@ -354,8 +366,12 @@ export class SetupHandoverScreen extends LitElement {
   /** From `pagehide` until `pageshow` restores the page. */
   #left = false;
   #modalOpen = false;
-  /** False while what a step is doing was started by no press, so no modal prompt may open. */
-  #promptAllowed = true;
+  /** Decided at each clock check's first request, for every request that check sends. */
+  #clockUnlock: Unlock = "ask";
+  /** The latest click through this element; its `eventPhase` is `NONE` once its dispatch ends. */
+  #click?: Event;
+  /** What a refusal that wanted a press put on screen; the clock step's next answer clears it. */
+  #passkeyAgain?: string;
   /** Sent until a step answers it; never written to storage or the address. */
   #assertion?: unknown;
   @state() private email = "";
@@ -384,6 +400,7 @@ export class SetupHandoverScreen extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    this.addEventListener("click", (event) => (this.#click = event), { capture: true });
   }
   override connectedCallback(): void {
     super.connectedCallback();
@@ -676,7 +693,7 @@ export class SetupHandoverScreen extends LitElement {
    */
   async #step<T>(
     send: (signIn: HandoverSignIn | undefined) => Promise<T>,
-    unlock = true,
+    unlock: Unlock,
   ): Promise<T> {
     try {
       const answer = await send(this.#signIn());
@@ -686,25 +703,26 @@ export class SetupHandoverScreen extends LitElement {
     } catch (cause) {
       const code = (cause as { code?: unknown } | null)?.code;
       if (typeof code === "string") this.#assertion = undefined;
-      if (!this.usePasskey || !unlock || !PROOF_REFUSALS.has(code as string)) throw cause;
-      if (!this.#promptAllowed) throw new PasskeyNeedsPress();
+      if (!this.usePasskey || unlock === "none" || !PROOF_REFUSALS.has(code as string)) throw cause;
+      if (unlock === "ask") throw new PasskeyNeedsPress();
     }
     try {
       const { options } = await this.api.switchPasskeyChallenge();
       if (this.#left) throw new PasskeyNotUsed();
+      if (document.visibilityState === "hidden") throw new PasskeyNeedsPress();
       // Every call aborts the ceremony before it, so the field's offer must not renew over this one.
       this.#stopAutofill();
       this.#modalOpen = true;
       this.#assertion = await startAuthentication({
         optionsJSON: options as PublicKeyCredentialRequestOptionsJSON,
       });
-    } catch {
-      throw new PasskeyNotUsed();
+    } catch (cause) {
+      throw cause instanceof PasskeyNeedsPress ? cause : new PasskeyNotUsed();
     } finally {
       if (this.#modalOpen) this.requestUpdate();
       this.#modalOpen = false;
     }
-    return this.#step(send, false);
+    return this.#step(send, "none");
   }
   #valid(): boolean {
     return this.usePasskey || (this.#emailValid && this.password !== "");
@@ -750,11 +768,11 @@ export class SetupHandoverScreen extends LitElement {
       binding,
       timeZone: status.timeZone,
       prepare: async (proposal) => {
-        // A press in the clock step sends its first request before the press reaches this page's
-        // own click listener, which allows the prompt again; a check the step makes by itself
-        // leaves it refused.
+        // The clock step sends a run's first request during the click that starts the run, if a
+        // click does.
         if ((proposal as { action?: unknown } | null)?.action === "clock-challenge")
-          this.#promptAllowed = false;
+          this.#clockUnlock =
+            this.#click !== undefined && this.#click.eventPhase !== Event.NONE ? "prompt" : "ask";
         if (!this.#valid()) {
           this.attempted = true;
           // ClockWait.settle takes a TypeError with no code as a lost request: during a wait the
@@ -763,11 +781,17 @@ export class SetupHandoverScreen extends LitElement {
           throw new TypeError("sign-in fields incomplete");
         }
         try {
-          return await this.#step((signIn) =>
-            this.api.prepareHandover(this.operationId, signIn, binding, proposal),
+          const answer = await this.#step(
+            (signIn) => this.api.prepareHandover(this.operationId, signIn, binding, proposal),
+            this.#clockUnlock,
           );
+          if (this.#passkeyAgain !== undefined && this.actionError === this.#passkeyAgain)
+            this.actionError = "";
+          this.#passkeyAgain = undefined;
+          return answer;
         } catch (cause) {
           if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
+          this.#passkeyAgain = cause instanceof PasskeyNeedsPress ? this.actionError : undefined;
           throw cause;
         }
       },
@@ -789,7 +813,6 @@ export class SetupHandoverScreen extends LitElement {
       return;
     }
     const controller = this.#controller;
-    this.#promptAllowed = true;
     this.busy = true;
     this.actionError = "";
     this.activationHeld = false;
@@ -797,8 +820,9 @@ export class SetupHandoverScreen extends LitElement {
     entry.starting = !retry;
     let refused = false;
     try {
-      const answer = await this.#step((signIn) =>
-        this.api.activateHandover(this.operationId, signIn, moduleOperation),
+      const answer = await this.#step(
+        (signIn) => this.api.activateHandover(this.operationId, signIn, moduleOperation),
+        "prompt",
       );
       if (controller?.signal.aborted) return;
       this.restarting = answer.restarting;
@@ -825,7 +849,7 @@ export class SetupHandoverScreen extends LitElement {
         cause.code === "handover.copy_mismatch"
       ) {
         try {
-          await this.#readPreview();
+          await this.#readPreview("prompt");
         } catch (failure) {
           this.actionError = this.#emergencyError(failure);
         }
@@ -900,7 +924,9 @@ export class SetupHandoverScreen extends LitElement {
     this.actionError = "";
     this.signInStep = "method";
     await this.updateComplete;
-    this.shadowRoot!.querySelector<HTMLElement>("[data-test=sign-in-passkey]")?.focus();
+    this.shadowRoot!.querySelector<HTMLElement>(
+      this.#choosesOnly ? '[name="handover-sign-in-method"]' : "[data-test=sign-in-passkey]",
+    )?.focus();
   }
   async #changeEmail(): Promise<void> {
     this.signInStep = "email";
@@ -930,7 +956,10 @@ export class SetupHandoverScreen extends LitElement {
     error: { params?: { reason?: string } } | null,
     cause: unknown,
   ): StringKey {
-    if (cause instanceof PasskeyNeedsPress) return "handover.emergency.passkey_again";
+    if (cause instanceof PasskeyNeedsPress)
+      return this.#choosesOnly
+        ? "handover.emergency.passkey_again_step"
+        : "handover.emergency.passkey_again";
     if (
       cause instanceof PasskeyNotUsed ||
       (this.usePasskey &&
@@ -1004,7 +1033,7 @@ export class SetupHandoverScreen extends LitElement {
     }
     if (!controller?.signal.aborted) this.#restartPolling();
   }
-  async #readPreview(unlock = true): Promise<boolean> {
+  async #readPreview(unlock: Unlock): Promise<boolean> {
     const controller = this.#controller;
     const preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn), unlock);
     if (controller?.signal.aborted) return false;
@@ -1031,7 +1060,7 @@ export class SetupHandoverScreen extends LitElement {
    */
   async #previewCopy(pressed = true): Promise<void> {
     if (this.busy || this.following || this.heldWaiting || !this.#valid()) return;
-    this.#promptAllowed = pressed;
+    const unlock: Unlock = pressed ? "prompt" : "ask";
     if (this.#controller?.signal.aborted) this.#restartPolling();
     const controller = this.#controller!;
     this.busy = true;
@@ -1047,7 +1076,7 @@ export class SetupHandoverScreen extends LitElement {
       if (this.#checksMain && !(await this.#checkMain())) return;
       let preview: EmergencyHandoverPreview | undefined;
       try {
-        preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn));
+        preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn), unlock);
       } catch (cause) {
         if (!HELD_SIGN_IN_REFUSALS.has((cause as { code?: string } | null)?.code ?? ""))
           throw cause;
@@ -1064,14 +1093,15 @@ export class SetupHandoverScreen extends LitElement {
       this.#heldTimer = setTimeout(() => {
         if (!controller.signal.aborted && this.following) this.heldOffered = true;
       }, HELD_OFFER_AFTER_MS);
-      await this.#takeFollowed(controller, true);
+      await this.#takeFollowed(controller, unlock);
     } catch (cause) {
       if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
     } finally {
       this.busy = false;
     }
   }
-  async #takeFollowed(controller: AbortController, unlock = false): Promise<void> {
+  /** `unlock` is the starting step's; a take carried on from a timer passes refusals on. */
+  async #takeFollowed(controller: AbortController, unlock: Unlock = "none"): Promise<void> {
     let answer: FollowedCopyTake;
     try {
       answer = await this.#step((signIn) => this.api.takeFollowedCopy(signIn), unlock);
@@ -1084,7 +1114,7 @@ export class SetupHandoverScreen extends LitElement {
       if (refusal === undefined) {
         this.actionError = this.#emergencyError(cause);
         // A retry while catching up resends the passkey answer, whose challenge lasts two minutes.
-        if (!unlock && code === "passkey.challenge_expired") {
+        if (unlock === "none" && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
           this.#reopenSignIn();
           this.preparing = false;
@@ -1107,7 +1137,8 @@ export class SetupHandoverScreen extends LitElement {
     if (answer.state === "taken") {
       this.busy = true;
       try {
-        await this.#readPreview();
+        // A take carried on from a timer passes refusals on; this check still asks for a press.
+        await this.#readPreview(unlock === "prompt" ? "prompt" : "ask");
       } catch (cause) {
         if (!controller.signal.aborted) this.actionError = this.#emergencyError(cause);
       } finally {
@@ -1123,7 +1154,7 @@ export class SetupHandoverScreen extends LitElement {
     try {
       const preview = await this.#step(
         (signIn) => this.api.previewEmergencyHandover(signIn),
-        false,
+        "none",
       );
       if (controller.signal.aborted) return;
       this.heldWaiting = false;
@@ -1156,16 +1187,15 @@ export class SetupHandoverScreen extends LitElement {
   }
   async #useHeldCopy(): Promise<void> {
     if (this.busy) return;
-    this.#promptAllowed = true;
     this.#restartPolling();
     this.following = this.heldOffered = false;
     this.heldChosen = this.busy = true;
     this.copyStep = "check";
     this.actionError = "";
-    await this.#readHeldCopy(this.#controller!, true);
+    await this.#readHeldCopy(this.#controller!, "prompt");
   }
   /** The old process may still have answered the offer's check; a lost answer waits for the restart. */
-  async #readHeldCopy(controller: AbortController, unlock = false): Promise<void> {
+  async #readHeldCopy(controller: AbortController, unlock: Unlock = "none"): Promise<void> {
     try {
       await this.#readPreview(unlock);
       if (controller.signal.aborted) return;
@@ -1186,7 +1216,7 @@ export class SetupHandoverScreen extends LitElement {
     try {
       const preview = await this.#step(
         (signIn) => this.api.previewEmergencyHandover(signIn),
-        false,
+        "none",
       );
       if (controller.signal.aborted) return;
       // Until the restart places the copy, the old process may still answer with the one it held.
@@ -1212,13 +1242,13 @@ export class SetupHandoverScreen extends LitElement {
     if (this.busy || !this.backup || !this.#valid() || (this.needsBackupKey && !this.backupKey))
       return;
     this.#stopFollowing();
-    this.#promptAllowed = true;
     this.busy = true;
     this.actionError = "";
     try {
       const backup = this.backup;
-      await this.#step((signIn) =>
-        this.api.selectEmergencyBackup(backup, signIn, this.backupKey || undefined),
+      await this.#step(
+        (signIn) => this.api.selectEmergencyBackup(backup, signIn, this.backupKey || undefined),
+        "prompt",
       );
       this.backup = undefined;
       this.backupKey = "";
@@ -1251,7 +1281,6 @@ export class SetupHandoverScreen extends LitElement {
   }
   async #declareEmergency(): Promise<void> {
     if (this.busy || !this.#validDeclaration() || this.copyRefused) return;
-    this.#promptAllowed = true;
     this.busy = true;
     this.actionError = "";
     // A copy refusal the switch request itself answered saved nothing; one from a check of the copy
@@ -1259,7 +1288,7 @@ export class SetupHandoverScreen extends LitElement {
     let switchRefused = false;
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
-      if (this.#pendingDeclaration && (await this.#readPreview())) {
+      if (this.#pendingDeclaration && (await this.#readPreview("prompt"))) {
         this.#prepareClock();
         return;
       }
@@ -1275,8 +1304,9 @@ export class SetupHandoverScreen extends LitElement {
         },
       };
       const declaration = this.#pendingDeclaration;
-      const answer = await this.#step((signIn) =>
-        this.api.declareEmergencyHandover({ ...declaration, signIn }),
+      const answer = await this.#step(
+        (signIn) => this.api.declareEmergencyHandover({ ...declaration, signIn }),
+        "prompt",
       ).catch((cause: unknown) => {
         switchRefused = typeof (cause as { code?: unknown } | null)?.code === "string";
         throw cause;
@@ -1295,7 +1325,7 @@ export class SetupHandoverScreen extends LitElement {
       ) {
         this.#backToPreparing();
         try {
-          await this.#readPreview();
+          await this.#readPreview("prompt");
           this.actionError = t("handover.emergency.copy_changed");
         } catch (failure) {
           this.actionError = this.#emergencyError(failure);
@@ -1304,7 +1334,7 @@ export class SetupHandoverScreen extends LitElement {
       }
       if (typeof cause !== "object" || cause === null || !("code" in cause)) {
         try {
-          if (await this.#readPreview()) {
+          if (await this.#readPreview("prompt")) {
             this.#prepareClock();
             return;
           }
@@ -1470,7 +1500,7 @@ export class SetupHandoverScreen extends LitElement {
           >
         </p>`
       : field("email", "handover.email");
-    // Without it a password manager may fill another saved login's password (dashboard, #934).
+    // Tells a password manager whose saved login the password field wants.
     const username = this.#emailValid
       ? html`<input
           class="autofill-username"
@@ -1866,16 +1896,6 @@ export class SetupHandoverScreen extends LitElement {
     const status = this.status;
     return html`<main
       lang=${currentLocale()}
-      @click=${(event: Event) => {
-        const entry = this.entry;
-        const path = event.composedPath();
-        if (
-          entry &&
-          path.includes(entry) &&
-          path.some((node) => (node as Element).localName === "wt-button")
-        )
-          this.#promptAllowed = true;
-      }}
       @recovery-edit-details=${(event: Event) => {
         event.stopPropagation();
         this.#resetSelection();

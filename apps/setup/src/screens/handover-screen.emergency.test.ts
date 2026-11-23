@@ -154,6 +154,12 @@ async function mount(
     challengeGate?: () => Promise<void>;
     /** The proof lapses as the first select arrives. */
     proofLapsesAtSelect?: boolean;
+    /** The proof lapses once a take has answered taken. */
+    proofLapsesAtTaken?: boolean;
+    /** Each clock-step request waits for what this returns before it is answered. */
+    preparationGate?: () => Promise<void>;
+    /** Each backup choice waits for what this returns before its sign-in is checked. */
+    backupGate?: () => Promise<void>;
     /** When the main box's latest copy last changed; otherwise it has no dated activity. */
     followedChangeAtMs?: number;
     /**
@@ -235,6 +241,8 @@ async function mount(
       proofLapsed = true;
       proof.cookie = false;
     }
+    if (path.endsWith("/preparation")) await options.preparationGate?.();
+    if (path.endsWith("/emergency/backup")) await options.backupGate?.();
     const proofRefusal = proof && switchSignIn(proof, path, body.signIn, take);
     if (proofRefusal) return proofRefusal;
     if (path.endsWith("/emergency/backup")) {
@@ -277,6 +285,7 @@ async function mount(
       }
       if (answer === "restarting") restartsLeft = 2;
       if (answer === "restarting" || answer === "taken") followedPlaced = true;
+      if (proof && options.proofLapsesAtTaken && answer === "taken") proof.cookie = false;
       return new Response(JSON.stringify({ state: answer }));
     }
     if (path.endsWith("/emergency/preview")) {
@@ -2392,10 +2401,14 @@ it("after a refused pick with no email typed, the method step offers the passkey
   expect(posts[sent]!.body.signIn).toEqual({ email: signIn.email, password: signIn.password });
 });
 
-it("an automatic check of the clocks that the box refuses for want of the passkey opens no prompt; the clock step's Try again opens one", async () => {
+/**
+ * Signs in with the passkey, saves the switch and lets the clock step's automatic re-check meet a
+ * lapsed proof, which needs a press to open the prompt.
+ */
+async function clockCheckNeedingPress() {
   const get = stubPasskey();
   const proof = newProof();
-  const { el } = await mount({ proof, secondClockMissing: 1 });
+  const { el, posts } = await mount({ proof, secondClockMissing: 1 });
   await choosePasskey(el);
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
   await declarationFields(el);
@@ -2408,14 +2421,214 @@ it("an automatic check of the clocks that the box refuses for want of the passke
   expect(get).toHaveBeenCalledTimes(1);
   proof.cookie = false;
   await vi.advanceTimersByTimeAsync(15_000);
-  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again")));
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again_step")));
   expect(get).toHaveBeenCalledTimes(1);
   vi.useRealTimers();
+  // The page's message is the only one: the clock step adds none of its own.
+  const clockActions = q<HTMLElement & { error: string }>(entry, "wt-form-actions");
+  await entry.updateComplete;
+  expect(clockActions.error).toBe("");
+  // The choice of method is drawn, so "or use your password" can be done.
+  const method = q<LitElement & { value: string }>(el, '[name="handover-sign-in-method"]');
+  expect(method).not.toBeNull();
+  expect(method.value).toBe("passkey");
   const again = q<HTMLElement & { disabled: boolean }>(entry, "[data-test=compare]");
   await vi.waitFor(() => expect(again.disabled).toBe(false));
+  return { el, entry, get, posts, again };
+}
+
+it("an automatic check of the clocks that the box refuses for want of the passkey opens no prompt; the clock step's Try again opens one", async () => {
+  const { el, entry, get, again } = await clockCheckNeedingPress();
   again.click();
   await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
   expect(get).toHaveBeenCalledTimes(2);
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_again_step"));
+});
+
+it("after an automatic check of the clocks needs the passkey, choosing the password and Try again sends the password", async () => {
+  const { el, entry, get, posts, again } = await clockCheckNeedingPress();
+  await chooseMethod(el, "password");
+  await edit(el, "handover-password", signIn.password);
+  await edit(el, "handover-code", signIn.totp);
+  const sent = posts.length;
+  again.click();
+  await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(1);
+  const preparations = posts.slice(sent).filter(({ path }) => path.endsWith("/preparation"));
+  expect(preparations.length).toBeGreaterThan(0);
+  for (const { body } of preparations) expect(body.signIn).toEqual(signIn);
+});
+
+it("a click in the clock step that sends nothing lets no prompt open for an automatic check already under way", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  const hold: { gate?: Promise<void> } = {};
+  const { el, posts } = await mount({
+    proof,
+    secondClockMissing: 1,
+    preparationGate: () => hold.gate ?? Promise.resolve(),
+  });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=clock-wait]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(1);
+  let open!: () => void;
+  hold.gate = new Promise<void>((resolve) => (open = resolve));
+  proof.cookie = false;
+  const sent = posts.length;
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(posts).toHaveLength(sent + 1));
+  q(entry, "[data-test=clear]").click();
+  open();
+  await vi.waitFor(() =>
+    expect(
+      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_step")),
+    ).toBe(true),
+  );
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("a passkey refusal that arrives once the tab is hidden opens no prompt, and Use your passkey then opens one", async () => {
+  const get = stubPasskey();
+  const { el } = await mount({ proof: newProof() });
+  await toMethods(el);
+  let hidden = false;
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() =>
+    hidden ? "hidden" : "visible",
+  );
+  q(el, "[data-test=sign-in-passkey]").click();
+  hidden = true;
+  await vi.waitFor(() =>
+    expect(
+      get.mock.calls.length > 0 || actions(el).includes(t("handover.emergency.passkey_again")),
+    ).toBe(true),
+  );
+  expect(get).not.toHaveBeenCalled();
+  hidden = false;
+  const passkey = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
+  await vi.waitFor(() => expect(passkey.disabled).toBe(false));
+  passkey.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("a passkey challenge that arrives once the tab is hidden opens no prompt", async () => {
+  const get = stubPasskey();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const challengeGate = vi.fn(() => gate);
+  const { el } = await mount({ proof: newProof(), challengeGate });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(challengeGate).toHaveBeenCalledTimes(1));
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  release();
+  await vi.waitFor(() =>
+    expect(
+      get.mock.calls.length > 0 || actions(el).includes(t("handover.emergency.passkey_again")),
+    ).toBe(true),
+  );
+  expect(get).not.toHaveBeenCalled();
+});
+
+it("the copy's check after the spare catches up, made by itself, opens no prompt when the proof has lapsed", async () => {
+  const get = stubPasskey();
+  const { el } = await mount({
+    proof: newProof(),
+    takes: ["catching-up", "taken"],
+    proofLapsesAtTaken: true,
+  });
+  await choosePasskey(el);
+  await vi.waitFor(
+    () =>
+      expect(
+        get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again")),
+      ).toBe(true),
+    { timeout: 5000 },
+  );
+  expect(get).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(q(el, "[data-test=sign-in-passkey]")).not.toBeNull());
+});
+
+/** Backup choices sent with a passkey answer. */
+const passkeyBackups = (posts: { path: string; body: Record<string, unknown> }[]) =>
+  posts.filter(
+    ({ path, body }) =>
+      path.endsWith("/emergency/backup") &&
+      typeof body.signIn === "object" &&
+      body.signIn !== null &&
+      "passkey" in body.signIn,
+  ).length;
+it("a backup chosen while the box restarts may open the prompt though the restart wait checks again before its answer", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  const hold: { gate?: Promise<void> } = {};
+  const { el, posts } = await mount({
+    proof,
+    takes: ["catching-up", "restarting"],
+    backupGate: () => hold.gate ?? Promise.resolve(),
+  });
+  await choosePasskey(el);
+  await vi.waitFor(() => catchingUp(el));
+  // The backup choice is opened while the spare catches up; the next take restarts the box.
+  await useDifferentCopy(el);
+  chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
+  await vi.waitFor(
+    () => expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+    { timeout: 5000 },
+  );
+  // A first Use this backup asks for the backup's key.
+  q(el, "[data-test=emergency-backup]").click();
+  await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
+  await edit(el, "handover-backup-key", "synthetic-recovery-key");
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting"));
+  const last = (step: string) => posts.map(({ path }) => path.endsWith(step)).lastIndexOf(true);
+  await vi.waitFor(() => expect(last("/preview")).toBeGreaterThan(last("/followed")));
+  const prompts = get.mock.calls.length;
+  const checks = previews(posts);
+  let open!: () => void;
+  hold.gate = new Promise<void>((resolve) => (open = resolve));
+  const backup = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-backup]");
+  expect(backup.disabled).toBe(false);
+  backup.click();
+  // The restart wait checks again 2 seconds on, while the backup's answer is still awaited.
+  await vi.waitFor(() => expect(previews(posts)).toBe(checks + 1), { timeout: 5000 });
+  const sentBefore = passkeyBackups(posts);
+  proof.cookie = false;
+  open();
+  // While the box restarts the page draws no message, so the refusal is read where it is kept.
+  const refusal = () => Reflect.get(el, "actionError") as string;
+  await vi.waitFor(() =>
+    expect(
+      passkeyBackups(posts) > sentBefore || refusal() === t("handover.emergency.passkey_again"),
+    ).toBe(true),
+  );
+  expect(refusal()).not.toBe(t("handover.emergency.passkey_again"));
+  expect(get).toHaveBeenCalledTimes(prompts + 1);
+  expect(passkeyBackups(posts)).toBe(sentBefore + 1);
+});
+
+it("Continue on a sign-in Ready to switch reopened moves focus to the choice of method", async () => {
+  const { el } = await mount({ expired: true });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
+  q(el, "[data-test=change-email]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  await edit(el, "handover-email", signIn.email);
+  q(el, "[data-test=emergency-preview]").click();
+  const method = await vi.waitFor(() => {
+    const found = q(el, '[name="handover-sign-in-method"]');
+    expect(found).not.toBeNull();
+    return found;
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(method));
 });
 
 it("starts no passkey offer once the page is left, and offers it again on the sign-in of the page restored", async () => {
