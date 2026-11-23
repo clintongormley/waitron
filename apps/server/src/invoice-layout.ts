@@ -1,18 +1,38 @@
 import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
-import type { ReceiptLogoRaster } from "@waitron/shared";
+import type { CardDetails } from "@waitron/payments";
 import {
+  addDecimal,
+  decimal,
+  divideDecimal,
+  ibanGroups,
+  isZeroDecimal,
+  MONEY_SCALE,
+  negateDecimal,
+  type Decimal,
+  type ReceiptLogoRaster,
+} from "@waitron/shared";
+import {
+  INVOICE_PAGE_HEIGHT,
   INVOICE_PAGE_WIDTH,
   invoiceTextWidth,
   wrapInvoiceParts,
   wrapInvoiceText,
+  type InvoicePage,
   type InvoicePageElement,
   type InvoiceTextWeight,
 } from "./invoice-page.js";
+import { cardName } from "./card-details.js";
 import { qrModules } from "./qr-matrix.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
-import { CONTACT_SEPARATOR } from "./receipt-document.js";
-import type { DatedInvoice, ReceiptFacts } from "./receipt-facts.js";
-import { formatMoney } from "./receipt-money.js";
+import { CONTACT_SEPARATOR, type ReceiptDocumentInput } from "./receipt-document.js";
+import {
+  rateLetters,
+  receiptFacts,
+  type DatedInvoice,
+  type FigureSection,
+  type ReceiptFacts,
+} from "./receipt-facts.js";
+import { formatMoney, formatVatRate } from "./receipt-money.js";
 
 const MARGIN = 36;
 const RIGHT = INVOICE_PAGE_WIDTH - MARGIN;
@@ -39,6 +59,16 @@ export const CUSTOMER_PANEL_FRACTION = 0.6;
 const LOGO_PITCH = 72 / 203;
 
 const lineHeight = (size: number): number => size * LINE_SPACING;
+
+function invoiceTitle({ labels, corrects, simplified, band }: ReceiptFacts): string {
+  const heading =
+    corrects !== undefined
+      ? labels.correctiveInvoice
+      : simplified
+        ? labels.simplifiedInvoice
+        : labels.invoiceHeading;
+  return `${heading} ${band.invoiceNumber}`;
+}
 
 /** Page 1's practice box, QR, letterhead, band, corrective lines and customer panel; `bottom` is
  *  where the next part may start. */
@@ -149,13 +179,7 @@ export function layoutInvoiceHeader(
   rule(MARGIN, y, TEXT_WIDTH, HEAVY_RULE);
   y += HEAVY_RULE + GAP;
 
-  const heading =
-    corrects !== undefined
-      ? labels.correctiveInvoice
-      : facts.simplified
-        ? labels.simplifiedInvoice
-        : labels.invoiceHeading;
-  const title = `${heading} ${band.invoiceNumber}`;
+  const title = invoiceTitle(facts);
   const titleLines = wrapInvoiceText(title, TEXT_WIDTH, TITLE_SIZE, "bold");
   const titleWidth = Math.max(
     ...titleLines.map((line) => invoiceTextWidth(line, TITLE_SIZE, "bold")),
@@ -260,4 +284,430 @@ export function layoutInvoiceHeader(
   }
 
   return { elements, bottom: y };
+}
+
+const PAGE_FOOT = INVOICE_PAGE_HEIGHT - MARGIN;
+const TOTAL_SIZE = 18;
+const CELL_PADDING = 4;
+const ROW_PADDING = 3;
+const ROW_RULE = 0.5;
+const INDENT_UNIT = 6;
+
+interface TableColumn {
+  heading: string;
+  width: number;
+  align: "left" | "right";
+}
+
+interface TableRow {
+  cells: string[];
+  indent: number;
+  muted: boolean;
+}
+
+type Line = { text: string; bold?: boolean };
+
+function tableColumns({ labels, simplified }: ReceiptFacts): TableColumn[] {
+  const right = (heading: string, width: number): TableColumn => ({
+    heading,
+    width,
+    align: "right",
+  });
+  const figures = simplified
+    ? [
+        right(labels.quantityColumn, 40),
+        right(labels.priceColumn, 80),
+        right(labels.amountColumn, 80),
+      ]
+    : [
+        right(labels.quantityColumn, 40),
+        right(labels.unitPriceExVatColumn, 72),
+        right(labels.totalExVatColumn, 72),
+        right(labels.vatColumn, 44),
+        right(labels.totalWithVatColumn, 72),
+      ];
+  const used = figures.reduce((sum, column) => sum + column.width, 0);
+  return [
+    { heading: labels.descriptionColumn, width: TEXT_WIDTH - used, align: "left" },
+    ...figures,
+  ];
+}
+
+function tableRows(facts: ReceiptFacts): TableRow[] {
+  const { locale, simplified } = facts;
+  const money = (value: Decimal): string => formatMoney(value, locale);
+  const lettered = (amount: Decimal, letter: string): string =>
+    letter === "" ? money(amount) : `${money(amount)} ${letter}`;
+  // A VAT-included row fills the price and the last column, whichever table it sits in.
+  const withVat = (
+    item: string,
+    quantity: string,
+    price: string,
+    amount: string,
+    indent: number,
+  ): TableRow => ({
+    cells: simplified ? [item, quantity, price, amount] : [item, quantity, "", "", "", amount],
+    indent,
+    muted: indent > 0,
+  });
+  const rows: TableRow[] = [];
+  const add = (section: FigureSection): void => {
+    if (section.kind === "filed") {
+      for (const row of section.rows) {
+        rows.push({
+          cells: [
+            row.item,
+            row.units,
+            row.unitPrice === undefined ? "" : money(row.unitPrice),
+            row.amountExVat === undefined ? "" : money(row.amountExVat),
+            row.rate === undefined ? "" : formatVatRate(row.rate, locale),
+            row.chargedWithVat === undefined ? "" : money(row.chargedWithVat),
+          ],
+          indent: row.indent,
+          muted: row.kind === "option" || row.kind === "answer" || row.kind === "discount",
+        });
+      }
+    } else if (section.kind === "withVat") {
+      const { group } = section;
+      const price =
+        group.perUnit === undefined
+          ? ""
+          : `${money(group.perUnit.price)}${group.perUnit.unitName === undefined ? "" : `/${group.perUnit.unitName}`}`;
+      rows.push(
+        withVat(group.item, group.quantity, price, lettered(group.amount, group.rateLetter), 0),
+      );
+      for (const answer of group.answers) rows.push(withVat(answer, "", "", "", 2));
+      for (const option of group.options) {
+        rows.push(
+          withVat(option.item, option.quantity, "", lettered(option.amount, option.rateLetter), 2),
+        );
+      }
+      for (const adjustment of group.adjustments) {
+        rows.push(
+          withVat(adjustment.item, "", "", lettered(adjustment.amount, adjustment.rateLetter), 2),
+        );
+      }
+    } else {
+      for (const row of section.rows) {
+        rows.push({ ...withVat(row.item, "", "", money(row.amount), 0), muted: true });
+      }
+    }
+  };
+  facts.sections.forEach(add);
+  return rows;
+}
+
+function paymentLines(facts: ReceiptFacts): Line[] {
+  const { labels, locale, total, band } = facts;
+  const { payments = [], tender, owed } = facts.payment;
+  const money = (value: Decimal | string): string => formatMoney(value, locale);
+  const deferred =
+    facts.payment.deferred ?? (tender.method === "deferred" ? { account: null } : undefined);
+  if (deferred !== undefined) {
+    const { account } = deferred;
+    if (account === null) return [{ text: `${labels.deferredPayment}.` }];
+    const instruction = labels.transferInstruction.replace("{number}", () => band.invoiceNumber);
+    const iban = `${labels.iban}: ${ibanGroups(account.iban).join(" ")}`;
+    return [
+      { text: `${labels.deferredPayment}. ${instruction}` },
+      {
+        text:
+          account.bankName === null ? iban : `${iban}   ${labels.bankName}: ${account.bankName}`,
+      },
+    ];
+  }
+
+  const cardParts = (card: CardDetails | undefined, amount: Decimal): string[] => {
+    if (card === undefined) return [`${labels.card} ${money(amount)}`];
+    const presented = {
+      contactless: ` (${labels.paymentContactless})`,
+      chip: ` (${labels.paymentChip})`,
+      swipe: ` (${labels.paymentSwipe})`,
+      unknown: "",
+    }[card.entryMode];
+    return [
+      `${cardName(card, labels.card)}${presented} ${money(amount)}`,
+      ...(card.authCode === null ? [] : [`${labels.paymentAuthorization} ${card.authCode}`]),
+    ];
+  };
+  const amountPart = (word: string, value: string): string[] =>
+    isZeroDecimal(decimal(value)) ? [] : [`${word} ${money(value)}`];
+  const refunds: string[] = [];
+  const paid: string[][] = [];
+  for (const payment of payments) {
+    const given = payment.refunds.map((refund) =>
+      addDecimal(decimal(refund.amount), decimal(refund.tip)),
+    );
+    if (payment.method === "cash") {
+      paid.push([
+        `${labels.cash} ${money(payment.tendered)}`,
+        ...amountPart(labels.change, payment.change),
+        ...amountPart(labels.tip, payment.tip),
+      ]);
+    } else {
+      const charged = given.reduce(addDecimal, decimal(payment.amount));
+      paid.push([
+        ...cardParts(payment.card, charged),
+        ...(payment.reference === null ? [] : [`${labels.reference} ${payment.reference}`]),
+        ...amountPart(labels.tip, payment.tip),
+      ]);
+    }
+    for (const amount of given) refunds.push(`${labels.refund} ${money(negateDecimal(amount))}`);
+  }
+  if (payments.length === 0 && tender.method === "cash") {
+    paid.push([
+      `${labels.cash} ${money(addDecimal(total, decimal(tender.change)))}`,
+      ...amountPart(labels.change, tender.change),
+    ]);
+  } else if (payments.length === 0 && tender.method === "card") {
+    paid.push([
+      ...(tender.card === undefined
+        ? [labels.card]
+        : cardParts(tender.card, decimal(tender.charged))),
+      ...(tender.reference === null ? [] : [`${labels.reference} ${tender.reference}`]),
+      ...(isZeroDecimal(decimal(tender.tip))
+        ? []
+        : [`${labels.tip} ${money(tender.tip)}`, `${labels.charged} ${money(tender.charged)}`]),
+    ]);
+  }
+  const listed = [
+    ...paid.map((parts) => ({ text: parts.join(CONTACT_SEPARATOR) })),
+    ...refunds.map((text) => ({ text })),
+  ];
+  if (owed !== undefined) {
+    return [...listed, { text: `${labels.owed} ${money(owed)}`, bold: true }];
+  }
+  // A fully comped bill moved no money, so it has nothing to call paid.
+  if (paid.length > 0 && !isZeroDecimal(total)) {
+    const [first, ...rest] = listed;
+    return [{ text: `${labels.paid}${CONTACT_SEPARATOR}${first!.text}` }, ...rest];
+  }
+  return refunds.map((text) => ({ text }));
+}
+
+/** The VAT summary, TOTAL, guests and payment footer, laid out from y = 0. */
+function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; height: number } {
+  const { labels, locale, total, simplified } = facts;
+  const elements: InvoicePageElement[] = [];
+  const text = (
+    value: string,
+    x: number,
+    y: number,
+    size: number,
+    weight: InvoiceTextWeight = "regular",
+    tone: "ink" | "muted" = "ink",
+  ): void => {
+    elements.push({ kind: "text", text: value, x, y, size, weight, tone });
+  };
+  const rightAt = (
+    value: string,
+    right: number,
+    y: number,
+    size: number,
+    weight: InvoiceTextWeight = "regular",
+    tone: "ink" | "muted" = "ink",
+  ): void => text(value, right - invoiceTextWidth(value, size, weight), y, size, weight, tone);
+  const money = (value: Decimal): string => formatMoney(value, locale);
+
+  const left = MARGIN + TEXT_WIDTH / 2;
+  const width = TEXT_WIDTH / 2;
+  const column = width / 4;
+  const cellRight = (index: number): number => left + (index + 1) * column - CELL_PADDING;
+  const inner = column - 2 * CELL_PADDING;
+  let y = 0;
+  const cells = (values: string[], size: number, tone: "ink" | "muted"): void => {
+    const wrapped = values.map((value) => wrapInvoiceText(value, inner, size));
+    wrapped.forEach((lines, index) =>
+      lines.forEach((line, at) =>
+        rightAt(line, cellRight(index), y + at * lineHeight(size), size, "regular", tone),
+      ),
+    );
+    y += Math.max(...wrapped.map((lines) => lines.length)) * lineHeight(size);
+  };
+  cells(
+    [labels.taxRateColumn, labels.taxBaseColumn, labels.taxAmountColumn, labels.taxTotalColumn],
+    LABEL_SIZE,
+    "muted",
+  );
+  const letters = simplified ? rateLetters(facts.vat) : null;
+  for (const { rate, base, tax } of facts.vat) {
+    const shown = formatVatRate(rate, locale);
+    const letter = letters?.get(rate);
+    cells(
+      [
+        letter === undefined ? shown : `${letter} ${shown}`,
+        money(base),
+        money(tax),
+        money(addDecimal(base, tax)),
+      ],
+      BODY_SIZE,
+      "ink",
+    );
+  }
+  y += GAP / 2;
+  elements.push({ kind: "rule", x: left, y, width, thickness: HEAVY_RULE });
+  y += HEAVY_RULE + GAP / 2;
+  text(labels.total, left, y, TOTAL_SIZE, "bold");
+  rightAt(money(total), RIGHT, y, TOTAL_SIZE, "bold");
+  y += lineHeight(TOTAL_SIZE);
+  if (facts.guests !== undefined) {
+    const { guests } = facts;
+    const people = `${guests} ${guests === 1 ? labels.guest : labels.guests}`;
+    const each = divideDecimal(total, decimal(String(guests)), MONEY_SCALE);
+    rightAt(`${people}${CONTACT_SEPARATOR}${labels.perPerson} ${money(each)}`, RIGHT, y, BODY_SIZE);
+    y += lineHeight(BODY_SIZE);
+  }
+
+  const lines = paymentLines(facts);
+  if (lines.length > 0) {
+    y += GAP;
+    elements.push({ kind: "rule", x: MARGIN, y, width: TEXT_WIDTH, thickness: LIGHT_RULE });
+    y += LIGHT_RULE + GAP;
+    text(labels.paymentMethodHeading, MARGIN, y, BODY_SIZE, "bold");
+    y += lineHeight(BODY_SIZE);
+    for (const line of lines) {
+      const weight = line.bold === true ? "bold" : "regular";
+      for (const part of wrapInvoiceParts(line.text, TEXT_WIDTH, BODY_SIZE, weight)) {
+        text(part, MARGIN, y, BODY_SIZE, weight);
+        y += lineHeight(BODY_SIZE);
+      }
+    }
+  }
+  return { elements, height: y };
+}
+
+/** A whole A4 invoice: page 1's header, the item table over as many pages as it takes, then the
+ *  closing block, kept whole on one page, and the footer message at the foot of the last page. */
+export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
+  const facts = receiptFacts(input);
+  const header = layoutInvoiceHeader(facts, input.logo);
+  const pages: InvoicePageElement[][] = [header.elements];
+  let page = header.elements;
+  let y = header.bottom;
+  const continuedTop = MARGIN + lineHeight(LABEL_SIZE) + GAP;
+  const newPage = (): void => {
+    page = [];
+    pages.push(page);
+    y = continuedTop;
+  };
+  const text = (
+    value: string,
+    x: number,
+    top: number,
+    size: number,
+    weight: InvoiceTextWeight,
+    tone: "ink" | "muted",
+  ): void => {
+    page.push({ kind: "text", text: value, x, y: top, size, weight, tone });
+  };
+
+  const columns = tableColumns(facts);
+  const lefts = columns.map((_, index) =>
+    columns.slice(0, index).reduce((sum, column) => sum + column.width, MARGIN),
+  );
+  const wrapCells = (
+    cells: readonly string[],
+    size: number,
+    weight: InvoiceTextWeight,
+    indent: number,
+  ): string[][] =>
+    cells.map((cell, index) =>
+      cell === ""
+        ? []
+        : wrapInvoiceText(
+            cell,
+            columns[index]!.width - 2 * CELL_PADDING - (index === 0 ? indent : 0),
+            size,
+            weight,
+          ),
+    );
+  const cellsHeight = (lines: readonly string[][], size: number): number =>
+    Math.max(1, ...lines.map((cell) => cell.length)) * lineHeight(size) + 2 * ROW_PADDING;
+  const drawCells = (
+    lines: readonly string[][],
+    size: number,
+    weight: InvoiceTextWeight,
+    tone: "ink" | "muted",
+    indent: number,
+  ): void => {
+    lines.forEach((cell, index) => {
+      const column = columns[index]!;
+      cell.forEach((line, at) => {
+        const x =
+          column.align === "left"
+            ? lefts[index]! + CELL_PADDING + indent
+            : lefts[index]! + column.width - CELL_PADDING - invoiceTextWidth(line, size, weight);
+        text(line, x, y + ROW_PADDING + at * lineHeight(size), size, weight, tone);
+      });
+    });
+  };
+  const headingLines = wrapCells(
+    columns.map((column) => column.heading),
+    LABEL_SIZE,
+    "bold",
+    0,
+  );
+  const headingHeight = cellsHeight(headingLines, LABEL_SIZE);
+  let headed = false;
+  for (const row of tableRows(facts)) {
+    const indent = row.indent * INDENT_UNIT;
+    const lines = wrapCells(row.cells, BODY_SIZE, "regular", indent);
+    const height = cellsHeight(lines, BODY_SIZE) + ROW_RULE;
+    if (y + height + (headed ? 0 : headingHeight) > PAGE_FOOT) {
+      newPage();
+      headed = false;
+    }
+    if (!headed) {
+      page.push({
+        kind: "box",
+        x: MARGIN,
+        y,
+        width: TEXT_WIDTH,
+        height: headingHeight,
+        fill: "heading",
+      });
+      drawCells(headingLines, LABEL_SIZE, "bold", "ink", 0);
+      y += headingHeight;
+      headed = true;
+    }
+    drawCells(lines, BODY_SIZE, "regular", row.muted ? "muted" : "ink", indent);
+    y += height - ROW_RULE;
+    page.push({ kind: "rule", x: MARGIN, y, width: TEXT_WIDTH, thickness: ROW_RULE });
+    y += ROW_RULE;
+  }
+
+  const message =
+    facts.footerMessage === undefined
+      ? []
+      : wrapInvoiceText(facts.footerMessage, TEXT_WIDTH, LABEL_SIZE);
+  const messageHeight = message.length * lineHeight(LABEL_SIZE);
+  const closing = layoutClosing(facts);
+  y += 2 * GAP;
+  if (y + closing.height > PAGE_FOOT - messageHeight - (message.length > 0 ? GAP : 0)) newPage();
+  const offset = y;
+  page.push(...closing.elements.map((element) => ({ ...element, y: element.y + offset })));
+  message.forEach((line, at) => {
+    const top = PAGE_FOOT - (message.length - at) * lineHeight(LABEL_SIZE);
+    const x = MARGIN + (TEXT_WIDTH - invoiceTextWidth(line, LABEL_SIZE)) / 2;
+    text(line, x, top, LABEL_SIZE, "regular", "muted");
+  });
+
+  const title = invoiceTitle(facts);
+  pages.forEach((elements, index) => {
+    if (index === 0) return;
+    const line = facts.labels.continuedPage
+      .replace("{title}", () => title)
+      .replace("{page}", String(index + 1))
+      .replace("{pages}", String(pages.length));
+    elements.unshift({
+      kind: "text",
+      text: line,
+      x: MARGIN,
+      y: MARGIN,
+      size: LABEL_SIZE,
+      weight: "regular",
+      tone: "muted",
+    });
+  });
+  return pages.map((elements) => ({ elements }));
 }
