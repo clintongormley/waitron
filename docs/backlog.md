@@ -117,7 +117,6 @@ the handover bundles.
 - [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals): chart answers and accepted-copy recognition.
 - [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
-- [Business-day start checks after A760](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
 **5. Important work.** The bundles marked important under each area, taken by theme so that a lane
@@ -540,8 +539,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1512. Send the venue's opening hours to Google (owner, 2026-11-11; was SP19).** Wanted. The
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
-
-- **Business-day start checks after A760** (bundle of 1, 1 important, size L). [Detail](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)

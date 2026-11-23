@@ -22,12 +22,12 @@ hours from `readSeasonDays` in the same file; the painter, the Year and the mont
 
 A special-day date saved on a public holiday records that holiday's official name
 (`special_day_dates.holiday_name`); a date the special day already held keeps the name it was saved
-with (`saveSpecialDay` in `packages/venue-service/src/special-days.ts`). On a special day that
-repeats every year, such a date falls in each later year on the date the country calendar gives a
-holiday of that name, and in no year whose shipped data lacks that name, a year with no shipped
-data included; any other repeating date falls on the same month and day (`specialDateIn`, same
-file; "applies nothing in a year whose list lacks the name, or that has no list" in
-`special-days.holiday-name.test.ts`). Nothing warns about a year that places such a date nowhere:
+with (`saveSpecialDay` in `packages/venue-service/src/special-days.ts`).
+For repeating special days, `specialDateIn` in `packages/venue-service/src/repeat-rules.ts` puts a
+holiday-named date where the country calendar puts that name in each later year. The date does not
+occur in a year with no list or no matching name. See "applies nothing in a year whose list lacks
+the name, or that has no list" in `special-days.holiday-name.test.ts`. Other repeating dates keep
+their month and day. Nothing warns about a year that places such a date nowhere:
 the official list comes out later (owner, 2026-11-14). The readiness list warns
 `special_day.date_shared` for each date in the venue's current or next year that falls where a
 different special day applies, naming both (`specialDayReadiness`, `special-days.ts`). A configuration bundle carries no holiday lists, so
@@ -198,7 +198,7 @@ These steps assume Spain; another country follows the same shape with its own of
    special day: `readHolidays` in `packages/venue-service/src/holidays.ts` reads the country
    calendar alone, and returns facts and coverage. It can move a special day, though: a repeating
    date saved on a public holiday falls wherever the shipped data puts that holiday's name
-   (`specialDateIn`, `packages/venue-service/src/special-days.ts`), so renaming a holiday or
+   (`specialDateIn` in `packages/venue-service/src/repeat-rules.ts`), so renaming a holiday or
    moving its date in the data moves or drops that date in the years it covers after the year the
    date was saved in. Run the holiday suites above to check the current reader; the earlier
    local-table receipt below is historical.

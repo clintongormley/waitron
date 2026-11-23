@@ -69,6 +69,18 @@ function cutSeason<T extends ClosedRange>(
   return ranges.flatMap((range) => cutToOwnDay(range, drawn, cut.anchor) ?? []);
 }
 
+function resolveDayRanges<T extends ClosedRange>(
+  seasonRanges: readonly T[],
+  special: SpecialDayOccurrence | null | undefined,
+  wall: ReturnType<typeof cutDays>,
+  day: LocalDate,
+  overlay: (season: readonly T[], special: SpecialDayOccurrence) => T[],
+): readonly T[] {
+  if (special?.closedAllDay) return [];
+  const season = cutSeason(seasonRanges, wall, day, special != null);
+  return special == null ? season : overlay(season, special);
+}
+
 /** Each day's season, and the special day standing on it, for the days it was read for. */
 export interface DayPlan {
   seasonIdOn: ReadonlyMap<LocalDate, string | null>;
@@ -231,20 +243,15 @@ export async function resolveDepartmentsDays(
     const weeks = allWeeks.get(departmentId) ?? new Map<string, ServiceRange[][]>();
     const days = new Map<LocalDate, ResolvedDepartmentDay>();
     for (const day of businessDays) {
-      const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
       const cutover = cutovers.get(day)!;
-      const season = cutSeason(
+      const ranges = resolveDayRanges(
         (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [],
+        plan.special.get(day),
         wall,
         day,
-        special != null,
+        (season, special) => layerPaint(season, special.paint.get(departmentId) ?? [], cutover),
       );
-      const ranges = special
-        ? special.closedAllDay
-          ? []
-          : layerPaint(season, special.paint.get(departmentId) ?? [], cutover)
-        : season;
       days.set(day, { businessDay: day, seasonId, ranges: fromChangeover(ranges, cutover) });
     }
     resolved.set(departmentId, days);
@@ -281,20 +288,16 @@ export async function resolveZoneClosedDays(
   for (const zoneId of zones) {
     const days = new Map<LocalDate, ClosedRange[]>();
     for (const day of businessDays) {
-      const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
-      const season = cutSeason(
+      const cutover = cutovers.get(day)!;
+      const ranges = resolveDayRanges(
         (seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ?? [],
+        plan.special.get(day),
         wall,
         day,
-        special != null,
+        (season, special) => layerZonePaint(season, special.zonePaint.get(zoneId) ?? [], cutover),
       );
-      const ranges = special
-        ? special.closedAllDay
-          ? []
-          : layerZonePaint(season, special.zonePaint.get(zoneId) ?? [], cutovers.get(day)!)
-        : season;
-      days.set(day, fromChangeover(ranges, cutovers.get(day)!));
+      days.set(day, fromChangeover(ranges, cutover));
     }
     resolved.set(zoneId, days);
   }
