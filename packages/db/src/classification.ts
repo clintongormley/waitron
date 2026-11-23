@@ -3,7 +3,7 @@ import { SETTINGS_CHANGE_TYPE, type ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
 const LEDGER = "what happened, keyed by the writing node";
-const STATE = "manager configuration / live service; copied to a standby";
+const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
 /**
  * The tables core's own module code owns. Core's change sources and its own backup check read this
@@ -31,7 +31,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "node_id and recovery_epoch scope every protocol access; admission validates referenced ids",
   ),
 
-  // ledger — copied to a standby AND drained back from a returned box.
+  // ledger — copied to a standby.
   appendOnly("sales", "ledger", LEDGER),
   appendOnly("sale_lines", "ledger", LEDGER),
   appendOnly("tenders", "ledger", LEDGER),
