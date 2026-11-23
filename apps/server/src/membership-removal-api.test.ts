@@ -1700,6 +1700,95 @@ describe("GET /management-api/servers", () => {
       });
     });
 
+    describe("the route accepts a plain wipe exactly where the row offers one, and a loss wipe exactly where it offers either", () => {
+      const states: [string, (p: Primary) => Promise<string>, boolean, boolean][] = [
+        [
+          "the return is awaited",
+          async (p) => {
+            const oldMain = await oldMainOf(p);
+            await awaitingReturnFrom(p, oldMain);
+            return oldMain;
+          },
+          false,
+          true,
+        ],
+        [
+          "a takeover awaits the return before its activation is recorded",
+          async (p) => {
+            const oldMain = await oldMainOf(p);
+            await takeover(p, oldMain, "activated", "emergency");
+            return oldMain;
+          },
+          false,
+          true,
+        ],
+        [
+          "the return completed",
+          async (p) => {
+            const oldMain = await oldMainOf(p);
+            await returnFrom(p.db, oldMain, p.nodeId);
+            return oldMain;
+          },
+          true,
+          false,
+        ],
+        [
+          "a plain order stands",
+          async (p) => {
+            const oldMain = await oldMainOf(p);
+            await returnFrom(p.db, oldMain, p.nodeId);
+            await orderResetOf(p, oldMain, false);
+            return oldMain;
+          },
+          true,
+          false,
+        ],
+        [
+          "a loss order stands",
+          async (p) => {
+            const oldMain = await oldMainOf(p);
+            await awaitingReturnFrom(p, oldMain);
+            await orderResetOf(p, oldMain, true);
+            return oldMain;
+          },
+          true,
+          false,
+        ],
+        ["no takeover replaced the box", (p) => oldMainOf(p), false, false],
+        [
+          "this box did not pin the box's key",
+          async (p) => {
+            const oldMain = await oldMainOf(p, false);
+            await awaitingReturnFrom(p, oldMain);
+            return oldMain;
+          },
+          false,
+          false,
+        ],
+      ];
+      const cases = states.flatMap(([name, ...rest]) =>
+        [false, true].map((acceptLoss) => [name, acceptLoss, ...rest] as const),
+      );
+
+      it.each(cases)(
+        "when %s, acceptLoss %s",
+        async (_name, acceptLoss, arrange, canReset, offersLoss) => {
+          const p = await primary();
+          const oldMain = await arrange(p);
+          const offered = await canWipeWithLoss(p, oldMain);
+          expect(offered).toEqual({ canReset, canWipeWithLoss: offersLoss });
+
+          const res = await p.app.request(`/management-api/servers/${oldMain}/reset`, {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie: p.adminCookie },
+            body: JSON.stringify({ acceptLoss }),
+          });
+          const accepted = acceptLoss ? canReset || offersLoss : canReset;
+          expect(res.status).toBe(accepted ? 200 : 409);
+        },
+      );
+    });
+
     it("offers no reset to a replaced former main box before its return, and offers it once an order stands", async () => {
       const p = await primary();
       const spare = standby();

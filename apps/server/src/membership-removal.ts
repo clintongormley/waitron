@@ -32,7 +32,7 @@ import {
   returnsCompletedAt,
 } from "./return-completion.js";
 import type { BackupStatus } from "./backup-status.js";
-import { readResetOrders, resetRefusal } from "./reset-order.js";
+import { readResetOrders, resetOptions, resetRefusal } from "./reset-order.js";
 
 type ChartRefusal =
   | "membership.node_not_found"
@@ -254,7 +254,13 @@ export async function listServers(
           ...facts,
           resetStatement,
         });
-      const refusal = resetRefusal(held, selfNodeId, n.nodeId, open, pinned);
+      const options = resetOptions({
+        refused: resetRefusal(held, selfNodeId, n.nodeId, open, pinned) !== null,
+        standing: order,
+        returnCompleted: facts.returnCompleted,
+        returnOutstanding: facts.returnOutstanding,
+        activated: activation !== undefined,
+      });
       return {
         nodeId: n.nodeId,
         contactUrl: n.contactUrl,
@@ -267,15 +273,8 @@ export async function listServers(
         returnOutstanding: facts.returnOutstanding,
         needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
         reset: order === null ? null : "ordered",
-        // orderReset's test without the loss: a standing order is answered as it stands, else
-        // holdsCompletedReturnFrom, which reads this same activationsBySource field.
-        canReset: refusal === null && (order !== null || facts.returnCompleted),
-        // The last clause is orderReset's choice of the takeover its order names.
-        canWipeWithLoss:
-          refusal === null &&
-          order === null &&
-          !facts.returnCompleted &&
-          (facts.returnOutstanding || activation !== undefined),
+        canReset: options.plain,
+        canWipeWithLoss: options.withLoss && !options.plain,
         returnScenario: activation?.scenario ?? null,
         recoveredRecordsBackup: facts.returnCompleted
           ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)
