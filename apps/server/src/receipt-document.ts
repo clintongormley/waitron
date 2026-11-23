@@ -1,10 +1,12 @@
 import type { CardDetails } from "@waitron/payments";
+import type { BankAccount } from "@waitron/db";
 import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
 import {
   addDecimal,
   compareDecimal,
   decimal,
   divideDecimal,
+  ibanGroups,
   MONEY_SCALE,
   negateDecimal,
   subtractDecimal,
@@ -33,7 +35,7 @@ import {
 import { cardName } from "./card-details.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
-import type { TillSaleResult } from "./till-sale.js";
+import type { TenderBlock, TillSaleResult } from "./till-sale.js";
 
 export interface ReceiptIssuer {
   venueName: string;
@@ -76,6 +78,8 @@ export interface ReceiptDocumentInput {
    * mark where there is one, and the printer's own line ends the page.
    */
   testPage?: { printer: string };
+  /** Set when the sale, or one it replaces, was closed as a deferred payment. */
+  deferredPayment?: { account: BankAccount | null };
 }
 
 export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
@@ -365,7 +369,9 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     total();
   }
   rule();
-  const { payments, tender: t, owed } = facts.payment;
+  const { payments, owed, deferred } = facts.payment;
+  // A deferred sale's own lines, below, take the place of its tender's.
+  const t: TenderBlock = deferred === undefined ? facts.payment.tender : { method: "unpaid" };
   const cardRows = (card: CardDetails | undefined, amount: Decimal): void => {
     if (card === undefined) {
       row(label.card, formatMoney(amount, locale));
@@ -413,7 +419,21 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
       row(label.charged, formatMoney(t.charged, locale));
     }
   }
-  if (owed !== undefined) row(label.owed, formatMoney(owed, locale), 0, { bold: true });
+  if (deferred !== undefined) {
+    text(label.paymentMethodHeading, 0, { bold: true });
+    const { account } = deferred;
+    if (account === null) text(`${label.deferredPayment}.`);
+    else {
+      const instruction = label.transferInstruction.replace("{number}", () => band.invoiceNumber);
+      text(`${label.deferredPayment}. ${instruction}`);
+      const iban = ibanGroups(account.iban).join(" ");
+      if (paperWidth === "58mm") {
+        text(`${label.iban}:`);
+        text(iban);
+      } else text(`${label.iban}: ${iban}`);
+      if (account.bankName !== null) text(`${label.bankName}: ${account.bankName}`);
+    }
+  } else if (owed !== undefined) row(label.owed, formatMoney(owed, locale), 0, { bold: true });
   rule();
   const { guests, footerMessage } = facts;
   if (guests !== undefined) {

@@ -29,6 +29,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
 import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { readReceiptPayments } from "./receipt-payments.js";
+import { readDeferredPayment } from "./receipt-deferred-payment.js";
 import { readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -157,6 +158,7 @@ async function readDocument(
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, sale.locale, current.locale);
   const guests = await readReceiptGuests(tx, saleId);
+  const deferredPayment = await readDeferredPayment(tx, saleId);
   return {
     surface: "a4",
     issuer,
@@ -169,6 +171,7 @@ async function readDocument(
     simulated: cfg.practiceMode,
     simulatedCardPayment: await readSimulatedCardPayment(tx, saleId, cfg.practiceMode === true),
     ...(guests === undefined ? {} : { guests }),
+    ...(deferredPayment === undefined ? {} : { deferredPayment }),
     result: {
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }

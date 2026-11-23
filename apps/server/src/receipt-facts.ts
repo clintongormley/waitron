@@ -482,6 +482,7 @@ export function receiptFacts(input: ReceiptDocumentInput): ReceiptFacts {
       ...(result.payments === undefined ? {} : { payments: result.payments }),
       tender: result.tender,
       ...(result.owed === undefined ? {} : { owed: decimal(result.owed) }),
+      ...(input.deferredPayment === undefined ? {} : { deferred: input.deferredPayment }),
     },
     ...(input.guests === undefined ? {} : { guests: input.guests }),
     ...(footerMessage ? { footerMessage } : {}),

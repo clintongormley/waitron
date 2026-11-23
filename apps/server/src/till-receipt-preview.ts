@@ -1,6 +1,7 @@
 import { readTaxpayer, type Transaction } from "@waitron/db";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { readPrintedGuests } from "./receipt-guests.js";
+import { readDeferredPayment } from "./receipt-deferred-payment.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 export async function tillReceiptPreview(
@@ -16,6 +17,7 @@ export async function tillReceiptPreview(
     issuer = { venueName: taxpayer.legalName, nif: taxpayer.taxId };
   }
   const guests = await readPrintedGuests(tx, saleId);
+  const deferredPayment = await readDeferredPayment(tx, saleId);
   const input: ReceiptDocumentInput = {
     result: ticket,
     issuer,
@@ -29,6 +31,7 @@ export async function tillReceiptPreview(
     simulated: practiceMode,
     simulatedCardPayment: ticket.simulatedCardPayment,
     guests,
+    ...(deferredPayment === undefined ? {} : { deferredPayment }),
   };
   try {
     return { ...ticket, receiptPreview: buildReceiptDocument(input).elements };
