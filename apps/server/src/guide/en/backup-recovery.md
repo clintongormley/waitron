@@ -123,8 +123,9 @@ approve the new request in Cloud.
 
 ## Prove access to the selected backup {#proof}
 
-At the end of Preparation, choose **Download recovery pack (PDF)**. Print the pack or keep it
-somewhere other than the box. If setup offers **Save as a file**, keep that file with your
+At the end of Preparation, the **Recovery pack** step shows the master key once. Choose
+**Download**, **Print** or **Copy**, keep the pack somewhere other than the box, then choose
+**Continue**. If setup offers **Save as a file**, keep that file with your
 other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose your recovery pack, or an older recovery PDF,

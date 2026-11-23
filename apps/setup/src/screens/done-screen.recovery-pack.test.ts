@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { finishEs } from "../i18n/strings/finish.js";
 import "./done-screen.js";
 import type { SetupDoneScreen } from "./done-screen.js";
 import type { SetupApi } from "../api/client.js";
@@ -148,13 +149,9 @@ describe("setup's Recovery pack step", () => {
     captureHandovers();
     setLocale("es-ES");
     const el = await mountStep();
-    expect(text(el, "h1")).toBe("Paquete de recuperación");
-    expect(text(el, "[data-test=pack-lead]")).toBe(
-      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
-    );
-    expect(text(el, "[data-test=pack-warning]")).toBe(
-      "Esta es la única vez que se muestra la clave maestra.",
-    );
+    expect(text(el, "h1")).toBe(finishEs["done.pack.heading"]);
+    expect(text(el, "[data-test=pack-lead]")).toBe(finishEs["done.pack.lead"]);
+    expect(text(el, "[data-test=pack-warning]")).toBe(finishEs["done.pack.warning"]);
     expect(text(el, "[data-test=master-key-name]")).toBe("Clave maestra · 2026-11-23 · QZJV");
     expect(text(el, "[data-test=pack-download]")).toBe("Descargar");
     expect(text(el, "[data-test=pack-print]")).toBe("Imprimir");

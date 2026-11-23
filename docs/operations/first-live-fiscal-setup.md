@@ -72,8 +72,8 @@ the attempt is claimed the app shows its page saying the details are frozen, wit
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
 made the page shows "We've created these invoice series:", lists each series with what it is for
 (for example "A-0CSQW — Simplified invoices (tickets)"; `first-hour.browser.test.ts`, "%s labels say invoice series, list each code with
-what it is for and never the bare name"), explains the recovery pack and offers
-**Download recovery pack**, which makes the pack and starts the download.
+what it is for and never the bare name"), then the **Recovery pack** step, which offers
+**Download**: that makes the pack and starts the download.
 
 After **Proceed** the page carries on by itself through its waits. It stops for a press only when it
 shows **Compare the clocks again** (clocks that differ, a box time before this release, a date out of
@@ -165,14 +165,17 @@ you did not report.
 
 ## Keep recovery pack 1
 
-Choose **Download recovery pack**, which makes `waitron-recovery-pack-1.pdf` and downloads it; the
-page then offers it again to download or to print. Both
-actions use the same document within that delivery session. Check the business, venue, box ID
-and key name on its box key page, then tick **I kept the recovery pack.** before continuing.
+Choose **Download**, which makes `waitron-recovery-pack-1.pdf` and downloads it; the page then
+shows the master key, its name above it, with **Download**, **Print** and **Copy**. Download and
+Print use the same document within that delivery session; Copy copies the key as printed, with its
+spaces. **Continue** appears once one of the three has been used
+(`first-hour-recovery-pack.browser.test.ts`). Check the business, venue, box ID and key name on
+its box key page, then choose **Continue**.
 There is no separate signing key, custodian computer, register or downloadable tool.
 
-Keep the PDF or paper outside the box and its backups. It contains the box key. Pack 1 holds
-only that key: its cover lists the bucket copy and archives as not set up
+Keep the PDF or paper outside the box and its backups. It contains the master key and the box key.
+Pack 1 has two pages, the master key's and the box key's, and its attached file names no bucket
+copy or archives
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
 1 holding only the staged key, in %s"). Your Cloud login, or the downloaded archive's password,
 stays separate. Keep an older pack or recovery sheet while you retain backups that need its key.
