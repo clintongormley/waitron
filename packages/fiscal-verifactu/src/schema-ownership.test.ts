@@ -16,7 +16,6 @@ const OWNED = [
   "verifactu_certificates",
   "fiscal_certificate_reminders",
   "verifactu_series_conflicts",
-  "fiscal_reservations",
   "verifactu_identities",
   "verifactu_records",
   "returned_invoice_records",

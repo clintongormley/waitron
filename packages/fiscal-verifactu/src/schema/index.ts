@@ -11,7 +11,6 @@ export { verifactuRecords } from "./verifactu-records.js";
 export { verifactuIdentities } from "./verifactu-identities.js";
 
 export { fiscalAllocations } from "./allocations.js";
-export { fiscalReservations } from "./reservations.js";
 
 export { verifactuSeriesConflicts } from "./verifactu-series-conflicts.js";
 

@@ -19,15 +19,12 @@ import {
   paperCustodianFingerprint,
   signPaperBlock,
   signPaperConsumptionForBlock,
-  signPaperReservationForBlock,
   type PaperAllocation,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envelope.js";
-import { establishDormantAllocation } from "./standby-allocation.js";
 
-import { fiscalReservations } from "./schema/reservations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -137,7 +134,6 @@ async function snapshot() {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     activations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
   };
 }
 
@@ -270,26 +266,6 @@ it("refuses a promotion without an hour authority", async () => {
     incidentEvidence: "master/join-1",
     reservedAt: approval.confirmedAt,
   };
-  const reservation = {
-    block,
-    reservation: signPaperReservationForBlock(block, candidate.allocationId, join, privateKey),
-  };
-  await withTransaction(suite.db, (tx) =>
-    establishDormantAllocation(tx, node, target, reservation, trust, {
-      ...join,
-      allocationId: candidate.allocationId,
-      taxpayerNif: candidate.taxpayerNif,
-      softwareId: "W1",
-      environment: "preproduction",
-      recipientVenueId: "venue-1",
-      generationId: "generation-1",
-      blockId: "block-1",
-      currentRegisterConfirmed: true,
-      reservationConfirmed: true,
-      currentEntryState: "reserved",
-      requiredBases: bases,
-    }),
-  );
   const promotion = {
     ...binding,
     action: "promote",
@@ -498,7 +474,7 @@ it("detaches independently held trust and confirmations before reading the datab
   );
 });
 
-it("requires a dormant reservation on the promotion path", async () => {
+it("refuses activation without an hour authority on the promotion path", async () => {
   const promotion = { ...binding, action: "promote" };
   const before = await snapshot();
   await withOperationAuthority(promotion, operator, (authority) =>

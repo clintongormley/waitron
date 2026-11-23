@@ -502,6 +502,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "fiscal_reservations",
   "acks",
   "filing_cases",
   "filing_case_events",

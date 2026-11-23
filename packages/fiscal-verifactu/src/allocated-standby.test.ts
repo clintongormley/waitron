@@ -10,14 +10,8 @@ import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import * as fiscal from "./index.js";
 
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import {
-  enrolPaperCustodian,
-  paperCustodianFingerprint,
-  signPaperBlock,
-  signPaperReservationForBlock,
-} from "./paper-evidence.js";
+import { signPaperBlock, signPaperReservationForBlock } from "./paper-evidence.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -25,13 +19,7 @@ const primary = { nodeId: TAXPAYER_A.nodeId };
 const standby = { nodeId: TAXPAYER_A.nodeId2 };
 const bases = SERIES_BASES;
 const keys = generateKeyPairSync("ed25519");
-const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const trust = enrolPaperCustodian(
-  "standby-custodian",
-  publicKey,
-  paperCustodianFingerprint(publicKey),
-)!;
 const allocation = {
   version: 1 as const,
   allocationId: "spare-allocation-42",
@@ -86,35 +74,16 @@ function request(action = "reserve", target = standby) {
       privateKey,
     ),
   };
-  const current = {
-    trust,
-    allocationId: allocation.allocationId,
-    recipientVenueId: "spare-venue",
-    generationId: "generation-1",
-    blockId: "spare-block",
-    incidentEvidence,
-    currentRegisterConfirmed: true,
-    reservationConfirmed: true,
-    currentEntryState: "reserved" as const,
-  };
-  return { binding, operatorId, evidence, current };
+  return { binding, operatorId, evidence };
 }
-type Request = ReturnType<typeof request>;
 async function attempt<T>(
   action: string,
-  run: (tx: Transaction, operation: ModuleOperationInput, held: Request) => Promise<T>,
-  change: (held: Request) => void = () => {},
-  target = standby,
+  run: (tx: Transaction, operation: ModuleOperationInput) => Promise<T>,
 ) {
-  const held = request(action, target);
-  change(held);
-  const preparation = fiscal.createStandbyAllocationPreparation(async (scope) => ({
-    ...scope,
-    evidence: held.current,
-  }));
+  const held = request(action);
   return withOperationAuthority(held.binding, held.operatorId, (authority) =>
-    preparation.prepare({ binding: held.binding, authority, input: held.evidence }, (operation) =>
-      withTransaction(suite.db, (tx) => run(tx, operation, held)),
+    withTransaction(suite.db, (tx) =>
+      run(tx, { binding: held.binding, authority, input: held.evidence }),
     ),
   );
 }
@@ -132,7 +101,6 @@ async function rows() {
       )
     ).rows,
     allocations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
   };
 }
 function refusal(reason: string) {
@@ -164,13 +132,14 @@ it("refuses a paper standby input without writing fiscal rows", async () => {
 
 it.each(["reserve", "establish"])("refuses %s without a fresh scoped authority", async (action) => {
   const held = request(action);
+  const before = await rows();
   await expect(
     withTransaction(suite.db, async (tx) => {
       if (action === "reserve") await lifecycle().reserve(tx, primary, standby);
       else await lifecycle().establish(tx, standby, { version: 1, evidence: held.evidence });
     }),
   ).rejects.toMatchObject(refusal("reauthentication_required"));
-  expect((await rows()).reservations).toEqual([]);
+  expect(await rows()).toEqual(before);
 });
 
 it.each(["reserve", "establish"])("refuses %s after its scoped authority ends", async (action) => {

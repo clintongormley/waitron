@@ -222,6 +222,9 @@ the node recovery key authenticates the node operation. They remain separate cre
 
 ## Reserve an entry for a named standby
 
+> A1308 Fi8 removed this standby procedure. Use the clock check when starting the venue on a
+> spare. See [recovering a box](../operations/hour-recovery.md).
+
 A spare box needs its own reserved names while the primary is still selling. Record the named
 spare, primary, operator and join event in the current outside register. Keep the entry reserved;
 joining does not consume it or activate its fiscal identity. Prepare `join.json`:

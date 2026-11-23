@@ -811,10 +811,9 @@ also qualifies the historical operation-description references in this section.
   two minutes; unknown top-level files and nested attachment folders are kept, and a refused cleanup
   is logged without stopping the start. Start again removes its listed files and then the empty folders,
   and sets unknown files aside under the state folder. The box certificate and key
-  share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
-  the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
-  link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity
-  (`fiscal_reservations`). It removes recipes (owner, 2026-11-04). The owner chose that A760's squash
+  share one PEM file, and a completed certificate repair ends after a start stays healthy.
+  A spare joins without reserving a fiscal identity. It gets its own fiscal identity and invoice
+  series when it takes over. A1308 removes recipes (owner, 2026-11-04). The owner chose that A760's squash
   runs first, merged into the eight sets. Slice 5 (5a–5h) completes the location removal. It absorbs A1301's schema slices (S20–S28);
   S23 builds no `venue_settings`, because the venue's settings become documents in the shared
   `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes

@@ -204,6 +204,34 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(series.rows).toEqual([]);
   });
+  it("refuses premature series before writing the spare's node or key", async () => {
+    const standby = generateStandbyIdentity();
+    await expect(
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db },
+        {
+          standby,
+          nodeName: "Spare",
+          filingModule: "fiscal-verifactu",
+          taxModule: null,
+          modules: ALL_MODULES,
+          reserved: {
+            modules: {},
+            series: [{ code: "FA-PREMATURE", purpose: "standard" }],
+            endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "module.operation_invalid",
+      params: { module: "fiscal-verifactu" },
+    });
+    expect(
+      (await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`)).rows,
+    ).toEqual([]);
+    expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
+  });
+
   it("establishes the node with no reserved series when the bundle carries no `series` key and no module reserves", async () => {
     const standby = generateStandbyIdentity();
     await establishReservedStandbyIdentity(

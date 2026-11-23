@@ -43,7 +43,6 @@ const EXPECTED = [
   "document_page_reprints",
   "drawer_entries",
   "fiscal_allocations",
-  "fiscal_reservations",
   "handover_activations",
   "invoice_correction_refunds",
   "invoice_pdf_downloads",
