@@ -1365,11 +1365,6 @@ this section records the remaining build and real-box qualification.
   check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
   [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)
 
-- **A1551. Each box offers to print its own switch label after setup, with a simple link (owner,
-  2026-11-18; wanted, not built).** The owner's point from the two-box test of 18 November, as
-  that session recorded it: labels should be automatic, not a chore. Today both labels are printed
-  from the main box's **System → Servers**, one row at a time (the guide's "Print a switch label").
-
 - **A1552. The Servers page is complicated and hard to read (owner, 2026-11-18; needs the owner
   before anything is built).** The owner's point from the two-box test of 18 November, as that
   session recorded it. A redesign needs the owner to say what the page should show. Seen at that
