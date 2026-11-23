@@ -100,6 +100,7 @@ to another category on the Products screen, by turning on **Select** and draggin
 with **Move to…**. The main category also plays a part in choosing the prep station a dish goes
 to, as described below.
 
+To drop into a subcategory, open its parent categories before you start dragging.
 When you drop products or categories, the Move window opens with the destination selected. Review
 any preparation station changes and choose **Move to…** to save. You can also drop onto
 **All products** to move items out of their category. Check the station changes too when you open

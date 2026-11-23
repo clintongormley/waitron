@@ -12,7 +12,7 @@ import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import type { ProductBrowser } from "./product-browser.js";
 import "./product-browser.js";
-import { HOVER_OPEN_MS, ROOT_KEY } from "./product-list.js";
+import { ROOT_KEY } from "./product-list.js";
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -816,26 +816,18 @@ it("marks a dragged row inactive only while it is dragged, as its faded text is 
   expect(row.hasAttribute("aria-disabled")).toBe(false);
 });
 
-it("opens a closed category after the hover delay, not before, and shows the gap where the product will land", async () => {
+it("keeps a closed category shut while a dragged product hovers over it", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const el = await mountBrowser();
     await press(el, "select");
-    const table = await tableOf(el);
     const cell = await nameCell(el, "bread");
+    const target = await nameCell(el, "folder:d");
     pointerEvent(cell, "pointerdown");
-    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
-    vi.advanceTimersByTime(HOVER_OPEN_MS - 1);
-    await table.updateComplete;
-    expect(await rowKeys(el)).not.toContain("cola");
-    vi.advanceTimersByTime(1);
-    await table.updateComplete;
-    expect(await rowKeys(el)).toContain("cola");
-    expect(
-      table
-        .shadowRoot!.querySelector('tr[data-row-key="cola"] td')!
-        .part.contains("drop-gap-before"),
-    ).toBe(true);
+    pointerEvent(target, "pointermove");
+    expect(target.closest("tr")!.querySelector("td")!.part.contains("drop-target")).toBe(true);
+    vi.advanceTimersByTime(1_000);
+    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
     pointerEvent(cell, "pointercancel");
   } finally {
     vi.runOnlyPendingTimers();
@@ -843,28 +835,18 @@ it("opens a closed category after the hover delay, not before, and shows the gap
   }
 });
 
-it("leaves a closed category closed when a drag crosses it without stopping", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  try {
-    const el = await mountBrowser();
-    await press(el, "select");
-    const table = await tableOf(el);
-    const cell = await nameCell(el, "bread");
-    pointerEvent(cell, "pointerdown");
-    pointerEvent(await nameCell(el, "folder:d"), "pointermove");
-    vi.advanceTimersByTime(HOVER_OPEN_MS - 100);
-    pointerEvent(await nameCell(el, "folder:f"), "pointermove");
-    vi.advanceTimersByTime(200);
-    await table.updateComplete;
-    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
-    vi.advanceTimersByTime(HOVER_OPEN_MS);
-    await table.updateComplete;
-    expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
-    pointerEvent(cell, "pointercancel");
-  } finally {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
-  }
+it("shows the landing gap inside a category opened before the drag", async () => {
+  const el = await mountBrowser();
+  await press(el, "select");
+  await toggleCategory(el, "d");
+  const table = await tableOf(el);
+  const cell = await nameCell(el, "bread");
+  pointerEvent(cell, "pointerdown");
+  pointerEvent(await nameCell(el, "folder:d"), "pointermove");
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="cola"] td')!.part.contains("drop-gap-before"),
+  ).toBe(true);
+  pointerEvent(cell, "pointercancel");
 });
 
 it("dropping on a product files the dragged row into that product's category", async () => {
