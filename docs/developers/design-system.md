@@ -6731,7 +6731,8 @@ When Station agreed is refused for want of `venue.configure`, the manager's PIN 
 signed-in till or handheld. It is app-owned, not a `wt-*` primitive. `till-shell` gives it the
 `notices` slot between its top bar and the screen, drawn only where the shell draws a top bar, so
 it sits under the top bar on Counter, Floor, Order and the till's Station tab, and never on a
-kiosk or a station display; `TillApp` renders it only outside device mode. The update bar and the
+kiosk or a station display; `TillApp` renders that one only outside device mode, and draws its own
+words-only strip above the clock-in and attendance pages (below). The update bar and the
 mode line stay where they are.
 
 - **Tones.** Each line takes `wt-banner`'s raised surface and bottom border, with an inline-start
