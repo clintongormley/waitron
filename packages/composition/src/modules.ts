@@ -169,6 +169,8 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     configurationTransfer: CORE_TRANSFER,
     settings: [VENUE_SETTINGS, BUSINESS_DAY_SETTINGS],
     backup: { verification: CORE_BACKUP_VERIFICATION },
+    // An unfinished setup's master key is thrown away with it; the setup that follows makes a new one.
+    startAgainDeletable: ["master_keys"],
   },
   {
     name: "node",
