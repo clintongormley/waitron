@@ -422,12 +422,26 @@ describe("stored bill invoice selection", () => {
 
 describe("country-free recipient validation", () => {
   it("accepts a long recipient name only when the backend allows it", () => {
+    const cappedName = "𐐀".repeat(120);
+    expect(checkedInvoiceRecipient(policy, { ...recipient, legalName: cappedName }).legalName).toBe(
+      cappedName,
+    );
+
     const legalName = "𐐀".repeat(121);
     expect(
       checkedInvoiceRecipient({ recipientNameMaxLength: null }, { ...recipient, legalName })
         .legalName,
     ).toBe(legalName);
     expect(() => checkedInvoiceRecipient(policy, { ...recipient, legalName })).toThrowError(
+      expect.objectContaining({
+        code: "invoice.recipient_invalid",
+        params: { field: "legalName" },
+      }),
+    );
+  });
+
+  it("refuses a whitespace-only recipient name", () => {
+    expect(() => checkedInvoiceRecipient(policy, { ...recipient, legalName: " " })).toThrowError(
       expect.objectContaining({
         code: "invoice.recipient_invalid",
         params: { field: "legalName" },
