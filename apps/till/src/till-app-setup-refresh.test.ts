@@ -1204,9 +1204,12 @@ describe("A841 the till follows the theme in use", () => {
 
   const kds = { ...first, formFactor: "kds" as FormFactor, capabilities: ["act-as-kds"] };
 
-  async function openKitchen(): Promise<TillApp> {
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue(kds),
+  async function openKitchen(
+    inactivityTimeoutSeconds: number | null = null,
+    activity?: SessionActivity,
+  ): Promise<TillApp> {
+    const device = {
+      getTill: vi.fn().mockResolvedValue({ ...kds, inactivityTimeoutSeconds }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "dev-1",
         formFactor: "kds",
@@ -1221,7 +1224,8 @@ describe("A841 the till follows the theme in use", () => {
         ],
       }),
       getDeviceStationScreen: vi.fn().mockResolvedValue({ stations: [] }),
-    });
+    };
+    const { el } = await mountApp(device, activity);
     await flush(el);
     expect(el.shadowRoot!.querySelector<TillStationScreen>("till-station-screen")?.deviceMode).toBe(
       true,
@@ -1229,6 +1233,90 @@ describe("A841 the till follows the theme in use", () => {
     expect(themeFetch).toHaveBeenCalledTimes(1);
     return el;
   }
+
+  it.each([null, 1_800])(
+    "a kitchen display signs out with the board open (initial timeout %s)",
+    async (initialTimeout) => {
+      let now = 0;
+      let idle: (() => void) | undefined;
+      let due: number | undefined;
+      const wake = { released: false, release: vi.fn(async () => {}) };
+      const activity = new SessionActivity({
+        now: () => now,
+        wakeLock: { request: async () => wake },
+        setTimer: (callback, delay) => {
+          idle = () => {
+            idle = undefined;
+            due = undefined;
+            callback();
+          };
+          due = now + delay;
+          return 1;
+        },
+        clearTimer: () => {
+          idle = undefined;
+          due = undefined;
+        },
+      });
+      const el = await openKitchen(initialTimeout, activity);
+      const board = el.shadowRoot!.querySelector("till-station-screen");
+      const loginPanel = () =>
+        el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]")!;
+      expect(due).toBeUndefined();
+      await signIn(el);
+      expect(due).toBe(initialTimeout === null ? undefined : 1_800_000);
+
+      api.getTill.mockResolvedValue({
+        ...kds,
+        setupRevision: "s2",
+        inactivityTimeoutSeconds: 1_800,
+      });
+      await poll(el);
+      expect(due).toBe(1_800_000);
+
+      now = 900_000;
+      board!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
+      expect(due).toBe(2_700_000);
+      now = 1_000_000;
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      expect(due).toBe(2_800_000);
+      now = 1_100_000;
+      api.getTill.mockResolvedValue({
+        ...kds,
+        setupRevision: "s3",
+        inactivityTimeoutSeconds: 1_800,
+      });
+      await poll(el);
+      expect(due).toBe(2_800_000);
+
+      api.getTill.mockResolvedValue({
+        ...kds,
+        setupRevision: "s4",
+        inactivityTimeoutSeconds: null,
+      });
+      await poll(el);
+      expect(due).toBeUndefined();
+      expect(api.logout).not.toHaveBeenCalled();
+      expect(loginPanel().compactOperator).toBe("Ana");
+
+      api.getTill.mockResolvedValue({
+        ...kds,
+        setupRevision: "s5",
+        inactivityTimeoutSeconds: 1_800,
+      });
+      await poll(el);
+      expect(due).toBe(2_900_000);
+      now = 2_900_000;
+      idle!();
+      await flush(el);
+
+      expect(api.logout).toHaveBeenCalledOnce();
+      expect(due).toBeUndefined();
+      expect(loginPanel().compactOperator).toBe("");
+      expect(el.shadowRoot!.querySelector("till-station-screen")).toBe(board);
+      expect(wake.release).not.toHaveBeenCalled();
+    },
+  );
 
   it("a moved theme hash repaints a kitchen screen in device mode", async () => {
     const el = await openKitchen();

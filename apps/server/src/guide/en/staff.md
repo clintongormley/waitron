@@ -198,6 +198,11 @@ A new kitchen profile offers **Log in** on its station screen to people in the s
 To limit sign-in to cooks, untick the other jobs. To hide **Log in**, untick them all. Save
 and reload the station screen to apply your choice.
 
+To sign cooks out automatically after a quiet spell, open **General** on the kitchen profile and
+enter a wait such as 30 in **Auto-logout after (minutes)**. Leave it blank to turn off automatic
+sign-out. Save to apply the setting on open station screens. A new wait starts counting when
+the display picks up the change.
+
 After you change the idle timeout, clocking or the available screens in a device
 profile, an open till picks up the change when it has no order open. After the till picks up a new
 starting screen, sign out and sign in again to open it.

@@ -214,6 +214,11 @@ puesto seleccionado. Para que solo pueda entrar el personal de cocina, desmarca 
 puestos. Para ocultar **Entrar**, desmárcalos todos. Guarda y recarga la pantalla de estación
 para aplicar tu elección.
 
+Para cerrar la sesión automáticamente tras un tiempo sin actividad, abre **General** en el perfil
+de cocina e introduce un valor como 30 en **Cierre de sesión automático (minutos)**. Deja el campo
+vacío para desactivar el cierre automático. Guarda para aplicar el ajuste en las pantallas de
+estación abiertas. El nuevo plazo empieza cuando la pantalla recibe el cambio.
+
 Si cambias el tiempo de inactividad, el fichaje o las pantallas disponibles en
 un perfil de dispositivo, el TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV
 reciba la nueva pantalla de inicio, cierra la sesión y vuelve a iniciarla para

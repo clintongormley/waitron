@@ -113,11 +113,7 @@ export class SessionActivity {
   }
 
   #shouldRunIdleTimer(): boolean {
-    return (
-      this.#config.loggedIn &&
-      this.#config.kind !== "kds_station" &&
-      this.#config.timeoutSeconds != null
-    );
+    return this.#config.loggedIn && this.#config.timeoutSeconds != null;
   }
 
   async #applyWakeLock(): Promise<void> {

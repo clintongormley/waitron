@@ -155,18 +155,14 @@ describe("validateStartingScreen", () => {
 });
 
 describe("validateInactivityTimeout", () => {
-  it("returns a positive integer unchanged for a non-kds form factor", () => {
-    expect(validateInactivityTimeout(300, "phone-portrait")).toBe(300);
-    expect(validateInactivityTimeout(1, "till")).toBe(1);
-  });
-
-  it("passes null through as null (never log out)", () => {
-    expect(validateInactivityTimeout(null, "till")).toBeNull();
+  it("returns a positive integer unchanged", () => {
+    expect(validateInactivityTimeout(300)).toBe(300);
+    expect(validateInactivityTimeout(1)).toBe(1);
   });
 
   it("rejects 0 — NULL is the 'never' sentinel, so a zero timeout is not a valid value", () => {
     try {
-      validateInactivityTimeout(0, "till");
+      validateInactivityTimeout(0);
       throw new Error("should have thrown");
     } catch (e) {
       expect(e).toBeInstanceOf(AppError);
@@ -175,14 +171,14 @@ describe("validateInactivityTimeout", () => {
     }
   });
 
-  it("FORCES null for a kds profile regardless of the value (a display is not a logged-in operator)", () => {
-    expect(validateInactivityTimeout(300, "kds")).toBeNull();
-    expect(validateInactivityTimeout(null, "kds")).toBeNull();
+  it("allows a 30-minute timeout or Never", () => {
+    expect(validateInactivityTimeout(1_800)).toBe(1_800);
+    expect(validateInactivityTimeout(null)).toBeNull();
   });
 
   it("rejects a negative value with device_profile.invalid {bad_inactivity_timeout}", () => {
     try {
-      validateInactivityTimeout(-5, "till");
+      validateInactivityTimeout(-5);
       throw new Error("should have thrown");
     } catch (e) {
       expect(e).toBeInstanceOf(AppError);
@@ -192,7 +188,7 @@ describe("validateInactivityTimeout", () => {
   });
 
   it("rejects a non-integer value", () => {
-    expect(() => validateInactivityTimeout(1.5, "till")).toThrow(AppError);
+    expect(() => validateInactivityTimeout(1.5)).toThrow(AppError);
   });
 });
 

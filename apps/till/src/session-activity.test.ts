@@ -29,7 +29,10 @@ describe("SessionActivity", () => {
     expect(wl.sentinel.release).toHaveBeenCalled();
   });
 
-  it("fires onIdle after the timeout with no interaction, and not for KDS", () => {
+  it.each([
+    ["handheld", 300],
+    ["kds_station", 1_800],
+  ] as const)("signs out an idle %s after %s seconds", (kind, timeoutSeconds) => {
     let fn: (() => void) | undefined;
     let now = 0;
     const timers = {
@@ -47,16 +50,14 @@ describe("SessionActivity", () => {
       wakeLock: { request: async () => ({ released: false, release: async () => {} }) } as never,
       ...timers,
     });
-    sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: 300, onIdle });
-    sa.start();
-    now = 300_000;
-    fn?.();
-    expect(onIdle).toHaveBeenCalledTimes(1);
-
-    onIdle.mockClear();
-    sa.configure({ loggedIn: true, kind: "kds_station", timeoutSeconds: 300, onIdle });
+    sa.configure({ loggedIn: true, kind, timeoutSeconds, onIdle });
+    void sa.start();
+    now = timeoutSeconds * 1000 - 1;
     fn?.();
     expect(onIdle).not.toHaveBeenCalled();
+    now += 1;
+    fn?.();
+    expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
   it("noteInteraction() resets the idle countdown", () => {
@@ -89,7 +90,7 @@ describe("SessionActivity", () => {
     expect(onIdle).toHaveBeenCalledTimes(1);
   });
 
-  it("KDS holds the wake lock while active even though it never logs in", async () => {
+  it("a signed-out kitchen display holds the wake lock while active", async () => {
     const wl = fakeWakeLock();
     const sa = new SessionActivity({
       wakeLock: wl as never,

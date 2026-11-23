@@ -48,6 +48,8 @@ it("resolves offered profile settings passively", async () => {
   });
   expect(await resolve("inactivityTimeout", "general")).toEqual([
     { id: "p/+", label: "Counter", path: "/device-profiles/profile/p%2F%2B/view/general" },
+    { id: "kds", label: "Kitchen", path: "/device-profiles/profile/kds/view/general" },
+    { id: "monitor", label: "Monitor", path: "/device-profiles/profile/monitor/view/general" },
   ]);
   expect((await resolve("stationScreenStations", "kitchen")).map((r) => r.id)).toEqual([
     "kds",

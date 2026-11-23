@@ -76,14 +76,9 @@ export function validateStartingScreen(
 
 /**
  * The auto-logout idle timeout in seconds. `null` already means never, so zero is refused rather
- * than read as "log out at once". A `kds` profile always gets `null`: a kitchen display has no
- * signed-in operator.
+ * than read as "log out at once".
  */
-export function validateInactivityTimeout(
-  value: number | null,
-  formFactor: FormFactor,
-): number | null {
-  if (formFactor === "kds") return null;
+export function validateInactivityTimeout(value: number | null): number | null {
   if (value === null) return null;
   if (!Number.isInteger(value) || value < 1) {
     throw new AppError("device_profile.invalid", { reason: "bad_inactivity_timeout" });

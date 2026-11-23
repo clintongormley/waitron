@@ -3093,12 +3093,16 @@ export class TillApp extends LitElement {
     this.#syncEquipmentNfc();
   };
 
-  readonly #onIdle = (): void => void this.#onLogout();
+  readonly #onIdle = (): void => {
+    if (this.kitchenOperator !== "") this.#onKitchenLogout();
+    else void this.#onLogout();
+  };
 
   #configureSessionActivity(): void {
     this.sessionActivity.configure({
       // `operatorPersonId` persists after logout; persons_display_name_ck keeps a signed-in name nonempty.
-      loggedIn: this.operatorName !== "",
+      loggedIn:
+        this.#deviceKind === "kds_station" ? this.kitchenOperator !== "" : this.operatorName !== "",
       kind: this.#deviceKind,
       timeoutSeconds: this.#inactivityTimeoutSeconds,
       onIdle: this.#onIdle,
@@ -6528,6 +6532,7 @@ export class TillApp extends LitElement {
     event.stopPropagation();
     this.#tabPerson = { personId: event.detail.personId };
     this.kitchenOperator = event.detail.displayName;
+    this.#configureSessionActivity();
   }
 
   #onKitchenLogout(endServerSession = true): void {
@@ -6544,6 +6549,7 @@ export class TillApp extends LitElement {
     }
     this.#tabPerson = null;
     this.kitchenOperator = "";
+    this.#configureSessionActivity();
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
@@ -12375,7 +12381,15 @@ export class TillApp extends LitElement {
     if (till.setupRevision === this.#setupRevision) this.#setupApplied = asked;
     else {
       this.#applyVenueSetup(till, asked);
-      this.#queueProfileSetup(till, asked);
+      if (!this.deviceMode) {
+        this.#queueProfileSetup(till, asked);
+      } else if (till.formFactor === "kds") {
+        const timeout = till.inactivityTimeoutSeconds ?? null;
+        if (timeout !== this.#inactivityTimeoutSeconds) {
+          this.#inactivityTimeoutSeconds = timeout;
+          this.#configureSessionActivity();
+        }
+      }
     }
   }
 
