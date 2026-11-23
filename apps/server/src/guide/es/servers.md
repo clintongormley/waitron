@@ -137,13 +137,13 @@ Si la página indica que falta espacio temporal, libera espacio en el disco del 
 reserva antes de volver a elegir la copia de seguridad.
 
 En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige
-**Cambiar a este servidor**. En la comprobación del reloj, marca **Estos datos son correctos.**
-y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas y muestra
-para qué sirve cada una. Si este servidor no puede comprobar su hora por internet, la página
-muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y
-elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
-hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
-servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Elige **Continuar** otra vez para iniciar el local en este servidor. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
+**Cambiar a este servidor**. La página comprueba entonces la hora de este servidor e inicia el
+local por sí sola. Si este servidor no puede comprobar su hora por internet, muestra antes
+**Comprueba la hora** con la hora de este servidor y la de este dispositivo, las dos en la zona
+horaria del local. Si coinciden y las dos son correctas, elige **Confirmar la hora**. Si no
+coinciden, elige **Tu dispositivo tiene la hora correcta** para poner la hora de este servidor con
+la del dispositivo que estás usando; después de **El servidor tiene la hora correcta** o **Las dos
+están mal**, corrige la hora de este dispositivo y elige **Volver a comprobar**. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
 passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
 normalmente una vez, y de nuevo pasados 15 minutos; si en su lugar dice que hay que volver a

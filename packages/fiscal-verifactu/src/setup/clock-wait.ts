@@ -53,6 +53,9 @@ interface SharedClockWords {
 
 type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "unavailable">;
 
+/** `true` appends the zone's abbreviation; a function words the abbreviation into a phrase. */
+type ZoneNaming = boolean | ((abbreviation: string) => string);
+
 export interface ClockComparison {
   id: string;
   clock: HourClockDecision;
@@ -305,6 +308,10 @@ export class ClockWait<Selected extends { status: "selected" }> {
     return this.#result;
   }
 
+  get answered(): boolean {
+    return this.#answered;
+  }
+
   /** Counting down, to the box's wait or through a taken minute. */
   get counting(): boolean {
     return this.#result?.status === "waiting" || this.#problem?.kind === "next-minute";
@@ -433,7 +440,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
     timeZone: string,
     setClock?: () => void,
     confirm?: { press: () => void; busy: boolean },
-    shown: { named?: boolean; note?: string } = {},
+    shown: { named?: ZoneNaming; note?: string } = {},
   ) {
     const device = this.#device;
     const problem = renderClockProblem(
@@ -477,7 +484,7 @@ export function renderClockProblem(
     /** Confirm the time: drawn when the page offers it (the setup page's Proceed confirms instead). */
     confirm?: { press: () => void; busy: boolean };
   },
-  place?: { locale: "en" | "es"; timeZone: string; named?: boolean; note?: string },
+  place?: { locale: "en" | "es"; timeZone: string; named?: ZoneNaming; note?: string },
 ) {
   const rows =
     clock && place
@@ -583,12 +590,15 @@ export function renderClockRows(
   words: ClockRowWords,
   locale: "en" | "es",
   timeZone: string,
-  named = false,
+  named: ZoneNaming = false,
 ) {
   const minutes = dateTimeFormat(locale, timeZone, { dateStyle: "long", timeStyle: "short" });
   const zoneName = dateTimeFormat(locale, timeZone, { timeZoneName: "short" });
-  const zone = (ms: number) =>
-    named ? ` ${zoneName.formatToParts(ms).find((p) => p.type === "timeZoneName")?.value}` : "";
+  const zone = (ms: number) => {
+    if (!named) return "";
+    const abbreviation = zoneName.formatToParts(ms).find((p) => p.type === "timeZoneName")!.value;
+    return named === true ? ` ${abbreviation}` : `, ${named(abbreviation)}`;
+  };
   const box = clock.usable.find((r) => r.source === "box");
   const boxMinute = box && minutes.format(middle(box));
   const format = clock.usable.some((r) => r !== box && minutes.format(middle(r)) === boxMinute)

@@ -819,9 +819,10 @@ export class SetupHandoverScreen extends LitElement {
     entry.starting = !retry;
     let refused = false;
     try {
+      // An emergency start that no press began may not open the passkey prompt.
       const answer = await this.#step(
         (signIn) => this.api.activateHandover(this.operationId, signIn, moduleOperation),
-        "prompt",
+        this.#isEmergency && !retry ? "ask" : "prompt",
       );
       if (controller?.signal.aborted) return;
       this.#staleRetried = false;
@@ -842,10 +843,12 @@ export class SetupHandoverScreen extends LitElement {
         return;
       }
       refused = true;
-      this.actionError = this.#isEmergency
-        ? this.#emergencyError(cause)
-        : entry.refusalMessage(cause);
-      if ((cause as { code?: unknown } | null)?.code === "password.invalid") {
+      if (this.#isEmergency) this.actionError = this.#emergencyError(cause);
+      if (!this.#isEmergency || stale) this.actionError = entry.refusalMessage(cause);
+      if (
+        (cause as { code?: unknown } | null)?.code === "password.invalid" ||
+        cause instanceof PasskeyNeedsPress
+      ) {
         this.activationHeld = true;
         return;
       }
@@ -1840,9 +1843,8 @@ export class SetupHandoverScreen extends LitElement {
       ${this.#isEmergency ? this.#emergencyContent() : nothing}
       ${
         this.entry
-          ? html`<p>${t("handover.zone")}</p>
-              ${this.entry}
-              ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
+          ? html`${this.#isEmergency ? nothing : html`<p>${t("handover.zone")}</p>`} ${this.entry}
+            ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
           : nothing
       }
       <wt-form-actions .error=${this.#formError}>

@@ -160,6 +160,8 @@ async function mount(
     proofLapsesAtSelect?: boolean;
     /** The proof lapses once a take has answered taken. */
     proofLapsesAtTaken?: boolean;
+    /** The proof lapses as the first start arrives. */
+    proofLapsesAtActivate?: boolean;
     /** Each clock-step request waits for what this returns before it is answered. */
     preparationGate?: () => Promise<void>;
     /** Each backup choice waits for what this returns before its sign-in is checked. */
@@ -189,6 +191,7 @@ async function mount(
   let sent = false;
   let previewLost = false;
   let proofLapsed = false;
+  let proofLapsedAtActivate = false;
   let secondClockMissing = options.secondClockMissing ?? 0;
   const later = [...(options.later ?? [])];
   const api = new SetupApi("", async (input, init) => {
@@ -244,6 +247,15 @@ async function mount(
       (body.proposal as { action?: string } | undefined)?.action === "select"
     ) {
       proofLapsed = true;
+      proof.cookie = false;
+    }
+    if (
+      proof &&
+      options.proofLapsesAtActivate &&
+      !proofLapsedAtActivate &&
+      path.endsWith("/activate")
+    ) {
+      proofLapsedAtActivate = true;
       proof.cookie = false;
     }
     if (path.endsWith("/preparation")) await options.preparationGate?.();
@@ -889,15 +901,18 @@ it("a second stale clock reading in a row is explained and not retried, until th
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
+  const staleTwice =
+    "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.";
   await vi.waitFor(() =>
-    expect(actions(el).includes(t("handover.emergency.failed")) || activations(posts) > 2).toBe(
-      true,
-    ),
+    expect(actions(el).includes(staleTwice) || activations(posts) > 2).toBe(true),
   );
   expect(activations(posts)).toBe(2);
-  expect(actions(el)).toContain(t("handover.emergency.failed"));
+  expect(actions(el)).toBe(staleTwice);
   expect(q(el, "vf-recovery-hour")).toBeNull();
-  q(el, "[data-test=authenticate]").click();
+  // The sentence names the button the page now offers.
+  const again = q(el, "[data-test=authenticate]");
+  expect(staleTwice).toContain(again.textContent!.trim());
+  again.click();
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
   expect(activations(posts)).toBe(4);
 });
@@ -913,6 +928,64 @@ it("the switch page's clock step is told it is the switch page", async () => {
   );
   expect(entry.context.scenario).toBe("emergency");
   expect(entry.context.timeZone).toBe(venueZone);
+});
+
+it("the switch page leaves the zone to the clock step's own rows, saying nothing of it above the step", async () => {
+  const { el } = await mount({ saved: true, noInternetTime: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=confirm-time]")).not.toBeNull());
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.zone"));
+});
+
+it("Enter on Switch to this box moves focus to the clock step's heading when the step asks about the time", async () => {
+  const { el } = await mount({ noInternetTime: true });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").shadowRoot!.querySelector("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => {
+    const entry = q<LitElement>(el, "vf-recovery-hour");
+    expect(entry && q(entry, "[data-test=confirm-time]")).not.toBeNull();
+  });
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  const heading = q(entry, "[data-test=clock-heading]");
+  await vi.waitFor(() => {
+    expect(el.shadowRoot!.activeElement).toBe(entry);
+    expect(entry.shadowRoot!.activeElement).toBe(heading);
+  });
+  expect(heading.textContent!.trim()).toBe("Check the time");
+});
+
+it("an automatic start the box refuses for want of the passkey opens no prompt; Try again, focused, opens one", async () => {
+  const get = stubPasskey();
+  const { el, posts } = await mount({ proof: newProof(), proofLapsesAtActivate: true });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() =>
+    expect(
+      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_step")),
+    ).toBe(true),
+  );
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(activations(posts)).toBe(1);
+  const again = q(el, "[data-test=retry-activation]");
+  expect(again).not.toBeNull();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(again));
+  expect(get).toHaveBeenCalledTimes(1);
+  again.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  expect(get).toHaveBeenCalledTimes(2);
+  // Try again leans on the lapsed proof first, then sends the passkey answer.
+  expect(
+    posts
+      .filter(({ path }) => path.endsWith("/activate"))
+      .map(({ body }) => (body.signIn === undefined ? "none" : Object.keys(body.signIn as object))),
+  ).toEqual(["none", "none", ["passkey"]]);
 });
 
 it("keeps the reason and statements when a code expires, and retries the same declaration with the new code", async () => {

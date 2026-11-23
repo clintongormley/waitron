@@ -4509,7 +4509,7 @@ synchronised time service carries on past a browser five minutes out"), or a sec
 another machine agrees within 30 seconds (the same file's "a name needs a second clock within 30
 seconds of the box"). AEAT's time is not read for it. Another machine's clock counts only once the
 person proved on that page confirms both times (**Confirm the time**) or sets the box's clock from
-it (**This device**); otherwise `select` is refused `sif.allocation_invalid`, reason
+it (**This device** (**Your device is correct** on the emergency switch)); otherwise `select` is refused `sif.allocation_invalid`, reason
 `confirmation_required` (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a device's agreeing
 time selects only once the person confirms it"; owner, 2026-11-13: "we should never just accept
 another device's match automatically. instead, we should always ask for confirmation, and that
@@ -4980,7 +4980,7 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   during the start-up window (below), or an administrator signed in on the till or named with their
   PIN, while the start waits or the clock reads before 28-10-2024;
 - the person on the first-setup, restore or handover page, from their own device, when the clocks
-  differ and they choose **This device** (A1482,
+  differ and they choose **This device** (**Your device is correct** on the emergency switch) (A1482,
   [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
   `clock-challenge` then `set-clock` through the preparation path it already uses for
   `compare-clocks`, so each page's own authority admits it: the setup owner's pass on first setup,
@@ -6768,7 +6768,7 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
   its recovery key or kit), the done screen or waiting page while that restore's start waits (under
   the node recovery key) or the handover page (signed in as a `node.manage` holder), when that
-  person chooses **This device** (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
+  person chooses **This device** (**Your device is correct** on the emergency switch) (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
   #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first

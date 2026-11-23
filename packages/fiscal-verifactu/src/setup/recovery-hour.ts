@@ -68,7 +68,27 @@ const internetCheck =
   "It is very important that the time on this box is correct, but it cannot currently check its time over the internet.";
 const internetCheckEs =
   "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet.";
-/** The emergency switch's clock words. */
+interface EmergencyClockWords {
+  checking: string;
+  clockHeading: string;
+  whichCorrect: string;
+  confirmWhy: string;
+  serverTime: string;
+  thisDevice: string;
+  theServer: string;
+  deviceCorrect: string;
+  bothWrong: string;
+  correctDevice: string;
+  compareAgain: string;
+  deviceFailed: string;
+  deviceSynchronised: string;
+  deviceLater: string;
+  laterAfterSet: string;
+  /** Names the page's own button, which this step does not draw. */
+  staleTwice: string;
+  zoneTime: (city: string, abbreviation: string) => string;
+  zoneNote: (city: string) => string;
+}
 export const emergencyClockWords = {
   en: {
     checking: "Checking this box's time…",
@@ -84,8 +104,16 @@ export const emergencyClockWords = {
     compareAgain: "Check again",
     deviceFailed:
       "The box could not set its clock from this device. Check this device's date and time, then press Your device is correct again.",
-    zoneNote: (city: string) =>
-      `Your device is set to ${city} time; both are shown in the venue's time.`,
+    deviceSynchronised:
+      "The box keeps its time over the internet, so its time is right. Correct the time on this device, then press Check again.",
+    deviceLater:
+      "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    laterAfterSet:
+      "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    staleTwice:
+      "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.",
+    zoneTime: (city, abbreviation) => `${city} time (${abbreviation})`,
+    zoneNote: (city) => `Your device is set to ${city} time; both are shown in the venue's time.`,
   },
   es: {
     checking: "Comprobando la hora del servidor…",
@@ -101,10 +129,25 @@ export const emergencyClockWords = {
     compareAgain: "Volver a comprobar",
     deviceFailed:
       "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Tu dispositivo tiene la hora correcta.",
-    zoneNote: (city: string) =>
+    deviceSynchronised:
+      "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y pulsa Volver a comprobar.",
+    deviceLater:
+      "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    laterAfterSet:
+      "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    staleTwice:
+      "La lectura de la hora de este servidor ha caducado dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a comprobarla.",
+    zoneTime: (city, abbreviation) => `hora de ${city} (${abbreviation})`,
+    zoneNote: (city) =>
       `Tu dispositivo está en la hora de ${city}; las dos se muestran en la hora del local.`,
   },
-};
+} satisfies Record<"en" | "es", EmergencyClockWords>;
+const stale = (cause: unknown) =>
+  record(cause) &&
+  cause.code === "sif.allocation_invalid" &&
+  record(cause.params) &&
+  cause.params.reason === "clock_stale";
+const zoneCity = (timeZone: string) => timeZone.split("/").at(-1)!.replace(/_/g, " ");
 const isEmergency = (context: Context) => isPromotion(context) && context.scenario === "emergency";
 interface Draft {
   oldBoxGone: boolean;
@@ -220,7 +263,6 @@ export class RecoveryHourEntry extends LitElement {
   @property() locale: "en" | "es" = "en";
   @property() errorMessage?: string;
   @property() refusedField?: string;
-  /** Continue stays on screen, busy, while the page starts the venue it asked for. */
   @property({ attribute: false }) starting = false;
   @state() private draft = empty();
   @state() private busy = false;
@@ -237,9 +279,9 @@ export class RecoveryHourEntry extends LitElement {
   #scope?: DraftScope<Draft>;
   #wait = new ClockWait<Selected>(this, () => void this.#run(true));
   #seriesShown = false;
-  /** Proceed was pressed and no field has changed since: the page carries on to the series. */
+  #clockAsked = false;
+  #clockAnswered = false;
   #confirmed = false;
-  /** A handover's Continue was pressed under the series now shown. */
   @state() private continued = false;
   /**
    * An emergency switch checks the clocks by itself when connected or given a new context. A
@@ -273,6 +315,14 @@ export class RecoveryHourEntry extends LitElement {
         this.shadowRoot!.querySelector<HTMLElement>("[data-test=selected-hour] h4"),
       );
     this.#seriesShown = shown;
+    const root = this.shadowRoot!;
+    const heading = root.querySelector<HTMLElement>("[data-test=clock-heading]");
+    const answered = isEmergency(this.context) && this.#wait.answered;
+    if (heading && !this.#clockAsked) focusNewScreen(root, heading);
+    else if (answered && !this.#clockAnswered)
+      focusNewScreen(root, root.querySelector<HTMLElement>("[data-test=compare]"));
+    this.#clockAsked = heading !== null;
+    this.#clockAnswered = answered;
   }
   #register(): void {
     if (this.isConnected && !this.#scope) {
@@ -379,19 +429,24 @@ export class RecoveryHourEntry extends LitElement {
       },
     };
   }
+  /**
+   * A refusal of the start the page sent. An emergency switch's page sends a start refused for a
+   * stale clock reading once more by itself, so such a refusal here is the second in a row.
+   */
   refusalMessage(cause: unknown): string {
+    return isEmergency(this.context) && stale(cause)
+      ? emergencyClockWords[this.locale].staleTwice
+      : this.#refusal(cause);
+  }
+  /** A refusal of this step's own request. */
+  #refusal(cause: unknown): string {
     const words = recoveryHourStrings[this.locale];
     if (record(cause)) {
       if (cause.explained === true) return "";
       if (cause.code === "node.operation_page_required") return words.promotionConnection;
       if (cause.code === "password.throttled") return words.promotionThrottled;
       if (cause.code === "authorization.not_permitted") return words.promotionPermission;
-      if (
-        cause.code === "sif.allocation_invalid" &&
-        record(cause.params) &&
-        cause.params.reason === "clock_stale"
-      )
-        return words.promotionClock;
+      if (stale(cause)) return words.promotionClock;
     }
     return words.promotionFailed;
   }
@@ -528,14 +583,15 @@ export class RecoveryHourEntry extends LitElement {
     const en = this.locale === "en";
     const context = this.context;
     const promote = isPromotion(context);
-    const emergency = isEmergency(context);
+    const emergencyWords = isEmergency(context) ? emergencyClockWords[this.locale] : undefined;
+    const emergency = emergencyWords !== undefined;
     const baseWords = en ? recoveryHourStrings.en : recoveryHourStrings.es;
     const words = promote
       ? {
           ...baseWords,
           ...promotionWords[context.scenario][this.locale],
           inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
-          ...(emergency ? emergencyClockWords[this.locale] : {}),
+          ...emergencyWords,
         }
       : {
           ...baseWords,
@@ -577,10 +633,15 @@ export class RecoveryHourEntry extends LitElement {
     const enabled = !sending && (action !== "proceed" || this.#canCompare);
     const selectedHour = result?.status === "selected" ? result : undefined;
     const editable = !selectedHour && !this.#confirmed && !sending;
-    const asks = emergency && (problem === "confirm" || problem === "disagreement");
+    const clockHeading =
+      problem === "confirm" || problem === "disagreement"
+        ? emergencyWords?.clockHeading
+        : undefined;
     const ownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const checking =
-      emergency && (this.busy || this.starting) && !sending && !problem && !this.#wait.counting;
+      this.busy && !sending && !problem && !this.#wait.counting
+        ? emergencyWords?.checking
+        : undefined;
     return html`<h3>${promote ? words.promotionHeading : words.heading}</h3>
       <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
         ${
@@ -684,8 +745,8 @@ export class RecoveryHourEntry extends LitElement {
                   ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
                 </p>`
         }
-        ${checking ? html`<p role="status" data-test="checking">${emergencyClockWords[this.locale].checking}</p>` : nothing}
-        ${asks ? html`<h4 data-test="clock-heading">${emergencyClockWords[this.locale].clockHeading}</h4>` : nothing}
+        ${checking ? html`<p role="status" data-test="checking">${checking}</p>` : nothing}
+        ${clockHeading ? html`<h4 data-test="clock-heading" tabindex="-1">${clockHeading}</h4>` : nothing}
         ${this.#wait.renderProblem(
           words,
           clock,
@@ -693,15 +754,12 @@ export class RecoveryHourEntry extends LitElement {
           displayZone,
           () => void this.#setClock(),
           { press: () => void this.#run(false, true), busy: this.busy },
-          emergency
+          emergencyWords
             ? {
-                named: true,
+                named: (abbreviation) =>
+                  emergencyWords.zoneTime(zoneCity(displayZone), abbreviation),
                 note:
-                  ownZone === displayZone
-                    ? undefined
-                    : emergencyClockWords[this.locale].zoneNote(
-                        ownZone.split("/").at(-1)!.replace(/_/g, " "),
-                      ),
+                  ownZone === displayZone ? undefined : emergencyWords.zoneNote(zoneCity(ownZone)),
               }
             : undefined,
         )}
@@ -721,7 +779,7 @@ export class RecoveryHourEntry extends LitElement {
           : nothing
       }
       <wt-form-actions
-        .error=${this.error ? (promote ? this.refusalMessage(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.error ? (promote ? this.#refusal(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
         ${
           action

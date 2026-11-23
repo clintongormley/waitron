@@ -2878,7 +2878,8 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
     expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
   el.starting = true;
   await el.updateComplete;
-  expect(statusLines(el)).toEqual([CHECKING]);
+  // The page says it is starting the venue; the step claims no check of its own meanwhile.
+  expect(statusLines(el)).toEqual([]);
   el.clear();
   await el.updateComplete;
   expect(el.readOperation()).toBeNull();
@@ -2925,16 +2926,18 @@ it.each([
     "Check the time",
     "It is very important that the time on this box is correct, but it cannot currently check its time over the internet. Check that both times below are right, then press Confirm the time.",
     ["This box", "Your device"],
+    /, New York time \(GMT-4\)$/,
   ],
   [
     "es",
     "Comprueba la hora",
     "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.",
     ["Este servidor", "Tu dispositivo"],
+    /, hora de New York \(GMT-4\)$/,
   ],
 ] as const)(
   "an emergency switch without internet time asks to confirm both times in the venue's named zone (%s)",
-  async (locale, heading, lead, labels) => {
+  async (locale, heading, lead, labels, zone) => {
     const { prepare, release } = emergencyPrepare(() => deviceOnly);
     release();
     const el = await mountPromotion(prepare, "emergency", { locale });
@@ -2949,7 +2952,7 @@ it.each([
     );
     const rows = detailRows(el, "clock-times");
     expect(rows.map(([label]) => label)).toEqual(labels);
-    for (const [, value] of rows) expect(value).toMatch(/GMT-4$/);
+    for (const [, value] of rows) expect(value).toMatch(zone);
     expect(statusLines(el)).toEqual([]);
     expect(promotionSelects(prepare)).toEqual([]);
     await userEvent.click(button(el, "confirm-time"));
@@ -2966,6 +2969,7 @@ it.each([
     ["The box is correct", "Your device is correct", "Both are wrong"],
     "Set this device's clock to the right time, then press Check again.",
     "Check again",
+    /, New York time \(GMT-4\)$/,
   ],
   [
     "es",
@@ -2977,10 +2981,11 @@ it.each([
     ],
     "Pon este dispositivo en la hora correcta y pulsa Volver a comprobar.",
     "Volver a comprobar",
+    /, hora de New York \(GMT-4\)$/,
   ],
 ] as const)(
   "an emergency switch whose clocks differ asks which device is correct in the owner's words (%s)",
-  async (locale, lead, labels, after, again) => {
+  async (locale, lead, labels, after, again, zone) => {
     let decision: typeof clock = differing;
     const { prepare, release } = emergencyPrepare(() => decision);
     release();
@@ -2993,7 +2998,7 @@ it.each([
         b.getAttribute("data-test"),
       ),
     ).toEqual(["server-correct", "device-correct", "both-wrong"]);
-    for (const [, value] of detailRows(el, "clock-times")) expect(value).toMatch(/GMT-4$/);
+    for (const [, value] of detailRows(el, "clock-times")) expect(value).toMatch(zone);
     await userEvent.click(button(el, locale === "en" ? "server-correct" : "both-wrong"));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=correct-device]")?.textContent?.trim()).toBe(
@@ -3037,6 +3042,126 @@ it("an emergency switch whose clock set fails names the button it offers", async
     ),
   );
 });
+it.each([
+  [
+    "en",
+    "synchronised",
+    "The box keeps its time over the internet, so its time is right. Correct the time on this device, then press Check again.",
+    "Check again",
+  ],
+  [
+    "es",
+    "synchronised",
+    "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y pulsa Volver a comprobar.",
+    "Volver a comprobar",
+  ],
+  [
+    "en",
+    "later",
+    "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "Check again",
+  ],
+  [
+    "es",
+    "later",
+    "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "Volver a comprobar",
+  ],
+] as const)(
+  "an emergency switch's refused clock set (%s, %s) names the button it offers",
+  async (locale, reason, line, again) => {
+    const answer = settable({ status: "refused", reason });
+    const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() => expect(deviceLine(el)).toBe(line));
+    expect(action(el)).toBe(again);
+  },
+);
+it.each([
+  [
+    "en",
+    "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "Check again",
+  ],
+  [
+    "es",
+    "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "Volver a comprobar",
+  ],
+] as const)(
+  "an emergency switch's later minute after the set names the button it offers (%s)",
+  async (locale, line, again) => {
+    const answer = settable({ status: "set" }, () => {
+      throw { code: "sif.allocation_invalid", params: { reason: "minute_not_later" } };
+    });
+    const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+    const el = await mountPromotion(prepare, "emergency", { locale });
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim(),
+      ).toBe(line),
+    );
+    expect(action(el)).toBe(again);
+  },
+);
+it.each(["server-correct", "both-wrong"])(
+  "on an emergency switch, answering %s moves focus from the choice it removes to Check again",
+  async (choice) => {
+    const { prepare, release } = emergencyPrepare(() => differing);
+    release();
+    const el = await mountPromotion(prepare, "emergency");
+    await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+    await userEvent.click(button(el, choice));
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button(el, "compare")));
+    expect(action(el)).toBe("Check again");
+  },
+);
+it("on an emergency switch, an answer given while focus is elsewhere on the page leaves it there", async () => {
+  const { prepare, release } = emergencyPrepare(() => differing);
+  release();
+  const el = await mountPromotion(prepare, "emergency");
+  const elsewhere = document.createElement("input");
+  document.body.append(elsewhere);
+  hosts.push(elsewhere);
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  elsewhere.focus();
+  button(el, "server-correct").click();
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.shadowRoot!.querySelector("[data-test=correct-device]")).not.toBeNull();
+  expect(document.activeElement).toBe(elsewhere);
+});
+it.each([
+  [
+    "en",
+    "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.",
+  ],
+  [
+    "es",
+    "La lectura de la hora de este servidor ha caducado dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a comprobarla.",
+  ],
+] as const)(
+  "an emergency switch explains a stale clock reading by what happened and the button it offers (%s); a planned handover keeps its own words",
+  (locale, line) => {
+    const stale = { code: "sif.allocation_invalid", params: { reason: "clock_stale" } };
+    const entry = (scenario: "controlled" | "emergency") =>
+      FISCAL_SETUP.createPromotion!({
+        locale,
+        scenario,
+        timeZone: "UTC",
+        binding: promotionBinding,
+        prepare: async () => ({}),
+      });
+    expect(entry("emergency").refusalMessage(stale)).toBe(line);
+    expect(entry("controlled").refusalMessage(stale)).toBe(
+      recoveryHourStrings[locale].promotionClock,
+    );
+  },
+);
 it.each([
   ["en", `Your device is set to ${ownCity} time; both are shown in the venue's time.`],
   ["es", `Tu dispositivo está en la hora de ${ownCity}; las dos se muestran en la hora del local.`],
