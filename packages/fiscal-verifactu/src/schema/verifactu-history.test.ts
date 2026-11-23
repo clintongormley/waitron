@@ -14,6 +14,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPendingEnvios } from "../../test/drain-fixtures.js";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -123,4 +124,146 @@ it("keeps written evidence append-only", async () => {
   expect((await suite.db.execute(sql`select seq from verifactu_history`)).rows).toEqual([
     { seq: 1 },
   ]);
+});
+
+function insertWithLinks(row: {
+  kind: string;
+  seq?: number;
+  registroId: string | null;
+  eventKey: string | null;
+  personId?: string;
+  data: Record<string, unknown>;
+}) {
+  return withTransaction(suite.db, (tx) =>
+    tx.execute(sql`insert into verifactu_history
+        (id, seq, kind, node_id, person_id, at, data, event_key, registro_id)
+      values (${newId()}, ${row.seq ?? 1}, ${row.kind}, ${nodeId}, ${row.personId ?? null},
+        ${at}, ${JSON.stringify(row.data)}, ${row.eventKey}, ${row.registroId})`),
+  );
+}
+
+const cause = "fiscal.huella_divergente";
+function observed(registroId: string) {
+  return {
+    kind: "conflict.observed",
+    registroId,
+    eventKey: `conflict:${registroId}:1:${cause}`,
+    data: { attempt: 1, cause, evidence: {} },
+  };
+}
+
+function lookup(registroId: string) {
+  return {
+    kind: "conflict.lookup",
+    registroId,
+    eventKey: `lookup:${registroId}`,
+    data: { evidence: {} },
+  };
+}
+
+async function recordForConflict() {
+  const fixture = await seedPendingEnvios(suite.db, { count: 1 });
+  return fixture.registroIds[0]!;
+}
+
+it.each([
+  ["text attempt", { data: { attempt: "1", cause, evidence: {} } }],
+  ["missing attempt", { data: { cause, evidence: {} } }],
+  ["missing cause", { data: { attempt: 1, evidence: {} } }],
+  ["missing evidence", { data: { attempt: 1, cause } }],
+  ["missing record", { registroId: null }],
+  ["wrong event key", { eventKey: "conflict:wrong" }],
+  ["missing event key", { eventKey: null }],
+])("refuses an observed conflict with %s", async (_name, overrides) => {
+  const row = { ...observed(await recordForConflict()), ...overrides };
+  const error = await captureError(() => insertWithLinks(row));
+  expect(checkFailed(error, "verifactu_history_observed_ck")).toBe(true);
+});
+
+it.each([
+  ["missing evidence", { data: {} }],
+  ["missing record", { registroId: null }],
+  ["wrong event key", { eventKey: "lookup:wrong" }],
+  ["missing event key", { eventKey: null }],
+])("refuses a lookup conflict with %s", async (_name, overrides) => {
+  const row = { ...lookup(await recordForConflict()), ...overrides };
+  const error = await captureError(() => insertWithLinks(row));
+  expect(checkFailed(error, "verifactu_history_lookup_ck")).toBe(true);
+});
+
+it.each([
+  ["observed", observed],
+  ["lookup", lookup],
+] as const)("enforces the parent and event key for %s", async (kind, conflict) => {
+  const row = conflict(await recordForConflict());
+  const missing = await captureError(() => insertWithLinks(conflict("missing")));
+  expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
+  expect(
+    checkFailed(
+      await captureError(() => insertWithLinks({ ...row, personId })),
+      `verifactu_history_${kind}_ck`,
+    ),
+  ).toBe(true);
+  await insertWithLinks(row);
+  const repeated = await captureError(() => insertWithLinks({ ...row, seq: 2 }));
+  expect(
+    refusalOn(repeated, UNIQUE_VIOLATION, { table: "verifactu_history", columns: ["event_key"] }),
+  ).toBe(true);
+});
+
+it.each([
+  [0, cause],
+  [1, "other"],
+])(
+  "refuses observed attempt %s and cause %s even with their matching key",
+  async (attempt, cause) => {
+    const registroId = await recordForConflict();
+    const error = await captureError(() =>
+      insertWithLinks({
+        ...observed(registroId),
+        eventKey: `conflict:${registroId}:${attempt}:${cause}`,
+        data: { attempt, cause, evidence: {} },
+      }),
+    );
+    expect(checkFailed(error, "verifactu_history_observed_ck")).toBe(true);
+  },
+);
+
+it("keeps observations for successive attempts", async () => {
+  const registroId = await recordForConflict();
+  const first = observed(registroId);
+  await insertWithLinks(first);
+  await insertWithLinks({
+    ...first,
+    seq: 2,
+    eventKey: `conflict:${registroId}:2:${cause}`,
+    data: { ...first.data, attempt: 2 },
+  });
+  expect(
+    (await suite.db.execute(sql`select seq from verifactu_history order by seq`)).rows,
+  ).toEqual([{ seq: 1 }, { seq: 2 }]);
+});
+
+it("keeps the conflict links off clock confirmations", async () => {
+  const registroId = await recordForConflict();
+  const clock = {
+    kind: "clock.confirmed",
+    data: validData,
+    personId,
+    registroId: null,
+    eventKey: null,
+  };
+  for (const row of [
+    { ...clock, registroId },
+    { ...clock, eventKey: "lookup:wrong" },
+  ]) {
+    expect(
+      checkFailed(
+        await captureError(() => insertWithLinks(row)),
+        "verifactu_history_confirmed_links_ck",
+      ),
+    ).toBe(true);
+  }
+  await insertWithLinks(clock);
+  await insertWithLinks({ ...clock, seq: 2 });
 });

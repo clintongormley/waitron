@@ -169,10 +169,13 @@ CREATE TABLE `verifactu_history` (
 	`person_id` text,
 	`at` text NOT NULL,
 	`data` text NOT NULL,
+	`event_key` text,
+	`registro_id` text,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "verifactu_history_data_ck" CHECK(case when json_valid("verifactu_history"."data") then json_type("verifactu_history"."data") = 'object' else 0 end),
-	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" = 'clock.confirmed'),
+	CONSTRAINT "verifactu_history_kind_ck" CHECK("verifactu_history"."kind" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')),
 	CONSTRAINT "verifactu_history_confirmed_source_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.source') in ('admin', 'staff'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_reason_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(json_extract("verifactu_history"."data", '$.reason') in ('start', 'unusable'), 0)),
 	CONSTRAINT "verifactu_history_confirmed_person_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(length("verifactu_history"."person_id") > 0, 0)),
@@ -181,10 +184,32 @@ CREATE TABLE `verifactu_history` (
         and json_type("verifactu_history"."data", '$.stepMs') = 'integer'
         and json_type("verifactu_history"."data", '$.proof') = 'object',
         0
+      )),
+	CONSTRAINT "verifactu_history_confirmed_links_ck" CHECK("verifactu_history"."kind" <> 'clock.confirmed' or coalesce(
+        "verifactu_history"."event_key" is null and "verifactu_history"."registro_id" is null, 0
+      )),
+	CONSTRAINT "verifactu_history_observed_ck" CHECK("verifactu_history"."kind" <> 'conflict.observed' or coalesce(
+        "verifactu_history"."registro_id" is not null
+        and json_type("verifactu_history"."data", '$.attempt') = 'integer'
+        and json_extract("verifactu_history"."data", '$.attempt') > 0
+        and json_extract("verifactu_history"."data", '$.cause') in ('fiscal.huella_divergente', 'fiscal.duplicado_anulado')
+        and json_type("verifactu_history"."data", '$.evidence') is not null
+        and "verifactu_history"."person_id" is null
+        and "verifactu_history"."event_key" = 'conflict:' || "verifactu_history"."registro_id" || ':' || json_extract("verifactu_history"."data", '$.attempt') || ':' || json_extract("verifactu_history"."data", '$.cause'),
+        0
+      )),
+	CONSTRAINT "verifactu_history_lookup_ck" CHECK("verifactu_history"."kind" <> 'conflict.lookup' or coalesce(
+        "verifactu_history"."registro_id" is not null
+        and json_type("verifactu_history"."data", '$.evidence') is not null
+        and "verifactu_history"."person_id" is null
+        and "verifactu_history"."event_key" = 'lookup:' || "verifactu_history"."registro_id",
+        0
       ))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `verifactu_history_seq_uq` ON `verifactu_history` (`seq`);--> statement-breakpoint
+CREATE UNIQUE INDEX `verifactu_history_event_key_uq` ON `verifactu_history` (`event_key`);--> statement-breakpoint
+CREATE INDEX `verifactu_history_registro_kind_seq_idx` ON `verifactu_history` (`registro_id`,`kind`,`seq`);--> statement-breakpoint
 CREATE TABLE `verifactu_identities` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,

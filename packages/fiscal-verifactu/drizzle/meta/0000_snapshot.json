@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dc1c8ff8-8243-4790-88cd-dac1e335d3ce",
+  "id": "e097f3d9-f155-47e2-95af-31586241eb28",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -1078,6 +1078,20 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "event_key": {
+          "name": "event_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "registro_id": {
+          "name": "registro_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1087,6 +1101,22 @@
             "seq"
           ],
           "isUnique": true
+        },
+        "verifactu_history_event_key_uq": {
+          "name": "verifactu_history_event_key_uq",
+          "columns": [
+            "event_key"
+          ],
+          "isUnique": true
+        },
+        "verifactu_history_registro_kind_seq_idx": {
+          "name": "verifactu_history_registro_kind_seq_idx",
+          "columns": [
+            "registro_id",
+            "kind",
+            "seq"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -1115,6 +1145,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "verifactu_history_registro_id_verifactu_records_id_fk": {
+          "name": "verifactu_history_registro_id_verifactu_records_id_fk",
+          "tableFrom": "verifactu_history",
+          "tableTo": "verifactu_records",
+          "columnsFrom": [
+            "registro_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1126,7 +1169,7 @@
         },
         "verifactu_history_kind_ck": {
           "name": "verifactu_history_kind_ck",
-          "value": "\"verifactu_history\".\"kind\" = 'clock.confirmed'"
+          "value": "\"verifactu_history\".\"kind\" in ('clock.confirmed', 'conflict.observed', 'conflict.lookup')"
         },
         "verifactu_history_confirmed_source_ck": {
           "name": "verifactu_history_confirmed_source_ck",
@@ -1143,6 +1186,18 @@
         "verifactu_history_confirmed_shape_ck": {
           "name": "verifactu_history_confirmed_shape_ck",
           "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(\n        json_type(\"verifactu_history\".\"data\", '$.confirmedAt') = 'text'\n        and json_type(\"verifactu_history\".\"data\", '$.stepMs') = 'integer'\n        and json_type(\"verifactu_history\".\"data\", '$.proof') = 'object',\n        0\n      )"
+        },
+        "verifactu_history_confirmed_links_ck": {
+          "name": "verifactu_history_confirmed_links_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(\n        \"verifactu_history\".\"event_key\" is null and \"verifactu_history\".\"registro_id\" is null, 0\n      )"
+        },
+        "verifactu_history_observed_ck": {
+          "name": "verifactu_history_observed_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'conflict.observed' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_type(\"verifactu_history\".\"data\", '$.attempt') = 'integer'\n        and json_extract(\"verifactu_history\".\"data\", '$.attempt') > 0\n        and json_extract(\"verifactu_history\".\"data\", '$.cause') in ('fiscal.huella_divergente', 'fiscal.duplicado_anulado')\n        and json_type(\"verifactu_history\".\"data\", '$.evidence') is not null\n        and \"verifactu_history\".\"person_id\" is null\n        and \"verifactu_history\".\"event_key\" = 'conflict:' || \"verifactu_history\".\"registro_id\" || ':' || json_extract(\"verifactu_history\".\"data\", '$.attempt') || ':' || json_extract(\"verifactu_history\".\"data\", '$.cause'),\n        0\n      )"
+        },
+        "verifactu_history_lookup_ck": {
+          "name": "verifactu_history_lookup_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'conflict.lookup' or coalesce(\n        \"verifactu_history\".\"registro_id\" is not null\n        and json_type(\"verifactu_history\".\"data\", '$.evidence') is not null\n        and \"verifactu_history\".\"person_id\" is null\n        and \"verifactu_history\".\"event_key\" = 'lookup:' || \"verifactu_history\".\"registro_id\",\n        0\n      )"
         }
       }
     },
