@@ -901,6 +901,36 @@ test("a long label never runs under the unit button", async () => {
   expect(label.right).toBeLessThanOrEqual(unit.left);
 });
 
+test("a unit too long for the field is cut with an ellipsis inside the box, keeping the amount's room and its whole name", async () => {
+  const unit = "per large catering platter";
+  const { el, input } = await mountPrice(
+    `<wt-price-input label="Price" unit="${unit}" locale="en-GB" value="12.50" style="width: 264px"></wt-price-input>`,
+  );
+  const { el: short } = await mountPrice(
+    '<wt-price-input label="Price" unit="kg" locale="en-GB" value="12.50" style="display: inline-block"></wt-price-input>',
+  );
+  const { field: box } = field(el);
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  const chevron = button.querySelector("wt-icon")!.getBoundingClientRect();
+  expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
+  expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box.getBoundingClientRect().right,
+  );
+  expect(chevron.right).toBeLessThanOrEqual(button.getBoundingClientRect().right);
+  expect(chevron.width).toBeGreaterThan(0);
+  expect(input.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+    field(short).input.getBoundingClientRect().width,
+  );
+  expect(button.getBoundingClientRect().height).toBe(
+    short.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect().height,
+  );
+  const text = button.querySelector<HTMLElement>(".unit-text")!;
+  expect(getComputedStyle(text).textOverflow).toBe("ellipsis");
+  expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
+  expect(button.textContent!.trim()).toBe(unit);
+  expect(button.hasAttribute("aria-label")).toBe(false);
+});
+
 /** The input's text line: its box less its block padding. */
 function valueLine(input: HTMLInputElement) {
   const box = input.getBoundingClientRect();

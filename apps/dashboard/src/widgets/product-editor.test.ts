@@ -714,6 +714,33 @@ it("keeps the base price field six tap targets wide on a wide dialog, and the ca
   expect(field().getBoundingClientRect().width).toBeCloseTo(containerWidth(), 1);
 });
 
+it("keeps a long unit inside the six-tap-target price field, cut short rather than drawn past its edge", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  onTestFinished(() => page.viewport(width, height));
+  setLocale("en-GB");
+  onTestFinished(() => setLocale("es-ES"));
+  await page.viewport(1280, 800);
+  const platter = { ...kg, id: "platter", abbreviation: { en: "large catering platter" } };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, unitId: platter.id, variants: [small] },
+    locales: ["en"],
+    units: [platter],
+  });
+  el.style.setProperty("--wt-tap-min", "44px");
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const price = el.shadowRoot!.querySelector<HTMLElement>("wt-price-input[name=unit-price]")!;
+  expect(price.getBoundingClientRect().width).toBe(264);
+  const box = price.shadowRoot!.querySelector<HTMLElement>(".field")!;
+  const button = price.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
+  expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+    box.getBoundingClientRect().right,
+  );
+  expect(button.textContent!.trim()).toBe("per large catering platter");
+});
+
 // A phone hides the variants table's price column and the unit button in its heading; the price
 // field's own unit button opens the same chooser.
 it("changes a product's unit from the price field when the table's heading unit button is hidden", async () => {
