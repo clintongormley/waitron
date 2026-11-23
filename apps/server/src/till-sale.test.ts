@@ -737,7 +737,7 @@ describe("counter basket payment", () => {
 
   it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
+    const each = available.find((p) => p.pricingUnit === "each")!;
 
     const result = await payCounterCash(
       cfg,
@@ -1593,19 +1593,19 @@ describe("ordering extras and options — parent + child lines", () => {
   }
 
   /**
-   * Sells a Tostada (4.00, super-reduced 4%) with one extra: a variant of Bacon (reduced 10%, 3.00)
-   * holding the given price and VAT of its own, or blanks. Three different rates, so a child line
-   * taxed at the dish's, the parent's or the variant's own rate each reads differently. The variant
-   * carries three names of its own — `<stem> staff`, `<stem> customer`, `<stem> kitchen` — each
-   * different from Bacon's and from each other, so a line that takes a name from the wrong product,
-   * or the wrong one of the three, fails. `takeawayVatRate` sells the order taken away, with the
-   * Tostada at 4.00, Bacon at 10.00 and the variant at that rate of its own.
+   * Sells, taken away, a Tostada (4.00, takeaway 4%) with one extra: a variant of Bacon (3.00, at
+   * takeaway rate `baconRate`) holding the given price and takeaway rate of its own, or blanks.
+   * Callers pick rates so the dish's, the parent's and the variant's own each read differently. The
+   * variant carries three names of its own — `<stem> staff`, `<stem> customer`, `<stem> kitchen` —
+   * each different from Bacon's and from each other, so a line that takes a name from the wrong
+   * product, or the wrong one of the three, fails.
    */
   async function sellVariantAsExtra(own: {
     stem: string;
     unitPrice: number | null;
     vatClass: "general" | null;
-    takeawayVatRate?: string;
+    baconRate: string;
+    variantRate?: string;
   }) {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
@@ -1630,10 +1630,11 @@ describe("ordering extras and options — parent + child lines", () => {
         unitPrice: "4.00",
         vatClass: "super_reduced",
       });
-      if (own.takeawayVatRate !== undefined) {
-        await tx.update(departments).set({ dining: "takeaway" });
-        await setTakeawayVatRate(tx, dish.id, "4.00");
-        await setTakeawayVatRate(tx, variant!.id, own.takeawayVatRate);
+      await tx.update(departments).set({ dining: "takeaway" });
+      await setTakeawayVatRate(tx, dish.id, "4.00");
+      await setTakeawayVatRate(tx, v.baconId, own.baconRate);
+      if (own.variantRate !== undefined) {
+        await setTakeawayVatRate(tx, variant!.id, own.variantRate);
       }
       const list = await createExtraList(
         tx,
@@ -1683,16 +1684,17 @@ describe("ordering extras and options — parent + child lines", () => {
       stem: "Bacon doble",
       unitPrice: null,
       vatClass: null,
+      baconRate: "21.00",
     });
     // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
     expect(total).toBe("7.00");
-    // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
+    // 3.00 gross at 21% is 2.48 net (3.00 / 1.21 = 2.479): 248 in cents, the rate 2100.
     expect(child).toMatchObject({
       name: "Bacon staff (Bacon doble staff)",
       descriptions: { [LOCALE]: "Bacon customer (Bacon doble customer)" },
       kitchenName: "Bacon kitchen (Bacon doble kitchen)",
-      unitPrice: 273,
-      vatRate: 1000,
+      unitPrice: 248,
+      vatRate: 2100,
     });
   });
 
@@ -1702,7 +1704,8 @@ describe("ordering extras and options — parent + child lines", () => {
       stem: "Bacon triple",
       unitPrice: 350,
       vatClass: "general",
-      takeawayVatRate: "21.00",
+      baconRate: "10.00",
+      variantRate: "21.00",
     });
     // 4.00 dish + 3.50 of its own = 7.50 gross.
     expect(total).toBe("7.50");

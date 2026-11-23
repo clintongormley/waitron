@@ -368,7 +368,7 @@ function payFreshBasket(
   cookie: string,
   billId: string,
   lines: unknown[],
-  tender: Record<string, unknown>,
+  fields: Record<string, unknown>,
   requestId?: string,
 ) {
   return app.request(`/api/working-orders/${billId}/payments`, {
@@ -384,7 +384,7 @@ function payFreshBasket(
       kind: "share",
       shareOf: 1,
       basket: { lines },
-      ...tender,
+      ...fields,
     }),
   });
 }
