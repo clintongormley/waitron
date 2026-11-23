@@ -1,7 +1,6 @@
 import "./errors.js";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
-  handoverActivations,
   readNodeMembership,
   recordActivity,
   withNodeTransaction,
@@ -20,6 +19,7 @@ import {
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { closeAbandonedReturnTx, openFacts, recordReturnAbandonedTx } from "./return-abandoned.js";
+import { latestTakeoverFrom } from "./handover-intervals.js";
 import { holdsCompletedReturnFrom } from "./return-completion.js";
 import { returnDigest } from "./return-records.js";
 
@@ -123,16 +123,6 @@ export async function readResetOrders(
   return picked;
 }
 
-async function latestActivationFrom(db: Database, sourceNodeId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ operationId: handoverActivations.operationId })
-    .from(handoverActivations)
-    .where(eq(handoverActivations.sourceNodeId, sourceNodeId))
-    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
-    .limit(1);
-  return row?.operationId ?? null;
-}
-
 /**
  * Why this box would refuse to order `targetNodeId` to reset whatever the press, or null: the
  * chart lists the box `sell-only`, this box is its serving primary, the box is the main box whose
@@ -192,7 +182,7 @@ export async function orderReset(
 
     const operationId = returnOutstanding
       ? open!.operationId
-      : await latestActivationFrom(deps.db, targetNodeId);
+      : ((await latestTakeoverFrom(deps.db, targetNodeId))?.operationId ?? null);
     if (operationId === null) throw new AppError("membership.node_not_replaced", {});
     const orderId = returnDigest({ kind: "handover.reset_order", operationId, acceptLoss });
     const abandon = acceptLoss && returnOutstanding;

@@ -36,6 +36,21 @@ export async function readHandoverIntervals(tx: Transaction) {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The latest takeover from `sourceNodeId` this box activated, or null when there is none. */
+export async function latestTakeoverFrom(db: Database, sourceNodeId: string) {
+  const [row] = await db
+    .select({
+      operationId: handoverActivations.operationId,
+      scenario: handoverActivations.scenario,
+      evidence: handoverActivations.evidence,
+    })
+    .from(handoverActivations)
+    .where(eq(handoverActivations.sourceNodeId, sourceNodeId))
+    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
+    .limit(1);
+  return row ?? null;
+}
+
 /**
  * The copy's latest sale or order time when the latest takeover from `sourceNodeId` was an
  * emergency switch; null after a planned handover or with no takeover from that box.
@@ -44,12 +59,7 @@ export async function emergencyCopyFrom(
   db: Database,
   sourceNodeId: string,
 ): Promise<{ lastChangeAtMs: number | null } | null> {
-  const [row] = await db
-    .select({ scenario: handoverActivations.scenario, evidence: handoverActivations.evidence })
-    .from(handoverActivations)
-    .where(eq(handoverActivations.sourceNodeId, sourceNodeId))
-    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
-    .limit(1);
+  const row = await latestTakeoverFrom(db, sourceNodeId);
   if (row?.scenario !== "emergency") return null;
   const body: unknown = row.evidence.body;
   const lastCopy = isRecord(body) ? body.lastCopy : undefined;
