@@ -357,9 +357,27 @@ export async function assertBusinessDayScheduleWrite(
   )
     throw new AppError("hours.clock_changed", {});
 }
+/** Wraps a write that can change opening hours: a time change refuses a stale clock revision
+ *  before `write`, and hours as written that no longer fit a waiting start after it, reading the
+ *  clock then unless `clock` is given. A metadata change runs neither check. */
+export async function writeHours<T>(
+  tx: Transaction,
+  gate: {
+    at: Date;
+    changeKind: "time" | "metadata";
+    expectedClockRevision: number;
+    clock?: BusinessDayClock;
+  },
+  write: () => Promise<T>,
+): Promise<T> {
+  await assertBusinessDayScheduleWrite(tx, gate.changeKind, gate.expectedClockRevision);
+  const result = await write();
+  if (gate.changeKind === "time") await assertWaitingChangeFits(tx, gate.at, gate.clock);
+  return result;
+}
 /** Checks the venue's hours, as written, against each change still waiting at `at`, in date
  *  order, each under the starts before it. */
-export async function assertWaitingChangeFits(
+async function assertWaitingChangeFits(
   tx: Transaction,
   at: Date,
   acquiredClock?: BusinessDayClock,

@@ -942,7 +942,7 @@ an add, a delete or a moved start is refused `hours.clock_changed` on a stale
 `expectedClockRevision` (`assertBusinessDayScheduleWrite`). Since 2026-10-18 (A788) such a call is
 not refused because a business-day start change is waiting: after writing, it checks the venue's
 hours as written against each waiting start and refuses `hours.clock_change_conflict` on a clash
-(`assertWaitingChangeFits`, `packages/venue-service/src/business-day-schedule.ts`); cases "refuses
+(`assertWaitingChangeFits` through `writeHours`, `packages/venue-service/src/business-day-schedule.ts`); cases "refuses
 adding a season while a stored range clashes, since the new season copies it" and "adds a season
 while a change waits when no stored range clashes" in `business-day-schedule.test.ts`, and "refuses
 deleting a season while another season's hours cross a waiting start, and deletes the one holding
@@ -1556,7 +1556,7 @@ in the sweep below are retired. The booking writer remains; the account below re
   07:00 start"), then, after
   writing, against each start change still waiting, and refuses `hours.clock_change_conflict` (409)
   on a clash, with the waiting `dayCutover`, its `startsAt`, the venue's `timeZone` and the clashing
-  ranges (`assertWaitingChangeFits`; the cases under "a waiting change checks the hours written
+  ranges (`assertWaitingChangeFits`, reached only through `writeHours` in `packages/venue-service/src/business-day-schedule.ts`; a new hours writer calls `writeHours` (zone and department deletion in `service-delete-settings.ts` remove hours without it), and nothing checks that it does; the cases under "a waiting change checks the hours written
   while it waits"). It checks the venue's hours as written, so a clash in another department refuses
   an unrelated write ("refuses a clean season week while another department holds a clash, naming
   that department"). A period rename is not checked ("accepts a period rename beside a stored range

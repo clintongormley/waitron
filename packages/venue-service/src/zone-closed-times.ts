@@ -1,9 +1,5 @@
 import { inForceClock, scheduleCutovers, serviceDayContext } from "./service-day-context.js";
-import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
-  sameScheduleRanges,
-} from "./business-day-schedule.js";
+import { writeHours, sameScheduleRanges } from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { departments, floorZones, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
@@ -47,13 +43,11 @@ export async function replaceZoneClosedWeek(
     inForceClock(clock, at),
     options.seasonId,
   );
-  await assertBusinessDayScheduleWrite(
+  await writeHours(
     tx,
-    staged.changed ? "time" : "metadata",
-    expectedClockRevision,
+    { at, clock, changeKind: staged.changed ? "time" : "metadata", expectedClockRevision },
+    staged.write,
   );
-  await staged.write();
-  if (staged.changed) await assertWaitingChangeFits(tx, at, clock);
 }
 
 /** A zone's closed week checked and compared with what its seasons hold, written by `write`. The

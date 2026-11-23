@@ -1,6 +1,5 @@
 import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
+  writeHours,
   sameScheduleRanges,
   readBusinessDayScheduleRevision,
   readBusinessDayScheduleStatus,
@@ -453,13 +452,11 @@ export async function replaceMenuWeek(
   const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const staged = await stageMenuWeek(tx, departmentId, days, inForce, options.seasonId);
-  await assertBusinessDayScheduleWrite(
+  await writeHours(
     tx,
-    staged.changed ? "time" : "metadata",
-    expectedClockRevision,
+    { at, clock, changeKind: staged.changed ? "time" : "metadata", expectedClockRevision },
+    staged.write,
   );
-  await staged.write();
-  if (staged.changed) await assertWaitingChangeFits(tx, at, clock);
 }
 
 /** A department week checked and compared with what its seasons hold, written by `write`. */

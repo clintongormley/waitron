@@ -9,11 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
-import {
-  assertBusinessDayScheduleWrite,
-  assertWaitingChangeFits,
-  readBusinessDayScheduleRevision,
-} from "./business-day-schedule.js";
+import { writeHours, readBusinessDayScheduleRevision } from "./business-day-schedule.js";
 import type { LocalDate } from "./hours-types.js";
 import { readRoutingUses, requirePeriod } from "./menu-timetable.js";
 import type { PeriodRoutingUse } from "./menu-timetable-types.js";
@@ -170,27 +166,27 @@ export async function deletePeriod(
       throw new AppError("menu_period.invalid", { field: "replacementPeriodId" });
   }
   const clock = await readVenueClock(tx);
-  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
-  const dayKeys = await tx
-    .selectDistinct({
-      departmentId: openingHours.departmentId,
-      seasonId: openingHours.seasonId,
-      weekday: openingHours.weekday,
-      specialDayDateId: openingHours.specialDayDateId,
-    })
-    .from(openingHours)
-    .where(eq(openingHours.periodId, periodId));
-  if (replacementId === null) {
-    await tx.delete(openingHours).where(eq(openingHours.periodId, periodId));
-  } else {
-    await tx
-      .update(openingHours)
-      .set({ periodId: replacementId })
+  await writeHours(tx, { at, clock, changeKind: "time", expectedClockRevision }, async () => {
+    const dayKeys = await tx
+      .selectDistinct({
+        departmentId: openingHours.departmentId,
+        seasonId: openingHours.seasonId,
+        weekday: openingHours.weekday,
+        specialDayDateId: openingHours.specialDayDateId,
+      })
+      .from(openingHours)
       .where(eq(openingHours.periodId, periodId));
-    await joinTouchingRanges(tx, period.departmentId, dayKeys, clock, at);
-  }
-  await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  await assertWaitingChangeFits(tx, at, clock);
+    if (replacementId === null) {
+      await tx.delete(openingHours).where(eq(openingHours.periodId, periodId));
+    } else {
+      await tx
+        .update(openingHours)
+        .set({ periodId: replacementId })
+        .where(eq(openingHours.periodId, periodId));
+      await joinTouchingRanges(tx, period.departmentId, dayKeys, clock, at);
+    }
+    await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
+  });
 }
 
 type DayKey = Pick<
