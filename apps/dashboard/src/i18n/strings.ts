@@ -1543,7 +1543,7 @@ export const en = {
   "email.settings.password": "Password",
   "email.settings.password_help_label": "Help with the mail password",
   "email.settings.password_help":
-    "For Google Workspace, turn on 2-Step Verification in your Google account. Create an app password and paste it into Password. Your organisation’s settings may block app passwords.",
+    "For Google Workspace, turn on 2-Step Verification in your Google account and create an app password. Turn on Use authentication and paste the app password into Password. Your organisation’s settings may block app passwords.",
   "email.settings.password_help_guide": "Use a Google Workspace app password",
   "email.settings.from": "Sender address",
   "email.settings.server_error": "Enter the mail server hostname.",
@@ -6306,7 +6306,7 @@ export const es: Record<StringKey, string> = {
   "email.settings.password": "Contraseña",
   "email.settings.password_help_label": "Ayuda con la contraseña del correo",
   "email.settings.password_help":
-    "Si usas Google Workspace, activa la verificación en dos pasos en tu cuenta de Google. Crea una contraseña de aplicación y pégala en Contraseña. La configuración de tu organización puede impedir que uses contraseñas de aplicación.",
+    "Si usas Google Workspace, activa la verificación en dos pasos en tu cuenta de Google y crea una contraseña de aplicación. Activa Usar autenticación y pega la contraseña de aplicación en Contraseña. La configuración de tu organización puede impedir que uses contraseñas de aplicación.",
   "email.settings.password_help_guide": "Usa una contraseña de aplicación de Google Workspace",
   "email.settings.from": "Dirección del remitente",
   "email.settings.server_error": "Escribe el nombre del servidor de correo.",

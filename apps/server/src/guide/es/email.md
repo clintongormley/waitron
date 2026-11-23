@@ -37,8 +37,9 @@ para abrir los mensajes guardados.
 
 En la cuenta de Google que usas para enviar correo, activa la **Verificación en dos pasos**.
 Abre `https://myaccount.google.com/apppasswords` y crea una contraseña de aplicación.
-En **Sistema → Correo** en Waitron, activa **Usar autenticación**. Pega la contraseña de
-aplicación en **Contraseña** y envía una prueba.
+En **Sistema → Correo** en Waitron, activa **Usar autenticación**. Escribe tu dirección de correo
+completa de Google Workspace en **Usuario**, pega la contraseña de aplicación en **Contraseña**
+y envía una prueba.
 
 Si Google no ofrece contraseñas de aplicación, revisa la política de inicio de sesión de tu
 organización. Por ejemplo, una política que solo permite llaves de seguridad puede bloquearlas.
