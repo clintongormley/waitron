@@ -167,6 +167,8 @@ export async function seedSale(
       advanceRole?: "payment_on_account" | "deduction";
       /** On a deduction line, the advance's sale it takes off. */
       deductsSaleId?: SaleId;
+      /** A set menu's own line, or a dish taken as part of one; absent means neither. */
+      setMenuRole?: "set_menu" | "dish";
     }>;
     correctsSaleId?: SaleId;
     /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
@@ -241,6 +243,7 @@ export async function seedSale(
       correctsLineId: line.correctsLineId ?? null,
       advanceRole: line.advanceRole ?? null,
       deductsSaleId: line.deductsSaleId ?? null,
+      setMenuRole: line.setMenuRole ?? null,
     })),
   );
   return saleId;

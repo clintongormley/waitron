@@ -31,12 +31,18 @@ export type CurrentClassifier = (
 ) => Promise<ReadonlyMap<string, SaleLineClassification>>;
 
 export interface CategoryTotal {
-  kind: "category" | "uncategorised" | "not_recorded" | "payments_on_account" | "free_text";
-  /** The category id; "uncategorised"; "not_recorded"; "payments_on_account"; for "free_text" the
-   * recorded text. */
+  kind:
+    | "category"
+    | "set_menus"
+    | "uncategorised"
+    | "not_recorded"
+    | "payments_on_account"
+    | "free_text";
+  /** The category id; "set_menus"; "uncategorised"; "not_recorded"; "payments_on_account"; for
+   * "free_text" the recorded text. */
   id: string;
   /** A category's name (recorded, or today's in current mode); a free-text node's text; "" for
-   * uncategorised, not_recorded and payments_on_account, which the screen names. */
+   * set_menus, uncategorised, not_recorded and payments_on_account, which the screen names. */
   name: string;
   /** 0 at the root. */
   depth: number;
@@ -72,6 +78,7 @@ type LineRow = {
   dish_category: string | null;
   dish_classification: string | null;
   advance_role: string | null;
+  set_menu_role: string | null;
 };
 
 /** Which of two lines was issued later: by the original sale's issue time, then sale id, then
@@ -107,6 +114,7 @@ interface Node {
   children: Map<string, Node>;
 }
 
+const SET_MENUS: Segment = { kind: "set_menus", id: "set_menus", name: "" };
 const UNCATEGORISED: Segment = { kind: "uncategorised", id: "uncategorised", name: "" };
 const NOT_RECORDED: Segment = { kind: "not_recorded", id: "not_recorded", name: "" };
 const PAYMENTS_ON_ACCOUNT: Segment = {
@@ -145,9 +153,10 @@ function tally(target: Node, name: string, rank: Rank, net: number, gross: numbe
 const KIND_ORDER: Record<CategoryTotal["kind"], number> = {
   category: 0,
   free_text: 0,
-  uncategorised: 1,
-  not_recorded: 2,
-  payments_on_account: 3,
+  set_menus: 1,
+  uncategorised: 2,
+  not_recorded: 3,
+  payments_on_account: 4,
 };
 
 function compareText(a: string, b: string): number {
@@ -211,7 +220,7 @@ export async function computeCategorySales(
     with lines as (
       select s.id as sale_id, s.issued_at, sl.line_no, sl.id, sl.line_total, sl.line_gross,
         sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
-        sl.advance_role
+        sl.advance_role, sl.set_menu_role
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
@@ -219,7 +228,7 @@ export async function computeCategorySales(
       union all
       select s.id, s.issued_at, sl.line_no, sl.id, -sl.line_total, -sl.line_gross,
         sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
-        sl.advance_role
+        sl.advance_role, sl.set_menu_role
       from sale_voids sv
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
@@ -244,7 +253,7 @@ export async function computeCategorySales(
       coalesce(l.parent_line_id, u.parent_line_id) as parent_line_id,
       l.product_id, l.category, l.classification,
       dl.product_id as dish_product_id, dl.category as dish_category,
-      dl.classification as dish_classification, l.advance_role
+      dl.classification as dish_classification, l.advance_role, l.set_menu_role
     from lines l
     left join up u on u.id = l.id and u.parent_line_id is not null
     left join sale_lines dl on dl.id = coalesce(l.parent_line_id, u.parent_line_id)
@@ -303,7 +312,13 @@ export async function computeCategorySales(
     const { row } = line;
     // An advance's line, its deduction and their correctives are money paid ahead, not dishes,
     // whatever product or category they recorded.
-    const path = row.advance_role === null ? classify(line) : [PAYMENTS_ON_ACCOUNT];
+    // A set menu's own line names no product; its dishes count under their own categories.
+    const path =
+      row.advance_role !== null
+        ? [PAYMENTS_ON_ACCOUNT]
+        : row.set_menu_role === "set_menu"
+          ? [SET_MENUS]
+          : classify(line);
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
     const gross = row.gross === null ? null : cents(row.gross);
