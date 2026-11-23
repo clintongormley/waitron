@@ -982,9 +982,7 @@ export class ImageLibrary extends LitElement {
     await this.updateComplete;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test="preview-${CSS.escape(id)}"]`)?.focus();
   }
-  /** `wt-dialog` has no close on a backdrop click (it sets `closedby` only to `closerequest` or
-   * `none`), so it is caught here: such a click reaches the `<dialog>` itself, at a point outside
-   * the dialog's box. */
+  /** Backdrop clicks reach the native dialog at coordinates outside its box. */
   #closeOnBackdrop(event: MouseEvent, id: string): void {
     const target = event.composedPath()[0];
     if (!(target instanceof HTMLDialogElement)) return;
