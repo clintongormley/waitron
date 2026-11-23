@@ -19,6 +19,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { request, PASSWORD } from "../test/first-fiscal.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { ownContactUrl } from "./box-name.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
@@ -247,6 +248,45 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
     before,
   );
 });
+
+it.each([
+  ["https://waitron.local", true],
+  ["https://localhost", false],
+] as const)(
+  "owned Live from the origin %s answers this box's own address for its label: %s",
+  async (advertisedOrigin, answered) => {
+    const { mount } = await fixture();
+    const persistTrading = vi.fn<NonNullable<SetupDeps["persistTrading"]>>(async () => {});
+    const app = mount({ persistTrading, advertisedOrigin });
+    const owned = await ownedHourSetup(
+      async (input, init) => app.request(String(input), init),
+      "https://box.test",
+      request,
+      PASSWORD,
+      undefined,
+      time.clock,
+    );
+    const response = await app.request(
+      "https://box.test/setup-api/provision",
+      {
+        method: "POST",
+        headers: { ...owned.headers, origin: "https://box.test" },
+        body: JSON.stringify({ mode: "live" }),
+      },
+      { incoming: { socket } },
+    );
+    const nodeId = persistTrading.mock.calls[0]![0].nodeId;
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: {
+        provisioned: true,
+        restarting: true,
+        ...(answered ? { contactUrl: ownContactUrl(advertisedOrigin, nodeId) } : {}),
+      },
+    });
+    if (answered) expect(ownContactUrl(advertisedOrigin, nodeId)).toMatch(/^https:\/\/box-/);
+  },
+);
 
 it("a Demo stopped after its venue committed is not resumed by a Prepare request, so the demo tax ID never becomes a Prepare venue's", async () => {
   const { mount, stateDir } = await fixture();

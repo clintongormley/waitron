@@ -1172,6 +1172,8 @@ export class SetupApp extends LitElement {
   @state() private breakGlassKeyName?: string;
   @state() private breakGlassKeyInBackups = false;
   @state() private cloudStaffEmailUnavailable = false;
+  /** This box's own address, for its label. */
+  @state() private contactUrl?: string;
 
   /**
    * Kept apart from {@link SetupApp.breakGlassSecret} because
@@ -2047,6 +2049,7 @@ export class SetupApp extends LitElement {
       this.breakGlassKeyName = result.breakGlassKeyName;
       this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
       this.cloudStaffEmailUnavailable = result.cloudStaffEmailUnavailable === true;
+      this.contactUrl = result.contactUrl;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
@@ -2239,6 +2242,7 @@ export class SetupApp extends LitElement {
       if (!this.isConnected) return;
       this.breakGlassSecret = outcome.breakGlassSecret;
       this.breakGlassKeyName = outcome.breakGlassKeyName;
+      this.contactUrl = outcome.contactUrl;
       this.primaryServersUrl = serversUrl;
       this.mirrorJoin = true;
       this.screen = "done";
@@ -2681,6 +2685,7 @@ export class SetupApp extends LitElement {
     this.breakGlassKeyName = undefined;
     this.breakGlassKeyInBackups = false;
     this.cloudStaffEmailUnavailable = false;
+    this.contactUrl = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -3215,6 +3220,7 @@ export class SetupApp extends LitElement {
           .cloudStaffEmailUnavailable=${this.cloudStaffEmailUnavailable}
           .mirrorJoin=${this.mirrorJoin}
           .serversUrl=${this.primaryServersUrl}
+          .contactUrl=${this.contactUrl}
           .onboardingIntent=${this.draft.mode}
           .restored=${this.restored}
           .recoveryPackPdf=${this.recoveryPackPdf}

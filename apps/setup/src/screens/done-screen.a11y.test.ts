@@ -25,14 +25,18 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     const { host, el } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
       {
-        api: apiWith(() => new Promise(() => {})),
-        startDelayMs: 100000,
+        api: {
+          ...apiWith(() => new Promise(() => {})),
+          nodeStanding: () => Promise.resolve("serving-secondary"),
+        } as unknown as SetupApi,
+        startDelayMs: 0,
         mirrorJoin: true,
         breakGlassSecret: "synthetic-key-for-visual-check",
         breakGlassKeyName: "2026-10-15 · K7QF",
       },
       theme,
     );
+    await vi.waitFor(() => expect(q(el, "[data-test=break-glass-key-name]")).not.toBeNull());
     try {
       for (const locale of ["en-GB", "es-ES"] as const) {
         setLocale(locale);
@@ -163,6 +167,24 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on a new restaurant's finished page offering this box's label", async () => {
+    const { host, el } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        onboardingIntent: "live",
+        contactUrl: "https://box-7c21.waitron.local",
+      },
+      theme,
+    );
+    const label = q(el, "setup-box-label")!;
+    await vi.waitFor(() =>
+      expect(label.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the mirror path", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
@@ -179,7 +201,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
   });
 
   it.each(["en-GB", "es-ES"] as const)(
-    "has no violations on the joining page while copying, after losing the box, and joined with both tasks confirmed (%s)",
+    "has no violations on the joining page while copying, after losing the box, at the key task, at the label task and with every task done (%s)",
     async (locale) => {
       setLocale(locale);
       let answer: "copying" | "lost" | "joined" = "copying";
@@ -202,6 +224,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
           mirrorJoin: true,
           breakGlassSecret: "bg-9f3a",
           serversUrl: "https://waitron.local/servers",
+          contactUrl: "https://box-41aa.waitron.local",
         },
         theme,
       );
@@ -216,13 +239,15 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       await vi.waitFor(() =>
         expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("true"),
       );
-      for (const task of ["key", "label"]) {
-        const sw = q(el, `[data-test=task-${task}-confirm]`) as HTMLElement & {
-          updateComplete: Promise<unknown>;
-        };
-        sw.shadowRoot!.querySelector("input")!.click();
-        await sw.updateComplete;
-      }
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=key-wrote]")!.click();
+      await el.updateComplete;
+      const label = q(el, "setup-box-label")!;
+      await vi.waitFor(() =>
+        expect(label.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
+      );
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=label-stuck]")!.click();
       await el.updateComplete;
       expect(q(el, "[data-test=task-key]")!.getAttribute("data-done")).toBe("true");
       expect(q(el, "[data-test=task-label]")!.getAttribute("data-done")).toBe("true");

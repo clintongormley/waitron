@@ -356,7 +356,10 @@ describe("the setup page's join routes", () => {
     expect(fake.attempt.start).not.toHaveBeenCalled();
   });
 
-  const JOINED = { storeUrl: "https://box-aaaa.waitron.local:7600" } as unknown as JoinedBox;
+  const JOINED = {
+    identity: { nodeId: "aaaa0000-0000-4000-8000-000000000000" },
+    storeUrl: "https://box-aaaa.waitron.local:7600",
+  } as unknown as JoinedBox;
   const ADOPTED = { breakGlassSecret: "the-server-key", breakGlassKeyName: "Spare key" };
 
   function mountAdopt(deps: Partial<SetupDeps> = {}) {

@@ -1,3 +1,5 @@
+import { isLoopbackHost } from "./primary-url.js";
+
 /**
  * The venue's mDNS name. The name the responder answers for, discovery advertises and the leaf's
  * SANs cover must agree, or the trust flow hits a certificate-hostname mismatch.
@@ -31,6 +33,19 @@ export function ownContactUrl(advertisedOrigin: string, nodeId: string): string 
   if (url.hostname !== BOX_HOSTNAME) return advertisedOrigin;
   url.hostname = boxHostnameFor(nodeId);
   return url.origin;
+}
+
+/**
+ * The address setup answers for this box's label, as a field to spread into its answer. None when
+ * the origin is unknown or loopback: a loopback label would open the scanning device itself.
+ */
+export function labelContactUrl(
+  advertisedOrigin: string | undefined,
+  nodeId: string,
+): { contactUrl?: string } {
+  if (advertisedOrigin === undefined || isLoopbackHost(new URL(advertisedOrigin).hostname))
+    return {};
+  return { contactUrl: ownContactUrl(advertisedOrigin, nodeId) };
 }
 
 /** A spare's store address: its contact address, switched to `https`, on the store port. */

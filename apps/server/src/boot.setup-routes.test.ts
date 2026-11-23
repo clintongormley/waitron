@@ -7,6 +7,7 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { ensureStreamId } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
+import { ownContactUrl } from "./box-name.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -1055,13 +1056,18 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         { environment: "preproduction", venue: hashedVenueRequest("60000010W") },
       );
 
-      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+      const env = { WAITRON_MANAGEMENT_ORIGIN: "https://waitron.local" };
+      await withSetupBoot(venue.directory, env, async ({ post, kills, stateDir }) => {
         const response = await post("/setup-api/provision", {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000010W") }),
         });
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+        expect(await response.json()).toEqual({
+          provisioned: true,
+          restarting: true,
+          contactUrl: ownContactUrl("https://waitron.local", committed.nodeId),
+        });
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         expect(trading.WAITRON_NODE_ID).toBe(committed.nodeId);
         expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");

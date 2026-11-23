@@ -1387,6 +1387,24 @@ describe("setup-app", () => {
     expect(readDraft(el).venue?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
   });
 
+  it("hands this box's own address from provisioning to the done screen's label", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockResolvedValue({
+          provisioned: true,
+          restarting: true,
+          contactUrl: "https://box-7c21.waitron.local",
+        }),
+      }),
+    );
+    provisionRequest(el);
+    await flush(el);
+    const done = (await screenHost(el, "done")) as SetupDoneScreen;
+    expect(done.contactUrl).toBe("https://box-7c21.waitron.local");
+    await done.updateComplete;
+    expect(done.shadowRoot!.querySelector("[data-test=main-label]")).not.toBeNull();
+  });
+
   it("leaves opening hours off the completion page", async () => {
     const el = await mountSetupApp(
       stubApi({
@@ -2034,12 +2052,7 @@ describe("setup-app", () => {
     expect(api.finishJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
     const done = await screenHost(el, "done");
     await expect
-      .poll(
-        () =>
-          done.shadowRoot!.querySelector<HTMLAnchorElement>(
-            "[data-test=task-label] [data-test=servers-link]",
-          )?.href,
-      )
+      .poll(() => (done as SetupDoneScreen).serversUrl)
       .toBe("https://main.example:8443/servers");
   });
 
@@ -2051,12 +2064,7 @@ describe("setup-app", () => {
     expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull();
     expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
     await expect
-      .poll(
-        () =>
-          done.shadowRoot!.querySelector<HTMLAnchorElement>(
-            "[data-test=task-label] [data-test=servers-link]",
-          )?.href,
-      )
+      .poll(() => (done as SetupDoneScreen).serversUrl)
       .toBe("https://main.example:8443/servers");
   });
 
@@ -2098,36 +2106,50 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi());
       await finishJoining(el, primaryUrl);
       await flush(el);
-      const done = (await screenHost(el, "done")) as HTMLElement & {
-        updateComplete: Promise<unknown>;
-      };
+      const done = (await screenHost(el, "done")) as SetupDoneScreen;
       await done.updateComplete;
-      const link = done.shadowRoot!.querySelector<HTMLAnchorElement>(
-        "[data-test=task-label] [data-test=servers-link]",
-      );
-      expect(link?.href).toBe(servers);
+      expect(done.serversUrl).toBe(servers);
     },
   );
 
-  // Weaker than its name: it checks the secret and its warning render, not that the secret is never
-  // shown a second time.
-  it("surfaces the break-glass secret ONCE on the done screen after a successful adopt", async () => {
+  it("surfaces the break-glass secret and what it is for on the done screen after a successful adopt", async () => {
     const secret = "bg-secret-once-9f3a";
     const adopt = vi.fn().mockResolvedValue({
       adopted: true,
       breakGlassSecret: secret,
       restarting: true,
     });
-    const el = await mountSetupApp(stubApi({ finishJoin: adopt }));
+    const el = await mountSetupApp(
+      stubApi({ finishJoin: adopt, nodeStanding: vi.fn().mockResolvedValue("serving-secondary") }),
+    );
     await finishJoining(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-    expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe(secret);
+    await expect
+      .poll(() => screenText(el, "done", "[data-test=break-glass-secret]"), { timeout: 5_000 })
+      .toBe(secret);
     // Whitespace is collapsed because the rendered copy wraps across lines.
-    const warning = (await screenText(el, "done", "[data-test=break-glass-warning]"))
+    const warning = (await screenText(el, "done", "[data-test=key-why]"))
       ?.toLowerCase()
       .replace(/\s+/g, " ");
-    expect(warning).toContain("will not be shown again");
+    expect(warning).toContain("if this box ever has to take over from the main box");
+  });
+
+  it("hands this box's own address from Finish joining to the done screen's label", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        finishJoin: vi.fn().mockResolvedValue({
+          adopted: true,
+          restarting: true,
+          contactUrl: "https://box-41aa.waitron.local",
+        }),
+      }),
+    );
+    await finishJoining(el);
+    await flush(el);
+    const done = (await screenHost(el, "done")) as SetupDoneScreen;
+    expect(done.contactUrl).toBe("https://box-41aa.waitron.local");
+    expect(done.mirrorJoin).toBe(true);
   });
 
   it("passes the adopted recovery key's name to its handover screen", async () => {
@@ -2139,13 +2161,14 @@ describe("setup-app", () => {
           breakGlassSecret: "key-on-paper",
           breakGlassKeyName: "2026-10-15 · K7QF",
         }),
+        nodeStanding: vi.fn().mockResolvedValue("serving-secondary"),
       }),
     );
     await finishJoining(el);
     await flush(el);
-    expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Box key 15 Oct 2026 · K7QF",
-    );
+    await expect
+      .poll(() => screenText(el, "done", "[data-test=break-glass-key-name]"), { timeout: 5_000 })
+      .toBe("Box key 15 Oct 2026 · K7QF");
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
   });
 

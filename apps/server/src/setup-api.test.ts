@@ -17,6 +17,7 @@ import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptHooks } from "./adopt.js";
 import type { JoinedBox } from "./box-join-attempt.js";
+import { ownContactUrl } from "./box-name.js";
 import { approvedJoinAttempt } from "./testing/setup-join.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup as mountSetupBase, type SetupDeps } from "./setup-api.js";
@@ -815,6 +816,35 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("answers this box's own address, as its chart row names it, when the box knows its origin", async () => {
+    const app = new Hono();
+    const { deps } = makeDeps({ advertisedOrigin: "https://waitron.local" });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    const contactUrl = ownContactUrl("https://waitron.local", NODE_ID);
+    expect(contactUrl).toBe(`https://box-${NODE_ID.slice(0, 4).toLowerCase()}.waitron.local`);
+    expect(await res.json()).toEqual({ provisioned: true, restarting: true, contactUrl });
+    await tick();
+  });
+
+  it.each(["http://localhost:5191", "https://127.0.0.1:8443", "https://[::1]"])(
+    "answers no address for the label when the box's origin is loopback (%s), which would open the scanning device itself",
+    async (advertisedOrigin) => {
+      const app = new Hono();
+      const { deps } = makeDeps({ advertisedOrigin });
+      mountSetup(app, deps, noopLog);
+
+      const res = await postProvision(app, demoBody());
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ provisioned: true, restarting: true });
+      await tick();
+    },
+  );
 
   it("provisions and seeds a demo venue: 200, orchestrates in order, defers restart, seals no cert", async () => {
     const app = new Hono();
@@ -2935,6 +2965,35 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("answers this box's own address, the one its join sent the main box", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps({ advertisedOrigin: "https://waitron.local:8443" });
+    mountSetup(app, deps, noopLog);
+    const response = await postAdopt(app);
+    expect(response.status).toBe(200);
+    const contactUrl = ownContactUrl("https://waitron.local:8443", JOINED.identity.nodeId);
+    expect(contactUrl).toBe("https://box-5555.waitron.local:8443");
+    expect(await response.json()).toEqual({
+      adopted: true,
+      restarting: true,
+      breakGlassSecret: BREAK_GLASS_SECRET,
+      contactUrl,
+    });
+  });
+
+  it("answers no address for the label when the box's origin is loopback", async () => {
+    const app = new Hono();
+    const { deps } = makeAdoptDeps({ advertisedOrigin: "http://localhost:5191" });
+    mountSetup(app, deps, noopLog);
+    const response = await postAdopt(app);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      adopted: true,
+      restarting: true,
+      breakGlassSecret: BREAK_GLASS_SECRET,
+    });
   });
 
   it("returns the minted recovery key name with its handover secret", async () => {

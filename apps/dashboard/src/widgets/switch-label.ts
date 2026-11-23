@@ -2,11 +2,11 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import { baseStyles, type WtModal } from "@waitron/ui";
+import { printEquipmentLabel } from "@waitron/ui/src/print-label.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { fill, t } from "../i18n/t.js";
-import { printEquipmentLabel } from "./equipment-label.js";
 
 /** The label for a box's case: scanned when the main server fails, it opens that box's switch page. */
 @customElement("dashboard-switch-label")

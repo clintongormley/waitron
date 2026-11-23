@@ -131,8 +131,8 @@ stops a theme root nested inside a dark one from being drawn dark while its colo
 light. Both are pinned in `packages/ui-core/src/tokens/colors.test.ts`. The dashboard nests theme roots
 inside its own (`applyTokens(document.documentElement)`, `apps/dashboard/src/main.ts:26`): the
 Appearance page's preview makes each of its two panels one inside its shadow root, with
-`data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the equipment
-label's print frame is one (`apps/dashboard/src/widgets/equipment-label.ts:43-45`). The label takes
+`data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the label
+print frame the dashboard and setup share is one (`packages/ui/src/print-label.ts:23`). The label takes
 its typeface, sizes and Bold weight, and the recovery sheet its typeface and sizes, from Waitron's
 own token file (`WAITRON_DEFAULTS.structure`), never from the page; the sheet sets no weight, so it
 draws the browser's own. A venue's text size, typeface and weights therefore do not reach paper.
