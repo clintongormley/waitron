@@ -1713,6 +1713,12 @@ also prints «Descuento 100%», and on the ticket any other amount prints the pe
 «Descuento 10,01% -1,00 €»; a full invoice's row joining several steps still prints one row without
 a step's percentage. The figures and the filed record are unchanged._
 
+_2026-11-23, A445 (adviser answer 1.10): on a ticket at two or more VAT rates holding an item given
+free, the filed record shares the price paid over every line by menu price, the free one included;
+the ticket still prints the free item as given free, and a full invoice's row whose adjustment's
+words would not describe its amount prints «Descuento» without a percentage. Question 14 of the
+[19 November sheet](2026-11-19-adviser-meeting.md) asks the adviser to confirm._
+
 **What the software does, 2026-09-30.** This is now built (service plan Task 11, #916). Staff can
 comp or discount only a bill whose invoice has not been issued yet (an open bill of a table). The
 filed record carries only the reduced price. The printed ticket, and the ticket the till shows

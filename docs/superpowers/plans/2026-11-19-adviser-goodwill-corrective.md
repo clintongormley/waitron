@@ -47,8 +47,8 @@ Words used below, once:
 
 - on goodwill money back: "take this as confirmed";
 - on A445: "i thought this was also confirmed" (the watcher adds: it is, by the adviser's answer
-  1.10 of 15 November, `docs/compliance/2026-11-15-adviser-answers.md:257-260`, and the owner's
-  decision D4 "Build A445 now", `:275` and `:567`);
+  1.10 of 15 November, `docs/compliance/2026-11-15-adviser-answers.md:257-260`; D4 "Build A445
+  now", `:275` and `:567`, is that document's recommendation, not a recorded decision);
 - for both: "i think we can build them and just put a confirmation note onto the adviser's list,
   ie 'have we done this right'".
 
@@ -381,7 +381,7 @@ watcher's reading, put back to the watcher on 23 November for the owner's own wo
   `git grep -n "listUnitPriceGross:"`). So it is never "free" here and keeps its €0. Comps on set-menu money are refused anyway (`refuseSetMenuMoney`,
   `adjustments-apply.ts:822`).
 - **A whole table given free:** the total is €0, so every share is €0 and nothing changes; that
-  case is the Given free sheet's, not this one (`docs/backlog/fiscal.md:24-28`).
+  case is the Given free sheet's, not this one (the owner's answer, `docs/compliance/2026-11-19-adviser-meeting.md:170`).
 - **Golden huella and `inmutabilidad`:** neither calls `issueMoment`; the golden cases pass lines
   straight to `recordSale` or through `priceBasket` (`packages/fiscal-verifactu/src/write-path.e2e.test.ts:756`),
   with no comp adjustment (read; a `grep` for "comp" there matches only `computeHuella`). Run on this

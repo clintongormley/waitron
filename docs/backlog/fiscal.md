@@ -1117,12 +1117,13 @@ replacement and the invoice it replaces are read whatever their date. The purcha
 covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
 that period's return changes with it.
 
-### A445: a free item on a ticket with two or more VAT rates takes its share of the price paid (2026-11-23)
+### A445: a free item on a ticket with two or more VAT rates takes its share of the price paid (owner and watcher, 2026-11-23)
 
 When a ticket mixing VAT rates holds an item given free (a comp, or a discount that takes it to
 €0), the price paid is shared across every line, the free one included, by menu price, and each
-share is filed at its line's own rate (the adviser's answer 1.10 of 15 November, DGT V0555-17; the
-owner's decision D4, "Build A445 now", [adviser answers](../compliance/2026-11-15-adviser-answers.md)).
+share is filed at its line's own rate (the adviser's answer 1.10 of 15 November, DGT V0555-17,
+[adviser answers](../compliance/2026-11-15-adviser-answers.md) section B4; the owner's word of 21
+November, "i think we can build them", lane L `questions.md`, "WATCHER 2026-11-21 18:17").
 Its scope, free items on tickets at two or more rates only, is the watcher's call (the plan's D2,
 lane L `questions.md`, "WATCHER 2026-11-23 13:47"). When the same ticket also carries another
 discount, every line weighs its menu price, so that discount is shared too: the watcher's call

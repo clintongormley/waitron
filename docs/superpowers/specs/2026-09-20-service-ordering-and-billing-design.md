@@ -438,7 +438,10 @@ _(2026-09-30, B11e: a venue set up with no reasons is given one of them, "Entry 
 price. A whole-bill discount is spread across the bill's lines in proportion to their amounts, so
 each VAT rate's taxable amount drops correctly. A comp is the line at 100% off, shown on the invoice
 with its original price and €0.00. This rests on the advisor finding that a reduction agreed before
-the invoice is issued is a *descuento* (Q15, closed). **Details, Owner, 2026-09-26:**
+the invoice is issued is a *descuento* (Q15, closed). _(2026-11-23, A445: on a ticket at two or
+more VAT rates holding a free item, the price paid, after any whole-bill discount, is shared over
+every line by menu price, the free one included; see
+[fiscal.md](../../backlog/fiscal.md#decisions-and-deliberate-limits).)_ **Details, Owner, 2026-09-26:**
 
 - A line always keeps a whole number of cents per unit, because the invoice is built from unit
   price × quantity. Comping or discounting part of a line (1 of Steak ×2) first splits that part

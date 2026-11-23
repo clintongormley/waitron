@@ -53,7 +53,7 @@ interface Ticket {
   dishes: { id: string; lineNo: number; name: string }[];
 }
 
-/** A paid ticket of `lines`, the Water comped; takeaway (Salad and Soup 4%, Water 21%) unless
+/** A paid ticket of `lines`, the Water comped; takeaway (Salad 4%, Water 21%; a case using Soup sets its own) unless
  * eaten here. Nothing is served. */
 async function ticket(lines: RoundLine[], dining: "takeaway" | "here" = "takeaway") {
   if (dining === "takeaway") await takeawayRates(venue, { Salad: "4.00", Water: "21.00" });
