@@ -46,6 +46,14 @@ Task 1 landed at `542f8b070e` and payments and receipts at `5614b7efc5`.
    takeaway payment refusal in the owner handoff. Capture both languages and
    themes at phone and desktop widths and wait for the owner's OK before landing.
 
-One PR. Expect about 350 added lines of data and seed code and 650 of tests and
+The watcher cleared this scope on 23 November at 17:13 with two pull requests.
+The first adds courses and documents how dishes wait at a table. Its screenshot
+shows mains waiting for Fire at dinner. The second adds the set menus and checks
+their facts in the published copy. Set only the eat-in VAT class. At the eat-in
+counter, check that no set menu appears. The second screenshot handoff calls out
+held mains and desserts at dinner and the existing takeaway payment refusal.
+Wait for the owner's screenshot approval for each pull request.
+
+Across both pull requests, expect about 350 added lines of data and seed code and 650 of tests and
 baseline support, plus guide edits. The fiscal writer, migrations, starter
 courses for real venues, historical seed sales and till logic stay out of scope.

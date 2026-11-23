@@ -21,6 +21,7 @@ export interface MadridSharedProduct {
   kitchenName: string;
   /** The captured category's name. */
   category: string;
+  courseId: string | null;
   vatClass: string;
   /** `null`: none of its own, so its offers take away at `vatClass`. */
   takeawayVatClass: string | null;
@@ -43,6 +44,8 @@ type Row = Record<string, unknown>;
 /** The cells that identify an added row, whatever its canonical key. */
 const SLOT = {
   products: (row: Row) => [row.id],
+  kitchen_courses: (row: Row) => [row.id, row.display_order],
+  department_courses: (row: Row) => [row.department_id, row.course_id, row.held_until_fired],
   sections: (row: Row) => [row.id],
   section_members: (row: Row) => [row.section_id, row.product_id, row.child_section_id],
   menu_items: (row: Row) => [row.menu_id, row.product_id],
@@ -133,6 +136,7 @@ export function madridWithSharedOffers(
       ["customerName", product.customerName, row.customer_name],
       ["kitchenName", product.kitchenName, row.kitchen_name],
       ["category", categoryKey(product.category), row.category_id],
+      ["course", product.courseId, row.course_id],
       ["vatClass", product.vatClass, row.vat_class],
       ["takeawayVatClass", product.takeawayVatClass, row.takeaway_vat_class],
       ["unitPrice", product.unitPrice, row.unit_price],

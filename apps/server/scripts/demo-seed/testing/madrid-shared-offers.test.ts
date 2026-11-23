@@ -102,6 +102,7 @@ function semantics(seeded: boolean, edit: (tables: Record<string, Row>) => void 
             [zero]: {
               id: zero,
               category_id: soft,
+              course_id: null,
               name: "Zero",
               customer_name: { en: "Zero can" },
               kitchen_name: "ZERO",
@@ -191,6 +192,7 @@ const declared: MadridSharedOffers = {
       customerName: { en: "Zero can" },
       kitchenName: "ZERO",
       category: "Soft",
+      courseId: null,
       vatClass: "reduced",
       takeawayVatClass: "general",
       unitPrice: 180,
@@ -222,6 +224,32 @@ it("takes the declared changes and additions, and counts the added rows", () => 
   const { semantics: result, added } = madridWithSharedOffers(semantics(false), seeded, declared);
   expect(result).toEqual(seeded);
   expect(added).toEqual({ products: 1, sections: 1, section_members: 4, menu_items: 3 });
+});
+
+it("compares the declared course and its department firing policy", () => {
+  const before = semantics(false);
+  before.tables.kitchen_courses = table({});
+  before.tables.department_courses = table({});
+  const after = semantics(true);
+  const drinks = '@kitchen_courses:["Drinks"]';
+  after.tables.kitchen_courses = table({
+    [drinks]: { id: drinks, name: "Drinks", display_order: 5 },
+  });
+  const firePolicy = { department_id: deli, course_id: drinks, held_until_fired: 0 };
+  after.tables.department_courses = table({ [stable(firePolicy)]: firePolicy });
+  const changes = {
+    ...declared,
+    added: {
+      ...declared.added,
+      kitchen_courses: [[drinks, 5]],
+      department_courses: [[deli, drinks, 0]],
+    },
+  };
+  expect(madridWithSharedOffers(before, after, changes).semantics).toEqual(after);
+  firePolicy.held_until_fired = 1;
+  expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
+    "Madrid added rows differ: department_courses",
+  );
 });
 
 it("refuses an existing cell changed beyond the declaration", () => {
@@ -265,6 +293,16 @@ it("refuses a declared product whose seeded row or published offer differs", () 
   };
   expect(() => madridWithSharedOffers(semantics(false), semantics(true), wrongRow)).toThrow(
     "Madrid declared takeawayVatClass differs: zero.webp",
+  );
+});
+
+it("checks the declared course for a newly added product", () => {
+  const changes = {
+    ...declared,
+    products: [{ ...declared.products[0]!, courseId: '@kitchen_courses:["Drinks"]' }],
+  };
+  expect(() => madridWithSharedOffers(semantics(false), semantics(true), changes)).toThrow(
+    "Madrid declared course differs: zero.webp",
   );
 });
 

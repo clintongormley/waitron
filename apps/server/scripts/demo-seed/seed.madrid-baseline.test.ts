@@ -51,6 +51,7 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const madridProduct = (image: string) => `@products:${JSON.stringify([`${image}.webp`])}`;
+const NEGRONI_PHOTO = "8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e";
 // Food and drink served to consume on the spot take the reduced rate (LIVA art. 91.Uno.2.2.º);
 // cheese sold as takeaway goods takes the super-reduced rate (art. 91.Dos.1.1.º d).
 const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
@@ -59,7 +60,7 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
     "3484f1297e957c98ea54ac37a61f8bc699987bca90de4038d5255aa253110bfc", // beer
     "6a8776dad20e3c5c33c9250d1a6194a4a2ed84d0801d4d8a6ee369898191766c", // house red
     "881a1845feb901650439bc8782fe901e1dfa72ddfa2f3a6eb567ff38571d2db9", // orange juice
-    "8e1f6221032d4b13be3b36a7498ac093fd0a367ef884cc8e55b1b3c359f1371e", // Negroni
+    NEGRONI_PHOTO,
     "b42524320b8b00b22ddf5505d841e69f543ccc24a86329d6b2afe502a5f0212c", // coffee
   ].map((image) => ({ product: madridProduct(image), old: "general", new: "reduced" })),
   {
@@ -84,6 +85,42 @@ const DRINK_IMAGES = {
   colaZero: "1697b140ce241b4ec3c003b86fc62e4212780eff2c2659b3ee71117aa85564a6.webp",
   beer: "4b2c42eed14559d95309ef3b2e63ad31a625ee1d9db7212326c6b2258eb14a5c.webp",
 };
+const courseKey = (name: string) => `@kitchen_courses:${stable([name])}`;
+
+const NEW_COURSES = ["Café", "Bebidas", "Pan"] as const;
+
+const MADRID_COURSE_DISHES = [
+  [
+    STARTER_COURSE_NAMES["Sharing plates"].es,
+    [
+      "patatas-bravas",
+      "croquetas",
+      "gambas-al-ajillo",
+      "tortilla",
+      "pan-con-tomate",
+      "pulpo-a-la-gallega",
+      "pimientos-de-padron",
+      "calamares",
+      "tabla-de-quesos",
+    ],
+  ],
+  [STARTER_COURSE_NAMES.Starters.es, ["gazpacho", "ensalada-mixta", "lentejas"]],
+  [
+    STARTER_COURSE_NAMES.Mains.es,
+    ["paella", "solomillo", "bacalao", "merluza", "pollo-asado", "merluza-rebozada"],
+  ],
+  [
+    STARTER_COURSE_NAMES.Desserts.es,
+    ["crema-catalana", "tarta-de-santiago", "flan", "arroz-con-leche"],
+  ],
+  [NEW_COURSES[0], ["cafe-solo"]],
+  [
+    NEW_COURSES[1],
+    ["negroni", "vino-tinto", "cana-cerveza", "refresco-cola", "agua-mineral", "zumo-naranja"],
+  ],
+  [NEW_COURSES[2], ["pan-de-la-casa"]],
+] as const;
+
 interface SharedDrinkNames {
   department: string;
   menus: { drinks: string; casa: string; lunch: string; deli: string };
@@ -122,6 +159,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         ...names.colaZero,
         customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
         category: names.categories.soft,
+        courseId: courseKey(NEW_COURSES[1]),
         vatClass: "reduced",
         takeawayVatClass: null,
         unitPrice: 180,
@@ -132,6 +170,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
         ...names.beer,
         customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
         category: names.categories.wineAndBeer,
+        courseId: courseKey(NEW_COURSES[1]),
         vatClass: "reduced",
         takeawayVatClass: null,
         unitPrice: 160,
@@ -2763,6 +2802,35 @@ for (const locale of ["en", "es"] as const) {
         expected.seeded.tables.opening_hours!.rows = Object.fromEntries(
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
+        const shared = SHARED_DRINKS[locale];
+        const departmentKeys = [
+          locale === "en" ? "Restaurant and bar" : "Restaurante y bar",
+          locale === "en" ? "Deli" : "Charcutería",
+        ].map((name) => `@departments:${stable([name])}`);
+        const declared: MadridSharedOffers = {
+          ...shared,
+          changed: [
+            ...shared.changed,
+            ...MADRID_COURSE_DISHES.flatMap(([course, dishes]) =>
+              dishes.map((dish) => ({
+                table: "products",
+                row: madridProduct(
+                  dish === "negroni" ? NEGRONI_PHOTO : previousPhotoHashes[dish + ".png"]!,
+                ),
+                column: "course_id",
+                from: null,
+                to: courseKey(course),
+              })),
+            ),
+          ],
+          added: {
+            ...shared.added,
+            kitchen_courses: NEW_COURSES.map((name, index) => [courseKey(name), index + 4]),
+            department_courses: departmentKeys.flatMap((department) =>
+              [NEW_COURSES[1], NEW_COURSES[2]].map((course) => [department, courseKey(course), 0]),
+            ),
+          },
+        };
         const { semantics, added } = madridWithSharedOffers(
           madridWithDroppedColumns(
             madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
@@ -2771,7 +2839,7 @@ for (const locale of ["en", "es"] as const) {
             },
           ),
           historicalSeeded,
-          SHARED_DRINKS[locale],
+          declared,
         );
         expected.seeded = semantics;
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;

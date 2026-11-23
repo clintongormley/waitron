@@ -917,8 +917,9 @@ dishes a set menu covers; the till's pay-by-items list leaves those out too, and
 show set menus as a group of their own. The table-service guide covers this in both languages.
 A takeaway bill holding a set menu still refuses new payments, comps, discounts and Print the bill
 (`set_menu.payment_not_ready`) until VAT-RATES piece B replaces that check.
-Selecting copy-only dishes in the live correction dialog remains open. Piece 5, the demo and
-courses, remains. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
+Selecting copy-only dishes in the live correction dialog remains open. The Spanish demo assigns
+kitchen courses to its restaurant dishes. Piece 5 still needs the two lunch set menus and the
+full demo walkthrough. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).
 _2026-11-18: adviser question
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement) has the owner's answer
 (owner, 2026-11-18, question 4 of the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md);
