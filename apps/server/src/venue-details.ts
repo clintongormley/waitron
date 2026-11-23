@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import { getCountryPack, requireCountryTimeZone } from "@waitron/country-packs";
+import { readBankAccount } from "@waitron/provisioning";
 import { readBusinessDayClockModel } from "./business-day-start.js";
 import {
   AppError,
@@ -156,6 +157,7 @@ export async function readVenueDetails(
     },
     issuer,
     taxpayerDomicile: taxpayer.domicile,
+    bankAccount: await readBankAccount(tx),
     hasSales: Boolean(history.sales),
     hasOrderHistory: Boolean(history.orders),
     policy: {

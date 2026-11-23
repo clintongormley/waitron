@@ -306,6 +306,7 @@ export async function applyVenue(
               postalCode: action.postalCode,
               city: action.city,
               province: action.province,
+              bankAccount: null,
             },
             null,
           );

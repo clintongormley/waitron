@@ -73,6 +73,7 @@ export async function seedVenueSettings(
         contentLanguages: null,
         defaultContentLanguage: null,
         holidayArea: null,
+        bankAccount: null,
         privacyNoticeUrl: null,
         privacyEmail: null,
         addressLine1: null,

@@ -26,6 +26,7 @@ const doc = {
   holidayArea: null,
   privacyNoticeUrl: null,
   privacyEmail: null,
+  bankAccount: null,
 };
 
 describe("the venue document", () => {
@@ -54,11 +55,47 @@ describe("the venue document", () => {
       holidayArea: null,
       privacyNoticeUrl: null,
       privacyEmail: null,
+      bankAccount: null,
     });
     expect(api.VENUE_SETTINGS.parse(api.VENUE_SETTINGS.defaults())).toEqual({
       ok: false,
       field: "name",
     });
+  });
+
+  it("reads a document saved without a bank account as having none", () => {
+    const { bankAccount: _none, ...older } = doc;
+    void _none;
+    expect(api.VENUE_SETTINGS.parse(older)).toEqual({ ok: true, doc });
+  });
+
+  it("parses a stored bank account and refuses one that is not stored as saved", () => {
+    const iban = "ES9121000418450200051332";
+    for (const bankAccount of [
+      { iban, bankName: "Openbank" },
+      { iban, bankName: null },
+    ])
+      expect(api.VENUE_SETTINGS.parse({ ...doc, bankAccount })).toEqual({
+        ok: true,
+        doc: { ...doc, bankAccount },
+      });
+    for (const bankAccount of [
+      "ES9121000418450200051332",
+      [],
+      {},
+      { iban, bankName: "Openbank", swift: "X" },
+      { iban: "ES91 2100 0418 4502 0005 1332", bankName: null },
+      { iban: "es9121000418450200051332", bankName: null },
+      { iban: "ES9121000418450200051333", bankName: null },
+      { iban: 7, bankName: null },
+      { iban, bankName: "  " },
+      { iban, bankName: 7 },
+      { iban },
+    ])
+      expect(api.VENUE_SETTINGS.parse({ ...doc, bankAccount })).toEqual({
+        ok: false,
+        field: "bankAccount",
+      });
   });
 
   it("parses a trimmed name and refuses each malformed field", () => {
@@ -272,6 +309,7 @@ describe("the venue document", () => {
         holidayArea: null,
         privacyNoticeUrl: null,
         privacyEmail: null,
+        bankAccount: null,
       },
       revision: 1,
     });

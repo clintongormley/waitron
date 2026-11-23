@@ -1,3 +1,4 @@
+import type { BankAccount } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 export interface VenueDetailValues {
   name: string;
@@ -25,6 +26,7 @@ export interface VenueDetailsModel {
   issuer: { country: string; legalName: string; taxId: string };
   /** The registered address full invoices print; null when setup stored none. */
   taxpayerDomicile: string | null;
+  bankAccount: BankAccount | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
   policy: Record<

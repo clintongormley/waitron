@@ -20,6 +20,7 @@ export {
   savePrivacyContact,
   type PrivacyContact,
 } from "./privacy-contact.js";
+export { readBankAccount, saveBankAccount } from "./bank-account.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export {

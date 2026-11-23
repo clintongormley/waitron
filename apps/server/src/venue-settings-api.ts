@@ -18,9 +18,10 @@ import {
   changeTaxpayerDomicile,
   readPrivacyContact,
   renameTaxpayer,
+  saveBankAccount,
   savePrivacyContact,
 } from "@waitron/provisioning";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError, normalizeIban } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -170,6 +171,41 @@ function taxpayerFieldRequest(
   if (typeof value !== "string") throw invalid(field, "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
   return { value: normalizeVenueText(value), expected: normalizeVenueText(expected) };
+}
+
+interface BankAccountRequest {
+  iban: string;
+  bankName: string;
+  expected: { iban: string; bankName: string };
+}
+
+/** The bank-account body, refused as `taxpayerFieldRequest` refuses a taxpayer field's. */
+function bankAccountRequest(body: unknown): BankAccountRequest {
+  const invalid = (name: string, reason: string) =>
+    new AppError("venue.detail_invalid", { field: name, reason });
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+  if (!isObject(body)) throw invalid("body", "type");
+  for (const key of Object.keys(body))
+    if (readOnlyVenueFields.has(key)) throw new AppError("venue.detail_read_only", { field: key });
+  const fields = ["iban", "bankName"];
+  if (Object.keys(body).some((key) => !fields.includes(key) && key !== "expected"))
+    throw invalid("body", "unknown_field");
+  for (const field of fields) if (typeof body[field] !== "string") throw invalid(field, "type");
+  const { expected } = body;
+  if (!isObject(expected)) throw invalid("expected", "type");
+  if (Object.keys(expected).some((key) => !fields.includes(key)))
+    throw invalid("expected", "unknown_field");
+  if (typeof expected.iban !== "string" || typeof expected.bankName !== "string")
+    throw invalid("expected", "type");
+  return {
+    iban: body.iban as string,
+    bankName: body.bankName as string,
+    expected: {
+      iban: normalizeIban(expected.iban),
+      bankName: normalizeVenueText(expected.bankName),
+    },
+  };
 }
 
 function withTaxpayer<T>(contact: T | null): T {
@@ -356,6 +392,19 @@ export function mountVenueSettingsApi(
     write: async (tx, { expected, value, personId }) =>
       (await changeTaxpayerDomicile(tx, { expected, taxpayerDomicile: value, personId })).changed,
   });
+  app.put("/management-api/venue-details/bank-account", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(sessionId, async (tx, personId) => {
+        await requireFreshManagementSignIn(tx, sessionId);
+        const change = await saveBankAccount(tx, { ...bankAccountRequest(body), personId });
+        if (!change.saved) throw new AppError("venue.detail_changed", { field: "iban" });
+        return { model: await readVenueDetails(tx, (deps.now ?? (() => new Date()))()) };
+      });
+      return c.json(result);
+    }),
+  );
   app.get("/management-api/receipt-language", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

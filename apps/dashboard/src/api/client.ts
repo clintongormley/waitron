@@ -178,6 +178,7 @@ export interface VenueDetailsModel {
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
   taxpayerDomicile: string | null;
+  bankAccount: { iban: string; bankName: string | null } | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
   policy: Record<

@@ -326,6 +326,7 @@ it("first setup writes the venue document and an identical reapply keeps its rev
         postalCode: "28013",
         city: "Madrid",
         province: "Madrid",
+        bankAccount: null,
       }),
       updated_by: null,
     },
