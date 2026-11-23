@@ -548,6 +548,19 @@ describe("the server-key page says where the key is", () => {
     );
   });
 
+  it("keeps the text inside its boxes clear of the box's edge", async () => {
+    const bytes = await renderRecoveryPack(input());
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    try {
+      const pdf = await loading.promise;
+      const items = (await (await pdf.getPage(4)).getTextContent()).items;
+      const item = items.find((i) => "str" in i && i.str.startsWith("This pack did not make"));
+      expect((item as { transform: number[] }).transform[4]).toBeGreaterThanOrEqual(48 + 10);
+    } finally {
+      await loading.destroy();
+    }
+  });
+
   it("prints every pack number with its date", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     for (const { text } of pages) {

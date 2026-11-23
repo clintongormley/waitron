@@ -460,7 +460,7 @@ configuración para poner en marcha otro local.
   dentro de la base de datos. Cada copia programada va cifrada con la clave de cifrado de copias, que guarda el servidor. Mientras la hace, el servidor escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
-  menos 12 caracteres, así que es tan segura como esa frase. Revisa si alguna parte de la portada del paquete de recuperación indica **No se pudo generar**.
+  menos 12 caracteres, así que es tan segura como esa frase.
   Lee sus páginas antes de necesitar el paquete: pueden nombrar un paquete anterior o una hoja que
   también necesites. Conserva esos papeles y los paquetes de las copias anteriores que puedas
   necesitar. Guarda cada paquete de recuperación bajo llave, fuera del servidor.

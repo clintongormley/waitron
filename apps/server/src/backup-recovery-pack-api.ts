@@ -352,7 +352,7 @@ async function makePack(
       masterKey:
         carried && input.newMasterKey !== undefined
           ? shownMasterKey(input.newMasterKey)
-          : await currentMasterKeyElsewhere(tx, nodeId),
+          : await currentMasterKeyElsewhere(tx, records),
     },
   );
   await insertRecoveryPack(tx, record);

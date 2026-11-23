@@ -2,7 +2,6 @@ import {
   insertRecoveryPack,
   nextRecoveryPackNumber,
   readCurrentMasterKey,
-  readRecoveryPacks,
   readVenue,
   requireStamp,
   withNodeTransaction,
@@ -44,18 +43,18 @@ export function shownMasterKey(made: MadeMasterKey): PackMasterKey {
 }
 
 /**
- * A pack that does not show the master key names the current one, and this box's pack that showed
- * it: the one made at the same instant, since every site that makes a key saves it with its pack's
- * `madeAt`.
+ * A pack that does not show the master key names the current one, and the pack among `packs` (this
+ * box's) that showed it: the one made at the same instant, since every site that makes a key and a
+ * pack saves the key with its pack's `madeAt`.
  */
 export async function currentMasterKeyElsewhere(
   tx: Transaction,
-  nodeId: string,
+  packs: readonly RecoveryPackRecord[],
 ): Promise<PackMasterKey> {
   const current = await readCurrentMasterKey(tx);
   if (current === null) return { masterKey: null, masterKeyName: null, masterKeyHeldBy: null };
   const at = current.madeAt.getTime();
-  const holder = (await readRecoveryPacks(tx, nodeId)).find((r) => r.madeAt.getTime() === at);
+  const holder = packs.find((pack) => pack.madeAt.getTime() === at);
   return { masterKey: null, masterKeyName: current.name, masterKeyHeldBy: holder?.number ?? null };
 }
 

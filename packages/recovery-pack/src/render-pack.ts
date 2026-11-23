@@ -42,7 +42,10 @@ const SCALES = [1, 0.9, 0.8, 0.7];
 const TALLEST_CELL = 96;
 const ELLIPSIS = "\u2026";
 
-/** The page each printed part is on: the master key's page is page 1, then one page per included or failed part. */
+/**
+ * The page each printed part is on: the master key's page is page 1, then one page per included or
+ * failed part.
+ */
 export function packPageNumbers(parts: readonly PackPart[]): Map<PackPart, number> {
   const pageOf = new Map<PackPart, number>();
   for (const part of parts)
@@ -97,8 +100,9 @@ async function digestOf(bytes: Uint8Array): Promise<string> {
 }
 
 /**
- * Draws the pack: the master key's page, then one A4 page for each part that is included or failed. The attached
- * file is the only embedded file, and the Info key `WaitronRecoveryDigest` is its SHA-256.
+ * Draws the pack: the master key's page, then one A4 page for each part that is included or
+ * failed. The attached file is the only embedded file, and the Info key `WaitronRecoveryDigest` is
+ * its SHA-256.
  */
 export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8Array<ArrayBuffer>> {
   const { locale, pack, parts } = input;
