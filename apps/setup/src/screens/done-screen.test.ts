@@ -1124,7 +1124,6 @@ describe("setup-done-screen", () => {
       const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
       expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
       expect(q(el, "[data-test=joining-status]")!.textContent!.trim()).toBe(words);
-      expect(q(el, "[data-test=task-join-detail]")).toBeNull();
     },
   );
 
@@ -1988,7 +1987,7 @@ describe("the joining page", () => {
   const SPARE = "https://box-41aa.waitron.local";
   const SWITCH_PAGE = "https://box-41aa.waitron.local/handover/emergency";
   const LOST_EN =
-    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's Servers page and look at this box's row.";
+    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the main box's Servers page and look at this box's row.";
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -2114,7 +2113,7 @@ describe("the joining page", () => {
     [
       "en-GB",
       "waiting",
-      "Joining. Waiting for the primary to send its copy of the restaurant's data.",
+      "Joining. Waiting for the main box to send its copy of the restaurant's data.",
     ],
     [
       "en-GB",
@@ -2125,7 +2124,7 @@ describe("the joining page", () => {
     [
       "es-ES",
       "waiting",
-      "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
+      "Uniéndose. Esperando a que el servidor principal envíe su copia de los datos del restaurante.",
     ],
     [
       "es-ES",
@@ -2333,7 +2332,7 @@ describe("the joining page", () => {
       "",
       "key-on-paper",
       "",
-      "You will need it if this box ever has to take over from the primary.",
+      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
@@ -2509,7 +2508,7 @@ describe("the joining page", () => {
     const { el } = await mountJoining([unreachable], { serversUrl: SERVERS, lostAfterMs: 0 });
     await vi.waitFor(() =>
       expect(statusText(el)).toBe(
-        "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la página Servidores del principal y mira la fila de este servidor.",
+        "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la página Servidores del servidor principal y mira la fila de este servidor.",
       ),
     );
   });

@@ -94,18 +94,16 @@ export const finishEn = {
   "done.break_glass.replacement":
     "The box key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new box key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
-  "done.break_glass.take_over":
-    "You will need it if this box ever has to take over from the primary.",
   "done.joining.heading": "This box is joining",
   "done.joined.heading": "This box has joined",
   "done.joining.status": "Joining. This can take a few minutes.",
   "done.joining.copy_waiting":
-    "Joining. Waiting for the primary to send its copy of the restaurant's data.",
+    "Joining. Waiting for the main box to send its copy of the restaurant's data.",
   "done.joining.copy_restoring":
     "Joining. Copying the restaurant's data from the main box. The main box keeps selling.",
   "done.joining.copy_ready": "Joining. The copy is complete and this box is restarting.",
   "done.joining.lost_before":
-    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
+    "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the main box's",
   "done.joining.lost_link": "Servers page",
   "done.joining.lost_after": "and look at this box's row.",
   "done.task.done": "Done",
@@ -121,7 +119,6 @@ export const finishEn = {
   "done.task.label_why":
     "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
   "done.task.label_stuck": "I've stuck it on",
-  "done.label.heading": "Print this box's label",
   "done.label.why":
     "Stick it on this box. Every box in the restaurant has one: if the main box fails, scan the label on a spare with any till or phone on the venue's network to switch to that spare.",
   "done.label.print": "Print label",
@@ -228,13 +225,11 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.replacement":
     "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
   "done.break_glass.open_backups": "Abrir Copias de seguridad",
-  "done.break_glass.take_over":
-    "La necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joined.heading": "Este servidor se ha unido",
   "done.joining.status": "Uniéndose. Puede tardar unos minutos.",
   "done.joining.copy_waiting":
-    "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
+    "Uniéndose. Esperando a que el servidor principal envíe su copia de los datos del restaurante.",
   "done.joining.copy_restoring":
     "Uniéndose. Copiando los datos del restaurante desde el servidor principal. El servidor principal sigue vendiendo.",
   "done.joining.copy_ready":
@@ -242,7 +237,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.joining.lost_before":
     "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la",
   "done.joining.lost_link": "página Servidores",
-  "done.joining.lost_after": "del principal y mira la fila de este servidor.",
+  "done.joining.lost_after": "del servidor principal y mira la fila de este servidor.",
   "done.task.done": "Hecho",
   "done.task.in_progress": "En curso",
   "done.task.to_do": "Pendiente",
@@ -256,7 +251,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.label_why":
     "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
   "done.task.label_stuck": "Ya la he pegado",
-  "done.label.heading": "Imprimir la etiqueta de este servidor",
   "done.label.why":
     "Pégala en este servidor. Cada servidor del restaurante tiene una: si el servidor principal falla, escanea la etiqueta de un servidor de reserva con cualquier caja o móvil conectado a la red del local para cambiar a ese servidor.",
   "done.label.print": "Imprimir etiqueta",

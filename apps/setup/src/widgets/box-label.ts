@@ -7,8 +7,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
 
-/** This box's label, as the dashboard's Servers page prints it: scanned when the main box fails, it
- * opens this box's switch page. Anything placed inside sits beside Print label. */
+/** This box's label: scanned when the main box fails, it opens this box's switch page. Anything
+ * placed inside sits beside Print label. */
 @customElement("setup-box-label")
 export class SetupBoxLabel extends LitElement {
   static override styles = [

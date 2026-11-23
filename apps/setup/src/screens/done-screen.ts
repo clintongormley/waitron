@@ -642,7 +642,7 @@ export class SetupDoneScreen extends LitElement {
         this.#preparation()
           ? "done.break_glass.file_purpose"
           : this.mirrorJoin
-            ? "done.break_glass.take_over"
+            ? "done.task.key_why"
             : "done.break_glass.promote",
       ),
       ...(this.mirrorJoin ? [] : [t("done.break_glass.backups")]),
@@ -687,8 +687,7 @@ export class SetupDoneScreen extends LitElement {
                   ? "done.break_glass.restore"
                   : "done.break_glass.pack_keep",
               )
-            : html`${t("done.break_glass.warning")}
-              ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}`
+            : html`${t("done.break_glass.warning")} ${t("done.break_glass.promote")}`
         }
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
@@ -735,7 +734,7 @@ export class SetupDoneScreen extends LitElement {
   #mainLabel(): TemplateResult | typeof nothing {
     if (this.contactUrl === undefined) return nothing;
     return html`<wt-card data-test="main-label">
-      <h2 class="card-heading">${t("done.label.heading")}</h2>
+      <h2 class="card-heading">${t("done.task.label")}</h2>
       <p data-test="main-label-why">${t("done.label.why")}</p>
       ${this.#boxLabel()}
     </wt-card>`;
