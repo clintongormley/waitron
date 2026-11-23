@@ -59,6 +59,11 @@ import {
   resendInvoicePrintJob,
 } from "./invoice-print.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { seedGivenAwayLine } from "./testing/cancel-line.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { RECEIPT_OUT_OF_DATE, saleReceiptLayout } from "./receipt-print.js";
 import * as receiptDocument from "./receipt-document.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -1470,4 +1475,63 @@ it("a resend of a receipt original given up as out of date carries its waiting d
       .where(eq(invoiceDeliveries.saleId, waiting.sale.id)),
   ).toEqual([{ printJobId: jobId, status: "sent" }]);
   expect(await waiting.sentOriginals()).toEqual(["receipt"]);
+});
+
+// A445 D3a: Find a bill's reprint of a ticket whose free item holds its share of the price paid
+// shows the dishes as sold, with the comp beneath the free one.
+async function counterBillWithFreeCana(takeaway: boolean): Promise<string> {
+  const ids = new Map(
+    venue.db
+      .all<{ id: string; name: string }>(sql`select id, name from products`)
+      .map((row) => [row.name, row.id]),
+  );
+  if (takeaway) {
+    for (const [name, rate] of [
+      ["House salad", "4.00"],
+      ["Caña", "21.00"],
+    ] as const) {
+      await inTx(venue, (tx) => setTakeawayVatRate(tx, ids.get(name)!, rate));
+    }
+  }
+  const id = await parked(venue, "House salad", "Caña");
+  if (takeaway) {
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, id)),
+    );
+  }
+  await seedGivenAwayLine(venue, id, 2);
+  const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+  await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(
+    { ...deps, admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    venue.operatorId,
+  );
+  return (await saleOf(id)).id;
+}
+const sold = (answer: { json: unknown }) =>
+  (answer.json as unknown as TillSaleResult).lines.map((line) => ({
+    gross: line.gross,
+    listGross: line.listGross,
+    adjustments: line.adjustments?.map(({ kind, amount }) => ({ kind, amount })),
+  }));
+
+it("reprints a takeaway ticket's free item and the dish beside it as sold, with the comp", async () => {
+  const answer = await get(await counterBillWithFreeCana(true));
+  expect(answer.status).toBe(200);
+  // Filed: salad 9.60 at 4% and caña 2.40 at 21%, shared 12 : 3 of the €12.00 paid.
+  expect(sold(answer)).toEqual([
+    { gross: "9.60", listGross: "12.00", adjustments: undefined },
+    { gross: "2.40", listGross: "3.00", adjustments: [{ kind: "comp", amount: "3.00" }] },
+  ]);
+});
+
+it("reprints a comped ticket eaten here with its comp", async () => {
+  const answer = await get(await counterBillWithFreeCana(false));
+  expect(answer.status).toBe(200);
+  expect(sold(answer)).toEqual([
+    { gross: "12.00", listGross: undefined, adjustments: undefined },
+    { gross: "0.00", listGross: "3.00", adjustments: [{ kind: "comp", amount: "3.00" }] },
+  ]);
 });

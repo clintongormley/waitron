@@ -114,7 +114,11 @@ async function readDocument(
         setMenuRole: row.setMenuRole,
       })),
     },
-    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row) => ({
+      id: orderIds.get(row.lineNo) ?? row.id,
+      listUnitGross:
+        row.listUnitPriceGross === null ? null : centsToDecimal(row.listUnitPriceGross),
+    })),
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
