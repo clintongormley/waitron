@@ -5,6 +5,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
 import "./wt-menu-row.js";
+import "./wt-toast.js";
 import { WtDataTable } from "./wt-data-table.js";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { expectNoA11yViolations } from "../a11y-helpers.js";
@@ -1621,6 +1622,21 @@ it("starts action buttons through nested help rows and paints their decorative i
   await icon.updateComplete;
   expect(icon.shadowRoot!.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
   expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
+});
+
+it("keeps a notice's close icon in the ordinary text colour inside an action menu", async () => {
+  const el = (await mount(`<wt-row-actions label="Actions">
+    <wt-button icon="menu-edit">Edit</wt-button>
+    <wt-toast open tone="error" message="Could not disconnect" close-label="Close"></wt-toast>
+  </wt-row-actions>`)) as WtRowActions;
+  host.style.setProperty("--wt-color-text", "rgb(10, 20, 30)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(50, 60, 70)");
+  const toast = el.querySelector("wt-toast")!;
+  await toast.updateComplete;
+  el.show();
+  expect(getComputedStyle(toast.shadowRoot!.querySelector("wt-icon")!).color).toBe(
+    "rgb(10, 20, 30)",
+  );
 });
 
 it("paints a direct menu divider and destructive row from their tokens", async () => {

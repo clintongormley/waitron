@@ -131,7 +131,6 @@ export class WtRowActions extends LitElement {
         --wt-action-text: var(--wt-color-text);
         --wt-action-danger-text: var(--wt-color-danger);
         --wt-action-hover: var(--wt-color-field-fill);
-        --wt-action-icon-flex: none;
         --wt-action-icon-color: var(--wt-color-text-muted);
         --wt-action-disabled-opacity: var(--wt-opacity-disabled);
         --wt-action-weight: var(--wt-font-weight-normal);
@@ -145,6 +144,8 @@ export class WtRowActions extends LitElement {
         ${actionDividerStyles}
       }
       ::slotted(:is(button, a[href])) {
+        --wt-action-icon-flex: none;
+        --wt-action-native-icon-color: var(--wt-color-text-muted);
         ${actionRowStyles}
       }
       ::slotted(:is(button, a[href]):not(:disabled, [aria-disabled="true"]):is(:hover, :active)) {

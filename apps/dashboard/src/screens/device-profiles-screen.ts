@@ -2139,7 +2139,7 @@ export class DeviceProfilesScreen extends LitElement {
                 variant="danger"
                 data-test=${`delete-${profile.id}`}
                 @click=${(event: Event) => this.#openDelete(profile, event)}
-                >${t("device_profiles.delete_confirm")}</wt-button
+                >${t("action.delete_dialog")}</wt-button
               >`,
             ])}
           </wt-row-actions>`,

@@ -3254,7 +3254,7 @@ export const en = {
   "device_profiles.copy_suffix": " (copy)",
   "device_profiles.delete_title": "Delete profile",
   "device_profiles.delete_message": "Delete this device profile? This cannot be undone.",
-  "device_profiles.delete_confirm": "Delete…",
+  "device_profiles.delete_confirm": "Delete",
   "device_profiles.name": "Name",
   "device_profiles.where_serves": "Where it serves",
   "device_profiles.setting_unavailable":
@@ -8091,7 +8091,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.delete_title": "Eliminar perfil",
   "device_profiles.delete_message":
     "¿Eliminar este perfil de dispositivo? Esta acción no se puede deshacer.",
-  "device_profiles.delete_confirm": "Eliminar…",
+  "device_profiles.delete_confirm": "Eliminar",
   "device_profiles.name": "Nombre",
   "device_profiles.where_serves": "Dónde atiende",
   "device_profiles.setting_unavailable":

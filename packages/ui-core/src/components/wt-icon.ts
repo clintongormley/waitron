@@ -21,7 +21,7 @@ export class WtIcon extends LitElement {
       :host {
         display: inline-flex;
         flex: var(--wt-action-icon-flex, 0 1 auto);
-        color: var(--wt-action-icon-color, var(--wt-color-text));
+        color: var(--wt-action-native-icon-color, var(--wt-color-text));
         width: var(--wt-font-size-md);
         height: var(--wt-font-size-md);
       }

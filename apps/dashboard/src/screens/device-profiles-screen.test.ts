@@ -629,7 +629,9 @@ describe("device-profiles-screen list mode", () => {
     const el = await mount(api);
     await profileAction(el, "delete-p1");
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+    expect(confirm.textContent!.trim()).toBe(t("action.delete"));
+    confirm.click();
     await flush(el);
     expect(api.deleteDeviceProfile).toHaveBeenCalledWith("p1");
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
