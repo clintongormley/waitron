@@ -7,6 +7,8 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { markDelivered } from "./acks.js";
+import { seedSoldRegistro } from "../test/fixtures.js";
+import { readChainHead } from "./chain.js";
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -84,27 +86,24 @@ describe("registerSif stamps the clock", () => {
     expect(new Date(revoked!).getTime()).toBeGreaterThanOrEqual(STARTED_AT);
   });
 
-  it("moves the existing chain head's actualizado_en when it resets the pointer", async () => {
-    await withTransaction(venue.db, (tx) => registerSif(tx, { ...SIF, nodeId: NODE }));
-    // A value no clock reading can produce, so a SET clause that never ran is visible.
-    venue.db.run(
-      sql`update cadenas set actualizado_en = '2020-01-01T00:00:00.000Z', secuencia = 7
-          where node_id = ${NODE}`,
+  it("keeps the record position and starts a fresh chain after activating another identity", async () => {
+    const first = await withTransaction(venue.db, (tx) =>
+      registerSif(tx, { ...SIF, nodeId: NODE }),
     );
+    const huella = "A".repeat(64);
+    await seedSoldRegistro(venue.db, {
+      nodeId: NODE,
+      sifId: first.id,
+      nif: SIF.nif,
+      secuencia: 7,
+      huella,
+    });
+    const head = () => withTransaction(venue.db, (tx) => readChainHead(tx, NODE));
+    expect(await head()).toMatchObject({ secuencia: 7, ultimaHuella: huella });
 
     await withTransaction(venue.db, (tx) => registerSif(tx, { ...SIF, nodeId: NODE }));
 
-    const [head] = venue.db.all<{
-      actualizado_en: string;
-      secuencia: number;
-      ultimo_registro_id: string | null;
-    }>(
-      sql`select actualizado_en, secuencia, ultimo_registro_id from cadenas
-          where node_id = ${NODE}`,
-    );
-    expect(new Date(head!.actualizado_en).getTime()).toBeGreaterThanOrEqual(STARTED_AT);
-    expect(head!.ultimo_registro_id).toBeNull();
-    expect(head!.secuencia).toBe(7); // ours, never reset
+    expect(await head()).toEqual({ secuencia: 7, ultimoRegistroId: null, ultimaHuella: null });
   });
 });
 

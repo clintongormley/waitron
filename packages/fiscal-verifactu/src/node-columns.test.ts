@@ -13,7 +13,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TAXPAYER_A, seedTaxpayerNodeSif } from "../test/fixtures.js";
 
 /**
- * `node_id` is the NOT NULL chain key on `verifactu_identities`, `cadenas` and `verifactu_records`.
+ * `node_id` is the NOT NULL chain key on `verifactu_identities` and `verifactu_records`.
  * Only `verifactu_records`'s foreign key onto `nodes` is exercised here.
  */
 const suite = useVenueDb({
@@ -51,28 +51,6 @@ describe("verifactu_identities.node_id", () => {
       sql`select node_id from verifactu_identities where id = ${TAXPAYER_A.sifId}`,
     );
     expect(row.rows[0]?.node_id).toBe(TAXPAYER_A.nodeId);
-  });
-});
-
-describe("cadenas.node_id", () => {
-  it("is NOT NULL and is the chain key", async () => {
-    expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "NO" }]);
-    const node = await seedNodeForA();
-    // `actualizado_en` is stated because only the insert BUILDER fills its default.
-    const inserted = await suite.db.execute<{ node_id: string | null }>(
-      sql`insert into cadenas (node_id, actualizado_en)
-           values (${node}, '2026-07-20T18:20:30.000Z') returning node_id`,
-    );
-    expect(inserted.rows[0]?.node_id).toBe(node);
-  });
-
-  it("rejects a null node_id (the chain key is required)", async () => {
-    const error = await captureError(async () =>
-      suite.db.execute(
-        sql`insert into cadenas (node_id, actualizado_en) values (null, '2026-07-20T18:20:30.000Z')`,
-      ),
-    );
-    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
   });
 });
 

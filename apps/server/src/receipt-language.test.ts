@@ -564,7 +564,6 @@ describe("a card-reader sale files and prints in the venue's language when the o
 /** Every row of these tables, so a reprint that changed one of them is seen. */
 const SALE_TABLES = [
   "verifactu_records",
-  "cadenas",
   "verifactu_submissions",
   "invoice_series",
   "sales",

@@ -21,6 +21,7 @@ import { allocationFixture } from "../test/allocation-fixture.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { readChainHead } from "./chain.js";
 import { ID_SISTEMA_MAX_LENGTH, currentSif } from "./registro-sif.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
@@ -97,10 +98,8 @@ describe("FISCAL_PROVISIONING.seed", () => {
     );
     const sif = await withTransaction(db, (tx) => currentSif(tx, TAXPAYER_A.nodeId));
     expect(sif.numeroInstalacion).toBe("P000042");
-    const head = await db.execute<{ h: string | null }>(
-      sql`select ultima_huella as h from cadenas where node_id = ${TAXPAYER_A.nodeId}`,
-    );
-    expect(head.rows[0]?.h).toBeNull();
+    const head = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(head.ultimaHuella).toBeNull();
   });
 });
 

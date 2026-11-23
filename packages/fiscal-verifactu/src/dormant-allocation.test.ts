@@ -125,7 +125,7 @@ describe("persisting a named spare's dormant paper allocation", () => {
   it("retains the signed reservation and complete bases without creating any active fiscal state", async () => {
     const active = [
       await rows("verifactu_identities"),
-      await rows("cadenas"),
+      await rows("verifactu_records"),
       await rows("invoice_series"),
       await suite.db.execute(
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,
@@ -150,7 +150,7 @@ describe("persisting a named spare's dormant paper allocation", () => {
     expect(JSON.parse(String(saved[0]!.bases))).toEqual(bases);
     expect([
       await rows("verifactu_identities"),
-      await rows("cadenas"),
+      await rows("verifactu_records"),
       await rows("invoice_series"),
       await suite.db.execute(
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,

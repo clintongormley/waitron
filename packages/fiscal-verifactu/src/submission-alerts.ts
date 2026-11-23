@@ -94,7 +94,7 @@ export const fiscalSubmissionSource: AlertSource = {
  * longer than the limit. Every walk back skips set-aside records (`recordsBefore`), as the hold
  * does.
  *
- * Each walk back names the chain's node, so `verifactu_records_node_secuencia_idx` serves it, and the
+ * Each walk back names the chain's node, so `verifactu_records_node_secuencia_uq` serves it, and the
  * `materialized` steps compute each chain's walks once rather than once per reference. A run with
  * nothing before it is counted from 0: `verifactu_records_secuencia_ck` keeps every position above it.
  */

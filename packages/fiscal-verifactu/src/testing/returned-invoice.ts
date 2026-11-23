@@ -11,7 +11,7 @@ export async function copyReturnFiscalMetadata(
   receiver: Database,
 ): Promise<void> {
   await withTransaction(receiver, async (tx) => {
-    for (const table of ["nodes", "invoice_series", "verifactu_identities", "cadenas"]) {
+    for (const table of ["nodes", "invoice_series", "verifactu_identities"]) {
       for (const row of source.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {
         const entries = Object.entries(row);
         await tx.execute(sql`insert into ${sql.identifier(table)}

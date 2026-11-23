@@ -348,8 +348,8 @@ function fiscalSnapshot() {
       (select count(*) from verifactu_records) as registros,
       (select count(*) from order_amendments) as amendments,
       (select group_concat(id || ':' || next_number, ',') from invoice_series) as series,
-      (select group_concat(node_id || ':' || secuencia || ':' || coalesce(ultima_huella, ''), ',')
-        from cadenas) as chain
+      (select group_concat(node_id || ':' || secuencia || ':' || huella, ',')
+        from (select node_id, secuencia, huella from verifactu_records order by node_id, secuencia)) as chain
   `)[0];
 }
 

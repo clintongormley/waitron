@@ -957,6 +957,24 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.location_business_day_settings;
       delete phases[phase]!.daily_closes;
       delete phases[phase]!.daily_close_chain;
+      const capturedHeads = Object.values(expected[phase].tables.cadenas!.rows);
+      expect(capturedHeads).toHaveLength(phases[phase]!.cadenas);
+      for (const head of capturedHeads) {
+        const latest = Object.values(expected[phase].tables.verifactu_records!.rows)
+          .filter((row) => row.node_id === head.node_id)
+          .sort((a, b) => Number(b.secuencia) - Number(a.secuencia))[0];
+        const identity = Object.values(expected[phase].tables.verifactu_identities!.rows).find(
+          (row) => row.node_id === head.node_id && row.revocado_en === null,
+        );
+        const predecessor = latest && latest.sif_id === identity?.id ? latest : undefined;
+        expect([head.secuencia, head.ultimo_registro_id, head.ultima_huella]).toEqual([
+          latest?.secuencia ?? 0,
+          predecessor?.id ?? null,
+          predecessor?.huella ?? null,
+        ]);
+      }
+      delete expected[phase].tables.cadenas;
+      delete phases[phase]!.cadenas;
       delete phases[phase]!.location_day_cutover_changes;
       phases[phase]!.day_cutover_changes = Object.keys(
         expected[phase].tables.day_cutover_changes!.rows,

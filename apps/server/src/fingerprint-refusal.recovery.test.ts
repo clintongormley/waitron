@@ -113,7 +113,6 @@ function snapshot() {
     "tenders",
     "working_orders",
     "working_order_lines",
-    "cadenas",
     "verifactu_records",
     "verifactu_submissions",
     "print_jobs",

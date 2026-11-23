@@ -161,7 +161,7 @@ async function rows(table: string) {
 async function activeRows() {
   return [
     await rows("verifactu_identities"),
-    await rows("cadenas"),
+    await rows("verifactu_records"),
     await rows("invoice_series"),
     await rows("fiscal_allocations"),
     await suite.db.execute(

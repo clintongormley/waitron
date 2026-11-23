@@ -50,7 +50,6 @@ it("keeps actual sale/void hashes, predecessor bytes and invoice numbers intact 
       )
     ).rows,
     series: (await suite.db.execute(sql`select * from invoice_series order by id`)).rows,
-    chains: (await suite.db.execute(sql`select * from cadenas order by node_id`)).rows,
   });
   const original = await snapshot();
   expect(original.records.map((r) => r.tipo_registro)).toEqual(["alta", "anulacion"]);

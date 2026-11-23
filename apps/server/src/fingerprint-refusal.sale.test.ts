@@ -51,7 +51,6 @@ function snapshot(includePayments = true) {
     "tenders",
     "sale_settlements",
     "verifactu_records",
-    "cadenas",
     "verifactu_submissions",
     "working_orders",
     "working_order_lines",

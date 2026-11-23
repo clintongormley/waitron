@@ -5,7 +5,6 @@ import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import {
-  cadenas,
   verifactuSubmissions,
   verifactuRecords,
   VerifactuBackend,
@@ -236,7 +235,6 @@ describe.each(["F1", "F3"] as const)("%s refused recipient identity", (kind) => 
     const input = await sale(recipient as Counterparty, 2);
     const before = {
       records: await suite.db.select().from(verifactuRecords),
-      head: await suite.db.select().from(cadenas),
       outbox: await suite.db.select().from(verifactuSubmissions),
     };
     const error = await captureError(() =>
@@ -251,7 +249,6 @@ describe.each(["F1", "F3"] as const)("%s refused recipient identity", (kind) => 
     expect(error.code).toBe("fiscal.record_invalid");
     expect(error.params).toEqual({ fields: [field], codes: ["RECIPIENT_IDENTIFIER_INVALID"] });
     expect(await suite.db.select().from(verifactuRecords)).toEqual(before.records);
-    expect(await suite.db.select().from(cadenas)).toEqual(before.head);
     expect(await suite.db.select().from(verifactuSubmissions)).toEqual(before.outbox);
   });
 });

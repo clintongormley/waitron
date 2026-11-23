@@ -1,8 +1,7 @@
 import type { stagedHourCrash } from "./staged-hour-crash.js";
 
 type Snapshot = Awaited<ReturnType<Awaited<ReturnType<typeof stagedHourCrash>>["snapshot"]>>;
-type RestoreRows = Pick<Snapshot, "registrations" | "series" | "allocations"> &
-  Partial<Pick<Snapshot, "chainHeads">>;
+type RestoreRows = Pick<Snapshot, "registrations" | "series" | "allocations">;
 export function resultFacts<T extends RestoreRows>(
   rows: T,
   installationName: keyof Snapshot["registrations"][number],
@@ -11,9 +10,6 @@ export function resultFacts<T extends RestoreRows>(
   const series = (id: string) => rows.series.find((row) => row.id === id)!.code;
   return {
     ...rows,
-    ...(rows.chainHeads === undefined
-      ? {}
-      : { chainHeads: rows.chainHeads.map((row) => ({ ...row, actualizadoEn: null })) }),
     registrations: rows.registrations.map((row) => ({
       ...row,
       id: sif(row.id),

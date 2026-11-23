@@ -151,16 +151,6 @@ it("full fiscal walk refuses an old damaged record beside an empty current regis
     status: "invalid",
   });
 });
-it("captured head comparison refuses a sequence beyond retained records", async () => {
-  const f = await suite.create();
-  await f.corrupt((db) => db.prepare("update cadenas set secuencia=secuencia+1").run());
-  const answer = await verify(f);
-  expect(answer.status).toBe("invalid");
-  expect(answer.modules.find((m) => m.name === "fiscal-verifactu")?.checks).toContainEqual({
-    code: "chain",
-    status: "invalid",
-  });
-});
 it("immutable equality refuses a changed migrated invoice line", async () => {
   const f = await suite.create();
   const place = placement.placeBackupData;

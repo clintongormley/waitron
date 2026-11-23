@@ -67,8 +67,8 @@ describe("a record AEAT could not accept never enters the chain", () => {
 
     // And the chain head must not have advanced: a refused record leaves the node exactly where it
     // was, so the next legitimate sale is still the chain's first record.
-    const heads = await suite.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${nodeId}`,
+    const heads = await suite.db.execute<{ secuencia: number | null }>(
+      sql`select max(secuencia) as secuencia from verifactu_records where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });
@@ -275,8 +275,8 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     const soldRows = await suite.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
-    const heads = await suite.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${nodeId}`,
+    const heads = await suite.db.execute<{ secuencia: number | null }>(
+      sql`select max(secuencia) as secuencia from verifactu_records where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });

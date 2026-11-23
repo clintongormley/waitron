@@ -9,7 +9,6 @@ import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import type { FakeAeat } from "@waitron/verifactu/testing";
 import { verifactuSubmissions } from "../src/schema/verifactu-submissions.js";
 import { verifactuRecords } from "../src/schema/verifactu-records.js";
-import { cadenas } from "../src/schema/cadenas.js";
 import { verifactuIdentities } from "../src/schema/verifactu-identities.js";
 import { currentSif } from "../src/registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "../src/registro-row.js";
@@ -149,16 +148,17 @@ export async function insertPendingAlta(
   // preproduction run 36350894099 (its `COMPLIANCE-AUDIT.md`, "Complete live result, 27 September
   // 2026").
   const head = await db.execute<{
+    sif_id: string;
     id_emisor_factura: string;
     num_serie_factura: string;
     fecha_expedicion_factura: string;
     huella: string;
   }>(sql`
-    select r.id_emisor_factura, r.num_serie_factura, r.fecha_expedicion_factura, r.huella
-    from cadenas c join verifactu_records r on r.id = c.ultimo_registro_id
-    where c.node_id = ${params.nodeId}
+    select sif_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, huella
+    from verifactu_records where node_id = ${params.nodeId} order by secuencia desc limit 1
   `);
-  const previous = head.rows[0];
+  const latest = head.rows[0];
+  const previous = latest?.sif_id === params.sifId ? latest : undefined;
   const sif = await db.execute<{ numero_instalacion: number }>(sql`
     select numero_instalacion from verifactu_identities where id = ${params.sifId}
   `);
@@ -222,11 +222,6 @@ export async function insertPendingAlta(
     throw new Error("insertPendingAlta: insert returned no row");
   }
   /* v8 ignore stop */
-  await db.execute(sql`
-    update cadenas
-    set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where node_id = ${params.nodeId}
-  `);
   return { registroId, numSerieFactura };
 }
 
@@ -351,30 +346,14 @@ function followingRecord(head: StoredRegistro) {
   };
 }
 
-async function advanceChainPointer(
-  db: Database,
-  seeded: SeededDrain,
-  secuencia: number,
-  id: string,
-  huella: string,
-): Promise<void> {
-  await db.execute(sql`
-    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
-    where node_id = ${seeded.nodeId}
-  `);
-}
-
 /**
- * A pending cancellation of `originalId` at `secuencia`, on the original's own chain, whose pointer
- * in `seeded` moves on to it. `sinRegistroPrevio: "S"` makes it the absent-original cancellation.
+ * A pending cancellation on the original invoice’s chain. `sinRegistroPrevio: "S"` marks an absent original.
  *
  * With `otherChainHeadId` it goes on ANOTHER chain instead, after that chain's record: a box
- * cancelling an invoice that another box's chain issued. The row is then built from that head, and
- * no chain pointer moves.
+ * cancelling an invoice that another box's chain issued.
  */
 export async function appendCancellation(
   db: Database,
-  seeded: SeededDrain,
   originalId: string,
   secuencia: number,
   options: { sinRegistroPrevio?: "S"; otherChainHeadId?: string } = {},
@@ -406,7 +385,6 @@ export async function appendCancellation(
     ...followingRecord(head),
     huella,
   });
-  if (!onOtherChain) await advanceChainPointer(db, seeded, secuencia, id, huella);
   await db.insert(verifactuSubmissions).values({ registroId: id, proximoIntentoEn: DUE_AT });
   return id;
 }
@@ -415,7 +393,6 @@ export async function appendCancellation(
  * `secuencia`: the same invoice, replacing that version. */
 export async function appendCorrection(
   db: Database,
-  seeded: SeededDrain,
   originalId: string,
   secuencia: number,
 ): Promise<string> {
@@ -434,7 +411,6 @@ export async function appendCorrection(
     ...followingRecord(chainHeadOf(records, original)),
     huella,
   });
-  await advanceChainPointer(db, seeded, secuencia, id, huella);
   await db.insert(verifactuSubmissions).values({ registroId: id, proximoIntentoEn: DUE_AT });
   return id;
 }
@@ -575,7 +551,6 @@ export async function seedPinnedChain(
     idSistemaInformatico: "WT",
     numeroInstalacion: String(pinnedInstallationSequence),
   });
-  await db.insert(cadenas).values({ nodeId });
 
   const { deviceId } = await seedDevice(db, {});
   const registroIds: string[] = [];

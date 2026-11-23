@@ -92,7 +92,6 @@ function snapshot() {
       "sale_substitutions",
       "invoice_series",
       "verifactu_records",
-      "cadenas",
       "verifactu_submissions",
       "tenders",
       "sale_settlements",

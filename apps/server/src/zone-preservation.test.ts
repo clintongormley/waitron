@@ -53,7 +53,6 @@ function facts() {
       "refunds",
       "invoice_series",
       "verifactu_records",
-      "cadenas",
       "drawer_entries",
     ].map((name) => [name, v.db.all(sql`select * from ${sql.identifier(name)} order by rowid`)]),
   );

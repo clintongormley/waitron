@@ -139,15 +139,12 @@ describe("checkFiscalChains", () => {
   it("a copy without the fiscal tables is broken, and one with empty tables is ok", async () => {
     const empty = await copy();
     const dropped = await copy();
-    damage(
-      dropped,
-      "drop table verifactu_records; drop table verifactu_identities; drop table cadenas;",
-    );
+    damage(dropped, "drop table verifactu_records; drop table verifactu_identities;");
     expect(await check(empty)).toBe("ok");
     expect(await check(dropped)).toBe("broken");
   });
 
-  it.each(["verifactu_records", "verifactu_identities", "cadenas", "nodes"])(
+  it.each(["verifactu_records", "verifactu_identities", "nodes"])(
     "a populated copy missing %s is broken",
     async (table) => {
       await twoChains();

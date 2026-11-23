@@ -29,7 +29,7 @@ export interface FilingCaseReport extends FilingCase {
  * its envío `preceding_envio`, leaving out set-aside (`retenido`) records: one is never sent, so
  * it neither breaks nor lengthens a run of refusals, and is never the record before a held one. A
  * caller adds its own conditions, order and limit. A chain's records are all on its node
- * (`appendToChain`, ./chain.ts), and naming the node lets `verifactu_records_node_secuencia_idx` serve
+ * (`appendToChain`, ./chain.ts), and naming the node lets `verifactu_records_node_secuencia_uq` serve
  * the walk.
  */
 export function recordsBefore(record: "r" | "d" | "p" | "h" | "held" | "runs"): SQL {

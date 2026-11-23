@@ -106,7 +106,6 @@ function snapshot() {
     "sale_settlements",
     "sale_voids",
     "sale_substitutions",
-    "cadenas",
     "verifactu_records",
     "verifactu_submissions",
   ]) {

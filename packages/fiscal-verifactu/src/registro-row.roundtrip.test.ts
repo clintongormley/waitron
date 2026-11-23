@@ -32,7 +32,7 @@ let invoiceSequence = 0;
  * Flattens `record` through `toRegistroRow`, inserts it under a fresh sale on the shared till, and
  * returns the raw `select *` row — the snake_case `RegistroRow` shape `fromRegistroRow` reads.
  * `secuencia: 1` + a `PrimerRegistro` record keeps every stored row a first record, so the tests
- * need no chain bookkeeping (`cadenas`) at all.
+ * need no chain bookkeeping at all.
  */
 async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;

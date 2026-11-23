@@ -24,8 +24,8 @@ import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { filingCases } from "./schema/filing-cases.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { cadenas } from "./schema/cadenas.js";
 import { VerifactuBackend } from "./backend.js";
+import { readChainHead } from "./chain.js";
 import { openFilingCase } from "./filing-cases.js";
 import { readActiveConflicts, type ConflictRef } from "./conflict-evidence.js";
 import * as recovery from "./conflict-recovery.js";
@@ -111,7 +111,6 @@ async function snapshot() {
     records: await suite.db.select().from(verifactuRecords),
     cases: await suite.db.select().from(filingCases),
     replies: await suite.db.select().from(verifactuSubmissions),
-    head: await suite.db.select().from(cadenas),
   };
 }
 beforeEach(async () => {
@@ -277,7 +276,8 @@ it("switches with key authority, preserves the rejected original and case, and r
     ["FF-0CNQR", 1],
     ["R-0CNQR", 1],
   ]);
-  expect(after.head[0]).toMatchObject({ ultimoRegistroId: null, ultimaHuella: null });
+  const head = await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId));
+  expect(head).toMatchObject({ ultimoRegistroId: null, ultimaHuella: null });
   expect(await withTransaction(suite.db, (tx) => readActiveConflicts(tx, node.nodeId))).toEqual([]);
   await withOperationAuthority(a.binding, a.operator, async (authority) => {
     const unavailable = {

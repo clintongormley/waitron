@@ -166,7 +166,7 @@ describe("currentSif resolves per node", () => {
       const sibling = brandNodeId(nodeRow!.id);
       // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)
       // via registerSif, so the installation number is minted from the real (NIF, IdSIF) counter
-      // rather than hand-picked, and the sibling's cadenas head is seeded the way production does it.
+      // rather than hand-picked, and the sibling's head comes from its appended record.
       const nifRow = await tx.execute<{ tax_id: string }>(sql`
         select tax_id from taxpayer limit 1
       `);

@@ -427,7 +427,7 @@ it("includes dormant reservation timestamps without executing the reservation", 
 
 it("cannot omit the full-chain result from the aggregate", async () => {
   await capture();
-  both((db) => db.exec("update cadenas set secuencia=1"));
+  both((db) => db.exec("update verifactu_identities set node_id='missing-node'"));
   expectCheck(await verify(), "chain", "invalid");
 });
 it("cannot omit retained filing refusals from the aggregate", async () => {

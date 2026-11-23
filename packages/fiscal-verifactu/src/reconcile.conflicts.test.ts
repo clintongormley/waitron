@@ -45,7 +45,6 @@ async function fixture(sent = true) {
 async function immutableSnapshot() {
   const tables = [
     "verifactu_records",
-    "cadenas",
     "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
@@ -86,7 +85,7 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     "keeps an invoice's own %s cancellation distinct from conflicting contents",
     async (state) => {
       const f = await fixture();
-      await appendCancellation(suite.db, f.seeded, f.seeded.registroIds[0]!, 2);
+      await appendCancellation(suite.db, f.seeded.registroIds[0]!, 2);
       if (state === "filed")
         await drain(
           {
@@ -493,7 +492,7 @@ it.each(["original", "cancellation"] as const)(
   "keeps a cancelled invoice's known %s fingerprint out of the conflict stop",
   async (fingerprintSource) => {
     const f = await fixture();
-    await appendCancellation(suite.db, f.seeded, f.seeded.registroIds[0]!, 2);
+    await appendCancellation(suite.db, f.seeded.registroIds[0]!, 2);
     await drain(
       {
         db: suite.db,

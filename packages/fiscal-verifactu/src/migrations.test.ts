@@ -60,7 +60,6 @@ describe("migration composition across packages", () => {
     expect(names).toContain("sales");
     expect(names).toContain("devices");
     expect(names).toContain("verifactu_records");
-    expect(names).toContain("cadenas");
     expect(names).toContain("verifactu_identities");
     expect(names).toContain("verifactu_submissions");
   });

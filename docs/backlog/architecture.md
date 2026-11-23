@@ -911,7 +911,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
   [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
-- **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
 - **Left open by #1261's review (W111):** the receipt editor's copied phone and email limits remain open.
 
 - **`clock_stop_restarts` is written by nothing: drop it, and its two backup-check links, when

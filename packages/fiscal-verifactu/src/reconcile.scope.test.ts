@@ -30,7 +30,6 @@ async function snapshot() {
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
-    heads: (await suite.db.execute(sql`select * from cadenas order by node_id`)).rows,
   };
 }
 
@@ -90,7 +89,6 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
       },
     );
     expect(after.records).toEqual(before.records);
-    expect(after.heads).toEqual(before.heads);
     expect(after.incidents).toEqual(before.incidents);
     expect(after.cases).toEqual(before.cases);
   });
@@ -174,7 +172,6 @@ describe("a runtime reconciliation's node, taxpayer and environment", () => {
     expect(after.acknowledgements).toHaveLength(3);
     expect(after.deliveries.map((row) => row.estado)).toEqual(["aceptado", "aceptado", "aceptado"]);
     expect(after.records).toEqual(before.records);
-    expect(after.heads).toEqual(before.heads);
   });
 });
 

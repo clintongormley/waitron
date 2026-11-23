@@ -14,7 +14,7 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { cadenas } from "./schema/cadenas.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import {
@@ -78,7 +78,7 @@ async function rows() {
   return {
     sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
-    chains: await suite.db.select().from(cadenas),
+    records: await suite.db.select().from(verifactuRecords),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
   };

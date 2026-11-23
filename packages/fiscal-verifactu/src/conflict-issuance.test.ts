@@ -137,13 +137,11 @@ describe("final fiscal builder conflict check", () => {
       async (cause) => {
         await conflict(cause, true);
         const before = await suite.db.execute(sql`select * from verifactu_records`);
-        const head = await suite.db.execute(sql`select * from cadenas`);
         await expect(build(kind)).rejects.toMatchObject({
           code: "sif.allocation_invalid",
           params: { reason: "conflict_requires_administrator" },
         });
         expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(before);
-        expect(await suite.db.execute(sql`select * from cadenas`)).toEqual(head);
       },
     );
     it(`${kind} still builds beside an unrelated filing refusal`, async () => {

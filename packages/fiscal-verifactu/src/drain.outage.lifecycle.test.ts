@@ -359,7 +359,7 @@ it("excludes a pending cancellation of a refused original from an unrelated tech
   t.authority.reject(seeded.facturaKeys[0]!, 1100, "Invalid test record");
   await drain(t.deps, at(1));
   const { appendCancellation, seedIndependentChain } = await import("../test/drain-fixtures.js");
-  const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 2);
+  const cancellation = await appendCancellation(suite.db, seeded.registroIds[0]!, 2);
   const wrong = await seedIndependentChain(suite.db, {
     sifId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
     secuencia: 1,

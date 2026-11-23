@@ -842,7 +842,7 @@ describe("reconcile — an invoice the old box issued and the box that took over
     const head = await seedSecondChain(suite.db, old, 5);
     await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
     const [original] = old.registroIds;
-    const cancellation = await appendCancellation(suite.db, old, original!, 6, {
+    const cancellation = await appendCancellation(suite.db, original!, 6, {
       otherChainHeadId: head.registroId,
     });
     await drain(drainDeps(staticResolver(aeat.client())), new Date("2026-07-21T00:02:00Z"));
