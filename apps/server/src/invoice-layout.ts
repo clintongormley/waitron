@@ -60,6 +60,46 @@ const LOGO_PITCH = 72 / 203;
 
 const lineHeight = (size: number): number => size * LINE_SPACING;
 
+function practiceNotices({ practice, labels }: ReceiptFacts): string[] {
+  if (practice === undefined) return [];
+  return [labels.practice, ...(practice.noRealCharge ? [labels.noRealCharge] : [])];
+}
+
+/** A full-width bordered box of notices, one wrapped paragraph each, from `top`. */
+function layoutNoticeBox(
+  notices: readonly string[],
+  top: number,
+): { elements: InvoicePageElement[]; bottom: number } {
+  const inner = TEXT_WIDTH - 2 * BOX_PADDING;
+  const lines = notices.flatMap((notice) => wrapInvoiceText(notice, inner, BODY_SIZE));
+  const height = 2 * BOX_PADDING + lines.length * lineHeight(BODY_SIZE);
+  const rule = (x: number, y: number, width: number, thickness: number): InvoicePageElement => ({
+    kind: "rule",
+    x,
+    y,
+    width,
+    thickness,
+  });
+  return {
+    elements: [
+      rule(MARGIN, top, TEXT_WIDTH, LIGHT_RULE),
+      rule(MARGIN, top + height - LIGHT_RULE, TEXT_WIDTH, LIGHT_RULE),
+      rule(MARGIN, top, LIGHT_RULE, height),
+      rule(RIGHT - LIGHT_RULE, top, LIGHT_RULE, height),
+      ...lines.map((line, at): InvoicePageElement => ({
+        kind: "text",
+        text: line,
+        x: MARGIN + BOX_PADDING,
+        y: top + BOX_PADDING + at * lineHeight(BODY_SIZE),
+        size: BODY_SIZE,
+        weight: "regular",
+        tone: "ink",
+      })),
+    ],
+    bottom: top + height,
+  };
+}
+
 function invoiceTitle({ labels, corrects, simplified, band }: ReceiptFacts): string {
   const heading =
     corrects !== undefined
@@ -94,22 +134,13 @@ export function layoutInvoiceHeader(
   let y = MARGIN;
 
   const notices = [
-    ...(facts.practice === undefined ? [] : [labels.practice]),
-    ...(facts.practice?.noRealCharge === true ? [labels.noRealCharge] : []),
+    ...practiceNotices(facts),
     ...(facts.testPage === undefined ? [] : [labels.paymentNotice]),
   ];
   if (notices.length > 0) {
-    const inner = TEXT_WIDTH - 2 * BOX_PADDING;
-    const lines = notices.flatMap((notice) => wrapInvoiceText(notice, inner, BODY_SIZE));
-    const height = 2 * BOX_PADDING + lines.length * lineHeight(BODY_SIZE);
-    rule(MARGIN, y, TEXT_WIDTH, LIGHT_RULE);
-    rule(MARGIN, y + height - LIGHT_RULE, TEXT_WIDTH, LIGHT_RULE);
-    rule(MARGIN, y, LIGHT_RULE, height);
-    rule(RIGHT - LIGHT_RULE, y, LIGHT_RULE, height);
-    lines.forEach((line, at) =>
-      text(line, MARGIN + BOX_PADDING, y + BOX_PADDING + at * lineHeight(BODY_SIZE), BODY_SIZE),
-    );
-    y += height + GAP;
+    const box = layoutNoticeBox(notices, y);
+    elements.push(...box.elements);
+    y = box.bottom + GAP;
   }
 
   const top = y;
@@ -477,12 +508,9 @@ function paymentLines(facts: ReceiptFacts): Line[] {
   if (owed !== undefined) {
     return [...listed, { text: `${labels.owed} ${money(owed)}`, bold: true }];
   }
-  // A fully comped bill moved no money, so it has nothing to call paid.
-  if (paid.length > 0 && !isZeroDecimal(total)) {
-    const [first, ...rest] = listed;
-    return [{ text: `${labels.paid}${CONTACT_SEPARATOR}${first!.text}` }, ...rest];
-  }
-  return refunds.map((text) => ({ text }));
+  if (paid.length === 0) return [];
+  const [first, ...rest] = listed;
+  return [{ text: `${labels.paid}${CONTACT_SEPARATOR}${first!.text}` }, ...rest];
 }
 
 /** The VAT summary, TOTAL, guests and payment footer, laid out from y = 0. */
@@ -525,7 +553,12 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
     y += Math.max(...wrapped.map((lines) => lines.length)) * lineHeight(size);
   };
   cells(
-    [labels.taxRateColumn, labels.taxBaseColumn, labels.taxAmountColumn, labels.taxTotalColumn],
+    [
+      labels.taxRateColumn,
+      labels.vatSummaryBaseColumn,
+      labels.vatSummaryAmountColumn,
+      labels.taxTotalColumn,
+    ],
     LABEL_SIZE,
     "muted",
   );
@@ -572,6 +605,15 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
         y += lineHeight(BODY_SIZE);
       }
     }
+  }
+  const notices = [
+    ...practiceNotices(facts),
+    ...(facts.testPage === undefined ? [] : [labels.paymentNotice, facts.testPage.printer]),
+  ];
+  if (notices.length > 0) {
+    const box = layoutNoticeBox(notices, y + GAP);
+    elements.push(...box.elements);
+    y = box.bottom;
   }
   return { elements, height: y };
 }

@@ -124,6 +124,8 @@ export const RECEIPT_LABEL_KEYS = [
   "taxBaseColumn",
   "taxAmountColumn",
   "taxTotalColumn",
+  "vatSummaryBaseColumn",
+  "vatSummaryAmountColumn",
   "registeredAddress",
   "guest",
   "guests",

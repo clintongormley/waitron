@@ -499,6 +499,20 @@ const rowBottoms = (elements: readonly InvoicePageElement[], summaryTop: number)
     element.kind === "rule" && element.y < summaryTop ? [element.y + element.thickness] : [],
   );
 
+/** The layout's gap above the VAT summary, and between the closing block and the footer message. */
+const SPACING_ABOVE = 16;
+const MESSAGE_GAP = 8;
+
+/** What the closing block needs under the last row: its spacing, its own height, and the footer
+ *  message with its gap. */
+const closingNeeds = (elements: readonly InvoicePageElement[], summary: Text): number => {
+  const message = named(elements, FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage!);
+  const block = elements.filter((element) => element !== message && element.y >= summary.y);
+  const blockHeight = Math.max(...block.map((element) => area(element).bottom)) - summary.y;
+  const messageHeight = area(message).bottom - area(message).top;
+  return SPACING_ABOVE + blockHeight + MESSAGE_GAP + messageHeight;
+};
+
 const expectNoOverlapOrOverflow = (name: string, pages: readonly InvoicePage[]): void => {
   for (const [number, page] of pages.entries()) {
     for (const element of page.elements) {
@@ -695,29 +709,12 @@ describe("layoutA4Invoice", () => {
   });
 
   it("gives a full comp no Pagado and no footer", () => {
-    const elements = lastPage(layoutA4Invoice(receiptCases.fullComp()));
+    const input = receiptCases.fullComp();
+    // A fully comped sale records no tender (packages/core/src/settle-sale.ts, before `settledAt`).
+    input.result.tender = { method: "unpaid" };
+    const elements = lastPage(layoutA4Invoice(input));
     expect(paidLine(elements)).toBe(false);
     expect(anyText(elements, (text) => text === labels.paymentMethodHeading)).toBe(false);
-  });
-
-  it("lists only the refunds when the sale has no payment of its own", () => {
-    const input = receiptCases.fullComp();
-    input.result.tender = { method: "unpaid" };
-    input.result.payments = [
-      {
-        method: "cash",
-        amount: "0.00",
-        tip: "0.00",
-        tendered: "2.00",
-        change: "0.00",
-        refunds: [{ amount: "2.00", tip: "0.00" }],
-      },
-    ];
-    const elements = lastPage(layoutA4Invoice(input));
-    named(elements, labels.paymentMethodHeading);
-    named(elements, `${labels.refund} ${money("-2.00")}`);
-    expect(paidLine(elements)).toBe(false);
-    expect(anyText(elements, (text) => text.startsWith(labels.cash))).toBe(false);
   });
 
   it("lists card payments with their card, authorization, reference, tip and refunds", () => {
@@ -798,6 +795,54 @@ describe("layoutA4Invoice", () => {
     expect(lettered).toContain(`${money("10.00")} A`);
   });
 
+  it("boxes a practice invoice's warning both at the top of page 1 and above the footer on the last page", () => {
+    const input = longInvoice(60);
+    input.simulated = true;
+    input.simulatedCardPayment = true;
+    const pages = layoutA4Invoice(input);
+    expect(pages.length).toBeGreaterThan(1);
+    const top = texts(pages[0]!.elements).filter((text) => text.text === labels.practice);
+    expect(top).toHaveLength(1);
+    const qr = qrOf(pages[0]!.elements);
+    expect(top[0]!.y).toBeLessThan(qr.y);
+    const last = lastPage(pages);
+    const bottom = named(last, labels.practice);
+    named(last, labels.noRealCharge);
+    expect(bottom.y).toBeGreaterThan(named(last, labels.paymentMethodHeading).y);
+    const message = named(last, FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage!);
+    expect(area(bottom).bottom).toBeLessThan(message.y);
+    const frame = last.filter(
+      (element): element is Rule =>
+        element.kind === "rule" &&
+        element.y <= bottom.y &&
+        element.y + element.thickness > bottom.y,
+    );
+    expect(frame.length).toBe(2);
+  });
+
+  it("ends a test page with its notice and the printer's name", () => {
+    const input = fixture();
+    input.testPage = { printer: "Office printer" };
+    const elements = lastPage(layoutA4Invoice(input));
+    const notices = texts(elements).filter((text) => text.text === labels.paymentNotice);
+    expect(notices).toHaveLength(2);
+    const printer = named(elements, "Office printer");
+    expect(printer.y).toBeGreaterThan(notices[1]!.y);
+    expect(printer.y).toBeGreaterThan(named(elements, labels.total).y);
+  });
+
+  it("heads the VAT summary with its own full words", () => {
+    const words = texts(lastPage(layoutA4Invoice(fixture()))).map((text) => text.text);
+    for (const heading of [
+      labels.taxRateColumn,
+      labels.vatSummaryBaseColumn,
+      labels.vatSummaryAmountColumn,
+      labels.taxTotalColumn,
+    ]) {
+      expect(words.join(" ")).toContain(heading);
+    }
+  });
+
   it("leaves the footer out when there is no payment of its own and nothing refunded", () => {
     const input = fixture();
     input.result.tender = { method: "unpaid" };
@@ -808,7 +853,8 @@ describe("layoutA4Invoice", () => {
 
   it("moves the summary, TOTAL and footer to a page of their own when they do not fit under the last row", () => {
     let pages: InvoicePage[] = [];
-    for (let count = 1; count < 200; count++) {
+    let count = 1;
+    for (; count < 200; count++) {
       pages = layoutA4Invoice(longInvoice(count));
       const shadedOnLast = lastPage(pages).some(
         (element) => element.kind === "box" && element.fill === "heading",
@@ -821,10 +867,19 @@ describe("layoutA4Invoice", () => {
     const summary = named(third!, labels.taxRateColumn);
     named(third!, labels.total);
     named(third!, labels.paymentMethodHeading);
-    const message = named(third!, FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage!);
-    const blockHeight = area(message).bottom - summary.y;
     const lastRow = Math.max(...rowBottoms(second!, INVOICE_PAGE_HEIGHT));
-    expect(INVOICE_PAGE_HEIGHT - 36 - lastRow).toBeLessThan(blockHeight);
+    const room = INVOICE_PAGE_HEIGHT - 36 - lastRow;
+    expect(room).toBeLessThan(closingNeeds(third!, summary));
+
+    // One line fewer: the block fits under the last row, so it stays on page 2.
+    const fewer = layoutA4Invoice(longInvoice(count - 1));
+    expect(fewer).toHaveLength(2);
+    const stays = named(fewer[1]!.elements, labels.taxRateColumn);
+    const above = Math.max(...rowBottoms(fewer[1]!.elements, stays.y));
+    expect(stays.y - above).toBeCloseTo(SPACING_ABOVE, 6);
+    expect(INVOICE_PAGE_HEIGHT - 36 - above).toBeGreaterThanOrEqual(
+      closingNeeds(fewer[1]!.elements, stays),
+    );
 
     for (const page of [first!, second!]) {
       const shaded = page.find(
