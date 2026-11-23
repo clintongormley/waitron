@@ -1,5 +1,5 @@
 import { createHash, hkdfSync } from "node:crypto";
-import { AppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import * as masterKeyModule from "./master-key.js";
 import {
@@ -9,8 +9,6 @@ import {
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
-  printMasterKey,
-  readMasterKey,
   sealingPublicKey,
 } from "./master-key.js";
 
@@ -31,8 +29,7 @@ function refusal(run: () => unknown): AppError {
 // HMAC-written HKDF, the authority key and check value also matched by `openssl kdf` and
 // `openssl dgst`) and `openssl pkey -pubout` for the public key; never with this module.
 describe("the fixed vectors", () => {
-  it("prints, checks and derives a fixed 16-byte key", () => {
-    expect(printMasterKey(fixedKey)).toBe("222A 5AT7 UZRS FT4B J48X R4T7 TP8N");
+  it("checks and derives a fixed 16-byte key", () => {
     expect(authorityKey(fixedKey).toString("hex")).toBe(
       "c31f1f410d875eb410aeb5848d18b7de40e24b308aa540c8f3252e9b5e0b7bce",
     );
@@ -49,49 +46,33 @@ describe("the fixed vectors", () => {
 
 describe("HKDF takes the decoded bytes, not the printed text", () => {
   it("derives from the 16 bytes a printed key reads back to", () => {
-    const printed = printMasterKey(fixedKey);
+    const printed = encodeMasterKeyCode(fixedKey);
     const fromBytes = Buffer.from(hkdfSync("sha256", fixedKey, salt, "authority", 32));
     for (const text of [printed, printed.replaceAll(" ", "")])
       expect(Buffer.from(hkdfSync("sha256", text, salt, "authority", 32)).equals(fromBytes)).toBe(
         false,
       );
-    expect(authorityKey(readMasterKey(printed)).equals(fromBytes)).toBe(true);
+    expect(authorityKey(decodeMasterKeyCode(printed)).equals(fromBytes)).toBe(true);
   });
 });
 
-describe("making, printing and reading a master key", () => {
+describe("making a master key", () => {
   it("makes 16 fresh random bytes each time", () => {
     const first = makeMasterKey();
     expect(first).toHaveLength(16);
     expect(first.equals(makeMasterKey())).toBe(false);
   });
 
-  it("reads back the same 16 bytes, in any case and with spaces or dashes", () => {
-    const printed = printMasterKey(fixedKey);
-    expect(readMasterKey(printed)).toEqual(fixedKey);
-    expect(Buffer.isBuffer(readMasterKey(printed))).toBe(true);
-    expect(readMasterKey(printed.toLowerCase().replaceAll(" ", "-"))).toEqual(fixedKey);
-  });
-
-  it.each(["", "not a key", printMasterKey(fixedKey).slice(1)])(
-    "refuses text that is not a printed master key %#",
-    (text) => {
-      const error = refusal(() => readMasterKey(text));
-      expect(error.code).toBe("shared.invalid_key_code");
-    },
-  );
-
   it.each([Buffer.alloc(15), Buffer.alloc(17), Buffer.alloc(0)])(
     "refuses a master key that is not 16 bytes %#",
     (bytes) => {
       for (const use of [
-        () => printMasterKey(bytes),
         () => authorityKey(bytes),
         () => masterKeyCheckValue(bytes),
         () => sealingPublicKey(bytes),
         () => masterKeyMatches(bytes, masterKeyCheckValue(fixedKey)),
       ])
-        expect(refusal(use).code).toBe("shared.invalid_key_code");
+        expect(refusal(use).code).toBe("master_key.code_invalid");
     },
   );
 
@@ -103,8 +84,6 @@ describe("making, printing and reading a master key", () => {
       "masterKeyId",
       "masterKeyMatches",
       "masterKeyName",
-      "printMasterKey",
-      "readMasterKey",
       "sealingPublicKey",
     ]);
   });
@@ -115,7 +94,7 @@ describe("checking a typed master key", () => {
 
   it("matches the key whose check value is stored", () => {
     expect(stored).toBe(createHash("sha256").update(authorityKey(fixedKey)).digest("hex"));
-    expect(masterKeyMatches(readMasterKey(printMasterKey(fixedKey)), stored)).toBe(true);
+    expect(masterKeyMatches(decodeMasterKeyCode(encodeMasterKeyCode(fixedKey)), stored)).toBe(true);
   });
 
   it.each([
@@ -138,12 +117,31 @@ describe("the master key's name", () => {
     expect(masterKeyName(publicKey, "2027-02-01").slice(-4)).toBe(name.slice(-4));
   });
 
-  it.each(["", "2026-1-23", "23-11-2026", "2026-11-23T00:00", "2026-13-01", "2026-11-32"])(
-    "refuses day %j",
+  it("takes a leap day in a leap year", () => {
+    expect(masterKeyName(sealingPublicKey(fixedKey), "2028-02-29")).toBe("2028-02-29 · EG6B");
+  });
+
+  it.each([
+    "",
+    "2026-1-23",
+    "23-11-2026",
+    "2026-11-23T00:00",
+    "2026-13-01",
+    "2026-11-32",
+    "2026-02-29",
+    "2026-04-31",
+  ])("refuses day %j", (day) => {
+    const error = refusal(() => masterKeyName(sealingPublicKey(fixedKey), day));
+    expect(error.code).toBe("master_key.name_day_invalid");
+    expect(error.params).toEqual({});
+  });
+
+  it.each(["2026-02-29", encodeMasterKeyCode(fixedKey)])(
+    "does not carry the text it refused: %j",
     (day) => {
       const error = refusal(() => masterKeyName(sealingPublicKey(fixedKey), day));
-      expect(error.code).toBe("master_key.name_day_invalid");
-      expect(error.params).toEqual({ value: day });
+      expect(JSON.stringify(error)).toContain("master_key.name_day_invalid");
+      expect(JSON.stringify(error)).not.toContain(day);
     },
   );
 });

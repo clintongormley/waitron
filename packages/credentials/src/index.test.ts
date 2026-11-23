@@ -52,8 +52,6 @@ describe("the public surface", () => {
         "masterKeyId",
         "masterKeyMatches",
         "masterKeyName",
-        "printMasterKey",
-        "readMasterKey",
         "sealingPublicKey",
       ].sort(),
     );

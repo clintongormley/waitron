@@ -9,7 +9,7 @@ const fixedPrinted = "222A 5AT7 UZRS FT4B J48X R4T7 TP8N";
 const fixedCode = fixedPrinted.replaceAll(" ", "");
 
 function refused(text: unknown): void {
-  expect(() => decodeMasterKeyCode(text as string)).toThrow("shared.invalid_key_code");
+  expect(() => decodeMasterKeyCode(text as string)).toThrow("master_key.code_invalid");
 }
 
 describe("the fixed vectors", () => {
@@ -27,6 +27,7 @@ describe("the fixed vectors", () => {
     );
     expect(keySymbols(new Uint8Array(8))).toBe("2222222222222");
     expect(keySymbols(new Uint8Array(16).fill(0xff))).toBe("KQGTVBZM585JJ38QRUAXWS3NG9");
+    expect(keySymbols(new Uint8Array(0))).toBe("");
   });
 });
 
@@ -43,6 +44,10 @@ describe("decodes the printed form to the same 16 bytes", () => {
   it("accepts lower case, spaces and dashes", () => {
     expect(decodeMasterKeyCode(fixedCode.toLowerCase())).toEqual(fixedKey);
     expect(decodeMasterKeyCode(" 222a-5at7 uzrs--ft4b j48x-r4t7 tp8n ")).toEqual(fixedKey);
+  });
+
+  it("accepts tabs and line breaks, as in a code copied from a wrapped page", () => {
+    expect(decodeMasterKeyCode("222A 5AT7\tUZRS FT4B\r\nJ48X R4T7\nTP8N")).toEqual(fixedKey);
   });
 });
 
@@ -68,8 +73,19 @@ describe("refusals", () => {
     refused(symbol + fixedCode.slice(1));
   });
 
-  it.each(["\t", "\n", "_", ".", "ſ", "Ａ", "+"])("refuses any other symbol: %j", (symbol) => {
+  it.each(["_", ".", "ſ", "Ａ", "+"])("refuses any other symbol: %j", (symbol) => {
     refused(fixedCode.slice(0, 27) + symbol);
+  });
+
+  it("refuses a letter that upper-cases into the alphabet, where the check would accept it", () => {
+    const at = fixedCode.indexOf("S");
+    expect(at).toBeLessThan(27);
+    refused(fixedCode.slice(0, at) + "ſ" + fixedCode.slice(at + 1));
+  });
+
+  it("refuses the second spelling of a check that two symbols can also hold as check + 953", () => {
+    expect(decodeMasterKeyCode("2222 2222 2222 2222 2222 2222 2222")).toEqual(new Uint8Array(16));
+    refused("2".repeat(26) + "ZS");
   });
 
   it("refuses a number of 2^128 or more", () => {
@@ -93,6 +109,6 @@ describe("refusals", () => {
   });
 
   it.each([15, 17, 0])("refuses to print %i bytes", (length) => {
-    expect(() => encodeMasterKeyCode(new Uint8Array(length))).toThrow("shared.invalid_key_code");
+    expect(() => encodeMasterKeyCode(new Uint8Array(length))).toThrow("master_key.code_invalid");
   });
 });
