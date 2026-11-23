@@ -17,12 +17,10 @@ import {
 } from "@waitron/db";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import { prepareIssueClock, readIssueZone } from "@waitron/fiscal";
-import { rateLines } from "@waitron/menu";
+import { rateLines, readVenueVatRates } from "@waitron/menu";
 import { findPaymentByBillPayment, associatePaymentWithSale } from "@waitron/payments";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import {
-  ADVANCE_VAT_CLASS,
-  VAT_RATE_TABLE,
   AppError,
   addDecimal,
   centsToDecimal,
@@ -81,7 +79,7 @@ function advanceOperationDescription(
 
 /**
  * The advance invoice of a received bill payment whose payer wants their own receipt: one line of
- * its applied money at {@link ADVANCE_VAT_CLASS} on the payment's local day, settled by one tender
+ * its applied money at the area's dine-in rate on the payment's local day, settled by one tender
  * carrying the payment's money and tip, linked to its bill in `bill_advances`, and queued on the
  * receipt printer `printers` resolves; it emails nothing (advances plan, ruling L11).
  */
@@ -131,6 +129,7 @@ export async function issueAdvance(
       ])
     ).get(workingOrderId) ?? null;
   const lineText = (locale: string) => advanceLineText(locale, table, order!.orderNumber);
+  const { dineIn } = await readVenueVatRates(tx);
   const priced = rateLines(
     {
       lines: [
@@ -151,7 +150,7 @@ export async function issueAdvance(
           variantKitchenName: null,
           kitchenName: null,
           advanceRole: "payment_on_account",
-          vatRates: VAT_RATE_TABLE[ADVANCE_VAT_CLASS],
+          vatRates: dineIn,
           grossUnitPrice: applied,
           lineGross: applied,
         },

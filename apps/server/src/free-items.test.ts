@@ -704,6 +704,22 @@ describe("the estimated cost", () => {
     ]);
   });
 
+  it("takes the dine-in rate for an eaten-in dish, not the label on its line", async () => {
+    await setMargin(departmentId, 3000);
+    const { billId } = await bill([{ name: "Bread" }]);
+    await reprice(billId, 1, 1100, "general");
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    // 11.00 ÷ 1.10 × 0.70 = 7.00, where the line's `general` label would give 6.36.
+    expect(await freeOn(billId)).toEqual([
+      row({
+        item: "Bread",
+        menuPrice: decimal("11.00"),
+        amountTakenOff: decimal("11.00"),
+        estimatedCost: decimal("7.00"),
+      }),
+    ]);
+  });
+
   it("takes the dish's takeaway class on a takeaway bill", async () => {
     await setMargin(departmentId, 3000);
     const { partyId, billId } = await bill([]);

@@ -1259,7 +1259,6 @@ async function readLockedLinesForIssuance(
       ...storedLineColumns,
       ...portionColumns,
       dining: workingOrders.dining,
-      eatInVatClass: workingOrderLines.vatClass,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
       setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
@@ -1280,12 +1279,11 @@ async function readLockedLinesForIssuance(
     rows.map((row) => ({
       productId: row.productId,
       setMenuRole: row.setMenuRole,
-      vatClass: row.eatInVatClass as VatClass,
       takeawayVatClass: row.takeawayVatClass as VatClass,
     })),
   );
   // A grouped row carries the id of the first working line it stands for; the lines it stands for
-  // share the product and the label for the order's way of selling, all their rates depend on.
+  // share the product and the set-menu role, all their rates depend on.
   const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
   return {
     lines: stored.map((line, i) => ({
