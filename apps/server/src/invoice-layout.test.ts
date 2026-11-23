@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { ReceiptLogoRaster } from "@waitron/shared";
-import { layoutInvoiceHeader } from "./invoice-layout.js";
+import { CUSTOMER_PANEL_FRACTION, layoutInvoiceHeader } from "./invoice-layout.js";
 import { invoiceTextWidth, type InvoicePageElement } from "./invoice-page.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptFacts } from "./receipt-facts.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
+import * as receiptCases from "./testing/receipt-cases.js";
 
 type Text = Extract<InvoicePageElement, { kind: "text" }>;
 type Box = Extract<InvoicePageElement, { kind: "box" }>;
@@ -230,7 +231,11 @@ describe("layoutInvoiceHeader", () => {
     const shortPanel = shortHeader.elements.find(
       (element): element is Box => element.kind === "box",
     )!;
-    expect(shortPanel).toMatchObject({ fill: "panel", x: 36, width: (RIGHT - 36) * 0.6 });
+    expect(shortPanel).toMatchObject({
+      fill: "panel",
+      x: 36,
+      width: (RIGHT - 36) * CUSTOMER_PANEL_FRACTION,
+    });
     expect(named(shortHeader.elements, labels.customer)).toMatchObject({ tone: "muted" });
     expect(named(shortHeader.elements, "Customer Ltd")).toMatchObject({ weight: "bold" });
 
@@ -345,11 +350,11 @@ describe("layoutInvoiceHeader", () => {
       elements,
       `${labels.invoiceHeading} A-VERY-LONG-INVOICE-SERIES/2026/000001`,
     );
-    const date = named(elements, labels.date);
-    expect(date.x).toBe(36);
-    expect(date.y).toBeGreaterThan(title.y + 17);
     const duplicate = named(elements, labels.duplicate);
-    expect(duplicate.y).toBeGreaterThan(date.y + 10);
+    expect(duplicate.x).toBe(36);
+    expect(duplicate.y).toBeGreaterThan(title.y + 17);
+    const takeAway = named(elements, labels.takeAway);
+    expect(takeAway.y).toBeGreaterThan(duplicate.y + 10);
     for (const text of texts(elements)) expect(textRight(text)).toBeLessThanOrEqual(RIGHT + 1e-6);
   });
 
@@ -365,6 +370,74 @@ describe("layoutInvoiceHeader", () => {
     )!;
     expect(light.y).toBeGreaterThan(Math.max(...lines.map((line) => line.y + line.size)));
     expect(bottom).toBeGreaterThan(light.y);
+  });
+
+  it("titles a simplified invoice with the simplified-invoice heading", () => {
+    const input = fixture();
+    input.result.invoiceType = "F2";
+    named(header(input).elements, `${labels.simplifiedInvoice} FF/1`);
+    expect(texts(header(input).elements).map((text) => text.text)).not.toContain(
+      `${labels.invoiceHeading} FF/1`,
+    );
+  });
+
+  it("puts the duplicate tag first after the title, before the date", () => {
+    const input = fixture();
+    input.duplicate = true;
+    const { elements } = header(input);
+    const title = named(elements, `${labels.invoiceHeading} FF/1`);
+    const duplicate = named(elements, labels.duplicate);
+    const date = named(elements, labels.date);
+    expect(duplicate.x).toBeGreaterThan(textRight(title));
+    expect(duplicate.x).toBeLessThan(date.x);
+  });
+
+  it("never draws one text over another, whatever the title's length", () => {
+    const corrective = (number: string, locale = "es-ES", inFull = false): ReceiptDocumentInput => {
+      const input = fixture();
+      input.invoiceLocale = locale;
+      input.result.invoiceType = "R5";
+      input.result.invoiceNumber = number;
+      input.result.corrects = {
+        invoiceNumber: "A/7",
+        issuedAt: "2026-08-16T20:00:00.000Z",
+        ...(inFull ? { inFull: true as const } : {}),
+      };
+      return input;
+    };
+    const crowded = fixture();
+    crowded.duplicate = true;
+    crowded.result.takeAway = true;
+    crowded.result.saleDay = "2026-08-16";
+    crowded.simulated = true;
+    const inputs: [string, ReceiptDocumentInput][] = [
+      ["fixture", fixture()],
+      ["crowded", crowded],
+      ...["FF/1", "FR/12", "R/12", "RX/123", "RX/12345", "RXY/2026/0001"].flatMap(
+        (number): [string, ReceiptDocumentInput][] =>
+          ["es-ES", "en-GB", "ca-ES", "gl-ES", "eu-ES"].map((locale) => [
+            `corrective ${number} ${locale}`,
+            corrective(number, locale, number.length % 2 === 0),
+          ]),
+      ),
+      ...Object.entries(receiptCases).map(([name, build]): [string, ReceiptDocumentInput] => [
+        name,
+        build(),
+      ]),
+    ];
+    for (const [name, input] of inputs) {
+      const drawn = texts(header(input).elements).map((text) => ({ text, at: area(text) }));
+      for (const [index, one] of drawn.entries()) {
+        for (const other of drawn.slice(index + 1)) {
+          const overlaps =
+            one.at.left < other.at.right - 0.01 &&
+            other.at.left < one.at.right - 0.01 &&
+            one.at.top < other.at.bottom - 0.01 &&
+            other.at.top < one.at.bottom - 0.01;
+          expect(overlaps, `${name}: "${one.text.text}" and "${other.text.text}"`).toBe(false);
+        }
+      }
+    }
   });
 
   it("reports a bottom below every element it drew", () => {

@@ -149,7 +149,13 @@ export function layoutInvoiceHeader(
   rule(MARGIN, y, TEXT_WIDTH, HEAVY_RULE);
   y += HEAVY_RULE + GAP;
 
-  const title = `${corrects === undefined ? labels.invoiceHeading : labels.correctiveInvoice} ${band.invoiceNumber}`;
+  const heading =
+    corrects !== undefined
+      ? labels.correctiveInvoice
+      : facts.simplified
+        ? labels.simplifiedInvoice
+        : labels.invoiceHeading;
+  const title = `${heading} ${band.invoiceNumber}`;
   const titleLines = wrapInvoiceText(title, TEXT_WIDTH, TITLE_SIZE, "bold");
   const titleWidth = Math.max(
     ...titleLines.map((line) => invoiceTextWidth(line, TITLE_SIZE, "bold")),
@@ -160,6 +166,7 @@ export function layoutInvoiceHeader(
   const titleBottom = y + titleLines.length * lineHeight(TITLE_SIZE);
 
   const pairs: { label?: string; value: string }[] = [
+    ...(band.duplicate ? [{ value: labels.duplicate }] : []),
     { label: labels.date, value: receiptDateTime(band.issuedAt, locale, band.issuedOffsetMinutes) },
     ...(band.saleDay === undefined
       ? []
@@ -169,11 +176,13 @@ export function layoutInvoiceHeader(
       ? [{ label: labels.order, value: String(band.orderNumber) }]
       : []),
     ...(band.takeAway ? [{ value: labels.takeAway }] : []),
-    ...(band.duplicate ? [{ value: labels.duplicate }] : []),
   ];
   const pairHeight = lineHeight(LABEL_SIZE) + lineHeight(VALUE_SIZE);
   const besideTitle = MARGIN + titleWidth + PAIR_GAP;
-  const pairsLeft = besideTitle <= MARGIN + TEXT_WIDTH / 2 ? MARGIN + TEXT_WIDTH * 0.4 : MARGIN;
+  const pairsLeft =
+    besideTitle <= MARGIN + TEXT_WIDTH / 2
+      ? Math.max(MARGIN + TEXT_WIDTH * 0.4, besideTitle)
+      : MARGIN;
   let pairsTop = pairsLeft === MARGIN ? titleBottom : y;
   let x = pairsLeft;
   let rowHeight = pairHeight;
