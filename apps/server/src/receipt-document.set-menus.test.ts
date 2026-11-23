@@ -4,6 +4,7 @@ import { printers, printJobs, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
+import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { enqueueReceiptCopy, readOriginalReceiptPrint } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket, type TillSaleLine } from "./till-sale.js";
@@ -313,7 +314,8 @@ it("a reprint prints what the first print did", async () => {
   expect(bySaleId).toEqual(original);
 });
 
-it("a comped surcharge keeps its row on both receipt reads", async () => {
+/** The spec bill eaten in, with its Sirloin surcharge comped. */
+async function compedSurchargeBill() {
   const bill = await specBill(spec, "fire");
   const sirloin = (await specRows(spec, bill.tabId)).find(
     ({ name, setMenuRole, lineTotal }) =>
@@ -338,6 +340,11 @@ it("a comped surcharge keeps its row on both receipt reads", async () => {
       venue.cfg.locale,
     ),
   );
+  return bill;
+}
+
+it("a comped surcharge keeps its row on both receipt reads", async () => {
+  const bill = await compedSurchargeBill();
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const { saleId, original, settled, bySaleId } = await printedItemRows(bill);
   expect(original.filter((row) => row.includes("Sirloin"))).toHaveLength(1);
@@ -354,4 +361,21 @@ it("a comped surcharge keeps its row on both receipt reads", async () => {
       adjustments: [{ kind: "comp", amount: "5.00" }],
     }),
   ]);
+});
+
+it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async () => {
+  const bill = await compedSurchargeBill();
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const creditId = await inTx(venue, async (tx) =>
+    creditWholeInvoice(tx, specDeps(spec), venue.cfg, (await readOrderInvoice(tx, bill.tabId))!, {
+      sessionId: venue.operator.sessionId,
+    }),
+  );
+  const credit = await inTx(venue, (tx) =>
+    readTransactionReceipt(venue.backend, tx, venue.cfg, creditId),
+  );
+  const rows = items(credit);
+  expect(rows).toContainEqual(["-1  Sirloin", "0,00"]);
+  expect(rows.filter(([, amount]) => amount.startsWith("--"))).toEqual([]);
+  expect(credit.lines.filter((line) => line.adjustments !== undefined)).toEqual([]);
 });

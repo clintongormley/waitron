@@ -97,7 +97,7 @@ export async function readTransactionReceipt(
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, sale.workingOrderId));
   const orderIds = new Map(orderLines.map((row) => [row.lineNo, row.id]));
-  const lines = await receiptLines(
+  const { lines: receiptRows, ...billAdjustments } = await receiptLines(
     tx,
     sale.workingOrderId,
     {
@@ -126,6 +126,18 @@ export async function readTransactionReceipt(
     })),
     saleId,
   );
+  // `receiptLines` answers one row per entry of `dishes`, in order, then the advances.
+  const lines = {
+    ...billAdjustments,
+    lines: receiptRows.map((line, i) =>
+      sale.correctsSaleId !== null &&
+      dishes[i]?.setMenuRole === "dish" &&
+      dishes[i].listGross !== null &&
+      line.listGross === undefined
+        ? { ...line, correctsPricedDish: true as const }
+        : line,
+    ),
+  };
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId), sale);
   const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;

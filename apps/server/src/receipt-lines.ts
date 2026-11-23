@@ -157,6 +157,7 @@ function isPriced(line: TillSaleLine): boolean {
   return (
     !isZeroDecimal(decimal(line.gross)) ||
     line.listGross !== undefined ||
+    line.correctsPricedDish === true ||
     (line.adjustments ?? []).length > 0
   );
 }
