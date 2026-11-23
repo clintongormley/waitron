@@ -4,12 +4,12 @@ import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { JoinCopyStage, SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
+import "../widgets/box-label.js";
 
 const KEY_NAME = /^(\d{4}-\d{2}-\d{2}) · ([34679ACDEFHJKMNPQRTUVWXY]{4})$/;
 
@@ -116,9 +116,19 @@ export class SetupDoneScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .tasks wt-switch {
-        display: block;
-        margin-block-start: var(--wt-space-1);
+      .tasks .key-name {
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .task-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        margin-block-start: var(--wt-space-3);
+      }
+      .card-heading {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-lg);
       }
       .mark {
         flex: none;
@@ -216,6 +226,13 @@ export class SetupDoneScreen extends LitElement {
   /** The main box's Servers page, from the address typed to join; unset when it is not a URL. */
   @property({ attribute: false }) serversUrl?: string;
 
+  /** This box's own address, which its label opens; unset when setup's answer did not name it. */
+  @property({ attribute: false }) contactUrl?: string;
+
+  /** Passed to the box's label; tests replace them. */
+  @property({ attribute: false }) drawQr?: (page: string) => Promise<string>;
+  @property({ attribute: false }) printFrame?: (view: Window) => void;
+
   /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
 
@@ -238,7 +255,7 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private keyConfirmed = false;
 
-  @state() private labelsConfirmed = false;
+  @state() private labelStuck = false;
 
   @state() private joined = false;
 
@@ -609,7 +626,8 @@ export class SetupDoneScreen extends LitElement {
       : `waitron-server-key-${parts[1]}-${parts[2]}.txt`;
   }
 
-  #saveBreakGlass(secret: string): void {
+  /** Whether the file was handed to the browser to save. */
+  #saveBreakGlass(secret: string): boolean {
     const lines = [
       t("done.break_glass.file_title"),
       ...(this.breakGlassKeyName === undefined ? [] : [this.#keyName(this.breakGlassKeyName)]),
@@ -623,7 +641,7 @@ export class SetupDoneScreen extends LitElement {
             ? "done.break_glass.take_over"
             : "done.break_glass.promote",
       ),
-      t("done.break_glass.backups"),
+      ...(this.mirrorJoin ? [] : [t("done.break_glass.backups")]),
       "",
       t("done.break_glass.file_keep"),
     ];
@@ -644,6 +662,7 @@ export class SetupDoneScreen extends LitElement {
       anchor.remove();
       if (url) URL.revokeObjectURL(url);
     }
+    return !this.breakGlassSaveFailed;
   }
 
   #preparation(): boolean {
@@ -687,15 +706,35 @@ export class SetupDoneScreen extends LitElement {
               >${t("done.break_glass.download_pack")}</a
             >`
       }
-      ${
-        this.breakGlassSaveFailed
-          ? html`<p class="error" role="alert" data-test="break-glass-save-error">
-              ${t("done.break_glass.save_failed")}
-            </p>`
-          : nothing
-      }
+      ${this.#saveFailed()}
       <p data-test="break-glass-backup-warning">${t("done.break_glass.backups")}</p>
     </div>`;
+  }
+
+  #saveFailed(): TemplateResult | typeof nothing {
+    return this.breakGlassSaveFailed
+      ? html`<p class="error" role="alert" data-test="break-glass-save-error">
+          ${t("done.break_glass.save_failed")}
+        </p>`
+      : nothing;
+  }
+
+  #boxLabel(extra: TemplateResult | typeof nothing = nothing): TemplateResult {
+    return html`<setup-box-label
+      .address=${this.contactUrl!}
+      .drawQr=${this.drawQr}
+      .printFrame=${this.printFrame}
+      >${extra}</setup-box-label
+    >`;
+  }
+
+  #mainLabel(): TemplateResult | typeof nothing {
+    if (this.contactUrl === undefined) return nothing;
+    return html`<wt-card data-test="main-label">
+      <h2 class="card-heading">${t("done.label.heading")}</h2>
+      <p data-test="main-label-why">${t("done.label.why")}</p>
+      ${this.#boxLabel()}
+    </wt-card>`;
   }
 
   #renderTrading(): TemplateResult {
@@ -725,6 +764,7 @@ export class SetupDoneScreen extends LitElement {
       <div class="choices" data-test="links">
         ${this.startFailed ? this.#serverLink() : this.#appLinks()}
       </div>
+      ${this.#mainLabel()}
       ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
       ${this.#breakGlass()}
       ${
@@ -786,10 +826,13 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
+  /** One task at a time: each appears once the one before it is done. */
   #renderJoining(): TemplateResult {
+    const secret = this.breakGlassSecret;
+    const keyOpen = this.joined && secret !== undefined && !this.keyConfirmed;
+    const labelShown = this.joined && !keyOpen && this.contactUrl !== undefined;
     return html`
       <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
-      <p class="intro" data-test="joining-status" role="status">${this.#joiningStatus()}</p>
       <ul class="tasks" data-test="joining-tasks">
         ${this.#task(
           "join",
@@ -797,48 +840,78 @@ export class SetupDoneScreen extends LitElement {
           t("done.task.join"),
           this.joined
             ? nothing
-            : html`<p data-test="task-join-detail">${t("done.task.join_detail")}</p>`,
+            : html`<p data-test="joining-status" role="status">${this.#joiningStatus()}</p>`,
         )}
         ${
-          this.breakGlassSecret === undefined
+          !this.joined || secret === undefined
             ? nothing
             : this.#task(
                 "key",
-                this.keyConfirmed ? "done" : "to_do",
+                keyOpen ? "to_do" : "done",
                 t("done.task.key"),
-                this.#confirmation("key", t("done.task.key_confirm"), this.keyConfirmed, (on) => {
-                  this.keyConfirmed = on;
-                }),
+                keyOpen ? this.#keyTask(secret) : nothing,
               )
         }
-        ${this.#task(
-          "label",
-          this.labelsConfirmed ? "done" : "to_do",
-          t("done.task.label"),
-          html`<p data-test="task-label-detail">
-              ${t("done.task.label_before")}
-              ${this.#serversLink("done.task.label_link", "servers-link")}
-              ${t("done.task.label_after")}
-            </p>
-            ${this.#confirmation(
-              "label",
-              t("done.task.label_confirm"),
-              this.labelsConfirmed,
-              (on) => {
-                this.labelsConfirmed = on;
-              },
-            )}`,
-        )}
+        ${
+          labelShown
+            ? this.#task(
+                "label",
+                this.labelStuck ? "done" : "to_do",
+                t("done.task.label"),
+                this.labelStuck
+                  ? nothing
+                  : html`<p data-test="label-why">${t("done.task.label_why")}</p>
+                      ${this.#boxLabel(
+                        html`<wt-button
+                          variant="secondary"
+                          data-test="label-stuck"
+                          @click=${() => {
+                            this.labelStuck = true;
+                          }}
+                          >${t("done.task.label_stuck")}</wt-button
+                        >`,
+                      )}`,
+              )
+            : nothing
+        }
       </ul>
-      ${this.#breakGlass()}
     `;
   }
 
+  #keyTask(secret: string): TemplateResult {
+    return html`<p data-test="key-why">${t("done.task.key_why")}</p>
+      ${
+        this.breakGlassKeyName === undefined
+          ? nothing
+          : html`<p class="key-name" data-test="break-glass-key-name">
+              ${this.#keyName(this.breakGlassKeyName)}
+            </p>`
+      }
+      <code class="break-glass-secret" data-test="break-glass-secret">${secret}</code>
+      <div class="task-actions">
+        <wt-button
+          variant="primary"
+          data-test="break-glass-save"
+          @click=${() => {
+            if (this.#saveBreakGlass(secret)) this.keyConfirmed = true;
+          }}
+          >${t("done.break_glass.save")}</wt-button
+        >
+        <wt-button
+          variant="secondary"
+          data-test="key-wrote"
+          @click=${() => {
+            this.keyConfirmed = true;
+          }}
+          >${t("done.task.key_wrote")}</wt-button
+        >
+      </div>
+      ${this.#saveFailed()}`;
+  }
+
   #joiningStatus(): TemplateResult | string {
-    if (this.joined) return t("done.joined.status");
     if (this.lost) {
-      return html`${t("done.joining.lost_before")}
-      ${this.#serversLink("done.joining.lost_link", "lost-servers-link")}
+      return html`${t("done.joining.lost_before")} ${this.#serversLink()}
       ${t("done.joining.lost_after")}`;
     }
     return t(
@@ -847,33 +920,15 @@ export class SetupDoneScreen extends LitElement {
   }
 
   /** The link words alone when the main box's address is not known. */
-  #serversLink(
-    words: "done.task.label_link" | "done.joining.lost_link",
-    test: string,
-  ): TemplateResult | string {
-    if (this.serversUrl === undefined) return t(words);
+  #serversLink(): TemplateResult | string {
+    if (this.serversUrl === undefined) return t("done.joining.lost_link");
     return html`<a
-      data-test=${test}
+      data-test="lost-servers-link"
       href=${this.serversUrl}
       target="_blank"
       rel="noopener noreferrer"
-      >${t(words)}</a
+      >${t("done.joining.lost_link")}</a
     >`;
-  }
-
-  #confirmation(
-    id: string,
-    label: string,
-    checked: boolean,
-    change: (checked: boolean) => void,
-  ): TemplateResult {
-    return html`<wt-switch
-      data-test=${`task-${id}-confirm`}
-      name=${`task-${id}-confirmed`}
-      label=${label}
-      .checked=${checked}
-      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => change(event.detail.checked)}
-    ></wt-switch>`;
   }
 
   #task(

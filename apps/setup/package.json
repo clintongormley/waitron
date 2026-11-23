@@ -23,9 +23,11 @@
     "lit": "^3.2.0",
     "@waitron/dashboard-modules": "workspace:*",
     "@waitron/module": "workspace:*",
-    "@simplewebauthn/browser": "^14.0.0"
+    "@simplewebauthn/browser": "^14.0.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.5",
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "axe-core": "^4.14.1",

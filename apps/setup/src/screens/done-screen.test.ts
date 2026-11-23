@@ -7,6 +7,11 @@ import { SetupDoneScreen } from "./done-screen.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
 import { SetupApi } from "../api/client.js";
+import type { SetupBoxLabel } from "../widgets/box-label.js";
+
+/** A one-pixel image, standing in for a drawn QR. */
+const PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
@@ -126,7 +131,6 @@ describe("setup-done-screen", () => {
   ] as const)("localizes the issue date and key label in %s", async (locale, name) => {
     setLocale(locale);
     const el = await mountDone(() => new Promise(() => {}), {
-      mirrorJoin: true,
       breakGlassSecret: "key-on-paper",
       breakGlassKeyName: "2026-10-15 · K7QF",
     });
@@ -1111,72 +1115,88 @@ describe("setup-done-screen", () => {
   });
 
   it.each([
-    [
-      "en-GB",
-      "This box is joining",
-      JOINING_STATUS_EN,
-      "Taking its first copy from the primary, which keeps selling.",
-    ],
-    [
-      "es-ES",
-      "Este servidor se está uniendo",
-      JOINING_STATUS_ES,
-      "Recibiendo su primera copia del principal, que sigue vendiendo.",
-    ],
+    ["en-GB", "This box is joining", JOINING_STATUS_EN],
+    ["es-ES", "Este servidor se está uniendo", JOINING_STATUS_ES],
   ] as const)(
-    "says the joining server is taking its first copy (%s)",
-    async (locale, heading, words, detail) => {
+    "says the joining box is taking its first copy (%s)",
+    async (locale, heading, words) => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
       expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
       expect(q(el, "[data-test=joining-status]")!.textContent!.trim()).toBe(words);
-      expect(q(el, "[data-test=task-join-detail]")!.textContent!.trim()).toBe(detail);
+      expect(q(el, "[data-test=task-join-detail]")).toBeNull();
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "while joining, shows only the join task, with the joining status as its detail (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), {
+        mirrorJoin: true,
+        breakGlassSecret: "bg-9f3a",
+        contactUrl: "https://box-41aa.waitron.local",
+      });
+      const tasks = [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")];
+      expect(tasks.map((task) => task.getAttribute("data-test"))).toEqual(["task-join"]);
+      const status = q(el, "[data-test=joining-status]")!;
+      expect(status.closest("[data-test=task-join]")).not.toBeNull();
+      expect(status.getAttribute("role")).toBe("status");
+      expect(q(el, "h1")!.nextElementSibling).toBe(q(el, "[data-test=joining-tasks]"));
+      expect(q(el, "[data-test=joining-tasks]")!.nextElementSibling).toBeNull();
+      expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
+      expect(q(el, "[data-test=break-glass]")).toBeNull();
+      expect(q(el, "setup-box-label")).toBeNull();
+      expect(el.shadowRoot!.textContent!).not.toMatch(/will not change|no cambiará/);
+      expect(el.shadowRoot!.textContent!).not.toMatch(/encryption key|cifrado/);
     },
   );
 
   it.each([
     [
       "en-GB",
-      "Once this box has joined, open the primary's Servers page and choose Print switch label in each box's row menu. Stick each label on its box.",
+      "Print this box's label",
+      "Stick it on this box. Every box in the restaurant has one: if the main box fails, scan the label on a spare with any till or phone on the venue's network to switch to that spare.",
     ],
     [
       "es-ES",
-      "Cuando este servidor se haya unido, abre la página Servidores del principal y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
+      "Imprimir la etiqueta de este servidor",
+      "Pégala en este servidor. Cada servidor del restaurante tiene una: si el servidor principal falla, escanea la etiqueta de un servidor de reserva con cualquier caja o móvil conectado a la red del local para cambiar a ese servidor.",
     ],
   ] as const)(
-    "tells the joining server's person to print switch labels once it has joined (%s)",
-    async (locale, words) => {
+    "offers this box's own label on a new restaurant's finished page (%s)",
+    async (locale, heading, why) => {
       setLocale(locale);
+      const printFrame = vi.fn<(view: Window) => void>();
       const el = await mountDone(() => new Promise(() => {}), {
-        mirrorJoin: true,
-        serversUrl: "https://waitron.local/servers",
+        onboardingIntent: "live",
+        contactUrl: "https://box-7c21.waitron.local",
+        drawQr: async () => PIXEL,
+        printFrame,
       });
-      expect(q(el, "[data-test=task-label-detail]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        words,
+      const card = q(el, "[data-test=main-label]")!;
+      expect(card.tagName).toBe("WT-CARD");
+      expect(card.previousElementSibling).toBe(q(el, "[data-test=links]"));
+      expect(card.querySelector("h2")!.textContent!.trim()).toBe(heading);
+      expect(card.querySelector("[data-test=main-label-why]")!.textContent!.trim()).toBe(why);
+      const preview = card.querySelector("setup-box-label") as SetupBoxLabel;
+      expect(preview.address).toBe("https://box-7c21.waitron.local");
+      expect(preview.children).toHaveLength(0);
+      const print = preview.shadowRoot!.querySelector<HTMLElement>("[data-test=print-label]")!;
+      await vi.waitFor(() =>
+        expect((print as HTMLElement & { disabled: boolean }).disabled).toBe(false),
       );
+      print.click();
+      await vi.waitFor(() => expect(printFrame).toHaveBeenCalledTimes(1));
+      printFrame.mock.calls[0]![0].dispatchEvent(new Event("afterprint"));
     },
   );
 
-  it.each(["en-GB", "es-ES"] as const)(
-    "lists joining, saving the key and printing the labels as tasks, in that order (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}), {
-        mirrorJoin: true,
-        breakGlassSecret: "bg-9f3a",
-      });
-      const tasks = [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")];
-      expect(tasks.map((task) => task.getAttribute("data-test"))).toEqual([
-        "task-join",
-        "task-key",
-        "task-label",
-      ]);
-      expect(q(el, "[data-test=joining-status]")!.nextElementSibling).toBe(
-        q(el, "[data-test=joining-tasks]"),
-      );
-      expect(el.shadowRoot!.textContent!).not.toMatch(/will not change|no cambiará/);
-    },
-  );
+  it("offers no label on the finished page when this box's address is not known", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
+    expect(q(el, "[data-test=main-label]")).toBeNull();
+    expect(q(el, "setup-box-label")).toBeNull();
+  });
 
   it("shows no joining status or task list on the ordinary done page", async () => {
     const el = await mountDone(() => new Promise(() => {}));
@@ -1213,32 +1233,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
-  it.each([
-    [
-      "en-GB",
-      "The backup encryption key opens the copy. To authorise a restore, keep the box key that was current when the backup was made.",
-      "Box key 15 Oct 2026 · K7QF",
-    ],
-    [
-      "es-ES",
-      "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
-      "Clave del servidor 15 oct 2026 · K7QF",
-    ],
-  ] as const)(
-    "shows the paper key name and the old-backup warning in %s",
-    async (locale, warning, name) => {
-      setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}), {
-        mirrorJoin: true,
-        breakGlassSecret: "key-on-paper",
-        breakGlassKeyName: "2026-10-15 · K7QF",
-      } as Partial<SetupDoneScreen>);
-      expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(name);
-      expect(q(el, "[data-test=break-glass-backup-warning]")?.textContent?.trim()).toBe(warning);
-      expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("key-on-paper");
-    },
-  );
-
   it("sets the break-glass secret in the design system's monospace font", async () => {
     const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api: apiWith(() => new Promise(() => {})),
@@ -1256,20 +1250,6 @@ describe("setup-done-screen", () => {
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("You need it to promote this box if the primary is unreachable.");
     expect(warning).not.toContain("take over from the primary");
-  });
-
-  it("shows the break-glass secret on the mirror path without promising a promote", async () => {
-    const el = await mountDone(() => new Promise(() => {}), {
-      mirrorJoin: true,
-      breakGlassSecret: "bg-9f3a",
-    });
-    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
-    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning).toContain("will not be shown again");
-    expect(warning).toContain(
-      "You will need it if this box ever has to take over from the primary.",
-    );
-    expect(warning).not.toContain("promote");
   });
 
   it("shows the finished setup in Spanish", async () => {
@@ -1334,23 +1314,15 @@ describe("setup-done-screen", () => {
     expect(steps).toContain("puerto 9110");
   });
 
-  it("shows the joining screen and its break-glass code in Spanish", async () => {
+  it("shows the joining screen in Spanish, keeping the key back until the box has joined", async () => {
     setLocale("es-ES");
     const el = await mountDone(() => new Promise(() => {}), {
       mirrorJoin: true,
       breakGlassSecret: "bg-9f3a",
     });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
-    expect(q(el, "[data-test=break-glass] h2")!.textContent!.trim()).toBe(
-      "Guarda ahora tu clave del servidor",
-    );
-    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
-    expect(warning).toContain(
-      "La necesitarás si algún día este servidor tiene que sustituir al principal.",
-    );
-    expect(warning).not.toContain("pase a ser el principal");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
+    expect(q(el, "[data-test=break-glass]")).toBeNull();
+    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
     expect(q(el, "[data-test=status]")).toBeNull();
   });
 
@@ -1462,11 +1434,6 @@ describe("saving the server key as a file", () => {
       "a Preparation setup",
       { onboardingIntent: "prepare" },
       "You need it to restore this venue from its bucket.",
-    ],
-    [
-      "a spare joining the primary",
-      { onboardingIntent: "prepare", mirrorJoin: true },
-      "You will need it if this box ever has to take over from the primary.",
     ],
     [
       "a Live setup",
@@ -2000,6 +1967,8 @@ describe("the joining page", () => {
     environment: "preproduction",
   };
   const SERVERS = "https://waitron.local/servers";
+  const SPARE = "https://box-41aa.waitron.local";
+  const SWITCH_PAGE = "https://box-41aa.waitron.local/handover/emergency";
   const LOST_EN =
     "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's Servers page and look at this box's row.";
   const json = (body: unknown, status = 200) =>
@@ -2045,10 +2014,29 @@ describe("the joining page", () => {
       pollIntervalMs: 3,
       mirrorJoin: true,
       breakGlassSecret: "key-on-paper",
+      contactUrl: SPARE,
+      drawQr: async () => PIXEL,
       ...extra,
     });
     return { el, ...rest };
   }
+
+  /** A joining page whose box has already joined. */
+  async function mountJoined(extra: Partial<SetupDoneScreen> = {}) {
+    const mounted = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], extra);
+    await vi.waitFor(() => expect(done(mounted.el, "join")).toBe("true"));
+    return mounted;
+  }
+  const press = async (el: SetupDoneScreen, test: string) => {
+    await userEvent.click(q(el, `[data-test=${test}]`)!);
+    await el.updateComplete;
+  };
+  const taskIds = (el: SetupDoneScreen) =>
+    [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")].map((task) =>
+      task.getAttribute("data-test"),
+    );
+  const label = (el: SetupDoneScreen) =>
+    q(el, "[data-test=task-label] setup-box-label") as SetupBoxLabel | null;
 
   const status = (el: SetupDoneScreen) => q(el, "[data-test=joining-status]")!;
   const statusText = (el: SetupDoneScreen) => status(el).textContent!.replace(/\s+/g, " ").trim();
@@ -2056,7 +2044,6 @@ describe("the joining page", () => {
     q(el, `[data-test=task-${task}]`)!.getAttribute("data-done");
   const stateText = (el: SetupDoneScreen, task: string) =>
     q(el, `[data-test=task-${task}-state]`)!.textContent!.trim();
-  const confirm = (el: SetupDoneScreen, task: string) => q(el, `[data-test=task-${task}-confirm]`)!;
 
   it("says it is joining, then changes by itself to joined and ticks the first task", async () => {
     const { el, nodeCalls } = await mountJoining([
@@ -2069,7 +2056,8 @@ describe("the joining page", () => {
     expect(status(el).getAttribute("role")).toBe("status");
     expect(statusText(el)).toBe(JOINING_STATUS_EN);
     expect(done(el, "join")).toBe("false");
-    await vi.waitFor(() => expect(statusText(el)).toBe("Joined. This box is now the standby."));
+    await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
+    expect(q(el, "[data-test=joining-status]")).toBeNull();
     expect(q(el, "h1")!.textContent!.trim()).toBe("This box has joined");
     expect(done(el, "join")).toBe("true");
     expect(stateText(el, "join")).toBe("Done");
@@ -2110,14 +2098,22 @@ describe("the joining page", () => {
       "waiting",
       "Joining. Waiting for the primary to send its copy of the restaurant's data.",
     ],
-    ["en-GB", "restoring", "Joining. Copying the restaurant's data from the primary."],
+    [
+      "en-GB",
+      "restoring",
+      "Joining. Copying the restaurant's data from the main box. The main box keeps selling.",
+    ],
     ["en-GB", "ready", "Joining. The copy is complete and this box is restarting."],
     [
       "es-ES",
       "waiting",
       "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
     ],
-    ["es-ES", "restoring", "Uniéndose. Copiando los datos del restaurante desde el principal."],
+    [
+      "es-ES",
+      "restoring",
+      "Uniéndose. Copiando los datos del restaurante desde el servidor principal. El servidor principal sigue vendiendo.",
+    ],
     ["es-ES", "ready", "Uniéndose. La copia está completa y este servidor se está reiniciando."],
   ] as const)(
     "says where the first copy has got to while the box is joining (%s, %s)",
@@ -2160,10 +2156,11 @@ describe("the joining page", () => {
     expect(link.rel).toBe("noopener noreferrer");
     expect(link.textContent!.trim()).toBe("Servers page");
     expect(done(el, "join")).toBe("false");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
     probe = () => Promise.resolve(json(JOINED_PROBE));
     await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
-    expect(statusText(el)).toBe("Joined. This box is now the standby.");
+    expect(q(el, "[data-test=joining-status]")).toBeNull();
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
   });
 
   it("goes back to the joining status when the box answers again", async () => {
@@ -2212,7 +2209,8 @@ describe("the joining page", () => {
             : later();
         },
       );
-      const copying = "Joining. Copying the restaurant's data from the primary.";
+      const copying =
+        "Joining. Copying the restaurant's data from the main box. The main box keeps selling.";
       await vi.waitFor(() => expect(statusText(el)).toBe(copying));
       await vi.waitFor(() => expect(boxCalls).toBeGreaterThan(4));
       expect(statusText(el)).toBe(copying);
@@ -2260,52 +2258,147 @@ describe("the joining page", () => {
     expect(fetchImpl.mock.calls.length).toBe(settled);
   });
 
-  it("ticks Save the server key only when the person says it is saved, not when the file is saved", async () => {
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const { el } = await mountJoining([() => new Promise(() => {})]);
-    expect(q(el, "[data-test=task-key]")!.textContent!.replace(/\s+/g, " ")).toContain(
-      "Save the box key",
-    );
+  it("once joined, ticks the join task and shows only the key task next, with its words, name, key and both buttons", async () => {
+    const { el } = await mountJoined({ breakGlassKeyName: "2026-10-15 · K7QF" });
+    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
+    expect(stateText(el, "join")).toBe("Done");
+    expect(q(el, "[data-test=task-join]")!.querySelector("p")).toBeNull();
     expect(done(el, "key")).toBe("false");
     expect(stateText(el, "key")).toBe("To do");
-    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
-    await el.updateComplete;
-    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
-    expect(done(el, "key")).toBe("false");
-    const sw = q(el, "[data-test=task-key-confirm]")!;
-    expect(sw.getAttribute("label")).toBe("I have saved the key");
-    await userEvent.click(confirm(el, "key"));
-    await el.updateComplete;
-    expect(done(el, "key")).toBe("true");
-    expect(stateText(el, "key")).toBe("Done");
-    await userEvent.click(confirm(el, "key"));
-    await el.updateComplete;
-    expect(done(el, "key")).toBe("false");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    const key = q(el, "[data-test=task-key]")!;
+    expect(key.querySelector(".task-label")!.textContent!.trim()).toBe("Download the box key");
+    expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
+      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
+    );
+    expect(key.querySelector("[data-test=break-glass-key-name]")!.textContent!.trim()).toBe(
+      "Box key 15 Oct 2026 · K7QF",
+    );
+    expect(key.querySelector("[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    expect(key.querySelector("[data-test=break-glass-save]")!.textContent!.trim()).toBe(
+      "Save as a file",
+    );
+    expect(key.querySelector("[data-test=key-wrote]")!.textContent!.trim()).toBe("I wrote it down");
+    expect(q(el, "[data-test=break-glass]")).toBeNull();
+    expect(el.shadowRoot!.textContent!).not.toMatch(/encryption key|promote|primary/);
   });
 
-  it("links the switch-label task to the primary's Servers page, and ticks it only when the person says so", async () => {
-    const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
-      serversUrl: SERVERS,
+  it("Save as a file saves the key without the backup sentence, completes the task and reveals the label task", async () => {
+    const blobs: Blob[] = [];
+    const realURL = URL.createObjectURL.bind(URL);
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      return realURL(blob);
     });
-    await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
-    const link = q(el, "[data-test=task-label] [data-test=servers-link]") as HTMLAnchorElement;
-    expect(link.href).toBe(SERVERS);
-    expect(link.target).toBe("_blank");
-    expect(link.rel).toBe("noopener noreferrer");
-    expect(link.textContent!.trim()).toBe("Servers page");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const { el } = await mountJoined();
+    await press(el, "break-glass-save");
+    expect((await blobs[0]!.text()).split("\n")).toEqual([
+      "Waitron box key",
+      "",
+      "key-on-paper",
+      "",
+      "You will need it if this box ever has to take over from the primary.",
+      "",
+      "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
+      "",
+    ]);
+    expect(done(el, "key")).toBe("true");
+    expect(stateText(el, "key")).toBe("Done");
+    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
+    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
     expect(done(el, "label")).toBe("false");
-    expect(q(el, "[data-test=task-label-confirm]")!.getAttribute("label")).toBe(
-      "I have stuck on the labels",
+  });
+
+  it("I wrote it down completes the key task and reveals the label task, saving nothing", async () => {
+    const createObjectURL = vi.spyOn(URL, "createObjectURL");
+    const { el } = await mountJoined();
+    await press(el, "key-wrote");
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(done(el, "key")).toBe("true");
+    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
+    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
+  });
+
+  it("keeps the key task open, with the key, when the file cannot be saved", async () => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
+      throw new Error("Download refused");
+    });
+    const { el } = await mountJoined();
+    await press(el, "break-glass-save");
+    const error = q(el, "[data-test=task-key] [data-test=break-glass-save-error]")!;
+    expect(error.getAttribute("role")).toBe("alert");
+    expect(error.textContent!.trim()).toBe(
+      "The file could not be saved. Write the key down instead.",
     );
-    await userEvent.click(confirm(el, "label"));
-    await el.updateComplete;
+    expect(done(el, "key")).toBe("false");
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
+  });
+
+  it("goes straight to the label task once joined when there is no key to save", async () => {
+    const { el } = await mountJoined({ breakGlassSecret: undefined });
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
+  });
+
+  it("shows this box's label in the label task, printing it once its QR is drawn", async () => {
+    let finish!: (qr: string) => void;
+    const drawQr = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+    const printFrame = vi.fn<(view: Window) => void>();
+    const { el } = await mountJoined({ breakGlassSecret: undefined, drawQr, printFrame });
+    const task = q(el, "[data-test=task-label]")!;
+    expect(task.querySelector(".task-label")!.textContent!.trim()).toBe("Print this box's label");
+    expect(stateText(el, "label")).toBe("To do");
+    expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(
+      "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
+    );
+    const preview = label(el)!;
+    expect(preview.address).toBe(SPARE);
+    expect(drawQr).toHaveBeenCalledExactlyOnceWith(SWITCH_PAGE);
+    const part = (test: string) =>
+      preview.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!;
+    expect(part("label-name").textContent!.trim()).toBe("box-41aa.waitron.local");
+    expect(part("label-address").textContent!.trim()).toBe(SWITCH_PAGE);
+    const print = part("print-label") as HTMLElement & { disabled: boolean };
+    expect(print.disabled).toBe(true);
+    finish(PIXEL);
+    await vi.waitFor(() => expect(print.disabled).toBe(false));
+    print.click();
+    await vi.waitFor(() => expect(printFrame).toHaveBeenCalledTimes(1));
+    const view = printFrame.mock.calls[0]![0];
+    expect(view.document.body.textContent).toContain(SWITCH_PAGE);
+    view.dispatchEvent(new Event("afterprint"));
+    expect(done(el, "label")).toBe("false");
+  });
+
+  it("ticks the label task when the person says it is stuck on", async () => {
+    const { el } = await mountJoined({ breakGlassSecret: undefined, drawQr: undefined });
+    await vi.waitFor(() =>
+      expect(label(el)!.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
+    );
+    const stuck = q(el, "[data-test=label-stuck]")!;
+    expect(stuck.textContent!.trim()).toBe("I've stuck it on");
+    expect(stuck.parentElement).toBe(label(el));
+    await press(el, "label-stuck");
     expect(done(el, "label")).toBe("true");
     expect(stateText(el, "label")).toBe("Done");
+    expect(label(el)).toBeNull();
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
+  });
+
+  it("offers no label task when this box's address is not known", async () => {
+    const { el } = await mountJoined({ breakGlassSecret: undefined, contactUrl: undefined });
+    expect(taskIds(el)).toEqual(["task-join"]);
+  });
+
+  it("shows no Servers page link on the page once the box answers", async () => {
+    const { el } = await mountJoined({ serversUrl: SERVERS, breakGlassSecret: undefined });
+    expect(el.shadowRoot!.querySelector("a")).toBeNull();
+    expect(el.shadowRoot!.textContent!).not.toContain("Print switch label");
   });
 
   it.each(["join", "key", "label"])("shows the %s task's state as visible words", async (task) => {
-    const { el } = await mountJoining([() => new Promise(() => {})], { serversUrl: SERVERS });
+    const { el } = await mountJoined();
+    if (task === "label") await press(el, "key-wrote");
     const state = q(el, `[data-test=task-${task}-state]`)!;
     const box = state.getBoundingClientRect();
     expect(box.width).toBeGreaterThan(8);
@@ -2324,21 +2417,35 @@ describe("the joining page", () => {
 
   it("shows the joining and joined page in Spanish", async () => {
     setLocale("es-ES");
-    const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
-      serversUrl: SERVERS,
-      startDelayMs: 100000,
-    });
+    let probe: () => Promise<Response> = () => new Promise(() => {});
+    const { el } = await mountJoining([() => probe()], { serversUrl: SERVERS });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
     expect(statusText(el)).toBe(JOINING_STATUS_ES);
-    expect(q(el, "[data-test=task-label] a")!.textContent!.trim()).toBe("página Servidores");
-    expect(q(el, "[data-test=task-key]")!.textContent!).toContain("Guardar la clave del servidor");
-    expect(q(el, "[data-test=task-key-confirm]")!.getAttribute("label")).toBe(
-      "He guardado la clave",
+    expect(stateText(el, "join")).toBe("En curso");
+    probe = () => Promise.resolve(json(JOINED_PROBE));
+    await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se ha unido");
+    const key = q(el, "[data-test=task-key]")!;
+    expect(key.querySelector(".task-label")!.textContent!.trim()).toBe(
+      "Descargar la clave del servidor",
     );
-    expect(q(el, "[data-test=task-label-confirm]")!.getAttribute("label")).toBe(
-      "He pegado las etiquetas",
+    expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
+      "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez.",
     );
+    expect(q(el, "[data-test=break-glass-save]")!.textContent!.trim()).toBe(
+      "Guardar en un archivo",
+    );
+    expect(q(el, "[data-test=key-wrote]")!.textContent!.trim()).toBe("La he anotado");
     expect(stateText(el, "key")).toBe("Pendiente");
+    await press(el, "key-wrote");
+    const task = q(el, "[data-test=task-label]")!;
+    expect(task.querySelector(".task-label")!.textContent!.trim()).toBe(
+      "Imprimir la etiqueta de este servidor",
+    );
+    expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(
+      "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
+    );
+    expect(q(el, "[data-test=label-stuck]")!.textContent!.trim()).toBe("Ya la he pegado");
   });
 
   it("says in Spanish when it has lost the box", async () => {

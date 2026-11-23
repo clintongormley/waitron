@@ -136,6 +136,8 @@ export interface ProvisionResult {
   breakGlassKeyName?: string;
   breakGlassKeyInBackups?: true;
   cloudStaffEmailUnavailable?: true;
+  /** This box's own address, which its label's QR opens. */
+  contactUrl?: string;
 }
 
 export interface AdoptOutcome {
@@ -144,6 +146,8 @@ export interface AdoptOutcome {
    * the box restarts. */
   breakGlassSecret?: string;
   breakGlassKeyName?: string;
+  /** This box's own address, which its label's QR opens. */
+  contactUrl?: string;
   restarting: true;
 }
 

@@ -101,26 +101,32 @@ export const finishEn = {
   "done.joining.status": "Joining. This can take a few minutes.",
   "done.joining.copy_waiting":
     "Joining. Waiting for the primary to send its copy of the restaurant's data.",
-  "done.joining.copy_restoring": "Joining. Copying the restaurant's data from the primary.",
+  "done.joining.copy_restoring":
+    "Joining. Copying the restaurant's data from the main box. The main box keeps selling.",
   "done.joining.copy_ready": "Joining. The copy is complete and this box is restarting.",
   "done.joining.lost_before":
     "This page can no longer reach this box. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
   "done.joining.lost_link": "Servers page",
   "done.joining.lost_after": "and look at this box's row.",
-  "done.joined.status": "Joined. This box is now the standby.",
   "done.task.done": "Done",
   "done.task.in_progress": "In progress",
   "done.task.to_do": "To do",
   "done.task.join": "Join the restaurant",
-  "done.task.join_detail": "Taking its first copy from the primary, which keeps selling.",
-  "done.task.key": "Save the box key",
-  "done.task.key_confirm": "I have saved the key",
-  "done.task.label": "Print the switch labels",
-  "done.task.label_before": "Once this box has joined, open the primary's",
-  "done.task.label_link": "Servers page",
-  "done.task.label_after":
-    "and choose Print switch label in each box's row menu. Stick each label on its box.",
-  "done.task.label_confirm": "I have stuck on the labels",
+  "done.task.key": "Download the box key",
+  "done.task.key_why":
+    "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
+  "done.task.key_wrote": "I wrote it down",
+  "done.task.label": "Print this box's label",
+  "done.task.label_why":
+    "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
+  "done.task.label_stuck": "I've stuck it on",
+  "done.label.heading": "Print this box's label",
+  "done.label.why":
+    "Stick it on this box. Every box in the restaurant has one: if the main box fails, scan the label on a spare with any till or phone on the venue's network to switch to that spare.",
+  "done.label.print": "Print label",
+  "done.label.words":
+    "If the main box fails, scan this with any till or phone on the venue's network",
+  "done.label.qr_alt": "QR code that opens this box's switch page",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -229,25 +235,30 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.joining.copy_waiting":
     "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
   "done.joining.copy_restoring":
-    "Uniéndose. Copiando los datos del restaurante desde el principal.",
+    "Uniéndose. Copiando los datos del restaurante desde el servidor principal. El servidor principal sigue vendiendo.",
   "done.joining.copy_ready":
     "Uniéndose. La copia está completa y este servidor se está reiniciando.",
   "done.joining.lost_before":
     "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la",
   "done.joining.lost_link": "página Servidores",
   "done.joining.lost_after": "del principal y mira la fila de este servidor.",
-  "done.joined.status": "Unido. Este servidor es ahora el servidor en espera.",
   "done.task.done": "Hecho",
   "done.task.in_progress": "En curso",
   "done.task.to_do": "Pendiente",
   "done.task.join": "Unirse al restaurante",
-  "done.task.join_detail": "Recibiendo su primera copia del principal, que sigue vendiendo.",
-  "done.task.key": "Guardar la clave del servidor",
-  "done.task.key_confirm": "He guardado la clave",
-  "done.task.label": "Imprimir las etiquetas de cambio",
-  "done.task.label_before": "Cuando este servidor se haya unido, abre la",
-  "done.task.label_link": "página Servidores",
-  "done.task.label_after":
-    "del principal y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
-  "done.task.label_confirm": "He pegado las etiquetas",
+  "done.task.key": "Descargar la clave del servidor",
+  "done.task.key_why":
+    "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez.",
+  "done.task.key_wrote": "La he anotado",
+  "done.task.label": "Imprimir la etiqueta de este servidor",
+  "done.task.label_why":
+    "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
+  "done.task.label_stuck": "Ya la he pegado",
+  "done.label.heading": "Imprimir la etiqueta de este servidor",
+  "done.label.why":
+    "Pégala en este servidor. Cada servidor del restaurante tiene una: si el servidor principal falla, escanea la etiqueta de un servidor de reserva con cualquier caja o móvil conectado a la red del local para cambiar a ese servidor.",
+  "done.label.print": "Imprimir etiqueta",
+  "done.label.words":
+    "Si el servidor principal falla, escanea esto con cualquier caja o móvil conectado a la red del local",
+  "done.label.qr_alt": "Código QR que abre la página de cambio de este servidor",
 };
