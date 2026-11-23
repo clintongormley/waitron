@@ -599,8 +599,8 @@ Slice 3.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 - **What A1558 left open (22 November 2026).** Wiping a replaced main box from its Servers row once
   its records are back is built (PR 10a). PR 10b's first part lets a "Manage boxes" holder download
-  those invoice records from the old box's own page, and the Wipe and remove dialog always points
-  to it. Left for its second part
+  the invoice records the new main box lacks from the old box's own page, and the Wipe and remove
+  dialog always points to it. Left for its second part
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): wiping it before
   its return completes, the download's tabs of what changed after the copy an emergency switch
   started from, and a Download button on the new main box. As its own pull request: the old box
