@@ -314,24 +314,19 @@ it("a reprint prints what the first print did", async () => {
   expect(bySaleId).toEqual(original);
 });
 
-/** The spec bill eaten in, with its Sirloin surcharge comped. */
-async function compedSurchargeBill() {
-  const bill = await specBill(spec, "fire");
-  const sirloin = (await specRows(spec, bill.tabId)).find(
-    ({ name, setMenuRole, lineTotal }) =>
-      name === "Sirloin" && setMenuRole === "dish" && lineTotal > 0,
-  )!;
-  await inTx(venue, async (tx) =>
+/** Comps the bill's line `lineId` whole, under the give-away reason. */
+function compLine(billId: string, lineId: string) {
+  return inTx(venue, async (tx) =>
     applyAdjustment(
       tx,
       venue.cfg,
       {
         admission: testTradingAdmission(),
-        orderId: bill.tabId,
-        expectedEdit: await readBillEditState(tx, bill.tabId),
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
         submissionId: crypto.randomUUID(),
-        expectedRevision: await readOrderRevision(tx, bill.tabId),
-        lineId: sirloin.id,
+        expectedRevision: await readOrderRevision(tx, billId),
+        lineId,
         reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
         action: "comp",
         note: null,
@@ -340,6 +335,16 @@ async function compedSurchargeBill() {
       venue.cfg.locale,
     ),
   );
+}
+
+/** The spec bill eaten in, with its Sirloin surcharge comped. */
+async function compedSurchargeBill() {
+  const bill = await specBill(spec, "fire");
+  const sirloin = (await specRows(spec, bill.tabId)).find(
+    ({ name, setMenuRole, lineTotal }) =>
+      name === "Sirloin" && setMenuRole === "dish" && lineTotal > 0,
+  )!;
+  await compLine(bill.tabId, sirloin.id);
   return bill;
 }
 
@@ -378,4 +383,28 @@ it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async 
   expect(rows).toContainEqual(["-1  Sirloin", "0,00"]);
   expect(rows.filter(([, amount]) => amount.startsWith("--"))).toEqual([]);
   expect(credit.lines.filter((line) => line.adjustments !== undefined)).toEqual([]);
+});
+
+it("after a set menu leaves the bill, a reprint by sale id prints each comp under its own row", async () => {
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await setSpecCount(spec, bill.tabId, spec.daily, 3);
+  const [firstSpecial] = (await setSpecCount(spec, bill.tabId, spec.special, 2)).setMenus.slice(3);
+  await setSpecCount(spec, bill.tabId, spec.daily, 2);
+  const numbers = (await specRows(spec, bill.tabId)).map(({ lineNo }) => lineNo);
+  expect(numbers).not.toEqual(numbers.map((_, i) => i + 1));
+  await compLine(bill.tabId, firstSpecial!.lineId);
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const [sale] = await venue.db
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, bill.tabId));
+  const settledRows = items(await settled(bill.tabId));
+  expect(settledRows.slice(1, 3)).toEqual([
+    ["1  Special menu", "20,00"],
+    [expect.stringMatching(/^ {2}\S/u), "-20,00"],
+  ]);
+  const bySaleId = await inTx(venue, (tx) =>
+    readTransactionReceipt(venue.backend, tx, venue.cfg, sale!.id),
+  );
+  expect(items(bySaleId)).toEqual(settledRows);
 });

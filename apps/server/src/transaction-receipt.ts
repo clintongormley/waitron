@@ -6,7 +6,6 @@ import {
   saleLines,
   saleSettlements,
   sales,
-  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -33,6 +32,7 @@ import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptPayments } from "./receipt-payments.js";
 import { readTenderBlock, receiptQr, type TillSaleResult } from "./till-sale.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
+import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
 import "./errors.js";
 
 function receiptGrosses(
@@ -65,6 +65,37 @@ function receiptGrosses(
   return amounts;
 }
 
+/**
+ * The bill line each filed row was priced from, as the settled-bill read pairs them: by position in
+ * the stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
+ * none. Null when the bill no longer prices to the filed rows, quantity and total, ignoring sign so
+ * a whole credit pairs too.
+ */
+async function billLinesFiled(
+  tx: Transaction,
+  workingOrderId: string | null,
+  dishes: readonly (typeof saleLines.$inferSelect)[],
+  grosses: ReadonlyMap<string, Decimal>,
+): Promise<Pick<OrderLineIdentity, "id" | "lineIds">[] | null> {
+  if (workingOrderId === null || !(await hasStoredLines(tx, workingOrderId))) return null;
+  const stored = await readStoredOrder(tx, workingOrderId);
+  const size = (amount: string) => decimal(amount.replace(/^-/, ""));
+  const same = (a: string, b: string) => compareDecimal(size(a), size(b)) === 0;
+  const paired =
+    stored.gross.lines.length === dishes.length &&
+    stored.gross.lines.every(
+      (line, i) =>
+        same(line.quantity, thousandthsToDecimal(dishes[i]!.quantity)) &&
+        same(line.lineGross, grosses.get(dishes[i]!.id)!),
+    );
+  return paired
+    ? stored.identities.map(({ id, lineIds }) => ({
+        id,
+        ...(lineIds === undefined ? {} : { lineIds }),
+      }))
+    : null;
+}
+
 export async function readTransactionReceipt(
   backend: FiscalBackend,
   tx: Transaction,
@@ -89,14 +120,7 @@ export async function readTransactionReceipt(
   const grosses = receiptGrosses(rows, sale.vatBreakdown);
   // `receiptLines` adds the lines that take an advance off, naming each advance.
   const dishes = rows.filter((row) => row.advanceRole !== "deduction");
-  const orderLines =
-    sale.workingOrderId === null
-      ? []
-      : await tx
-          .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, sale.workingOrderId));
-  const orderIds = new Map(orderLines.map((row) => [row.lineNo, row.id]));
+  const orderIdentities = await billLinesFiled(tx, sale.workingOrderId, dishes, grosses);
   const { lines: receiptRows, ...billAdjustments } = await receiptLines(
     tx,
     sale.workingOrderId,
@@ -116,8 +140,8 @@ export async function readTransactionReceipt(
         setMenuRole: row.setMenuRole,
       })),
     },
-    dishes.map((row) => ({
-      id: orderIds.get(row.lineNo) ?? row.id,
+    dishes.map((row, i) => ({
+      ...(orderIdentities?.[i] ?? { id: row.id }),
       // A correction's lines take none: the bill's comps and discounts were made on the original's.
       listUnitGross:
         sale.correctsSaleId !== null || row.listGross === null || row.listUnitPriceGross === null
