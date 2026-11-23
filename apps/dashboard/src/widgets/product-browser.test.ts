@@ -1995,7 +1995,9 @@ it("keeps the All products row when a column filter hides every product and cate
   expect(await rowKeys(el)).toEqual([]);
   const root = (await tableOf(el)).shadowRoot!;
   expect(
-    root.querySelector('tr[data-row-key="root"] [data-test="count-root"]')?.textContent?.trim(),
+    root
+      .querySelector(`tr[data-row-key="${ROOT_KEY}"] [data-test="count-root"]`)
+      ?.textContent?.trim(),
   ).toBe("0 de 3 productos");
   expect(root.querySelector(".empty")).toBeNull();
 });

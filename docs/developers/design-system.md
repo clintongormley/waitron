@@ -1810,10 +1810,10 @@ width, sets a `narrow` attribute on itself if the box is that narrow and removes
 table is not watched and carries no `narrow`. A screen may style its cells on
 `wt-data-table[narrow]`, as the Products tree does for its category name box.
 
-A tree using `flatTreeSearch` can set `filterCandidates(rows, hasFilters)` to narrow the rows offered to search and to
-expanded results. When a column filter is active, its cells receive `context.filterMatches`, the
-rows that passed all column filters before the tree narrows or ranks them. The Products tree uses
-that set to keep and count the categories with matching products.
+A tree using `flatTreeSearch` can set `filterCandidates(rows, hasFilters)` to narrow the rows offered to
+search and to expanded results. When a column filter is active, its cells receive
+`context.filterMatches`, the rows that passed all column filters before the tree narrows or ranks
+them. The Products tree uses that set to keep and count the categories with matching products.
 
 Set `collapseDescendants` when reopening a branch should show its children closed. Closing then
 clears descendant openings from the complete parent graph, including branches hidden by filters or

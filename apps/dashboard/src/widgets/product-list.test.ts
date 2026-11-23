@@ -6008,12 +6008,14 @@ describe("product-list filters (A463)", () => {
       el.nameDraft = { kind: "rename", categoryId: "desserts" };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      await userEvent.keyboard("{End}!");
       await choose(el, "modifiers", "has");
       expect(rowKeys(root)).toEqual(["folder:f", "folder:desserts"]);
       const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
         'tr[data-row-key="folder:desserts"] wt-input[name="category-name"]',
       );
-      expect(box?.value).toBe("Desserts");
+      expect(focusedName(el)).toBe("category-name");
+      expect(box?.shadowRoot?.querySelector("input")?.value).toBe("Desserts!");
       el.nameDraft = null;
       await el.updateComplete;
       await table.updateComplete;
