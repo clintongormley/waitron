@@ -13,7 +13,8 @@ import {
   taxpayer,
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, masterKeyCheckValue } from "@waitron/credentials";
+import { decodeMasterKeyCode } from "@waitron/shared";
 import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
@@ -29,6 +30,7 @@ import {
   buildDevEnv,
   DEMO_DEVICE_LINES,
   devSetup,
+  masterKeySummaryLines,
   inspectVenues,
   parseEnvFile,
   renderEnvFile,
@@ -283,6 +285,32 @@ describe("devSetup against a real venue directory", () => {
     expect(second.env).toEqual(first.env);
   });
 
+  it("dev:setup makes one master key and prints it; a re-run makes none", async () => {
+    const stored = () =>
+      readVenue(async (db) => {
+        const { rows } = await db.execute<{ name: string; check_value: string; made_by: null }>(
+          sql`select name, check_value, made_by from master_keys`,
+        );
+        return rows.map((row) => ({ ...row }));
+      });
+    const made = first.masterKey!;
+    expect(await stored()).toEqual([
+      {
+        name: made.masterKeyName,
+        check_value: masterKeyCheckValue(decodeMasterKeyCode(made.masterKey)),
+        made_by: null,
+      },
+    ]);
+    expect(masterKeySummaryLines(first)).toContain(
+      `  master key ${made.masterKeyName}:  ${made.masterKey}`,
+    );
+    const again = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
+    expect(again.reused).toBe(true);
+    expect(again.masterKey).toBeUndefined();
+    expect(masterKeySummaryLines(again)).toEqual([]);
+    expect(await stored()).toHaveLength(1);
+  });
+
   it("provisioning seeds the starter profiles", async () => {
     // Read through the table definition, so the JSON capability list is decoded as product readers
     // get it.
@@ -527,6 +555,9 @@ describe("dev-setup run as a command", () => {
     expect(result.stdout).toContain("http://localhost:5290/till/?dev");
     expect(result.stdout).toContain("dashboard  http://localhost:5291/");
     expect(result.stdout).toContain("setup      http://localhost:5292/setup/");
+    expect(result.stdout).toMatch(
+      /\n {2}master key \d{4}-\d\d-\d\d · [2-9A-HJKMNP-Z]{4}: {2}(?:[2-9A-HJKMNP-Z]{4} ){6}[2-9A-HJKMNP-Z]{4}\n/,
+    );
     expect(parseEnvFile(readFileSync(settingsFile, "utf8")).WAITRON_VENUE_DIR).toBe(
       join(workDir, "venue"),
     );
