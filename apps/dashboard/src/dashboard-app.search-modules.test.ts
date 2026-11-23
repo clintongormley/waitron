@@ -685,7 +685,7 @@ it("opens the exact period from Menus and follows changes passively while the li
   expect(reads()).toBe(inEditor);
 });
 
-it("keeps period names after edit access ends and stops the watch when read access ends", async () => {
+it("shows plain period names after edit access ends and stops the watch when read access ends", async () => {
   let finish!: (value: unknown) => void;
   const pending = new Promise((resolve) => {
     finish = resolve;
@@ -704,6 +704,7 @@ it("keeps period names after edit access ends and stops the watch when read acce
   await expect
     .poll(() => [...(row()?.querySelectorAll("td") ?? [])][2]?.textContent)
     .toContain("Lunch");
+  expect(periodLink(el)).toBeNull();
   const reads = () => read.mock.calls.filter(([path]) => path === openingHours).length;
   read.mockImplementationOnce(() => pending);
   liveData.invalidate([{ type: "menu_periods" }]);
