@@ -292,14 +292,31 @@ Choices, all in `wt-tabs`, the screen otherwise unchanged:
 
 ## A670 — guest-menu sharing and fixed A4 presets
 
-The manager’s guest preview reads the published menu, with guest/default/internal name fallback,
-separately priced sizes/extras and declarations. Local opt-in sharing exposes only the active default publication on the serving box. Bistro and Lunch-and-wine A4 presets print the captured publication through the browser, with box-local scalar appearance and per-preview logo/order/breaks. A mobile-data guest link remains unavailable.
+The 23 November 2026 rehearsal passed 12 external HTTPS checks on a synthetic venue. Cloud served
+the last delivered edition while the box was disconnected, updated it after reconnection and
+when a scheduled edition became due, and kept serving it while a disable was pending offline.
+Cloud takedown returned 404 while the box was offline and after it reconnected. The retired link
+also returned 404. The guest address refused staff, media and write requests.
 
-Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
-public mobile-data qualification of Cloud’s hosted copy. The box delivers publications and
-reports delivery confirmation under lane G’s A670-CLOUD contract. When Cloud requires an active
-trial or paid plan, the preview explains why the hosted copy is hidden and links to Cloud Billing.
-Public readiness remains unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
+Two checks remain before public rollout and QR sharing under the watcher-cleared
+[build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md).
+
+1. **Takeover.** Pair a main and spare for a synthetic venue and verify a temporary test Billing
+   grant before starting the trial. Publish and wait for Cloud to confirm delivery. Open the guest
+   HTTPS link without signing in and note the edition and publication date. Hand over to the spare
+   and turn off the old main. Reload the same URL and verify that it still shows that edition and
+   date. Publish a visibly different edition from the new main, wait for delivery confirmation,
+   then verify that the same URL shows the new edition and date. The 23 November takeover attempt
+   stopped before the trial because the Billing grant could not be verified.
+2. **Phone on mobile data.** With a delivered edition, turn off Wi-Fi and open the guest HTTPS link
+   in a private phone tab using mobile data. Note the edition and publication date. Disconnect the
+   box from Cloud, reload the same URL, and check that the edition and date match. The owner's
+   earlier mobile-data check covered the connected box.
+
+Reconnect the box after the phone check. After each rehearsal, retire the synthetic venue, verify
+the guest URL returns 404, and have Lane G restore the original test Billing settings.
+
+Ordering and choosing a guest menu independently of the default menu remain separate work.
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
 forwarding to the box with a hosted published read-only copy when unreachable, fixed presets
@@ -412,8 +429,8 @@ fixed by #3502.
 
 ## A1517. Allergen points to revisit before go-live
 
-The remaining guest-menu work is qualification of the guest link over mobile data, tracked
-under [A670](#a670--guest-menu-sharing-and-fixed-a4-presets).
+The remaining guest-menu work is qualification through takeover and on mobile data with the box
+disconnected, tracked under [A670](#a670--guest-menu-sharing-and-fixed-a4-presets).
 
 The [11 November proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 original checks and their limits. The owner accepted its recommendations at 22:01; the

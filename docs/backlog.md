@@ -477,7 +477,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   more on the terrace today is to make it a department of its own with its own menu. Not designed.
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations; mobile-data access to A670's published menu remains to build.
+  the recommendations. The remaining guest-menu checks are tracked under A670.
   The [cleared new-selection plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/menu.md#a1517-allergen-points-to-revisit-before-go-live)
 
@@ -487,11 +487,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
-  Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
-  Customer names fall back through guest language, venue default, then internal name; never kitchen.
-  Managers can preview a published menu in guest languages and enable local sharing of the default publication. The watcher cleared the
-  [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
-  Fixed A4 presets offer browser Print / Save as PDF. The box delivers the published copy to Cloud and reports confirmation; mobile-data qualification remains. No ordering.
+  The 23 November rehearsal passed 12 checks of Cloud’s hosted guest menu. Before public rollout
+  and QR sharing, verify that the same link survives a takeover and that it works on a phone using
+  mobile data while the box is disconnected.
   [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
 - **Product names on phones and sold-out tiles** (bundle of 2, size M, needs the owner). [Detail](backlog/menu.md#bundle-product-names-on-phones-and-sold-out-tiles)
