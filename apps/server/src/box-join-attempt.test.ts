@@ -176,19 +176,18 @@ describe("the new box's join attempt", () => {
     return promise;
   }
 
-  it("says hello, reveals, shows the code with its addresses, and polls until approved", async () => {
+  it("says hello with its addresses, reveals, shows the code, and polls until approved", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
     const shown = await attempt.start(MAIN_URL);
 
-    expect(shown.addresses).toEqual([FROM, "10.0.0.9"]);
+    expect(shown).not.toHaveProperty("addresses");
     expect(sent[0]!.body.addresses).toEqual([FROM, "10.0.0.9"]);
     expect(requests.listed()).toMatchObject([{ address: FROM }]);
     expect(listedChoices()).toContain(shown.code);
     expect(attempt.current()).toEqual({
       state: "waiting",
       code: shown.code,
-      addresses: [FROM, "10.0.0.9"],
       primaryUrl: MAIN_URL,
       timeLeftMs: 15 * 60_000,
     });

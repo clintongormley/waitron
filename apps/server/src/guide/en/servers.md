@@ -43,13 +43,12 @@ Waitron box running a restaurant on the network and offers **Join it as a spare*
 the same join page.
 
 Enter the main box's address by its name, `https://waitron.local`, and choose **Join**; its IP
-address, such as `https://192.168.1.10`, is refused. The new box shows a six-digit code and its own
-addresses.
+address, such as `https://192.168.1.10`, is refused. The new box shows a six-digit code and a link
+to the main box's Servers page.
 
-On the main box, open **System → Servers**, choose **Check** beside the box at one of those
-addresses, and tap the code the new box shows. Check that the address is the one the new box shows
-and the code is the one it shows now. A wrong tap ends the request; choose **Start again** on the
-new box.
+On the main box, open **System → Servers** (the link opens it), choose **Check** beside the request,
+and tap the code the new box shows. A wrong tap ends the request; choose **Start again** on the new
+box.
 
 Back on the new box, choose **Finish joining**. The
 new box takes its first copy over the venue's network and restarts by itself as the spare. Its page

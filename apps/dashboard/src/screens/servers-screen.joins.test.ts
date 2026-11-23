@@ -130,6 +130,10 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(buttons.every((b) => b.size === "lg")).toBe(true);
     expect(buttons[0]!.getAttribute("aria-label")).toBe("Code 482\u00a0913");
     expect(find(el, "join-dialog-address")!.textContent).toContain("192.168.1.23");
+    expect(find(el, "join-compare")!.textContent!.trim()).toBe(
+      "A wrong tap ends the request; choose Start again on the new box.",
+    );
+    expect(joinDialog(el).textContent).not.toMatch(/Check that the address/);
   });
 
   it("a right tap approves with that code and says to finish joining on the new box", async () => {
@@ -505,6 +509,7 @@ describe("a box asking to join, on the Servers screen", () => {
       });
       const tapped = await mount(api);
       await check(tapped);
+      expect(find(tapped, "join-compare")!.textContent!.trim()).toBe(es["servers.join_compare"]);
       choiceButtons(tapped)[0]!.click();
       await flush(tapped);
       await flush(tapped);

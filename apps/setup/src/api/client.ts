@@ -150,7 +150,6 @@ export interface AdoptOutcome {
 /** A join's code as the new box first shows it, with the handle that keeps it on this tab. */
 export interface JoinStarted {
   code: string;
-  addresses: string[];
   /** Measured on the new box's own clock when it answered; the browser's clock plays no part. */
   timeLeftMs: number;
   handle: string;
@@ -164,7 +163,7 @@ export type JoinState =
   | { state: "none" }
   | { state: "elsewhere" }
   | { state: "replaced" }
-  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; timeLeftMs: number }
+  | { state: "waiting"; code: string; primaryUrl: string; timeLeftMs: number }
   | { state: "approved"; code: string }
   | { state: "ended"; reason: string }
   | { state: "failed"; error: string };

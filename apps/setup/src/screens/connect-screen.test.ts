@@ -31,14 +31,12 @@ async function bottomOf(el: SetupConnectScreen): Promise<string> {
 const MAIN = "https://waitron.local";
 const STARTED: JoinStarted = {
   code: "482913",
-  addresses: ["192.168.1.23", "fd00::23"],
   timeLeftMs: 14.5 * 60_000,
   handle: "h1",
 };
 const WAITING: JoinState = {
   state: "waiting",
   code: "482913",
-  addresses: ["192.168.1.23", "fd00::23"],
   primaryUrl: MAIN,
   timeLeftMs: STARTED.timeLeftMs,
 };
@@ -137,7 +135,7 @@ describe("setup-connect-screen: the address", () => {
 });
 
 describe("setup-connect-screen: waiting", () => {
-  it("joins the origin of the typed address and shows the code, this box's addresses, the main box and the time left", async () => {
+  it("joins the origin of the typed address and shows a link to the main box's Servers page, the code and the time left", async () => {
     const { el, api } = await mount();
     const seen = handles(el);
     await type(el, `${MAIN}/dashboard?x=1`);
@@ -145,14 +143,33 @@ describe("setup-connect-screen: waiting", () => {
     await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
     expect(api.startJoin).toHaveBeenCalledWith(MAIN, undefined);
     expect(seen).toEqual(["h1"]);
-    expect(text(el, "[data-test=addresses]")).toBe(
-      "The request on the main box should come from one of this box's addresses: 192.168.1.23, fd00::23",
+    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
+      "Open the Servers page on the main box, choose Check beside this box's request, and tap this code:",
     );
-    expect(text(el, "[data-test=main]")).toBe(`Main box: ${MAIN}`);
+    const link = q(el, "[data-test=state] a[data-test=servers-page]")!;
+    expect(link.getAttribute("href")).toBe(`${MAIN}/servers`);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link.textContent!.trim()).toBe("Open the Servers page on the main box");
+    expect(q(el, "[data-test=addresses]")).toBeNull();
+    expect(q(el, "[data-test=main]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toMatch(/192\.168\.1\.23|Main box:/);
     expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
     expect(q(el, "[data-test=start-again]")).not.toBeNull();
     expect(q(el, "[data-test=finish]")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();
+  });
+
+  it("shows the instruction without a link when the main box's address is not a web address", async () => {
+    // serversPageOf answers undefined for an address with no http: or https: scheme.
+    const { el } = await mount(stubApi({ ...WAITING, primaryUrl: "waitron.local" }), {
+      handle: "h1",
+    });
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(q(el, "[data-test=state] a")).toBeNull();
+    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
+      "Open the Servers page on the main box, choose Check beside this box's request, and tap this code:",
+    );
   });
 
   it("reads the join with this tab's handle on opening, and shows its waiting code", async () => {
@@ -670,9 +687,15 @@ describe("setup-connect-screen in Spanish", () => {
     setLocale("es-ES");
     const { el } = await mount(stubApi(WAITING), { handle: "h1" });
     expect(text(el, "h1")).toBe("Unirse al servidor principal");
-    expect(text(el, "[data-test=addresses]")).toBe(
-      "La solicitud en el servidor principal debe venir de una de las direcciones de este servidor: 192.168.1.23, fd00::23",
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(text(el, "[data-test=state]").replace(/\s+/g, " ")).toBe(
+      `${es["connect.waiting.open_link"]}${es["connect.waiting.open_after"]}`,
     );
+    expect(text(el, "[data-test=servers-page]")).toBe(es["connect.waiting.open_link"]);
+    expect(q(el, "[data-test=servers-page]")!.getAttribute("href")).toBe(`${MAIN}/servers`);
+    expect(q(el, "[data-test=addresses]")).toBeNull();
+    expect(q(el, "[data-test=main]")).toBeNull();
+    expect(text(el, "[data-test=time-left]")).toBe("Tiempo restante: 15 min");
     expect(text(el, "[data-test=start-again]")).toBe("Empezar de nuevo");
   });
 });

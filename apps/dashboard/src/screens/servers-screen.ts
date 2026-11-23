@@ -570,7 +570,9 @@ export class ServersScreen extends LitElement {
               ${
                 join.choices === null
                   ? nothing
-                  : html`<p class="explanation">${t("servers.join_compare")}</p>
+                  : html`<p class="explanation" data-test="join-compare">
+                        ${t("servers.join_compare")}
+                      </p>
                       <p class="target" id="join-match-prompt">${t("servers.join_match_prompt")}</p>
                       <div class="choices" role="group" aria-labelledby="join-match-prompt">
                         ${join.choices.map(

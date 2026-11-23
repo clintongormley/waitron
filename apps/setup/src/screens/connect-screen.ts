@@ -12,12 +12,13 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { actionsStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles, helpLinkStyles } from "../form-styles.js";
 import { dispatchJoinFinishRequested, dispatchJoinHandle, dispatchSetupGoto } from "../events.js";
 import { SetupApi, type JoinState } from "../api/client.js";
 import { format, localTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { serversPageOf } from "../servers-page.js";
 
 /** The holding tab reads every 2 seconds, which keeps it counted as open on the server. */
 const READ_EVERY_MS = 2_000;
@@ -140,6 +141,7 @@ export class SetupConnectScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    helpLinkStyles,
     fieldStyles,
     actionsStyles,
     css`
@@ -432,11 +434,24 @@ export class SetupConnectScreen extends LitElement {
     }
   }
 
-  #stateWords(): string {
+  #stateWords(): string | TemplateResult {
     const view = this.view;
     switch (view.state) {
-      case "waiting":
-        return t("connect.waiting.lead");
+      case "waiting": {
+        const servers = serversPageOf(view.primaryUrl);
+        const open = t("connect.waiting.open_link");
+        return html`${
+          servers === undefined
+            ? open
+            : html`<a
+                data-test="servers-page"
+                href=${servers}
+                target="_blank"
+                rel="noopener noreferrer"
+                >${open}</a
+              >`
+        }${t("connect.waiting.open_after")}`;
+      }
       case "approved":
         return `${format("connect.approved", { code: groupedJoinCode(view.code) })} ${t("connect.approved.hint")}`;
       case "elsewhere":
@@ -460,12 +475,6 @@ export class SetupConnectScreen extends LitElement {
       Math.ceil((view.timeLeftMs - (performance.now() - this.#shownAt)) / 60_000),
     );
     return html`<p class="code" data-test="code">${groupedJoinCode(view.code)}</p>
-      <p class="detail" data-test="addresses">
-        ${format("connect.waiting.addresses", { addresses: view.addresses.join(", ") })}
-      </p>
-      <p class="detail" data-test="main">
-        ${format("connect.waiting.main", { primaryUrl: view.primaryUrl })}
-      </p>
       <p class="detail" data-test="time-left">
         ${Number.isNaN(minutes) ? nothing : format("connect.waiting.time_left", { minutes })}
       </p>`;
