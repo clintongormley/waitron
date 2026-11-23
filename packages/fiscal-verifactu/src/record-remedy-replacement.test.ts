@@ -158,7 +158,7 @@ beforeEach(async () => {
     correctiveId = series!.id;
     const [fullSeries] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "RF", purpose: "full_corrective", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "RF", purpose: "full_corrective" })
       .returning();
     fullCorrectiveId = fullSeries!.id;
   });

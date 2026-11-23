@@ -188,9 +188,13 @@ function otherSeriesOwner(name: string): WaitronModule {
 
 it("exports the series owner's configured bases, not the box's suffixed live codes", async () => {
   const target = await seed();
-  await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`update invoice_series set code = code || ${SUFFIX}`),
-  );
+  await withTransaction(suite.db, async (tx) => {
+    const live = await tx.select().from(invoiceSeries).where(isNull(invoiceSeries.retiredAt));
+    await tx.update(invoiceSeries).set({ retiredAt: now }).where(isNull(invoiceSeries.retiredAt));
+    await tx
+      .insert(invoiceSeries)
+      .values(live.map(({ nodeId, code, purpose }) => ({ nodeId, code: code + SUFFIX, purpose })));
+  });
   const owned = await buildConfigurationBundle(
     suite.db,
     target,
