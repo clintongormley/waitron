@@ -3683,7 +3683,7 @@ of non-test `.ts` files under `apps/` and `packages/`, so a field made with
 `document.createElement`, from markup no single literal holds, or with its tag name split across a
 `${…}` is invisible to it, and the field primitives' own files, and `wt-data-table`'s (its search
 box), are not read at all. It allows some files by name: the hidden username input the browser's
-password manager reads, in `apps/dashboard/src/widgets/autofill-username.ts`, the print agent's setup page, the recovery page's
+password manager reads, in `packages/ui/src/autofill-username.ts`, the print agent's setup page, the recovery page's
 password box, and the carry-on form on the page a box serves while it waits for its peers, each held to the number of
 lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
 added on a line that already has one passes.
