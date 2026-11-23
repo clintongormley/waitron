@@ -48,4 +48,12 @@ describe.each(["light", "dark"] as const)("wt-relative-time a11y (%s theme)", (t
     expect(el.shadowRoot!.querySelector("time")!.textContent!.trim()).toBe("now");
     await expectNoA11yViolations(host);
   });
+
+  test("a moment days gone, read as a calendar", async () => {
+    const el = await mountAt(theme, 'calendar time-zone="UTC"');
+    el.now = () => new Date(Date.parse(AT) + 2 * 86_400_000);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("time")!.textContent!.trim()).toBe("Monday, 11:49");
+    await expectNoA11yViolations(host);
+  });
 });
