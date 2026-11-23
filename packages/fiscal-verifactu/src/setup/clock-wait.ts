@@ -47,6 +47,8 @@ interface SharedClockWords {
   laterAfterSet: string;
   confirmWhy: string;
   confirm: string;
+  /** The answer that sets the box's clock from this device; `thisDevice` when a page names none. */
+  deviceCorrect?: string;
 }
 
 type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "unavailable">;
@@ -431,6 +433,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
     timeZone: string,
     setClock?: () => void,
     confirm?: { press: () => void; busy: boolean },
+    shown: { named?: boolean; note?: string } = {},
   ) {
     const device = this.#device;
     const problem = renderClockProblem(
@@ -450,7 +453,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
         },
         confirm,
       },
-      { locale, timeZone },
+      { locale, timeZone, ...shown },
     );
     return device?.status === "set" && this.#result?.status !== "selected"
       ? html`<p role="status" data-test="device-clock">${words.deviceSet}</p>
@@ -474,8 +477,15 @@ export function renderClockProblem(
     /** Confirm the time: drawn when the page offers it (the setup page's Proceed confirms instead). */
     confirm?: { press: () => void; busy: boolean };
   },
-  place?: { locale: "en" | "es"; timeZone: string },
+  place?: { locale: "en" | "es"; timeZone: string; named?: boolean; note?: string },
 ) {
+  const rows =
+    clock && place
+      ? html`<dl class="details" data-test="clock-times">
+            ${renderClockRows(clock, words, place.locale, place.timeZone, place.named)}
+          </dl>
+          ${place.note ? html`<p data-test="zone-note">${place.note}</p>` : nothing}`
+      : nothing;
   if (problem?.kind === "second-clock") {
     const onBox = clock?.unavailable.some(
       (r) => r.source === "browser" && r.reason === "same_machine",
@@ -499,13 +509,7 @@ export function renderClockProblem(
   if (problem?.kind === "confirm")
     return html`<section data-test="clock-confirm">
       <p role="status">${words.confirmWhy}</p>
-      ${
-        clock && place
-          ? html`<dl class="details" data-test="clock-times">
-              ${renderClockRows(clock, words, place.locale, place.timeZone)}
-            </dl>`
-          : nothing
-      }
+      ${rows}
       ${
         choice.confirm
           ? html`<div class="choices">
@@ -525,7 +529,9 @@ export function renderClockProblem(
     const device = choice.device;
     const choices = [
       ["server-correct", words.theServer, () => choice.answer()],
-      ...(device?.set ? ([["device-correct", words.thisDevice, device.set]] as const) : []),
+      ...(device?.set
+        ? ([["device-correct", words.deviceCorrect ?? words.thisDevice, device.set]] as const)
+        : []),
       ["both-wrong", words.bothWrong, () => choice.answer()],
     ] as const;
     return html`<section data-test="clock-refused">
@@ -534,13 +540,7 @@ export function renderClockProblem(
           ? html`<p role="status" data-test="correct-device">${words.correctDevice}</p>`
           : html`<p role="status" id="which-correct">${words.whichCorrect}</p>`
       }
-      ${
-        clock && place
-          ? html`<dl class="details" data-test="clock-times">
-              ${renderClockRows(clock, words, place.locale, place.timeZone)}
-            </dl>`
-          : nothing
-      }
+      ${rows}
       ${
         choice.answered
           ? nothing

@@ -278,7 +278,7 @@ for (const theme of ["light", "dark"] as const)
             const instant = Date.parse("2026-10-18T12:30:00Z");
             const el = FISCAL_SETUP.createPromotion!({
               locale,
-              scenario: "emergency",
+              scenario: "controlled",
               binding,
               timeZone: "America/New_York",
               prepare: async (proposal) => {
@@ -387,6 +387,84 @@ for (const theme of ["light", "dark"] as const)
             expect((await axe.run(host)).violations).toEqual([]);
             expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
             expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+            el.remove();
+            host.remove();
+          }
+        }
+      } finally {
+        await page.viewport(original[0]!, original[1]!);
+      }
+    });
+
+for (const theme of ["light", "dark"] as const)
+  for (const locale of ["en", "es"] as const)
+    it(`${locale} ${theme} an emergency switch's clock page fits and remains accessible`, async () => {
+      const original = [window.innerWidth, window.innerHeight];
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 1600);
+          for (const state of ["confirm", "disagreement", "answered"] as const) {
+            const differ = state !== "confirm";
+            const host = document.createElement("main");
+            hosts.push(host);
+            document.body.append(host);
+            applyTokens(host);
+            host.dataset.theme = theme;
+            host.lang = locale;
+            host.style.cssText =
+              "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
+            const instant = Date.parse("2026-10-18T12:30:00Z");
+            const el = FISCAL_SETUP.createPromotion!({
+              locale,
+              scenario: "emergency",
+              binding: {
+                module: "fiscal-verifactu",
+                action: "promote",
+                eventId: "switch",
+                sourceId: "old-box",
+                targetNodeId: "new-box",
+              },
+              timeZone: "Pacific/Chatham",
+              prepare: async (proposal) => {
+                const action = (proposal as { action: string }).action;
+                if (action === "clock-challenge") return { id: "challenge" };
+                if (action === "compare-clocks")
+                  return {
+                    id: "compared",
+                    clock: {
+                      usable: [
+                        { source: "box", lowerMs: instant, upperMs: instant },
+                        {
+                          source: "browser",
+                          lowerMs: instant + (differ ? 180_000 : 0),
+                          upperMs: instant + (differ ? 180_000 : 0),
+                        },
+                      ],
+                      unavailable: [
+                        { source: "internet", result: "unavailable", reason: "offline" },
+                      ],
+                      secondClock: true,
+                      disagreement: differ,
+                      releaseBlocked: false,
+                      rangeBlocked: false,
+                    },
+                  };
+                throw new Error("unexpected promotion proposal");
+              },
+            }) as RecoveryHourEntry;
+            host.append(el);
+            const action = (name: string) =>
+              el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${name}"]`);
+            await vi.waitFor(() =>
+              expect(action(differ ? "server-correct" : "confirm-time")).not.toBeNull(),
+            );
+            if (state === "answered") {
+              await userEvent.click(action("server-correct")!);
+              await vi.waitFor(() => expect(action("correct-device")).not.toBeNull());
+            }
+            expect(action("clock-heading")).not.toBeNull();
+            expect((await axe.run(host)).violations).toEqual([]);
+            expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
             el.remove();
             host.remove();
           }

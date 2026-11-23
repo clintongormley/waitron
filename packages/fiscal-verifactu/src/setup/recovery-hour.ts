@@ -64,6 +64,48 @@ export const promotionWords = {
     },
   },
 } as const;
+const internetCheck =
+  "It is very important that the time on this box is correct, but it cannot currently check its time over the internet.";
+const internetCheckEs =
+  "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet.";
+/** The emergency switch's clock words. */
+export const emergencyClockWords = {
+  en: {
+    checking: "Checking this box's time…",
+    clockHeading: "Check the time",
+    whichCorrect: `${internetCheck} Which device is correct?`,
+    confirmWhy: `${internetCheck} Check that both times below are right, then press Confirm the time.`,
+    serverTime: "This box",
+    thisDevice: "Your device",
+    theServer: "The box is correct",
+    deviceCorrect: "Your device is correct",
+    bothWrong: "Both are wrong",
+    correctDevice: "Set this device's clock to the right time, then press Check again.",
+    compareAgain: "Check again",
+    deviceFailed:
+      "The box could not set its clock from this device. Check this device's date and time, then press Your device is correct again.",
+    zoneNote: (city: string) =>
+      `Your device is set to ${city} time; both are shown in the venue's time.`,
+  },
+  es: {
+    checking: "Comprobando la hora del servidor…",
+    clockHeading: "Comprueba la hora",
+    whichCorrect: `${internetCheckEs} ¿Qué dispositivo tiene la hora correcta?`,
+    confirmWhy: `${internetCheckEs} Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.`,
+    serverTime: "Este servidor",
+    thisDevice: "Tu dispositivo",
+    theServer: "El servidor tiene la hora correcta",
+    deviceCorrect: "Tu dispositivo tiene la hora correcta",
+    bothWrong: "Las dos están mal",
+    correctDevice: "Pon este dispositivo en la hora correcta y pulsa Volver a comprobar.",
+    compareAgain: "Volver a comprobar",
+    deviceFailed:
+      "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Tu dispositivo tiene la hora correcta.",
+    zoneNote: (city: string) =>
+      `Tu dispositivo está en la hora de ${city}; las dos se muestran en la hora del local.`,
+  },
+};
+const isEmergency = (context: Context) => isPromotion(context) && context.scenario === "emergency";
 interface Draft {
   oldBoxGone: boolean;
   soleRecovery: boolean;
@@ -199,17 +241,32 @@ export class RecoveryHourEntry extends LitElement {
   #confirmed = false;
   /** A handover's Continue was pressed under the series now shown. */
   @state() private continued = false;
+  /**
+   * An emergency switch checks the clocks by itself when connected or given a new context. A
+   * `clear()` alone does not: the page clears a step it is about to discard.
+   */
+  #autoStart = false;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
+    this.#autoStart = true;
+    this.requestUpdate();
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
-    if (changed.has("context")) this.clear();
+    if (changed.has("context")) {
+      this.clear();
+      this.#autoStart = true;
+    }
     this.#register();
+    if (this.#autoStart && this.isConnected && isEmergency(this.context)) {
+      this.#autoStart = false;
+      this.#confirmed = true;
+      void this.#run();
+    }
   }
   override updated(): void {
-    const shown = this.#wait.result?.status === "selected";
+    const shown = this.#wait.result?.status === "selected" && !isEmergency(this.context);
     if (shown && !this.#seriesShown)
       focusNewScreen(
         this.shadowRoot!,
@@ -343,7 +400,7 @@ export class RecoveryHourEntry extends LitElement {
       !isPromotion(this.context) ||
       !this.continued ||
       this.busy ||
-      !this.draft.detailsCorrect ||
+      (!this.draft.detailsCorrect && !isEmergency(this.context)) ||
       this.#wait.result?.status !== "selected"
     )
       return null;
@@ -442,6 +499,7 @@ export class RecoveryHourEntry extends LitElement {
       } else if (selected.status !== "waiting" || !validWait(selected))
         throw new Error("invalid wait");
       this.#wait.show(undefined, selected as unknown as Selected);
+      if (selected.status === "selected" && isEmergency(context)) this.continued = true;
     } catch (cause) {
       if (current()) this.#wait.settle(cause, automatic, (error) => this.#failed(error));
     } finally {
@@ -470,12 +528,14 @@ export class RecoveryHourEntry extends LitElement {
     const en = this.locale === "en";
     const context = this.context;
     const promote = isPromotion(context);
+    const emergency = isEmergency(context);
     const baseWords = en ? recoveryHourStrings.en : recoveryHourStrings.es;
     const words = promote
       ? {
           ...baseWords,
           ...promotionWords[context.scenario][this.locale],
           inUse: en ? clockWaitStrings.en.inUse : clockWaitStrings.es.inUse,
+          ...(emergency ? emergencyClockWords[this.locale] : {}),
         }
       : {
           ...baseWords,
@@ -497,7 +557,7 @@ export class RecoveryHourEntry extends LitElement {
     const result = this.#wait.result;
     const problem = this.#wait.problem?.kind;
     const sending = this.busy ? this.sending : undefined;
-    const action =
+    const step =
       sending ??
       (this.busy || result?.status === "selected" || problem === "in-use"
         ? undefined
@@ -513,9 +573,14 @@ export class RecoveryHourEntry extends LitElement {
               : problem === "confirm" || (this.#confirmed && this.#wait.waiting)
                 ? undefined
                 : "proceed");
+    const action = emergency && step === "proceed" ? "tryAgain" : step;
     const enabled = !sending && (action !== "proceed" || this.#canCompare);
     const selectedHour = result?.status === "selected" ? result : undefined;
     const editable = !selectedHour && !this.#confirmed && !sending;
+    const asks = emergency && (problem === "confirm" || problem === "disagreement");
+    const ownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const checking =
+      emergency && (this.busy || this.starting) && !sending && !problem && !this.#wait.counting;
     return html`<h3>${promote ? words.promotionHeading : words.heading}</h3>
       <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
         ${
@@ -577,36 +642,50 @@ export class RecoveryHourEntry extends LitElement {
                   ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
                 </p>`
         }
-        <h4>${words.checkHeading}</h4>
-        <dl class="details" data-test="venue-review" data-clock=${clock ? "read" : "reading"}>
-          ${
-            promote
-              ? nothing
-              : html`${detailRow(words.environment, words[context.selection.environment])}
-                ${detailRow(words.country, regionName(this.locale, context.selection.country))}
-                ${detailRow(words.taxId, context.selection.taxId)}`
-          }
-          ${detailRow(words.zone, displayZone)}
-        </dl>
+        ${
+          emergency
+            ? nothing
+            : html`<h4>${words.checkHeading}</h4>
+                <dl
+                  class="details"
+                  data-test="venue-review"
+                  data-clock=${clock ? "read" : "reading"}
+                >
+                  ${
+                    promote
+                      ? nothing
+                      : html`${detailRow(words.environment, words[context.selection.environment])}
+                        ${detailRow(words.country, regionName(this.locale, context.selection.country))}
+                        ${detailRow(words.taxId, context.selection.taxId)}`
+                  }
+                  ${detailRow(words.zone, displayZone)}
+                </dl>`
+        }
         ${
           clock
             ? html`${clock.releaseBlocked || clock.rangeBlocked ? html`<p role="status">${clock.rangeBlocked ? words.rangeBlocked : words.blocked}</p>` : nothing}`
             : nothing
         }
-        <label
-          ><input
-            type="checkbox"
-            name="recovery-details-confirmed"
-            required
-            aria-invalid=${this.attempted && !this.draft.detailsCorrect ? "true" : "false"}
-            aria-describedby="details-error"
-            .checked=${this.draft.detailsCorrect}
-            @change=${(event: Event) => this.#edit({ detailsCorrect: (event.currentTarget as HTMLInputElement).checked })}
-          />${words.detailsCorrect} *</label
-        >
-        <p id="details-error" class="error">
-          ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
-        </p>
+        ${
+          emergency
+            ? nothing
+            : html`<label
+                  ><input
+                    type="checkbox"
+                    name="recovery-details-confirmed"
+                    required
+                    aria-invalid=${this.attempted && !this.draft.detailsCorrect ? "true" : "false"}
+                    aria-describedby="details-error"
+                    .checked=${this.draft.detailsCorrect}
+                    @change=${(event: Event) => this.#edit({ detailsCorrect: (event.currentTarget as HTMLInputElement).checked })}
+                  />${words.detailsCorrect} *</label
+                >
+                <p id="details-error" class="error">
+                  ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
+                </p>`
+        }
+        ${checking ? html`<p role="status" data-test="checking">${emergencyClockWords[this.locale].checking}</p>` : nothing}
+        ${asks ? html`<h4 data-test="clock-heading">${emergencyClockWords[this.locale].clockHeading}</h4>` : nothing}
         ${this.#wait.renderProblem(
           words,
           clock,
@@ -614,12 +693,23 @@ export class RecoveryHourEntry extends LitElement {
           displayZone,
           () => void this.#setClock(),
           { press: () => void this.#run(false, true), busy: this.busy },
+          emergency
+            ? {
+                named: true,
+                note:
+                  ownZone === displayZone
+                    ? undefined
+                    : emergencyClockWords[this.locale].zoneNote(
+                        ownZone.split("/").at(-1)!.replace(/_/g, " "),
+                      ),
+              }
+            : undefined,
         )}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
-        ${action === "proceed" && !sending ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
+        ${action === "proceed" && !sending && !emergency ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
       </div>
       ${
-        selectedHour
+        selectedHour && !emergency
           ? html`<section data-test="selected-hour" role="status">
               <h4 tabindex="-1">${words.chosen}</h4>
               <ul>
@@ -642,7 +732,7 @@ export class RecoveryHourEntry extends LitElement {
                 ?loading=${Boolean(sending)}
                 @click=${() => {
                   if (this.busy) return;
-                  if (action === "proceed") this.#confirmed = true;
+                  if (action === "proceed" || action === "tryAgain") this.#confirmed = true;
                   void this.#run();
                   this.sending = this.busy ? action : undefined;
                 }}
@@ -651,7 +741,7 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
         }
         ${
-          promote && selectedHour && (!this.continued || this.starting)
+          promote && !emergency && selectedHour && (!this.continued || this.starting)
             ? html`<wt-button
                 data-test="continue"
                 variant="primary"
@@ -665,7 +755,7 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
         }
         ${
-          editable
+          editable && !emergency
             ? html`<wt-button
                 slot="secondary"
                 data-test="edit-details"
@@ -679,7 +769,7 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
         }
         ${
-          selectedHour
+          selectedHour || emergency
             ? nothing
             : html`<wt-button data-test="clear" variant="secondary" @click=${() => this.clear()}
                 >${words.clear}</wt-button

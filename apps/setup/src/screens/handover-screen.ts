@@ -366,6 +366,8 @@ export class SetupHandoverScreen extends LitElement {
   #click?: Event;
   /** What a refusal that wanted a press put on screen; the clock step's next answer clears it. */
   #passkeyAgain?: string;
+  /** An emergency start refused for a stale clock reading was retried; a second refusal is shown. */
+  #staleRetried = false;
   /** Sent until a step answers it; never written to storage or the address. */
   #assertion?: unknown;
   @state() private email = "";
@@ -736,6 +738,7 @@ export class SetupHandoverScreen extends LitElement {
   async #authenticate(): Promise<void> {
     if (this.busy || (this.#isEmergency && this.copyRefused) || !(await this.#checked())) return;
     this.actionError = "";
+    this.#staleRetried = false;
     this.#resetSelection();
     this.#prepareClock();
   }
@@ -792,7 +795,9 @@ export class SetupHandoverScreen extends LitElement {
     });
   }
   async #retry(): Promise<void> {
-    if (!this.busy && (await this.#checked())) await this.#activate(true);
+    if (this.busy || !(await this.#checked())) return;
+    this.#staleRetried = false;
+    await this.#activate(true);
   }
   /** The button that asked for the start stays on screen, busy, until the start is answered. */
   async #activate(retry = false): Promise<void> {
@@ -819,6 +824,7 @@ export class SetupHandoverScreen extends LitElement {
         "prompt",
       );
       if (controller?.signal.aborted) return;
+      this.#staleRetried = false;
       this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
@@ -826,6 +832,15 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
+      const stale =
+        (cause as { code?: unknown } | null)?.code === "sif.allocation_invalid" &&
+        (cause as { params?: { reason?: unknown } }).params?.reason === "clock_stale";
+      if (this.#isEmergency && stale && !this.#staleRetried) {
+        this.#staleRetried = true;
+        this.#resetSelection();
+        this.#prepareClock();
+        return;
+      }
       refused = true;
       this.actionError = this.#isEmergency
         ? this.#emergencyError(cause)
