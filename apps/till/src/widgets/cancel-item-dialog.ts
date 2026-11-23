@@ -38,6 +38,8 @@ type Draft = {
   reasonId: string;
   note: string;
 };
+/** What the outcomes offered depend on. */
+type Facts = Pick<Draft, "quantity" | "preparationStarted">;
 export interface CancelItemChoice {
   lineId: string;
   quantity: string;
@@ -191,7 +193,7 @@ export class TillCancelItemDialog extends LitElement {
       }),
     );
   }
-  #options(): Outcome[] {
+  #options(draft: Facts = this.draft): Outcome[] {
     const context = this.consent?.context;
     if (
       !context ||
@@ -199,10 +201,12 @@ export class TillCancelItemDialog extends LitElement {
       compareDecimal(decimal(this.#remaining()), decimal("0")) <= 0
     )
       return [];
-    if (this.#asksPreparation() && this.draft.preparationStarted === null) return [];
+    if (this.#asksPreparation() && draft.preparationStarted === null) return [];
     if (context.billStatus === "settled")
-      return this.#canRefund() && !this.#freeServed() ? ["keep_charge", "refund"] : ["keep_charge"];
-    return this.#started() ? ["keep_charge", "remove_charge"] : ["remove_charge"];
+      return this.#canRefund() && !this.#freeServed(draft)
+        ? ["keep_charge", "refund"]
+        : ["keep_charge"];
+    return this.#started(draft) ? ["keep_charge", "remove_charge"] : ["remove_charge"];
   }
   /** A last paid dish whose own share is €0.00 still gives back the free items that come with it. */
   #canRefund(): boolean {
@@ -221,10 +225,10 @@ export class TillCancelItemDialog extends LitElement {
       ) > 0
     );
   }
-  #defaultOutcome(): Outcome | null {
-    const options = this.#options();
+  #defaultOutcome(draft: Facts = this.draft): Outcome | null {
+    const options = this.#options(draft);
     if (this.consent?.context.billStatus === "settled" && options.length > 0)
-      return !this.#started() && options.includes("refund") ? "refund" : "keep_charge";
+      return !this.#started(draft) && options.includes("refund") ? "refund" : "keep_charge";
     return options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null;
   }
   #refundAmount(): string {
@@ -238,10 +242,10 @@ export class TillCancelItemDialog extends LitElement {
     );
   }
   /** Whether the cancel takes every portion the dish has left. */
-  #takesAll(): boolean {
+  #takesAll(draft: Facts = this.draft): boolean {
     return (
-      this.#quantityValid() &&
-      compareDecimal(decimal(quantityValue(this.draft.quantity)), decimal(this.#remaining())) === 0
+      this.#quantityValid(draft) &&
+      compareDecimal(decimal(quantityValue(draft.quantity)), decimal(this.#remaining())) === 0
     );
   }
   /** The free items that come back with this cancel: it refunds every portion the bill's last paid
@@ -252,8 +256,10 @@ export class TillCancelItemDialog extends LitElement {
   }
   /** Whether the cancel would have to bring back a free item already served, which cannot come
    * back, so it gives no money back. */
-  #freeServed(): boolean {
-    return (this.consent?.withFree ?? []).some((item) => item.served === true) && this.#takesAll();
+  #freeServed(draft: Facts = this.draft): boolean {
+    return (
+      (this.consent?.withFree ?? []).some((item) => item.served === true) && this.#takesAll(draft)
+    );
   }
   #asksPreparation(): boolean {
     return (
@@ -261,8 +267,8 @@ export class TillCancelItemDialog extends LitElement {
       this.consent.context.components.some((component) => component.firedAt !== null)
     );
   }
-  #started(): boolean {
-    return this.consent?.context.stage === "started" || this.draft.preparationStarted === true;
+  #started(draft: Facts = this.draft): boolean {
+    return this.consent?.context.stage === "started" || draft.preparationStarted === true;
   }
   #currentKey(): string {
     return JSON.stringify([
@@ -285,13 +291,12 @@ export class TillCancelItemDialog extends LitElement {
       this.#key = key;
       const quantity =
         this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining();
-      this.draft = { ...this.draft, preparationStarted: null, quantity };
       this.draft = {
         preparationStarted: null,
         reasonId: "",
         note: "",
         quantity,
-        outcome: this.#defaultOutcome(),
+        outcome: this.#defaultOutcome({ preparationStarted: null, quantity }),
       };
       this.#baseline = { ...this.draft };
       this.attempted = false;
@@ -337,8 +342,8 @@ export class TillCancelItemDialog extends LitElement {
     )
       this.#requestReasons();
   }
-  #quantityValid(): boolean {
-    const quantity = quantityValue(this.draft.quantity);
+  #quantityValid(draft: Facts = this.draft): boolean {
+    const quantity = quantityValue(draft.quantity);
     if (this.unitPrecision !== 0) return compareDecimal(decimal(quantity || "0"), decimal("0")) > 0;
     return (
       /^\d+$/.test(quantity) &&
