@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
-import { AppError, cancelRefundShare, thousandthsToDecimal } from "@waitron/shared";
+import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { staffPresentationName } from "@waitron/menu";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { parseCancellationContext, parseWithFree } from "./line-cancel-input.js";
@@ -25,6 +25,7 @@ import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
 import {
+  freeItemRefund,
   freeItemsLeft,
   isLastPaidDish,
   lastPaidDishes,
@@ -213,11 +214,7 @@ export function mountLineCancelApi(
                 lineId: line.id,
                 name: staffPresentationName(line),
                 quantity: thousandthsToDecimal(line.quantity - cancelled),
-                refundAmount: cancelRefundShare(
-                  value,
-                  thousandthsToDecimal(cancelled),
-                  thousandthsToDecimal(line.quantity - cancelled),
-                ),
+                refundAmount: freeItemRefund({ line, value, cancelled }),
                 ...(line.servedQuantity > 0 ? { served: true } : {}),
               }));
         return {

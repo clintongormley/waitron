@@ -30,6 +30,7 @@ import { staffPresentationName } from "@waitron/menu";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import {
+  freeItemRefund,
   freeItemRefusal,
   freeItemsLeft,
   isLastPaidDish,
@@ -567,11 +568,7 @@ export async function cancelItem(
               removed: freeTaken[i]!.off,
               of: [freeFamilies[i]!],
               started: freeStarted[i]!,
-              refundValue: cancelRefundShare(
-                free.value,
-                thousandthsToDecimal(free.cancelled),
-                thousandthsToDecimal(freeTaken[i]!.off),
-              ),
+              refundValue: freeItemRefund(free),
             }),
           });
         }

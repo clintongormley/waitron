@@ -3,11 +3,13 @@ import { saleLineDishes, saleLines, workingOrderLines, type Transaction } from "
 import {
   addDecimal,
   AppError,
+  cancelRefundShare,
   centsToDecimal,
   decimal,
   isZeroDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type Decimal,
 } from "@waitron/shared";
 import { readPortionBindings } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
@@ -150,6 +152,16 @@ export function lastPaidDishes(paid: readonly PaidDish[]): Map<string, number> {
     }),
   );
   return isLastPaidDish(paid, off) ? off : new Map();
+}
+
+/** What a free item gives back when it comes back with the bill's last paid dish: the share of its
+ * portions not yet cancelled. The cancellation read shows it and the cancel records it. */
+export function freeItemRefund({ line, value, cancelled }: ShareHolder): Decimal {
+  return cancelRefundShare(
+    value,
+    thousandthsToDecimal(cancelled),
+    thousandthsToDecimal(line.quantity - cancelled),
+  );
 }
 
 /** Cancel and refund refused for how a free item holding a share comes back with its paid dishes. */
