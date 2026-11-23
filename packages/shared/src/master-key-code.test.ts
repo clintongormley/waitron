@@ -1,9 +1,5 @@
 import { expect, it } from "vitest";
-import {
-  encodeRecoveryKey,
-  decodeRecoveryKey,
-  FISCAL_SERVER_KEY_AS_TYPED,
-} from "./recovery-key-code.js";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "./master-key-code.js";
 
 const secret = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 const printed = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
@@ -11,9 +7,9 @@ const code = printed.replaceAll(" ", "");
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 it("prints the unchanged 192-bit key with two trailing check symbols in one grouped value", () => {
-  expect(encodeRecoveryKey(secret)).toBe(printed);
-  expect(decodeRecoveryKey(printed)).toBe(secret);
-  expect(decodeRecoveryKey(code.toLowerCase().replaceAll("0", "o").replaceAll("1", "l"))).toBe(
+  expect(encodeMasterKeyCode(secret)).toBe(printed);
+  expect(decodeMasterKeyCode(printed)).toBe(secret);
+  expect(decodeMasterKeyCode(code.toLowerCase().replaceAll("0", "o").replaceAll("1", "l"))).toBe(
     secret,
   );
 });
@@ -21,7 +17,7 @@ it("refuses every single-symbol substitution, including either check symbol", ()
   for (let i = 0; i < code.length; ++i)
     for (const symbol of alphabet)
       if (symbol !== code[i])
-        expect(() => decodeRecoveryKey(code.slice(0, i) + symbol + code.slice(i + 1))).toThrow(
+        expect(() => decodeMasterKeyCode(code.slice(0, i) + symbol + code.slice(i + 1))).toThrow(
           "Recovery key refused",
         );
 });
@@ -29,41 +25,42 @@ it("refuses each swap of unequal adjacent symbols, including the key/check bound
   for (let i = 0; i < code.length - 1; ++i)
     if (code[i] !== code[i + 1])
       expect(() =>
-        decodeRecoveryKey(code.slice(0, i) + code[i + 1]! + code[i]! + code.slice(i + 2)),
+        decodeMasterKeyCode(code.slice(0, i) + code[i + 1]! + code[i]! + code.slice(i + 2)),
       ).toThrow("Recovery key refused");
 });
 it.each(["", "!", code.slice(1), code + "0", code.replace("M", "U"), null, 42])(
   "refuses malformed printed input %#",
   (value) => {
-    expect(() => decodeRecoveryKey(value as string)).toThrow("Recovery key refused");
+    expect(() => decodeMasterKeyCode(value as string)).toThrow("Recovery key refused");
   },
 );
 it.each(["", "a".repeat(31), "a".repeat(33), "!".repeat(32), null])(
   "refuses malformed raw secrets %#",
   (value) => {
-    expect(() => encodeRecoveryKey(value as string)).toThrow("Recovery key refused");
+    expect(() => encodeMasterKeyCode(value as string)).toThrow("Recovery key refused");
   },
 );
 it("round-trips zero, high-bit and mixed raw keys without changing their bytes", () => {
   for (const key of ["A".repeat(32), "_".repeat(32), "0123456789abcdefghijklmnopqrstuv"])
-    expect(decodeRecoveryKey(encodeRecoveryKey(key))).toBe(key);
+    expect(decodeMasterKeyCode(encodeMasterKeyCode(key))).toBe(key);
 });
 
 it("refuses nonzero spare key bits even when both check symbols are valid", () => {
-  expect(() => decodeRecoveryKey("000000000000000000000000000000000000001ZT")).toThrow(
+  expect(() => decodeMasterKeyCode("000000000000000000000000000000000000001ZT")).toThrow(
     "Recovery key refused",
   );
 });
 
-it.each([printed, printed.toLowerCase(), code, `  ${printed.replaceAll(" ", "   ")} `])(
-  "reads a server key typed as printed, in any case and spacing, as its secret %#",
-  (typed) => {
-    expect(FISCAL_SERVER_KEY_AS_TYPED(typed)).toBe(secret);
-  },
-);
-it.each([secret, "", code.slice(1), code.replace("M", "U")])(
-  "reads text that is not a printed server key as no key %#",
-  (typed) => {
-    expect(FISCAL_SERVER_KEY_AS_TYPED(typed)).toBeUndefined();
-  },
-);
+it("reads a 1 typed as i or l, and keeps base64url's - and _ through the round trip", () => {
+  const key = "Ab-_".repeat(8);
+  const keyPrinted = encodeMasterKeyCode(key);
+  expect(keyPrinted).toContain("1");
+  expect(decodeMasterKeyCode(keyPrinted.replaceAll("1", "l"))).toBe(key);
+  expect(decodeMasterKeyCode(keyPrinted.replaceAll("1", "i"))).toBe(key);
+});
+
+it("refuses symbols outside the alphabet even when the check symbols balance", () => {
+  expect(() => decodeMasterKeyCode("9FXXXES72K7VF3Q07H1UCB12GD0QRN3ETGZ5U6RHD")).toThrow(
+    "Recovery key refused",
+  );
+});
