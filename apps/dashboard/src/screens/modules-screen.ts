@@ -328,7 +328,7 @@ export class ModulesScreen extends LitElement {
       },
       {
         key: "actions",
-        label: "",
+        label: t("staff.actions"),
         pinned: "end",
         cell: (row) =>
           row.category === "module" && this.canManageModules

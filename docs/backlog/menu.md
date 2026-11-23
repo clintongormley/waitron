@@ -30,9 +30,9 @@ the full scans and translation-gap read remain.
 
 ## Sold-out tile appearance (A292, #1310): owner review
 
-- In the dark theme, an available plain tile was about 1.10:1 lighter than a sold-out one in
-  #1310's "Looks for the owner to judge" captures (lane C's `a292-shots/`). The owner kept the
-  light-theme stripe at 4 px on 2026-11-23.
+- The dark theme's contrast is still for the owner to judge. An available plain tile was
+  about 1.10:1 lighter than a sold-out one in #1310's captures (lane C's `a292-shots/`). The owner
+  kept the light-theme stripe at 4 px on 2026-11-23.
 
 ## Each menu has one Device Home Page (W93, #1287): left open
 

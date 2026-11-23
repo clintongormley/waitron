@@ -122,6 +122,7 @@ describe("row actions", () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
     const icon = el.shadowRoot!.querySelector("button wt-icon")!;
     expect(icon.getAttribute("name")).toBe("kebab");
+    expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
   });
   it("shows a caller-supplied icon instead of the kebab, for a non-row menu (e.g. account menu) reusing this same disclosure", async () => {
     const { el } = await mountWidget<WtRowActions>("wt-row-actions", {

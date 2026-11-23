@@ -5731,10 +5731,10 @@ test.each([
     const icon = heading.querySelector("wt-icon");
     expect(icon?.shadowRoot?.querySelector("svg[aria-hidden=true]")).toBeTruthy();
     expect(heading.querySelector("button")).toBeNull();
-    const contentWidth = Math.max(
-      icon!.getBoundingClientRect().width,
-      button.getBoundingClientRect().width,
-    );
+    const iconBox = icon!.getBoundingClientRect();
+    const buttonBox = button.getBoundingClientRect();
+    expect(iconBox.x + iconBox.width / 2).toBeCloseTo(buttonBox.x + buttonBox.width / 2, 0);
+    const contentWidth = Math.max(iconBox.width, buttonBox.width);
     const style = getComputedStyle(heading);
     const neededWidth =
       contentWidth + parseFloat(style.paddingInlineStart) + parseFloat(style.paddingInlineEnd);

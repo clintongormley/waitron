@@ -580,6 +580,8 @@ describe("the open alerts at phone width", () => {
         });
         await flush(el);
         const table = el.shadowRoot!.querySelector("[data-test=open-alerts-table]")!;
+        const heading = table.shadowRoot!.querySelector('thead th[data-pinned="end"]')!;
+        expect(heading.querySelector("wt-icon")).toBeNull();
         const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
         expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(
           scroll.clientWidth,

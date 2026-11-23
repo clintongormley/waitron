@@ -1538,6 +1538,8 @@ describe("at phone width", () => {
         expect(dialog.open).toBe(true);
         const table = dialog.querySelector("wt-data-table")!;
         await table.updateComplete;
+        const heading = table.shadowRoot!.querySelector('thead th[data-pinned="end"]')!;
+        expect(heading.querySelector("wt-icon")).toBeNull();
         const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
         expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(
           scroll.clientWidth,

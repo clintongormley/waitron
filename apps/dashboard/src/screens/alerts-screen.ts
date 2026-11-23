@@ -208,7 +208,7 @@ export class AlertsScreen extends LitElement {
         cell: (a) => formatAlertTime(a.since),
       },
       {
-        key: "actions",
+        key: "buttons",
         label: t("alerts.col_actions"),
         pinned: "end",
         cell: (a) => {
