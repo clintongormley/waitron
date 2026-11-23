@@ -1,7 +1,8 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { incidents, withTransaction } from "@waitron/db";
+import { incidents, printers, withTransaction } from "@waitron/db";
+import { cardReaders } from "@waitron/payments";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -12,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, onTestFinished, vi } from "vitest";
 import type { CloudConnection } from "./cloud-client.js";
-import { createCloudProblemReports } from "./cloud-problem-reports.js";
+import { cloudProblemReportsJob, createCloudProblemReports } from "./cloud-problem-reports.js";
 import { mountProblemReportApi } from "./problem-report-api.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -37,7 +38,7 @@ async function fixture() {
     registration: (next: string | undefined) => {
       registration = next;
     },
-    reports: (version = "1.2.3", isPrimary = () => true) =>
+    reports: (version = "1.2.3", isPrimary = () => true, paymentsEnabled?: boolean) =>
       createCloudProblemReports({
         db: suite.db,
         stateDir,
@@ -45,6 +46,7 @@ async function fixture() {
         environment: "preproduction",
         nodeId: "this-box",
         version,
+        paymentsEnabled,
         isPrimary,
         now: () => now,
         log,
@@ -250,4 +252,256 @@ it("queues an administrator's text behind its diagnostics without a separate app
     JSON.stringify({ reportId: preview.id, description: "Printer jammed", time: 1767225600000 }),
   ]);
   expect(await reports.descriptions()).toEqual([]);
+});
+
+/** The main-box answers a test scripts: each queued answer is used once, then `steady`. */
+function primaryScript(steady = true) {
+  const answers: boolean[] = [];
+  const isPrimary = () => answers.shift() ?? steady;
+  return { isPrimary, next: (...values: boolean[]) => answers.push(...values) };
+}
+
+const queueFile = (stateDir: string) => join(stateDir, "cloud/problem-reports.json");
+
+it("names a printer, and a card reader only when payments are on, in the preview's equipment", async () => {
+  const f = await fixture();
+  await suite.db.insert(printers).values({ name: "Bar", transport: "cloud_poll", pollId: "bar" });
+  await suite.db
+    .insert(cardReaders)
+    .values({ provider: "stub", providerRef: "r1", name: "Reader" });
+  const equipment = async (paymentsEnabled?: boolean) => {
+    const preview = await f.reports("1.2.3", () => true, paymentsEnabled).preview("till", "a");
+    if (!preview.available) throw new Error("Preview unavailable");
+    return JSON.parse(preview.attachment).details.equipment;
+  };
+  expect(await equipment(true)).toEqual(["printer", "card_reader"]);
+  expect(await equipment()).toEqual(["printer"]);
+});
+
+it.each([
+  ["blank", "   "],
+  ["holding a control character", "Drawer\u0007jammed"],
+  ["over 2000 characters", "x".repeat(2001)],
+])("refuses a description that is %s without sending or saving anything", async (_, text) => {
+  const f = await fixture();
+  const reports = f.reports();
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  await expect(
+    reports.send("till", "staff", preview.id, { text, admin: false }),
+  ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  expect(f.delivered).not.toHaveBeenCalled();
+  await expect(readFile(queueFile(f.stateDir), "utf8")).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it.each([
+  ["text that is not JSON", "{"],
+  ["a queue without a registration", JSON.stringify({ pending: [], drafts: [] })],
+  ["a pending entry without an id", JSON.stringify({ registration: "first", pending: [{}] })],
+])("refuses to read a saved queue holding %s", async (_, contents) => {
+  const f = await fixture();
+  await mkdir(dirname(queueFile(f.stateDir)), { recursive: true });
+  await writeFile(queueFile(f.stateDir), contents);
+  await expect(f.reports().descriptions()).rejects.toMatchObject({ code: "cloud.state_invalid" });
+});
+
+it("passes on a saved queue it cannot open as a file", async () => {
+  const f = await fixture();
+  await mkdir(queueFile(f.stateDir), { recursive: true });
+  await expect(f.reports().descriptions()).rejects.toMatchObject({ code: "EISDIR" });
+});
+
+it("refuses each step once this box stops being the main box partway through", async () => {
+  const f = await fixture();
+  const primary = primaryScript();
+  const reports = f.reports("1.2.3", primary.isPrimary);
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  f.delivered.mockResolvedValueOnce("retry");
+  await reports.send("till", "staff", preview.id, { text: "Drawer jammed", admin: false });
+
+  primary.next(true, false);
+  expect(await reports.preview("till", "other")).toEqual({ available: false });
+
+  primary.next(true, false, false);
+  await expect(reports.decideDescription(preview.id, "send")).rejects.toMatchObject({
+    code: "cloud.not_primary",
+  });
+  primary.next(false);
+  await expect(reports.decideDescription(preview.id, "send")).rejects.toMatchObject({
+    code: "cloud.not_primary",
+  });
+  primary.next(false);
+  expect(await reports.descriptions()).toEqual([]);
+  expect(await reports.descriptions()).toEqual([
+    { reportId: preview.id, description: "Drawer jammed", time: 1767225600000 },
+  ]);
+
+  const second = await reports.preview("till", "second");
+  if (!second.available) throw new Error("Preview unavailable");
+  primary.next(false);
+  await expect(reports.send("till", "second", second.id)).rejects.toMatchObject({
+    code: "cloud.not_primary",
+  });
+  const third = await reports.preview("till", "third");
+  if (!third.available) throw new Error("Preview unavailable");
+  primary.next(true, false);
+  await expect(reports.send("till", "third", third.id)).rejects.toMatchObject({
+    code: "cloud.not_primary",
+  });
+  expect(f.delivered).toHaveBeenCalledTimes(1);
+  expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain(third.id);
+});
+
+it("keeps a report queued unsent when the box stops being the main box just before sending", async () => {
+  const f = await fixture();
+  const primary = primaryScript();
+  const reports = f.reports("1.2.3", primary.isPrimary);
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  primary.next(true, true, false);
+  expect(await reports.send("till", "staff", preview.id)).toBe("queued");
+  expect(f.delivered).not.toHaveBeenCalled();
+  expect(await readFile(queueFile(f.stateDir), "utf8")).toContain(preview.id);
+  await reports.run(signal());
+  expect(f.delivered.mock.calls.map((call) => call[1])).toEqual([preview.id]);
+});
+
+it("refuses a description decision for a report it does not hold", async () => {
+  const f = await fixture();
+  await expect(
+    f.reports().decideDescription("00000000-0000-4000-8000-000000000000", "send"),
+  ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+});
+
+it("refuses a preview that was made under a registration since replaced", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  f.registration("second");
+  await expect(reports.send("till", "staff", preview.id)).rejects.toMatchObject({
+    code: "cloud.not_configured",
+  });
+  expect(f.delivered).not.toHaveBeenCalled();
+});
+
+it("refuses a preview replaced by a newer one while its send was being checked", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  const sending = reports.send("till", "staff", preview.id);
+  const newer = await reports.preview("till", "staff");
+  await expect(sending).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  expect(newer.available).toBe(true);
+  expect(f.delivered).not.toHaveBeenCalled();
+});
+
+it("drops an old registration's queue when a new report is saved, and says so in the log", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const old = await reports.preview("till", "staff");
+  if (!old.available) throw new Error("Preview unavailable");
+  f.delivered.mockResolvedValueOnce("retry");
+  await reports.send("till", "staff", old.id);
+  f.registration("second");
+  const next = await reports.preview("till", "staff");
+  if (!next.available) throw new Error("Preview unavailable");
+  expect(await reports.send("till", "staff", next.id)).toBe("sent");
+  expect(f.log.mock.calls).toEqual([["warn", "cloud.not_configured"]]);
+  expect(f.delivered.mock.calls.map((call) => call.slice(0, 2))).toEqual([
+    ["first", old.id],
+    ["second", next.id],
+  ]);
+  expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain(old.id);
+});
+
+it("queues a second report behind one still waiting, without sending it ahead", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const first = await reports.preview("till", "a");
+  const second = await reports.preview("till", "b");
+  if (!first.available || !second.available) throw new Error("Preview unavailable");
+  f.delivered.mockResolvedValueOnce("retry");
+  expect(await reports.send("till", "a", first.id)).toBe("queued");
+  expect(await reports.send("till", "b", second.id)).toBe("queued");
+  expect(f.delivered.mock.calls.map((call) => call[1])).toEqual([first.id]);
+  await reports.run(signal());
+  await reports.run(signal());
+  expect(f.delivered.mock.calls.map((call) => call[1])).toEqual([first.id, first.id, second.id]);
+});
+
+it("refuses a report the Cloud refuses outright", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  f.delivered.mockResolvedValueOnce("stop");
+  await expect(reports.send("till", "staff", preview.id)).rejects.toMatchObject({
+    code: "cloud.request_invalid",
+  });
+  expect(f.log.mock.calls).toEqual([["warn", "cloud.request_invalid"]]);
+});
+
+it.each([false, true])(
+  "says the queue is busy once sixteen are waiting (with a description: %s)",
+  async (withText) => {
+    const f = await fixture();
+    const reports = f.reports();
+    f.delivered.mockResolvedValue("retry");
+    for (let index = 0; index < 16; index += 1) {
+      const preview = await reports.preview("till", `s${index}`);
+      if (!preview.available) throw new Error("Preview unavailable");
+      const description = withText ? { text: `Note ${index}`, admin: false } : undefined;
+      expect(await reports.send("till", `s${index}`, preview.id, description)).toBe("queued");
+    }
+    const extra = await reports.preview("till", "extra");
+    if (!extra.available) throw new Error("Preview unavailable");
+    const description = withText ? { text: "One too many", admin: false } : undefined;
+    await expect(reports.send("till", "extra", extra.id, description)).rejects.toMatchObject({
+      code: "cloud.busy",
+    });
+    expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain(extra.id);
+  },
+);
+
+it("forgets the oldest preview once 256 are held", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const oldest = await reports.preview("till", "s0");
+  if (!oldest.available) throw new Error("Preview unavailable");
+  for (let index = 1; index <= 256; index += 1) await reports.preview("till", `s${index}`);
+  await expect(reports.send("till", "s0", oldest.id)).rejects.toMatchObject({
+    code: "cloud.request_invalid",
+  });
+  const kept = await reports.preview("till", "s1");
+  expect(kept.available).toBe(true);
+});
+
+it("runs the queue as a job that comes back sooner only while a report is waiting", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  const job = cloudProblemReportsJob(reports, () => true);
+  expect(job.applies()).toBe(true);
+  expect(await job.pass({ now: new Date(), signal: signal() })).toEqual({ nextDueAt: null });
+
+  const preview = await reports.preview("till", "staff");
+  if (!preview.available) throw new Error("Preview unavailable");
+  f.delivered.mockResolvedValueOnce("retry");
+  await reports.send("till", "staff", preview.id);
+  let release!: () => void;
+  f.delivered.mockImplementationOnce(
+    () => new Promise((resolve) => (release = () => resolve("retry"))),
+  );
+  const before = Date.now();
+  const passing = job.pass({ now: new Date(), signal: signal() });
+  await vi.waitFor(() => expect(f.delivered).toHaveBeenCalledTimes(2));
+  expect(await reports.run(signal())).toBeUndefined();
+  release();
+  const { nextDueAt } = await passing;
+  expect(nextDueAt!.getTime()).toBeGreaterThanOrEqual(before + 30_000);
+  expect(f.delivered).toHaveBeenCalledTimes(2);
 });

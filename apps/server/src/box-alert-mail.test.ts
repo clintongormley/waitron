@@ -284,3 +284,42 @@ it("expires an old alert email without a sent or failed line", async () => {
   expect(await row()).toMatchObject({ status: "expired" });
   expect(log).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["backup.archives_deleted", { count: "2", date: "2026-11-01", lastDate: "2026-11-07" }],
+  ["backup.run_stopped", { neededBytes: 1024, availableBytes: "512" }],
+  ["upgrade.rolled_back", { fromVersion: "1.2.0", toVersion: 110 }],
+] as const)(
+  "sends no Cloud notice for %s when its recorded facts are malformed",
+  async (code, params) => {
+    await queue(code, { incident: code === "backup.archives_deleted", params });
+    const sendCloudEmail = vi.fn(async () => ({ status: "sent" as const }));
+    await runMailPass({
+      ...deps,
+      resolveDelivery: async () => ({ mode: "unconfigured" }),
+      resolveAccountRelay: async () => ({
+        id: "grant",
+        revision: 1,
+        enabled: true,
+        expiresAt: "2026-11-11T00:00:00Z",
+      }),
+      noticeRelayAllowed: async () => true,
+      sendCloudEmail,
+    });
+    expect(sendCloudEmail).not.toHaveBeenCalled();
+    expect(await row()).toMatchObject({ status: "rejected", failureCode: "mail.compose_failed" });
+  },
+);
+
+it("cancels an alert email left from an earlier alert episode", async () => {
+  await queue("storage.space_low", { incident: false });
+  const earlier = await row();
+  await runMailPass({
+    ...deps,
+    owners: [
+      boxAlertMail({ previousEpisodeMailIds: new Set([earlier!.id]), venueLanguage: "en", log }),
+    ],
+  });
+  expect(await row()).toMatchObject({ status: "cancelled", attempts: 0 });
+  expect(deps.send).not.toHaveBeenCalled();
+});

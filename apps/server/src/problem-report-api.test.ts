@@ -157,3 +157,72 @@ it("restricts review and decisions to an administrator on the box's own page", a
   expect((await approve(admin)).status).toBe(204);
   expect(decideDescription).toHaveBeenCalledExactlyOnceWith(reportId, "send");
 });
+
+it("refuses malformed dashboard sends and decisions, and answers when reporting is not set up", async () => {
+  const db = suite.db;
+  const [person] = await seedPersons(db, { displayName: "Owner", role: "admin" });
+  const { token } = await withTransaction(db, (tx) =>
+    startManagementSession(tx, { personId: person!.id, method: "password" }),
+  );
+  const cookie = { cookie: `${MANAGEMENT_COOKIE}=${token}` };
+  const send = vi.fn(async () => "sent" as const);
+  const decideDescription = vi.fn(async () => {});
+  const withReports = new Hono();
+  const withoutReports = new Hono();
+  mountProblemReportApi(
+    withReports,
+    {
+      db,
+      reports: {
+        preview: async () => ({ available: false }),
+        send,
+        descriptions: async () => [],
+        decideDescription,
+      },
+    },
+    () => {},
+  );
+  mountProblemReportApi(withoutReports, { db }, () => {});
+  const base = "/management-api/problem-reports";
+  const id = randomUUID();
+  const post = (app: Hono, path: string, body?: string) =>
+    app.request(`${base}${path}`, { method: "POST", headers: cookie, body });
+  const refusal = async (response: Response) => [
+    response.status,
+    ((await response.json()) as { error: { code: string } }).error.code,
+  ];
+
+  expect(await refusal(await post(withReports, "/not-an-id/send"))).toEqual([
+    400,
+    "cloud.request_invalid",
+  ]);
+  expect(await refusal(await post(withReports, "/descriptions/not-an-id/discard"))).toEqual([
+    400,
+    "cloud.request_invalid",
+  ]);
+  for (const body of [JSON.stringify({ description: 7 }), "null"]) {
+    expect(await refusal(await post(withReports, `/${id}/send`, body))).toEqual([
+      400,
+      "cloud.request_invalid",
+    ]);
+  }
+  const tooLarge = JSON.stringify({ description: "x".repeat(16_385) });
+  expect(await refusal(await post(withReports, `/${id}/send`, tooLarge))).toEqual([
+    400,
+    "cloud.request_invalid",
+  ]);
+  expect(send).not.toHaveBeenCalled();
+  expect(decideDescription).not.toHaveBeenCalled();
+
+  expect(
+    await (await withoutReports.request(`${base}/preview`, { headers: cookie })).json(),
+  ).toEqual({ available: false });
+  expect(await refusal(await post(withoutReports, `/${id}/send`))).toEqual([
+    409,
+    "cloud.not_configured",
+  ]);
+  expect(await refusal(await post(withoutReports, `/descriptions/${id}/send`))).toEqual([
+    409,
+    "cloud.not_configured",
+  ]);
+});

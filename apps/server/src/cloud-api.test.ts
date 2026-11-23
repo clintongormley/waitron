@@ -77,6 +77,76 @@ it("changes error reporting offline and reports the local choice", async () => {
   expect(await status.json()).toMatchObject({ errorReportsEnabled: true });
 });
 
+it("refuses a malformed error reporting change, and answers one on a box without reporting", async () => {
+  const manager = await person("manager");
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    { db: suite.db, managementOrigin: "https://venue.test", isPrimary: () => true },
+    () => {},
+  );
+  const change = (body: string) =>
+    app.request("/management-api/cloud/error-reports", {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+  for (const body of ['{"enabled":"yes"}', '{"enabled":true,"extra":1}', "null"]) {
+    const refused = await change(body);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: { code: "cloud.request_invalid", params: {} } });
+  }
+  const unconfigured = await change('{"enabled":true}');
+  expect(unconfigured.status).toBe(409);
+  expect(await unconfigured.json()).toEqual({
+    error: { code: "cloud.not_configured", params: {} },
+  });
+  const foreign = await app.request("/management-api/cloud/error-reports", {
+    method: "POST",
+    headers: { cookie: manager.cookie, origin: "https://other.test" },
+    body: '{"enabled":true}',
+  });
+  expect(foreign.status).toBe(403);
+  expect(await foreign.json()).toEqual({
+    error: { code: "authorization.not_permitted", params: {} },
+  });
+});
+
+it("refuses a malformed Cloud sign-in, and answers a well-formed one on a box without a connection", async () => {
+  const manager = await person("manager");
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    { db: suite.db, managementOrigin: "https://venue.test", isPrimary: () => true },
+    () => {},
+  );
+  const signIn = async (action: "start" | "return", body: string) => {
+    const response = await app.request(`/management-api/cloud/sign-in/${action}`, {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+    return [response.status, ((await response.json()) as { error: { code: string } }).error.code];
+  };
+  const tab = "0123abcd-0123-4abc-8abc-0123456789ab";
+  for (const body of ["null", "[]", JSON.stringify({ tab: "not-a-tab" })])
+    expect(await signIn("start", body)).toEqual([400, "cloud.request_invalid"]);
+  expect(await signIn("start", JSON.stringify({ tab, extra: 1 }))).toEqual([
+    400,
+    "cloud.request_invalid",
+  ]);
+  expect(await signIn("start", JSON.stringify({ tab }))).toEqual([409, "cloud.not_configured"]);
+  expect(await signIn("return", JSON.stringify({ tab }))).toEqual([409, "cloud.not_configured"]);
+});
+
 it("refuses error reporting changes without Manage the system", async () => {
   const staff = await person("staff");
   const app = new Hono();
@@ -350,6 +420,61 @@ it.each(["prepare", "check", "reissue"] as const)(
     expect(effect).not.toHaveBeenCalled();
   },
 );
+it("refuses a replacement step with a body, and reports one taken on a box without a connection", async () => {
+  const manager = await person("manager");
+  const prepare = vi.fn(async () => ({ state: "awaiting_owner" }) as ReplacementView);
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    {
+      db: suite.db,
+      managementOrigin: "https://venue.test",
+      isPrimary: () => true,
+      replacement: {
+        status: async () => null,
+        eligible: async () => false,
+        approval: async () => null,
+        hasProposal: async () => false,
+        prepare,
+        check: prepare,
+        reissue: prepare,
+        recordStop: vi.fn(),
+        retire: vi.fn(),
+      },
+    },
+    () => {},
+  );
+  const step = (body: string) =>
+    app.request("/management-api/cloud/replacement/prepare", {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body,
+    });
+  for (const body of ['{"force":true}', "[]"]) {
+    const refused = await step(body);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: { code: "cloud.request_invalid", params: {} } });
+  }
+  expect(prepare).not.toHaveBeenCalled();
+  const taken = await step("{}");
+  expect(taken.status).toBe(200);
+  expect(await taken.json()).toEqual({
+    state: "not_connected",
+    code: "",
+    replacement: { state: "awaiting_owner" },
+    replacementPending: true,
+    replacementApproval: null,
+    replacementError: null,
+    replacementEligible: false,
+    configured: false,
+    isPrimary: true,
+  });
+  expect(prepare).toHaveBeenCalledOnce();
+});
 it.each(["complete", "revoke", "remote-access"] as const)(
   "rechecks confirmation inside Cloud %s before saving",
   async (action) => {

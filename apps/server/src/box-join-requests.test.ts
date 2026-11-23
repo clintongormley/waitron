@@ -514,3 +514,34 @@ describe("one approval at a time", () => {
     expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).not.toHaveProperty("refused");
   });
 });
+
+describe("refusals for a request it cannot act on", () => {
+  it("answers a reveal of an ended request with why it ended, and one with seq 0 as invalid", () => {
+    const { store, hello, reveal, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    store.cancel({ requestId: id, seq: 2 });
+    expect(reveal(id, "10.0.0.1")).toEqual({ refused: "ended", reason: "cancelled" });
+
+    const second = hello("10.0.0.2");
+    if ("refused" in second) throw new Error("hello refused");
+    expect(reveal(second.requestId, "10.0.0.2", newNonceOf("10.0.0.2"), 0)).toEqual({
+      refused: "invalid",
+    });
+    expect(store.listed()).toEqual([]);
+  });
+
+  it("refuses a cancel for an unknown request, and one whose seq does not rise", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    expect(store.cancel({ requestId: "req-unknown", seq: 2 })).toEqual({ refused: "not_found" });
+    expect(store.cancel({ requestId: id, seq: 1 })).toEqual({ refused: "invalid" });
+    expect(store.listed().map((r) => r.id)).toEqual([id]);
+  });
+
+  it("refuses to approve a request it does not list", () => {
+    const { store, hello } = setup();
+    hello("10.0.0.1");
+    expect(store.approve.begin("req-1", "123456")).toEqual({ refused: "not_found" });
+    expect(store.approve.begin("req-unknown", "123456")).toEqual({ refused: "not_found" });
+  });
+});

@@ -701,6 +701,13 @@ describe("the new box's join attempt", () => {
     expect(attempt.current()).toBeNull();
   });
 
+  it("sends nothing for a cancel when no attempt is held", async () => {
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.cancel();
+    expect(paths()).toEqual([]);
+    expect(attempt.current()).toBeNull();
+  });
+
   it("keeps no attempt across a restart", async () => {
     await createBoxJoinAttempt(deps()).start(MAIN_URL);
     expect(createBoxJoinAttempt(deps()).current()).toBeNull();

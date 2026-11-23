@@ -422,4 +422,99 @@ describe("the main box's box-to-box join routes", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual(err("mirror.join_not_found"));
   });
+
+  it.each([
+    [{ refused: "ended", reason: "code_taken" }, 409, "mirror.join_code_taken"],
+    [{ refused: "ended", reason: "invalid" }, 400, "mirror.join_invalid"],
+    [{ refused: "ended", reason: "dismissed" }, 404, "mirror.join_not_found"],
+    [{ refused: "invalid" }, 400, "mirror.join_invalid"],
+  ] as const)("answers a reveal the store refuses with %o as %i", async (refusal, status, code) => {
+    mount({ ...createBoxJoinRequests(), reveal: () => refusal });
+    const box = newBox("192.168.1.20");
+    const response = await post(
+      "reveal",
+      revealBody(box, (await hello(box)).requestId),
+      box.address,
+    );
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(err(code));
+  });
+
+  it.each([
+    ["approving", 409, "mirror.join_approving"],
+    ["not_found", 404, "mirror.join_not_found"],
+  ] as const)("answers a cancel the store refuses as %s", async (refused, status, code) => {
+    mount({ ...createBoxJoinRequests(), cancel: () => ({ refused }) });
+    const box = newBox("192.168.1.20");
+    const { requestId } = await hello(box);
+    const response = await post(
+      "cancel",
+      { requestId, seq: 2, signature: signed(box, JOIN_CANCEL_LABEL, requestId, 2, []) },
+      box.address,
+    );
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual(err(code));
+  });
+
+  it.each([
+    ["a nonce that is not text", { newNonce: 7 }],
+    ["a short nonce", { newNonce: Buffer.alloc(8).toString("base64") }],
+    ["a sequence number below one", { seq: 0 }],
+  ])("refuses a reveal carrying %s, before checking its signature", async (_, change) => {
+    const box = newBox("192.168.1.20");
+    const { requestId } = await hello(box);
+    const response = await post(
+      "reveal",
+      { ...revealBody(box, requestId), ...change },
+      box.address,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(err("mirror.join_invalid"));
+    expect(requests.listed()).toEqual([]);
+    const proper = await post("reveal", revealBody(box, requestId), box.address);
+    expect(proper.status).toBe(200);
+  });
+
+  it.each([
+    ["a signing key that is not text", { newPublicKey: 7 }],
+    [
+      "a signing key that is not a key",
+      { newPublicKey: Buffer.from("not a key").toString("base64") },
+    ],
+  ])("refuses a hello carrying %s", async (_, change) => {
+    const box = newBox("192.168.1.20");
+    const response = await post("hello", helloBody(box, change), box.address);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual(err("mirror.standby_invalid"));
+    expect(requests.listed()).toEqual([]);
+  });
+
+  it("refuses a poll whose time is not a time, and a poll the store refuses", async () => {
+    const real = createBoxJoinRequests();
+    let refuse = false;
+    mount({
+      ...real,
+      poll: (input) => (refuse ? { refused: "invalid" } : real.poll(input)),
+    });
+    const box = newBox("192.168.1.20");
+    const { requestId } = await hello(box);
+    await post("reveal", revealBody(box, requestId), box.address);
+    const pollBody = (seq: number, at: unknown) => ({
+      requestId,
+      seq,
+      at,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [Buffer.from(String(at))]),
+    });
+    const notATime = await post("poll", pollBody(2, "soon"), box.address);
+    expect(notATime.status).toBe(400);
+    expect(await notATime.json()).toEqual(err("mirror.join_invalid"));
+    refuse = true;
+    const refused = await post("poll", pollBody(3, NOW), box.address);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual(err("mirror.join_invalid"));
+    refuse = false;
+    expect(await (await post("poll", pollBody(4, NOW), box.address)).json()).toEqual({
+      state: "waiting",
+    });
+  });
 });

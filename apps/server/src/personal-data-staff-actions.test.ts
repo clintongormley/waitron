@@ -185,3 +185,90 @@ it("exports only the subject's remaining non-fiscal actions after the initial wr
   });
   await expect((await prepareStaffActions("clara"))()).resolves.toEqual([]);
 });
+
+it("lists several actions of each kind in a fixed order, whatever order they were written in", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await seedPerson(tx, { id: "ana", displayName: "ana" });
+  });
+  const build = await prepareStaffActions("ana");
+  await withTransaction(suite.db, async (tx) => {
+    await seedVenue(tx, { invoiceLocales: ["en"] });
+    const later = await seedWorkingOrder(tx, { orderNumber: 45, editorId: "ana" });
+    const earlier = await seedWorkingOrder(tx, { orderNumber: 44, editorId: "ana" });
+    await tx.insert(parties).values({ id: "party", openedBy: "ana" });
+    await tx.insert(orderDrafts).values([
+      { id: "z-draft", partyId: "party", ownerId: "ana", billId: later.id },
+      { id: "a-draft", partyId: "party", ownerId: "ana", billId: earlier.id },
+    ]);
+    const line = {
+      name: "Dish",
+      descriptions: { en: "Dish" },
+      quantity: 1000,
+      unitPriceGross: 600,
+      lineTotal: 600,
+      vatClass: "reduced",
+      takeawayVatClass: "reduced",
+      creditedTo: "ana",
+    };
+    await tx.insert(workingOrderLines).values([
+      { ...line, workingOrderId: later.id, id: "b-line", lineNo: 1 },
+      { ...line, workingOrderId: later.id, id: "a-line", lineNo: 2 },
+      { ...line, workingOrderId: earlier.id, id: "c-line", lineNo: 1 },
+    ]);
+    const incident = { source: "dashboard", severity: "warning", detectedAt: AT } as const;
+    await tx.insert(incidents).values([
+      { ...incident, code: "printer.paper", acknowledgedAt: LATER, acknowledgedBy: "ana" },
+      { ...incident, code: "printer.offline", acknowledgedAt: LATER, acknowledgedBy: "ana" },
+      { ...incident, code: "printer.unknown", acknowledgedAt: AT, acknowledgedBy: "ana" },
+    ]);
+    for (const at of [LATER, AT]) {
+      await recordActivity(tx, {
+        kind: "dashboard.signed_out",
+        subjectId: "ana",
+        personId: "ana",
+        data: { reason: "signed_out" },
+        at: new Date(at),
+      });
+    }
+    await recordActivity(tx, {
+      kind: "dashboard.signed_in",
+      subjectId: "ana",
+      personId: "ana",
+      data: { method: "password" },
+      at: new Date(AT),
+    });
+    await tx
+      .insert(printers)
+      .values({ id: "printer", name: "Bar printer", transport: "network_tcp", host: "10.0.0.1" });
+    const print = { printerId: "printer", payload: Buffer.from("x"), status: "done" } as const;
+    await tx.insert(printJobs).values([
+      { ...print, id: "z-job", handedOverBy: "ana", handedOverAt: LATER },
+      { ...print, id: "b-job", handedOverBy: "ana", handedOverAt: AT },
+      { ...print, id: "a-job", handedOverBy: "ana", handedOverAt: AT },
+    ]);
+  });
+
+  const exported = JSON.parse((await build())[0]!.content as string);
+  expect(exported.billEdits).toEqual([{ orderNumber: 44 }, { orderNumber: 45 }]);
+  expect(exported.ownedDrafts).toEqual([{ draftId: "a-draft" }, { draftId: "z-draft" }]);
+  expect(exported.creditedLines).toEqual([
+    { orderNumber: 44, lineId: "c-line" },
+    { orderNumber: 45, lineId: "a-line" },
+    { orderNumber: 45, lineId: "b-line" },
+  ]);
+  expect(exported.acknowledgedAlerts).toEqual([
+    { code: "printer.unknown", at: AT },
+    { code: "printer.offline", at: LATER },
+    { code: "printer.paper", at: LATER },
+  ]);
+  expect(exported.activity).toEqual([
+    { kind: "dashboard.signed_in", at: AT },
+    { kind: "dashboard.signed_out", at: AT },
+    { kind: "dashboard.signed_out", at: LATER },
+  ]);
+  expect(exported.receiptHandovers).toEqual([
+    { jobId: "a-job", at: AT },
+    { jobId: "b-job", at: AT },
+    { jobId: "z-job", at: LATER },
+  ]);
+});

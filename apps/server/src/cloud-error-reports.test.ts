@@ -1,15 +1,15 @@
-import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, incidents } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
-import { VENUE_FILE } from "@waitron/store";
+import { CLOUD_ERROR_REPORTS_FILE, VENUE_FILE } from "@waitron/store";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import type { CloudConnection } from "./cloud-client.js";
-import { createCloudErrorReports } from "./cloud-error-reports.js";
+import { cloudErrorReportsJob, createCloudErrorReports } from "./cloud-error-reports.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 beforeEach(() => seedTaxpayer(suite.db));
@@ -23,6 +23,7 @@ async function fixture() {
   let registration: string | undefined = "registration-one";
   const sendErrorReport = vi.fn<CloudConnection["sendErrorReport"]>(async () => {});
   return {
+    dir,
     sendErrorReport,
     registration(next: string | undefined) {
       registration = next;
@@ -232,4 +233,79 @@ it("remembers the initial registration even before the first report", async () =
   f.registration("replacement");
   await sender.run(signal());
   expect(f.sendErrorReport).not.toHaveBeenCalled();
+});
+
+it("skips an error it cannot report and sends the next one", async () => {
+  const f = await fixture();
+  const sender = f.reports();
+  await sender.setEnabled(true);
+  await incident(1, { code: "Storage.Disk-Full" });
+  await incident(2);
+  expect(await sender.run(signal())).toBe(false);
+  expect(await sender.run(signal())).toBe(true);
+  expect(f.sendErrorReport.mock.calls.map(([, , body]) => JSON.parse(body).code)).toEqual([
+    "storage.disk_full",
+  ]);
+});
+
+it.each([
+  ["not an object", "null"],
+  ["not JSON", "{"],
+])("treats a saved setting that is %s as switched off", async (_, contents) => {
+  const f = await fixture();
+  await mkdir(join(f.dir, "cloud"), { recursive: true });
+  await writeFile(join(f.dir, CLOUD_ERROR_REPORTS_FILE), contents);
+  const sender = f.reports();
+  expect(await sender.enabled()).toBe(false);
+  await incident(1);
+  expect(await sender.run(signal())).toBe(false);
+  expect(f.sendErrorReport).not.toHaveBeenCalled();
+});
+
+it("passes on a saved setting it cannot open as a file", async () => {
+  const f = await fixture();
+  await mkdir(join(f.dir, CLOUD_ERROR_REPORTS_FILE), { recursive: true });
+  await expect(f.reports().enabled()).rejects.toMatchObject({ code: "EISDIR" });
+});
+
+it("keeps an earlier choice when asked only to set a starting value", async () => {
+  const f = await fixture();
+  const sender = f.reports();
+  await sender.setEnabled(true);
+  expect(await sender.setEnabled(false, true)).toBe(true);
+  expect(await sender.enabled()).toBe(true);
+});
+
+it("refuses to switch reporting on before the venue is set up", async () => {
+  const f = await fixture();
+  await suite.db.run(sql`delete from taxpayer`);
+  await expect(f.reports().setEnabled(true)).rejects.toMatchObject({
+    code: "cloud.not_configured",
+  });
+});
+
+it("sends one report at a time and runs as a job that comes back sooner after a send", async () => {
+  const f = await fixture();
+  const sender = f.reports();
+  const job = cloudErrorReportsJob(sender, () => true);
+  expect(job.applies()).toBe(true);
+  await sender.setEnabled(true);
+  expect(await job.pass({ now: new Date(), signal: signal() })).toEqual({ nextDueAt: null });
+
+  await incident(1);
+  let finish!: () => void;
+  f.sendErrorReport.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (finish = resolve)),
+  );
+  const before = Date.now();
+  const passing = job.pass({ now: new Date(), signal: signal() });
+  await vi.waitFor(() => expect(f.sendErrorReport).toHaveBeenCalledOnce());
+  expect(await sender.run(signal())).toBe(false);
+  const aborted = new AbortController();
+  aborted.abort();
+  expect(await sender.run(aborted.signal)).toBe(false);
+  finish();
+  const { nextDueAt } = await passing;
+  expect(nextDueAt!.getTime()).toBeGreaterThanOrEqual(before + 10_000);
+  expect(f.sendErrorReport).toHaveBeenCalledOnce();
 });
