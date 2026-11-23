@@ -811,6 +811,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftFormFactor: FormFactor = FORM_FACTORS[0];
   @state() private draftInactivityMinutes: number | null = null;
   @state() private invalidInactivityText: string | null = null;
+  #otherInactivityDraft?: Pick<ProfileDraft, "inactivityMinutes" | "invalidInactivityText">;
   @state() private draftPrinterLists: PrinterDraft = NO_PRINTER_LISTS;
   #printerDisplayOrder: Partial<Record<PrinterListKey, readonly string[]>> = {};
   /** The drawer list and defaults as opened, so a save sends only the ones it changed. */
@@ -884,6 +885,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftFormFactor = value.formFactor;
         this.draftInactivityMinutes = value.inactivityMinutes;
         this.invalidInactivityText = value.invalidInactivityText;
+        this.#otherInactivityDraft = undefined;
         this.draftPrinterLists = structuredClone(value.printerLists);
         this.#printerDisplayOrder = {};
         this.draftKitchenScreens = structuredClone(value.kitchenScreens);
@@ -1292,6 +1294,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftFormFactor = FORM_FACTORS[0];
     this.draftInactivityMinutes = null;
     this.invalidInactivityText = null;
+    this.#otherInactivityDraft = undefined;
     this.draftPrinterLists = NO_PRINTER_LISTS;
     this.#printerDisplayOrder = {};
     this.#loadedEquipment = null;
@@ -1530,9 +1533,14 @@ export class DeviceProfilesScreen extends LitElement {
   #onFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const formFactor = event.detail.value as FormFactor;
-    if (this.#ordering() && isSharedDisplay(formFactor)) {
-      this.draftInactivityMinutes = null;
-      this.invalidInactivityText = null;
+    if (isSharedDisplay(formFactor) !== isSharedDisplay(this.draftFormFactor)) {
+      const other = this.#otherInactivityDraft;
+      this.#otherInactivityDraft = {
+        inactivityMinutes: this.draftInactivityMinutes,
+        invalidInactivityText: this.invalidInactivityText,
+      };
+      this.draftInactivityMinutes = other?.inactivityMinutes ?? null;
+      this.invalidInactivityText = other?.invalidInactivityText ?? null;
       this.#clearRefusal("inactivity");
     }
     this.draftFormFactor = formFactor;

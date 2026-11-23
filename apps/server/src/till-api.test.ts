@@ -2077,9 +2077,10 @@ it.each([
   { formFactor: "till", inactivityTimeoutSeconds: 42 },
   { formFactor: "phone-portrait", inactivityTimeoutSeconds: 42 },
   { formFactor: "tablet-landscape", inactivityTimeoutSeconds: 42 },
+  { formFactor: "kds", inactivityTimeoutSeconds: null },
   { formFactor: "kds", inactivityTimeoutSeconds: 1_800 },
 ] as const)(
-  "GET /api/till returns the enrolled $formFactor form factor without canvas data",
+  "GET /api/till returns the enrolled $formFactor form factor with timeout $inactivityTimeoutSeconds and no canvas data",
   async ({ formFactor, inactivityTimeoutSeconds }) => {
     const [profile] = await seedDeviceProfiles(suite.db, {
       name: `Fixed ${formFactor}`,

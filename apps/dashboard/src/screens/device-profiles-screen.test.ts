@@ -990,6 +990,26 @@ describe("device-profiles-screen editor form", () => {
     );
   });
 
+  it("keeps the ordering timeout draft when switching to kitchen and back", async () => {
+    const profile: DeviceProfile = { ...profiles[0], inactivityTimeoutSeconds: 300 };
+    const api = stubApi({ getDeviceProfile: vi.fn().mockResolvedValue(profile) });
+    const el = await mount(api);
+    await profileAction(el, "edit-p1");
+    await flush(el);
+    change(el, "profile-inactivity", "10");
+
+    selectFormFactor(el, "kds");
+    await flush(el);
+    change(el, "profile-inactivity", "30");
+    selectFormFactor(el, "till");
+    await flush(el);
+
+    const input = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=profile-inactivity]",
+    );
+    expect(input?.value).toBe("10");
+  });
+
   it("Edit seeds the inactivity-timeout input in minutes from the stored seconds (300 → 5)", async () => {
     const phone: DeviceProfile = {
       ...profiles[0],
