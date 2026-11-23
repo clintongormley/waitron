@@ -296,11 +296,11 @@ Every place piece A touches. Every task's requirements include this list.
   settings (`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts:28`), once per call of
   `readLineVatRates` that has eaten-in lines (`apps/server/src/line-vat-rates.ts:24`) and once per
   advance invoice (`issueAdvance`, `apps/server/src/bill-advances.ts:132`). `readLineVatRates` is
-  called when an order is issued (`readLockedLinesForIssuance`, `apps/server/src/working-order.ts:1276`,
-  through `priceStoredOrderForIssuance` at :1463) and by the corrections report's free-items listing
+  called when an order is issued (`readLockedLinesForIssuance`, `apps/server/src/working-order.ts:1271`,
+  through `priceStoredOrderForIssuance` at :1455) and by the corrections report's free-items listing
   (`listFreeItems`, `apps/server/src/free-items.ts:185`, once per way of selling)." Pricing a new
   basket (`priceOrderLines`, `working-order.ts:653`) reads no rate, since PR 2 its gross lines carry
-  `vatRates: []` (:952, :1014); `readLockedLines` (:1232) reads none either.
+  `vatRates: []` (:952, :1014); `readLockedLines` (:1228) reads none either, and no longer joins the order.
 - **Compiling:** each task says which packages do not typecheck until which later task in the same
   PR. No PR ends with a package that does not typecheck: each PR's last task runs `pnpm -r typecheck`.
   Suites failing at runtime inside a PR are named in the task that starts them (only PR 3's D10
