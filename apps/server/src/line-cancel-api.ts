@@ -27,7 +27,6 @@ import { partyRevision } from "./parties.js";
 import {
   freeItemRefund,
   freeItemsLeft,
-  isLastPaidDish,
   lastPaidDishes,
   readBillFiling,
   refundValueIn,
@@ -199,16 +198,10 @@ export function mountLineCancelApi(
           filing === undefined ? { free: [], paid: [] } : await shareHoldersIn(tx, filing);
         const subject = lineIds ?? [lineId];
         const givenFree = holders.free.some(({ line }) => subject.includes(line.id));
-        const cancellable = new Map(
-          holders.paid
-            .filter(({ line }) => subject.includes(line.id))
-            .map(({ line, cancelled }) => [
-              line.id,
-              line.quantity - cancelled - line.servedQuantity,
-            ]),
-        );
+        const back = lastPaidDishes(holders.paid);
+        const last = back.size > 0 && [...back.keys()].every((id) => subject.includes(id));
         const withFree =
-          givenFree || !isLastPaidDish(holders.paid, cancellable)
+          givenFree || !last
             ? undefined
             : freeItemsLeft(holders.free).map(({ line, value, cancelled }) => ({
                 lineId: line.id,
@@ -224,9 +217,7 @@ export function mountLineCancelApi(
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
           ...(refundValue === undefined ? {} : { refundValue }),
-          ...(givenFree
-            ? { givenFree: true, comesBackWith: [...lastPaidDishes(holders.paid).keys()] }
-            : {}),
+          ...(givenFree ? { givenFree: true, comesBackWith: [...back.keys()] } : {}),
           ...(withFree === undefined || withFree.length === 0 ? {} : { withFree }),
         };
       });

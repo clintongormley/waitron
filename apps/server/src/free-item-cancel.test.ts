@@ -55,7 +55,11 @@ interface Ticket {
 
 /** A paid ticket of `lines`, the Water comped; takeaway (Salad 4%, Water 21%; a case using Soup sets its own) unless
  * eaten here. Nothing is served. */
-async function ticket(lines: RoundLine[], dining: "takeaway" | "here" = "takeaway") {
+async function ticket(
+  lines: RoundLine[],
+  dining: "takeaway" | "here" = "takeaway",
+  beforePaying?: (t: Ticket) => Promise<void>,
+) {
   if (dining === "takeaway") await takeawayRates(venue, { Salad: "4.00", Water: "21.00" });
   const { partyId, billId } = await billWith(
     venue,
@@ -97,6 +101,8 @@ async function ticket(lines: RoundLine[], dining: "takeaway" | "here" = "takeawa
       venue.venueLocale,
     );
   });
+  const open = { partyId, billId, saleId: "", tenderId: "", dishes };
+  await beforePaying?.(open);
   const paid = await cashPayment(venue, venue.cookie.staff, billId, "100.00");
   expect(paid.status, JSON.stringify(paid.json)).toBe(200);
   const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, billId));
@@ -339,6 +345,39 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     const answer = await cancel(t, soup);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect((await written(t)).cancels).toEqual([{ lineId: soup.id, refundValue: 533 }]);
+  });
+
+  it("does not offer the water with a paid dish that has nothing left to cancel", async () => {
+    const t = await ticket(SALAD_AND_WATER);
+    const salad = dish(t, "Salad");
+    const plain = await cancel(t, salad, { refund: false });
+    expect(plain.status, JSON.stringify(plain.json)).toBe(200);
+    expect(await consent(t, salad)).not.toHaveProperty("withFree");
+    expect(await consent(t, dish(t, "Water"))).toMatchObject({ comesBackWith: [] });
+  });
+
+  it("offers the water with a row's last portion when the other was served and cancelled before payment", async () => {
+    const t = await ticket(
+      [{ name: "Salad", quantity: "2" }, { name: "Water" }],
+      "takeaway",
+      async (open) => {
+        const first = dish(open, "Salad", 0);
+        await serve(open, first);
+        const kept = await cancel(open, first, { refund: false, preparationStarted: true });
+        expect(kept.status, JSON.stringify(kept.json)).toBe(200);
+      },
+    );
+    const row = [dish(t, "Salad", 0).id, dish(t, "Salad", 1).id];
+    const water = dish(t, "Water");
+    expect(await consent(t, dish(t, "Salad", 1), row)).toMatchObject({
+      withFree: [{ lineId: water.id }],
+    });
+    const last = await cancel(t, dish(t, "Salad", 1), {
+      lineIds: row,
+      quantity: "1",
+      withFree: [water.id],
+    });
+    expect(last.status, JSON.stringify(last.json)).toBe(200);
   });
 
   it("gives one portion of a two-salad row its own share, and the other brings the water back", async () => {
