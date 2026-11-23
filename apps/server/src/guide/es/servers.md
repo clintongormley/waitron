@@ -113,7 +113,7 @@ a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras ha
 esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
 
 Elige **Empezar el cambio**, escribe el correo de un administrador y elige **Continuar**, o elige
-una passkey guardada que te ofrezca el campo del correo. Después elige **Usar tu passkey**, o
+una passkey guardada que te ofrezca el campo del correo. Si escribiste el correo, elige **Usar tu passkey**, o
 escribe tu contraseña y el código actual del autenticador, si está configurado, y elige
 **Identificarse con contraseña**. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
 vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
