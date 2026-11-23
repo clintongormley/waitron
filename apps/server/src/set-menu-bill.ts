@@ -273,36 +273,38 @@ async function placedSetMenuDishes(
 ) {
   const billValues = sql`(select value from json_each(${JSON.stringify([...new Set(placed.map(({ billId }) => billId))])}))`;
   const payments = await tx
-    .select({ billId: billPayments.workingOrderId, lineId: billPaymentLines.lineId })
+    .select({ lineId: billPaymentLines.lineId })
     .from(billPaymentLines)
     .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
     .where(inArray(billPayments.workingOrderId, billValues));
-  const actions = await tx
-    .select({
-      billId: adjustments.workingOrderId,
-      lineId: adjustments.lineId,
-      action: adjustments.action,
-      reducedLineId: adjustmentLines.lineId,
-      chargeKept: adjustments.chargeKept,
-    })
+  const cancels = await tx
+    .select({ lineId: adjustments.lineId, chargeKept: adjustments.chargeKept })
     .from(adjustments)
-    .leftJoin(
-      adjustmentLines,
-      and(eq(adjustmentLines.adjustmentId, adjustments.id), gt(adjustmentLines.reduction, 0)),
-    )
-    .where(inArray(adjustments.workingOrderId, billValues));
-  const key = (billId: string, lineId: string) => `${billId}:${lineId}`;
-  const fixed = new Set(payments.map(({ billId, lineId }) => key(billId, lineId)));
+    .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
+  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
+  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
+  // made on.
+  const reduced = await tx
+    .select({ lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      and(
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(placed.map(({ id }) => id))}))`,
+        ),
+        gt(adjustmentLines.reduction, 0),
+      ),
+    );
+  const fixed = new Set([...payments, ...reduced].map(({ lineId }) => lineId));
   const cancelled = new Set<string>();
-  for (const { billId, lineId, action, chargeKept, reducedLineId } of actions) {
-    if (action === "cancel" && lineId !== null) {
-      if (chargeKept) fixed.add(key(billId, lineId));
-      else cancelled.add(key(billId, lineId));
-    }
-    if (reducedLineId !== null) fixed.add(key(billId, reducedLineId));
+  for (const { lineId, chargeKept } of cancels) {
+    if (lineId === null) continue;
+    if (chargeKept) fixed.add(lineId);
+    else cancelled.add(lineId);
   }
   return placed
-    .filter(({ billId, id }) => !cancelled.has(key(billId, id)))
+    .filter(({ id }) => !cancelled.has(id))
     .map((line) => ({
       billId: line.billId,
       dish: {
@@ -313,7 +315,7 @@ async function placedSetMenuDishes(
         place: line.place!,
         priceCents: line.priceCents,
         countsAsCourseId: line.countsAsCourseId!,
-        movable: line.cancellationLineId === null && !fixed.has(key(line.billId, line.id)),
+        movable: line.cancellationLineId === null && !fixed.has(line.id),
       },
     }));
 }

@@ -235,57 +235,51 @@ it("after a bill discount, an empty set menu can still be removed", async () => 
   expect(await total(tab.tabId)).toBe(discounted - removedLine.lineTotal);
 });
 
-// Passed at once: `movable` already counted comps, discounts and item payments. The plan's
-// case comped Special 2's Sirloin, but that dish is covered at 0.00 and cannot be comped,
-// discounted or paid by items (`adjustment.no_reduction`); on this fixture only a 0.00 dish is
-// ever offered a move. So the fixed dish here is the surcharged Sirloin, and the suggestion part
-// is the control.
+// Passed at once: `movable` already counted comps, discounts and item payments. With a third
+// Special, a new Hake draws Daily 2's +5.00 Sirloin to the Special at 0.00 unless something
+// holds the Sirloin where it is.
 it("the offered move never names a comped, discounted or item-paid dish", async () => {
-  const sirloinFixedBy = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
+  const offeredFor = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
     const tab = await specBill(spec);
+    const third = (await setSpecCount(spec, tab.tabId, spec.special, 3)).setMenus.at(-1)!;
     const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);
+    expect(sirloin).toMatchObject({ name: "Sirloin", lineTotal: 500 });
     await fix(tab.tabId, sirloin.id);
     const state = await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId));
-    return state.dishes.find(({ lineId }) => lineId === sirloin.id)!.movable;
+    const suggestion = suggestMove(state, [], {
+      id: crypto.randomUUID(),
+      productId: spec.productIds.Hake,
+      variantId: null,
+    });
+    return { tab, third: third.lineId, sirloin: sirloin.id, suggestion };
   };
-  expect(await sirloinFixedBy(async () => {})).toBe(true);
-  expect(await sirloinFixedBy((billId, lineId) => adjust(billId, lineId, { action: "comp" }))).toBe(
-    false,
-  );
-  expect(
-    await sirloinFixedBy((billId, lineId) =>
-      adjust(billId, lineId, { action: "discount_percent", percentBp: 1000 }),
-    ),
-  ).toBe(false);
-  expect(
-    await sirloinFixedBy(async (billId, lineId) =>
-      payByItems(billId, await lineNoOf(billId, lineId), "5.00"),
-    ),
-  ).toBe(false);
 
-  const tab = await specBill(spec);
-  const third = (await setSpecCount(spec, tab.tabId, spec.daily, 3)).setMenus.at(-1)!;
-  const covered = await dishAt(tab.tabId, tab.special[1]!, 1);
-  expect(covered).toMatchObject({ name: "Sirloin", lineTotal: 0 });
-  await expect(adjust(tab.tabId, covered.id, { action: "comp" })).rejects.toMatchObject({
-    code: "adjustment.no_reduction",
-  });
-  const state = await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId));
-  const suggestion = suggestMove(state, [], {
-    id: crypto.randomUUID(),
-    productId: spec.productIds["Sea bass"],
-    variantId: null,
-  });
-  expect(suggestion?.moves).toEqual([
+  const control = await offeredFor(async () => {});
+  expect(control.suggestion?.moves).toEqual([
     {
-      lineId: covered.id,
-      from: { setMenuLineId: tab.special[1], place: 1 },
-      to: { setMenuLineId: third.lineId, place: 1 },
-      priceCents: 500,
+      lineId: control.sirloin,
+      from: { setMenuLineId: control.tab.daily[1], place: 1 },
+      to: { setMenuLineId: control.third, place: 1 },
+      priceCents: 0,
       countsAsCourseId: expect.any(String),
     },
   ]);
-  expect(suggestion?.place).toMatchObject({ setMenuLineId: tab.special[1], place: 1 });
+  expect(control.suggestion?.place).toMatchObject({
+    setMenuLineId: control.tab.daily[1],
+    place: 1,
+  });
+
+  for (const fix of [
+    (billId: string, lineId: string) => adjust(billId, lineId, { action: "comp" }),
+    (billId: string, lineId: string) =>
+      adjust(billId, lineId, { action: "discount_percent", percentBp: 1000 }),
+    async (billId: string, lineId: string) =>
+      payByItems(billId, await lineNoOf(billId, lineId), "5.00"),
+  ]) {
+    const { third, suggestion } = await offeredFor(fix);
+    expect(suggestion?.moves).toEqual([]);
+    expect(suggestion?.place).toMatchObject({ setMenuLineId: third, place: 1 });
+  }
 });
 
 // Passed at once: `deleteEmptyMenus` already ran `assertBillInvariant`.
