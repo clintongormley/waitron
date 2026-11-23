@@ -3620,6 +3620,7 @@ describe("backup-machine audit read", () => {
       complete: true,
       backupMatches: [],
       backupUnmatched: [row],
+      pairedAudit: { complete: false, matched: 0, toCheck: 0, rows: [] },
       refundAudit: {
         complete: false,
         checkedAt: [],
@@ -3635,6 +3636,159 @@ describe("backup-machine audit read", () => {
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
+});
+
+it("reports paired SumUp captures and charges once for the selected Madrid day", async () => {
+  const venue = await seedVenueWithStaff();
+  const manager = await seedPerson(suite.db, { displayName: "Hold reviewer" });
+  const order = await seedWorkingOrder(suite.db, { source: "dashboard" });
+  const deviceId = await seedDevice();
+  const [reader] = await suite.db
+    .insert(cardReaders)
+    .values({ name: "Counter reader", provider: "sumup", providerRef: nextRef() })
+    .returning();
+  const start = "2026-07-01T22:00:00.000Z";
+  const checkedAt = "2026-07-02T02:00:00.000Z";
+  const entries = [
+    ["before-day", "2026-07-01T21:59:59.999Z"],
+    ["match", start],
+    ["before-check-refund", start],
+    ["after-check-refund", start],
+    ["sumup-refund", start],
+    ["multiple-findings", start],
+    ["held-resolved", start],
+    ["no-evidence", start],
+    ["unpaid", null],
+    ["linked", null],
+    ["next-day", "2026-07-02T22:00:00.000Z"],
+  ] as const;
+  await suite.db.insert(payments).values(
+    entries.map(([paymentRef, settledAt]) => ({
+      workingOrderId: order.id,
+      source: "device" as const,
+      deviceId,
+      readerId: reader!.id,
+      provider: "sumup",
+      paymentRef,
+      externalRef: settledAt === null ? null : `charge-${paymentRef}`,
+      amount: 1000,
+      state: settledAt === null ? ("attempting" as const) : ("captured" as const),
+      settledAt,
+      createdAt: start,
+      ...(paymentRef === "held-resolved"
+        ? {
+            holdProviderAmount: 1100,
+            heldAt: start,
+            holdOutcome: "kept" as const,
+            holdDecidedAt: checkedAt,
+            holdDecidedBy: manager,
+          }
+        : {}),
+    })),
+  );
+  await withTransaction(suite.db, async (tx) => {
+    for (const [paymentRef, at] of [
+      ["before-check-refund", start],
+      ["after-check-refund", "2026-07-02T10:00:00.000Z"],
+    ] as const)
+      await recordRefund(tx, {
+        provider: "sumup",
+        paymentRef,
+        amount: decimal("10"),
+        at: new Date(at),
+      });
+  });
+  const linked = {
+    references: ["linked-charge"],
+    amount: "10.00",
+    settledAt: start,
+    hintedPaymentRef: "linked",
+  };
+  const unlinked = { ...linked, references: ["standalone-charge"], hintedPaymentRef: null };
+  const finding = {
+    paymentRef: "multiple-findings",
+    references: ["charge-multiple-findings"],
+    localState: "captured",
+    localAmount: "10.00",
+    settledAmount: "11.00",
+    workingOrderId: order.id,
+  };
+  await suite.db.insert(reconciliationRuns).values([
+    {
+      duty: "payments.reconcile.sumup",
+      periodFrom: "2026-07-01T00:00:00.000Z",
+      periodTo: "2026-07-02T00:00:00.000Z",
+      state: "succeeded",
+      finishedAt: checkedAt,
+      summary: {
+        backupMatches: [],
+        backupUnmatched: [],
+        chargeAudit: {
+          matches: ["before-day", "match", "after-check-refund", "sumup-refund"].map(
+            (paymentRef) => ({
+              paymentRef,
+              providerRefunded: paymentRef === "sumup-refund",
+            }),
+          ),
+          missingLocal: [linked, unlinked],
+        },
+        drift: [finding],
+        orphan: [finding],
+      },
+    },
+    {
+      duty: "payments.reconcile.sumup",
+      periodFrom: "2026-07-02T00:00:00.000Z",
+      periodTo: "2026-07-03T00:00:00.000Z",
+      state: "succeeded",
+      finishedAt: "2026-07-03T02:00:00.000Z",
+      summary: {
+        backupMatches: [],
+        backupUnmatched: [
+          {
+            references: unlinked.references,
+            amount: unlinked.amount,
+            settledAt: start,
+            reason: "unmatched",
+            kind: "charge",
+          },
+        ],
+        chargeAudit: { matches: [], missingLocal: [linked, unlinked] },
+      },
+    },
+  ]);
+  const response = await send(
+    mountApp(venue),
+    "GET",
+    "/management-api/payments/backup-audit?day=2026-07-02",
+    {
+      cookie: venue.managerCookie,
+    },
+  );
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  const { pairedAudit, backupUnmatched } = await response.json();
+  expect(pairedAudit).toMatchObject({ complete: false, matched: 2, toCheck: 4 });
+  expect(
+    Object.fromEntries(
+      pairedAudit.rows.map(
+        ({ paymentRef, statuses }: { paymentRef: string; statuses: string[] }) => [
+          paymentRef,
+          statuses,
+        ],
+      ),
+    ),
+  ).toEqual({
+    match: ["matched"],
+    "before-check-refund": ["refunded_before_check"],
+    "after-check-refund": ["matched"],
+    "sumup-refund": ["refunded_at_sumup"],
+    "multiple-findings": ["drift", "orphan"],
+    "held-resolved": ["resolved"],
+    "no-evidence": ["not_checked"],
+    linked: ["missing_local"],
+  });
+  expect(pairedAudit.rows).toHaveLength(8);
+  expect(backupUnmatched).toMatchObject([{ kind: "charge", references: ["standalone-charge"] }]);
 });
 
 it.each(["sumup", "manual"])(
