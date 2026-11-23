@@ -1,5 +1,4 @@
 import type { CardDetails } from "@waitron/payments";
-import type { BankAccount } from "@waitron/db";
 import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
 import {
   addDecimal,
@@ -13,16 +12,14 @@ import {
   type Decimal,
   type ReceiptElement,
   type ReceiptIndent,
-  type ReceiptLogoRaster,
   type ReceiptStyle,
-  type ReceiptPaperWidth,
-  type ReceiptPresentation,
 } from "@waitron/shared";
 import {
   filedRates,
   rateLetters,
   receiptFacts,
   type DatedInvoice,
+  type ReceiptDocumentInput,
   type FiledFigureRow,
   type WithVatFigures,
 } from "./receipt-facts.js";
@@ -35,53 +32,10 @@ import {
 import { cardName } from "./card-details.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
-import type { TenderBlock, TillSaleResult } from "./till-sale.js";
-
-export interface ReceiptIssuer {
-  venueName: string;
-  nif: string;
-  domicile?: string;
-}
-
-export interface ReceiptTrim {
-  headerSubtitle?: string;
-  phone?: string;
-  email?: string;
-  footerMessage?: string;
-}
-
-export interface ReceiptDocumentInput {
-  /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
-  paperWidth?: ReceiptPaperWidth;
-  logo?: ReceiptLogoRaster | null;
-  result: Omit<
-    TillSaleResult,
-    keyof ReceiptPresentation | "simulatedCardPayment" | "venueAddressLine"
-  >;
-  issuer: ReceiptIssuer;
-  receiptHeader?: { tradingName: string | null; printTradingName: boolean };
-  receipt: ReceiptTrim;
-  venueAddress?: readonly string[];
-  /** The venue's address joined as a registered address is, so that one naming the province
-   *  `venueAddress` leaves out still prints once. */
-  venueAddressLine?: string;
-  invoiceLocale: string;
-  namesLocale?: string;
-  /** Marks a practice document, regardless of whether money moved. */
-  simulated?: boolean;
-  simulatedCardPayment?: boolean;
-  duplicate?: boolean;
-  guests?: number;
-  /**
-   * A printer's test page: the no-invoice notice prints at the top and bottom, after the practice
-   * mark where there is one, and the printer's own line ends the page.
-   */
-  testPage?: { printer: string };
-  /** Set when the sale, or one it replaces, was closed as a deferred payment. */
-  deferredPayment?: { account: BankAccount | null };
-}
+import type { TenderBlock } from "./till-sale.js";
 
 export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
+export type { ReceiptDocumentInput, ReceiptIssuer, ReceiptTrim } from "./receipt-facts.js";
 
 /** A part of the trim the dashboard's preview highlights. */
 export type ReceiptPart =
@@ -103,8 +57,6 @@ export interface ReceiptDocument {
   duplicate: boolean;
   practice: boolean;
 }
-
-export const CONTACT_SEPARATOR = " · ";
 
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
 function sameAddress(lines: readonly string[], line: string, domicile: string): boolean {

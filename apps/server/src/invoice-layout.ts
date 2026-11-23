@@ -24,10 +24,11 @@ import {
 import { cardName } from "./card-details.js";
 import { qrModules } from "./qr-matrix.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
-import { CONTACT_SEPARATOR, type ReceiptDocumentInput } from "./receipt-document.js";
 import {
+  CONTACT_SEPARATOR,
   rateLetters,
   receiptFacts,
+  type ReceiptDocumentInput,
   type DatedInvoice,
   type FigureSection,
   type ReceiptFacts,

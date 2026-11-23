@@ -65,11 +65,11 @@ describe("A4 office raster weights, tones and shaded boxes", () => {
 
   it("draws bold text as the bold face's outlines filled, with no stroke around them", async () => {
     const { default: sharp } = await import("sharp");
-    const size = 40 / invoiceBoldFont.unitsPerEm;
-    const run = invoiceBoldFont.layout("Total");
+    const size = 40 / invoiceBoldFont().unitsPerEm;
+    const run = invoiceBoldFont().layout("Total");
     let x = 36;
     const paths = run.glyphs.map((glyph, index) => {
-      const drawn = `<path transform="translate(${x} ${36 + invoiceBoldFont.ascent * size}) scale(${size} ${-size})" d="${glyph.path.toSVG()}" fill="#000000"/>`;
+      const drawn = `<path transform="translate(${x} ${36 + invoiceBoldFont().ascent * size}) scale(${size} ${-size})" d="${glyph.path.toSVG()}" fill="#000000"/>`;
       x += run.positions[index]!.xAdvance * size;
       return drawn;
     });

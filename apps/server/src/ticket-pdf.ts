@@ -77,7 +77,7 @@ export async function renderTicketPdf(drawing: TicketDrawing): Promise<Buffer> {
     autoFirstPage: false,
     // PDFKit accepts font bytes here; its constructor option type names only a path. A fixed-width
     // font puts each hidden character over the grid cell its glyph was printed in.
-    font: invoiceMonoFontBytes as unknown as string,
+    font: invoiceMonoFontBytes() as unknown as string,
     info: { CreationDate: issuedAt, ModDate: issuedAt },
   });
   const chunks: Buffer[] = [];

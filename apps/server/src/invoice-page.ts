@@ -1,9 +1,12 @@
 import type { ReceiptLogoRaster } from "@waitron/shared";
 import { invoiceBoldFont, invoiceFont } from "./invoice-font.js";
-import { CONTACT_SEPARATOR } from "./receipt-document.js";
+import { CONTACT_SEPARATOR } from "./receipt-facts.js";
 
 export const INVOICE_PAGE_WIDTH = 595.28;
 export const INVOICE_PAGE_HEIGHT = 841.89;
+export const INVOICE_INK = "#000000";
+export const INVOICE_MUTED = "#6b6b6b";
+export const INVOICE_BOX_FILLS = { heading: "#e4e4e8", panel: "#f2f2f4" } as const;
 
 type PageText = {
   kind: "text";
@@ -52,7 +55,8 @@ const faces = {
 };
 
 function width(text: string, size: number, weight: InvoiceTextWeight = "regular"): number {
-  const { font, advanceWidths } = faces[weight];
+  const { font: load, advanceWidths } = faces[weight];
+  const font = load();
   let advance = advanceWidths.get(text);
   if (advance === undefined) {
     if (advanceWidths.size >= INVOICE_TEXT_WIDTH_MEMO_LIMIT) advanceWidths.clear();

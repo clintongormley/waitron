@@ -14,6 +14,9 @@ import {
   subtractDecimal,
   sumDecimals,
   type Decimal,
+  type ReceiptLogoRaster,
+  type ReceiptPaperWidth,
+  type ReceiptPresentation,
 } from "@waitron/shared";
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import {
@@ -36,9 +39,54 @@ import {
   printsOnTicket,
   type LineGroup,
 } from "./receipt-lines.js";
-import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { BillTenderLine } from "./receipt-payments.js";
-import type { ReceiptAdjustment, TenderBlock, TillSaleLine } from "./till-sale.js";
+import type { ReceiptAdjustment, TenderBlock, TillSaleLine, TillSaleResult } from "./till-sale.js";
+
+export interface ReceiptIssuer {
+  venueName: string;
+  nif: string;
+  domicile?: string;
+}
+
+export interface ReceiptTrim {
+  headerSubtitle?: string;
+  phone?: string;
+  email?: string;
+  footerMessage?: string;
+}
+
+export interface ReceiptDocumentInput {
+  /** The roll's width; absent on an A4 page (PDF or image). */
+  paperWidth?: ReceiptPaperWidth;
+  logo?: ReceiptLogoRaster | null;
+  result: Omit<
+    TillSaleResult,
+    keyof ReceiptPresentation | "simulatedCardPayment" | "venueAddressLine"
+  >;
+  issuer: ReceiptIssuer;
+  receiptHeader?: { tradingName: string | null; printTradingName: boolean };
+  receipt: ReceiptTrim;
+  venueAddress?: readonly string[];
+  /** The venue's address joined as a registered address is, so that one naming the province
+   *  `venueAddress` leaves out still prints once. */
+  venueAddressLine?: string;
+  invoiceLocale: string;
+  namesLocale?: string;
+  /** Marks a practice document, regardless of whether money moved. */
+  simulated?: boolean;
+  simulatedCardPayment?: boolean;
+  duplicate?: boolean;
+  guests?: number;
+  /**
+   * A printer's test page: the no-invoice notice prints at the top and bottom, after the practice
+   * mark where there is one, and the printer's own line ends the page.
+   */
+  testPage?: { printer: string };
+  /** Set when the sale, or one it replaces, was closed as a deferred payment. */
+  deferredPayment?: { account: BankAccount | null };
+}
+
+export const CONTACT_SEPARATOR = " · ";
 
 /** A row of a full invoice's table, before VAT. Amounts are what the row adds: a discount's are
  *  negative. A set menu's covered dish has no money figures. */

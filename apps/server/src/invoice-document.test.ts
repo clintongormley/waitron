@@ -54,7 +54,8 @@ import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { CONTACT_SEPARATOR, type ReceiptDocumentInput } from "./receipt-document.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { CONTACT_SEPARATOR } from "./receipt-facts.js";
 import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";

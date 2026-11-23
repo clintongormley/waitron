@@ -1766,7 +1766,7 @@ describe("layoutA4Invoice, printed", () => {
 
   it("forgets every remembered text width once the limit is reached", async () => {
     vi.resetModules();
-    const { invoiceFont: font } = await import("./invoice-font.js");
+    const font = (await import("./invoice-font.js")).invoiceFont();
     const page = await import("./invoice-page.js");
     const measure = vi.spyOn(font, "layout");
     try {
@@ -1786,7 +1786,7 @@ describe("layoutA4Invoice, printed", () => {
 
   it("lays out the same invoice a second time without measuring any text again", async () => {
     vi.resetModules();
-    const { invoiceFont: font } = await import("./invoice-font.js");
+    const font = (await import("./invoice-font.js")).invoiceFont();
     const fresh = await import("./invoice-layout.js");
     const measure = vi.spyOn(font, "layout");
     try {

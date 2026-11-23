@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { invoiceFont } from "./invoice-font.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { renderInvoiceRaster } from "./invoice-raster.js";
-import { CONTACT_SEPARATOR } from "./receipt-document.js";
+import { CONTACT_SEPARATOR } from "./receipt-facts.js";
 import { formatMoney } from "./receipt-money.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
@@ -126,7 +126,7 @@ describe("invoice receipt languages", () => {
         expect(text).not.toContain("Wrong frozen name from another language");
         for (const character of new Set(text)) {
           expect(
-            invoiceFont.hasGlyphForCodePoint(character.codePointAt(0)!),
+            invoiceFont().hasGlyphForCodePoint(character.codePointAt(0)!),
             `${locale} missing glyph ${character}`,
           ).toBe(true);
         }

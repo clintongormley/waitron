@@ -18,14 +18,14 @@ export async function renderAttendancePdf(document: RecordExportDocument): Promi
     Array.from(value.replace(/\r\n?/gu, "\n").replace(/\t/gu, "    "))
       .map((c) => {
         if (c !== "\n" && /[\p{Cc}\p{Cf}]/u.test(c)) return " ";
-        if (c === "\n" || invoiceFont.hasGlyphForCodePoint(c.codePointAt(0)!)) return c;
+        if (c === "\n" || invoiceFont().hasGlyphForCodePoint(c.codePointAt(0)!)) return c;
         escaped = true;
         return `[U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}]`;
       })
       .join("");
   const pdf = new PDFDocument({
     autoFirstPage: false,
-    font: invoiceFontBytes as unknown as string,
+    font: invoiceFontBytes() as unknown as string,
     info: {
       Title: words.title,
       Author: "Waitron",
