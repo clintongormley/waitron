@@ -30,7 +30,7 @@ const charged = (figures: ReceiptFigures): Decimal[] =>
       case "withVat": {
         const { amount, options, adjustments } = section.group;
         return [
-          amount,
+          ...(amount === undefined ? [] : [amount]),
           ...options.map((option) => option.amount),
           ...adjustments.map((adjustment) => adjustment.amount),
         ];

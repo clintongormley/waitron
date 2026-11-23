@@ -15,6 +15,7 @@ import { renderInvoicePdf } from "./invoice-pdf.js";
 import { renderInvoiceRaster } from "./invoice-raster.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+import type { TillSaleLine } from "./till-sale.js";
 import { receiptFacts } from "./receipt-facts.js";
 import { formatMoney, formatVatRate } from "./receipt-money.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
@@ -539,6 +540,32 @@ const expectNoOverlapOrOverflow = (name: string, pages: readonly InvoicePage[]):
   }
 };
 
+const setMenuLine = (
+  name: string,
+  gross: string,
+  setMenuRole: "set_menu" | "dish" | undefined,
+  extra: Partial<TillSaleLine> = {},
+): TillSaleLine => ({
+  descriptions: { "es-ES": name },
+  quantity: "1",
+  gross,
+  parentLineNo: null,
+  ...(setMenuRole === undefined ? {} : { setMenuRole }),
+  ...extra,
+});
+
+/** The texts on each table row whose description is `name`, left to right. */
+const rowsNamed = (elements: readonly InvoicePageElement[], name: string): string[][] =>
+  texts(elements)
+    .filter((text) => text.text === name)
+    .sort((one, other) => one.y - other.y)
+    .map((cell) =>
+      texts(elements)
+        .filter((text) => text.y === cell.y)
+        .sort((one, other) => one.x - other.x)
+        .map((text) => text.text),
+    );
+
 describe("layoutA4Invoice", () => {
   it("prints each row's VAT-included amount in the last column, adding up to a bold 18 pt TOTAL under a 1.5 pt rule", () => {
     const [page] = layoutA4Invoice(fixture());
@@ -797,6 +824,72 @@ describe("layoutA4Invoice", () => {
     ).map((text) => text.text);
     expect(lettered).toContain("A 10%");
     expect(lettered).toContain(`${money("10.00")} A`);
+  });
+
+  it("lists a full invoice's set menu and surcharge, leaves a covered dish off or without figures, and still adds up to TOTAL", () => {
+    const input = fixture();
+    const net = (base: string, tax: string) => ({
+      unitPrice: base,
+      priceQuantity: "1.000",
+      base,
+      tax,
+      rate: "10",
+    });
+    input.result.total = "20.50";
+    input.result.vatBreakdown = [{ rate: "10", base: "18.64", tax: "1.86" }];
+    input.result.lines = [
+      setMenuLine("Daily menu", "14.00", "set_menu", { net: net("12.73", "1.27") }),
+      setMenuLine("Hake", "0.00", "dish", { net: net("0.00", "0.00") }),
+      setMenuLine("Soup", "0.00", "dish", { net: net("0.00", "0.00") }),
+      setMenuLine("Bread", "1.50", undefined, { parentLineNo: 3, net: net("1.36", "0.14") }),
+      setMenuLine("Sirloin", "5.00", "dish", { net: net("4.55", "0.45") }),
+    ];
+    const [page] = layoutA4Invoice(input);
+    const elements = page!.elements;
+    expect(rowsNamed(elements, "Hake")).toEqual([]);
+    expect(rowsNamed(elements, "Soup")).toEqual([["Soup", "1", formatVatRate("10", "es-ES")]]);
+    expect(rowsNamed(elements, "Sirloin")).toEqual([
+      ["Sirloin", "1", money("4.55"), money("4.55"), formatVatRate("10", "es-ES"), money("5.00")],
+    ]);
+    const summaryTop = named(elements, labels.taxRateColumn).y;
+    const amounts = texts(elements).filter(
+      (text) => text.y < summaryTop && text.text.endsWith("€"),
+    );
+    const rightmost = Math.max(...amounts.map(textRight));
+    const column = amounts
+      .filter((text) => Math.abs(textRight(text) - rightmost) < 0.01)
+      .sort((one, other) => one.y - other.y)
+      .map((text) => text.text);
+    expect(column).toEqual([money("14.00"), money("1.50"), money("5.00")]);
+    const total = named(elements, labels.total);
+    expect(texts(elements).some((text) => text.y === total.y && text.text === money("20.50"))).toBe(
+      true,
+    );
+  });
+
+  it("puts a plus before a simplified page's surcharge and its price each, and leaves a covered dish's amount blank", () => {
+    const input = fixture();
+    input.result.invoiceType = "F2";
+    input.result.total = "44.50";
+    input.result.vatBreakdown = [{ rate: "10", base: "40.45", tax: "4.05" }];
+    const each = { unitPriceGross: "5.00" };
+    input.result.lines = [
+      setMenuLine("Daily menu", "14.00", "set_menu", { unitPriceGross: "14.00" }),
+      setMenuLine("Daily menu", "14.00", "set_menu", { unitPriceGross: "14.00" }),
+      setMenuLine("Hake", "0.00", "dish"),
+      setMenuLine("Soup", "0.00", "dish"),
+      setMenuLine("Bread", "1.50", undefined, { parentLineNo: 4 }),
+      setMenuLine("Sirloin", "5.00", "dish", each),
+      setMenuLine("Sirloin", "5.00", "dish", each),
+      setMenuLine("Sirloin", "5.00", undefined, each),
+    ];
+    const elements = allElements(layoutA4Invoice(input));
+    expect(rowsNamed(elements, "Hake")).toEqual([]);
+    expect(rowsNamed(elements, "Soup")).toEqual([["Soup", "1"]]);
+    expect(rowsNamed(elements, "Sirloin")).toEqual([
+      ["Sirloin", "2", `+${money("5.00")}`, `+${money("10.00")}`],
+      ["Sirloin", "1", money("5.00")],
+    ]);
   });
 
   it("boxes a practice invoice's warning both at the top of page 1 and above the footer on the last page", () => {

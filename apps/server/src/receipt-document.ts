@@ -272,21 +272,24 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
       units: figure.units,
       item: figure.item,
       ...indent,
-      price: formatAmount(figure.unitPrice!, locale),
-      amount: formatAmount(figure.amountExVat!, locale),
+      price: figure.unitPrice === undefined ? "" : formatAmount(figure.unitPrice, locale),
+      amount: figure.amountExVat === undefined ? "" : formatAmount(figure.amountExVat, locale),
       ...rate,
     };
   };
   const withVatGroup = (group: WithVatFigures): void => {
     const quantity = `${group.quantity}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
+    const plus = group.surcharge ? "+" : "";
     row(
       `${quantity}${group.item}${included}`,
-      `${itemAmount(group.amount)}${lettered(group.rateLetter)}`,
+      group.amount === undefined
+        ? ""
+        : `${plus}${itemAmount(group.amount)}${lettered(group.rateLetter)}`,
       { after: quantity },
     );
     if (group.perUnit !== undefined) {
-      const price = formatMoney(group.perUnit.price, locale);
+      const price = `${plus}${formatMoney(group.perUnit.price, locale)}`;
       const each =
         group.perUnit.unitName === undefined
           ? label.perUnit.replace("{price}", () => price)

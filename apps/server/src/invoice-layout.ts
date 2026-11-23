@@ -400,13 +400,14 @@ function tableRows(facts: ReceiptFacts): TableRow[] {
       }
     } else if (section.kind === "withVat") {
       const { group } = section;
+      const plus = group.surcharge ? "+" : "";
       const price =
         group.perUnit === undefined
           ? ""
-          : `${money(group.perUnit.price)}${group.perUnit.unitName === undefined ? "" : `/${group.perUnit.unitName}`}`;
-      rows.push(
-        withVat(group.item, group.quantity, price, lettered(group.amount, group.rateLetter), 0),
-      );
+          : `${plus}${money(group.perUnit.price)}${group.perUnit.unitName === undefined ? "" : `/${group.perUnit.unitName}`}`;
+      const amount =
+        group.amount === undefined ? "" : `${plus}${lettered(group.amount, group.rateLetter)}`;
+      rows.push(withVat(group.item, group.quantity, price, amount, 0));
       for (const answer of group.answers) rows.push(withVat(answer, "", "", "", 2));
       for (const option of group.options) {
         rows.push(

@@ -28,13 +28,20 @@ import {
 } from "./receipt-figures.js";
 import { receiptDayNumeric } from "./receipt-dates.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
-import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
+import {
+  groupByParent,
+  isCoveredDish,
+  isSurcharge,
+  mergeIdenticalGroups,
+  printsOnTicket,
+  type LineGroup,
+} from "./receipt-lines.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import type { BillTenderLine } from "./receipt-payments.js";
 import type { ReceiptAdjustment, TenderBlock, TillSaleLine } from "./till-sale.js";
 
 /** A row of a full invoice's table, before VAT. Amounts are what the row adds: a discount's are
- *  negative. */
+ *  negative. A set menu's covered dish has no figures. */
 export interface FiledFigureRow {
   kind: "line" | "option" | "answer" | "discount" | "advance";
   units: string;
@@ -66,7 +73,10 @@ export interface WithVatAdjustment {
 export interface WithVatFigures {
   quantity: string;
   item: string;
-  amount: Decimal;
+  /** Absent for a set menu's covered dish. */
+  amount?: Decimal;
+  /** A set-menu surcharge on a simplified invoice: its amount and price each print with a plus. */
+  surcharge?: true;
   /** "" when the bill has one rate, or the line none. */
   rateLetter: string;
   /** The price each, with the unit it is per; no `unitName` for a count. */
@@ -249,14 +259,18 @@ export function receiptFigures({
     indent: number,
   ): FiledFigureRow => {
     const { line, figures } = figuredLine;
-    return {
+    const row: FiledFigureRow = {
       kind: line.advance === undefined ? kind : "advance",
       units: quantityText(line, namesLocale, locale),
       item: itemName(line),
       indent,
+      rate: decimal(line.net.rate),
+    };
+    if (isCoveredDish(line)) return row;
+    return {
+      ...row,
       unitPrice: figures.price,
       amountExVat: figures.amount,
-      rate: decimal(line.net.rate),
       chargedWithVat: chargedFor(figuredLine),
     };
   };
@@ -307,7 +321,8 @@ export function receiptFigures({
     const group: WithVatFigures = {
       quantity: shown,
       item: itemName(dish),
-      amount,
+      ...(isCoveredDish(dish) ? {} : { amount }),
+      ...(simplified && isSurcharge(dish, amount) ? { surcharge: true as const } : {}),
       rateLetter: letter(dish),
       answers: answers(dish),
       options: [],
@@ -368,12 +383,14 @@ export function receiptFigures({
 
   let nextFiled = 0;
   const printed = simplified
-    ? mergeIdenticalGroups(groups, result.vatBreakdown.length <= 1)
+    ? mergeIdenticalGroups(groups.filter(printsOnTicket), result.vatBreakdown.length <= 1)
     : groups;
   // An advance is taken off what the bill came to, so it prints after the whole-bill discounts.
   const advances: (() => void)[] = [];
   printed.forEach((group, at) => {
     const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
+    // Left out only after the filed rows are paired by position, so later rows keep their figures.
+    if (!printsOnTicket(group) && !discounts.under.has(at)) return;
     const print = (): void => {
       if (filed !== undefined) {
         tableGroup(filed);
