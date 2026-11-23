@@ -590,12 +590,16 @@ export class MenusScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
-      wt-data-table::part(changes-mark) {
+      wt-data-table::part(changes-mark),
+      wt-data-table::part(clashes-mark) {
         flex: none;
         inline-size: var(--wt-space-2);
         block-size: var(--wt-space-2);
         border-radius: var(--wt-radius-full);
         background: var(--wt-color-warning);
+      }
+      wt-data-table::part(clashes-mark) {
+        background: var(--wt-color-danger);
       }
       wt-data-table::part(changes-link) {
         display: inline-flex;
@@ -2324,6 +2328,7 @@ export class MenusScreen extends LitElement {
         ? t("menus.price_clash")
         : fill("menus.price_clashes", { count: String(clashes) });
     return html`<span part="clashes"
+      ><span part="clashes-mark" aria-hidden="true"></span
       ><a
         part="clashes-link"
         data-test=${`clashes-${menu.id}`}

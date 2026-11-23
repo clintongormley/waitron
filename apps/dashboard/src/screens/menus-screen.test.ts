@@ -1836,6 +1836,21 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
+  it("marks the clash line with a danger dot, so its words start where the changes link's do", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const el = await listed(clashing());
+      const dot = row(el, "menu-lunch").querySelector<HTMLElement>('[part="clashes-mark"]')!;
+      expect(dot.getAttribute("aria-hidden")).toBe("true");
+      expect(getComputedStyle(dot).backgroundColor).toBe(
+        computedColour(el.shadowRoot!, "var(--wt-color-danger)"),
+      );
+      expect(clashLink(el, "menu-lunch")!.getBoundingClientRect().left).toBeCloseTo(
+        link(el, "menu-lunch")!.getBoundingClientRect().left,
+        0,
+      );
+    });
+  });
+
   it("words the clash link in Spanish", async () => {
     await at([1280, 900], "es-ES", async () => {
       const el = await mount(clashing());
