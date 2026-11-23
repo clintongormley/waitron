@@ -1660,6 +1660,16 @@ CREATE TABLE `recovery_packs` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `recovery_packs_node_number_uq` ON `recovery_packs` (`node_id`,`number`);--> statement-breakpoint
+CREATE TABLE `master_keys` (
+	`number` integer PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`check_value` text NOT NULL,
+	`public_key` blob NOT NULL,
+	`made_at` text NOT NULL,
+	`made_by` text,
+	FOREIGN KEY (`made_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
 CREATE TABLE `invoice_deliveries` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,

@@ -50,6 +50,7 @@ export * from "./deployment.js";
 export * from "./node-membership.js";
 export * from "./node-sealed-state.js";
 export * from "./recovery-packs.js";
+export * from "./master-keys.js";
 export * from "./invoice-deliveries.js";
 
 export * from "./refunds.js";

@@ -242,6 +242,9 @@ export {
   readRecoveryPacks,
 } from "./recovery-packs.js";
 export type { RecoveryPackPartRecord, RecoveryPackRecord } from "./recovery-packs.js";
+export * from "./schema/master-keys.js";
+export { insertMasterKey, readCurrentMasterKey } from "./master-keys.js";
+export type { MasterKeyRecord } from "./master-keys.js";
 export {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,

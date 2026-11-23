@@ -79,7 +79,7 @@ by the answers):
     lists as not in the download yet: the actors in `sales`, `invoice_corrections`,
     `invoice_deliveries`, `invoice_pdf_downloads`, `unpaid_departures`, `deferred_closures`,
     `device_invoice_save_operations`, `document_delivery_requests` and `document_page_reprints`.
-    The guard also lists `recovery_packs.made_by`. A1323 removes that table.
+    The guard also lists `recovery_packs.made_by`, a table A1323 removes, and `master_keys.made_by`.
   - **Other modules' actor columns**: fiscal operations, payment requests and resolutions, payment
     refund approvals, department transfer senders, service steps, handover activations
     (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the

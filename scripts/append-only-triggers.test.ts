@@ -49,6 +49,7 @@ const EXPECTED = [
   "handover_activations",
   "invoice_correction_refunds",
   "invoice_pdf_downloads",
+  "master_keys",
   "menu_version_images",
   "menu_versions",
   "order_amendments",

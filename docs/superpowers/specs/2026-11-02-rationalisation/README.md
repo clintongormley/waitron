@@ -128,7 +128,8 @@ Agreed with the owner on 2 November 2026 and amended in their review of 4 Novemb
 ## 4. The one picture
 
 **246 tables become 145**, in eight migration sets instead of sixteen (§5, U1), or 144 once A1323
-removes `recovery_packs`. Of the 145, 113 keep a name a table has today, many with fewer or changed
+removes `recovery_packs` (pointer, 2026-11-23: A1323 also adds `master_keys`, #4156, outside this
+count). Of the 145, 113 keep a name a table has today, many with fewer or changed
 columns, and 32 have a new name: a rename, a merge of several tables, or a new table. Of today's
 246, 15 are deleted (U6) and the other 118 are renamed or fold into another table, a settings
 document or a history. Measured by matching this section's target list against the table names in

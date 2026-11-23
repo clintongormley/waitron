@@ -746,6 +746,8 @@ triggers.
   count, and `box` does not absorb it, since nothing here has read it beyond that line.
 - **A1323:** removes `recovery_packs`, replaces `box.recovery_key_*`, and changes how
   `node_sealed_state` is sealed (§1.7, §1.8, §1.17). It is wanted, not designed.
+  Pointer, 2026-11-23: #4156 adds an empty, append-only `master_keys` table to `venue.db` (`state`).
+  It is not in this design's count.
 
 ---
 
