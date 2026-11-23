@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handoverActivations,
+  invoiceSeries,
+  liveBackupQuery,
   readNodeMembership,
   stampDeployment,
   withNodeTransaction,
@@ -37,6 +39,7 @@ import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
 import { createOldBoxHoldings, type OldBoxHoldings } from "./old-box-holdings.js";
+import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import { earlierBoxChain, lackingChainOf } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const ring = loadKeyRing({
@@ -809,6 +812,20 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     );
   }
 
+  /** A one-record chain this box holds, as its own summary names it. */
+  async function heldChain(): Promise<CanonicalValue> {
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId: main, seriesId },
+      reuseExistingParents: true,
+    });
+    await insertFiscalRecord(suite.db, ids);
+    const held = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
+    expect(held).toHaveLength(1);
+    return held;
+  }
+
   async function field(seats: WaitronModule[] = modules) {
     const listing = await listServers(suite.db, suite.node, main, undefined, {
       holdings: oldBoxHoldings,
@@ -823,15 +840,10 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     expect(await field()).toBe(true);
   });
 
-  it("is false when the seat finds every named chain held, or the summary names none", async () => {
+  it("is false for a summary whose every chain this box holds, or that names none", async () => {
     await completedReturn("controlled");
-    const lacking = vi.fn(async () => []);
-    const holdsAll: WaitronModule[] = [
-      { ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } },
-    ];
-    await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
-    expect(await field(holdsAll)).toBe(false);
-    expect(lacking).toHaveBeenCalledWith(expect.anything(), [MISSING_CHAIN]);
+    await ask(await queryBody({ holdings: { fiscal: await heldChain() } }));
+    expect(await field()).toBe(false);
     await ask(await queryBody({ holdings: { fiscal: [] } }));
     expect(await field()).toBe(false);
   });
