@@ -43,6 +43,7 @@ describe("printEquipmentLabel", () => {
     expect(frame.getBoundingClientRect().height).toBe(0);
     expect(getComputedStyle(frame).borderTopStyle).toBe("none");
     expect(view.document.title).toBe("Waitron");
+    expect(frame.hasAttribute("data-wt-theme-root")).toBe(true);
     view.dispatchEvent(new Event("afterprint"));
     expect(frame.isConnected).toBe(false);
   });
