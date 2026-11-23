@@ -102,6 +102,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "No full invoice names that tax number.",
     es: "Ninguna factura completa lleva ese NIF.",
   },
+  "vat_rate.area_unsupported": {
+    en: `Waitron has no VAT rates for this venue's country and fiscal territory, which were fixed when the box was set up, so trying again will not help. This is a fault in Waitron; choose ${en["problem_report.title"]} to report it.`,
+    es: `Waitron no tiene tipos de IVA para el país y el territorio fiscal de este local, que quedaron fijados al configurar el servidor, así que reintentarlo no servirá. Es un fallo de Waitron; elige ${es["problem_report.title"]} para comunicarlo.`,
+  },
   "venue.time_zone_invalid": {
     en: en["zone_repair.invalid_zone"],
     es: es["zone_repair.invalid_zone"],

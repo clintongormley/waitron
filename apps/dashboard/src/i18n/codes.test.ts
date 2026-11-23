@@ -68,6 +68,17 @@ it("words an office printer refused as a receipt printer in both languages", () 
   );
 });
 
+// Setup admits only territories with VAT rates and later fixes the country and territory, so
+// retrying never helps and the refusal names the in-place report button.
+it("words a tax area with no VAT rates as a fault in Waitron, never as try again", () => {
+  for (const locale of ["en", "es"] as const) {
+    const message = codeMessage("vat_rate.area_unsupported", locale);
+    expect(message).not.toBe(codeMessage("unknown.code", locale));
+    expect(message).toContain(locale === "en" ? "fault in Waitron" : "fallo de Waitron");
+    expect(message).toContain({ en, es }[locale]["problem_report.title"]);
+  }
+});
+
 it("words the office-printer refusals in both languages", () => {
   for (const code of [
     "page_printer.not_found",
