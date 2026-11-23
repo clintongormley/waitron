@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { toDataURL } from "qrcode";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { finishEs } from "../i18n/strings/finish.js";
 import type { SetupBoxLabel } from "./box-label.js";
 import "./box-label.js";
 
@@ -47,10 +48,8 @@ describe("setup-box-label", () => {
       drawQr: async () => PIXEL,
     });
     await vi.waitFor(() => expect(part(el, "label-qr")).not.toBeNull());
-    expect(text(el, "label-words")).toBe(
-      "Si el servidor principal falla, escanea esto con cualquier caja o móvil conectado a la red del local",
-    );
-    expect(text(el, "print-label")).toBe("Imprimir etiqueta");
+    expect(text(el, "label-words")).toBe(finishEs["done.label.words"]);
+    expect(text(el, "print-label")).toBe(finishEs["done.label.print"]);
   });
 
   it("keeps Print label off until the QR is drawn, then prints the label alone", async () => {

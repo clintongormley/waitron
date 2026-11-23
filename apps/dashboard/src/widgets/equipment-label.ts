@@ -1,12 +1,8 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
-import {
-  baseStyles,
-  printEquipmentLabel,
-  type EquipmentLabelContent,
-  type WtModal,
-} from "@waitron/ui";
+import { baseStyles, type WtModal } from "@waitron/ui";
+import { printEquipmentLabel, type EquipmentLabelContent } from "@waitron/ui/src/print-label.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { DashboardApi, Printer } from "../api/client.js";

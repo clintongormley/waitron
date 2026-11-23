@@ -6,7 +6,7 @@ import { SERIF_BOLD_SHEET, TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-f
 import { DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { printEquipmentLabel } from "@waitron/ui";
+import { printEquipmentLabel } from "@waitron/ui/src/print-label.js";
 import "./equipment-label.js";
 import type { EquipmentLabel } from "./equipment-label.js";
 const ID = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";

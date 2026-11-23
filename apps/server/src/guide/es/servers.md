@@ -53,9 +53,9 @@ En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa p�
 equivocado termina la solicitud; elige **Empezar de nuevo** en el servidor nuevo.
 
 De vuelta en el servidor nuevo, elige **Terminar la unión**. El servidor nuevo recibe su primera copia por la red del
-local y se reinicia solo como servidor de reserva. Su página muestra lo que queda por hacer:
-guardar la clave del servidor y, cuando se haya unido, imprimir las
-[etiquetas de cambio](servers.md#switch-label).
+local y se reinicia solo como servidor de reserva. Cuando se haya unido, su página te pide guardar
+la clave del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y
+pegarla en el servidor.
 
 En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del servidor de reserva en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
@@ -66,9 +66,11 @@ La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicac
 
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
 
-Cuando un servidor de reserva haya terminado de unirse, abre **Sistema → Servidores** en el
-servidor principal. Para el servidor principal y para el de reserva, abre el menú de su fila,
-elige **Imprimir etiqueta de cambio** y después **Imprimir**, y pega la etiqueta en ese servidor. Si
+El servidor de un restaurante nuevo ofrece su etiqueta en su página **Configuración completada**, y
+un servidor de reserva en su propia página cuando se ha unido: elige **Imprimir etiqueta** y pega la
+etiqueta en ese servidor. Para volver a imprimirla, abre **Sistema → Servidores** en el servidor
+principal, abre el menú de la fila del servidor y elige **Imprimir etiqueta de cambio** y después
+**Imprimir**. Si
 el servidor principal falla, escanea la etiqueta del servidor de reserva con cualquier caja o móvil
 conectado a la red del local para abrir su [página de cambio](servers.md#emergency).
 

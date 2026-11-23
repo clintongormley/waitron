@@ -196,8 +196,6 @@ export {
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE, paleSwatch } from "./category-color.js";
 
-export { printEquipmentLabel, type EquipmentLabelContent } from "./print-label.js";
-
 export { WtLozenge } from "./components/wt-lozenge.js";
 export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";
 export { WtChoiceRow } from "./components/wt-choice-row.js";
