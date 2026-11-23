@@ -99,11 +99,8 @@ export const startEn = {
   "connect.finish.bundle_fetch_failed":
     "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
   "connect.reading": "Checking this box's join…",
-  "connect.waiting.lead":
-    "On the main box, open System → Servers, choose Check beside the request from this box, and tap this code:",
-  "connect.waiting.addresses":
-    "The request on the main box should come from one of this box's addresses: {addresses}",
-  "connect.waiting.main": "Main box: {primaryUrl}",
+  "connect.waiting.open_link": "Open the Servers page on the main box",
+  "connect.waiting.open_after": ", choose Check beside this box's request, and tap this code:",
   "connect.waiting.time_left": "Time left: {minutes} min",
   "connect.approved": "The main box approved a join with code {code}.",
   "connect.approved.hint":
@@ -342,11 +339,9 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.finish.bundle_fetch_failed":
     "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
   "connect.reading": "Comprobando la unión de este servidor…",
-  "connect.waiting.lead":
-    "En el servidor principal, abre Sistema → Servidores, elige Comprobar junto a la solicitud de este servidor y toca este código:",
-  "connect.waiting.addresses":
-    "La solicitud en el servidor principal debe venir de una de las direcciones de este servidor: {addresses}",
-  "connect.waiting.main": "Servidor principal: {primaryUrl}",
+  "connect.waiting.open_link": "Abre la página Servidores del servidor principal",
+  "connect.waiting.open_after":
+    ", elige Comprobar junto a la solicitud de este servidor y toca este código:",
   "connect.waiting.time_left": "Tiempo restante: {minutes} min",
   "connect.approved": "El servidor principal aprobó una unión con el código {code}.",
   "connect.approved.hint":

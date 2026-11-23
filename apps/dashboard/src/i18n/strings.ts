@@ -2381,8 +2381,7 @@ export const en = {
   "servers.join_dialog_title": "Add this box as a spare",
   "servers.join_checking": "Checking the request…",
   "servers.join_match_prompt": "Tap the code the new box shows",
-  "servers.join_compare":
-    "Check that the address is the one the new box shows and the code is the one it shows now. A wrong tap ends the request; choose Start again on the new box.",
+  "servers.join_wrong_tap": "A wrong tap ends the request; choose Start again on the new box.",
   "servers.join_choice_label": "Code {code}",
   "servers.join_approved": "Approved. On the new box, choose Finish joining.",
   "servers.join_recovery_key_missing":
@@ -7149,8 +7148,8 @@ export const es: Record<StringKey, string> = {
   "servers.join_dialog_title": "Añadir este servidor como reserva",
   "servers.join_checking": "Comprobando la solicitud…",
   "servers.join_match_prompt": "Toca el código que muestra el servidor nuevo",
-  "servers.join_compare":
-    "Comprueba que la dirección es la que muestra el servidor nuevo y que el código es el que muestra ahora. Un toque equivocado termina la solicitud; elige Empezar de nuevo en el servidor nuevo.",
+  "servers.join_wrong_tap":
+    "Un toque equivocado termina la solicitud; elige Empezar de nuevo en el servidor nuevo.",
   "servers.join_choice_label": "Código {code}",
   "servers.join_approved": "Aprobado. En el servidor nuevo, elige Terminar la unión.",
   "servers.join_recovery_key_missing":

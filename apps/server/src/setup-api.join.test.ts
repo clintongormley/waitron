@@ -12,7 +12,6 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 
 const PRIMARY_URL = "https://main.deli.test:8443";
-const ADDRESSES = ["192.168.1.20"];
 const TIME_LEFT_MS = 900_000;
 
 /** Stands in for the attempt, whose own behaviour `box-join-attempt.test.ts` covers. */
@@ -26,8 +25,8 @@ function fakeAttempt() {
     await gate;
     started += 1;
     const code = String(100000 + started);
-    state = { state: "waiting", code, addresses: ADDRESSES, primaryUrl, timeLeftMs: TIME_LEFT_MS };
-    return { code, addresses: ADDRESSES, timeLeftMs: TIME_LEFT_MS };
+    state = { state: "waiting", code, primaryUrl, timeLeftMs: TIME_LEFT_MS };
+    return { code, timeLeftMs: TIME_LEFT_MS };
   };
   const attempt = {
     start: vi.fn(async (primaryUrl: string) => {
@@ -125,7 +124,6 @@ describe("the setup page's join routes", () => {
     const answer = (await response.json()) as Record<string, unknown>;
     expect(answer).toEqual({
       code: "100001",
-      addresses: ADDRESSES,
       timeLeftMs: TIME_LEFT_MS,
       handle: expect.stringMatching(/^[\w-]{43}$/),
     });
@@ -133,7 +131,6 @@ describe("the setup page's join routes", () => {
     expect(await read(answer.handle as string)).toEqual({
       state: "waiting",
       code: "100001",
-      addresses: ADDRESSES,
       primaryUrl: PRIMARY_URL,
       timeLeftMs: TIME_LEFT_MS,
     });
@@ -275,7 +272,6 @@ describe("the setup page's join routes", () => {
       {
         state: "waiting",
         code: "100001",
-        addresses: ADDRESSES,
         primaryUrl: PRIMARY_URL,
         timeLeftMs: TIME_LEFT_MS,
       },

@@ -74,7 +74,7 @@ export interface BoxJoinAttemptDeps {
 }
 
 export type JoinAttemptState =
-  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; timeLeftMs: number }
+  | { state: "waiting"; code: string; primaryUrl: string; timeLeftMs: number }
   | { state: "approved"; code: string }
   /** `unknown`: the main box ended the request for a reason this box does not know. */
   | { state: "ended"; reason: JoinEndReason | "unknown" }
@@ -341,7 +341,6 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const identity = generateStandbyIdentity();
     const encryption = generateKeyPairSync("x25519");
     const contactUrl = ownContactUrl(deps.advertisedOrigin, identity.nodeId);
-    const addresses = ownAddresses();
     const hello: JoinHello = {
       newNodeId: identity.nodeId,
       newPublicKey: identity.publicKey,
@@ -350,7 +349,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
         .toString("base64"),
       contactUrl,
       storeUrl: spareStoreUrl(deps.advertisedOrigin, identity.nodeId, deps.spareStorePort),
-      addresses,
+      addresses: ownAddresses(),
     };
     const at = deps.now().getTime();
     const deadline = steadyNow() + JOIN_REQUEST_TTL_MS;
@@ -442,11 +441,11 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const attempt: Attempt = {
       ...asking,
       code,
-      state: { state: "waiting", code, addresses, primaryUrl, timeLeftMs: 0 },
+      state: { state: "waiting", code, primaryUrl, timeLeftMs: 0 },
     };
     current = attempt;
     schedulePoll(attempt);
-    return { code, addresses, timeLeftMs: timeLeft(attempt) };
+    return { code, timeLeftMs: timeLeft(attempt) };
   }
 
   return {

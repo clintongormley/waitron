@@ -31,7 +31,6 @@ const LAYOUTS: [string, JoinState, string][] = [
     {
       state: "waiting",
       code: "482913",
-      addresses: ["192.168.1.23"],
       primaryUrl: "https://waitron.local",
       timeLeftMs: 600_000,
     },

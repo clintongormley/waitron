@@ -6,14 +6,12 @@ export const JOIN_HANDLE = "h1";
 export const MAIN = "https://waitron.local";
 export const STARTED: JoinStarted = {
   code: "482913",
-  addresses: ["192.168.1.23"],
   timeLeftMs: 14 * 60_000,
   handle: JOIN_HANDLE,
 };
 export const WAITING: JoinState & { state: "waiting" } = {
   state: "waiting",
   code: "482913",
-  addresses: STARTED.addresses,
   primaryUrl: MAIN,
   timeLeftMs: STARTED.timeLeftMs,
 };

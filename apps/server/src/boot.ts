@@ -904,8 +904,8 @@ export interface StartServerSeams {
    */
   boxLookup?: BoxLookup;
   /**
-   * This box's addresses as a new box's Join lists them; unset, the configured box addresses or its
-   * interface addresses.
+   * This box's addresses as a new box's join request sends them to the main box; unset, the
+   * configured box addresses or its interface addresses.
    */
   joinAddresses?: () => string[];
   /**

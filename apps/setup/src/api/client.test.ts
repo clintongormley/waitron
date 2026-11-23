@@ -320,7 +320,7 @@ describe("SetupApi", () => {
   });
 
   it("sends the join's handle on every join request that has one, and the same empty body to finish", async () => {
-    const started = { code: "482913", addresses: ["192.168.1.23"], timeLeftMs: 1, handle: "h1" };
+    const started = { code: "482913", timeLeftMs: 1, handle: "h1" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(started))
