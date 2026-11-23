@@ -124,6 +124,16 @@ function knownBody(
 ${link}`;
 }
 
+/** A sign-in form's email field, holding `value`; `invalid` is its error attributes or "". */
+export function emailInput(id: string, value: string, invalid: string): string {
+  return `<input type="email" id="${escapeHtml(id)}" name="email" autocomplete="username" required value="${escapeHtml(value)}"${invalid}>`;
+}
+
+/** A sign-in form's authenticator code field; `invalid` is its error attributes or "". */
+export function codeInput(id: string, invalid: string, required = false): string {
+  return `<input type="text" id="${escapeHtml(id)}" name="totp" inputmode="numeric" autocomplete="one-time-code"${required ? " required" : ""}${invalid}>`;
+}
+
 function formSection(
   view: FormView,
   other: string,
@@ -141,7 +151,7 @@ function formSection(
   const checked = (on: boolean) => (on ? " checked" : "");
   const code = view.askCode
     ? `<p><label for="carry-on-totp">${escapeHtml(words.totp)} *</label></p>
-<p><input type="text" id="carry-on-totp" name="totp" inputmode="numeric" autocomplete="one-time-code"${invalid("totp")}></p>
+<p>${codeInput("carry-on-totp", invalid("totp"))}</p>
 <p><label for="carry-on-recovery-code">${escapeHtml(words.recoveryCode)}</label></p>
 <p><input type="text" id="carry-on-recovery-code" name="recoveryCode" autocomplete="off"${invalid("totp")}></p>
 ${error("totp")}`
@@ -156,7 +166,7 @@ ${error("totp")}`
 <form method="post" action="/carry-on" id="carry-on">
 <input type="hidden" name="returnTo" value="${escapeHtml(destination)}">
 <p><label for="carry-on-email">${escapeHtml(words.email)} *</label></p>
-<p><input type="email" id="carry-on-email" name="email" autocomplete="username" required value="${escapeHtml(view.email)}"${invalid("email")}></p>
+<p>${emailInput("carry-on-email", view.email, invalid("email"))}</p>
 ${error("email")}<p><label for="carry-on-password">${escapeHtml(words.password)} *</label></p>
 <p><input type="password" id="carry-on-password" name="password" autocomplete="current-password" required${invalid("password")}></p>
 ${error("password")}${code}<p><label><input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required${checked(view.switchedOff)}${invalid("switchedOff")}> ${escapeHtml(words.switchedOff[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.switchedOff[1])} *</label></p>

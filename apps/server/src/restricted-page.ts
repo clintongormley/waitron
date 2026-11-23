@@ -16,7 +16,11 @@ import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml, httpsLinkLine } from "./html-page.js";
 import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
+import { codeInput, emailInput } from "./carry-on.js";
+import { isSecure } from "./encrypted-connection.js";
+import { passwordInput } from "./recovery-start-again.js";
 import {
+  RESTRICTED_DOWNLOAD_WORDS,
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RESET_WORDS,
   RESTRICTED_RETURN_WORDS,
@@ -61,6 +65,8 @@ export interface OldBoxDownloadState {
 
 interface RestrictedView {
   returnState: ReturnState;
+  /** Whether this box handed over in a planned handover, not an emergency switch. */
+  planned: boolean;
   download?: OldBoxDownloadState;
   successorUrl?: string;
   handoverPage?: string;
@@ -214,12 +220,80 @@ async function readView(
             progressPage(deps, operation, restriction, read?.chart, returnState),
           ),
     returnState,
+    planned: operation?.scenario === "controlled",
     reset: await resetLine(deps, requestId),
     ...(download === undefined ? {} : { download }),
   };
 }
 
-function renderPage(view: RestrictedView, locale: SupportedLocale): string {
+/** What the download form shows after a refusal: fields marked beside them, the bottom line. */
+function downloadMessages(
+  download: OldBoxDownloadState | undefined,
+  words: (typeof RESTRICTED_DOWNLOAD_WORDS)[SupportedLocale],
+): { email?: string; password?: string; message?: string; askCode: boolean } {
+  if (download === undefined) return { askCode: false };
+  switch (download.refusal) {
+    case "insecure":
+    case "wipeUnderWay":
+      return { askCode: false };
+    case "fieldsMissing":
+      // The route keeps the email it read; with one kept, the password was the missing field.
+      return {
+        ...(download.email === ""
+          ? { email: words.emailMissing }
+          : { password: words.passwordMissing }),
+        message: words.fixFields,
+        askCode: false,
+      };
+    case "totpRequired":
+      return { message: words.totpRequired, askCode: true };
+    case "throttled":
+      return {
+        message: words.throttled(Math.max(1, Math.ceil((download.retryAfterSeconds ?? 60) / 60))),
+        askCode: false,
+      };
+    default:
+      return { message: words[download.refusal], askCode: false };
+  }
+}
+
+function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: boolean): string {
+  const words = RESTRICTED_DOWNLOAD_WORDS[locale];
+  const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
+  if (view.reset === "ordered" || view.download?.refusal === "wipeUnderWay")
+    return `<section>\n${heading}<p>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
+  const intro = `<p>${escapeHtml(view.planned ? words.planned : words.emergency)}</p>\n`;
+  if (!secure)
+    return `<section>\n${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n</section>`;
+  const shown = downloadMessages(view.download, words);
+  const error = (field: "email" | "password") =>
+    shown[field] === undefined
+      ? ""
+      : `<p id="old-box-data-${field}-error">${escapeHtml(shown[field])}</p>\n`;
+  const invalid = (field: "email" | "password") =>
+    shown[field] === undefined
+      ? ""
+      : ` aria-invalid="true" aria-describedby="old-box-data-${field}-error"`;
+  const code = shown.askCode
+    ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} *</label></p>
+<p>${codeInput("old-box-data-totp", "", true)}</p>\n`
+    : "";
+  const bottom =
+    shown.message === undefined
+      ? ""
+      : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
+  return `<section>
+${heading}${intro}<form method="post" action="/old-box-data">
+<p><label for="old-box-data-email">${escapeHtml(words.email)} *</label></p>
+<p>${emailInput("old-box-data-email", view.download?.email ?? "", invalid("email"))}</p>
+${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} *</label></p>
+<p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
+${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
+</form>
+</section>`;
+}
+
+function renderPage(view: RestrictedView, locale: SupportedLocale, secure: boolean): string {
   const text = RESTRICTED_PAGE_WORDS[locale];
   const line =
     view.reset !== undefined
@@ -233,7 +307,8 @@ function renderPage(view: RestrictedView, locale: SupportedLocale): string {
     `<h1>${escapeHtml(text.title)}</h1>
 ${httpsLinkLine(view.successorUrl, text.openDashboard)}
 ${line === undefined ? "" : `<p>${escapeHtml(line)}</p>`}
-${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}`,
+${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
+${downloadSection(view, locale, secure)}`,
   );
 }
 
@@ -255,9 +330,10 @@ export async function restrictedPageAnswer(
   try {
     return boxPageAnswer(
       c,
-      renderPage(await readView(deps, c.get("requestId"), download), locale),
+      renderPage(await readView(deps, c.get("requestId"), download), locale, isSecure(c)),
       status,
       "no-store",
+      { inline: [], connectSelf: false, formSelf: true },
     );
   } catch (error) {
     deps.log("error", "restricted_page.failed", {

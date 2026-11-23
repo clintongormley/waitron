@@ -30,10 +30,12 @@ export interface BoxPageScripts {
   inline: readonly string[];
   /** Lets them fetch from the page's own origin. */
   connectSelf: boolean;
+  /** Lets the page's forms post to its own origin. */
+  formSelf?: boolean;
 }
 
-const policy = ({ inline, connectSelf }: BoxPageScripts): string =>
-  `default-src 'none'; style-src 'unsafe-inline'; script-src ${[THEME_SCRIPT, ...inline].map(scriptSource).join(" ")}; ${connectSelf ? "connect-src 'self'; " : ""}base-uri 'none'; form-action 'none'; frame-ancestors 'self'`;
+const policy = ({ inline, connectSelf, formSelf }: BoxPageScripts): string =>
+  `default-src 'none'; style-src 'unsafe-inline'; script-src ${[THEME_SCRIPT, ...inline].map(scriptSource).join(" ")}; ${connectSelf ? "connect-src 'self'; " : ""}base-uri 'none'; form-action ${formSelf === true ? "'self'" : "'none'"}; frame-ancestors 'self'`;
 
 const CSP = policy({ inline: [], connectSelf: false });
 

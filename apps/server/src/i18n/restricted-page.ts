@@ -104,3 +104,87 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
       "La devolución se ha detenido: un registro de facturación de este servidor choca con uno del servidor principal. Sigue vendiendo con el servidor principal y conserva los datos de este servidor.",
   },
 };
+
+/** The download section of the page (`../restricted-page.ts`), posted to `../old-box-data-page.ts`. */
+export interface RestrictedDownloadWords {
+  heading: string;
+  /** After an emergency switch, or a restriction naming no operation. */
+  emergency: string;
+  /** After a planned handover. */
+  planned: string;
+  email: string;
+  password: string;
+  totp: string;
+  action: string;
+  insecure: string;
+  wipeUnderWay: string;
+  otherPage: string;
+  busy: string;
+  signInRefused: string;
+  totpRequired: string;
+  notPermitted: string;
+  throttled: (minutes: number) => string;
+  emailMissing: string;
+  passwordMissing: string;
+  fixFields: string;
+  failed: string;
+}
+
+export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, RestrictedDownloadWords>> =
+  {
+    "en-GB": {
+      email: "Email",
+      password: "Password",
+      totp: "Authenticator code",
+      throttled: (minutes) =>
+        `Too many incorrect attempts. Wait ${minutes === 1 ? "a minute" : `${minutes} minutes`} and try again. Nothing was changed.`,
+      emailMissing: "Enter your email.",
+      passwordMissing: "Enter your password.",
+      fixFields: "Correct the highlighted fields to continue.",
+      failed:
+        "Nothing was changed: this is a fault in Waitron or this box. Try again. If it fails again, switch this box off and on, then try once more.",
+      heading: "Download this box's data",
+      emergency:
+        "This box may hold data that the new main box does not have. To keep it, download it here before this box is wiped.",
+      planned: "Download the invoice records this box holds that the new main box does not.",
+      action: "Download",
+      insecure: "To download this box's data, open this page at its https:// address.",
+      wipeUnderWay: "This box is being wiped, so its data can no longer be downloaded.",
+      otherPage: "The download must be asked for on this page. Nothing was changed.",
+      busy: "This box is already making the file. Try again in a minute.",
+      signInRefused:
+        "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
+      totpRequired: "Enter your password again and the code from your authenticator app.",
+      notPermitted:
+        "This account cannot download this box's data. Sign in here with an administrator's account, or one allowed to manage boxes. Nothing was changed.",
+    },
+    "es-ES": {
+      email: "Correo electrónico",
+      password: "Contraseña",
+      totp: "Código del autenticador",
+      throttled: (minutes) =>
+        `Demasiados intentos incorrectos. Espera ${minutes === 1 ? "un minuto" : `${minutes} minutos`} y vuelve a intentarlo. No se ha cambiado nada.`,
+      emailMissing: "Introduce tu correo electrónico.",
+      passwordMissing: "Introduce tu contraseña.",
+      fixFields: "Corrige los campos marcados para continuar.",
+      failed:
+        "No se ha cambiado nada: es un fallo de Waitron o de este servidor. Vuelve a intentarlo. Si vuelve a fallar, apaga y enciende este servidor y después inténtalo otra vez.",
+      heading: "Descargar los datos de este servidor",
+      emergency:
+        "Este servidor puede tener datos que el nuevo servidor principal no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
+      planned:
+        "Descarga los registros de facturación que tiene este servidor y que el nuevo servidor principal no tiene.",
+      action: "Descargar",
+      insecure:
+        "Para descargar los datos de este servidor, abre esta página en su dirección https://.",
+      wipeUnderWay: "Este servidor se está borrando, así que ya no se pueden descargar sus datos.",
+      otherPage: "La descarga debe pedirse en esta página. No se ha cambiado nada.",
+      busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
+      signInRefused:
+        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban cuando dejó de llevar el local. No se ha cambiado nada.",
+      totpRequired:
+        "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
+      notPermitted:
+        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que pueda gestionar servidores. No se ha cambiado nada.",
+    },
+  };
