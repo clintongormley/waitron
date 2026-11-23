@@ -19,6 +19,7 @@ import {
   record,
   validWait,
   type ClockComparison,
+  type SharedClockWords,
 } from "./clock-wait.js";
 import {
   checkVenueStrings,
@@ -68,27 +69,32 @@ const internetCheck =
   "It is very important that the time on this box is correct, but it cannot currently check its time over the internet.";
 const internetCheckEs =
   "Es muy importante que la hora de este servidor sea correcta, pero ahora mismo no puede comprobarla por internet.";
-interface EmergencyClockWords {
-  checking: string;
-  clockHeading: string;
-  whichCorrect: string;
-  confirmWhy: string;
-  serverTime: string;
-  thisDevice: string;
-  theServer: string;
-  deviceCorrect: string;
-  bothWrong: string;
-  correctDevice: string;
-  compareAgain: string;
-  deviceFailed: string;
-  deviceSynchronised: string;
-  deviceLater: string;
-  laterAfterSet: string;
-  /** Names the page's own button, which this step does not draw. */
-  staleTwice: string;
-  zoneTime: (city: string, abbreviation: string) => string;
-  zoneNote: (city: string) => string;
-}
+/** Typed from the shared sets, so renaming a shared key fails here instead of leaving a word unused. */
+type EmergencyClockWords = Pick<
+  SharedClockWords,
+  | "whichCorrect"
+  | "confirmWhy"
+  | "serverTime"
+  | "thisDevice"
+  | "theServer"
+  | "bothWrong"
+  | "correctDevice"
+  | "deviceFailed"
+  | "deviceSynchronised"
+  | "deviceLater"
+  | "laterAfterSet"
+  | "later"
+  | "inUse"
+> &
+  Required<Pick<SharedClockWords, "deviceCorrect">> &
+  Pick<(typeof checkVenueStrings)["en"], "compareAgain"> & {
+    checking: string;
+    clockHeading: string;
+    /** Names the page's own button, which this step does not draw. */
+    staleTwice: string;
+    zoneTime: (city: string, abbreviation: string) => string;
+    zoneNote: (city: string) => string;
+  };
 export const emergencyClockWords = {
   en: {
     checking: "Checking this box's time…",
@@ -107,11 +113,14 @@ export const emergencyClockWords = {
     deviceSynchronised:
       "The box keeps its time over the internet, so its time is right. Correct the time on this device, then press Check again.",
     deviceLater:
-      "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+      "The box's time was not changed: this device's time is earlier than a time this venue has already used, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
     laterAfterSet:
-      "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+      "The venue cannot start: the box's time is now earlier than a time this venue has already used, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    later:
+      "The venue cannot start yet: this box's time is earlier than a time this venue has already used. Press Check again.",
+    inUse: "The venue cannot be started. This is a fault in Waitron.",
     staleTwice:
-      "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.",
+      "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.",
     zoneTime: (city, abbreviation) => `${city} time (${abbreviation})`,
     zoneNote: (city) => `Your device is set to ${city} time; both are shown in the venue's time.`,
   },
@@ -132,11 +141,14 @@ export const emergencyClockWords = {
     deviceSynchronised:
       "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y pulsa Volver a comprobar.",
     deviceLater:
-      "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+      "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que este local ya ha usado, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
     laterAfterSet:
-      "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+      "El local no puede iniciarse: la hora del servidor es ahora anterior a una hora que este local ya ha usado, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    later:
+      "El local todavía no puede iniciarse: la hora de este servidor es anterior a una hora que este local ya ha usado. Pulsa Volver a comprobar.",
+    inUse: "No se puede iniciar el local. Es un fallo de Waitron.",
     staleTwice:
-      "La lectura de la hora de este servidor ha caducado dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a comprobarla.",
+      "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a intentarlo.",
     zoneTime: (city, abbreviation) => `hora de ${city} (${abbreviation})`,
     zoneNote: (city) =>
       `Tu dispositivo está en la hora de ${city}; las dos se muestran en la hora del local.`,
@@ -148,6 +160,12 @@ const stale = (cause: unknown) =>
   record(cause.params) &&
   cause.params.reason === "clock_stale";
 const zoneCity = (timeZone: string) => timeZone.split("/").at(-1)!.replace(/_/g, " ");
+/** Focus is on nothing, or on the page itself, as when the focused control was removed. */
+function focusFallen(): boolean {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active === null || active === document.body;
+}
 const isEmergency = (context: Context) => isPromotion(context) && context.scenario === "emergency";
 interface Draft {
   oldBoxGone: boolean;
@@ -281,6 +299,9 @@ export class RecoveryHourEntry extends LitElement {
   #seriesShown = false;
   #clockAsked = false;
   #clockAnswered = false;
+  /** The emergency step's problem and answer as last drawn, and whether focus was last inside it. */
+  #clockShown = "";
+  #focusInside = false;
   #confirmed = false;
   @state() private continued = false;
   /**
@@ -288,6 +309,10 @@ export class RecoveryHourEntry extends LitElement {
    * `clear()` alone does not: the page clears a step it is about to discard.
    */
   #autoStart = false;
+  constructor() {
+    super();
+    this.addEventListener("focusin", () => (this.#focusInside = true));
+  }
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -317,12 +342,30 @@ export class RecoveryHourEntry extends LitElement {
     this.#seriesShown = shown;
     const root = this.shadowRoot!;
     const heading = root.querySelector<HTMLElement>("[data-test=clock-heading]");
+    const compare = root.querySelector<HTMLElement>("[data-test=compare]");
     const answered = isEmergency(this.context) && this.#wait.answered;
+    const clockShown = `${this.#wait.problem?.kind}:${answered}`;
+    const fallen = focusFallen();
     if (heading && !this.#clockAsked) focusNewScreen(root, heading);
-    else if (answered && !this.#clockAnswered)
-      focusNewScreen(root, root.querySelector<HTMLElement>("[data-test=compare]"));
+    else if (answered && !this.#clockAnswered) focusNewScreen(root, compare);
+    // A change that removed what had focus in the step hands focus to what the step now offers.
+    else if (
+      isEmergency(this.context) &&
+      clockShown !== this.#clockShown &&
+      fallen &&
+      this.#focusInside
+    ) {
+      const target = heading ?? compare ?? root.querySelector<HTMLElement>("h3")!;
+      // A button drawn by this update has no inner button to take focus until it has drawn too.
+      void Promise.resolve((target as Partial<LitElement>).updateComplete).then(() => {
+        if (focusFallen()) target.focus();
+      });
+    }
     this.#clockAsked = heading !== null;
     this.#clockAnswered = answered;
+    this.#clockShown = clockShown;
+    if (root.activeElement !== null) this.#focusInside = true;
+    else if (!fallen) this.#focusInside = false;
   }
   #register(): void {
     if (this.isConnected && !this.#scope) {
@@ -642,7 +685,8 @@ export class RecoveryHourEntry extends LitElement {
       this.busy && !sending && !problem && !this.#wait.counting
         ? emergencyWords?.checking
         : undefined;
-    return html`<h3>${promote ? words.promotionHeading : words.heading}</h3>
+    const title = promote ? words.promotionHeading : words.heading;
+    return html`<h3 tabindex=${emergency ? "-1" : nothing}>${title}</h3>
       <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
         ${
           observations.length === 0

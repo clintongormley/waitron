@@ -22,7 +22,7 @@ export type ClockWords = SharedClockWords &
       }
   );
 
-interface SharedClockWords {
+export interface SharedClockWords {
   whyWait: string;
   nothingToDo: string;
   continuesIn: string;

@@ -902,7 +902,7 @@ it("a second stale clock reading in a row is explained and not retried, until th
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
   const staleTwice =
-    "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.";
+    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.";
   await vi.waitFor(() =>
     expect(actions(el).includes(staleTwice) || activations(posts) > 2).toBe(true),
   );
@@ -968,13 +968,16 @@ it("an automatic start the box refuses for want of the passkey opens no prompt; 
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() =>
     expect(
-      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_step")),
+      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_try")),
     ).toBe(true),
   );
   expect(get).toHaveBeenCalledTimes(1);
   expect(activations(posts)).toBe(1);
   const again = q(el, "[data-test=retry-activation]");
   expect(again).not.toBeNull();
+  // The sentence names the button the page offers.
+  expect(actions(el)).toBe(t("handover.emergency.passkey_again_try"));
+  expect(actions(el)).toContain(again.textContent!.trim());
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(again));
   expect(get).toHaveBeenCalledTimes(1);
   again.click();
@@ -986,6 +989,40 @@ it("an automatic start the box refuses for want of the passkey opens no prompt; 
       .filter(({ path }) => path.endsWith("/activate"))
       .map(({ body }) => (body.signIn === undefined ? "none" : Object.keys(body.signIn as object))),
   ).toEqual(["none", "none", ["passkey"]]);
+});
+
+it("the Spanish sentence asking for the passkey again names the Spanish Try again", () => {
+  expect(handoverEs["handover.emergency.passkey_again_try"]).toContain(
+    handoverEs["handover.try_again"],
+  );
+});
+
+it("Try again after the time reading has gone stale prompts once, and the page's one stale retry then starts the venue by itself", async () => {
+  const get = stubPasskey();
+  const { el, posts } = await mount({
+    proof: newProof(),
+    proofLapsesAtActivate: true,
+    activationStale: 1,
+  });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
+  const again = q(el, "[data-test=retry-activation]");
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(again));
+  expect(get).toHaveBeenCalledTimes(1);
+  again.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  // One prompt to sign in, and one for Try again.
+  expect(get).toHaveBeenCalledTimes(2);
+  // The refused start set the proof that the clock step and the automatic start lean on.
+  expect(
+    posts
+      .filter(({ path }) => path.endsWith("/activate"))
+      .map(({ body }) => (body.signIn === undefined ? "none" : Object.keys(body.signIn as object))),
+  ).toEqual(["none", "none", ["passkey"], "none"]);
+  expect(actions(el)).toBe("");
 });
 
 it("keeps the reason and statements when a code expires, and retries the same declaration with the new code", async () => {
@@ -2520,7 +2557,7 @@ async function clockCheckNeedingPress() {
   expect(get).toHaveBeenCalledTimes(1);
   proof.cookie = false;
   await vi.advanceTimersByTimeAsync(15_000);
-  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again_step")));
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again_try")));
   expect(get).toHaveBeenCalledTimes(1);
   vi.useRealTimers();
   // The page's message is the only one: the clock step adds none of its own.
@@ -2533,6 +2570,8 @@ async function clockCheckNeedingPress() {
   expect(method.value).toBe("passkey");
   const again = q<HTMLElement & { disabled: boolean }>(entry, "[data-test=compare]");
   await vi.waitFor(() => expect(again.disabled).toBe(false));
+  // The sentence names the clock step's button.
+  expect(actions(el)).toContain(again.textContent!.trim());
   return { el, entry, get, posts, again };
 }
 
@@ -2541,7 +2580,7 @@ it("an automatic check of the clocks that the box refuses for want of the passke
   again.click();
   await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/activate"))).toBe(true));
   expect(get).toHaveBeenCalledTimes(2);
-  expect(actions(el)).not.toContain(t("handover.emergency.passkey_again_step"));
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_again_try"));
 });
 
 it("after an automatic check of the clocks needs the passkey, choosing the password and Try again sends the password", async () => {
@@ -2586,7 +2625,7 @@ it("a click in the clock step that sends nothing lets no prompt open for an auto
   open();
   await vi.waitFor(() =>
     expect(
-      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_step")),
+      get.mock.calls.length > 1 || actions(el).includes(t("handover.emergency.passkey_again_try")),
     ).toBe(true),
   );
   expect(get).toHaveBeenCalledTimes(1);

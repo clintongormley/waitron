@@ -1450,8 +1450,8 @@ it.each([
   },
 );
 it.each([
-  ["en", "The invoice series cannot be created. This is a fault in Waitron."],
-  ["es", "No se pueden crear las series de facturas. Es un fallo de Waitron."],
+  ["en", "The venue cannot be started. This is a fault in Waitron."],
+  ["es", "No se puede iniciar el local. Es un fallo de Waitron."],
 ] as const)(
   "a handover start found taken names the fault and never sends the person to a restore (%s)",
   async (locale, words) => {
@@ -3058,13 +3058,13 @@ it.each([
   [
     "en",
     "later",
-    "The box's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "The box's time was not changed: this device's time is earlier than a time this venue has already used, so it is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
     "Check again",
   ],
   [
     "es",
     "later",
-    "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que este local ya ha usado, así que probablemente está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
     "Volver a comprobar",
   ],
 ] as const)(
@@ -3082,12 +3082,12 @@ it.each([
 it.each([
   [
     "en",
-    "The invoice series cannot be created: the box's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
+    "The venue cannot start: the box's time is now earlier than a time this venue has already used, so this device's time is probably wrong. Correct the time on this device, press Check again, then choose which time is correct.",
     "Check again",
   ],
   [
     "es",
-    "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
+    "El local no puede iniciarse: la hora del servidor es ahora anterior a una hora que este local ya ha usado, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, pulsa Volver a comprobar y elige qué hora es la correcta.",
     "Volver a comprobar",
   ],
 ] as const)(
@@ -3106,6 +3106,8 @@ it.each([
       ).toBe(line),
     );
     expect(action(el)).toBe(again);
+    // The choice pressed is gone; focus moves to the button that is left.
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(button(el, "compare")));
   },
 );
 it.each(["server-correct", "both-wrong"])(
@@ -3135,14 +3137,89 @@ it("on an emergency switch, an answer given while focus is elsewhere on the page
   expect(el.shadowRoot!.querySelector("[data-test=correct-device]")).not.toBeNull();
   expect(document.activeElement).toBe(elsewhere);
 });
+/** The clocks agree with no internet time; after Confirm the time they differ, or select is refused. */
+function confirmedThen(answer: "disagreement" | "later" | "in-use", hold?: Promise<void>) {
+  let compared = 0;
+  return vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") {
+      compared += 1;
+      if (compared > 1) await hold;
+      const decision = compared > 1 && answer === "disagreement" ? differing : deviceOnly;
+      return { id: `comparison-${compared}`, clock: decision };
+    }
+    if (action === "select")
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: answer === "later" ? "minute_not_later" : "minute_in_use" },
+      };
+    throw new Error("unexpected promotion proposal");
+  });
+}
+it.each([
+  ["disagreement", "the Check the time heading", "[data-test=clock-heading]"],
+  ["later", "Check again", "[data-test=compare]"],
+  ["in-use", "the step's heading", "h3"],
+] as const)(
+  "on an emergency switch, Confirm the time answered %s moves focus from the button it removes to %s",
+  async (answer, _target, selector) => {
+    const el = await mountPromotion(confirmedThen(answer), "emergency");
+    await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+    await userEvent.click(button(el, "confirm-time"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull(),
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(selector)),
+    );
+  },
+);
+it("on an emergency switch, focus moved elsewhere while Confirm the time is answered stays there", async () => {
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  const el = await mountPromotion(confirmedThen("later", hold), "emergency");
+  const elsewhere = document.createElement("input");
+  document.body.append(elsewhere);
+  hosts.push(elsewhere);
+  await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+  await userEvent.click(button(el, "confirm-time"));
+  elsewhere.focus();
+  release();
+  await vi.waitFor(() => expect(button(el, "compare")).not.toBeNull());
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(document.activeElement).toBe(elsewhere);
+});
 it.each([
   [
     "en",
-    "This box's time reading was too old twice in a row, so the venue was not started. Press Continue to clock check to check the time again.",
+    "The venue cannot start yet: this box's time is earlier than a time this venue has already used. Press Check again.",
   ],
   [
     "es",
-    "La lectura de la hora de este servidor ha caducado dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a comprobarla.",
+    "El local todavía no puede iniciarse: la hora de este servidor es anterior a una hora que este local ya ha usado. Pulsa Volver a comprobar.",
+  ],
+] as const)(
+  "an emergency switch explains a time earlier than one already used without naming invoice series, naming the button it offers (%s)",
+  async (locale, later) => {
+    const el = await mountPromotion(confirmedThen("later"), "emergency", { locale });
+    await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+    await userEvent.click(button(el, "confirm-time"));
+    const line = () =>
+      el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim();
+    await vi.waitFor(() => expect(line()).toBe(later));
+    expect(later).toContain(action(el)!);
+  },
+);
+it.each([
+  [
+    "en",
+    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.",
+  ],
+  [
+    "es",
+    "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a intentarlo.",
   ],
 ] as const)(
   "an emergency switch explains a stale clock reading by what happened and the button it offers (%s); a planned handover keeps its own words",

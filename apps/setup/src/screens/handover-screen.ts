@@ -76,6 +76,7 @@ const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
   "handover.emergency.passkey_failed",
   "handover.emergency.passkey_again",
   "handover.emergency.passkey_again_step",
+  "handover.emergency.passkey_again_try",
   "handover.emergency.code_expired",
   "handover.emergency.sign_in_failed",
   "handover.emergency.throttled",
@@ -968,10 +969,13 @@ export class SetupHandoverScreen extends LitElement {
     error: { params?: { reason?: string } } | null,
     cause: unknown,
   ): StringKey {
+    // With the clock step drawn, the step's Try again or the page's is the button on screen.
     if (cause instanceof PasskeyNeedsPress)
-      return this.#choosesOnly
-        ? "handover.emergency.passkey_again_step"
-        : "handover.emergency.passkey_again";
+      return this.entry
+        ? "handover.emergency.passkey_again_try"
+        : this.#choosesOnly
+          ? "handover.emergency.passkey_again_step"
+          : "handover.emergency.passkey_again";
     if (
       cause instanceof PasskeyNotUsed ||
       (this.usePasskey &&
