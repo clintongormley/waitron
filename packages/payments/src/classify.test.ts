@@ -49,6 +49,7 @@ describe("classify", () => {
       row({ paymentRef: "orphan", externalRef: "orphan", saleId: null }),
       row({ paymentRef: "drift", externalRef: "drift" }),
       row({ paymentRef: "unpaid", externalRef: "unpaid", state: "initiated" }),
+      row({ paymentRef: "lost", externalRef: "lost", state: "initiated" }),
       row({ paymentRef: "resolved", externalRef: "resolved", held: true, holdResolved: true }),
       row({ paymentRef: "unreported", externalRef: "unreported", auditedAt: RECENT }),
     ];
@@ -56,6 +57,7 @@ describe("classify", () => {
       record({ references: ["clean"] }),
       record({ references: ["orphan"] }),
       record({ references: ["drift"], amount: decimal("9.50") }),
+      record({ references: ["lost"] }),
       record({ references: ["resolved"] }),
     ];
 

@@ -364,6 +364,9 @@ describe("backup-machine comparison", () => {
     ]);
     expect(result.unlinkedCharges).toBe(0);
     expect(result.missingLocal.map((row) => row.references)).toEqual(nextDay ? [] : [["hinted"]]);
+    expect(result.chargeAudit?.missingLocal.map((row) => row.references)).toEqual(
+      nextDay ? [] : [["hinted"]],
+    );
   });
 });
 
