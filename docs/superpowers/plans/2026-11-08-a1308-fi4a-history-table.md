@@ -2,18 +2,30 @@
 
 Fi5 will write and read observed and lookup conflicts, Fi6 will write and read filing case notes,
 and Fi7 will save AEAT answers before clearing them. Fi8–11 have no direct use for this table.
-Separate tables could make individual row shapes easier to read, but would leave Fi5 and Fi6
-maintaining separate audit stores and give Fi7 another one to build. Keep the shared append-only
-history agreed in [A1308 §3](../specs/2026-11-02-rationalisation/README.md). Before Fi5, the verified
-clock step is the sole user, so shrink Fi4a to the table, checks and writer that step needs. Fi4a
-proves storage on its own, then [Fi4b](2026-11-08-a1308-fi4b-clock-onto-history.md) moves the live write.
+Keeping today's two conflict tables would avoid Fi5's move. Fi6 would then keep a separate store
+for notes, and Fi7 would still need somewhere append-only to keep the cleared answers. The
+[agreed A1308 design](../specs/2026-11-02-rationalisation/README.md)
+gives those events one home. Only the verified clock-step write needs it before Fi5. The write
+returns an ID and no product reader loads its evidence. Backup retention reads `clock.corrected`
+incidents. Shrink Fi4a to the storage and writer needed for that step alone. The alternative is to
+trim the existing step table and let Fi5 introduce shared history. That would revise the agreed
+mapping of clock evidence, so it needs a decision before the build.
+
+The watcher wrote “keep the shared append-only history for the later slices that need it” in Lane
+E's `questions.md` at 13:08 CET on 2026-11-23. [Fi4b](2026-11-08-a1308-fi4b-clock-onto-history.md)
+covers the write and removal. The watcher is deciding whether both parts land together.
 
 **Base** is Fi3 at `f971e5506c`, including A1420 #3003 (`6e88c96309`). Follow the
 [slice rules](2026-11-08-a1308-slice-rules.md). Estimated 80–110 code lines and 120–190 test lines.
 **Landed by the owner.** Open the PR with “Every venue is reset: fiscal-verifactu; backups and
 exports from before this cannot be restored or imported.”
 
-## Build and check the table
+## Global Constraints
+
+Put `verifactu_history_data_ck` first. Wrap every per-kind CHECK as
+`kind <> '<kind>' OR coalesce(condition, 0)` so a missing JSON key fails.
+
+## Task 1. Build and check the table and writer
 
 - [ ] Take the base protection list from `apps/server` (rules §3).
 - [ ] First write failing cases in `packages/fiscal-verifactu/src/schema/verifactu-history.test.ts`
@@ -32,8 +44,7 @@ exports from before this cannot be restored or imported.”
   - `verifactu_history_kind_ck` admits `clock.confirmed`.
   - The `verifactu_history_confirmed_` CHECKs end in `source_ck` (admin or staff), `reason_ck`
     (start or unusable), `person_ck` (a nonempty person id) and `shape_ck` (text `confirmedAt`,
-    integer `stepMs`, object `proof`). Wrap each kind-specific test in
-    `kind <> 'clock.confirmed' OR coalesce(condition, 0)` so a missing key fails.
+    integer `stepMs`, object `proof`).
 - [ ] Export the table in `src/schema/index.ts`, classify it with `appendOnly` as `ledger` and
       add it to the migration manifest. Update `schema-ownership`, root `append-only-triggers` and
       `schema-constraints` expectations and the Madrid seed's `ADDED_TABLES`. Run
@@ -69,18 +80,23 @@ should report `extra index verifactu_history.primary key(id)`,
 with the table in the JSON. Compare the lists, check those fields and account for each line in
 the PR. Apply the slice-rule stops, run `/finish-branch` and reset after the owner lands.
 
+## Stops beyond the slice rules
+
+1. A per-kind CHECK accepts a row it should refuse on the app's SQLite. Take the result to the
+   watcher before using the design's fallback of a typed nullable column with a plain CHECK.
+
 ## Successor plans at stop point 1
 
-Recheck each plan against its landed base before building. Fi5 first needs nullable `event_key`
-with its unique index, `registro_id` with its record link (including backup verification), and
-`verifactu_history_registro_kind_seq_idx (registro_id, kind, seq)`. Add them with the conflict
-writes, reads and query-plan test so the schema pays for a tested use. Remove `clock.check_opened`
-from Fi5's kind list and refresh its protection prediction, writer signature and fixtures. Fi6
-first creates `triggers/fiscal-verifactu.sql` and
-`src/trigger-refusals.ts` for its submission guards. Refresh its assumed history trigger, key
-examples and ordering. Update Fi7's dependency on those files and recheck its baseline. Drop `ref_id` from
-the three successor CHECKs. The deleted check link was its only planned user. Recheck borrowed
-fixtures and the build order's Fi4a bench dependency. The stop readers, `(kind, seq)` index and
-`--history` bench flag served deleted queries in [tables-fiscal §§0.3 and 8.3](../specs/2026-11-02-rationalisation/tables-fiscal.md).
-Update those assumptions when the affected work next reaches its plan check, using the schema and
-query that will actually ship.
+Fi5 first needs nullable `event_key` with its unique index, `registro_id` with its record link and
+backup verification, and the `(registro_id, kind, seq)` lookup index. Add them with the conflict
+writes, reads and query-plan test. At that point require both columns to be null for
+`clock.confirmed` so a clock row cannot take a conflict or note's key. Refresh the kind list,
+protection prediction and writer and fixture assumptions. Remove `ref_id` from the later kinds'
+CHECKs because only the deleted stop used the check link.
+
+The original Fi4a recorded the owner's 2026-11-09 decision that a confirmation must name a clock
+check if it carries a check ID. A1420 removed that relationship. Fi6 would now create the
+hand-written trigger file and constants for its submission guards, and Fi7 and Fi9 would extend
+them. Recheck Fi6's key examples and ordering and the Fi7/Fi9 prerequisites. Fi2 and the build
+order's Fi4a bench references came from the deleted read in
+[tables-fiscal §§0.3 and 8.3](../specs/2026-11-02-rationalisation/tables-fiscal.md).

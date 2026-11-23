@@ -32,6 +32,9 @@ backups and exports from before this cannot be restored or imported.”
       promotion uses its authenticated operator and requires a person name
       (`node-operation-preparation.ts:160–181`). The setup and restore setter writes its setup note via
       its own backend (`setup-clock-set.ts:108–119`). Stop if a real path fails Fi4a's U11 person link.
+      Configuration import replaces non-admin people during setup (`boot.ts:1759–1771`).
+      `provisionVenue` refuses any existing taxpayer before that import (`provision.ts:126–137`),
+      so the import route runs before a venue can hold a verified staff step.
 - [ ] Rerun the live cases. Preserve clock admission, start confirmation and payment decisions.
       `latestClockStep` still takes the last nonzero `clock.corrected` in insertion order
       (`clock-step.ts:172–186`); backup retention checks the in-flight or pending step first
