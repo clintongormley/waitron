@@ -157,10 +157,10 @@
 
 **Pages.**
 
-- **The old box's page** shows a new line: "The main box asked this box to reset. It restarts shortly as a new box." Spanish, with the restricted page's own word for box (`i18n/restricted-page.ts:30-46`): "El equipo principal ha pedido restablecer este equipo. En breve se reinicia como un equipo nuevo."
+- **The old box's page** shows a new line: "The main box asked this box to reset. It restarts shortly as a new box." Spanish, with the restricted page's own word for box (`i18n/restricted-page.ts:30-46`): "El servidor principal ha pedido restablecer este servidor. En breve se reinicia como un servidor nuevo."
 - **The old box's page when its set-aside was refused at the start** (the watcher's condition (b)): it says what happened and gives a step the person can take themselves, with no "contact support" (CLAUDE.md §3's refusal rule). Lane B's wording, for the owner to see in the PR:
   - English: "This box was asked to reset, but it could not set its records aside, so it did not reset. Nothing on it was changed or deleted. The venue runs on the main box and no longer needs this one, so you can switch it off."
-  - Spanish: "Se pidió a este equipo que se restableciera, pero no ha podido apartar sus registros, así que no se ha restablecido. No se ha cambiado ni borrado nada en él. El local funciona con el equipo principal y ya no necesita este, así que puedes apagarlo."
+  - Spanish: "Se pidió a este servidor que se restableciera, pero no ha podido apartar sus registros, así que no se ha restablecido. No se ha cambiado ni borrado nada en él. El local funciona con el servidor principal y ya no necesita este, así que puedes apagarlo."
   - Switching it off is the only step this page can offer. A reset from the old box's own page is the open question in "Left unclear by the answers", item 1.
 - **The Servers row:**
   - after an order: "Reset asked. The old box resets itself when it is on and can reach this box. It may already have reset; if so, remove this row."
@@ -495,23 +495,23 @@ The first seven columns are new and describe the record:
 | Record type (Issue / Cancellation) | Tipo de registro (Alta / Anulación) |
 | Record created at (UTC) | Registro generado el (UTC) |
 | Sent to AEAT (Waiting / Being sent / Accepted / Accepted with errors / Refused / Stopped / Held) | Envío a la AEAT (Pendiente / Enviándose / Aceptado / Aceptado con errores / Rechazado / Detenido / Retenido) |
-| Whole chain listed (Yes when the main box's copy could not be matched) | Cadena completa (Sí cuando no se ha podido cotejar la copia del equipo principal) |
+| Whole chain listed (Yes when the main box's copy could not be matched) | Cadena completa (Sí cuando no se ha podido cotejar la copia del servidor principal) |
 
 The rest are the workbook's invoice columns and words, unchanged. Unlike the workbook, the file
 **includes** a record whose sale is a substitution (F3), because that record is unreturned too.
 The seven filing states are the module's own (`packages/fiscal-verifactu/src/filing-states.ts:5-13`).
 
-**On the old box's own page** (restricted page words, which call a box "equipo"):
+**On the old box's own page** (restricted page words, which call a box "servidor"):
 
-- "This box holds {count} invoice records that the main box does not have." / "Este equipo tiene
-  {count} registros de facturación que el equipo principal no tiene."
+- "This box holds {count} invoice records that the main box does not have." / "Este servidor tiene
+  {count} registros de facturación que el servidor principal no tiene."
 - "To keep them for your accountant, download them on the main box: System → Servers, this box's
   row, Download for accountant. Do this before this box is reset." / "Para guardarlos para tu
-  gestor, descárgalos en el equipo principal: Sistema → Servidores, la fila de este equipo,
-  Descargar para tu gestor. Hazlo antes de que se restablezca este equipo."
+  gestor, descárgalos en el servidor principal: Sistema → Servidores, la fila de este servidor,
+  Descargar para tu gestor. Hazlo antes de que se restablezca este servidor."
 - Before its first answer from the main box: "This box has not yet compared its invoice records with
-  the main box's." / "Este equipo aún no ha comparado sus registros de facturación con los del
-  equipo principal."
+  the main box's." / "Este servidor aún no ha comparado sus registros de facturación con los del
+  servidor principal."
 
 The page already links to the main box (`restricted-page.ts:208`). The row item "Download for
 accountant" opens the same block in a small dialog of its own, so the old box's page can point
