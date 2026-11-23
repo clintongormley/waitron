@@ -1507,6 +1507,31 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
+  it.each(["prepare", "demo", "live"] as const)(
+    "a %s setup ends with the Recovery pack step, showing the master key provisioning returned",
+    async (mode) => {
+      const provision = vi.fn().mockResolvedValue({
+        provisioned: true,
+        restarting: true,
+        masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+        masterKeyName: "2026-11-23 · QZJV",
+        recoveryPackPdf: btoa("%PDF-setup"),
+      });
+      const el = await mountSetupApp(stubApi({ provision }));
+      patch(el, { mode });
+      provisionRequest(el);
+      await flush(el);
+      expect(await screenText(el, "done", "h1")).toBe("Recovery pack");
+      expect(await screenText(el, "done", "[data-test=master-key-name]")).toBe(
+        "Master key · 2026-11-23 · QZJV",
+      );
+      expect(await screenText(el, "done", "[data-test=master-key]")).toBe(
+        "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      );
+      expect(await screenText(el, "done", "[data-test=pack-download]")).toBe("Download");
+    },
+  );
+
   it("threads demo intent through to the done screen", async () => {
     const el = await mountSetupApp(
       stubApi({

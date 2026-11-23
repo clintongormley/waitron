@@ -4,6 +4,7 @@ import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { JoinCopyStage, SetupApi } from "../api/client.js";
@@ -189,6 +190,46 @@ export class SetupDoneScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
+      .pack-warning {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+      }
+      .master-key {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+      .master-key-name {
+        margin: 0 0 var(--wt-space-1);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .master-key code {
+        display: block;
+        font-family: var(--wt-font-family-mono);
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+        overflow-wrap: anywhere;
+      }
+      .pack-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-3) 0;
+      }
+      .pack-copied {
+        margin: 0;
+        color: var(--wt-color-success);
+        font-weight: var(--wt-font-weight-bold);
+      }
       a.break-glass-save {
         display: inline-block;
       }
@@ -215,6 +256,14 @@ export class SetupDoneScreen extends LitElement {
 
   @property({ attribute: false }) recoveryPackPdf?: string;
   #recoveryPackUrl?: string;
+
+  /** The setup's new master key, as printed; the server keeps none, so this step shows it once. */
+  @property({ attribute: false }) masterKey?: string;
+  @property({ attribute: false }) masterKeyName?: string;
+
+  @state() private packUsed = false;
+  @state() private packCopied = false;
+  @state() private packContinued = false;
 
   @property({ type: Boolean }) cloudStaffEmailUnavailable = false;
   @property() onboardingIntent?: "demo" | "prepare" | "live";
@@ -740,7 +789,99 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
+  #downloadPack(): void {
+    const url = this.#recoveryPackUrl;
+    if (url === undefined) return;
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "waitron-recovery-pack.pdf";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    this.packUsed = true;
+  }
+
+  #printPack(): void {
+    if (this.#recoveryPackUrl === undefined) return;
+    window.open(this.#recoveryPackUrl, "_blank");
+    this.packUsed = true;
+  }
+
+  async #copyKey(key: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(key);
+    } catch {
+      return;
+    }
+    if (key !== this.masterKey) return;
+    this.packCopied = true;
+    this.packUsed = true;
+  }
+
+  #recoveryPackStep(key: string): TemplateResult {
+    const pdf = this.#recoveryPackUrl !== undefined;
+    return html`
+      <h1>${t("done.pack.heading")}</h1>
+      <p data-test="pack-lead">${t("done.pack.lead")}</p>
+      <p class="pack-warning" data-test="pack-warning">${t("done.pack.warning")}</p>
+      <div class="master-key">
+        ${
+          this.masterKeyName === undefined
+            ? nothing
+            : html`<p class="master-key-name" data-test="master-key-name">
+                ${format("done.pack.key_name", { name: this.masterKeyName })}
+              </p>`
+        }
+        <code data-test="master-key">${key}</code>
+      </div>
+      <div class="pack-actions">
+        ${
+          pdf
+            ? html`<wt-button
+                  data-test="pack-download"
+                  variant="secondary"
+                  @click=${() => this.#downloadPack()}
+                  >${t("done.pack.download")}</wt-button
+                >
+                <wt-button
+                  data-test="pack-print"
+                  variant="secondary"
+                  @click=${() => this.#printPack()}
+                  >${t("done.pack.print")}</wt-button
+                >`
+            : nothing
+        }
+        <wt-button data-test="pack-copy" variant="secondary" @click=${() => void this.#copyKey(key)}
+          >${t("done.pack.copy")}</wt-button
+        >
+        ${
+          this.packCopied
+            ? html`<p class="pack-copied" data-test="pack-copied" role="status">
+                ${t("done.pack.copied")}
+              </p>`
+            : nothing
+        }
+      </div>
+      ${
+        this.packUsed
+          ? html`<wt-form-actions
+              ><wt-button
+                data-test="pack-continue"
+                variant="primary"
+                @click=${() => {
+                  this.packContinued = true;
+                }}
+                >${t("done.pack.continue")}</wt-button
+              ></wt-form-actions
+            >`
+          : nothing
+      }
+    `;
+  }
+
   #renderTrading(): TemplateResult {
+    if (this.masterKey !== undefined && !this.packContinued)
+      return this.#recoveryPackStep(this.masterKey);
     const needsReplacement = this.breakGlassKeyInBackups && this.breakGlassSecret === undefined;
     return html`
       <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>

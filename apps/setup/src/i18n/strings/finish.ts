@@ -73,6 +73,16 @@ export const finishEn = {
     "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this box, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
     "A print agent on this box reconnects by itself. One on another computer that was given an IP address needs its Box address changed on its own page, at port 9110 on that computer.",
+  "done.pack.heading": "Recovery pack",
+  "done.pack.lead":
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+  "done.pack.warning": "This is the only time the master key is shown.",
+  "done.pack.key_name": "Master key · {name}",
+  "done.pack.download": "Download",
+  "done.pack.print": "Print",
+  "done.pack.copy": "Copy",
+  "done.pack.copied": "Copied.",
+  "done.pack.continue": "Continue",
   "done.break_glass.heading": "Save your box key now",
   "done.break_glass.key_name": "Box key {date} · {code}",
   "done.break_glass.backups":
@@ -205,6 +215,16 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Los que se abrieron en una dirección IP (por ejemplo, escaneando un código QR) hay que volver a abrirlos: ve a /setup/trust en este servidor, escanea su código QR y vuelve a configurar el dispositivo.",
   "done.devices.print_agent":
     "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Box address» en su propia página, en el puerto 9110 de ese ordenador.",
+  "done.pack.heading": "Paquete de recuperación",
+  "done.pack.lead":
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+  "done.pack.warning": "Esta es la única vez que se muestra la clave maestra.",
+  "done.pack.key_name": "Clave maestra · {name}",
+  "done.pack.download": "Descargar",
+  "done.pack.print": "Imprimir",
+  "done.pack.copy": "Copiar",
+  "done.pack.copied": "Copiada.",
+  "done.pack.continue": "Continuar",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":

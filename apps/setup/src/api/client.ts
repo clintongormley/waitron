@@ -133,6 +133,9 @@ export interface ProvisionResult {
   provisioned: true;
   restarting: true;
   recoveryPackPdf?: string;
+  /** The venue's new master key as printed, and its name; answered once, never stored here. */
+  masterKey?: string;
+  masterKeyName?: string;
   breakGlassSecret?: string;
   breakGlassKeyName?: string;
   breakGlassKeyInBackups?: true;
