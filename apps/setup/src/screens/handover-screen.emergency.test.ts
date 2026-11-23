@@ -504,17 +504,18 @@ async function startSwitching(el: SetupHandoverScreen) {
 }
 interface SwitchProof {
   cookie: boolean;
-  /** When each challenge was issued; one is live for two minutes. */
+  /** When each challenge was issued; one is live for two minutes, or 15 once given back. */
   issued: Map<string, number>;
   used: Set<string>;
-  givenBack: Set<string>;
+  /** When each challenge refused as unknown was given back. */
+  givenBack: Map<string, number>;
   /**
    * Codes the next passkey answers are refused with, in turn, after their challenge is taken:
    * `passkey.verification_failed` as for a wrong key, or `passkey.not_registered` as for a passkey
    * the copy checked does not hold, which leaves the challenge live for the next step, once.
    */
   refusals: string[];
-  /** A challenge refused as unknown has lapsed by the next step, as one kept past two minutes. */
+  /** A challenge refused as unknown has lapsed by the next step, as after the spare restarts. */
   unknownLapses?: boolean;
 }
 const refusal = (code: string, status: number) =>
@@ -538,7 +539,14 @@ function switchSignIn(
     const client = passkey.response.clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
     const { challenge } = JSON.parse(atob(client)) as { challenge: string };
     const issuedAt = proof.issued.get(challenge);
-    if (issuedAt === undefined || proof.used.has(challenge) || Date.now() - issuedAt >= 120_000)
+    const givenBackAt = proof.givenBack.get(challenge);
+    if (
+      issuedAt === undefined ||
+      proof.used.has(challenge) ||
+      (givenBackAt === undefined
+        ? Date.now() - issuedAt >= 120_000
+        : Date.now() - givenBackAt >= 15 * 60_000)
+    )
       return refusal("passkey.challenge_expired", 400);
     if (take?.includes(".")) return undefined;
     const refused = proof.refusals.shift();
@@ -547,7 +555,7 @@ function switchSignIn(
       !proof.unknownLapses &&
       !proof.givenBack.has(challenge)
     )
-      proof.givenBack.add(challenge);
+      proof.givenBack.set(challenge, Date.now());
     else proof.used.add(challenge);
     if (refused !== undefined) return refusal(refused, 401);
     proof.cookie = true;
@@ -560,7 +568,7 @@ const newProof = (): SwitchProof => ({
   cookie: false,
   issued: new Map(),
   used: new Set(),
-  givenBack: new Set(),
+  givenBack: new Map(),
   refusals: [],
 });
 /**
@@ -3288,10 +3296,10 @@ it.each(["passkey.not_registered", "passkey.verification_failed"])(
   },
 );
 
-it("a passkey answer that lapses while the spare catches up says so, and checking again asks anew", async () => {
+it("a passkey answer the held copy did not know still signs in after catching up for over two minutes", async () => {
   const get = stubPasskey();
   const proof = newProof();
-  proof.refusals = ["passkey.not_registered", "passkey.not_registered"];
+  proof.refusals = ["passkey.not_registered"];
   const { el, posts } = await mount({
     proof,
     takes: [...Array<string>(66).fill("catching-up"), "restarting"],
@@ -3305,6 +3313,25 @@ it("a passkey answer that lapses while the spare catches up says so, and checkin
     await vi.advanceTimersByTimeAsync(2000);
     await vi.waitFor(() => expect(followedTakes(posts)).toBeGreaterThan(sent));
   }
+  vi.useRealTimers();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_lapsed"));
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("a passkey answer that lapses while the spare catches up says so, and checking again asks anew", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  proof.unknownLapses = true;
+  const { el, posts } = await mount({ proof, takes: ["catching-up", "restarting"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await choosePasskey(el);
+  await vi.waitFor(() => catchingUp(el));
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(followedTakes(posts)).toBe(2));
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_lapsed")));
   expect(actions(el)).not.toContain(t("handover.emergency.passkey_failed"));
   expect(get).toHaveBeenCalledTimes(1);

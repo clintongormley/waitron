@@ -21,7 +21,11 @@ import type { FollowProgress } from "@waitron/stream";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { followedCopyId } from "./handover-copy-from-follow.js";
-import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
+import {
+  SWITCH_PROOF_COOKIE,
+  SWITCH_PROOF_TTL_MS,
+  makeSwitchProof,
+} from "./handover-switch-proof.js";
 import { beginHandover } from "./handover-store.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -311,17 +315,40 @@ it("a passkey answer the joined copy refuses for another reason is used up", asy
   }
 });
 
-it("a passkey answer refused as unknown still lapses two minutes after its challenge was made", async () => {
+it("a passkey answer refused as unknown is accepted past two minutes, until 15 minutes after it was given back", async () => {
   const passkey = signingPasskey("spare.example");
   enrol(followedVenue(), passkey);
   const s = service();
-  const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
-  const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
+  const signIn = async () => ({
+    passkey: passkey.assert(
+      (await s.post({}, "passkey-challenge")).body.options!.challenge,
+      "https://spare.example",
+    ),
+  });
+  const lapsing = await signIn();
+  const kept = await signIn();
   vi.setSystemTime(Date.now() + 90_000);
-  expect((await s.post({ signIn }, "preview")).body.error?.code).toBe("passkey.not_registered");
-  vi.setSystemTime(Date.now() + 31_000);
-  expect((await s.post({ signIn })).body.error?.code).toBe("passkey.challenge_expired");
-  expect(s.stopForSwitch).not.toHaveBeenCalled();
+  for (const answer of [lapsing, kept])
+    expect((await s.post({ signIn: answer }, "preview")).body.error?.code).toBe(
+      "passkey.not_registered",
+    );
+  vi.setSystemTime(Date.now() + SWITCH_PROOF_TTL_MS);
+  expect((await s.post({ signIn: lapsing })).body.error?.code).toBe("passkey.challenge_expired");
+  vi.setSystemTime(Date.now() - 1);
+  expect((await s.post({ signIn: kept })).body).toEqual({ state: "restarting" });
+  await restarted(s);
+});
+
+it("a take that checks this box's proof before stopping, then waits, does not renew it", async () => {
+  const proof = await makeSwitchProof(
+    { db: placed.venue, node: placed.node, ring, nodeId: standby.nodeId },
+    ADMIN,
+  );
+  const s = service({ catchingUp: true });
+  const answer = await s.post({}, "followed", { cookie: `${SWITCH_PROOF_COOKIE}=${proof}` });
+  expect(answer.body).toEqual({ state: "catching-up" });
+  expect(s.stopForSwitch).toHaveBeenCalledOnce();
+  expect(answer.setCookie).toBeUndefined();
 });
 
 it.each([

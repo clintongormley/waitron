@@ -883,6 +883,20 @@ describe("the switch's passkey and proof", () => {
     expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
   });
 
+  it("a step passed on the proof cookie renews it for another 15 minutes from then", async () => {
+    const s = service();
+    const first = await proofCookie();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    const renewed = await s.post({}, true, "preview", first);
+    expect(renewed.status).toBe(200);
+    const [pair] = renewed.setCookie!.split("; ");
+    expect(pair!.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
+    expect(pair).not.toBe(first.cookie);
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+    expect((await s.post({}, true, "preview", first)).body.error?.code).toBe("password.invalid");
+    expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
+  });
+
   it("refuses a passkey whose person does not hold node.manage", async () => {
     const passkey = await enrolledPasskey();
     await setBuiltInRoleForTest(placed.venue, ADMIN, "staff");

@@ -132,20 +132,21 @@ export function readSwitchProofCookie(c: Context): string | null {
 }
 
 interface HeldChallenge {
-  /** When the challenge was made. */
-  at: number;
+  /** When the challenge stops being live. */
+  until: number;
   givenBack: boolean;
 }
 
 /**
  * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
- * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once.
+ * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once, and is live
+ * for 2 minutes from when it is made, or 15 from when it is given back.
  */
 export function createSwitchChallenges() {
   const made = new Map<string, HeldChallenge>();
   const live = (challenge: string) => {
     const held = made.get(challenge);
-    return held !== undefined && Date.now() - held.at < SWITCH_CHALLENGE_TTL_MS;
+    return held !== undefined && Date.now() < held.until;
   };
   const prune = () => {
     for (const challenge of made.keys())
@@ -159,7 +160,10 @@ export function createSwitchChallenges() {
         rpID: rpId,
         userVerification: "required",
       });
-      made.set(options.challenge, { at: Date.now(), givenBack: false });
+      made.set(options.challenge, {
+        until: Date.now() + SWITCH_CHALLENGE_TTL_MS,
+        givenBack: false,
+      });
       return options;
     },
     /** The challenge as it was held, if it is live; either way it is no longer held. */
@@ -168,11 +172,11 @@ export function createSwitchChallenges() {
       made.delete(challenge);
       return held;
     },
-    /** Holds a taken challenge again, once, keeping the time it was made. */
+    /** Holds a taken challenge again, once, live for as long as a proof. */
     giveBack(challenge: string, held: HeldChallenge): void {
       if (held.givenBack) return;
       prune();
-      made.set(challenge, { at: held.at, givenBack: true });
+      made.set(challenge, { until: Date.now() + SWITCH_PROOF_TTL_MS, givenBack: true });
     },
   };
 }
@@ -220,7 +224,7 @@ type NotPassword = Exclude<SwitchSignInRequest, { kind: "password" }>;
 /**
  * Without `db`, checks only what needs no copy and uses nothing up. With it, a passkey's challenge
  * is taken, its answer checked against `db` and the proof cookie set, or the proof's person is
- * checked against `db`.
+ * checked against `db` and the proof cookie renewed.
  */
 async function checkSwitchSignIn(
   c: Context,
@@ -231,7 +235,10 @@ async function checkSwitchSignIn(
   if (signIn.kind === "malformed") refuse("malformed");
   if (signIn.kind === "proof") {
     const personId = await readSwitchProof(sw, signIn.proof);
-    if (db !== undefined) await requireSwitchPerson(db, personId);
+    if (db !== undefined) {
+      await requireSwitchPerson(db, personId);
+      setSwitchProofCookie(c, await makeSwitchProof({ ...sw, db }, personId));
+    }
     return personId;
   }
   const { challenge, response } = signIn;
