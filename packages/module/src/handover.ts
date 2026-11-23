@@ -69,11 +69,14 @@ export interface ModuleHandoverContribution {
   lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;
   /**
    * The records in this database that the main box's `holdings` do not cover, by chain; a chain is
-   * left out only when those holdings show the main box holds this box's part of it. Holdings not in
-   * the module's shape throw
-   * `MalformedHoldingsError`.
+   * left out only when those holdings show the main box holds this box's part of it. With no
+   * holdings (`undefined`, the main box was not asked), every chain is listed whole. Holdings not in
+   * the module's shape throw `MalformedHoldingsError`.
    */
-  unreturned?(query: BackupQuery, mainHoldings: CanonicalValue): Promise<UnreturnedChain[]>;
+  unreturned?(
+    query: BackupQuery,
+    mainHoldings: CanonicalValue | undefined,
+  ): Promise<UnreturnedChain[]>;
 }
 
 function byName(modules: readonly WaitronModule[]): WaitronModule[] {

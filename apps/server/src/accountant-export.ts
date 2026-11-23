@@ -6,9 +6,10 @@ import {
   asc,
   between,
   eq,
+  exists,
   inArray,
   isNotNull,
-  isNull,
+  not,
   notExists,
   or,
   sql,
@@ -407,6 +408,12 @@ export async function readAccountantInvoices(
   const originalSeries = alias(invoiceSeries, "original_series");
   const replacement = alias(sales, "replacement_invoice");
   const civilDate = stampDate(sales.issuedAt, sales.issuedOffsetMinutes);
+  const substitutes = exists(
+    tx
+      .select({ id: saleSubstitutions.id })
+      .from(saleSubstitutions)
+      .where(eq(saleSubstitutions.substitutionSaleId, sales.id)),
+  );
   // The day the workbook lists the sale under: a replacement goes with the original it repeats.
   const periodDay = sql<string>`case when ${sales.replacesOriginal} = 1
     then ${saleVatDay({
@@ -440,7 +447,7 @@ export async function readAccountantInvoices(
         vatBreakdown: sales.vatBreakdown,
         correctsSaleId: sales.correctsSaleId,
         replacesOriginal: sales.replacesOriginal,
-        substitution: saleSubstitutions.id,
+        substitution: sql<number>`${substitutes}`.mapWith(Boolean),
         originalCode: originalSeries.code,
         originalNumber: original.invoiceNumber,
         voidedAt: saleVoids.voidedAt,
@@ -453,19 +460,13 @@ export async function readAccountantInvoices(
       .leftJoin(
         replacement,
         and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
-      )
-      .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id));
+      );
   type Row = Awaited<ReturnType<ReturnType<typeof query>["execute"]>>[number];
   const rows: Row[] = [];
   if ("range" in selection)
     rows.push(
       ...(await query()
-        .where(
-          and(
-            between(periodDay, selection.range.from, selection.range.to),
-            isNull(saleSubstitutions.id),
-          ),
-        )
+        .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
         .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id))),
     );
   else {
@@ -496,7 +497,7 @@ export async function readAccountantInvoices(
         ? "replacement"
         : row.correctsSaleId !== null
           ? "corrective"
-          : substitution !== null
+          : substitution
             ? "F3"
             : row.customerTaxId === null
               ? "F2"

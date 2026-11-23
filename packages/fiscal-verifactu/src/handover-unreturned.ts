@@ -32,9 +32,10 @@ async function matchesThrough(query: BackupQuery, held: ChainHolding): Promise<b
  */
 export async function fiscalUnreturned(
   query: BackupQuery,
-  mainHoldings: CanonicalValue,
+  mainHoldings: CanonicalValue | undefined,
 ): Promise<UnreturnedChain[]> {
-  const main = new Map(readHoldings(mainHoldings).map((h) => [`${h.nodeId}\n${h.sifId}`, h]));
+  const held = mainHoldings === undefined ? [] : readHoldings(mainHoldings);
+  const main = new Map(held.map((h) => [`${h.nodeId}\n${h.sifId}`, h]));
   const unreturned: UnreturnedChain[] = [];
   for await (const head of chainHeads(query)) {
     const held = main.get(`${head.nodeId}\n${head.sifId}`);

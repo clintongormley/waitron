@@ -30,4 +30,30 @@ describe("renderWorkbook", () => {
     expect(strFromU8(files["xl/worksheets/sheet2.xml"]!)).toContain(">two</t>");
     expect(relationships).toContain('Target="styles.xml"');
   });
+
+  it("names columns past Z in base 26, as A to Z then AA, AZ, BA, ZZ, AAA", async () => {
+    const cells = Array.from({ length: 703 }, (_, index) => String(index));
+    const sheet = strFromU8(
+      unzipSync(await renderWorkbook([{ name: "Wide", rows: [cells, ["a", "b"]] }]))[
+        "xl/worksheets/sheet1.xml"
+      ]!,
+    );
+    const reference = (index: number) =>
+      sheet.match(
+        new RegExp(`<c r="([A-Z]+1)" t="inlineStr"><is><t xml:space="preserve">${index}<`),
+      )?.[1];
+    expect([0, 25, 26, 27, 51, 52, 701, 702].map(reference)).toEqual([
+      "A1",
+      "Z1",
+      "AA1",
+      "AB1",
+      "AZ1",
+      "BA1",
+      "ZZ1",
+      "AAA1",
+    ]);
+    expect(sheet).toContain(
+      '<row r="2"><c r="A2" t="inlineStr"><is><t xml:space="preserve">a</t></is></c><c r="B2" t="inlineStr"><is><t xml:space="preserve">b</t></is></c></row>',
+    );
+  });
 });

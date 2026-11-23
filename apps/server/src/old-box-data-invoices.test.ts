@@ -1,8 +1,9 @@
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { billAdvances, type Database } from "@waitron/db";
+import { billAdvances, liveBackupQuery, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import type { CanonicalValue } from "@waitron/membership";
 import type { UnreturnedChain, WaitronModule } from "@waitron/module";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
@@ -39,34 +40,46 @@ beforeEach(async () => {
   venue = await seedVenueWithSeries(suite.db);
 });
 
-/** Records `saleIds` as one chain of issue records, in order, on the venue's node. */
-async function chainOf(saleIds: readonly string[]): Promise<void> {
+/** A module whose seat lists `saleIds` as one whole chain of issue records, numbered from 1. */
+function listing(saleIds: readonly string[]): WaitronModule {
+  const chain: UnreturnedChain = {
+    ids: { nodeId: "node-a", sifId: "sif-3" },
+    whole: true,
+    records: saleIds.map((saleId, index) => ({
+      saleId,
+      number: index + 1,
+      type: "issue",
+      createdAt: "2026-11-20T10:00:01Z",
+      filingState: null,
+    })),
+  };
+  return { ...fiscal, handover: { ...VERIFACTU_HANDOVER, unreturned: async () => [chain] } };
+}
+
+/** One issue record of `saleId` on the venue's node, through the fiscal fixtures' defaults. */
+async function recordOf(saleId: string): Promise<void> {
   const parents = await seedFiscalParents(suite.db, {
-    ids: { nodeId: venue.nodeId, seriesId: venue.seriesId },
+    ids: { nodeId: venue.nodeId, seriesId: venue.seriesId, saleId },
     reuseExistingParents: true,
     skipSale: true,
   });
-  for (const [index, saleId] of saleIds.entries()) {
-    await insertFiscalRecord(
-      suite.db,
-      { ...parents, saleId },
-      {
-        secuencia: index + 1,
-        numSerie: `A/${index + 1}`,
-      },
-    );
-  }
+  await insertFiscalRecord(suite.db, parents);
 }
 
 function sheet(bytes: Uint8Array, name = "xl/worksheets/sheet1.xml"): string {
   return strFromU8(unzipSync(bytes)[name]!);
 }
 
-function build(db: Database, modules: readonly WaitronModule[], language: "en" | "es" = "en") {
+function build(
+  db: Database,
+  modules: readonly WaitronModule[],
+  language: "en" | "es" = "en",
+  mainHoldings: Readonly<Record<string, CanonicalValue>> | null = { fiscal: [] },
+) {
   return buildOldBoxWorkbook({
     db,
     modules,
-    mainHoldings: { fiscal: [] },
+    mainHoldings,
     madeAt: MADE_AT,
     language,
   });
@@ -123,9 +136,7 @@ describe("the old box's Invoices tab", () => {
       lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
     });
     await seedSubstitution(suite.db, { substitutionSaleId: substitute, substitutedSaleId: walkUp });
-    await chainOf([twoRates, walkUp, advance, substitute]);
-
-    const xml = sheet(await build(suite.db, [fiscal]));
+    const xml = sheet(await build(suite.db, [listing([twoRates, walkUp, advance, substitute])]));
     const words = OLD_BOX_DATA_WORDS.en;
     const accountant = ACCOUNTANT_EXPORT_WORDS.en;
 
@@ -162,10 +173,10 @@ describe("the old box's Invoices tab", () => {
       "23.10",
     ]);
     expect(first.slice(20)).toEqual([
-      expect.stringContaining(venue.nodeId),
+      "Box: node-a; System record: sif-3",
       "1",
       words.recordTypes.issue,
-      expect.any(String),
+      "2026-11-20T10:00:01Z",
       words.notFiled,
       words.yes,
     ]);
@@ -230,41 +241,35 @@ describe("the old box's Invoices tab", () => {
 
     const xml = sheet(await build(suite.db, [seat], "es"));
     const words = OLD_BOX_DATA_WORDS.es;
+    const chainCell = `${words.chainFields.nodeId}: node-a; ${words.chainFields.sifId}: sif-a`;
 
     expect(unreturned).toHaveBeenCalledWith(expect.anything(), []);
     expect(row(xml, 1)).toEqual([words.invoiceIntro.replace("{time}", "2026-11-23 09:30 UTC")]);
     expect(row(xml, 2).slice(0, 3)).toEqual(ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.slice(0, 3));
-    expect(row(xml, 2).slice(-6)).toEqual([
-      "Cadena",
-      "Número de registro",
-      "Tipo de registro",
-      "Registro creado el (UTC)",
-      "Estado del envío a la AEAT",
-      "Cadena completa listada",
-    ]);
+    expect(row(xml, 2).slice(-6)).toEqual(words.recordColumns);
     expect(row(xml, 3).slice(20)).toEqual([
-      "nodeId: node-a; sifId: sif-a",
+      chainCell,
       "7",
-      "Alta",
+      words.recordTypes.issue,
       "2026-11-20T10:00:01Z",
-      "Aceptado",
+      words.filingStates.aceptado,
       "No",
     ]);
     expect(row(xml, 4).slice(0, 3)).toEqual([sale, venue.nodeId, "A/1"]);
     expect(row(xml, 4).slice(20)).toEqual([
-      "nodeId: node-a; sifId: sif-a",
+      chainCell,
       "8",
-      "Anulación",
+      words.recordTypes.cancellation,
       "2026-11-20T10:05:00Z",
-      "Pendiente",
+      words.filingStates.pendiente,
       "No",
     ]);
     expect(row(xml, 5)).toEqual([
       "sale-not-here",
       ...Array<string>(19).fill(""),
-      "nodeId: node-a; sifId: sif-a",
+      chainCell,
       "9",
-      "Alta",
+      words.recordTypes.issue,
       "2026-11-20T10:06:00Z",
       "a_later_state",
       "No",
@@ -283,6 +288,61 @@ describe("the old box's Invoices tab", () => {
     }
     expect(lock).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
+  });
+  it("lists the fiscal module's chains whole under the no-comparison first line when there is no main-box summary, and nothing when the summary holds them", async () => {
+    const sale = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-20T10:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await recordOf(sale);
+
+    for (const language of ["en", "es"] as const) {
+      const xml = sheet(await build(suite.db, [fiscal], language, null));
+      const words = OLD_BOX_DATA_WORDS[language];
+      // The fiscal seat names a chain by box, system record, system and installation, in that order.
+      const [box, record, system, installation] = Object.values(words.chainFields);
+      expect(row(xml, 1)).toEqual([
+        words.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+      ]);
+      expect([row(xml, 3)[0], row(xml, 3)[20], row(xml, 3).at(-1)]).toEqual([
+        sale,
+        expect.stringMatching(
+          new RegExp(
+            `^${box}: ${venue.nodeId}; ${record}: [^;]+; ${system}: WAITRON01; ${installation}: \\d+$`,
+          ),
+        ),
+        words.yes,
+      ]);
+      expect(row(xml, 4)).toEqual([]);
+    }
+    expect(OLD_BOX_DATA_WORDS.en.uncomparedIntro).toBe(
+      "Every invoice record this box holds, {time}. No comparison with the new main box was made, so some of these may already be on it.",
+    );
+
+    const held = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
+    const compared = sheet(await build(suite.db, [fiscal], "en", { fiscal: held }));
+    expect(row(compared, 1)[0]).toMatch(/^Invoice records the new main box did not have/);
+    expect(row(compared, 3)).toEqual([]);
+  });
+
+  it("asks a module the main box's summary does not name for every chain, and says no comparison was made", async () => {
+    const named = vi.fn(async (): Promise<UnreturnedChain[]> => []);
+    const unnamed = vi.fn(async (): Promise<UnreturnedChain[]> => []);
+    const modules: WaitronModule[] = [
+      { ...fiscal, name: "named", handover: { ...VERIFACTU_HANDOVER, unreturned: named } },
+      { ...fiscal, name: "unnamed", handover: { ...VERIFACTU_HANDOVER, unreturned: unnamed } },
+    ];
+
+    const xml = sheet(await build(suite.db, modules, "en", { named: ["held"] }));
+
+    expect(named).toHaveBeenCalledWith(expect.anything(), ["held"]);
+    expect(unnamed).toHaveBeenCalledWith(expect.anything(), undefined);
+    expect(row(xml, 1)[0]).toMatch(/^Every invoice record this box holds/);
+    expect(
+      row(sheet(await build(suite.db, modules, "en", { named: [], unnamed: [] })), 1)[0],
+    ).toMatch(/^Invoice records the new main box did not have/);
   });
 });
 
@@ -319,5 +379,33 @@ describe("reading invoices by sale id", () => {
       ]),
     );
     expect(invoices).toHaveLength(2);
+  });
+
+  it("reads a substitution that replaces two tickets once", async () => {
+    const tickets = [];
+    for (const invoiceNumber of [1, 2])
+      tickets.push(
+        await seedSale(suite.db, venue, {
+          invoiceNumber,
+          issuedAt: "2026-11-20T10:00:00.000Z",
+          total: "12.10",
+          lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+        }),
+      );
+    const full = await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-11-20T11:00:00.000Z",
+      total: "24.20",
+      counterpartyTaxId: "B87654321",
+      lines: [{ vatRate: "21.00", lineTotal: "20.00" }],
+    });
+    for (const ticket of tickets)
+      await seedSubstitution(suite.db, { substitutionSaleId: full, substitutedSaleId: ticket });
+
+    const invoices = await readAccountantInvoices(suite.db, { saleIds: [full] });
+
+    expect(invoices.map(({ id, invoiceType }) => ({ id, invoiceType }))).toEqual([
+      { id: full, invoiceType: "F3" },
+    ]);
   });
 });

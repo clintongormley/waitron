@@ -175,6 +175,19 @@ describe("fiscalUnreturned", () => {
     ]);
   });
 
+  it("lists every chain whole when there is no main-box summary at all", async () => {
+    const node = await seedNode(suite.db, "Unasked");
+    const first = await append(node, 1);
+    const second = await append(node, 2);
+    const path = await copy();
+
+    const unreturned = await reading(path, (query) => fiscalUnreturned(query, undefined));
+
+    expect(unreturned.map((chain) => [chain.whole, chain.records.map((r) => r.saleId)])).toEqual([
+      [true, [first.sale, second.sale]],
+    ]);
+  });
+
   it("refuses main-box holdings that are not a list of chains", async () => {
     const path = await copy();
     for (const holdings of [{ holdings: [] }, ["not a chain"]] as CanonicalValue[]) {

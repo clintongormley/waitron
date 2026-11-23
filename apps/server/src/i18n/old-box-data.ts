@@ -3,6 +3,14 @@ export const OLD_BOX_DATA_WORDS = {
     invoiceSheet: "Invoices",
     invoiceIntro:
       "Invoice records the new main box did not have when this file was made, {time}. The old main box may still send some of these to it before it is wiped.",
+    uncomparedIntro:
+      "Every invoice record this box holds, {time}. No comparison with the new main box was made, so some of these may already be on it.",
+    chainFields: {
+      nodeId: "Box",
+      sifId: "System record",
+      idSistemaInformatico: "System",
+      numeroInstalacion: "Installation",
+    } as Readonly<Record<string, string>>,
     recordColumns: [
       "Chain",
       "Record number",
@@ -29,6 +37,14 @@ export const OLD_BOX_DATA_WORDS = {
     invoiceSheet: "Facturas",
     invoiceIntro:
       "Registros de facturación que el nuevo servidor principal no tenía cuando se creó este archivo, {time}. Es posible que el antiguo servidor principal aún le envíe algunos antes de borrarse.",
+    uncomparedIntro:
+      "Todos los registros de facturación de este servidor, {time}. No se ha comparado con el nuevo servidor principal, así que algunos pueden estar ya en él.",
+    chainFields: {
+      nodeId: "Servidor",
+      sifId: "Registro del sistema",
+      idSistemaInformatico: "Sistema",
+      numeroInstalacion: "Instalación",
+    } as Readonly<Record<string, string>>,
     recordColumns: [
       "Cadena",
       "Número de registro",
