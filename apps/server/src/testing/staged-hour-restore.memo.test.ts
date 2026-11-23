@@ -1,26 +1,35 @@
-import "./staged-hour-restore.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
-import {
-  failingDerivationsOf,
-  watchDerivations,
-  watchedDerivationCount,
-  watchedOrder,
-} from "./watched-scrypt.js";
 
-vi.mock("node:crypto", async (importOriginal) =>
-  (await import("./watched-scrypt.js")).watchedCrypto(await importOriginal()),
-);
+const derivations = vi.hoisted(() => ({ count: 0, failNext: false }));
 
-afterEach(async () => {
-  await watchedOrder();
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  const scrypt = (
+    secret: string,
+    salt: Buffer,
+    keyLength: number,
+    done: (error: Error | null, key: Buffer) => void,
+  ) => {
+    derivations.count += 1;
+    if (derivations.failNext) {
+      derivations.failNext = false;
+      throw new Error("scrypt failed (test fault)");
+    }
+    actual.scrypt(secret, salt, keyLength, done);
+  };
+  return { ...actual, scrypt };
 });
 
-describe("the staged-restore fixture's secret-check memo", () => {
+beforeEach(() => {
+  derivations.count = 0;
+  derivations.failNext = false;
+});
+
+describe("the server test setup's secret-check memo", () => {
   it("derives a repeated or concurrent exact pair once", async () => {
     const secret = "repeated recovery key";
     const stored = hashSecret(secret);
-    watchDerivations(secret);
     expect(
       await Promise.all([
         verifySecretAsync(secret, stored),
@@ -29,29 +38,33 @@ describe("the staged-restore fixture's secret-check memo", () => {
       ]),
     ).toEqual([true, true, true]);
     expect(await verifySecretAsync(secret, stored)).toBe(true);
-    expect(watchedDerivationCount()).toBe(1);
+    expect(derivations.count).toBe(1);
   });
 
   it("keeps different secrets and stored hashes separate, including refusals", async () => {
     const secret = "current recovery key";
     const stored = hashSecret(secret);
     const other = hashSecret("replacement recovery key");
-    watchDerivations(secret);
+    const sameSecret = hashSecret(secret);
     expect(await verifySecretAsync(secret, stored)).toBe(true);
     expect(await verifySecretAsync("wrong recovery key", stored)).toBe(false);
+    expect(await verifySecretAsync("wrong recovery key", stored)).toBe(false);
+    expect(derivations.count).toBe(2);
+    expect(await verifySecretAsync(secret, sameSecret)).toBe(true);
+    expect(derivations.count).toBe(3);
     expect(await verifySecretAsync(secret, other)).toBe(false);
     expect(await verifySecretAsync("replacement recovery key", other)).toBe(true);
     expect(await verifySecretAsync(secret, other)).toBe(false);
-    expect(watchedDerivationCount()).toBe(2);
+    expect(derivations.count).toBe(5);
   });
 
   it("retries a pair after its real derivation rejects", async () => {
     const secret = "retry recovery key";
     const stored = hashSecret(secret);
-    await expect(
-      failingDerivationsOf(secret, () => verifySecretAsync(secret, stored)),
-    ).rejects.toThrow("scrypt failed (test fault)");
+    derivations.failNext = true;
+    await expect(verifySecretAsync(secret, stored)).rejects.toThrow("scrypt failed (test fault)");
     expect(await verifySecretAsync(secret, stored)).toBe(true);
+    expect(derivations.count).toBe(2);
   });
 
   it("gives the event loop a turn before returning a remembered answer", async () => {

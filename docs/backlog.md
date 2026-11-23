@@ -1395,7 +1395,7 @@ For db, ui-core and ui mutation
 packing, use their [cost-table refresh instructions](developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 
 
-- **apps/server's test speed: restart tests and recovery-key checks** (bundle of 2, size L). The restart tests and wider recovery-key memo adoption remain. [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-and-recovery-key-checks)
+- **Find why the server's fiscal-hour restart tests boot twice.** [Detail](backlog/ci.md#the-servers-fiscal-hour-restart-tests-boot-twice)
 
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the

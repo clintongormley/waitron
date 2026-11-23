@@ -40,28 +40,6 @@ import {
 } from "./hour-test-clock.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
-// Load this fixture before recovery-key consumers so they receive its memoised verifier.
-vi.mock("@waitron/identity", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/identity")>();
-  const answers = new Map<string, Map<string, Promise<boolean>>>();
-  return {
-    ...actual,
-    async verifySecretAsync(secret: string, stored: string): Promise<boolean> {
-      let bySecret = answers.get(stored);
-      if (bySecret === undefined) answers.set(stored, (bySecret = new Map()));
-      const remembered = bySecret.get(secret);
-      if (remembered !== undefined) {
-        await new Promise((resolve) => setImmediate(resolve));
-        return remembered;
-      }
-      const answer = actual.verifySecretAsync(secret, stored);
-      bySecret.set(secret, answer);
-      answer.catch(() => bySecret.delete(secret));
-      return answer;
-    },
-  };
-});
-
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));

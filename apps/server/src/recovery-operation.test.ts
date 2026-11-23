@@ -132,6 +132,7 @@ describe("scoped recovery-key authority", () => {
   });
 
   it("derives outside the write lock and rolls back a refused operation", async () => {
+    await perform(async () => {});
     const original = await readRecoveryKeyVerifier(suite.node, NODE);
     let held: unknown;
     const observed = await venueAndNodeWritersBesideRequest(suite.db, suite.node, () =>
