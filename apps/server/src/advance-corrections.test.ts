@@ -50,6 +50,7 @@ import {
   spanish,
   type AdvanceVenue,
 } from "./testing/advance-bills.js";
+import { correctableNow } from "./invoice-corrections.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import "./errors.js";
 
@@ -1162,6 +1163,24 @@ describe("the link between an advance and the rest's invoice that took it off", 
     expect(byId.get(corrective)).toBeDefined();
     expect(byId.get(corrective)).not.toHaveProperty("advance");
     expect(byId.get(corrective)).not.toHaveProperty("takesOff");
+  });
+});
+
+describe("correctableNow on a part payment", () => {
+  it("answers 0 once the table's ticket took it off", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    expect(
+      await inTx(venue(), (tx) =>
+        correctableNow(
+          tx,
+          venue().backend,
+          venue().cfg,
+          venue().clock.now(),
+          brandSaleId(rest.advanceIds[0]!),
+          () => true,
+        ),
+      ),
+    ).toEqual({ refundable: 3000, correctable: 0 });
   });
 });
 

@@ -170,7 +170,6 @@ async function checkInvoiceCorrectable<T>(
 const LASTING_REFUSALS: ReadonlySet<string> = new Set([
   "invoice_correction.not_settled",
   "advance.taken_off_final_invoice",
-  "invoice_correction.chain_unsound",
   "sale.correction_history_unusable",
   "sale.correction_unsupported",
 ]);

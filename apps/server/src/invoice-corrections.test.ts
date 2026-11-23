@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
@@ -58,6 +58,7 @@ import {
   parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
+  correctableNow,
 } from "./invoice-corrections.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
@@ -756,6 +757,19 @@ describe("fileCorrectionIn", () => {
     const correctiveSaleId = await fileAll(correction.id);
     const [corrective] = await venue.db.select().from(sales).where(eq(sales.id, correctiveSaleId));
     expect(corrective).toMatchObject({ total: -100 });
+  });
+});
+
+describe("correctableNow", () => {
+  it("answers 0 for a ticket not yet paid, without asking whether the caller would refuse", async () => {
+    const saleId = await soldForCash("Rib steak", []);
+    const stillRefused = vi.fn(() => true);
+    expect(
+      await inTx(venue, (tx) =>
+        correctableNow(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, stillRefused),
+      ),
+    ).toEqual({ refundable: 0, correctable: 0 });
+    expect(stillRefused).not.toHaveBeenCalled();
   });
 });
 

@@ -225,18 +225,11 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
-/** A payment on account's money comes back this way only as {@link refusePlainRefundOfAdvance}
- * allows; its tip alone always may. Answers whether `saleId` is one. */
-async function refuseRefundOfAdvance(
-  tx: Transaction,
-  saleId: string,
-  tenderId: string,
-): Promise<boolean> {
+async function isPartPayment(tx: Transaction, saleId: string): Promise<boolean> {
   const [advance] = await tx
     .select({ saleId: billAdvances.advanceSaleId })
     .from(billAdvances)
     .where(eq(billAdvances.advanceSaleId, saleId));
-  if (advance !== undefined) await refusePlainRefundOfAdvance(tx, saleId, { tenderId });
   return advance !== undefined;
 }
 
@@ -344,10 +337,12 @@ export async function reserveTenderRefund(
   // invoice while an advance's correction is open (`advance.correction_open`): a guard for one missed.
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
   else await refuseTakenOffAdvance(tx, saleId);
-  const plain =
-    correctionLink === undefined &&
-    appliedAmount > 0 &&
-    !(await refuseRefundOfAdvance(tx, saleId, tenderId));
+  const returnsPayment = correctionLink === undefined && appliedAmount > 0;
+  // A part payment's money comes back this way only as refusePlainRefundOfAdvance allows; its tip
+  // alone always may.
+  const partPayment = returnsPayment && (await isPartPayment(tx, saleId));
+  if (partPayment) await refusePlainRefundOfAdvance(tx, saleId, { tenderId });
+  const plain = returnsPayment && !partPayment;
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,
