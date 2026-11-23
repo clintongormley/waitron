@@ -1,11 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { billPayments, sales, workingOrderLines, workingOrders } from "@waitron/db";
+import { sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { createPinThrottle } from "@waitron/identity";
-import { insertCapturedPayment, payments } from "@waitron/payments";
+import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
@@ -28,7 +28,11 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  capturedCardPayment,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { REASONS } from "./testing/adjustment-venue.js";
@@ -306,35 +310,7 @@ it("keeps the cancellation when the remaining set-menu bill matches cash already
 
 it("recovers a captured card payment that covers the whole set-menu bill without another charge", async () => {
   const id = await bill();
-  const receivedAt = venue.clock.now().instant;
-  const paymentId = await inTx(venue, async (tx) => {
-    const [{ id: paymentId }] = await tx
-      .insert(billPayments)
-      .values({
-        workingOrderId: id,
-        submissionId: crypto.randomUUID(),
-        fingerprint: "pending-card-payment",
-        kind: "contribution",
-        method: "card",
-        applied: 2600,
-        state: "pending",
-        requestedBy: venue.operator.personId,
-        source: venue.cfg.origin.source,
-        deviceId: venue.cfg.origin.deviceId,
-      })
-      .returning({ id: billPayments.id });
-    await insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: id,
-      billPaymentId: paymentId,
-      provider: "fake",
-      paymentRef: crypto.randomUUID(),
-      amount: decimal("26.00"),
-      settledAt: receivedAt,
-    });
-    return paymentId;
-  });
+  const paymentId = await inTx(venue, (tx) => capturedCardPayment(tx, venue, id));
   const result = await settlePendingBillPayments({ ...deps(), cfg: venue.cfg });
   expect(result).toMatchObject({ received: 1, pending: 0, errors: [] });
   expect(await paymentsOf(venue, id)).toMatchObject([

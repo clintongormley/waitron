@@ -13,8 +13,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct, setProductVariants, setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertCapturedPayment, payments } from "@waitron/payments";
-import { decimal, type Dining } from "@waitron/shared";
+import { payments } from "@waitron/payments";
+import type { Dining } from "@waitron/shared";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
@@ -32,7 +32,11 @@ import {
   setupPartyVenue,
   inTx as partyTx,
 } from "./testing/party-venue.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  capturedCardPayment,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -251,31 +255,7 @@ describe("an eaten-in set-menu bill paid by a captured card", () => {
         .update(workingOrderLines)
         .set({ vatClass: "general" })
         .where(eq(workingOrderLines.id, setMenuLine));
-      const [{ id: paymentId }] = await tx
-        .insert(billPayments)
-        .values({
-          workingOrderId: tabId,
-          submissionId: randomUUID(),
-          fingerprint: "pending-card-payment",
-          kind: "contribution",
-          method: "card",
-          applied: 2600,
-          state: "pending",
-          requestedBy: venue.operator.personId,
-          source: venue.cfg.origin.source,
-          deviceId: venue.cfg.origin.deviceId,
-        })
-        .returning({ id: billPayments.id });
-      await insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: tabId,
-        billPaymentId: paymentId,
-        provider: "fake",
-        paymentRef: randomUUID(),
-        amount: decimal("26.00"),
-        settledAt: venue.clock.now().instant,
-      });
+      await capturedCardPayment(tx, venue, tabId);
     });
 
     const result = await settlePendingBillPayments({
