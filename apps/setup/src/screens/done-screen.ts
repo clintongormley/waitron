@@ -230,6 +230,10 @@ export class SetupDoneScreen extends LitElement {
         color: var(--wt-color-success);
         font-weight: var(--wt-font-weight-bold);
       }
+      .pack-copy-failed {
+        margin: 0;
+        color: var(--wt-color-danger);
+      }
       a.break-glass-save {
         display: inline-block;
       }
@@ -263,6 +267,7 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private packUsed = false;
   @state() private packCopied = false;
+  @state() private packCopyFailed = false;
   @state() private packContinued = false;
 
   @property({ type: Boolean }) cloudStaffEmailUnavailable = false;
@@ -808,14 +813,16 @@ export class SetupDoneScreen extends LitElement {
   }
 
   async #copyKey(key: string): Promise<void> {
+    let refused = false;
     try {
       await navigator.clipboard.writeText(key);
     } catch {
-      return;
+      refused = true;
     }
     if (key !== this.masterKey) return;
-    this.packCopied = true;
-    this.packUsed = true;
+    this.packCopied = !refused;
+    this.packCopyFailed = refused;
+    if (!refused) this.packUsed = true;
   }
 
   #recoveryPackStep(key: string): TemplateResult {
@@ -834,6 +841,13 @@ export class SetupDoneScreen extends LitElement {
         }
         <code data-test="master-key">${key}</code>
       </div>
+      ${
+        this.packCopyFailed
+          ? html`<p class="pack-copy-failed" data-test="pack-copy-failed" role="alert">
+              ${t("done.pack.copy_failed")}
+            </p>`
+          : nothing
+      }
       <div class="pack-actions">
         ${
           pdf

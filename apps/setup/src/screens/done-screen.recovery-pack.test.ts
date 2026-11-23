@@ -106,14 +106,47 @@ describe("setup's Recovery pack step", () => {
     expect(copied).toEqual(["88DP 74BA YPVB RRM5 XFV2 WPQY B5M5"]);
   });
 
-  it("a Copy the browser refuses says nothing and leaves Continue hidden", async () => {
+  it("a Copy the browser refuses says so under the key box, never Copied., and leaves Continue hidden", async () => {
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
     const el = await mountStep();
     await userEvent.click(q(el, "[data-test=pack-copy]")!);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await el.updateComplete;
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=pack-copy-failed]")).toBe(
+        "Copy did not work. Use Download or Print, or write the key down.",
+      ),
+    );
+    expect(q(el, "[data-test=pack-copy-failed]")!.previousElementSibling?.className).toBe(
+      "master-key",
+    );
     expect(q(el, "[data-test=pack-copied]")).toBeNull();
     expect(q(el, "[data-test=pack-continue]")).toBeNull();
+  });
+
+  it("a Copy that works after a refused one takes the refusal away", async () => {
+    const writes = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockRejectedValueOnce(new Error("denied"))
+      .mockResolvedValueOnce(undefined);
+    const el = await mountStep();
+    await userEvent.click(q(el, "[data-test=pack-copy]")!);
+    await vi.waitFor(() => expect(q(el, "[data-test=pack-copy-failed]")).not.toBeNull());
+    await userEvent.click(q(el, "[data-test=pack-copy]")!);
+    await vi.waitFor(() => expect(text(el, "[data-test=pack-copied]")).toBe("Copied."));
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test=pack-copy-failed]")).toBeNull();
+    expect(q(el, "[data-test=pack-continue]")).not.toBeNull();
+  });
+
+  it("says in Spanish when a Copy is refused", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    setLocale("es-ES");
+    const el = await mountStep();
+    await userEvent.click(q(el, "[data-test=pack-copy]")!);
+    await vi.waitFor(() => expect(q(el, "[data-test=pack-copy-failed]")).not.toBeNull());
+    expect(text(el, "[data-test=pack-copy-failed]")).toBe(finishEs["done.pack.copy_failed"]);
+    expect(finishEs["done.pack.copy_failed"]).not.toBe(
+      "Copy did not work. Use Download or Print, or write the key down.",
+    );
   });
 
   it("Download saves the pack PDF and Print opens it in a new tab", async () => {

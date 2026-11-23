@@ -112,6 +112,33 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     }
   });
 
+  it("has no violations when a Copy is refused, in both languages", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    const { host, el } = await mountWidget<SetupDoneScreen>(
+      "setup-done-screen",
+      {
+        api: apiWith(() => new Promise(() => {})),
+        startDelayMs: 100000,
+        onboardingIntent: "prepare",
+        masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+        masterKeyName: "2026-11-23 · QZJV",
+        recoveryPackPdf: btoa("%PDF-test"),
+      },
+      theme,
+    );
+    try {
+      q(el, "[data-test=pack-copy]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pack-copy-failed]")).not.toBeNull());
+      for (const locale of ["en-GB", "es-ES"] as const) {
+        setLocale(locale);
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+      }
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("has no violations while waiting for the restart", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
