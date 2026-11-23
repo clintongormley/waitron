@@ -1,51 +1,51 @@
 # Show the nightly SumUp check for paired readers
 
-In **Reporting → Check card payments → SumUp comparison**, choose a calendar day in the venue’s
-zone. **Paired readers** lists each charge’s amount, reference and status. It opens on problems
-and shows the day’s matched and to-check counts while you filter. Charges SumUp reports without a
-recorded charge in Waitron appear once in the comparison.
+In **Reporting → Check card payments → SumUp comparison**, managers can choose a venue day and
+see a status for each paired-reader payment, with the day's matched and to-check totals. The
+status filter opens on problems. A SumUp charge with no recorded charge in Waitron appears once.
 
-## Keep the evidence from the existing check
+Claude reviewed the plan on 23 November. The watcher cleared it at 20:52 that day and split it
+into two pull requests so the nightly check can start collecting evidence while the screen is built.
 
-- In `packages/payments/src/reconcile.ts`, use the existing classification to retain the refs of
-  captured payments with an equal provider charge and no finding. A skipped hold or an initiated
-  payment with no charge is no match. For `missingLocal` charges retain the provider reference,
-  amount, charge time and any hinted Waitron payment ref. Request this optional `chargeAudit` result
-  in `packages/payments-sumup/src/reconciler.ts` and save it in the existing SumUp summary in
-  `apps/server/src/reconcile-duty.ts`. Keep the existing findings
-  and their wire shapes. This adds no provider reads or changes to the check or refund decisions.
-- Extend the existing manager-only `/management-api/payments/backup-audit` in
-  `apps/server/src/payments-api.ts` with `pairedAudit`. Share the latest-successful-run selection and
-  calendar-day bounds in `backup-audit-day.ts`. Read SumUp payment rows with a reader ID. Use capture
-  time when present and include an unfinished attempt only with a saved finding. Show a captured
-  payment with no saved result as **Not checked**, including a charge refunded before it was checked.
-  Preserve a saved match after a refund and show a staff-resolved hold as **Resolved**. Attach all
-  open findings to its row and count it once. Scope the incomplete notice to missing run coverage,
-  older summaries without charge evidence or unreadable charges already counted by the duty.
-- Place provider-only rows by charge time, deduplicated by SumUp reference. Count a provider-only
-  charge in the paired results if its hinted Waitron attempt identifies a reader. Keep existing
-  unlinked charges in the standalone findings, outside the paired count. Show any remaining charge
-  with no known reader as SumUp-only. The provider charge alone cannot identify a paired reader.
-- Reuse the comparison that `apps/dashboard/src/screens/payments-screen.ts` opens. Extend its
-  API type in `apps/dashboard/src/api/client.ts` and render the rows in `widgets/backup-audit.ts`
-  with `wt-data-table` and a labelled status filter. Keep the day and refresh controls. Update
-  English and Spanish `apps/dashboard/src/i18n/strings.ts` and the two `apps/server/src/guide/`
-  `table-service.md` guides. Send the watcher the mock-up for the owner before finishing the screen.
-  This uses the existing endpoint and summary, with no new table or manual rerun.
+## PR 1 — Save the nightly evidence
 
-## Prove the result
+- In `packages/payments/src/reconcile.ts`, record payment refs for captured rows with an equal
+  SumUp charge and no finding. For provider charges without a recorded local charge, retain the
+  reference, amount, charge time and any linked Waitron payment ref. Keep the existing findings
+  and their wire shapes.
+- Request this evidence in `packages/payments-sumup/src/reconciler.ts` and save it in the existing
+  summary in `apps/server/src/reconcile-duty.ts`. Reuse the same provider reads and reconciliation
+  decisions. Leave the manager's backlog entry open.
+- In `classify.test.ts`, distinguish an exact capture from drift, orphans, unpaid attempts and
+  resolved holds. In the SumUp `reconciler.test.ts`, check that the adapter supplies the evidence,
+  including a charge dated outside the run's day. In `reconcile-duty.test.ts`, read the saved
+  evidence back from a successful scheduled run. Run the existing Stripe reconciler checks too.
+- Expected size about 35–50 production lines and 45–65 test lines.
 
-- In `packages/payments/src/reconcile.test.ts` and `apps/server/src/reconcile-duty.test.ts`, start
-  with failing checks for a confirmed match and provider-only charge time and hint in saved evidence.
-  Keep the existing SumUp and Stripe assertions and run their focused reconciler files.
-- In `apps/server/src/payments-api.test.ts`, verify the Madrid day across UTC midnight, newest successful
-  findings, a matched then refunded payment, two reasons on one payment counted once, a hold resolved by
-  staff and a provider-only charge counted once. Check that an unpaid attempt stays out, an unlinked
-  charge already in the standalone list stays there, and old, missing or unreadable evidence reads incomplete.
-- In `apps/dashboard/src/widgets/backup-audit.test.ts`, check the initial filter, one problem type,
-  all rows, fixed totals and a date change. Run the existing screen comparison case. Open both
-  languages and themes at phone and desktop widths. Remove the finished `docs/backlog/payments.md`
-  bullet with the implementation.
+## PR 2 — Show the paired-reader results
 
-Target 300–365 production lines including copy and 190–235 test lines. Read the changed files again
-before the branch review and report the code and test sizes separately.
+- Start the screen work by sending the watcher a mock-up showing rows, the status filter, totals
+  and the incomplete-check notice. Build the endpoint while the owner looks at it.
+- Add `pairedAudit` to the manager-only `/management-api/payments/backup-audit` in
+  `apps/server/src/payments-api.ts`. Share the latest successful runs and day bounds in
+  `backup-audit-day.ts`. Use capture time for a Waitron payment and charge time for a SumUp-only
+  row. A SumUp-only charge linked to a Waitron payment on a paired reader counts in Paired readers.
+  The standalone panel shows the remaining unlinked charges, outside the paired totals.
+- A refund recorded after a match keeps that result. **Refunded before the check** is filtered
+  with matched payments by default and adds nothing to **To check**. Show resolved holds as
+  **Resolved**. Attach all open findings to a single row and count the row once. Show **Not
+  checked** for a capture with no evidence. Leave unpaid attempts out unless a finding shows
+  that SumUp took money. Show the incomplete notice for a missing day, old summaries without
+  evidence, or unreadable charges.
+- Reuse the comparison opened by `apps/dashboard/src/screens/payments-screen.ts`, its API type
+  in `api/client.ts`, and `wt-data-table` in `widgets/backup-audit.ts`. Keep the day and refresh
+  controls. Update dashboard translations and both `table-service.md` guides. Remove the
+  finished `docs/backlog/payments.md` entry.
+- In `backup-audit-day.test.ts`, check newest successful runs, day coverage and incomplete
+  evidence. In `payments-api.test.ts`, cover Madrid midnight, statuses, counts, deduplication,
+  unpaid attempts, unlinked charges and one endpoint wiring case. In `backup-audit.test.ts`,
+  check the default filter, a problem status, all rows, totals and a date change. Run the
+  existing screen comparison test and open both languages and themes at phone and desktop widths.
+- Expected size about 265–315 production lines including copy and 145–170 test lines.
+
+Both pull requests use the existing duty and data store.

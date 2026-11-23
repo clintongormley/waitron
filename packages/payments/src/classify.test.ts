@@ -43,6 +43,25 @@ describe("classify", () => {
     expect(out.checked).toBe(1);
   });
 
+  it("collects only clean, confirmed captures for the charge audit", () => {
+    const rows = [
+      row({ paymentRef: "clean", externalRef: "clean" }),
+      row({ paymentRef: "orphan", externalRef: "orphan", saleId: null }),
+      row({ paymentRef: "drift", externalRef: "drift" }),
+      row({ paymentRef: "unpaid", externalRef: "unpaid", state: "initiated" }),
+      row({ paymentRef: "resolved", externalRef: "resolved", held: true, holdResolved: true }),
+      row({ paymentRef: "unreported", externalRef: "unreported", auditedAt: RECENT }),
+    ];
+    const records = [
+      record({ references: ["clean"] }),
+      record({ references: ["orphan"] }),
+      record({ references: ["drift"], amount: decimal("9.50") }),
+      record({ references: ["resolved"] }),
+    ];
+
+    expect(classify(rows, records, NOW, LAG, true).matchedPaymentRefs).toEqual(["clean"]);
+  });
+
   it("classifies an unreported payment past the tolerance as unsettled", () => {
     const out = classify([row()], [], NOW, LAG);
     expect(out.rows.map((r) => r.klass)).toEqual(["unsettled"]);

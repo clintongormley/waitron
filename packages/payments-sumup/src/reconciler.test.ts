@@ -126,6 +126,9 @@ describe("SumUp audit", () => {
       }).reconcile(period, new Date("2026-07-02T00:05:00Z"));
       expect(result.unsettled.map((row) => row.paymentRef)).toEqual(unsettled);
       expect(result.missingLocal).toEqual([]);
+      expect(result.chargeAudit?.matchedPaymentRefs).toEqual(
+        status === "SUCCESSFUL" ? ["capture"] : [],
+      );
       expect(lookup.mock.calls).toEqual([[{ id: "charge" }]]);
     },
   );
@@ -389,6 +392,14 @@ it("keeps an original failed attempt's recovered charge even when SumUp dates it
       localAmount: null,
       settledAmount: "10.00",
       workingOrderId: seeded.workingOrderId,
+    },
+  ]);
+  expect(result.chargeAudit?.missingLocal).toEqual([
+    {
+      references: ["earlier"],
+      amount: "10.00",
+      settledAt: "2026-06-30T12:00:00.000Z",
+      hintedPaymentRef: "lost-date",
     },
   ]);
   expect(result.backupMatches).toEqual([]);
