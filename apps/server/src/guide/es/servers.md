@@ -112,9 +112,10 @@ cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que 
 a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras hacer el cambio, **Salir de
 esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
 
-Elige **Empezar el cambio** y después identifícate con la contraseña de una cuenta de
-administrador y su código actual de autenticador, si está configurado, o elige **Usar tu passkey**;
-después elige **Continuar** y, con una passkey, úsala cuando la página la pida. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
+Elige **Empezar el cambio**, escribe el correo de un administrador y elige **Continuar**, o elige
+una passkey guardada que te ofrezca el campo del correo. Después elige **Usar tu passkey**, o
+escribe tu contraseña y el código actual del autenticador, si está configurado, y elige
+**Identificarse con contraseña**. Escribe la contraseña con cuidado: si es incorrecta, el servidor de reserva se reinicia y
 vuelve a poner al día su copia antes de que puedas intentarlo de nuevo.
 
 **Preparando el local** aplica los cambios que el servidor de reserva ya recibió del servidor

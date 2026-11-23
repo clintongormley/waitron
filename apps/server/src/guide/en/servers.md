@@ -105,9 +105,9 @@ working again, keep using it. Until you choose **Switch to this box**, **Go back
 not come from a till) leaves without switching; after switching, **Leave this page (the switch is
 saved)** or **Continue to this box** brings you back.
 
-Choose **Start switching**, then sign in with an administrator account’s password and
-current authenticator code, if set up, or choose **Use your passkey**; then choose **Continue**,
-and with a passkey, use it when the page asks. Type the password
+Choose **Start switching**, enter an administrator’s email and choose **Continue**, or pick a
+saved passkey offered in the email field. Then choose **Use your passkey**, or enter your password
+and current authenticator code, if set up, and choose **Sign in with password**. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
 again.
 
