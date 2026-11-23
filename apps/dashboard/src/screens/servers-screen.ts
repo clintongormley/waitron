@@ -1109,6 +1109,11 @@ export class ServersScreen extends LitElement {
   }
 
   #renderDownload(target: ServerRow): TemplateResult {
+    if (target.contactUrl === "") {
+      return html`<p class="explanation follows" data-test="reset-download">
+        ${t("servers.reset_download_no_address")}
+      </p>`;
+    }
     const [before, after] = t("servers.reset_download").split("{address}");
     return html`<p class="explanation follows" data-test="reset-download">
       ${before}${
@@ -1116,7 +1121,7 @@ export class ServersScreen extends LitElement {
           ? html`<a href=${target.contactUrl} target="_blank" rel="noopener noreferrer"
               >${target.contactUrl}</a
             >`
-          : this.#address(target)
+          : target.contactUrl
       }${after}
     </p>`;
   }

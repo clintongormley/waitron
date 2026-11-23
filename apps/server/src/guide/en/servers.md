@@ -167,15 +167,16 @@ Invoice records it made after the copy the new main box started from stay only o
 switched on again before you remove it.
 
 Once its invoice records are back, its row menu offers **Wipe and remove**. The dialog says the old
-main box may hold data that this box does not have and links to the old box's address: open it and
-[download that data](servers.md#handed-over) before you confirm, because once the wipe starts it can
-no longer be downloaded. A **CAUTION** line in the dialog means the recovered records exist only on
-this box until a backup is made. Once you confirm, the row says **Wipe asked**. The old main box
-wipes itself and leaves the list the next time it is on and can reach this box, then restarts on
-setup's first page: [re-add it as a spare](servers.md#adding-a-spare) from there, comparing the code
-it shows with the one on this box. If it was already wiped by hand, choose **Remove from venue**. If
-this main box is itself replaced before the old one has wiped itself, the old one never receives the
-wipe: choose **Remove from venue** on the new main box and wipe it from a terminal.
+main box may hold data that this box does not have and gives the old box's address when its row
+has one: open it and [download that data](servers.md#handed-over) before you confirm, because once
+the wipe starts it can no longer be downloaded. A **CAUTION** line in the dialog means the recovered
+records exist only on this box until a backup is made. Once you confirm, the row says
+**Wipe asked**. The old main box wipes itself and leaves the list the next time it is on and can
+reach this box, then restarts on setup's first page:
+[re-add it as a spare](servers.md#adding-a-spare) from there, comparing the code it shows with the
+one on this box. If it was already wiped by hand, choose **Remove from venue**. If this main box is
+itself replaced before the old one has wiped itself, the old one never receives the wipe: choose
+**Remove from venue** on the new main box and wipe it from a terminal.
 
 To remove an old main box without wiping it, choose **Remove from venue** in its row menu. If it has
 not returned its invoice records, tick that it has been wiped or will never be switched on again. If
