@@ -196,6 +196,34 @@ describe("durable conflict observations", () => {
     expect(observed!.evidence.csv).toBe(accepted.rows[0]!.csv);
   });
 
+  it("keeps the annulled observation first when both causes share an attempt", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const registroId = seeded.registroIds[0]!;
+    const aeat = fake();
+    await collideAtAeat(suite.db, aeat, seeded, registroId);
+    await run(clientFor(aeat));
+    const [first] = await observations();
+    expect(first!.cause).toBe("fiscal.huella_divergente");
+    const evidence = { ...first!.evidence, comparison: { kind: "annulled" as const } };
+    await withTransaction(suite.db, (tx) =>
+      conflicts.recordConflictEvidence(tx, {
+        registroId,
+        attempt: first!.attempt,
+        cause: "fiscal.duplicado_anulado",
+        evidence,
+        now: SECOND,
+      }),
+    );
+    expect(await active(seeded.nodeId)).toEqual([
+      expect.objectContaining({
+        registroId,
+        cause: "fiscal.duplicado_anulado",
+        observedAt: SECOND.toISOString(),
+        evidence,
+      }),
+    ]);
+  });
+
   it("retains a mismatching fingerprint when the stored software identity is absent", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const aeat = fake();

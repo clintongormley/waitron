@@ -81,6 +81,8 @@ export async function readActiveConflicts(
     .orderBy(
       asc(verifactuRecords.secuencia),
       asc(sql`json_extract(${observed.data}, '$.attempt')`),
+      // When both causes share an attempt, show the annulled observation first.
+      asc(sql`json_extract(${observed.data}, '$.cause')`),
     );
   const found = new Set<string>();
   const active: ActiveConflict[] = [];
