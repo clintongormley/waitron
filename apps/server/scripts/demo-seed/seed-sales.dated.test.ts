@@ -17,29 +17,28 @@ import { seedSales } from "./seed-sales.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const offsetAt = (instant: Date) => -instant.getTimezoneOffset();
 
-// A reduced rate of 4% from yesterday's local date, the shipped table otherwise.
+// The area's dine-in rate: 10%, and 4% from yesterday's local date.
 const CHANGE = vi.hoisted(() => {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const local = new Date(yesterday.getTime() - yesterday.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 });
-vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
-  const table = {
-    ...original.VAT_RATE_TABLE,
-    reduced: [
-      { from: null, rate: "10.00" },
-      { from: CHANGE, rate: "4.00" },
-    ],
-  };
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/country-packs")>();
   return {
-    ...original,
-    VAT_RATE_TABLE: table,
-    vatRateOn: (...[vatClass, date, given]: Parameters<typeof original.vatRateOn>) =>
-      original.vatRateOn(vatClass, date, given ?? table),
-    vatRatesOn: (...[date, given]: Parameters<typeof original.vatRatesOn>) =>
-      original.vatRatesOn(date, given ?? table),
+    ...actual,
+    vatRatesFor: (...args: Parameters<typeof actual.vatRatesFor>) => {
+      const rates = actual.vatRatesFor(...args);
+      return (
+        rates && {
+          ...rates,
+          dineIn: [
+            { from: null, rate: "10.00" },
+            { from: CHANGE, rate: "4.00" },
+          ],
+        }
+      );
+    },
   };
 });
 

@@ -33,6 +33,7 @@ import {
   localCalendarDate,
   rateLines,
   readContentLanguages,
+  readVenueVatRates,
   toInvoiceLineDescriptions,
 } from "@waitron/menu";
 import type { GrossLine, VatClass } from "@waitron/menu";
@@ -47,7 +48,6 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
-  VAT_RATE_TABLE,
   workingOrderId as brandWorkingOrderId,
   type DatedRate,
 } from "@waitron/shared";
@@ -188,9 +188,10 @@ export async function seedSales(
 
   // Falls back to the content default, as a till sale does (`working-order.ts`): the demo writes its
   // text in every content language, and the receipt language may not be one of them.
-  const { defaultLanguage } = await withTransaction(db, (tx) =>
-    readContentLanguages(tx, invoiceLocale),
-  );
+  const { defaultLanguage, dineIn } = await withTransaction(db, async (tx) => ({
+    defaultLanguage: (await readContentLanguages(tx, invoiceLocale)).defaultLanguage,
+    dineIn: (await readVenueVatRates(tx)).dineIn,
+  }));
 
   const backDating = clock ?? backDatingClock();
 
@@ -242,7 +243,7 @@ export async function seedSales(
           chosen.push({ product, vatRates: [{ from: null, rate: product.takeawayVatRate }] });
         } else {
           const product = products[randInt(rng, 0, products.length - 1)]!;
-          chosen.push({ product, vatRates: VAT_RATE_TABLE[product.vatClass] });
+          chosen.push({ product, vatRates: dineIn });
         }
       }
       const method = rng() < 0.6 ? "cash" : "card";
