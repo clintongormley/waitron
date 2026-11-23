@@ -248,8 +248,10 @@ No stored fiscal row is to be rewritten.
   - The inner try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead: with it
     removed, the "LOGGER fails" case still passed, because `Promise.allSettled` absorbs the
     rejection.
-  - Removing `appendToChain`'s nested `tx.transaction` makes no test fail (`chain.test.ts`'s
-    header says so); the protection it gives a losing attempt has no test holding it.
+  - With the nested `tx.transaction` in `appendToChain` replaced by a direct
+    `attemptAppend(tx, …)`, `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.test.ts`
+    left the real-collision case passing and failed three stub-based cases. Those failures exercise
+    the stub's shape rather than the rollback of a losing attempt's writes.
   - `write-path.e2e.test.ts` (lines 410 and 414) points at `test/fixtures.ts:249-256` for a
     receipt of one basket hashing differently filed 16th and filed standalone, and at
     `test/write-path-fixtures.ts:37-44` for `steadyClock`. The receipt is now at
@@ -1062,7 +1064,7 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 
 ## Bundle: One authorised edit of a protected test, plus its neighbours
 
-4 entries, size S. The first two keep their text from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
 - **`packages/fiscal-verifactu` code** — found by #562 while pruning comments. **Open:** the inner
   try/catch around the log call in `aeat-transport.ts`'s `closeAll` is dead; removing
