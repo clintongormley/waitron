@@ -671,3 +671,47 @@ it("offers Try again when the set menu cannot be read after a removal", async ()
   expect(page.getByRole("alert").elements()).toHaveLength(0);
   expect(api.readSetMenu).toHaveBeenCalledTimes(reads + 2);
 });
+
+it("ignores Escape while a surcharge is being sent", async () => {
+  const { api } = await mountDishes();
+  const sharing = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  let answer!: () => void;
+  api.updateMenuItem.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  await sharing.fill("5.25");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(answer).toBeDefined());
+  await expect.element(sharing).toHaveAttribute("readonly");
+  await userEvent.keyboard("{Escape}");
+  await expect.element(sharing).toHaveValue("5.25");
+  expect(api.updateMenuItem).toHaveBeenCalledTimes(1);
+  api.readSetMenu.mockResolvedValue({
+    ...details,
+    dishes: [hake, { ...bravas, surcharge: "5.25" }, soup],
+  });
+  answer();
+  await expect.element(sharing).not.toHaveAttribute("readonly");
+  expect(api.updateMenuItem).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a refused surcharge marked when another dish is removed", async () => {
+  const { api } = await mountDishes();
+  api.updateMenuItem.mockRejectedValueOnce({
+    code: "set_menu.invalid",
+    params: { field: "surcharge" },
+  });
+  const field = page.getByRole("textbox", { name: "Surcharge for Bravas" });
+  await field.fill("4.00");
+  await userEvent.keyboard("{Enter}");
+  await expect.element(field).toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Actions for Hake" }).click();
+  api.readSetMenu.mockResolvedValue({ ...details, dishes: [bravas, soup] });
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect.element(page.getByRole("region", { name: "No course" })).not.toBeInTheDocument();
+  await expect.element(field).toHaveAttribute("aria-invalid", "true");
+  await expect.element(field).toHaveValue("4.00");
+});
