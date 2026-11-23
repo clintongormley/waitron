@@ -412,7 +412,10 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   that — the countdown, the second-clock checks and a used code's countdown — runs by itself. A
   wait the setup box recorded before a reload carries on with no tick and no press. (Since A1420 PR
   3a, 2026-11-15: when the box cannot check its time over the internet, a page whose clocks agree
-  shows both times and waits for the person to confirm them.)
+  shows both times and waits for the person to confirm them.) (Since EMERGENCY-SWITCH-SIMPLE 5a,
+  2026-11-23, the owner's D1 and D2 of 2026-11-22: the emergency switch on a spare has no tick, no
+  Proceed and no series list; its clock step starts by itself and starts the venue once a time slot
+  is chosen. The controlled handover keeps the tick, Proceed and series.)
 - **A stored series pick found taken is not retried (A1223 deleted, owner 2026-11-09):** the
   pick-time check already skips every name in the invoice series and records
   (`packages/fiscal-verifactu/src/hour-selection.ts`, the `used` loop over the history
