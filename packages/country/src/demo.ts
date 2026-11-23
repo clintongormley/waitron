@@ -140,6 +140,7 @@ interface CountryDemoDataFields<L extends string = string> {
     readonly deli: CountryDemoMenu<L>;
     readonly lunch: CountryDemoMenu<L>;
     readonly setMenus: readonly CountryDemoSetMenu<L>[];
+    readonly setMenuHolderName: DemoPlainText<L>;
     readonly drinksName: DemoPlainText<L>;
     readonly drinksCustomerName: DemoText<L>;
     readonly drinksImage?: string;

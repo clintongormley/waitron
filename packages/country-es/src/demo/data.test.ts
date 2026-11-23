@@ -31,6 +31,7 @@ describe("pack-owned Spanish demo", () => {
       "deli",
       "lunch",
       "setMenus",
+      "setMenuHolderName",
       "drinksName",
       "drinksImage",
       "drinksCustomerName",

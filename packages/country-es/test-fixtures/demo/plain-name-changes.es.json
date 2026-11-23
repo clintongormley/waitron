@@ -929,5 +929,19 @@
     "column": "name",
     "old": "Open",
     "new": "Abierto"
+  },
+  {
+    "table": "catalogues",
+    "row": "@catalogues:[\"Menú del Día\"]",
+    "column": "name",
+    "old": "Menú del Día",
+    "new": "Menús"
+  },
+  {
+    "table": "sections",
+    "row": "@sections:[\"@catalogues:[\\\"Menú del Día\\\"]\",\"menu_root\",\"Menú del Día\"]",
+    "column": "internal_name",
+    "old": "Menú del Día",
+    "new": "Menús"
   }
 ]

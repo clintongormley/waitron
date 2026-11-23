@@ -1,7 +1,7 @@
 import { venueMenus } from "../../src/testing/venue-menus.js";
 // The whole demo seed, end to end: the reports light up, the menus are accessible, a seeded
 // product's `image` resolves to stored bytes, and a working order MIXING a Casa Delgado offer with
-// a Menú del Día offer parks and retrieves in the counter zone. `WAITRON_ENV` is left unset, so
+// a lunch staff-menu offer parks and retrieves in the counter zone. `WAITRON_ENV` is left unset, so
 // `deploymentEnvironment` resolves to `preproduction` for the seeded sales.
 
 import { randomUUID } from "node:crypto";
@@ -117,6 +117,9 @@ describe("demo seed end-to-end", () => {
       const publishedOffers = [...documents.values()].flatMap(({ document }) =>
         documentOffers(document),
       );
+      const setMenuOffers = [...documents.values()].flatMap(({ document }) =>
+        Object.values(document.setMenus ?? {}).flatMap(({ offers }) => Object.values(offers)),
+      );
       const { rows: imageRows } = await tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );
@@ -136,6 +139,7 @@ describe("demo seed end-to-end", () => {
           .select({ productId: menuItems.productId, menuId: menuItems.menuId })
           .from(menuItems),
         publishedOffers,
+        setMenuOffers,
         image: imageRows[0]?.image ?? null,
         close,
       };
@@ -151,15 +155,17 @@ describe("demo seed end-to-end", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
-      "Set lunch",
+      "Menu of the day",
+      "Set menus",
+      "Special menu",
     ]);
     expect(read.menus[0]!.isDefault).toBe(true);
-    const menuDelDia = read.menus.find((m) => m.name === "Set lunch")!;
+    const menuDelDia = read.menus.find((m) => m.name === "Set menus")!;
     expect(menuDelDia.isDefault).toBe(false);
 
     const chickens = [
       read.products.find((product) => product.name === "Roast chicken")!,
-      read.publishedOffers.find((offer) => offer.name === "Roast chicken")!,
+      read.setMenuOffers.find((offer) => offer.name === "Roast chicken")!,
     ];
     for (const chicken of chickens) {
       expect(chicken.offeredModifiers).toHaveLength(1);
@@ -197,7 +203,7 @@ describe("demo seed end-to-end", () => {
     }
 
     const casaMenu = read.menus.find((menu) => menu.name === "Casa Delgado")!.id;
-    const diaMenu = read.menus.find((menu) => menu.name === "Set lunch")!.id;
+    const diaMenu = read.menus.find((menu) => menu.name === "Set menus")!.id;
     const casaProducts = read.products.filter((product) =>
       read.memberships.some((item) => item.productId === product.id && item.menuId === casaMenu),
     );

@@ -292,6 +292,9 @@ export async function canonicalMadridSemantics(
       case "menu_items":
         key = parts("menu_id", "product_id");
         break;
+      case "set_menu_lines":
+        key = parts("menu_id", "position");
+        break;
       case "menu_versions":
         key = parts("menu_id", "number");
         break;

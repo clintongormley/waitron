@@ -110,6 +110,13 @@ export const CASA_DELGADO_ES = {
     deli: DELI_TAKEAWAY,
     lunch: MENU_DEL_DIA,
     setMenus: DEMO_SET_MENUS,
+    setMenuHolderName: {
+      en: "Set menus",
+      es: "Menús",
+      ca: "Menús",
+      "ca-ES-valencia": "Menús",
+      gl: "Menús",
+    },
     drinksName: {
       en: "Drinks",
       es: "Bebidas",

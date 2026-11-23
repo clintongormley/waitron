@@ -312,6 +312,9 @@ Under **What one set menu includes**, set how many dishes you offer from each co
 use one line for one starter and another for one main. Put two courses on the same line to let
 guests choose from either.
 
+If your set menu includes drinks, bread or coffee, give the products those courses. In each
+department, set Drinks and Bread to **Fire now** so you can send them with the first order.
+
 Open the full menu that will offer the set menu. In **Structure**, open the actions for the
 menu or section where it belongs, choose **Set menu…** and pick it. Use **Preview** to see the
 placement, later edits and anything you need to fix. Publish the full menu to send the current
@@ -426,8 +429,10 @@ station ticket, receipt and reprint continue to show the facts saved with that o
 sent takes the new customer-facing or prep station name of an options list or option at the next
 change to the order.
 
-When you set up a Madrid demo in English, its staff and prep station names are in English. The till shows
-**Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the prep station name
+When you set up a Madrid demo in English, its staff and prep station names are in English.
+At a table at lunch, open **Set menus** for the **Menu of the day** (€14) or the **Special
+menu** (€20). Try the **Sirloin** for a €5 supplement on the Menu of the day.
+**Salad** uses the prep station name
 **SALAD · LUNCH** and a custom **Portion** unit, abbreviated **ptn**. **House coffee** has two
 variants and the prep station name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
 content languages, so changing staff wording does not replace the words on a receipt.
@@ -446,8 +451,8 @@ the Balearic, Valencian and Galician demos default to Spanish receipts.
 During setup, the suggested restaurant name follows the postcode or province until you edit it.
 Once you type a name, Waitron keeps it when you change the region, including after Review and Back.
 
-Casa Delgado and Set lunch include a **Drinks** menu as a folder. Drinks prices **Beer** at
-3.00 instead of its product price of 2.80; both including menus inherit that price. Set lunch
+Casa Delgado and Set menus include a **Drinks** menu as a folder. Drinks prices **Beer** at
+3.00 instead of its product price of 2.80; both including menus inherit that price. Set menus
 sets its own **House Negroni** price of 9.00. The coffee variants keep their own prices. The
 **Sirloin** carries the **Doneness** options list. On **Roast chicken**, you can choose up to
 three optional **Sides**: peppers (2.00), salad (1.50) and bread (0.50). These prices apply to

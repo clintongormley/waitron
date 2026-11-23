@@ -339,7 +339,10 @@ and offers in the published menu, from the seeded output; what it refuses is sta
 A demo product in an existing category, a product offered on another menu too, or a changed cell
 of an existing row goes through `madridWithSharedOffers`
 (`apps/server/scripts/demo-seed/testing/madrid-shared-offers.ts`) instead: the baseline test lists
-each changed cell, each new product's facts and every added row by the cells that identify it.
+each changed cell, each new product's facts and each added row by the cells that identify it.
+For the demo's lunch set menus, it also lists removed row keys and the new set-menu ids in
+the holder's published version. Check prices, inclusion lines and dishes in the published
+copies in `seed-set-menus.test.ts`.
 
 ## A migration set gets a whole database-backed suite by calling one function.
 
