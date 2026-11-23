@@ -376,10 +376,13 @@ Evidence inspection and persistent-repair policy remain separate A1089 work.
 
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
-`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
-core sale and void writers. It returns 12.10 in cash through the till's refund route before
-voiding the invoice; the refund route deliberately refuses an already voided invoice. The
-filing queue sets the ordinary cancellation aside after the original's definitive rejection.
+`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue. Through the
+till's routes it seats a party, orders a House salad and takes 12.00 in cash; it then cancels the
+dish with Cancel and refund (the Refund tick, `refundableCancel` in
+`apps/server/src/testing/cancel-line.ts`) and returns 12.00 in cash through the till's refund route,
+naming that cancel. Only then does it cancel the invoice, with core's `recordVoid`; the refund route
+deliberately refuses an already voided invoice. The filing queue sets the ordinary cancellation
+aside after the original's definitive rejection.
 An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
 the administrator then releases the same cancellation. Concurrent release and reordered retries
 return the saved decision. A refund retry returns the original completed refund. The checks compare
@@ -393,6 +396,15 @@ correction is accepted, whichever issuing chain the correction is on. The origin
 these cases is synthetic stored evidence; they do not send a real refund or establish a legal
 remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
 owner's fiscal review before landing and separate legal authority before production enablement.
+
+No product path reaches the held-cancellation remedy today: the filing queue setting such a
+cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancellations` in
+`packages/fiscal-verifactu/src/drain.ts`), `releaseHeldCancellation`
+(`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
+held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:181-183`). The
+ordinary cancellation it handles is written only by core's `recordVoid`
+(`packages/core/src/record-void.ts`), which no till screen or server route calls. The code is kept,
+not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an
 ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
@@ -1151,8 +1163,7 @@ checking), Refund a payment stays open; where it only waits (a filing refused, s
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still
 owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
-refund is refused before the terminal step, so staff never return money that the refund would then
-refuse: the watcher's clearance of the lane's change (2026-11-23 22:51).
+refund of money Correct invoice could give back is refused before the terminal step: the watcher's clearance of the lane's change (2026-11-23 22:51).
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)

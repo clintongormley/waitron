@@ -184,7 +184,7 @@ async function fiscalFacts() {
   }));
 }
 
-it("resolves a real staff void and cash refund by filing the same held cancellation without returning money twice", async () => {
+it("resolves a staff Cancel and refund followed by a test-built cancellation by filing the same held cancellation without returning money twice", async () => {
   const originalCase = await rejectOriginal();
   const issued = await accounting();
   const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
@@ -344,7 +344,7 @@ it.each(["pendiente", "enviando", "detenido"])(
 );
 
 it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
-  "does not reinterpret %s as a known rejected invoice after staff already refunded and cancelled it",
+  "does not reinterpret %s as a known rejected invoice after a staff Cancel and refund and a test-built cancellation",
   async (cause) => {
     const { refundBody, refunded, facts } = await cancelAndRefund();
     await store.db
