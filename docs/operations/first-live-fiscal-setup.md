@@ -71,7 +71,7 @@ the attempt is claimed the app shows its page saying the details are frozen, wit
 (`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
 made the page shows "We've created these invoice series:", lists each series with what it is for
-(for example "A-0CSQW — Standard"; `first-hour.browser.test.ts`, "%s labels say invoice series, list each code with
+(for example "A-0CSQW — Simplified invoices (tickets)"; `first-hour.browser.test.ts`, "%s labels say invoice series, list each code with
 what it is for and never the bare name"), explains the recovery pack and offers
 **Download recovery pack**, which makes the pack and starts the download.
 

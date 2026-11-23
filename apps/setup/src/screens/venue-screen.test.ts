@@ -2006,7 +2006,7 @@ describe("setup-venue-screen in Spanish", () => {
       "Como en sus documentos fiscales",
     );
     expect(q(el, "[data-test=seriesCode] wt-help-tooltip")!.getAttribute("aria-label")).toBe(
-      "Ayuda sobre el código de la serie de facturas",
+      "Ayuda sobre el código de la serie de facturas simplificadas (tickets)",
     );
     expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Zona horaria: Europe/Madrid");
     expect(q(el, "[data-test=back]")!.textContent).toBe("Volver");

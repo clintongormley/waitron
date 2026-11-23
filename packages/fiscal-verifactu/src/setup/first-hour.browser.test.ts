@@ -1743,8 +1743,8 @@ it.each([
     "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
     [
-      "A-0CSQW — Standard",
-      "FF-0CSQW — Full invoice",
+      "A-0CSQW — Simplified invoices (tickets)",
+      "FF-0CSQW — Full invoices",
       "R-0CSQW — Corrective of simplified invoices",
       "RF-0CSQW — Corrective of full invoices",
     ],
@@ -1754,8 +1754,8 @@ it.each([
     "Hemos creado estas series de facturas:",
     "Waitron no puede crear series de facturas para esta fecha: está fuera del rango que cubren los códigos de serie.",
     [
-      "A-0CSQW — Simplificada",
-      "FF-0CSQW — Factura completa",
+      "A-0CSQW — Facturas simplificadas (tickets)",
+      "FF-0CSQW — Facturas completas",
       "R-0CSQW — Rectificativa de simplificadas",
       "RF-0CSQW — Rectificativa de completas",
     ],

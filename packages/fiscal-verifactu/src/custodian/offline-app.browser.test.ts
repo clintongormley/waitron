@@ -199,7 +199,9 @@ for (const theme of ["light", "dark"] as const)
         .element(page.getByText(`Estado: ${labels[state]![1]}`, { exact: true }))
         .toBeVisible();
       if (state === "ready")
-        expect(app!.shadowRoot!.textContent).toContain("A-S000001 / Ordinarias");
+        expect(app!.shadowRoot!.textContent).toContain(
+          "A-S000001 / Facturas simplificadas (tickets)",
+        );
       const spanish = await axe.run(app!);
       expect(
         spanish.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),

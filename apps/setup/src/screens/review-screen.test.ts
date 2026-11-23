@@ -389,8 +389,8 @@ describe("setup-review-screen", () => {
       value.textContent,
     ]);
     expect(rows).toEqual([
-      ["summary-seriesCode", "Invoice series", "FA"],
-      ["summary-fullSeriesCode", "Full invoice series", "FF"],
+      ["summary-seriesCode", "Series for simplified invoices (tickets)", "FA"],
+      ["summary-fullSeriesCode", "Series for full invoices", "FF"],
       ["summary-correctiveSeriesCode", "Series for correctives of simplified invoices", "RF"],
       ["summary-fullCorrectiveSeriesCode", "Series for correctives of full invoices", "FX"],
     ]);
@@ -507,7 +507,7 @@ describe("setup-review-screen in Spanish", () => {
     expect(labels).toContain("Razón social");
     expect(labels).toEqual(
       expect.arrayContaining([
-        "Serie de facturas",
+        "Serie de facturas simplificadas (tickets)",
         "Serie de facturas completas",
         "Serie rectificativa de simplificadas",
         "Serie rectificativa de completas",

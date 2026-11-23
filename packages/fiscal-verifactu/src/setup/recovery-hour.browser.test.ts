@@ -1793,8 +1793,8 @@ it("a handover start lists each new series with what it is for, and hands over n
   await proceed(el);
   await vi.waitFor(() =>
     expect(seriesRows(el)).toEqual([
-      "A-0CSQW — Standard",
-      "FF-0CSQW — Full invoice",
+      "A-0CSQW — Simplified invoices (tickets)",
+      "FF-0CSQW — Full invoices",
       "R-0CSQW — Corrective of simplified invoices",
       "RF-0CSQW — Corrective of full invoices",
     ]),
@@ -1889,8 +1889,8 @@ it("a Spanish handover start names each new series' use and offers Continuar", a
   await proceed(el);
   await vi.waitFor(() =>
     expect(seriesRows(el)).toEqual([
-      "A-0CSQW — Simplificada",
-      "FF-0CSQW — Factura completa",
+      "A-0CSQW — Facturas simplificadas (tickets)",
+      "FF-0CSQW — Facturas completas",
       "R-0CSQW — Rectificativa de simplificadas",
       "RF-0CSQW — Rectificativa de completas",
     ]),
@@ -1901,8 +1901,8 @@ it("a restore lists each new series with what it is for, in English and Spanish,
   const { el } = await pressed();
   await vi.waitFor(() =>
     expect(seriesRows(el)).toEqual([
-      "A-0CSQW — Standard",
-      "FF-0CSQW — Full invoice",
+      "A-0CSQW — Simplified invoices (tickets)",
+      "FF-0CSQW — Full invoices",
       "R-0CSQW — Corrective of simplified invoices",
       "RF-0CSQW — Corrective of full invoices",
     ]),
@@ -1912,8 +1912,8 @@ it("a restore lists each new series with what it is for, in English and Spanish,
   el.locale = "es";
   await el.updateComplete;
   expect(seriesRows(el)).toEqual([
-    "A-0CSQW — Simplificada",
-    "FF-0CSQW — Factura completa",
+    "A-0CSQW — Facturas simplificadas (tickets)",
+    "FF-0CSQW — Facturas completas",
     "R-0CSQW — Rectificativa de simplificadas",
     "RF-0CSQW — Rectificativa de completas",
   ]);
@@ -2422,14 +2422,14 @@ it.each([
     expect([...section.querySelectorAll("li")].map((li) => li.textContent!.trim())).toEqual(
       locale === "en"
         ? [
-            "A-0CSQW — Standard",
-            "FF-0CSQW — Full invoice",
+            "A-0CSQW — Simplified invoices (tickets)",
+            "FF-0CSQW — Full invoices",
             "R-0CSQW — Corrective of simplified invoices",
             "RF-0CSQW — Corrective of full invoices",
           ]
         : [
-            "A-0CSQW — Simplificada",
-            "FF-0CSQW — Factura completa",
+            "A-0CSQW — Facturas simplificadas (tickets)",
+            "FF-0CSQW — Facturas completas",
             "R-0CSQW — Rectificativa de simplificadas",
             "RF-0CSQW — Rectificativa de completas",
           ],
@@ -2558,8 +2558,8 @@ it("after Proceed the second screen says which series were created, and the rest
       li.textContent?.trim(),
     ),
   ).toEqual([
-    "A-0CSQW — Standard",
-    "FF-0CSQW — Full invoice",
+    "A-0CSQW — Simplified invoices (tickets)",
+    "FF-0CSQW — Full invoices",
     "R-0CSQW — Corrective of simplified invoices",
     "RF-0CSQW — Corrective of full invoices",
   ]);

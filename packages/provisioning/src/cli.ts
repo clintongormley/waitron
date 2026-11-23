@@ -237,7 +237,11 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       deps,
     );
     const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
-    const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
+    const seriesCode = await resolveOption(
+      values["series-code"],
+      "series code for simplified invoices (tickets): ",
+      deps,
+    );
     const fullSeriesCode =
       resolveWithoutPrompt(values["full-series-code"]) ?? DEFAULT_SERIES_CODES.fullSeriesCode;
     const correctiveSeriesCode = await resolveOption(
