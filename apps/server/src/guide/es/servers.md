@@ -259,15 +259,12 @@ nada a Hacienda. Usa **Abrir el panel en el nuevo servidor principal.**, si la p
 para ir al servidor que lleva el local.
 
 La página muestra una línea más solo mientras algo te necesita, y dice qué hacer. Mientras un
-[traspaso](servers.md#hand-over) no ha terminado, ofrece también **Progreso**: úsalo para terminar
+[traspaso](servers.md#hand-over) no ha terminado, puede ofrecer también **Progreso**: úsalo para terminar
 el traspaso en el servidor de reserva.
 
 Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
-Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en curso se devuelven
-con sus pagos originales para que el principal pueda comprobar su resultado. El envío a Hacienda
-continúa en el principal. La confirmación significa que cada dato devuelto se ha recibido o se ha
-cubierto mediante una diferencia de pago aceptada expresamente; para una diferencia aceptada, el
-principal conserva sus propios datos de pago.
+Los reembolsos con tarjeta en curso se devuelven con sus pagos originales. El envío a Hacienda
+continúa en el principal.
 
 Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
 servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
@@ -278,7 +275,7 @@ servidor anterior si los necesitas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
-necesitas. La devolución no está confirmada. Puedes restablecer el servidor desde un terminal, pero
+necesitas. La devolución no está confirmada. Puedes borrar el servidor desde un terminal, pero
 eso borra sus datos del local, incluidos los registros que sigan pendientes.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
@@ -314,7 +311,8 @@ confirmada** significa que el nuevo servidor ha contabilizado todos los lotes de
 por el anterior. No confirma la actividad que falte ni los importes, ni reconstruye los arqueos. Una
 recepción sin confirmar necesita una devolución completa; si el servidor anterior ya dejó de enviar,
 reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el servidor anterior,
-comprueba el estado de la devolución en su página antes de decidir si lo restableces.
+comprueba que su fila en **Sistema → Servidores** ya no dice **Esperando a que el servidor principal
+anterior devuelva sus registros de facturación** antes de elegir **Borrar y retirar**.
 
 Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida por primera vez
 con el servidor de origen, la instalación que la generó, la fecha de expedición original y los

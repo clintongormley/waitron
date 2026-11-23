@@ -234,14 +234,11 @@ Use **Open the dashboard on the new main box.**, when the page shows it, to go t
 the venue.
 
 The page shows one more line only while something needs you, and says what to do. While a
-[handover](servers.md#hand-over) is unfinished it also offers **Progress**: use it to finish the
+[handover](servers.md#hand-over) is unfinished it can also offer **Progress**: use it to finish the
 handover on the spare.
 
-Keep this box running while it returns its invoice records to the main box. Refresh the page to
-check progress. Card refunds still in progress go with their original payments so the main box
-can check their outcome. Filing with the tax agency continues on the main box. Confirmation means
-every returned fact was either received or covered by a specifically accepted payment difference;
-for an accepted difference, the main box keeps its own payment facts.
+Keep this box running while it returns its invoice records to the main box. Card refunds still in
+progress go with their original payments. Filing with the tax agency continues on the main box.
 
 Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
@@ -250,7 +247,7 @@ and local backups, which this return does not carry; keep the old box's data if 
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.
-A reset from a terminal remains possible, but deletes the old box's venue data, including any
+You can still wipe it from a terminal, but that deletes the old box's venue data, including any
 records still waiting.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
@@ -280,8 +277,8 @@ Use **Refresh intervals** to check the inventory receipt. **Inventory receipt co
 the new box accounted for all batches in an inventory advertised by the old box. It does not
 confirm missing activity or amounts, or reconstruct cash-ups. An unconfirmed receipt needs a
 complete return; if the old box already stopped sending, restart it while it remains restricted
-to resend. If the old box returns, check the return status on its page before deciding whether
-to reset it.
+to resend. If the old box returns, check that its row in **System → Servers** no longer says **Waiting for
+the old main box to return its invoice records** before choosing **Wipe and remove**.
 
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
 box, generating installation, original issue date and recorded amounts. Invoice rows show a

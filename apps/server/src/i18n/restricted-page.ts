@@ -65,7 +65,7 @@ export const RESTRICTED_RESET_WORDS: Readonly<
   },
 };
 
-/** The successor's role, after its address, where this box knows it is the main box. */
+/** The successor's role, after its address, where this box knows it is the main box (the waiting page's Carry on, `../carry-on.ts`). */
 export const RESTRICTED_MAIN_BOX_WORDS: Readonly<Record<SupportedLocale, string>> = {
   "en-GB": "main box",
   "es-ES": "servidor principal",

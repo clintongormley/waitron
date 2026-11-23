@@ -20,21 +20,14 @@ import {
   readHandoverEvent,
   readHandoverOperation,
   type HandoverOperation,
-  type HandoverOperationState,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
 import "./errors.js";
 
-/**
- * Every event kind a source operation records: its states, the offer's event, the final copy's and
- * the confirmed return's.
- */
-type RestrictedStepKind = HandoverOperationState | "offer" | "final_state" | "return_confirmed";
-
 /** The `node_handover_events.kind` of each event read or written by name. */
 export const HANDOVER_EVENT = {
   offer: "offer",
-  finalState: "final_state" satisfies RestrictedStepKind,
+  finalState: "final_state",
   copyAccepted: "copy_accepted",
   /** That the accepted copy is the live database. */
   copyPlaced: "copy_placed",

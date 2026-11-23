@@ -681,7 +681,8 @@ to fail after that test passed. The start then writes the reset marker's phase
 wiping nothing (`apps/server/src/replaced-reset.ts`). The main box has removed the box on the
 acknowledgement, or, if that removal was refused, its row still offers Remove; once removed, its
 later reset queries are refused as no longer a member. Its page says it
-did not reset, that nothing was changed or deleted, and that it can be switched off
+was asked to wipe itself but could not set its records aside, that nothing on it was changed, and
+that it can be switched off
 (`apps/server/src/i18n/restricted-page.ts`). Recovering the machine takes
 `waitron.sh reset --force-production`.
 
