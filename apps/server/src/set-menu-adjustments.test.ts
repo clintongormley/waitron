@@ -116,7 +116,6 @@ async function dishAt(billId: string, setMenuLineId: string, place: number) {
   )!;
 }
 
-// Failed first: a set-menu line's comp was refused `set_menu.remove_from_summary`.
 it("comping a set menu keeps its dishes covered", async () => {
   const tab = await specBill(spec);
   const before = await specRows(spec, tab.tabId);
@@ -138,7 +137,6 @@ it("comping a set menu keeps its dishes covered", async () => {
   expect(await total(tab.tabId)).toBe(5900);
 });
 
-// Passed at once: a surcharged dish is an ordinary priced line.
 it("a discount on a surcharge", async () => {
   const tab = await specBill(spec);
   const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);
@@ -152,7 +150,6 @@ it("a discount on a surcharge", async () => {
   expect(await total(tab.tabId)).toBe(7050);
 });
 
-// Passed at once: the bill-wide discount never went through the set-menu line refusal.
 it("a bill discount spreads over set menus and surcharges and the ticket matches", async () => {
   const tab = await specBill(spec, "fire");
   const before = await specRows(spec, tab.tabId);
@@ -193,7 +190,6 @@ it("a bill discount spreads over set menus and surcharges and the ticket matches
   expect(sale!.total).toBe(6570);
 });
 
-// Failed first: − deleted the item-paid set menu and kept the unpaid empty one.
 it("an item-paid set menu cannot be removed, by − or by Cancel", async () => {
   const tab = await specBill(spec);
   const [, , , , third, fourth] = (await setSpecCount(spec, tab.tabId, spec.daily, 4)).setMenus;
@@ -217,8 +213,6 @@ it("an item-paid set menu cannot be removed, by − or by Cancel", async () => {
   expect(await specRows(spec, tab.tabId)).toEqual(before);
 });
 
-// Failed first, at the comp: a set-menu line's comp was refused `set_menu.remove_from_summary`.
-// The removal itself was already allowed.
 it("a comped empty set menu can be removed", async () => {
   const tab = await specBill(spec);
   const [, , , , third, fourth] = (await setSpecCount(spec, tab.tabId, spec.daily, 4)).setMenus;
@@ -232,7 +226,6 @@ it("a comped empty set menu can be removed", async () => {
   expect(await total(tab.tabId)).toBe(7300);
 });
 
-// Passed at once: removal does not look at adjustments.
 it("after a bill discount, an empty set menu can still be removed", async () => {
   const tab = await specBill(spec);
   const added = (await setSpecCount(spec, tab.tabId, spec.daily, 3)).setMenus.at(-1)!;
@@ -246,8 +239,7 @@ it("after a bill discount, an empty set menu can still be removed", async () => 
   expect(await total(tab.tabId)).toBe(discounted - removedLine.lineTotal);
 });
 
-// Passed at once: `movable` already counted comps, discounts and item payments. With a third
-// Special, a new Hake draws Daily 2's +5.00 Sirloin to the Special at 0.00 unless something
+// With a third Special, a new Hake draws Daily 2's +5.00 Sirloin to the Special at 0.00 unless something
 // holds the Sirloin where it is.
 it("the offered move never names a comped, discounted or item-paid dish", async () => {
   const offeredFor = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
@@ -293,7 +285,6 @@ it("the offered move never names a comped, discounted or item-paid dish", async 
   }
 });
 
-// Passed at once: `deleteEmptyMenus` already ran `assertBillInvariant`.
 it("an empty set menu is removed from a bill holding a contribution while the money fits", async () => {
   for (const [contribution, outcome] of [
     ["60.00", "accepted"],
@@ -327,7 +318,6 @@ async function moveAlone(partyId: string, from: string, to: string, lineIds: str
   return inTx(venue, (tx) => moveDishes(tx, venue.cfg, from, to, lineIds, command));
 }
 
-// Failed first: the discounted Sirloin moved alone onto the other bill's Daily.
 it("a discounted set-menu dish moves only with its set menu", async () => {
   const { tab, other, emptyDaily } = await twoBills();
   const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);
@@ -369,7 +359,6 @@ it("a discounted set-menu dish moves only with its set menu", async () => {
   expect(await specRows(spec, other)).toEqual(before.to);
 });
 
-// Failed first: a comp on Bread, Soup's extra, let the Soup move alone.
 it("a dish whose extra is comped moves only with its set menu", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
   await setSpecCount(spec, bill.tabId, spec.daily, 1);
@@ -390,7 +379,6 @@ it("a dish whose extra is comped moves only with its set menu", async () => {
   expect(await specRows(spec, other)).toEqual(before.to);
 });
 
-// Passed at once: a set menu takes its dishes, and their comps, with it.
 it("the same dish moves with its set menu", async () => {
   const { tab, other } = await twoBills();
   const sirloin = await dishAt(tab.tabId, tab.daily[1]!, 1);

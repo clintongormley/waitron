@@ -186,7 +186,6 @@ it("a comped set menu splits after print with its comp", async () => {
   expect(await reductions(copy.id)).toEqual(original);
   expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(6800);
 
-  // Failed first: the comp's `adjustments` row stays on the old bill, so the copy read as movable.
   expect(await movable(billId, copy.id)).toBe(false);
   // Uncomped, a third Special would draw the Sirloin off its +5.00 place to make room for a Hake.
   const third = (await setSpecCount(spec, billId, spec.special, 3)).setMenus.at(-1)!;

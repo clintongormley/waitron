@@ -1318,12 +1318,12 @@ it.each([
 });
 
 it("each new code is worded in English and Spanish", () => {
-  const params = { dishNames: ["Sirloin"] };
+  const params = { dishNames: ["Sirloin", "Soup"] };
   expect(codeMessage("set_menu.move_adjusted", "en-GB", params)).toBe(
-    "Sirloin has a comp or discount, so it moves only with its set menu. Move the set menu with it, or leave it on this bill.",
+    "Because of a comp or discount, Sirloin and Soup can only move with the set menu. Move the set menu as well, or leave Sirloin and Soup on this bill.",
   );
   expect(codeMessage("set_menu.move_adjusted", "es-ES", params)).toBe(
-    "Sirloin tiene un descuento, así que solo se mueve con su menú. Mueve también el menú o déjalo en esta cuenta.",
+    "Por un descuento, hay que mover Sirloin y Soup junto con el menú. Mueve también el menú o deja Sirloin y Soup en esta cuenta.",
   );
 });
 
