@@ -320,7 +320,7 @@ describe("till-box-time-dialog", () => {
     },
   );
 
-  it("asks to correct this device in Spanish too", async () => {
+  it("keeps the Spanish clock correction open on a backdrop click", async () => {
     setLocale("es-ES");
     const el = await open(fakeApi(BOX_BEHIND));
     await press(el, "both-wrong");

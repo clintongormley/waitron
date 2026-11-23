@@ -962,15 +962,15 @@ caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo
 tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**, en **Ajustes**. Marca **Mostrar**
 en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
-Si abres **Ajustes** mientras tomas un pedido, toca fuera de la ventana para volver al pedido.
-La cesta se queda como estaba.
-
 Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
 pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
 mostrador elegidas. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las
 zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre;
 después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
 [Volver a tus mesas con platos sin enviar](table-service.md#unsent-tables).
+
+En la caja, si abres **Ajustes** mientras tomas un pedido, toca fuera de la ventana para volver
+al pedido.
 
 La elección es de este dispositivo y del perfil con el que ha entrado, así que otro dispositivo con
 el mismo perfil conserva la suya, y al cambiar de perfil vuelve la elección de ese perfil. Si un

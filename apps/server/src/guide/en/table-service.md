@@ -899,14 +899,14 @@ open **More** (☰), then **Settings**, then **Zones on this device**. On a phon
 **More** (☰) and choose **Zones on this device**, under **Settings**. Tick **Show** for each zone
 you want, choose the one that **Opens first**, and tap **Save**.
 
-If you open **Settings** while taking an order, tap outside the window to return to your order.
-Your basket stays as it was.
-
 The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
 all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
 phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice, a
 phone or tablet opens where it always has; after that it opens on your **Opens first** zone. After
 you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
+
+On a till, if you open **Settings** while taking an order, tap outside the window to return
+to your order.
 
 The choice belongs to this device and the profile it is signed in on, so another device on the same
 profile keeps its own, and switching profile brings back that profile's choice. If a manager
