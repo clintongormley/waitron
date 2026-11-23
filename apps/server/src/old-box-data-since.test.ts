@@ -683,3 +683,9 @@ describe("the old box's Working hours tab", () => {
     );
   });
 });
+
+describe("the Payments and cash tab's headings", () => {
+  it("names the bill payment a row belongs to as a bill payment, not a part payment", () => {
+    expect(OLD_BOX_DATA_WORDS.en.paymentColumns[9]).toBe("Bill payment");
+  });
+});
