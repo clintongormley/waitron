@@ -512,8 +512,6 @@ export function inTx<T>(venue: Pick<AdjustmentVenue, "db">, fn: (tx: Transaction
   return withTransaction(venue.db, fn);
 }
 
-/** One round line: a product by name, a quantity, the variant it is sold as, and extras picks for
- * the Pizza. */
 /** Sets each named product's takeaway rate for this test, putting the venue default 10.00 back after. */
 export async function takeawayRates(
   venue: Pick<AdjustmentVenue, "db">,
@@ -528,6 +526,8 @@ export async function takeawayRates(
   }
 }
 
+/** One round line: a product by name, a quantity, the variant it is sold as, and extras picks for
+ * the Pizza. */
 export interface RoundLine {
   name: string;
   quantity?: string;
