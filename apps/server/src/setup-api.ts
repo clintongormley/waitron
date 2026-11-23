@@ -83,6 +83,7 @@ import { parseEmailSettings } from "./email-settings-api.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { makePreparationRecoveryPack } from "./backup-recovery-pack-output.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
+import { ownContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
@@ -163,6 +164,9 @@ export interface SetupDeps {
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
   joinAttempt?: BoxJoinAttempt;
+  /** This box's configured origin; when set, provision and Finish joining answer this box's own
+   * address (`ownContactUrl`), which setup prints on the box's label. */
+  advertisedOrigin?: string;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
@@ -1117,6 +1121,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const publicResult = {
         provisioned: true,
         restarting: true,
+        ...(deps.advertisedOrigin === undefined
+          ? {}
+          : { contactUrl: ownContactUrl(deps.advertisedOrigin, result.nodeId) }),
         ...(cloudStaffEmailUnavailable && { cloudStaffEmailUnavailable: true }),
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
@@ -1321,7 +1328,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         },
       });
       // The operator's only chance to record the offline promote fallback. It is NEVER logged.
-      const response = c.json({ adopted: true, ...secret, restarting: true }, 200);
+      const contactUrl =
+        deps.advertisedOrigin === undefined
+          ? {}
+          : { contactUrl: ownContactUrl(deps.advertisedOrigin, joined.identity.nodeId) };
+      const response = c.json({ adopted: true, ...secret, restarting: true, ...contactUrl }, 200);
       setTimeout(() => requestRestart(), 0);
       return response;
     };

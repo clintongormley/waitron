@@ -1540,6 +1540,7 @@ async function bootServer(
       app,
       {
         installationOrigin: config.installationOrigin,
+        advertisedOrigin: config.managementOrigin,
         environment: config.environment,
         firstSetup,
         firstFiscal: firstSetupHost,

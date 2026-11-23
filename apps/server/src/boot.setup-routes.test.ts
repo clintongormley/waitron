@@ -1061,7 +1061,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000010W") }),
         });
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+        expect(await response.json()).toEqual({
+          provisioned: true,
+          restarting: true,
+          contactUrl: "http://localhost:5191",
+        });
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         expect(trading.WAITRON_NODE_ID).toBe(committed.nodeId);
         expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
@@ -1270,7 +1274,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             }),
           });
           expect(response.status, await response.clone().text()).toBe(200);
-          expect(await response.json()).toEqual({ provisioned: true, restarting: true });
+          expect(await response.json()).toEqual({
+            provisioned: true,
+            restarting: true,
+            contactUrl: "http://localhost:5191",
+          });
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
           await cp(stateDir, keptStateDir, { recursive: true });
