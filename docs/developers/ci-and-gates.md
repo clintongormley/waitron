@@ -3338,7 +3338,8 @@ afterwards, and the retry installed the libraries.
 
 Before that retry, the job switches to an Ubuntu mirror whose hostname is absent from the runner's
 mirror list. If both alternate hosts are already listed or the runner uses a different source file
-layout, the retry uses the runner's sources. In the
+layout, the retry uses the runner's sources. A failed mirror-list write also leaves the retry
+available. In the
 [hosted control](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030991531),
 both attempts hit the 90-second deadline while requesting the same held font package.
 The [patched job](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030992123)
