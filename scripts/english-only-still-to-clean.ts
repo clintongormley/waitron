@@ -556,7 +556,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/units-api.test.ts",
   "apps/server/src/unpaid-departure.test.ts",
   "apps/server/src/unpaid-invoice-delivery.test.ts",
-  "apps/server/src/vat-class-at-line-add.test.ts",
   "apps/server/src/vat-rate-at-issue.test.ts",
   "apps/server/src/venue-details.test.ts",
   "apps/server/src/venue-settings-api.test.ts",
