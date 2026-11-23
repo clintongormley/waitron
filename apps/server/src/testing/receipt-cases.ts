@@ -101,6 +101,35 @@ export const billDiscountOverTwoRatesWithAnUnfiledLine = (): ReceiptDocumentInpu
   return input;
 };
 
+/** The same bill with a free water at 21% beside the wine and the unfiled bread: the water holds its
+ *  share of the price paid (1,70 of its 2,00, `shareFreeItems`), so its comp takes off 0,30. */
+export const billDiscountWithAnUnfiledLineAndASharedFreeItem = (): ReceiptDocumentInput => {
+  const input = billDiscountOverTwoRatesWithAnUnfiledLine();
+  const [wine, bread] = input.result.lines;
+  input.result.lines = [
+    {
+      ...wine!,
+      gross: "25.43",
+      net: { ...wine!.net!, unitPrice: "21.02", base: "21.02", tax: "4.41" },
+    },
+    { ...bread!, gross: "2.12" },
+    {
+      descriptions: { "es-ES": "Mineral water" },
+      quantity: "1",
+      gross: "1.70",
+      listGross: "2.00",
+      listUnitPriceGross: "2.00",
+      net: { unitPrice: "1.40", priceQuantity: "1.000", base: "1.40", tax: "0.30", rate: "21.00" },
+      adjustments: [{ kind: "comp", amount: "2.00" }],
+    },
+  ];
+  input.result.vatBreakdown = [
+    { rate: "21.00", base: "22.42", tax: "4.71" },
+    { rate: "10.00", base: "1.93", tax: "0.19" },
+  ];
+  return input;
+};
+
 export const fullComp = (): ReceiptDocumentInput => {
   const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
   input.result.lines = [

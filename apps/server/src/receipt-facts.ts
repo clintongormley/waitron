@@ -441,8 +441,8 @@ export function receiptFigures({
       if (compareDecimal(billShare, ZERO) > 0) {
         group.adjustments.push({
           item:
-            billAdjustments.length === 1
-              ? adjustmentLabel(billAdjustments[0]!, locale, label)
+            discounts.billNamed !== null
+              ? adjustmentLabel(discounts.billNamed, locale, label)
               : label.discount,
           amount: negateDecimal(billShare),
           rateLetter: sharedLetter([dish, ...options]),

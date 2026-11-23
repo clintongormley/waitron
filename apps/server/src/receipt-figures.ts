@@ -75,6 +75,8 @@ export interface InvoiceDiscounts {
   under: ReadonlyMap<number, GroupDiscount[]>;
   /** One row per rate, in the order rates first appear in `groups`; never zero. */
   atEnd: GroupDiscount[];
+  /** The bill adjustment whose words name every row of the bill's share, `atEnd`'s `named`. */
+  billNamed: ReceiptAdjustment | null;
 }
 
 /** A dish family's own discount prints under the family; what the bill took off prints once per
@@ -137,16 +139,16 @@ export function invoiceDiscounts(
   }
   // A free item holding a share of the price paid moved part of every line's loss onto the others,
   // so the bill adjustment's words no longer describe what each rate's end row takes off.
-  const atEndNamed = billAdjustments.length === 1 && !sharedFreeItem ? billAdjustments[0]! : null;
+  const billNamed = billAdjustments.length === 1 && !sharedFreeItem ? billAdjustments[0]! : null;
   const atEnd = firstRates(groups)
     .map((rate) => ({
       rate,
       amount: billShares.find((share) => sameRate(share.rate, rate))?.amount ?? ZERO,
       comp: false,
-      named: atEndNamed,
+      named: billNamed,
     }))
     .filter((row) => !isZeroDecimal(row.amount));
-  return { under, atEnd };
+  return { under, atEnd, billNamed };
 }
 
 function sameRate(left: string, right: string): boolean {

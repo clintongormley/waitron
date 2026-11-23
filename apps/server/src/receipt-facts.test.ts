@@ -14,6 +14,7 @@ import {
   advanceTakenOff,
   billDiscountOverTwoRates,
   billDiscountOverTwoRatesWithAnUnfiledLine,
+  billDiscountWithAnUnfiledLineAndASharedFreeItem,
   burgerAndBread,
   burgerAndBreadWithBillDiscount,
   dishDiscountOverExtraAtAnotherRate,
@@ -135,6 +136,30 @@ describe("receiptFigures", () => {
         rateLetter: "",
       },
     ]);
+  });
+
+  // The unfiled line's row follows the end rows: a free item holding a share of the price paid
+  // means the bill discount's "10%" no longer describes what either takes off.
+  it("names an unfiled line's share of a bill discount as the end rows do when a free item holds a share", () => {
+    const figures = receiptFigures(billDiscountWithAnUnfiledLineAndASharedFreeItem());
+    const [unfiled] = figures.sections.flatMap((section) =>
+      section.kind === "withVat" ? [section.group] : [],
+    );
+    const discount = receiptLabelsFor("es-ES").discount;
+    expect(unfiled!.adjustments).toEqual([{ item: discount, amount: "-0.38", rateLetter: "" }]);
+    const filedDiscounts = figures.sections.flatMap((section) =>
+      section.kind === "filed"
+        ? section.rows.flatMap(({ kind, item, rate }) =>
+            kind === "discount" ? [[item, rate]] : [],
+          )
+        : [],
+    );
+    // The water's own row, then the 21% end row.
+    expect(filedDiscounts).toEqual([
+      [discount, "21.00"],
+      [discount, "21.00"],
+    ]);
+    expect(sum(charged(figures))).toBe(figures.total);
   });
 
   it("splits a dish's own discount over its extra at another rate, VAT included", () => {
