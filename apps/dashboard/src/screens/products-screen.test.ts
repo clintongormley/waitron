@@ -3725,7 +3725,7 @@ it("reads the venue's default into a new editor without replacing an open draft"
 });
 
 it.each([true, false])(
-  "hands the editor whether the venue's region charges a takeaway VAT class (%s)",
+  "hands the editor whether the venue's region charges takeaway its own VAT rate (%s)",
   async (takeawayVat) => {
     const api = stubApi({
       getMenuSettings: vi

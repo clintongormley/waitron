@@ -833,17 +833,20 @@ it("reads the menu settings' dine-in rate again on its passive minute timer whil
 
 it("reads the menu settings' dine-in rate again when the saved time zone changes", async () => {
   let reads = 0;
-  const fetchImpl = vi.fn(async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(async () => {
     reads++;
     return new Response(JSON.stringify({ dineInVatRate: reads === 1 ? "10.00" : "7.50" }));
   });
-  const api = new DashboardApi("", fetchImpl);
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
   api.liveData.setConnected(true);
   const observed = api.liveData.observe(dashboardQuery(api, "getMenuSettings", []), () => {});
   try {
     await vi.waitFor(() => expect(observed.snapshot.value?.dineInVatRate).toBe("10.00"));
     api.liveData.invalidate([{ type: "settings.business_day" }]);
     await vi.waitFor(() => expect(observed.snapshot.value?.dineInVatRate).toBe("7.50"));
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
   } finally {
     observed.unsubscribe();
   }

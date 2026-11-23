@@ -121,7 +121,7 @@ Rescheduling records the old and new activation times and the acting person in
 
 A line freezes its names and its gross price when it is added and never reads them from the menu
 again, so editing a product does not rewrite yesterday's receipt. A line eaten here files at the
-dine-in rate on the day the invoice is issued, below. A line taken away,
+dine-in rate in force on the day of the sale, below. A line taken away,
 other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
 invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
 
@@ -169,7 +169,7 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
 line. Neither table has a `variant_id` column.
 
-**Eaten here, every line files at the dine-in rate in force on the day the invoice is issued.
+**Eaten here, every line files at the dine-in rate in force on the day of the sale: the day the invoice is issued, or the earlier day the meal ended (`issueMoment`, below).
 Taken away, a line files at its product's own
 takeaway rate on that day, read when the line is rated.** Each published menu version records the
 eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,

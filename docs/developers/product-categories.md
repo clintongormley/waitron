@@ -312,9 +312,7 @@ and other menus when comparing shared changes; publishing checks its own menu; s
 the zone's assigned active menus. Reset the venue before using its
 menus; republishing an old document is not an upgrade path (owner, 2026-10-06, A291).
 Availability, course and reporting category are
-applied from current rows when serving that version; its VAT class and its takeaway VAT class are
-frozen, and it holds no VAT
-rate (`applyLiveFields`, `packages/menu/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
+applied from current rows when serving that version (`applyLiveFields`, `packages/menu/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
 there are no per-menu extras publications or overrides.
 
 ### Device Home Page routes
