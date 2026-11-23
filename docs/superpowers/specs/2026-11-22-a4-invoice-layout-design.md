@@ -259,8 +259,9 @@ Banco: OPENBANK
 - A string-rendered page has nothing checking that it renders: open the PDF and the office-printer
   image and look, at both a one-page and a multi-page invoice.
 - Help guide: the Business card's new field and the deferred-payment instructions are described in
-  the dashboard guide (English and Spanish) and the invoices guide
-  (`apps/server/src/guide/{en,es}/invoices.md`).
+  the table-service guide (`apps/server/src/guide/{en,es}/table-service.md`), and the staff guide
+  (`apps/server/src/guide/{en,es}/staff.md`) adds the bank account to the changes that need a fresh
+  sign-in.
 
 ## Recording the decisions
 

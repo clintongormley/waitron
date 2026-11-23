@@ -339,13 +339,20 @@ interface TableRow {
 type Line = { text: string; bold?: boolean };
 
 const QUANTITY_WIDTH = 40;
+/** Holds "99999 mg" on one line; a unit may be thousands of characters, so a longer one wraps. */
+const QUANTITY_MAX_WIDTH = 72;
 
 function tableColumns({ labels, simplified }: ReceiptFacts, rows: TableRow[]): TableColumn[] {
   // A weighed quantity ("0,350 kg") wraps in the narrow column, so the column grows to its widest
   // quantity and Description gives up the room.
-  const quantity = Math.max(
-    QUANTITY_WIDTH,
-    ...rows.map((row) => invoiceTextWidth(row.cells[1]!, BODY_SIZE, "regular") + 2 * CELL_PADDING),
+  const quantity = Math.min(
+    QUANTITY_MAX_WIDTH,
+    Math.max(
+      QUANTITY_WIDTH,
+      ...rows.map(
+        (row) => invoiceTextWidth(row.cells[1]!, BODY_SIZE, "regular") + 2 * CELL_PADDING,
+      ),
+    ),
   );
   const right = (heading: string, width: number): TableColumn => ({
     heading,

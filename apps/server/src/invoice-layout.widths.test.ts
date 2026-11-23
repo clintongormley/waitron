@@ -10,6 +10,9 @@ type Text = Extract<InvoicePageElement, { kind: "text" }>;
 const MARGIN = 36;
 const RIGHT = INVOICE_PAGE_WIDTH - MARGIN;
 const SUMMARY_LEFT = MARGIN + (RIGHT - MARGIN) / 2;
+/** Room the full table's Description keeps beside every figure column, quantity at its widest. */
+const MIN_DESCRIPTION = 180;
+const CELL_PADDING = 4;
 
 const fixture = (locale: string): ReceiptDocumentInput => ({
   ...structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE),
@@ -107,5 +110,45 @@ describe("the A4 table's quantity column", () => {
     const sameRow = texts.filter((text) => text.y === cell.y && text.x > cell.x);
     const right = cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
     for (const next of sameRow) expect(right).toBeLessThan(next.x);
+  });
+
+  it.each([
+    ["es-ES", "measure ".repeat(15).trim()],
+    ["en-GB", "measure ".repeat(15).trim()],
+    ["es-ES", "m".repeat(120)],
+  ])("wraps a long unit inside a capped quantity column in %s (%s)", (locale, unit) => {
+    expect(unit.length).toBeGreaterThanOrEqual(119);
+    const pages = layoutA4Invoice(weighed(locale, "2", unit));
+    const texts = pages
+      .flatMap((page) => page.elements)
+      .filter((element): element is Text => element.kind === "text");
+    for (const text of texts) expect(text.x, text.text).toBeGreaterThanOrEqual(MARGIN - 0.01);
+
+    const rightOf = (text: Text): number =>
+      text.x + invoiceTextWidth(text.text, text.size, text.weight);
+    const heading = texts.find((text) => text.text === receiptLabelsFor(locale).quantityColumn)!;
+    const item = fixture(locale).result.lines[1]!.descriptions[locale as "es-ES" | "en-GB"]!;
+    const name = texts.find((text) => text.text === item)!;
+    const pieces = texts.filter(
+      (text) =>
+        text !== heading &&
+        text.y >= name.y &&
+        Math.abs(rightOf(text) - rightOf(heading)) < 0.000001,
+    );
+    expect(pieces.length).toBeGreaterThan(1);
+    expect(pieces.map((text) => text.text.replaceAll(" ", "")).join("")).toBe(
+      `2${unit.replaceAll(" ", "")}`,
+    );
+
+    // A wrapped line falls short of its column by less than one character, so this bounds the
+    // column's left edge from below.
+    const widestCharacter = Math.max(
+      ...[...unit].map((character) => invoiceTextWidth(character, pieces[0]!.size, "regular")),
+    );
+    const columnLeft = Math.min(...pieces.map((text) => text.x)) - CELL_PADDING - widestCharacter;
+    expect(columnLeft - MARGIN, "Description keeps its minimum width").toBeGreaterThanOrEqual(
+      MIN_DESCRIPTION,
+    );
+    expect(rightOf(name)).toBeLessThan(columnLeft);
   });
 });
