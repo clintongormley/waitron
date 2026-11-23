@@ -31,8 +31,9 @@ import {
   JOIN_HANDLE,
   MAIN,
   WAITING,
-  chooseFinish,
+  chooseTryAgain,
   finishJoining,
+  finishRequested,
   forgetJoin,
   joinScreen,
   joinStubs,
@@ -2012,7 +2013,7 @@ describe("setup-app", () => {
     expect(connect.shadowRoot!.querySelector("h1")?.textContent).toContain("Join the main box");
   });
 
-  it("keeps Join's handle and main box in this tab's session storage, and forgets both on Start again", async () => {
+  it("keeps Join's handle and main box in this tab's session storage, and forgets both on No", async () => {
     const api = stubApi();
     const el = await mountSetupApp(api);
     goto(el, "connect");
@@ -2029,10 +2030,26 @@ describe("setup-app", () => {
     expect(api.startJoin).toHaveBeenCalledExactlyOnceWith(MAIN, undefined);
     expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
     vi.mocked(api.startJoin).mockReturnValue(new Promise(() => {}));
-    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=start-again]")!.click();
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=no]")!.click();
     await vi.waitFor(() => expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull());
     expect(api.cancelJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
     expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+  });
+
+  it("sends Join on the code to the server with the stored handle", async () => {
+    const api = stubApi();
+    vi.mocked(api.joinState).mockResolvedValue(WAITING);
+    sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
+    const el = await mountSetupApp(api);
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    await vi.waitFor(() =>
+      expect(connect.shadowRoot!.querySelector("[data-test=yes]")).not.toBeNull(),
+    );
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=yes]")!.click();
+    await expect.poll(() => vi.mocked(api.confirmJoin).mock.calls.length).toBe(1);
+    expect(api.confirmJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
   });
 
   it("sends the stored handle on the join's reads and on Finish joining, and keeps the main box a read names", async () => {
@@ -2042,9 +2059,11 @@ describe("setup-app", () => {
       .mockResolvedValue(APPROVED);
     sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
     const el = await mountSetupApp(api);
+    const requested = finishRequested(el);
     goto(el, "connect");
     await el.updateComplete;
-    await chooseFinish(el);
+    await requested;
+    await flush(el);
     expect(api.joinState).toHaveBeenCalledWith(JOIN_HANDLE);
     expect(vi.mocked(api.joinState).mock.calls.every(([handle]) => handle === JOIN_HANDLE)).toBe(
       true,
@@ -2079,22 +2098,16 @@ describe("setup-app", () => {
     expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
   });
 
-  it("posts nothing when the main box approves the join until Finish joining is chosen", async () => {
+  it("posts Finish joining once by itself when the main box has added this box", async () => {
     const api = stubApi();
     sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
     const el = await mountSetupApp(api);
     goto(el, "connect");
     await el.updateComplete;
-    const connect = await joinScreen(el);
-    await vi.waitFor(() =>
-      expect(connect.shadowRoot!.querySelector("[data-test=finish]")).not.toBeNull(),
-    );
+    await expect.poll(() => vi.mocked(api.finishJoin).mock.calls.length).toBe(1);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(api.finishJoin).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-    await chooseFinish(el);
     expect(api.finishJoin).toHaveBeenCalledExactlyOnceWith(JOIN_HANDLE);
-    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
   it.each([
@@ -2446,7 +2459,7 @@ describe("setup-app", () => {
     await finishJoining(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-    await chooseFinish(el);
+    await chooseTryAgain(el);
     await flush(el);
     expect(adopt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();

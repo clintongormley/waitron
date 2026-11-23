@@ -558,9 +558,9 @@ async function answerOf(response: Response): Promise<Answer> {
 }
 
 /**
- * The spare at `spare.url` joins the main box at `primaryUrl` by code: Join on the spare, Check
- * and a tap on the code the spare shows by `ADMIN` on the main box, then Finish joining on the
- * spare. Answers Finish joining's answer, or the Join's or the Check's refusal; after a refused
+ * The spare at `spare.url` joins the main box at `primaryUrl` by code: Join and Yes on the spare,
+ * Check and Add as spare by `ADMIN` on the main box, once it shows the spare's code, then the
+ * spare's finish. Answers the finish's answer, or the Join's or the Check's refusal; after a refused
  * Check the request is dismissed and the spare's join cancelled, so neither holds a place.
  */
 export async function adoptFrom(
@@ -606,9 +606,9 @@ export async function adoptFrom(
       expect(cancelled.status, await cancelled.text()).toBe(204);
       return checked;
     }
-    expect(((await checked.json()) as { choices: string[] }).choices).toContain(code);
+    expect(await checked.json()).toEqual({ code, newConfirmed: true });
     const approved = await answerOf(
-      await onMain(`/management-api/box-joins/${requestId}/approve`, { code }),
+      await onMain(`/management-api/box-joins/${requestId}/approve`, {}),
     );
     expect(approved.status, JSON.stringify(approved.body)).toBe(202);
     return undefined;

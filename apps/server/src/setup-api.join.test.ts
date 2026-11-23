@@ -25,7 +25,7 @@ function fakeAttempt() {
     await gate;
     started += 1;
     const code = String(100000 + started);
-    state = { state: "waiting", code, primaryUrl, timeLeftMs: TIME_LEFT_MS };
+    state = { state: "waiting", code, primaryUrl, timeLeftMs: TIME_LEFT_MS, confirmed: false };
     return { code, timeLeftMs: TIME_LEFT_MS };
   };
   const attempt = {
@@ -44,6 +44,9 @@ function fakeAttempt() {
       state = null;
       joined = null;
     }),
+    confirm: vi.fn(async () => {
+      if (state?.state === "waiting") state = { ...state, confirmed: true };
+    }),
     current: () => state,
     joined: () => joined,
   } satisfies BoxJoinAttempt;
@@ -57,7 +60,7 @@ function fakeAttempt() {
     };
   };
   const approve = (box: JoinedBox) => {
-    state = { state: "approved", code: String(100000 + started) };
+    state = { state: "approved" };
     joined = box;
   };
   return { attempt, hold, approve, set: (next: JoinAttemptState | null) => (state = next) };
@@ -109,6 +112,7 @@ describe("the setup page's join routes", () => {
   const read = async (handle?: string) => (await send("GET", "", { handle })).json();
   const start = (handle?: string) => send("POST", "start", { handle });
   const cancel = (handle?: string) => send("POST", "cancel", { handle });
+  const confirm = (handle?: string) => send("POST", "confirm", { handle });
   async function started(): Promise<string> {
     const response = await start();
     expect(response.status).toBe(200);
@@ -133,6 +137,7 @@ describe("the setup page's join routes", () => {
       code: "100001",
       primaryUrl: PRIMARY_URL,
       timeLeftMs: TIME_LEFT_MS,
+      confirmed: false,
     });
     expect(await read()).toEqual({ state: "elsewhere" });
     expect(await read("")).toEqual({ state: "elsewhere" });
@@ -240,10 +245,48 @@ describe("the setup page's join routes", () => {
     expect(await read()).toEqual({ state: "none" });
   });
 
+  it("sends the Yes with the current handle while its tab is live", async () => {
+    const handle = await started();
+    await read(handle);
+    expect((await confirm(handle)).status).toBe(204);
+    expect(fake.attempt.confirm).toHaveBeenCalledOnce();
+    expect(await read(handle)).toMatchObject({ state: "waiting", confirmed: true });
+  });
+
+  it("refuses a Yes without the handle while the holding tab read the state in the last 15 seconds", async () => {
+    const handle = await started();
+    vi.advanceTimersByTime(10_000);
+    await read(handle);
+    vi.advanceTimersByTime(14_999);
+    expect(await refusal(await confirm())).toEqual({ status: 409, code: "mirror.join_in_use" });
+    expect(fake.attempt.confirm).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect((await confirm()).status).toBe(204);
+    expect(fake.attempt.confirm).toHaveBeenCalledOnce();
+  });
+
+  it("passes on a Yes the attempt could not send, or has no waiting join for", async () => {
+    const handle = await started();
+    fake.attempt.confirm.mockRejectedValueOnce(new AppError("mirror.bundle_fetch_failed", {}));
+    expect(await refusal(await confirm(handle))).toEqual({
+      status: 502,
+      code: "mirror.bundle_fetch_failed",
+    });
+    fake.attempt.confirm.mockRejectedValueOnce(
+      new AppError("setup.request_invalid", { field: "join" }),
+    );
+    expect(await refusal(await confirm(handle))).toEqual({
+      status: 400,
+      code: "setup.request_invalid",
+    });
+    expect(await read(handle)).toMatchObject({ state: "waiting", confirmed: false });
+  });
+
   it.each([
     ["GET", ""],
     ["POST", "start"],
     ["POST", "cancel"],
+    ["POST", "confirm"],
   ] as const)("refuses %s %s from another page or over plain http", async (method, path) => {
     const handle = await started();
     fake.attempt.start.mockClear();
@@ -259,6 +302,7 @@ describe("the setup page's join routes", () => {
     ]);
     expect(fake.attempt.start).not.toHaveBeenCalled();
     expect(fake.attempt.cancel).not.toHaveBeenCalled();
+    expect(fake.attempt.confirm).not.toHaveBeenCalled();
   });
 
   it("takes plain http from the box itself", async () => {
@@ -274,8 +318,9 @@ describe("the setup page's join routes", () => {
         code: "100001",
         primaryUrl: PRIMARY_URL,
         timeLeftMs: TIME_LEFT_MS,
+        confirmed: true,
       },
-      { state: "approved", code: "100001" },
+      { state: "approved" },
       { state: "ended", reason: "dismissed" },
       { state: "failed", error: "mirror.join_not_found" },
     ];

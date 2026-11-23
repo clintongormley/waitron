@@ -29,6 +29,7 @@ const asking = {
   address: "192.168.1.23",
   askedAt: "2026-11-21T10:00:00.000Z",
   startedAgain: false,
+  newConfirmed: false,
 };
 
 const listing = (joinRequests = [asking]): ServerListing => ({
@@ -37,9 +38,8 @@ const listing = (joinRequests = [asking]): ServerListing => ({
   joinRequests,
 });
 
-const checked: BoxJoinCheck = {
-  choices: ["482913", "105770", "930264"],
-};
+const checked: BoxJoinCheck = { code: "482913", newConfirmed: true };
+const unconfirmed: BoxJoinCheck = { code: "482913", newConfirmed: false };
 
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
@@ -70,9 +70,14 @@ const joinDialog = (el: ServersScreen) =>
     "wt-dialog[data-test=join-dialog]",
   )!;
 
-const choiceButtons = (el: ServersScreen) => [
-  ...joinDialog(el).querySelectorAll<HTMLElementTagNameMap["wt-button"]>("[data-choice]"),
-];
+const dialogButton = (el: ServersScreen, test: string) =>
+  joinDialog(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="${test}"]`);
+
+async function add(el: ServersScreen): Promise<void> {
+  dialogButton(el, "join-add")!.click();
+  await flush(el);
+  await flush(el);
+}
 
 async function message(el: ServersScreen): Promise<string | null> {
   const actions = joinDialog(el).querySelector("wt-form-actions")!;
@@ -103,7 +108,7 @@ describe("a box asking to join, on the Servers screen", () => {
       }),
     );
     expect(find(again, `join-started-again-${REQUEST}`)!.textContent!.trim()).toBe(
-      "This box started again. Tap only a code it showed after that.",
+      "This box started again. Compare only the code it shows now.",
     );
   });
 
@@ -112,59 +117,253 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(find(el, "join-requests")).toBeNull();
   });
 
-  it("Check reads the request, then shows its three codes as large buttons in a labelled group", async () => {
+  it("Check reads the request, then shows its one code and asks whether the new box shows it", async () => {
     const api = stubApi();
     const el = await mount(api);
     await check(el);
     expect(api.checkBoxJoin).toHaveBeenCalledWith(REQUEST);
     expect(joinDialog(el).open).toBe(true);
-    const group = joinDialog(el).querySelector<HTMLElement>('[role="group"]')!;
-    const label = joinDialog(el).querySelector(`#${group.getAttribute("aria-labelledby")}`)!;
-    expect(label.textContent!.trim()).toBe("Tap the code the new box shows");
-    const buttons = choiceButtons(el);
-    expect(buttons.map((b) => b.textContent!.trim())).toEqual([
-      "482\u00a0913",
-      "105\u00a0770",
-      "930\u00a0264",
-    ]);
-    expect(buttons.every((b) => b.size === "lg")).toBe(true);
-    expect(buttons[0]!.getAttribute("aria-label")).toBe("Code 482\u00a0913");
+    expect(find(el, "join-code")!.textContent!.trim()).toBe("482\u00a0913");
+    expect(find(el, "join-question")!.textContent!.trim()).toBe("Does the new box show this code?");
     expect(find(el, "join-dialog-address")!.textContent).toContain("192.168.1.23");
-    expect(find(el, "join-wrong-tap")!.textContent!.trim()).toBe(
-      "A wrong tap ends the request; choose Start again on the new box.",
-    );
-    expect(joinDialog(el).textContent).not.toMatch(/Check that the address/);
+    expect(dialogButton(el, "join-no")!.textContent!.trim()).toBe("No");
+    expect(dialogButton(el, "join-no")!.slot).toBe("secondary");
+    expect(dialogButton(el, "join-add")!.textContent!.trim()).toBe("Add as spare");
+    expect(dialogButton(el, "join-add")!.variant).toBe("primary");
+    expect(dialogButton(el, "join-close")).toBeNull();
+    expect(joinDialog(el).querySelector('[role="group"]')).toBeNull();
+    expect(joinDialog(el).textContent).not.toMatch(/wrong tap|ends the request/);
   });
 
-  it("a right tap approves with that code and says to finish joining on the new box", async () => {
+  it("No in the dialog ends the request, closes the dialog and reads the list again", async () => {
+    const listServers = vi.fn().mockResolvedValueOnce(listing()).mockResolvedValue(listing([]));
+    const api = stubApi({ listServers });
+    const el = await mount(api);
+    await check(el);
+    dialogButton(el, "join-no")!.click();
+    await flush(el);
+    await flush(el);
+    expect(api.dismissBoxJoin).toHaveBeenCalledWith(REQUEST);
+    expect(joinDialog(el).open).toBe(false);
+    expect(listServers).toHaveBeenCalledTimes(2);
+  });
+
+  it("a refused No says why inside the dialog, which stays open", async () => {
+    const api = stubApi({
+      dismissBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_in_progress", status: 409 }),
+    });
+    const el = await mount(api);
+    await check(el);
+    dialogButton(el, "join-no")!.click();
+    await flush(el);
+    await flush(el);
+    expect(joinDialog(el).open).toBe(true);
+    expect(await message(el)).toBe("This box's copy is already being prepared. Wait a moment.");
+  });
+
+  it("Add as spare on a request the new box has confirmed approves at once, with no code", async () => {
     const api = stubApi();
     const el = await mount(api);
     await check(el);
-    choiceButtons(el)[0]!.click();
-    await flush(el);
-    await flush(el);
-    expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST, "482913");
+    await add(el);
+    expect(api.approveBoxJoin).toHaveBeenCalledTimes(1);
+    expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST);
     expect(find(el, "join-approved")!.textContent!.trim()).toBe(
-      "Approved. On the new box, choose Finish joining.",
+      "Added. The new box finishes joining while its join page is open.",
     );
-    expect(choiceButtons(el)).toEqual([]);
+    expect(find(el, "join-code")).toBeNull();
+    expect(dialogButton(el, "join-add")).toBeNull();
+    expect(dialogButton(el, "join-close")).not.toBeNull();
     expect(api.listServers).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the codes dialog open while a tap is being sent, so its answer is shown", async () => {
+  it("Add as spare on a request the live list shows confirmed approves at once", async () => {
+    const liveData = new LiveData();
+    const background = {
+      listServers: vi.fn().mockResolvedValue(listing([{ ...asking, newConfirmed: true }])),
+    };
+    const api = stubApi({
+      liveData,
+      background,
+      checkBoxJoin: vi.fn().mockResolvedValue(unconfirmed),
+    });
+    const el = await mount(api);
+    await check(el);
+    liveData.invalidate([{ type: "box_joins" }]);
+    await vi.waitFor(() => expect(background.listServers).toHaveBeenCalled());
+    await flush(el);
+    expect(api.approveBoxJoin).not.toHaveBeenCalled();
+    await add(el);
+    expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST);
+    expect(find(el, "join-waiting")).toBeNull();
+  });
+
+  describe("Add as spare before the new box chose Join", () => {
+    async function waiting(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+      const liveData = new LiveData();
+      const background = { listServers: vi.fn().mockResolvedValue(listing()) };
+      const api = stubApi({
+        liveData,
+        background,
+        checkBoxJoin: vi.fn().mockResolvedValue(unconfirmed),
+        ...overrides,
+      });
+      const el = await mount(api);
+      await check(el);
+      await add(el);
+      const update = async (rows = [{ ...asking, newConfirmed: true }]) => {
+        const before = background.listServers.mock.calls.length;
+        background.listServers.mockResolvedValue(listing(rows));
+        liveData.invalidate([{ type: "box_joins" }]);
+        await vi.waitFor(() =>
+          expect(background.listServers.mock.calls.length).toBeGreaterThan(before),
+        );
+        await flush(el);
+        await flush(el);
+      };
+      return { api, el, update };
+    }
+
+    it("sends nothing, says to choose Join on the new box, and keeps No and Close usable", async () => {
+      const { api, el } = await waiting();
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      const line = find(el, "join-waiting")!;
+      expect(line.textContent!.trim()).toBe("Now choose Join on the new box.");
+      expect(line.getAttribute("role")).toBe("status");
+      expect(find(el, "join-question")).toBeNull();
+      expect(find(el, "join-code")!.textContent!.trim()).toBe("482\u00a0913");
+      expect(dialogButton(el, "join-add")).toBeNull();
+      expect(dialogButton(el, "join-no")!.disabled).toBe(false);
+      expect(dialogButton(el, "join-close")!.disabled).toBe(false);
+      expect(joinDialog(el).dismissible).toBe(true);
+    });
+
+    it("adds the box once, opening no sign-in prompt, when a live update shows it confirmed", async () => {
+      const { api, el, update } = await waiting();
+      await update([asking]);
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      await update();
+      expect(api.approveBoxJoin).toHaveBeenCalledTimes(1);
+      expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST, { askForSignIn: false });
+      expect(find(el, "join-approved")!.textContent!.trim()).toBe(
+        "Added. The new box finishes joining while its join page is open.",
+      );
+      await update();
+      expect(api.approveBoxJoin).toHaveBeenCalledTimes(1);
+    });
+
+    it("No while waiting ends the request and adds nothing afterwards", async () => {
+      const { api, el, update } = await waiting();
+      dialogButton(el, "join-no")!.click();
+      await flush(el);
+      await flush(el);
+      expect(api.dismissBoxJoin).toHaveBeenCalledWith(REQUEST);
+      expect(joinDialog(el).open).toBe(false);
+      await update();
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+    });
+
+    it("a failed No drops the pending add, so a later Yes adds nothing and Add as spare is offered again", async () => {
+      const { api, el, update } = await waiting({
+        dismissBoxJoin: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+      });
+      dialogButton(el, "join-no")!.click();
+      await flush(el);
+      await flush(el);
+      expect(api.dismissBoxJoin).toHaveBeenCalledWith(REQUEST);
+      expect(joinDialog(el).open).toBe(true);
+      expect(await message(el)).not.toBeNull();
+      await update();
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      expect(find(el, "join-waiting")).toBeNull();
+      expect(dialogButton(el, "join-add")).not.toBeNull();
+    });
+
+    it("leaving the screen while a poll is out sends no add when that poll shows the Yes", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        let release!: (value: ServerListing) => void;
+        const background = {
+          listServers: vi.fn(() => new Promise<ServerListing>((resolve) => (release = resolve))),
+        };
+        const api = stubApi({ background, checkBoxJoin: vi.fn().mockResolvedValue(unconfirmed) });
+        const el = await mount(api);
+        await check(el);
+        await add(el);
+        expect(find(el, "join-waiting")).not.toBeNull();
+        vi.advanceTimersByTime(5000);
+        await flush(el);
+        expect(background.listServers).toHaveBeenCalledTimes(1);
+        el.remove();
+        release(listing([{ ...asking, newConfirmed: true }]));
+        await flush(el);
+        await flush(el);
+        expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("says the request ended, and adds nothing, when the live list no longer holds it", async () => {
+      const { api, el, update } = await waiting();
+      await update([]);
+      expect(find(el, "join-waiting")).toBeNull();
+      expect(find(el, "join-code")).toBeNull();
+      expect(dialogButton(el, "join-add")).toBeNull();
+      expect(await message(el)).toBe(
+        "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
+      );
+      await update();
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      expect(await message(el)).toBe(
+        "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
+      );
+    });
+
+    it("closing the dialog before the update means nothing is added after it, even if reopened", async () => {
+      const { api, el, update } = await waiting();
+      dialogButton(el, "join-close")!.click();
+      await flush(el);
+      expect(joinDialog(el).open).toBe(false);
+      await update([asking]);
+      await check(el);
+      expect(find(el, "join-question")).not.toBeNull();
+      await update();
+      expect(api.approveBoxJoin).not.toHaveBeenCalled();
+      expect(find(el, "join-question")).not.toBeNull();
+    });
+
+    it("an automatic add refused for a stale sign-in shows the refusal and Add as spare again", async () => {
+      const { api, el, update } = await waiting();
+      vi.mocked(api.approveBoxJoin)
+        .mockRejectedValueOnce({ code: "management_session.proof_required", status: 400 })
+        .mockResolvedValueOnce(undefined);
+      await update();
+      expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST, { askForSignIn: false });
+      expect(await message(el)).toBe(
+        "Confirm it is you to continue. The action has not been carried out.",
+      );
+      expect(find(el, "join-waiting")).toBeNull();
+      expect(dialogButton(el, "join-add")!.disabled).toBe(false);
+      await add(el);
+      expect(api.approveBoxJoin).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(api.approveBoxJoin).mock.calls[1]).toEqual([REQUEST]);
+      expect(find(el, "join-approved")).not.toBeNull();
+    });
+  });
+
+  it("keeps the dialog open while Add as spare is being sent, so its answer is shown", async () => {
     let answer!: () => void;
     const api = stubApi({
       approveBoxJoin: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
     });
     const el = await mount(api);
     await check(el);
-    choiceButtons(el)[0]!.click();
+    dialogButton(el, "join-add")!.click();
     await flush(el);
-    const close =
-      joinDialog(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=join-close]")!;
-    expect(close.disabled, "close while sending").toBe(true);
+    expect(dialogButton(el, "join-add")!.loading, "add while sending").toBe(true);
+    expect(dialogButton(el, "join-no")!.disabled, "no while sending").toBe(true);
     expect(joinDialog(el).dismissible, "dismissible while sending").toBe(false);
-    close.click();
     expect(await joinDialog(el).requestClose("cancel")).toBe(false);
     await flush(el);
     expect(joinDialog(el).open, "open after close attempts").toBe(true);
@@ -172,29 +371,11 @@ describe("a box asking to join, on the Servers screen", () => {
     await flush(el);
     await flush(el);
     expect(find(el, "join-approved")).not.toBeNull();
-    expect(close.disabled).toBe(false);
+    expect(dialogButton(el, "join-close")!.disabled).toBe(false);
     expect(joinDialog(el).dismissible).toBe(true);
   });
 
-  it("a wrong tap shows the refusal and offers no more codes", async () => {
-    const api = stubApi({
-      approveBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_wrong_code", status: 409 }),
-    });
-    const el = await mount(api);
-    await check(el);
-    choiceButtons(el)[1]!.click();
-    await flush(el);
-    await flush(el);
-    expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST, "105770");
-    expect(await message(el)).toBe(
-      "That is not the code the new box shows, so this request has ended and nothing was sent. If you are adding a box now, choose Start again on it and check its new code.",
-    );
-    expect(choiceButtons(el)).toEqual([]);
-    expect(find(el, "join-check-again")).toBeNull();
-    expect(api.listServers).toHaveBeenCalledTimes(2);
-  });
-
-  it("a refusal while building leaves the codes to tap again", async () => {
+  it("a refusal while building offers Add as spare again", async () => {
     const api = stubApi({
       approveBoxJoin: vi
         .fn()
@@ -203,16 +384,12 @@ describe("a box asking to join, on the Servers screen", () => {
     });
     const el = await mount(api);
     await check(el);
-    choiceButtons(el)[0]!.click();
-    await flush(el);
-    await flush(el);
+    await add(el);
     expect(await message(el)).toBe(
       "The list of boxes was being changed at the same moment. Try again.",
     );
-    expect(choiceButtons(el).every((b) => !b.disabled)).toBe(true);
-    choiceButtons(el)[0]!.click();
-    await flush(el);
-    await flush(el);
+    expect(dialogButton(el, "join-add")!.disabled).toBe(false);
+    await add(el);
     expect(api.approveBoxJoin).toHaveBeenCalledTimes(2);
     expect(find(el, "join-approved")).not.toBeNull();
   });
@@ -229,12 +406,12 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(await message(el)).toBe(
       "Confirm it is you to continue. The action has not been carried out.",
     );
-    expect(choiceButtons(el)).toEqual([]);
+    expect(find(el, "join-code")).toBeNull();
     find(el, "join-check-again")!.click();
     await flush(el);
     await flush(el);
     expect(api.checkBoxJoin).toHaveBeenCalledTimes(2);
-    expect(choiceButtons(el)).toHaveLength(3);
+    expect(find(el, "join-code")).not.toBeNull();
     expect(await message(el)).toBeNull();
   });
 
@@ -362,9 +539,7 @@ describe("a box asking to join, on the Servers screen", () => {
       expect(background.listServers).toHaveBeenCalledTimes(1);
 
       await check(el);
-      choiceButtons(el)[0]!.click();
-      await flush(el);
-      await flush(el);
+      await add(el);
       expect(listServers).toHaveBeenCalledTimes(2);
       expect(find(el, `join-row-${REQUEST}`)).toBeNull();
 
@@ -403,7 +578,7 @@ describe("a box asking to join, on the Servers screen", () => {
       await flush(el);
 
       await check(el);
-      choiceButtons(el)[0]!.click();
+      dialogButton(el, "join-add")!.click();
       await flush(el);
       expect(listServers).toHaveBeenCalledTimes(2);
       releasePoll(listing([{ ...asking, startedAgain: true }]));
@@ -431,7 +606,7 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(find(el, "join-check-again")).toBeNull();
   });
 
-  it("Dismiss waits while another join action is out, and closes the codes dialog for that request", async () => {
+  it("Dismiss waits while another join action is out, and closes the dialog for that request", async () => {
     let releaseCheck!: (value: BoxJoinCheck) => void;
     const checkBoxJoin = vi
       .fn()
@@ -454,14 +629,14 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(api.dismissBoxJoin).not.toHaveBeenCalled();
     releaseCheck(checked);
     await flush(el);
-    expect(choiceButtons(el)).toHaveLength(3);
+    expect(find(el, "join-code")).not.toBeNull();
 
     find(el, `join-dismiss-${REQUEST}`)!.click();
     await flush(el);
     await flush(el);
     expect(api.dismissBoxJoin).toHaveBeenCalledWith(REQUEST);
     expect(joinDialog(el).open).toBe(false);
-    expect(choiceButtons(el)).toEqual([]);
+    expect(find(el, "join-code")).toBeNull();
   });
 
   it("words a module's unreadable settings for the join here, while the shared words stay general", async () => {
@@ -472,9 +647,7 @@ describe("a box asking to join, on the Servers screen", () => {
     });
     const el = await mount(api);
     await check(el);
-    choiceButtons(el)[0]!.click();
-    await flush(el);
-    await flush(el);
+    await add(el);
     expect(await message(el)).toBe(
       "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
     );
@@ -504,18 +677,15 @@ describe("a box asking to join, on the Servers screen", () => {
       expect(find(el, `join-started-again-${REQUEST}`)!.textContent!.trim()).toBe(
         es["servers.join_started_again"],
       );
-      const api = stubApi({
-        approveBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_wrong_code", status: 409 }),
-      });
-      const tapped = await mount(api);
-      await check(tapped);
-      expect(find(tapped, "join-wrong-tap")!.textContent!.trim()).toBe(
-        "Un toque equivocado termina la solicitud; elige Empezar de nuevo en el servidor nuevo.",
+      const api = stubApi({ checkBoxJoin: vi.fn().mockResolvedValue(unconfirmed) });
+      const asked = await mount(api);
+      await check(asked);
+      expect(find(asked, "join-question")!.textContent!.trim()).toBe(
+        es["servers.join_match_prompt"],
       );
-      choiceButtons(tapped)[0]!.click();
-      await flush(tapped);
-      await flush(tapped);
-      expect(await message(tapped)).toBe(codeMessage("mirror.join_wrong_code", "es"));
+      expect(dialogButton(asked, "join-add")!.textContent!.trim()).toBe(es["servers.join_add"]);
+      await add(asked);
+      expect(find(asked, "join-waiting")!.textContent!.trim()).toBe(es["servers.join_waiting"]);
     } finally {
       setLocale(before);
     }
@@ -527,7 +697,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.join_not_found" },
-    "This box is no longer asking to join: it ran out of time, or someone chose Start again on it.",
+    "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
   ],
   [
     "check",
@@ -550,12 +720,12 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
       code: "mirror.clocks_apart",
       params: { primaryAt: "2026-11-21T10:00:00.000Z", standbyAt: "2026-11-21T10:30:00.000Z" },
     },
-    "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Start again on it.",
+    "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose No on it and Join again.",
   ],
   [
     "check",
     { code: "mirror.standby_name_taken" },
-    "Another box here has the same short name as the new box. Choose Start again on the new box; it picks a new name.",
+    "Another box here has the same short name as the new box. Choose No on the new box, then Join again; it picks a new name.",
   ],
   [
     "check",
@@ -565,7 +735,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.standby_removed" },
-    "The new box asked under the name of a box removed from this venue. Choose Start again on the new box; it picks a new name.",
+    "The new box asked under the name of a box removed from this venue. Choose No on the new box, then Join again; it picks a new name.",
   ],
   [
     "check",
@@ -579,8 +749,8 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   ],
   [
     "approve",
-    { code: "mirror.join_wrong_code" },
-    "That is not the code the new box shows, so this request has ended and nothing was sent. If you are adding a box now, choose Start again on it and check its new code.",
+    { code: "mirror.join_not_confirmed" },
+    "The new box has not chosen Join yet. Choose Join on the new box, then Add as spare here.",
   ],
   [
     "approve",
@@ -590,7 +760,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "approve",
     { code: "mirror.join_other_approved" },
-    "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+    "Another box is being added as a spare, or was added a moment ago. Wait for it to finish joining, then try this one again in a few minutes.",
   ],
   [
     "approve",
@@ -617,11 +787,7 @@ describe("each refusal's words", () => {
         : stubApi({ approveBoxJoin: vi.fn().mockRejectedValue({ status: 409, ...error }) });
     const el = await mount(api);
     await check(el);
-    if (route === "approve") {
-      choiceButtons(el)[0]!.click();
-      await flush(el);
-      await flush(el);
-    }
+    if (route === "approve") await add(el);
     const params = (error as { params?: Record<string, string> }).params ?? {};
     const expected = words
       .replace("{primaryAt}", params.primaryAt ? formatRecentMinute(params.primaryAt) : "")
@@ -667,13 +833,13 @@ describe("a join request's codes dialog, while a read is out", () => {
     },
   );
 
-  it("sends one approval when a code is tapped twice before the dialog redraws", async () => {
+  it("sends one approval when Add as spare is pressed twice before the dialog redraws", async () => {
     const api = stubApi({ approveBoxJoin: vi.fn(() => new Promise(() => {})) });
     const el = await mount(api);
     await check(el);
-    const code = choiceButtons(el)[0]!;
-    code.click();
-    code.click();
+    const addButton = dialogButton(el, "join-add")!;
+    addButton.click();
+    addButton.click();
     expect(api.approveBoxJoin).toHaveBeenCalledTimes(1);
   });
 

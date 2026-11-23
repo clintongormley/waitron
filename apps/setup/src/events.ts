@@ -34,7 +34,10 @@ export function dispatchJoinHandle(el: EventTarget, handle: string | undefined):
   );
 }
 
-/** Finish joining, chosen on an approved join; the shell posts it with the tab's handle. */
+/**
+ * Finish joining, asked for by the join screen once the main box has added this box, or by its Try
+ * again; the shell posts it with the tab's handle.
+ */
 export function dispatchJoinFinishRequested(el: EventTarget): void {
   el.dispatchEvent(
     new CustomEvent("join-finish-requested", { detail: {}, bubbles: true, composed: true }),

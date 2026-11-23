@@ -324,14 +324,14 @@ describe("SetupApi", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(started))
-      .mockResolvedValueOnce(jsonResponse({ state: "approved", code: "482913" }))
+      .mockResolvedValueOnce(jsonResponse({ state: "approved" }))
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(jsonResponse({ adopted: true, restarting: true }))
       .mockResolvedValueOnce(jsonResponse({ state: "none" }));
     const api = new SetupApi("", fetchImpl);
     const handle = { "x-waitron-join-handle": "h0" };
     expect(await api.startJoin("https://waitron.local", "h0")).toEqual(started);
-    expect(await api.joinState("h1")).toEqual({ state: "approved", code: "482913" });
+    expect(await api.joinState("h1")).toEqual({ state: "approved" });
     await api.cancelJoin("h1");
     await api.finishJoin("h1");
     await api.joinState(undefined);
@@ -369,6 +369,18 @@ describe("SetupApi", () => {
       ],
       ["/setup-api/join", { method: "GET", credentials: "include" }],
     ]);
+  });
+
+  it("posts the new box's Join to the main box's code with the join's handle", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new SetupApi("", fetchImpl);
+    await api.confirmJoin("h1");
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/setup-api/join/confirm", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json", "x-waitron-join-handle": "h1" },
+      body: "{}",
+    });
   });
 
   it("resetIncompleteAdopt POSTs with no body and returns the result", async () => {

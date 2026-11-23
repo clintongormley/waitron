@@ -12,7 +12,7 @@ import {
   JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
   commitmentFor,
-  joinCode,
+  pollMessageFields,
   revealAnswerFields,
   verifyJoinMessage,
   type JoinHello,
@@ -223,36 +223,24 @@ describe("the main box's box-to-box join routes", () => {
   it("answers a reveal whose code a listed request shows with no Nm", async () => {
     const first = newBox("192.168.1.20");
     const second = newBox("192.168.1.30");
-    const ids = ["11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"];
-    const nonces = [randomBytes(32), randomBytes(32)];
-    const secondCode = joinCode({
-      ...second.hello,
-      mainNodeId,
-      mainPublicKey,
-      newNonce: second.newNonce,
-      mainNonce: nonces[1]!,
-      requestId: ids[1]!,
+    const real = createBoxJoinRequests();
+    // The store's own case shows when a code is taken; this one is the route's answer to it.
+    mount({
+      ...real,
+      reveal: (input) =>
+        input.requestId === secondId ? { refused: "code_taken" } : real.reveal(input),
     });
-    // The second request's real code becomes one of the first request's decoys.
-    const draws = [secondCode, "000001", "000002"];
-    let made = 0;
-    mount(
-      createBoxJoinRequests({
-        newId: () => ids[made]!,
-        newMainNonce: () => nonces[made++]!,
-        drawCode: () => draws.shift()!,
-      }),
-    );
     const firstHello = await hello(first);
     const secondHello = await hello(second);
+    const secondId = secondHello.requestId;
     expect(
       (await post("reveal", revealBody(first, firstHello.requestId), first.address)).status,
     ).toBe(200);
-    const taken = await post("reveal", revealBody(second, secondHello.requestId), second.address);
+    const taken = await post("reveal", revealBody(second, secondId), second.address);
     expect(taken.status).toBe(409);
     const body = await taken.text();
     expect(JSON.parse(body)).toEqual(err("mirror.join_code_taken"));
-    expect(body).not.toContain(nonces[1]!.toString("base64"));
+    expect(body).not.toContain("mainNonce");
     expect(requests.listed().map((r) => r.id)).toEqual([firstHello.requestId]);
   });
 
@@ -264,7 +252,8 @@ describe("the main box's box-to-box join routes", () => {
       requestId,
       seq,
       at,
-      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [Buffer.from(String(at))]),
+      confirmed: false,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, pollMessageFields(at, false)),
     });
     const forged = { ...pollBody(2, NOW), at: NOW + 1 };
     const response = await post("poll", forged, box.address);
@@ -313,7 +302,8 @@ describe("the main box's box-to-box join routes", () => {
         requestId,
         seq: 2,
         at,
-        signature: signed(box, JOIN_POLL_LABEL, requestId, 2, [Buffer.from(String(at))]),
+        confirmed: false,
+        signature: signed(box, JOIN_POLL_LABEL, requestId, 2, pollMessageFields(at, false)),
       },
       box.address,
     );
@@ -329,6 +319,59 @@ describe("the main box's box-to-box join routes", () => {
     expect(await cancel.json()).toEqual({ cancelled: true });
     expect(requests.listed()).toEqual([]);
     expect(requests.check(requestId)).toEqual({ refused: "not_found" });
+  });
+
+  describe("the new box's Yes in a poll", () => {
+    async function revealed(box: NewBox): Promise<string> {
+      const { requestId } = await hello(box);
+      await post("reveal", revealBody(box, requestId), box.address);
+      return requestId;
+    }
+    const pollBody = (box: NewBox, requestId: string, seq: number, confirmed: boolean) => ({
+      requestId,
+      seq,
+      at: NOW,
+      confirmed,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, pollMessageFields(NOW, confirmed)),
+    });
+
+    it("is recorded on the listed request", async () => {
+      const box = newBox("192.168.1.20");
+      const requestId = await revealed(box);
+      const response = await post("poll", pollBody(box, requestId, 2, true), box.address);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ state: "waiting" });
+      expect(requests.listed()).toMatchObject([{ id: requestId, newConfirmed: true }]);
+    });
+
+    it("is refused, and ends the request, when it was added after the poll was signed", async () => {
+      const box = newBox("192.168.1.20");
+      const requestId = await revealed(box);
+      const forged = { ...pollBody(box, requestId, 2, false), confirmed: true };
+      const response = await post("poll", forged, box.address);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(err("mirror.join_invalid"));
+      expect(requests.listed()).toEqual([]);
+      expect(requests.check(requestId)).toEqual({ refused: "not_found" });
+    });
+
+    it.each([
+      ["missing", undefined],
+      ["a string", "true"],
+      ["a number", 1],
+      ["null", null],
+    ])("is refused when it is %s rather than true or false", async (_name, confirmed) => {
+      const box = newBox("192.168.1.20");
+      const requestId = await revealed(box);
+      const response = await post(
+        "poll",
+        { ...pollBody(box, requestId, 2, true), confirmed },
+        box.address,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(err("mirror.join_invalid"));
+      expect(requests.listed()).toMatchObject([{ id: requestId, newConfirmed: false }]);
+    });
   });
 
   it("refuses a malformed hello, an unknown protocol, a bad signature, clocks apart and a taken box name", async () => {
@@ -358,7 +401,7 @@ describe("the main box's box-to-box join routes", () => {
     const cases: [string, Record<string, unknown>, number, unknown][] = [
       ["malformed", helloBody(box, { addresses: [] }), 400, err("mirror.standby_invalid")],
       ["unusable key", helloBody(unlockable), 400, err("mirror.standby_invalid")],
-      ["protocol", helloBody(box, { protocol: 2, addresses: [] }), 400, err("mirror.join_invalid")],
+      ["protocol", helloBody(box, { protocol: 1, addresses: [] }), 400, err("mirror.join_invalid")],
       ["signature", { ...helloBody(box), at: NOW + 1 }, 400, err("mirror.join_invalid")],
       [
         "clock",
@@ -416,7 +459,13 @@ describe("the main box's box-to-box join routes", () => {
     const box = newBox("192.168.1.20");
     const response = await post(
       "poll",
-      { requestId: "33333333-3333-4333-8333-333333333333", seq: 2, at: NOW, signature: "x" },
+      {
+        requestId: "33333333-3333-4333-8333-333333333333",
+        seq: 2,
+        at: NOW,
+        confirmed: false,
+        signature: "x",
+      },
       box.address,
     );
     expect(response.status).toBe(404);
@@ -503,7 +552,11 @@ describe("the main box's box-to-box join routes", () => {
       requestId,
       seq,
       at,
-      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [Buffer.from(String(at))]),
+      confirmed: false,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [
+        Buffer.from(String(at)),
+        Buffer.from("false"),
+      ]),
     });
     const notATime = await post("poll", pollBody(2, "soon"), box.address);
     expect(notATime.status).toBe(400);

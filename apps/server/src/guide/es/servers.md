@@ -48,14 +48,15 @@ Introduce la dirección del servidor principal por su nombre, `https://waitron.l
 **Unirse**; su dirección IP, como `https://192.168.1.10`, se rechaza. El servidor nuevo muestra un
 código de seis cifras y un enlace a la página Servidores del servidor principal.
 
-En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa página), elige
-**Comprobar** junto a la solicitud y toca el código que muestra el servidor nuevo. Un toque
-equivocado termina la solicitud; elige **Empezar de nuevo** en el servidor nuevo.
+En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa página) y elige
+**Comprobar** junto a la solicitud. Si los dos servidores muestran el mismo código, elige **Unirse**
+en el servidor nuevo y **Añadir como reserva** en el servidor principal, en cualquier orden. Si los
+códigos no coinciden, elige **No**.
 
-De vuelta en el servidor nuevo, elige **Terminar la unión**. El servidor nuevo recibe su primera copia por la red del
-local y se reinicia solo como servidor de reserva. Su página te pide guardar
-la clave del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y
-pegarla en el servidor.
+Deja abierta la página de unión del servidor nuevo. Después, el servidor nuevo recibe su primera
+copia por la red del local y se reinicia como servidor de reserva. Su página te pide guardar la clave
+del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en
+el servidor.
 
 En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del servidor de reserva en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,

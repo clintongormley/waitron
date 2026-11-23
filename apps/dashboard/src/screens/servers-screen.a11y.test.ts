@@ -420,6 +420,7 @@ const asking: ServerListing = {
       address: "192.168.1.23",
       askedAt: "2026-11-21T10:00:00.000Z",
       startedAgain: true,
+      newConfirmed: false,
     },
   ],
 };
@@ -442,7 +443,7 @@ describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) =
       {
         api: stubApi({
           listServers: vi.fn().mockResolvedValue(asking),
-          checkBoxJoin: vi.fn().mockResolvedValue({ choices: ["482913", "105770", "930264"] }),
+          checkBoxJoin: vi.fn().mockResolvedValue({ code: "482913", newConfirmed: false }),
           ...overrides,
         }),
       },
@@ -456,11 +457,35 @@ describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  it("renders the codes dialog accessibly", async () => {
+  it("renders the code and its question accessibly", async () => {
     const { el, host } = await mountAsking();
     await flush(el);
     const dialog = await openJoin(el);
-    expect(dialog.querySelectorAll("[data-choice]")).toHaveLength(3);
+    expect(dialog.querySelector('[data-test="join-question"]')).not.toBeNull();
+    expect(dialog.querySelector('[data-test="join-add"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the wait for the new box's Join accessibly", async () => {
+    const { el, host } = await mountAsking();
+    await flush(el);
+    const dialog = await openJoin(el);
+    dialog.querySelector<HTMLElement>('[data-test="join-add"]')!.click();
+    await flush(el);
+    expect(dialog.querySelector('[data-test="join-waiting"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused No inside the dialog accessibly", async () => {
+    const { el, host } = await mountAsking({
+      dismissBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_in_progress", status: 409 }),
+    });
+    await flush(el);
+    const dialog = await openJoin(el);
+    dialog.querySelector<HTMLElement>('[data-test="join-no"]')!.click();
+    await flush(el);
+    await flush(el);
+    expect(await formMessageOf(dialog.querySelector("wt-form-actions")!)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -476,11 +501,12 @@ describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) =
 
   it("renders an approved join accessibly", async () => {
     const { el, host } = await mountAsking({
+      checkBoxJoin: vi.fn().mockResolvedValue({ code: "482913", newConfirmed: true }),
       approveBoxJoin: vi.fn().mockResolvedValue(undefined),
     });
     await flush(el);
     const dialog = await openJoin(el);
-    dialog.querySelector<HTMLElement>("[data-choice]")!.click();
+    dialog.querySelector<HTMLElement>('[data-test="join-add"]')!.click();
     await flush(el);
     await flush(el);
     expect(dialog.querySelector('[data-test="join-approved"]')).not.toBeNull();

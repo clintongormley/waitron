@@ -29,12 +29,8 @@ import type {
 /** How often the list is read again while it shows a box asking to join, which sends no event. */
 const JOIN_POLL_MS = 5000;
 
-/** Refusals after which the request no longer exists, so no code may be tapped again. */
-const JOIN_ENDED = new Set([
-  "mirror.join_wrong_code",
-  "mirror.join_not_found",
-  "mirror.join_stopped_after_listing",
-]);
+/** Refusals after which the request no longer exists, so it cannot be added. */
+const JOIN_ENDED = new Set(["mirror.join_not_found", "mirror.join_stopped_after_listing"]);
 
 /** Codes whose shared words serve other screens too, so a join refusal words them here. */
 const JOIN_WORDS: Partial<Record<string, StringKey>> = {
@@ -259,10 +255,12 @@ export class ServersScreen extends LitElement {
       .join-body .target {
         margin: 0;
       }
-      .choices {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
+      .join-code {
+        margin: 0;
+        font-family: var(--wt-font-family-mono);
+        font-size: var(--wt-font-size-xl);
+        font-weight: var(--wt-font-weight-bold);
+        letter-spacing: var(--wt-letter-spacing-wide);
       }
       .declarations {
         display: flex;
@@ -287,16 +285,23 @@ export class ServersScreen extends LitElement {
   @state() private spare: SpareFollowView | null = null;
   @state() private joinRequests: BoxJoinRequestRow[] = [];
   @state() private joinListError = "";
-  /** The request whose Check dialog is open, with what Check answered. */
+  /** The request whose Check dialog is open, with what Check answered. `waiting` is set while
+   * Add as spare waits for the new box to choose Join. */
   @state() private join: {
     request: BoxJoinRequestRow;
-    choices: string[] | null;
+    code: string | null;
+    newConfirmed: boolean;
+    waiting: boolean;
     error: string;
     ended: boolean;
     approved: boolean;
   } | null = null;
-  /** `"check"` while Check reads, `"dismiss"` while Dismiss is sent, or the code being sent. */
-  @state() private joinBusy: string | null = null;
+  @state() private joinBusy: "check" | "dismiss" | "approve" | null = null;
+  /** Taken anew whenever the dialog closes or Check opens it, so an answer meant for an earlier
+   * opening is not shown. */
+  #joinOpening = 0;
+  /** The request Add as spare is sent for once the live list shows it confirmed. */
+  #addWhenConfirmed: { request: BoxJoinRequestRow; opening: number } | null = null;
   #joinPoll?: ReturnType<typeof setInterval>;
   #pollOut = false;
   /** Every read and live snapshot takes the next number; an answer numbered at or below the
@@ -361,6 +366,7 @@ export class ServersScreen extends LitElement {
   override disconnectedCallback(): void {
     this.#closeHandover();
     this.#syncJoinPoll(false);
+    this.#dropPendingAdd();
     super.disconnectedCallback();
   }
 
@@ -372,6 +378,44 @@ export class ServersScreen extends LitElement {
     this.joinRequests = listing.joinRequests ?? [];
     this.loadErrorKey = null;
     this.#syncJoinPoll(this.joinRequests.length > 0);
+    const gone = this.#goneJoin();
+    if (gone !== null) {
+      this.#addWhenConfirmed = null;
+      this.join = {
+        ...gone,
+        code: null,
+        waiting: false,
+        ended: true,
+        error: codeMessage("mirror.join_not_found"),
+      };
+      return;
+    }
+    const join = this.join;
+    if (join !== null && !join.newConfirmed && this.#listedConfirmed(join.request.id))
+      this.join = { ...join, newConfirmed: true };
+    const pending = this.#addWhenConfirmed;
+    if (
+      pending !== null &&
+      this.isConnected &&
+      pending.opening === this.#joinOpening &&
+      this.joinBusy === null &&
+      this.#listedConfirmed(pending.request.id)
+    ) {
+      this.#addWhenConfirmed = null;
+      void this.#approveJoin(pending.request, pending.opening, false);
+    }
+  }
+
+  /** The open dialog, when it shows a code for a request the list no longer holds. An Add as spare
+   * being sent is left to its own answer. */
+  #goneJoin(): NonNullable<ServersScreen["join"]> | null {
+    const join = this.join;
+    if (join === null || join.code === null || this.joinBusy === "approve") return null;
+    return this.joinRequests.some((row) => row.id === join.request.id) ? null : join;
+  }
+
+  #listedConfirmed(requestId: string): boolean {
+    return this.joinRequests.some((row) => row.id === requestId && row.newConfirmed);
   }
 
   #syncJoinPoll(on: boolean): void {
@@ -409,15 +453,28 @@ export class ServersScreen extends LitElement {
 
   async #checkJoin(request: BoxJoinRequestRow): Promise<void> {
     if (this.joinBusy !== null) return;
-    this.join = { request, choices: null, error: "", ended: false, approved: false };
+    const opening = this.#newJoinOpening();
+    this.join = {
+      request,
+      code: null,
+      newConfirmed: false,
+      waiting: false,
+      error: "",
+      ended: false,
+      approved: false,
+    };
     this.joinBusy = "check";
     let ended = false;
     try {
       const checked = await this.api.checkBoxJoin(request.id);
-      if (this.join?.request !== request) return;
-      this.join = { ...this.join, choices: checked.choices };
+      if (this.#joinOpening !== opening || this.join === null) return;
+      this.join = {
+        ...this.join,
+        code: checked.code,
+        newConfirmed: checked.newConfirmed || this.#listedConfirmed(request.id),
+      };
     } catch (error) {
-      if (this.join?.request !== request) return;
+      if (this.#joinOpening !== opening || this.join === null) return;
       ended = JOIN_ENDED.has(codeOf(error));
       this.join = { ...this.join, error: joinRefusal(error), ended };
     } finally {
@@ -426,23 +483,45 @@ export class ServersScreen extends LitElement {
     if (ended) await this.#reread();
   }
 
-  async #approveJoin(code: string): Promise<void> {
+  #addAsSpare(): void {
     const join = this.join;
     if (join === null || this.joinBusy !== null) return;
-    this.joinBusy = code;
-    this.join = { ...join, error: "" };
+    if (join.newConfirmed) {
+      void this.#approveJoin(join.request, this.#joinOpening, true);
+      return;
+    }
+    this.join = { ...join, waiting: true, error: "" };
+    this.#addWhenConfirmed = { request: join.request, opening: this.#joinOpening };
+  }
+
+  #dropPendingAdd(): void {
+    this.#addWhenConfirmed = null;
+    if (this.join?.waiting) this.join = { ...this.join, waiting: false };
+  }
+
+  /** The automatic send opens no sign-in prompt: one appearing unasked would surprise the person. */
+  async #approveJoin(
+    request: BoxJoinRequestRow,
+    opening: number,
+    askForSignIn: boolean,
+  ): Promise<void> {
+    if (this.joinBusy !== null || this.join === null) return;
+    this.joinBusy = "approve";
+    this.join = { ...this.join, waiting: false, error: "" };
     try {
-      await this.api.approveBoxJoin(join.request.id, code);
-      if (this.join?.request !== join.request) return;
-      this.join = { ...this.join, approved: true, choices: null };
+      await (askForSignIn
+        ? this.api.approveBoxJoin(request.id)
+        : this.api.approveBoxJoin(request.id, { askForSignIn: false }));
+      if (this.#joinOpening !== opening || this.join === null) return;
+      this.join = { ...this.join, approved: true, code: null };
     } catch (error) {
-      if (this.join?.request !== join.request) return;
+      if (this.#joinOpening !== opening || this.join === null) return;
       const ended = JOIN_ENDED.has(codeOf(error));
       this.join = {
         ...this.join,
         error: joinRefusal(error),
         ended,
-        choices: ended ? null : this.join.choices,
+        code: ended ? null : this.join.code,
       };
       if (!ended) return;
     } finally {
@@ -455,11 +534,14 @@ export class ServersScreen extends LitElement {
     if (this.joinBusy !== null) return;
     this.joinBusy = "dismiss";
     this.joinListError = "";
+    if (this.join?.request.id === request.id) this.#dropPendingAdd();
     try {
       await this.api.dismissBoxJoin(request.id);
     } catch (error) {
       if (codeOf(error) !== "mirror.join_not_found") {
-        this.joinListError = joinRefusal(error);
+        if (this.join?.request.id === request.id)
+          this.join = { ...this.join, error: joinRefusal(error) };
+        else this.joinListError = joinRefusal(error);
         return;
       }
     } finally {
@@ -470,13 +552,14 @@ export class ServersScreen extends LitElement {
   }
 
   #closeJoin(): void {
-    if (this.#sendingTap()) return;
+    if (this.joinBusy === "approve") return;
+    this.#newJoinOpening();
     this.join = null;
   }
 
-  /** A tap's answer is shown in the codes dialog, so it stays open until the answer arrives. */
-  #sendingTap(): boolean {
-    return this.joinBusy !== null && this.joinBusy !== "check" && this.joinBusy !== "dismiss";
+  #newJoinOpening(): number {
+    this.#addWhenConfirmed = null;
+    return ++this.#joinOpening;
   }
 
   #renderJoinRequests(): TemplateResult | typeof nothing {
@@ -533,13 +616,13 @@ export class ServersScreen extends LitElement {
     </section>`;
   }
 
-  /** Tapping a code is the approval, so there is no separate Approve control. */
   #renderJoinDialog(): TemplateResult {
     const join = this.join;
     const checking = this.joinBusy === "check";
-    const sending = this.#sendingTap();
+    const sending = this.joinBusy === "approve";
+    const asking = join !== null && join.code !== null;
     const canCheckAgain =
-      join !== null && !checking && join.choices === null && !join.approved && !join.ended;
+      join !== null && !checking && join.code === null && !join.approved && !join.ended;
     return html`<wt-dialog
       data-test="join-dialog"
       heading=${t("servers.join_dialog_title")}
@@ -568,39 +651,58 @@ export class ServersScreen extends LitElement {
                   : nothing
               }
               ${
-                join.choices === null
+                join.code === null
                   ? nothing
-                  : html`<p class="explanation" data-test="join-wrong-tap">
-                        ${t("servers.join_wrong_tap")}
+                  : html`<p class="join-code" data-test="join-code">
+                        ${groupedJoinCode(join.code)}
                       </p>
-                      <p class="target" id="join-match-prompt">${t("servers.join_match_prompt")}</p>
-                      <div class="choices" role="group" aria-labelledby="join-match-prompt">
-                        ${join.choices.map(
-                          (code) =>
-                            html`<wt-button
-                              variant="secondary"
-                              size="lg"
-                              data-choice=${code}
-                              ?disabled=${this.joinBusy !== null}
-                              ?loading=${this.joinBusy === code}
-                              aria-label=${fill("servers.join_choice_label", { code: groupedJoinCode(code) })}
-                              @click=${() => void this.#approveJoin(code)}
-                              >${groupedJoinCode(code)}</wt-button
-                            >`,
-                        )}
-                      </div>`
+                      ${
+                        join.waiting
+                          ? html`<p class="target" role="status" data-test="join-waiting">
+                              ${t("servers.join_waiting")}
+                            </p>`
+                          : html`<p class="target" data-test="join-question">
+                              ${t("servers.join_match_prompt")}
+                            </p>`
+                      }`
               }
             </div>`
       }
       <wt-form-actions slot="footer" .error=${join?.error ?? ""}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="join-close"
-          ?disabled=${sending}
-          @click=${() => this.#closeJoin()}
-          >${t("action.close")}</wt-button
-        >
+        ${
+          asking && !join.waiting
+            ? nothing
+            : html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="join-close"
+                @click=${() => this.#closeJoin()}
+                >${t("action.close")}</wt-button
+              >`
+        }
+        ${
+          asking
+            ? html`<wt-button
+                slot="secondary"
+                variant="secondary"
+                data-test="join-no"
+                ?disabled=${sending}
+                @click=${() => void this.#dismissJoin(join.request)}
+                >${t("servers.join_no")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          asking && !join.waiting
+            ? html`<wt-button
+                variant="primary"
+                data-test="join-add"
+                ?loading=${sending}
+                @click=${() => this.#addAsSpare()}
+                >${t("servers.join_add")}</wt-button
+              >`
+            : nothing
+        }
         ${
           canCheckAgain
             ? html`<wt-button

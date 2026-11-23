@@ -156,8 +156,8 @@ let joinAddresses = 0;
 
 /**
  * A new box at `spareUrl` asks `main` to join by code, through the real `createBoxJoinAttempt`
- * answered by `main`'s app, and the administrator `email` taps its code on the main box; answers
- * what the new box then holds, as Finish joining hands it to `adoptFromPrimary`. It throws where
+ * answered by `main`'s app; the new box says Yes and the administrator `email` approves on the main
+ * box; answers what the new box then holds, as finishing the join hands it to `adoptFromPrimary`. It throws where
  * the attempt refuses the main box's answers.
  */
 export async function collectJoin(
@@ -191,9 +191,10 @@ export async function collectJoin(
       return answer;
     },
   });
-  const { code } = await attempt.start(mainBox.advertisedOrigin);
+  await attempt.start(mainBox.advertisedOrigin);
   try {
-    const approved = await approveJoin(main.bundleApp, requestId!, { code }, { cookie });
+    await attempt.confirm();
+    const approved = await approveJoin(main.bundleApp, requestId!, {}, { cookie });
     expect(approved.status, JSON.stringify(approved.body)).toBe(202);
     for (let waited = 0; attempt.current()?.state === "waiting" && waited < 10_000; waited += 50)
       await new Promise((resolve) => setTimeout(resolve, 50));

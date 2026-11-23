@@ -1591,10 +1591,12 @@ declare module "@waitron/shared" {
     "mirror.join_code_taken": Record<string, never>;
     /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */
     "mirror.join_not_found": Record<string, never>;
-    /** A person tapped a code that is not the new box's; the request ended and nothing was sent. */
-    "mirror.join_wrong_code": Record<string, never>;
     /**
-     * A right tap, or a Dismiss, arrived while an earlier tap was still preparing the new box's
+     * Add as spare before the new box chose Join; nothing was built and the request stays waiting.
+     */
+    "mirror.join_not_confirmed": Record<string, never>;
+    /**
+     * An approve, or a Dismiss, arrived while an earlier approve was still preparing the new box's
      * copy.
      */
     "mirror.join_in_progress": Record<string, never>;
@@ -1606,7 +1608,7 @@ declare module "@waitron/shared" {
      */
     "mirror.join_approving": Record<string, never>;
     /**
-     * A right tap while another request's copy is being prepared, or was approved less than 2
+     * An approve while another request's copy is being prepared, or was approved less than 2
      * minutes ago unless a newer request from its address has since ended it; the request stays
      * waiting.
      */
@@ -1622,7 +1624,7 @@ declare module "@waitron/shared" {
      */
     "mirror.join_waiting": Record<string, never>;
     /**
-     * A join cancel or start without the current join's handle, while the page holding that handle
+     * A join cancel, Yes or start without the current join's handle, while the page holding that handle
      * read the join's state in the last 15 seconds.
      */
     "mirror.join_in_use": Record<string, never>;

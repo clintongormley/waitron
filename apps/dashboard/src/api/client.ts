@@ -2041,13 +2041,15 @@ export interface BoxJoinRequestRow {
   id: string;
   address: string;
   askedAt: string;
-  /** A box at this address started again recently: tap only a code it showed after that. */
   startedAgain: boolean;
+  /** The new box has chosen Join, so Add as spare can be sent. */
+  newConfirmed: boolean;
 }
 
-/** The Check answer (`apps/server/src/box-join-api.ts`): three six-digit codes, one the new box's. */
+/** The Check answer (`apps/server/src/box-join-api.ts`). */
 export interface BoxJoinCheck {
-  choices: string[];
+  code: string;
+  newConfirmed: boolean;
 }
 
 /** LOCAL copy of the server's `DestinationView` (`apps/server/src/backup-supervisor.ts`). */
@@ -2970,6 +2972,8 @@ export class DashboardApi {
     return this.#background;
   }
   readonly #request: DashboardRequest;
+  /** The same request without the fresh sign-in gate's prompt and resend. */
+  readonly #requestWithoutPrompt: DashboardRequest;
   readonly #baseUrl: string;
   readonly #fetch: FetchLike;
   #localesPromise?: Promise<{
@@ -3028,6 +3032,7 @@ export class DashboardApi {
       passive,
       sessionGeneration: options.sessionGeneration,
     });
+    this.#requestWithoutPrompt = request;
     this.#request = options.freshSignIn?.wrap(request, passive) ?? request;
   }
 
@@ -5403,12 +5408,11 @@ export class DashboardApi {
     );
   }
 
-  /** A wrong code ends the request (`mirror.join_wrong_code`); any other refusal leaves it waiting. */
-  approveBoxJoin(requestId: string, code: string): Promise<void> {
-    return this.#request(
+  /** With `askForSignIn: false` a stale sign-in is refused as it is, opening no prompt. */
+  approveBoxJoin(requestId: string, { askForSignIn = true } = {}): Promise<void> {
+    return (askForSignIn ? this.#request : this.#requestWithoutPrompt)(
       `/management-api/box-joins/${encodeURIComponent(requestId)}/approve`,
       "POST",
-      { code },
     );
   }
 

@@ -29,7 +29,6 @@ import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reserva
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
 import { AppError, nodeId } from "@waitron/shared";
-import { joinCode } from "./box-join-code.js";
 import type { BoxJoinRequests } from "./box-join-requests.js";
 import type { Logger } from "./logger.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
@@ -89,10 +88,18 @@ let nifCounter = 0;
 let afterIssue: () => void = () => {};
 
 /** A hello and its reveal, so the request is listed; carries the code the new box would show. */
-const listedRequest = (address: string): Promise<ListedJoin> =>
+const waitingForYes = (address: string): Promise<ListedJoin> =>
   listedJoin(app, joiningBox(address, { unlikeNodeId: designated.nodeId }));
 
 const poll = (listed: ListedJoin): Promise<unknown> => pollJoin(app, listed);
+const sayYes = (listed: ListedJoin): Promise<unknown> => pollJoin(app, listed, Date.now(), true);
+
+/** A listed request whose new box has said Join. */
+async function listedRequest(address: string): Promise<ListedJoin> {
+  const listed = await waitingForYes(address);
+  expect(await sayYes(listed)).toEqual({ state: "waiting" });
+  return listed;
+}
 
 async function cancel(listed: ListedJoin): Promise<void> {
   expect((await cancelJoin(app, listed)).status).toBe(200);
@@ -308,7 +315,7 @@ describe("the main box's person routes for a joining box", () => {
   it("refuses Cloud remote access on every route, and dismisses on a stale sign-in", async () => {
     const { requestId } = await listedRequest("192.168.1.20");
     const remote = { env: { remoteStaff: true } };
-    expect(await approve(requestId, { code: "000000" }, remote)).toEqual(
+    expect(await approve(requestId, {}, remote)).toEqual(
       refusal(403, "node.operation_page_required"),
     );
     expect(await dismiss(requestId, remote)).toEqual(refusal(403, "node.operation_page_required"));
@@ -319,23 +326,35 @@ describe("the main box's person routes for a joining box", () => {
     expect(await check(requestId)).toEqual(refusal(404, "mirror.join_not_found"));
   });
 
-  it("shows three codes, fixed per request, with the real one not always in one place", async () => {
-    const places = new Set<number>();
-    for (let n = 0; n < 12; n++) {
-      const { requestId, code } = await listedRequest(`192.168.1.${30 + n}`);
-      const first = await check(requestId);
-      expect(first.status).toBe(200);
-      const answer = first.body as { choices: string[] };
-      expect(Object.keys(answer)).toEqual(["choices"]);
-      expect(new Set(answer.choices).size).toBe(3);
-      expect(answer.choices).toContain(code);
-      expect(((await check(requestId)).body as { choices: string[] }).choices).toEqual(
-        answer.choices,
-      );
-      places.add(answer.choices.indexOf(code));
-      expect((await dismiss(requestId)).status).toBe(204);
-    }
-    expect(places.size).toBeGreaterThan(1);
+  it("shows the new box's code and whether it has said Join", async () => {
+    const listed = await waitingForYes("192.168.1.30");
+    expect(await check(listed.requestId)).toEqual({
+      status: 200,
+      body: { code: listed.code, newConfirmed: false },
+    });
+    await sayYes(listed);
+    expect(await check(listed.requestId)).toEqual({
+      status: 200,
+      body: { code: listed.code, newConfirmed: true },
+    });
+  });
+
+  it("refuses Add as spare before the new box said Join, whatever code is sent, and takes it after", async () => {
+    const listed = await waitingForYes("192.168.1.20");
+    const chartBefore = await readNodeMembership(db);
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+      refusal(409, "mirror.join_not_confirmed"),
+    );
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+    expect(requests.listed()).toMatchObject([{ id: listed.requestId, newConfirmed: false }]);
+    expect(await poll(listed)).toEqual({ state: "waiting" });
+
+    await sayYes(listed);
+    expect(await approve(listed.requestId, { code: "000000" })).toEqual({
+      status: 202,
+      body: null,
+    });
+    expect(await poll(listed)).toMatchObject({ state: "approved" });
   });
 
   it("shows the started-again flag for a box that cancelled and asked again", async () => {
@@ -369,6 +388,7 @@ describe("the main box's person routes for a joining box", () => {
         address: "192.168.1.20",
         askedAt: expect.any(String),
         startedAgain: false,
+        newConfirmed: true,
       },
     ]);
   });
@@ -396,21 +416,6 @@ describe("the main box's person routes for a joining box", () => {
     expect(await response.json()).not.toHaveProperty("joinRequests");
   });
 
-  it("ends the request on a wrong tap and gives its reveal place back", async () => {
-    for (let n = 0; n < 5; n++) await cancel(await listedRequest(`192.168.1.${40 + n}`));
-    const sixth = await listedRequest("192.168.1.50");
-    const { choices } = (await check(sixth.requestId)).body as { choices: string[] };
-    const wrong = choices.find((c) => c !== sixth.code)!;
-
-    expect(await approve(sixth.requestId, { code: wrong })).toEqual(
-      refusal(409, "mirror.join_wrong_code"),
-    );
-    expect(await check(sixth.requestId)).toEqual(refusal(404, "mirror.join_not_found"));
-    expect(await poll(sixth)).toEqual({ state: "ended", reason: "wrong_code" });
-    // Six reveals in 15 minutes is the limit; the wrong tap's no longer counts.
-    await listedRequest("192.168.1.51");
-  });
-
   it("refuses Check and approve while the held chart cannot be read, leaving the request waiting", async () => {
     const body = { term: ((await readNodeMembership(db))?.body.term ?? -1) + 1 };
     await writeNodeMembership(db, {
@@ -423,13 +428,13 @@ describe("the main box's person routes for a joining box", () => {
     const broken = refusal(409, "membership.held_untrusted", { reason: "malformed" });
 
     expect(await check(listed.requestId)).toEqual(broken);
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual(broken);
+    expect(await approve(listed.requestId, {})).toEqual(broken);
     expect(await poll(listed)).toEqual({ state: "waiting" });
   });
 
   it("keeps only the locked bundle, which the new box's key opens", async () => {
     const listed = await listedRequest("192.168.1.20");
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual({
+    expect(await approve(listed.requestId, {})).toEqual({
       status: 202,
       body: null,
     });
@@ -481,26 +486,22 @@ describe("the main box's person routes for a joining box", () => {
       signAnswer: () => "signed",
     });
     if ("refused" in revealed) throw new Error("reveal refused");
-    const code = joinCode({
-      ...box.hello,
-      mainNodeId: main.nodeId,
-      mainPublicKey: main.publicKey,
-      newNonce: box.newNonce,
-      mainNonce: revealed.mainNonce,
+    requests.poll({
       requestId: opened.requestId,
+      seq: 2,
+      at: new Date().toISOString(),
+      confirmed: true,
     });
     const chartBefore = await readNodeMembership(db);
 
-    expect(await approve(opened.requestId, { code })).toEqual(
-      refusal(400, "mirror.standby_invalid"),
-    );
+    expect(await approve(opened.requestId, {})).toEqual(refusal(400, "mirror.standby_invalid"));
     expect(await readNodeMembership(db)).toEqual(chartBefore);
     expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
-  it("refuses the new box's cancel and a Dismiss while a right tap is being approved", async () => {
+  it("refuses the new box's cancel and a Dismiss while an approve is being built", async () => {
     const listed = await listedRequest("192.168.1.20");
-    expect(requests.approve.begin(listed.requestId, listed.code)).not.toHaveProperty("refused");
+    expect(requests.approve.begin(listed.requestId)).not.toHaveProperty("refused");
     const cancelled = await cancelJoin(app, listed);
     expect({ status: cancelled.status, body: await cancelled.json() }).toEqual(
       refusal(409, "mirror.join_approving"),
@@ -519,7 +520,7 @@ describe("the main box's person routes for a joining box", () => {
       afterIssue = () => {};
       throw new AppError("membership.write_contended", { attempts: 8 });
     };
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+    expect(await approve(listed.requestId, {})).toEqual(
       refusal(409, "mirror.join_stopped_after_listing"),
     );
     expect(lines).toContainEqual([
@@ -535,9 +536,7 @@ describe("the main box's person routes for a joining box", () => {
       listed.box.hello.newNodeId,
     );
     expect(await poll(listed)).toEqual({ state: "ended", reason: "stopped" });
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
-      refusal(404, "mirror.join_not_found"),
-    );
+    expect(await approve(listed.requestId, {})).toEqual(refusal(404, "mirror.join_not_found"));
   });
 
   it("says the spare was listed when a full disk stops the approval after listing it", async () => {
@@ -548,7 +547,7 @@ describe("the main box's person routes for a joining box", () => {
       afterIssue = () => {};
       throw new AppError("storage.disk_full", {});
     };
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+    expect(await approve(listed.requestId, {})).toEqual(
       refusal(409, "mirror.join_stopped_after_listing"),
     );
     expect(lines).toContainEqual([
@@ -565,7 +564,7 @@ describe("the main box's person routes for a joining box", () => {
     await withReservingModule(
       listed.box.hello.newNodeId,
       async (moduleOperation) => {
-        expect(await approve(listed.requestId, { code: listed.code, moduleOperation })).toEqual(
+        expect(await approve(listed.requestId, { moduleOperation })).toEqual(
           refusal(507, "storage.disk_full"),
         );
       },
@@ -596,7 +595,7 @@ describe("the main box's person routes for a joining box", () => {
         signAnswer: () => "signed",
       });
     };
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+    expect(await approve(listed.requestId, {})).toEqual(
       refusal(409, "mirror.join_stopped_after_listing"),
     );
     expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).toContain(
@@ -607,7 +606,7 @@ describe("the main box's person routes for a joining box", () => {
   it("reaches the module with the approver as the operation's authority", async () => {
     const listed = await listedRequest("192.168.1.20");
     await withReservingModule(listed.box.hello.newNodeId, async (moduleOperation, operators) => {
-      const answer = await approve(listed.requestId, { code: listed.code, moduleOperation });
+      const answer = await approve(listed.requestId, { moduleOperation });
       expect(answer.status, JSON.stringify(answer.body)).toBe(202);
       expect(operators).toEqual([approverId]);
     });
@@ -642,20 +641,20 @@ describe("the main box's person routes for a joining box", () => {
     const listed = await listedRequest("192.168.1.20");
     const extra = (await arrange()) ?? {};
     try {
-      expect(await approve(listed.requestId, { code: listed.code, ...extra })).toEqual(expected);
+      expect(await approve(listed.requestId, { ...extra })).toEqual(expected);
     } finally {
       await db.execute(sql.raw("drop trigger if exists test_node_membership_contended"));
     }
     expect((await check(listed.requestId)).status).toBe(200);
     expect(await poll(listed)).toEqual({ state: "waiting" });
     await stampDeployment(db, "preproduction");
-    expect(await approve(listed.requestId, { code: listed.code })).toEqual({
+    expect(await approve(listed.requestId, {})).toEqual({
       status: 202,
       body: null,
     });
   });
 
-  it("reserves once when a right tap is sent again after membership.write_contended", async () => {
+  it("reserves once when an approve is sent again after membership.write_contended", async () => {
     const listed = await listedRequest("192.168.1.20");
     await holdChartNamingOnlyMainBox();
     await withReservingModule(listed.box.hello.newNodeId, async (moduleOperation, operators) => {
@@ -665,13 +664,13 @@ describe("the main box's person routes for a joining box", () => {
         ),
       );
       try {
-        expect(await approve(listed.requestId, { code: listed.code, moduleOperation })).toEqual(
+        expect(await approve(listed.requestId, { moduleOperation })).toEqual(
           refusal(503, "membership.write_contended", { attempts: 8 }),
         );
       } finally {
         await db.execute(sql.raw("drop trigger test_node_membership_contended"));
       }
-      const again = await approve(listed.requestId, { code: listed.code, moduleOperation });
+      const again = await approve(listed.requestId, { moduleOperation });
       expect(again.status, JSON.stringify(again.body)).toBe(202);
       // This module's reserve writes no venue row, so its calls are the reservations it made.
       expect(await db.select().from(fiscalReservations)).toEqual([]);
@@ -679,29 +678,25 @@ describe("the main box's person routes for a joining box", () => {
     });
   });
 
-  it("answers mirror.join_in_progress to a second tap while the first is building", async () => {
+  it("answers mirror.join_in_progress to a second approve while the first is building", async () => {
     const listed = await listedRequest("192.168.1.20");
     const [first, second] = await Promise.all([
-      approve(listed.requestId, { code: listed.code }),
-      approve(listed.requestId, { code: listed.code }),
+      approve(listed.requestId, {}),
+      approve(listed.requestId, {}),
     ]);
     expect([first, second]).toContainEqual(refusal(409, "mirror.join_in_progress"));
     expect([first, second]).toContainEqual({ status: 202, body: null });
   });
 
-  it("refuses a tap on a second box while the first is approved, keeping the first's pair link", async () => {
+  it("refuses approving a second box while the first is approved, keeping the first's pair link", async () => {
     const first = await listedRequest("192.168.1.20");
     const second = await listedRequest("192.168.1.21");
-    expect(requests.approve.begin(first.requestId, first.code)).not.toHaveProperty("refused");
-    expect(await approve(second.requestId, { code: second.code })).toEqual(
-      refusal(409, "mirror.join_other_approved"),
-    );
+    expect(requests.approve.begin(first.requestId)).not.toHaveProperty("refused");
+    expect(await approve(second.requestId, {})).toEqual(refusal(409, "mirror.join_other_approved"));
     requests.approve.abandon(first.requestId);
 
-    expect((await approve(first.requestId, { code: first.code })).status).toBe(202);
-    expect(await approve(second.requestId, { code: second.code })).toEqual(
-      refusal(409, "mirror.join_other_approved"),
-    );
+    expect((await approve(first.requestId, {})).status).toBe(202);
+    expect(await approve(second.requestId, {})).toEqual(refusal(409, "mirror.join_other_approved"));
     expect((await readPairLink(suite.node, designated.nodeId))?.peerNodeId).toBe(
       first.box.hello.newNodeId,
     );
@@ -711,10 +706,11 @@ describe("the main box's person routes for a joining box", () => {
     expect(await poll(second)).toEqual({ state: "waiting" });
   });
 
-  it("takes a tap on the new code once the approved box has chosen Start again and asked again", async () => {
+  it("takes an approve of the new request once the approved box has chosen Start again and asked again", async () => {
     const box = joiningBox("192.168.1.20", { unlikeNodeId: designated.nodeId });
     const first = await listedJoin(app, box);
-    expect((await approve(first.requestId, { code: first.code })).status).toBe(202);
+    await sayYes(first);
+    expect((await approve(first.requestId, {})).status).toBe(202);
     expect(await poll(first)).toMatchObject({ state: "approved" });
     const cancelled = await cancelJoin(app, first);
     expect({ status: cancelled.status, body: await cancelled.json() }).toEqual(
@@ -722,7 +718,7 @@ describe("the main box's person routes for a joining box", () => {
     );
 
     const again = await listedRequest("192.168.1.20");
-    expect(await approve(again.requestId, { code: again.code })).toEqual({
+    expect(await approve(again.requestId, {})).toEqual({
       status: 202,
       body: null,
     });
@@ -735,9 +731,7 @@ describe("the main box's person routes for a joining box", () => {
   it("answers mirror.join_not_found for an unknown request", async () => {
     const unknown = "00000000-0000-4000-8000-000000000000";
     expect(await check(unknown)).toEqual(refusal(404, "mirror.join_not_found"));
-    expect(await approve(unknown, { code: "123456" })).toEqual(
-      refusal(404, "mirror.join_not_found"),
-    );
+    expect(await approve(unknown, {})).toEqual(refusal(404, "mirror.join_not_found"));
     expect(await dismiss(unknown)).toEqual(refusal(404, "mirror.join_not_found"));
     expect(await db.select().from(nodes)).toHaveLength(1);
   });

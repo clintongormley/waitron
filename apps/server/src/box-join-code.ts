@@ -1,4 +1,4 @@
-import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { signBytes, verifyBytes } from "@waitron/membership";
 
 export const JOIN_COMMITMENT_LABEL = "waitron box join commitment v1";
@@ -115,28 +115,7 @@ export function joinCode(inputs: JoinCodeInputs): string {
   return String(v.readBigUInt64BE(0) % 1_000_000n).padStart(6, "0");
 }
 
-function randomCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-/** Two decoys, distinct from the real code, from each other and from every listed request's codes. */
-export function drawDecoys(
-  real: string,
-  listed: Iterable<string>,
-  draw: () => string = randomCode,
-): [string, string] {
-  const avoid = new Set([real, ...listed]);
-  const decoys: string[] = [];
-  while (decoys.length < 2) {
-    const code = draw();
-    if (avoid.has(code)) continue;
-    avoid.add(code);
-    decoys.push(code);
-  }
-  return [decoys[0]!, decoys[1]!];
-}
-
-export const JOIN_PROTOCOL = 1;
+export const JOIN_PROTOCOL = 2;
 
 /** The hello's fields every signature over it covers, in order. */
 function helloFields(hello: JoinHello): Buffer[] {
@@ -180,9 +159,9 @@ export function revealMessageFields(newNonce: Buffer): Buffer[] {
   return [newNonce];
 }
 
-/** What the new box signs in a poll, under the request id and seq. */
-export function pollMessageFields(at: number): Buffer[] {
-  return [Buffer.from(String(at))];
+/** What the new box signs in a poll, under the request id and seq; `confirmed` is its Yes. */
+export function pollMessageFields(at: number, confirmed: boolean): Buffer[] {
+  return [Buffer.from(String(at)), Buffer.from(String(confirmed))];
 }
 
 /** What the main box signs in its reveal answer, under the reveal's request id and seq. */

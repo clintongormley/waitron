@@ -12,6 +12,7 @@ async function mount(state: JoinState, theme: Theme) {
     startJoin: vi.fn(),
     joinState: vi.fn().mockResolvedValue(state),
     cancelJoin: vi.fn(),
+    confirmJoin: vi.fn(),
   };
   const mounted = await mountWidget<SetupConnectScreen>(
     "setup-connect-screen",
@@ -24,20 +25,20 @@ async function mount(state: JoinState, theme: Theme) {
   return mounted;
 }
 
+const WAITING: JoinState = {
+  state: "waiting",
+  code: "482913",
+  primaryUrl: "https://waitron.local",
+  timeLeftMs: 600_000,
+  confirmed: false,
+};
+
 const LAYOUTS: [string, JoinState, string][] = [
   ["the address", { state: "none" }, "primaryUrl"],
-  [
-    "waiting, with the code",
-    {
-      state: "waiting",
-      code: "482913",
-      primaryUrl: "https://waitron.local",
-      timeLeftMs: 600_000,
-    },
-    "code",
-  ],
-  ["approved, with Finish joining", { state: "approved", code: "482913" }, "finish"],
-  ["ended", { state: "ended", reason: "wrong_code" }, "start-again"],
+  ["waiting, asking whether the main box shows the code", WAITING, "yes"],
+  ["waiting for Add as spare on the main box", { ...WAITING, confirmed: true }, "no"],
+  ["added, finishing joining", { state: "approved" }, "start-again"],
+  ["ended", { state: "ended", reason: "dismissed" }, "start-again"],
 ];
 
 describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)", (theme) => {
@@ -77,11 +78,11 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations while Finish joining is being sent", async () => {
-    const { el, host } = await mount({ state: "approved", code: "482913" }, theme);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=finish]")!.click();
+  it("has no violations with Try again after a refused Finish joining", async () => {
+    const { el, host } = await mount({ state: "approved" }, theme);
+    el.refusal = { code: "mirror.bundle_fetch_failed" };
     await el.updateComplete;
-    expect(el.finishing).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=finish]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

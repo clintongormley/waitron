@@ -1553,31 +1553,53 @@ describe("DashboardApi routes", () => {
   });
 
   it("checks, approves and dismisses a box's join by its request id", async () => {
-    const checked = { choices: ["1"] };
+    const checked = { code: "482913", newConfirmed: false };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(checked))
       .mockResolvedValueOnce(new Response(null, { status: 202 }))
-      .mockResolvedValueOnce(refusal("mirror.join_wrong_code", 409))
+      .mockResolvedValueOnce(refusal("mirror.join_not_confirmed", 409))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.checkBoxJoin("j-1")).resolves.toEqual(checked);
-    await expect(api.approveBoxJoin("j-1", "482913")).resolves.toBeFalsy();
-    await expect(api.approveBoxJoin("a/b", "105770")).rejects.toMatchObject({
-      code: "mirror.join_wrong_code",
+    await expect(api.approveBoxJoin("j-1")).resolves.toBeFalsy();
+    await expect(api.approveBoxJoin("a/b")).rejects.toMatchObject({
+      code: "mirror.join_not_confirmed",
       status: 409,
     });
     await expect(api.dismissBoxJoin("j-1")).resolves.toBeFalsy();
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/box-joins/j-1/check", "POST", undefined],
-      ["/management-api/box-joins/j-1/approve", "POST", { code: "482913" }],
-      ["/management-api/box-joins/a%2Fb/approve", "POST", { code: "105770" }],
+      ["/management-api/box-joins/j-1/approve", "POST", undefined],
+      ["/management-api/box-joins/a%2Fb/approve", "POST", undefined],
       ["/management-api/box-joins/j-1/dismiss", "POST", undefined],
     ]);
   });
 });
+
+it.each([
+  [undefined, 1, 2],
+  [{ askForSignIn: false }, 0, 1],
+] as const)(
+  "approving a join with %o opens the fresh sign-in prompt %i times",
+  async (options, prompts, sends) => {
+    const prompt = vi.fn(async () => true);
+    const gate = createFreshSignInGate({ sessionGeneration: () => 0, prompt });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(refusal("management_session.proof_required", 400))
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new DashboardApi("", fetchImpl, undefined, undefined, false, { freshSignIn: gate });
+    const sent = api.approveBoxJoin("j-1", options);
+    if (prompts === 0)
+      await expect(sent).rejects.toMatchObject({ code: "management_session.proof_required" });
+    else await expect(sent).resolves.toBeFalsy();
+    expect(prompt).toHaveBeenCalledTimes(prompts);
+    expect(fetchImpl).toHaveBeenCalledTimes(sends);
+  },
+);
 
 it("asks for a bill's full invoice on the chosen printer under the given request key", async () => {
   const attempt = { id: "delivery-1", medium: "a4", status: "queued" };

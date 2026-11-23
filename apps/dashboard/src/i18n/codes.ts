@@ -1642,20 +1642,20 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor no puede comprobar su propia lista de servidores, así que no puede añadir otro. No se ha cambiado nada.",
   },
   "mirror.join_not_found": {
-    en: "This box is no longer asking to join: it ran out of time, or someone chose Start again on it.",
-    es: "Este servidor ya no está pidiendo unirse: se agotó el tiempo o alguien eligió Empezar de nuevo en él.",
+    en: "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
+    es: "Este servidor ya no está pidiendo unirse: se añadió desde otra página, se agotó el tiempo o alguien eligió No o Empezar de nuevo.",
   },
-  "mirror.join_wrong_code": {
-    en: "That is not the code the new box shows, so this request has ended and nothing was sent. If you are adding a box now, choose Start again on it and check its new code.",
-    es: "Ese no es el código que muestra el servidor nuevo, así que esta solicitud ha terminado y no se ha enviado nada. Si estás añadiendo un servidor ahora, elige Empezar de nuevo en él y comprueba su código nuevo.",
+  "mirror.join_not_confirmed": {
+    en: "The new box has not chosen Join yet. Choose Join on the new box, then Add as spare here.",
+    es: "El servidor nuevo aún no ha elegido Unirse. Elige Unirse en el servidor nuevo y después Añadir como reserva aquí.",
   },
   "mirror.join_in_progress": {
     en: "This box's copy is already being prepared. Wait a moment.",
     es: "Ya se está preparando la copia para este servidor. Espera un momento.",
   },
   "mirror.join_other_approved": {
-    en: "Another box is being approved to join, or was approved a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
-    es: "Se está aprobando la unión de otro servidor, o se aprobó hace un momento. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+    en: "Another box is being added as a spare, or was added a moment ago. Wait for it to finish joining, then try this one again in a few minutes.",
+    es: "Se está añadiendo otro servidor como reserva, o se añadió hace un momento. Espera a que termine de unirse y vuelve a intentarlo con este dentro de unos minutos.",
   },
   "mirror.join_stopped_after_listing": {
     en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
@@ -1670,20 +1670,20 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "La copia continua a tu bucket está activada. Desactívala en Copias de seguridad para añadir un servidor de reserva; tu bucket dejará de recibir los cambios del local.",
   },
   "mirror.clocks_apart": {
-    en: "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Start again on it.",
-    es: "Los relojes de los dos servidores se separan más de 10 minutos (este {primaryAt}, el nuevo {standbyAt}). Si la hora del servidor nuevo es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y elige Empezar de nuevo en él.",
+    en: "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose No on it and Join again.",
+    es: "Los relojes de los dos servidores se separan más de 10 minutos (este {primaryAt}, el nuevo {standbyAt}). Si la hora del servidor nuevo es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y elige No en él y después Unirse otra vez.",
   },
   "mirror.standby_name_taken": {
-    en: "Another box here has the same short name as the new box. Choose Start again on the new box; it picks a new name.",
-    es: "Otro servidor de este local tiene el mismo nombre corto que el nuevo. Elige Empezar de nuevo en el servidor nuevo; tomará otro nombre.",
+    en: "Another box here has the same short name as the new box. Choose No on the new box, then Join again; it picks a new name.",
+    es: "Otro servidor de este local tiene el mismo nombre corto que el nuevo. Elige No en el servidor nuevo y después Unirse otra vez; tomará otro nombre.",
   },
   "mirror.membership_full": {
     en: "This venue's list of boxes already holds {limit} boxes, the most it can hold. Clear a removed box from the list on this page before adding another.",
     es: "La lista de servidores de este local ya tiene {limit} servidores, el máximo que admite. Quita de la lista en esta página un servidor retirado antes de añadir otro.",
   },
   "mirror.standby_removed": {
-    en: "The new box asked under the name of a box removed from this venue. Choose Start again on the new box; it picks a new name.",
-    es: "El servidor nuevo lo pidió con el nombre de un servidor retirado de este local. Elige Empezar de nuevo en el servidor nuevo; tomará otro nombre.",
+    en: "The new box asked under the name of a box removed from this venue. Choose No on the new box, then Join again; it picks a new name.",
+    es: "El servidor nuevo lo pidió con el nombre de un servidor retirado de este local. Elige No en el servidor nuevo y después Unirse otra vez; tomará otro nombre.",
   },
   "mirror.standby_invalid": {
     en: "The new box's request could not be read, so nothing was sent. Choose Start again on the new box.",

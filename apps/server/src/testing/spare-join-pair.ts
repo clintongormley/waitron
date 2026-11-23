@@ -51,7 +51,7 @@ export interface JoinPair {
   urlS: string;
   /** M's contact address, as its chart gives it. */
   primaryUrl: string;
-  /** Join, Check, tap and Finish joining (`adoptFrom`), with S joining M at `primaryUrl`. */
+  /** Join, Yes, Check, Add as spare and the finish (`adoptFrom`), with S joining M at `primaryUrl`. */
   adopt: (primaryUrl?: string) => Promise<{ status: number; body: unknown }>;
   /**
    * `adopt` with a folder where S's `trading.env` goes, so the join's last write fails after M

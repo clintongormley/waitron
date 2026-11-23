@@ -1,5 +1,6 @@
-// The new box's side of a join by code: it asks the main box, shows the code, and waits for a
-// person to tap it there. The attempt lives in memory only, so a restart forgets it.
+// The new box's side of a join by code: it asks the main box, shows the code, sends the person's Yes
+// in its polls, and waits for the main box to add it. The attempt lives in memory only, so a
+// restart forgets it.
 import "./errors.js";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { AppError, type ErrorCode } from "@waitron/shared";
@@ -74,8 +75,15 @@ export interface BoxJoinAttemptDeps {
 }
 
 export type JoinAttemptState =
-  | { state: "waiting"; code: string; primaryUrl: string; timeLeftMs: number }
-  | { state: "approved"; code: string }
+  | {
+      state: "waiting";
+      code: string;
+      primaryUrl: string;
+      timeLeftMs: number;
+      /** A poll carrying the Yes has been answered. */
+      confirmed: boolean;
+    }
+  | { state: "approved" }
   /** `unknown`: the main box ended the request for a reason this box does not know. */
   | { state: "ended"; reason: JoinEndReason | "unknown" }
   | { state: "failed"; error: ErrorCode };
@@ -111,10 +119,18 @@ interface Attempt {
   state: JoinAttemptState;
   bundle?: MirrorBundle;
   timer?: ReturnType<typeof setTimeout>;
+  /** Every poll from the person's Yes on carries it. */
+  wantConfirmed: boolean;
+  /** The one poll on its way, and whether it carries the Yes. */
+  inFlight?: { carries: boolean };
+  /** A Yes arrived while a poll without it was on its way, so the next poll goes at once. */
+  pollAgain: boolean;
+  /** Each `confirm()` waiting for a poll carrying the Yes to be answered. */
+  yesWaiters: { resolve: () => void; reject: (error: AppError) => void }[];
 }
 
 /** An attempt between its hello and its reveal, before it has a code to show. */
-type Asking = Omit<Attempt, "code" | "state">;
+type Asking = Omit<Attempt, "code" | "state" | "wantConfirmed" | "pollAgain" | "yesWaiters">;
 
 const fetchFailed = () => new AppError("mirror.bundle_fetch_failed", {});
 
@@ -249,44 +265,96 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
   }
 
   async function poll(attempt: Attempt): Promise<void> {
+    const carries = attempt.wantConfirmed;
+    attempt.inFlight = { carries };
     const at = deps.now().getTime();
     let sent: { status: number; text: string } | undefined;
     try {
       sent = await send(attempt, "poll", {
-        ...signed(attempt, JOIN_POLL_LABEL, pollMessageFields(at)),
+        ...signed(attempt, JOIN_POLL_LABEL, pollMessageFields(at, carries)),
         at,
+        confirmed: carries,
       });
     } catch {
       // A lost poll is asked again at the next one.
+    } finally {
+      attempt.inFlight = undefined;
     }
-    if (current !== attempt) return;
+    const heard = current === attempt && read(attempt, sent, carries);
+    const over = current !== attempt || attempt.state.state !== "waiting";
+    if (carries || over) {
+      const waiters = attempt.yesWaiters.splice(0);
+      for (const waiter of waiters) {
+        if (heard || over) waiter.resolve();
+        else waiter.reject(fetchFailed());
+      }
+    }
+    if (over) return;
+    if (attempt.pollAgain) {
+      attempt.pollAgain = false;
+      void poll(attempt);
+    } else schedulePoll(attempt);
+  }
+
+  /** Takes a poll's answer into the attempt; false when there was no answer it understood. */
+  function read(
+    attempt: Attempt,
+    sent: { status: number; text: string } | undefined,
+    carried: boolean,
+  ): boolean {
     const answer = sent === undefined ? undefined : jsonOf(sent.text);
     if (isRecord(answer) && answer.state === "approved" && isLocked(answer.locked)) {
-      const bundle = collect(attempt, answer.locked);
+      // An approval answered to a poll without the Yes was not asked for by the person here.
+      const bundle = carried ? collect(attempt, answer.locked) : null;
       // No cancel: the main box has approved, so it would refuse one.
       if (bundle === null) {
         attempt.state = { state: "failed", error: "mirror.join_invalid" };
-        return;
+        return true;
       }
       attempt.bundle = bundle;
-      attempt.state = { state: "approved", code: attempt.code };
-      return;
+      attempt.state = { state: "approved" };
+      return true;
     }
     if (isRecord(answer) && answer.state === "ended") {
       const reason = JOIN_END_REASONS.find((r) => r === answer.reason) ?? "unknown";
       attempt.state = { state: "ended", reason };
-      return;
+      return true;
     }
     if (sent?.status === 404 && refusalOf(sent.text).code === "mirror.join_not_found") {
       attempt.state = { state: "failed", error: "mirror.join_not_found" };
-      return;
+      return true;
     }
-    schedulePoll(attempt);
+    if (sent?.status !== 200 || !isRecord(answer) || answer.state !== "waiting") return false;
+    if (carried && attempt.state.state === "waiting") attempt.state.confirmed = true;
+    return true;
   }
 
   function schedulePoll(attempt: Attempt): void {
+    clearTimeout(attempt.timer);
+    // The poll on its way schedules the next when it returns.
+    if (attempt.inFlight !== undefined) return;
     attempt.timer = setTimeout(() => void poll(attempt), deps.pollEveryMs ?? POLL_EVERY_MS);
     attempt.timer.unref();
+  }
+
+  /**
+   * The person's Yes: sent in a poll now, or straight after the one on its way. Resolves once a poll
+   * carrying it is answered, or the attempt has moved on; the state says which.
+   */
+  async function confirm(): Promise<void> {
+    const attempt = current;
+    if (attempt === null || attempt.state.state !== "waiting")
+      throw new AppError("setup.request_invalid", { field: "join" });
+    if (attempt.state.confirmed) return;
+    attempt.wantConfirmed = true;
+    const answered = new Promise<void>((resolve, reject) =>
+      attempt.yesWaiters.push({ resolve, reject }),
+    );
+    if (attempt.inFlight === undefined) {
+      clearTimeout(attempt.timer);
+      void poll(attempt);
+    } else if (!attempt.inFlight.carries) attempt.pollAgain = true;
+    return answered;
   }
 
   /** A cancel during a start waits for it, so the request the main box lists is the one ended. */
@@ -441,7 +509,10 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const attempt: Attempt = {
       ...asking,
       code,
-      state: { state: "waiting", code, primaryUrl, timeLeftMs: 0 },
+      state: { state: "waiting", code, primaryUrl, timeLeftMs: 0, confirmed: false },
+      wantConfirmed: false,
+      pollAgain: false,
+      yesWaiters: [],
     };
     current = attempt;
     schedulePoll(attempt);
@@ -450,6 +521,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
 
   return {
     start,
+    confirm,
     cancel,
     current: (): JoinAttemptState | null =>
       current === null

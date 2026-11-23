@@ -24,9 +24,10 @@ export function approvedJoinAttempt(joined: () => JoinedBox | Promise<JoinedBox>
   return {
     start: async () => {
       held = await joined();
-      state = { state: "approved", code: CODE };
+      state = { state: "approved" };
       return { code: CODE, timeLeftMs: 900_000 };
     },
+    confirm: async () => {},
     cancel: async () => {
       state = null;
       held = null;
@@ -47,9 +48,9 @@ type Wait = (what: string, ms: number, probe: () => Promise<true | undefined>) =
 const untilApproved: Wait = (what, ms, probe) => waitUntil(what, ms, probe, undefined, 250);
 
 /**
- * Join the main box at `primaryUrl` on the new box's setup page, let `approve` act on the main box
- * (an answer it gives is the result), wait until the join is approved, then Finish joining.
- * Answers Join's refusal, `approve`'s answer, or Finish joining's answer.
+ * Join the main box at `primaryUrl` on the new box's setup page, say Yes there, let `approve` act on
+ * the main box (an answer it gives is the result), wait until the join is approved, then finish
+ * joining. Answers Join's or the Yes's refusal, `approve`'s answer, or the finish's answer.
  */
 export async function joinThenFinish(
   send: SetupPageSend,
@@ -63,6 +64,8 @@ export async function joinThenFinish(
   const started = await send("/setup-api/join/start", { body: { primaryUrl } });
   if (started.status !== 200) return started;
   const shown = (await started.json()) as { code: string; handle: string };
+  const confirmed = await send("/setup-api/join/confirm", { handle: shown.handle });
+  if (confirmed.status !== 204) return confirmed;
   const answered = await options.approve?.(shown);
   if (answered !== undefined) return answered;
   await (options.wait ?? untilApproved)(
@@ -120,8 +123,8 @@ export async function finishJoining(
  * A main box's real box-to-box join routes, on a database of its own whose node `nodeId` holds
  * `keys`, as a listener for the new box's real requests. A network delivers the new box's requests
  * from an address it holds, so each arrives from the first address its hello listed. `approve`
- * stands in for the person's tap on the code the new box shows, approving with the bundle
- * `bundleFor` builds for the asking box, locked as the person's approve locks it.
+ * stands in for the person who saw `code` on the new box choosing Add as spare, approving with the
+ * bundle `bundleFor` builds for the asking box, locked as the person's approve locks it.
  */
 export async function mainBoxJoinRoutes(main: {
   nodeId: string;
@@ -166,7 +169,8 @@ export async function mainBoxJoinRoutes(main: {
       const [listed] = requests.listed();
       const checked = listed === undefined ? undefined : requests.check(listed.id);
       if (checked === undefined || "refused" in checked) throw new Error("no join is listed");
-      const begun = requests.approve.begin(listed!.id, code);
+      if (checked.code !== code) throw new Error("the two boxes show different codes");
+      const begun = requests.approve.begin(listed!.id);
       if (!("encryptionKey" in begun)) throw new Error(`approve refused: ${begun.refused}`);
       const { newNodeId, newPublicKey } = checked.hello;
       const bundle = main.bundleFor({ nodeId: newNodeId, publicKey: newPublicKey });
