@@ -46,20 +46,13 @@ import {
   createProduct,
   localToday,
   rateLines,
+  setTakeawayVatRate,
   writeProductModifiers,
   type GrossLines,
-  type VatClass,
 } from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { listStationNotices } from "@waitron/venue-service";
-import {
-  decimal,
-  subtractDecimal,
-  sumDecimals,
-  toScale,
-  VAT_RATE_TABLE,
-  type Decimal,
-} from "@waitron/shared";
+import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -257,11 +250,11 @@ async function payAll(billId: string) {
   return { sale: sale!, lines };
 }
 
-/** The VAT breakdown `rateLines` gives lines of these classes and gross totals, by rate. */
-function breakdownOf(lines: [VatClass, string][]) {
+/** The VAT breakdown `rateLines` gives lines at these rates and gross totals, by rate. */
+function breakdownOf(lines: [string, string][]) {
   const gross: GrossLines = {
-    lines: lines.map(([vatClass, lineGross]) => ({
-      vatRates: VAT_RATE_TABLE[vatClass],
+    lines: lines.map(([rate, lineGross]) => ({
+      vatRates: [{ from: null, rate }],
       grossUnitPrice: decimal(lineGross),
       lineGross: decimal(lineGross),
     })) as unknown as GrossLines["lines"],
@@ -354,22 +347,22 @@ describe("a comp (plan D4)", () => {
     ]);
     const filed = byRate(sale.vatBreakdown);
     const comped = breakdownOf([
-      ["general", "0.00"],
-      ["reduced", "2.50"],
+      ["10.00", "0.00"],
+      ["10.00", "2.50"],
     ]);
     const uncomped = breakdownOf([
-      ["general", "12.00"],
-      ["reduced", "2.50"],
+      ["10.00", "12.00"],
+      ["10.00", "2.50"],
     ]);
-    const burgerAlone = breakdownOf([["general", "12.00"]]);
+    const burgerAlone = breakdownOf([["10.00", "12.00"]]);
     expect(filed).toEqual(comped);
-    // The general rate's base and tax drop by exactly the Burger's; the reduced rate is untouched.
-    const general = Object.keys(burgerAlone)[0]!;
-    expect(decimalDifference(uncomped[general]!.base, filed[general]!.base)).toBe(
-      burgerAlone[general]!.base,
+    expect(filed).toEqual({ "10.00": { base: "2.27", tax: "0.23" } });
+    // The rate's base and tax drop by exactly the Burger's.
+    expect(decimalDifference(uncomped["10.00"]!.base, filed["10.00"]!.base)).toBe(
+      burgerAlone["10.00"]!.base,
     );
-    expect(decimalDifference(uncomped[general]!.tax, filed[general]!.tax)).toBe(
-      burgerAlone[general]!.tax,
+    expect(decimalDifference(uncomped["10.00"]!.tax, filed["10.00"]!.tax)).toBe(
+      burgerAlone["10.00"]!.tax,
     );
   });
 
@@ -627,9 +620,9 @@ describe("the receipt (ruling R13)", () => {
         },
       }),
     );
-    const burger = printed.findIndex((line) => /^1 {2}Beef burger +12,00 A$/u.test(line));
+    const burger = printed.findIndex((line) => /^1 {2}Beef burger +12,00$/u.test(line));
     expect(burger).toBeGreaterThanOrEqual(0);
-    expect(printed[burger + 1]).toMatch(/^ {2}Descuento 100% +-12,00 A$/u);
+    expect(printed[burger + 1]).toMatch(/^ {2}Descuento 100% +-12,00$/u);
   });
 
   async function payOnReader(billId: string, provider: FakePaymentProvider) {
@@ -936,13 +929,37 @@ describe("a bill discount over a dish with extras", () => {
 
 describe("a bill discount across VAT rates (Review Focus 5)", () => {
   it("gives €1.67, €1.66 and €1.67, the tie going to the line added first, and files each rate's base from what is left", async () => {
+    await inTx(venue, async (tx) => {
+      for (const [name, rate] of [
+        ["Tortilla", "10.00"],
+        ["Peppers", "10.00"],
+        ["Draught beer", "21.00"],
+      ] as const) {
+        const [product] = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(eq(products.name, name));
+        await setTakeawayVatRate(tx, product!.id, rate);
+      }
+    });
     const shares = [];
     for (let run = 0; run < 2; run++) {
-      const { billId } = await bill([
-        { name: "Tortilla" },
-        { name: "Peppers" },
-        { name: "Draught beer" },
-      ]);
+      const { billId } = await bill([]);
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(workingOrders)
+          .set({ dining: "takeaway" })
+          .where(eq(workingOrders.id, billId));
+        await addTabRound(
+          tx,
+          venue.cfg,
+          billId,
+          ["Tortilla", "Peppers", "Draught beer"].map((name) => ({
+            menuItemId: venue.item(name),
+            quantity: "1",
+          })),
+        );
+      });
 
       await adjust(billId, { action: "discount_amount", amount: "5.00" });
 
@@ -956,9 +973,9 @@ describe("a bill discount across VAT rates (Review Focus 5)", () => {
       const { sale } = await payAll(billId);
       expect(byRate(sale.vatBreakdown)).toEqual(
         breakdownOf([
-          ["reduced", "1.66"],
-          ["reduced", "1.67"],
-          ["general", "1.67"],
+          ["10.00", "1.66"],
+          ["10.00", "1.67"],
+          ["21.00", "1.67"],
         ]),
       );
     }

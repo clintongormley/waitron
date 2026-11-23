@@ -7,12 +7,13 @@ import {
   sales,
   taxpayer,
   withTransaction,
+  workingOrders,
   type Database,
 } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { createCategory, createProduct } from "@waitron/menu";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { localCalendarDate } from "@waitron/shared";
+import { localCalendarDate, type Dining } from "@waitron/shared";
 import type { BillPaymentRequest } from "../bill-payments.js";
 import { receiptDayNumeric } from "../receipt-dates.js";
 import { formatReceipt } from "../receipt-ticket.js";
@@ -26,12 +27,17 @@ import { inTx, provisionBillVenue, send, type Answer, type BillVenue } from "./b
 
 // Bills that take advances off their invoice (advances plan, worked examples 1, 2, 6 and 8), each
 // at a table of its own, against a venue that files real Veri*Factu records.
-const DISHES: { name: string; price: string; vatClass: "reduced" | "general" }[] = [
-  { name: "Tasting menu", price: "120.00", vatClass: "reduced" },
-  { name: "Bread roll", price: "1.05", vatClass: "reduced" },
-  { name: "Salad bowl", price: "20.00", vatClass: "reduced" },
-  { name: "Seafood platter", price: "30.05", vatClass: "reduced" },
-  { name: "Wine case", price: "80.00", vatClass: "general" },
+const DISHES: {
+  name: string;
+  price: string;
+  vatClass: "reduced" | "general";
+  takeawayVatRate: string;
+}[] = [
+  { name: "Tasting menu", price: "120.00", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Bread roll", price: "1.05", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Salad bowl", price: "20.00", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Seafood platter", price: "30.05", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Wine case", price: "80.00", vatClass: "general", takeawayVatRate: "21.00" },
 ];
 
 export const spanish = receiptLabelsFor("es-ES");
@@ -58,6 +64,7 @@ export async function provisionAdvanceVenue(db: Database): Promise<AdvanceVenue>
         pricingUnit: "each",
         unitPrice: dish.price,
         vatClass: dish.vatClass,
+        takeawayVatRate: dish.takeawayVatRate,
       });
       ids.set(dish.name, product.id);
     }
@@ -72,6 +79,15 @@ export function advanceBills(current: () => AdvanceVenue) {
 
   /** A party at a fresh table whose bill carries one line per named dish, its dishes sent. */
   function seated(...names: string[]): Promise<string> {
+    return seatedFor("eat_in", names);
+  }
+
+  /** {@link seated}, the bill taken away: each dish files at its product's takeaway rate. */
+  function seatedTakeaway(...names: string[]): Promise<string> {
+    return seatedFor("takeaway", names);
+  }
+
+  function seatedFor(dining: Dining, names: string[]): Promise<string> {
     return withTransaction(venue().db, async (tx) => {
       const table = await createTable(tx, venue().cfg, {
         label: `R-${randomUUID().slice(0, 8)}`,
@@ -81,6 +97,9 @@ export function advanceBills(current: () => AdvanceVenue) {
         tableId: table.id,
         lines: names.map((name) => ({ menuItemId: current().offerFor(name), quantity: "1" })),
       });
+      if (dining !== "eat_in") {
+        await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, tabId));
+      }
       await fireAll(tx, venue().cfg, tabId);
       return tabId;
     });
@@ -160,7 +179,17 @@ export function advanceBills(current: () => AdvanceVenue) {
     return inTx(venue(), (tx) => readTransactionReceipt(venue().backend, tx, venue().cfg, saleId));
   }
 
-  return { seated, cash, advance, payRest, restId, advanceFacts, caption, readTicket };
+  return {
+    seated,
+    seatedTakeaway,
+    cash,
+    advance,
+    payRest,
+    restId,
+    advanceFacts,
+    caption,
+    readTicket,
+  };
 }
 
 const squeezed = (line: string) => line.replace(/\s+/g, " ").trim();

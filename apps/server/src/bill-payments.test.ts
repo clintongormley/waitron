@@ -1441,7 +1441,7 @@ describe("the invoice at full payment", () => {
               descriptions: { "es-ES": "Caña de cerveza" },
               quantity: "1",
               gross: "3.00",
-              net: { base: "2.48", tax: "0.52" },
+              net: { base: "2.73", tax: "0.27" },
             },
           ],
         });
@@ -2111,10 +2111,10 @@ describe("the invoice at full payment", () => {
     const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
     for (const invoice of [completed.invoice!, replay]) {
       expect(invoice.lines).toMatchObject([
-        { net: { base: "2.48", tax: "0.52" } },
-        { net: { base: "20.66", tax: "4.34" } },
+        { net: { base: "2.73", tax: "0.27" } },
+        { net: { base: "22.73", tax: "2.27" } },
       ]);
-      expect(invoice.vatBreakdown).toEqual([{ rate: "21.00", base: "23.14", tax: "4.86" }]);
+      expect(invoice.vatBreakdown).toEqual([{ rate: "10.00", base: "25.46", tax: "2.54" }]);
     }
   });
 
@@ -2145,16 +2145,16 @@ describe("the invoice at full payment", () => {
     const expected = [
       {
         gross: "3.00",
-        net: { unitPrice: "2.48", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
+        net: { unitPrice: "2.73", priceQuantity: "1.000", base: "2.73", rate: "10.00" },
       },
       {
         gross: "25.00",
-        net: { unitPrice: "20.66", priceQuantity: "1.000", base: "20.66", rate: "21.00" },
+        net: { unitPrice: "22.73", priceQuantity: "1.000", base: "22.73", rate: "10.00" },
       },
     ];
     expect(completed.invoice!.lines).toMatchObject(expected);
     expect(replay.lines).toMatchObject(expected);
-    expect(replay.vatBreakdown).toEqual([{ rate: "21.00", base: "23.14", tax: "4.86" }]);
+    expect(replay.vatBreakdown).toEqual([{ rate: "10.00", base: "25.46", tax: "2.54" }]);
     expect(replay.total).toBe("28.00");
   });
 

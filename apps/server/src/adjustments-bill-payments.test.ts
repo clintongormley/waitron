@@ -263,7 +263,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     expect(printed[start]).toBe("TOTAL 40,00 €");
     expect(withoutRules(printed.slice(start + 1)).slice(0, 4)).toEqual([
       "Tipo Base IVA Total",
-      "21% 33,05 6,95 40,00",
+      "10% 36,36 3,64 40,00",
       "Efectivo 50,00 €",
       "Devolución -10,00 €",
     ]);
