@@ -223,9 +223,9 @@ describe("register PDF", () => {
     [
       "en",
       [
-        "A-S000001 / Standard",
-        "B-S000001 / Standard",
-        "FF-S000001 / Full invoice",
+        "A-S000001 / Simplified invoices (tickets)",
+        "B-S000001 / Simplified invoices (tickets)",
+        "FF-S000001 / Full invoices",
         "R-S000001 / Corrective of simplified invoices",
         "RF-S000001 / Corrective of full invoices",
       ],
@@ -233,9 +233,9 @@ describe("register PDF", () => {
     [
       "es",
       [
-        "A-S000001 / Simplificada",
-        "B-S000001 / Simplificada",
-        "FF-S000001 / Factura completa",
+        "A-S000001 / Facturas simplificadas (tickets)",
+        "B-S000001 / Facturas simplificadas (tickets)",
+        "FF-S000001 / Facturas completas",
         "R-S000001 / Rectificativa de simplificadas",
         "RF-S000001 / Rectificativa de completas",
       ],

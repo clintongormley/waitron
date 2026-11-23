@@ -246,16 +246,16 @@ const valueLabels: Record<
   Readonly<Record<(typeof seriesPurposes)[number] | "production" | "preproduction", string>>
 > = {
   en: {
-    standard: "Ordinary",
-    full: "Full",
+    standard: "Simplified invoices (tickets)",
+    full: "Full invoices",
     corrective: "Corrective of simplified invoices",
     full_corrective: "Corrective of full invoices",
     production: "Production",
     preproduction: "Preproduction",
   },
   es: {
-    standard: "Ordinarias",
-    full: "Completas",
+    standard: "Facturas simplificadas (tickets)",
+    full: "Facturas completas",
     corrective: "Rectificativas de simplificadas",
     full_corrective: "Rectificativas de completas",
     production: "Producción",

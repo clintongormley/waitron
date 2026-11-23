@@ -177,8 +177,8 @@ it("starts the venue only after Continue is pressed under the new series", async
       li.textContent!.trim(),
     ),
   ).toEqual([
-    "A-0CSQW — Standard",
-    "FF-0CSQW — Full invoice",
+    "A-0CSQW — Simplified invoices (tickets)",
+    "FF-0CSQW — Full invoices",
     "R-0CSQW — Corrective of simplified invoices",
     "FR-0CSQW — Corrective of full invoices",
   ]);

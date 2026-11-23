@@ -4,14 +4,14 @@ import { seriesPurposeLabel, seriesPurposes } from "./strings.js";
 describe("seriesPurposeLabel", () => {
   it("names every series purpose from the setup strings in each locale", () => {
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "en"))).toEqual([
-      "Standard",
-      "Full invoice",
+      "Simplified invoices (tickets)",
+      "Full invoices",
       "Corrective of simplified invoices",
       "Corrective of full invoices",
     ]);
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "es"))).toEqual([
-      "Simplificada",
-      "Factura completa",
+      "Facturas simplificadas (tickets)",
+      "Facturas completas",
       "Rectificativa de simplificadas",
       "Rectificativa de completas",
     ]);

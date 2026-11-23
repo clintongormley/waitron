@@ -194,8 +194,8 @@ it("exports only the frozen public block/allocation and consumption/approval wit
     expect(await crypto.subtle.verify("Ed25519", key, signature, new Uint8Array(bytes))).toBe(true);
   }
   const snapshot = resume.snapshotDocument("es");
-  expect(snapshot).toContain("A-S000001 / Ordinarias");
-  expect(snapshot).toContain("FF-S000001 / Completas");
+  expect(snapshot).toContain("A-S000001 / Facturas simplificadas (tickets)");
+  expect(snapshot).toContain("FF-S000001 / Facturas completas");
   expect(snapshot).toContain("R-S000001 / Rectificativas de simplificadas");
   expect(snapshot).toContain("RF-S000001 / Rectificativas de completas");
   expect(snapshot).toContain("W1 / Producción");
