@@ -1,4 +1,4 @@
-import { ibanProblem, isUuid, normalizeIban, privacyContactProblem } from "@waitron/shared";
+import { ibanShapeProblem, isUuid, normalizeIban, privacyContactProblem } from "@waitron/shared";
 import { DEFAULT_TIME_ZONE } from "./schema/taxpayer.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
 
@@ -37,8 +37,13 @@ function parseBankAccount(input: unknown): BankAccount | null | undefined {
   if (typeof input !== "object" || Array.isArray(input)) return undefined;
   const { iban, bankName, ...rest } = input as Record<string, unknown>;
   if (Object.keys(rest).length > 0) return undefined;
-  // The checksum is enforced at save only: a rule tightened later must not fail every venue read.
-  if (typeof iban !== "string" || iban !== normalizeIban(iban) || ibanProblem(iban) === "format")
+  // The checksum and the country's format are enforced at save only: a rule tightened later
+  // must not fail every venue read.
+  if (
+    typeof iban !== "string" ||
+    iban !== normalizeIban(iban) ||
+    ibanShapeProblem(iban) !== undefined
+  )
     return undefined;
   if (bankName !== null && (typeof bankName !== "string" || bankName.trim() === ""))
     return undefined;

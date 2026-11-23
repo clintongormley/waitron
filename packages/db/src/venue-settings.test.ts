@@ -106,6 +106,16 @@ describe("the venue document", () => {
     });
   });
 
+  it("reads a stored IBAN that its country's format refuses, leaving that check to saving", () => {
+    for (const iban of ["DE5137040044053201300", "ES08A1000418450200051332"]) {
+      const bankAccount = { iban, bankName: null };
+      expect(api.VENUE_SETTINGS.parse({ ...doc, bankAccount })).toEqual({
+        ok: true,
+        doc: { ...doc, bankAccount },
+      });
+    }
+  });
+
   it("parses a trimmed name and refuses each malformed field", () => {
     expect(api.VENUE_SETTINGS.parse({ ...doc, name: "  Harbour restaurant  " })).toEqual({
       ok: true,

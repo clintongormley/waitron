@@ -84,6 +84,8 @@ folded in below.
   - `ibanProblem(iban: string): "format" | "checksum" | undefined` — on a normalized value. Format:
     two letters, two digits, then 11–30 letters or digits (15–34 in all); `ES` exactly 24. Checksum:
     ISO 7064 mod-97 equals 1 (use `BigInt` or chunked folding; a 34-character IBAN overflows a number).
+    (2026-11-23, after review: format is now each country's length and BBAN format from the SWIFT
+    IBAN registry; the rule above survives as `ibanShapeProblem`, which reads use.)
   - `ibanGroups(iban: string): string[]` — groups of four; the last may be shorter.
   - `maskIban(iban: string): string`.
 

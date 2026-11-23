@@ -58,7 +58,14 @@ export type {
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export { formatBytes } from "./bytes-format.js";
-export { ibanGroups, ibanProblem, maskIban, normalizeIban, type IbanProblem } from "./iban.js";
+export {
+  ibanGroups,
+  ibanProblem,
+  ibanShapeProblem,
+  maskIban,
+  normalizeIban,
+  type IbanProblem,
+} from "./iban.js";
 export { formatDuration } from "./duration-format.js";
 export {
   JOIN_SIDES,
