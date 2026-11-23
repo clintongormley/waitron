@@ -253,7 +253,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
   );
 });
 
-it("activates the exact retained dormant reservation at promotion", async () => {
+it("refuses a promotion without an hour authority", async () => {
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, {
       nodeId: node.nodeId,
@@ -304,7 +304,7 @@ it("activates the exact retained dormant reservation at promotion", async () => 
     operatorId: keyEvent,
   };
   const supplied = { ...signed(candidate, permission), reservationEventId: join.eventId };
-  const before = await suite.db.select().from(fiscalReservations);
+  const before = await snapshot();
   const pending = withOperationAuthority(promotion, keyEvent, (authority) =>
     withTransaction(suite.db, (tx) =>
       activation.activateModuleAllocation(
@@ -315,16 +315,11 @@ it("activates the exact retained dormant reservation at promotion", async () => 
       ),
     ),
   );
-  await expect(pending).resolves.toHaveProperty("activationEventId", "restore-42");
-  const result = await pending;
-  expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
-    { code: "A-P000042", purpose: "standard" },
-    { code: "FF-P000042", purpose: "full" },
-    { code: "R-P000042", purpose: "corrective" },
-    { code: "RF-P000042", purpose: "full_corrective" },
-  ]);
-  expect(await suite.db.select().from(fiscalReservations)).toEqual(before);
-  expect((await suite.db.select().from(fiscalAllocations))[0]!.nodeId).toBe(target.nodeId);
+  await expect(pending).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "reservation_missing" },
+  });
+  expect(await snapshot()).toEqual(before);
 });
 
 it("preserves a genuine in-process emergency draw while detaching the outside history", async () => {

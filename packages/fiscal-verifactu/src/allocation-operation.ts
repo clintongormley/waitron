@@ -13,7 +13,6 @@ import { AppError } from "@waitron/shared";
 import { hourAdmissionRefusal, type AllocationContext } from "./allocation-envelope.js";
 import {
   activateAuthenticatedAllocation,
-  activateAuthenticatedDormantAllocation,
   activateAuthenticatedHourStandbyAllocation,
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
@@ -232,11 +231,7 @@ export async function activateModuleAllocation(
       (input.allocation as Record<string, unknown>).allocationId !== heldEvidence.allocationId)
   )
     return refuse("reservation_mismatch");
-  if (
-    binding.action === "promote" &&
-    heldEvidence.authority.kind !== "hour" &&
-    (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)
-  )
+  if (binding.action === "promote" && heldEvidence.authority.kind !== "hour")
     return refuse("reservation_missing");
   const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
@@ -257,7 +252,7 @@ export async function activateModuleAllocation(
     authority: heldEvidence.authority,
   };
   const result =
-    binding.action === "promote" && heldEvidence.authority.kind === "hour"
+    binding.action === "promote"
       ? await activateAuthenticatedHourStandbyAllocation(
           tx,
           node,
@@ -266,25 +261,15 @@ export async function activateModuleAllocation(
           context,
           authority,
         )
-      : binding.action === "promote"
-        ? await activateAuthenticatedDormantAllocation(
-            tx,
-            node,
-            input.reservationEventId as string,
-            input.allocation,
-            input.approval,
-            context,
-            authority,
-          )
-        : await activateAuthenticatedAllocation(
-            tx,
-            node,
-            input.allocation,
-            input.approval,
-            context,
-            authority,
-            binding.action,
-          );
+      : await activateAuthenticatedAllocation(
+          tx,
+          node,
+          input.allocation,
+          input.approval,
+          context,
+          authority,
+          binding.action,
+        );
   authoriseHour();
   return result;
 }
