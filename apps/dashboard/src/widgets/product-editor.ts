@@ -231,13 +231,6 @@ export class ProductEditor extends LitElement {
       wt-disclosure::part(section) {
         padding-block: 0;
       }
-      .unavailable {
-        color: var(--wt-color-warning);
-      }
-      .selling-summary {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       dashboard-product-appearance dashboard-image-upload::part(preview) {
         display: none;
       }
@@ -306,16 +299,6 @@ export class ProductEditor extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         overflow-wrap: anywhere;
-      }
-      .nutrition-summary {
-        overflow-wrap: anywhere;
-      }
-      .nutrition-summary .inherited,
-      .nutrition-summary [data-implied] {
-        font-style: italic;
-      }
-      .nutrition-summary .unreviewed {
-        color: var(--wt-color-warning);
       }
       .badge {
         padding: var(--wt-space-1) var(--wt-space-2);
@@ -1081,9 +1064,9 @@ export class ProductEditor extends LitElement {
     return { label, value: inherited(), placeholder: true };
   }
 
-  private renderKitchen() {
+  private kitchenSummary(): SummaryField[] {
     const { courseId } = this.draft;
-    const summary = [
+    return [
       // A variant's blank kitchen name falls back to its own Name, never the parent's.
       {
         label: t("editor.kitchen_name"),
@@ -1098,12 +1081,15 @@ export class ProductEditor extends LitElement {
           this.blankChoice(t("modifiers.none_specified"), this.courses, this.inherited?.courseId),
       ),
     ];
+  }
+
+  private renderKitchen() {
     return html`<wt-disclosure
       ruled
       open
       data-section="kitchen"
       heading=${t("editor.section_kitchen")}
-      .summaryFields=${summary}
+      .summaryFields=${this.kitchenSummary()}
       ?has-error=${this.sectionHasError("kitchen")}
     >
       <div class="group">
@@ -1258,6 +1244,18 @@ export class ProductEditor extends LitElement {
     </div>`;
   }
 
+  private descriptorsSummary(): SummaryField[] {
+    const described = Object.keys(nonBlankNames(this.draft.description ?? {}));
+    return [
+      { label: t("editor.customer_name"), value: this.languagesLine(this.draft.customerName) },
+      this.foldedValue(
+        t("editor.description"),
+        described.length ? this.languagesLine(this.draft.description) : null,
+        () => this.languagesLine(this.inherited!.description),
+      ),
+    ];
+  }
+
   private renderDescriptors() {
     const described = Object.keys(nonBlankNames(this.draft.description ?? {}));
     // Storage inherits a variant's description as one value across every language, so a parent's
@@ -1272,22 +1270,11 @@ export class ProductEditor extends LitElement {
         ? languageText(hintSource, locale)
         : defaultLanguageHint(hintSource, locale, this.language);
     };
-    const summary = [
-      { label: t("editor.name"), value: this.languagesLine(this.draft.customerName), lines: 1 },
-      {
-        ...this.foldedValue(
-          t("editor.description"),
-          described.length ? this.languagesLine(this.draft.description) : null,
-          () => this.languagesLine(this.inherited!.description),
-        ),
-        lines: 2,
-      },
-    ];
     return html`<wt-disclosure
       ruled
       data-section="descriptors"
       heading=${t("editor.section_descriptors")}
-      .summaryRows=${summary}
+      .summaryFields=${this.descriptorsSummary()}
       ?has-error=${this.sectionHasError("descriptors")}
     >
       <div class="group">
@@ -1321,7 +1308,7 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
-  private renderNutrition() {
+  private nutritionSummary(): SummaryField[] {
     const parent = this.inherited;
     const inheritedAllergens = parent !== null && this.draft.allergens === null;
     const allergens = inheritedAllergens ? parent.allergens : this.draft.allergens;
@@ -1335,10 +1322,26 @@ export class ProductEditor extends LitElement {
       parent ? this.draft.dietaryDeclarations : (this.draft.dietaryDeclarations ?? []),
       parent?.dietaryDeclarations ?? [],
     );
-    const labels = [
-      ...diet.chosen.map((label) => ({ label, implied: false })),
-      ...diet.implied.map(({ label }) => ({ label, implied: true })),
+    const labels = [...diet.chosen, ...diet.implied.map(({ label }) => label)];
+    return [
+      {
+        label: t("modifiers.allergens"),
+        value: allergenText,
+        ...(inheritedAllergens ? { placeholder: true } : {}),
+        ...(allergens === null ? { warning: true } : {}),
+      },
+      {
+        label: t("editor.nutrition.dietary"),
+        value: labels.length
+          ? labels.map((label) => t(`editor.diet.${label}`)).join(", ")
+          : t("editor.nutrition.diet_none"),
+        ...(diet.inherited ? { placeholder: true } : {}),
+      },
     ];
+  }
+
+  private renderNutrition() {
+    const parent = this.inherited;
     const nutritionErrors = Object.fromEntries(
       Object.entries(this.#errorsNow).filter(([key]) => key.startsWith("allergens")),
     );
@@ -1346,20 +1349,9 @@ export class ProductEditor extends LitElement {
       ruled
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
+      .summaryFields=${this.nutritionSummary()}
       ?has-error=${this.sectionHasError("nutrition")}
     >
-      <span slot="summary" class="nutrition-summary" data-test="nutrition-summary"
-        ><strong>${t("modifiers.allergens")}:</strong>
-        <span
-          data-test="nutrition-allergens"
-          class=${`${inheritedAllergens ? "inherited" : ""} ${allergens === null ? "unreviewed" : ""}`}
-          >${allergenText}</span
-        >
-        · <strong>${t("editor.nutrition.dietary")}:</strong>
-        <span data-test="nutrition-dietary" class=${diet.inherited ? "inherited" : ""}
-          >${labels.length ? labels.map(({ label, implied }, index) => html`${index ? ", " : nothing}<span ?data-implied=${implied} class=${diet.inherited ? "inherited" : ""}>${t(`editor.diet.${label}`)}</span>`) : t("editor.nutrition.diet_none")}</span
-        ></span
-      >
       <dashboard-product-nutrition-picker
         name="allergens"
         .value=${{ allergens: this.draft.allergens, dietaryDeclarations: this.draft.dietaryDeclarations }}
@@ -1380,18 +1372,34 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
+  private sellingSummary(): SummaryField[] {
+    return [
+      this.draft.available
+        ? { label: t("editor.available_label"), value: t("editor.available") }
+        : {
+            label: t("editor.available_label"),
+            value: t("product.unavailable_badge"),
+            warning: true,
+          },
+      ...(this.inherited
+        ? []
+        : [
+            {
+              label: t("editor.ordered_on_own"),
+              value: t(`product.ordering_${this.draft.ordering}`),
+            },
+          ]),
+    ];
+  }
+
   private renderSelling() {
     return html`<wt-disclosure
       ruled
       data-section="selling"
       heading=${t("editor.selling")}
+      .summaryFields=${this.sellingSummary()}
       ?has-error=${this.sectionHasError("selling")}
     >
-      <span slot="summary" class="selling-summary"
-        ><strong class=${this.draft.available ? "" : "unavailable"}
-          >${t(this.draft.available ? "editor.available" : "product.unavailable_badge")}</strong
-        >${this.inherited ? nothing : html` · <strong>${t("editor.ordered_on_own")}:</strong> ${t(`product.ordering_${this.draft.ordering}`)}`}</span
-      >
       <div class="group">
         ${switchField(this.fields(), "available", t("editor.available"), this.draft.available, (value) => this.change("available", value))}
         ${this.inherited ? nothing : this.renderOrdering()}
@@ -1537,11 +1545,17 @@ export class ProductEditor extends LitElement {
     return this.draft.variants.some((variant) => variant.active);
   }
 
-  private pricingSummary(amount: string, unitLabel: string) {
-    const price = amount.trim();
+  private takeawayVatSummary(): SummaryField[] {
     const ownRate = this.draft.takeawayVatRate;
     const takeaway =
       this.takeawayVat && ownRate !== null && this.vatRates.includes(ownRate) ? ownRate : null;
+    return takeaway === null
+      ? []
+      : [{ label: t("editor.takeaway_vat"), value: vatRateText(takeaway) }];
+  }
+
+  private pricingSummary(amount: string, unitLabel: string): SummaryField[] {
+    const price = amount.trim();
     return [
       ...(price
         ? [
@@ -1553,9 +1567,7 @@ export class ProductEditor extends LitElement {
             },
           ]
         : []),
-      ...(takeaway === null
-        ? []
-        : [{ label: t("editor.takeaway_vat"), value: vatRateText(takeaway) }]),
+      ...this.takeawayVatSummary(),
     ];
   }
 

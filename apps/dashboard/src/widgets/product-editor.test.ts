@@ -281,11 +281,31 @@ it("A647 paints the closed unavailable summary with the warning token", async ()
   const el = await mountPricing({ ...saved, available: false });
   const selling = folded(el, "selling");
   expect(selling).not.toBeNull();
+  expect(summaryOf(el, "selling")[0]).toEqual({
+    label: t("editor.available_label"),
+    value: t("product.unavailable_badge"),
+    warning: true,
+  });
   el.style.setProperty("--wt-color-warning", "rgb(11, 12, 13)");
-  const unavailable = selling.querySelector(".unavailable");
+  selling.open = false;
+  await selling.updateComplete;
+  const unavailable = selling.shadowRoot!.querySelector(".summary-warning");
   expect(unavailable).not.toBeNull();
   expect(unavailable!.textContent!.trim()).toBe(t("product.unavailable_badge"));
   expect(getComputedStyle(unavailable!).color).toBe("rgb(11, 12, 13)");
+});
+
+it("names a product's sale and ordering on the Selling line, and a variant's sale alone", async () => {
+  const el = await mountPricing({ ...saved, available: true, ordering: "staff_only" });
+  expect(summaryOf(el, "selling")).toEqual([
+    { label: t("editor.available_label"), value: t("editor.available") },
+    { label: t("editor.ordered_on_own"), value: t("product.ordering_staff_only") },
+  ]);
+  cleanupWidgets();
+  const variant = await mountVariant();
+  expect(summaryOf(variant, "selling")).toEqual([
+    { label: t("editor.available_label"), value: t("editor.available") },
+  ]);
 });
 
 async function input(el: ProductEditor, name: string, value: string) {
@@ -321,6 +341,10 @@ function folded(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
     `wt-disclosure[data-section="${name}"]`,
   )!;
+}
+/** The named values a section's closed line shows. */
+function summaryOf(el: ProductEditor, name: string) {
+  return folded(el, name).summaryFields;
 }
 async function openSection(el: ProductEditor, name: string) {
   const disclosure = section(el, name);
@@ -2889,7 +2913,7 @@ it("saves a cereal clicked in the chips after the nutrition section is collapsed
   await userEvent.click(fold.shadowRoot!.querySelector<HTMLElement>("button.header")!);
   await fold.updateComplete;
   expect(fold.open).toBe(false);
-  expect(nutritionFields(el)[0]!.value).toContain(allergenName("gluten"));
+  expect(summaryOf(el, "nutrition")[0]!.value).toContain(allergenName("gluten"));
   expect(cancelled).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!.open).toBe(
     true,
@@ -3350,21 +3374,20 @@ it("summarises each collapsed section from its filled-in values", async () => {
     units: [unit],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(folded(el, "kitchen").summaryFields).toEqual([
+  expect(summaryOf(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: "BAR" },
     { label: t("editor.summary_course"), value: "Starters" },
   ]);
   // The image is not on the line: the photo sits beside Name.
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: "EN: House coffee · ES: Café de la casa", lines: 1 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: House coffee · ES: Café de la casa" },
     {
       label: t("editor.description"),
       value: `EN: Freshly roasted · ES: ${t("modifiers.none_specified")}`,
-      lines: 2,
     },
   ]);
   // The dashboard's shipped locale is Spanish, so these summaries are the Spanish strings.
-  expect(nutritionFields(el)).toEqual([
+  expect(summaryOf(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk") },
     {
       label: t("editor.nutrition.dietary"),
@@ -3384,12 +3407,11 @@ it("keeps stored regional names and descriptions separate when editing main-lang
     locales: ["en", "es"],
     units: [unit],
   });
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: t("modifiers.none_specified"), lines: 1 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: t("modifiers.none_specified") },
     {
       label: t("editor.description"),
       value: t("modifiers.none_specified"),
-      lines: 2,
     },
   ]);
   await openSection(el, "descriptors");
@@ -4163,20 +4185,8 @@ function control<T = HTMLElement>(el: ProductEditor, name: string) {
 function firstOption(el: ProductEditor, name: string) {
   return combobox(el, name)!.options[0]!;
 }
-function nutritionFields(el: ProductEditor) {
-  const summary = el.shadowRoot!.querySelector('[data-test="nutrition-summary"]')!;
-  const labels = [...summary.querySelectorAll("strong")];
-  return ["nutrition-allergens", "nutrition-dietary"].map((name, index) => {
-    const node = summary.querySelector<HTMLElement>(`[data-test="${name}"]`)!;
-    return {
-      label: labels[index]!.textContent!.replace(/:$/, ""),
-      value: node.textContent!,
-      ...(node.classList.contains("inherited") ? { placeholder: true } : {}),
-    };
-  });
-}
 function inheritedNutrition(el: ProductEditor, name: string) {
-  const field = nutritionFields(el)[name === "allergens" ? 0 : 1]!;
+  const field = summaryOf(el, "nutrition")[name === "allergens" ? 0 : 1]!;
   return field.placeholder ? `${field.label}: ${field.value}` : undefined;
 }
 
@@ -6017,7 +6027,7 @@ it.each([
       courses: [{ id: "course-1", name: "Starters" }],
     });
     const none = t("modifiers.none_specified");
-    expect(folded(el, "kitchen").summaryFields).toEqual([
+    expect(summaryOf(el, "kitchen")).toEqual([
       { label: t("editor.kitchen_name"), value: shown.includes("kitchen") ? "BAR" : none },
       { label: t("editor.summary_course"), value: shown.includes("course") ? "Starters" : none },
     ]);
@@ -6063,23 +6073,23 @@ it("rows each language's customer-facing name and description in the languages' 
     description: { es: " ", en: "Seared" },
   });
   const none = t("modifiers.none_specified");
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: "ES: Solomillo de ternera · EN: Beef tenderloin", lines: 1 },
-    { label: t("editor.description"), value: `ES: ${none} · EN: Seared`, lines: 2 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "ES: Solomillo de ternera · EN: Beef tenderloin" },
+    { label: t("editor.description"), value: `ES: ${none} · EN: Seared` },
   ]);
   el = await mountWith({ customerName: { es: " " }, description: { es: "Sellado" } });
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: none, lines: 1 },
-    { label: t("editor.description"), value: `ES: Sellado · EN: ${none}`, lines: 2 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: none },
+    { label: t("editor.description"), value: `ES: Sellado · EN: ${none}` },
   ]);
   el = await mountWith({ customerName: null, description: null });
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: none, lines: 1 },
-    { label: t("editor.description"), value: none, lines: 2 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: none },
+    { label: t("editor.description"), value: none },
   ]);
 });
 
-it("cuts the Descriptors Name row after one line and the Description row after two, only the field name in bold", async () => {
+it("draws the Descriptors line as named values, only the field names marked as names", async () => {
   const long = (word: string) => Array.from({ length: 60 }, () => word).join(" ");
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -6092,24 +6102,15 @@ it("cuts the Descriptors Name row after one line and the Description row after t
     units: [unit],
   });
   const descriptors = folded(el, "descriptors");
+  descriptors.open = false;
   await descriptors.updateComplete;
-  const rows = [...descriptors.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
-  expect(rows.map((row) => row.querySelector(".summary-label")!.textContent)).toEqual([
-    `${t("editor.name")}:`,
-    `${t("editor.description")}:`,
-  ]);
-  for (const [row, lines] of [
-    [rows[0]!, 1],
-    [rows[1]!, 2],
-  ] as const) {
-    // The language codes are plain text: only the field name is bold.
-    expect(row.querySelectorAll(".summary-label")).toHaveLength(1);
-    expect(row.textContent).toContain("EN: ");
-    expect(row.scrollHeight).toBeGreaterThan(row.clientHeight);
-    const label = document.createRange();
-    label.selectNodeContents(row.querySelector(".summary-label")!);
-    expect(Math.round(row.clientHeight / parseFloat(getComputedStyle(row).lineHeight))).toBe(lines);
-  }
+  expect(descriptors.shadowRoot!.querySelectorAll(".summary-row")).toHaveLength(0);
+  const summary = descriptors.shadowRoot!.querySelector<HTMLElement>(".summary")!;
+  expect([...summary.querySelectorAll(".summary-label")].map((label) => label.textContent)).toEqual(
+    [`${t("editor.customer_name")}:`, `${t("editor.description")}:`],
+  );
+  // The language codes are plain text: only the field names are marked.
+  expect(summary.textContent).toContain("EN: ");
 });
 
 it("starts another product with the image library closed", async () => {
@@ -6143,17 +6144,10 @@ async function foldedLines(el: ProductEditor): Promise<Record<string, string>> {
     const fold = folded(el, name);
     fold.open = false;
     await fold.updateComplete;
-    if (name === "nutrition") {
-      lines[name] = nutritionFields(el)
-        .map(({ label, value, placeholder }) => `${label}: ${placeholder ? `[${value}]` : value}`)
-        .join(" · ");
-      continue;
-    }
     const summary = fold.shadowRoot!.querySelector(".summary")!.cloneNode(true) as HTMLElement;
     for (const value of summary.querySelectorAll(".summary-placeholder"))
       value.textContent = `[${value.textContent}]`;
-    for (const row of summary.querySelectorAll(".summary-row")) row.append(" / ");
-    lines[name] = summary.textContent!.replace(/\s+/g, " ").replace(/ \/ $/, "").trim();
+    lines[name] = summary.textContent!.replace(/\s+/g, " ").trim();
   }
   return lines;
 }
@@ -6162,13 +6156,13 @@ it.each([
   {
     locale: "en-GB",
     kitchen: "Prep station name: None specified · Course: None specified",
-    descriptors: "Name: None specified / Description: None specified",
+    descriptors: "Customer-facing name: None specified · Description: None specified",
     nutrition: "Allergens: Not yet reviewed · Dietary: None",
   },
   {
     locale: "es-ES",
     kitchen: "Nombre de estación de preparación: Sin especificar · Curso: Sin especificar",
-    descriptors: "Nombre: Sin especificar / Descripción: Sin especificar",
+    descriptors: "Nombre para el cliente: Sin especificar · Descripción: Sin especificar",
     nutrition: "Alérgenos: Sin revisar todavía · Dietética: Ninguna",
   },
 ])(
@@ -6195,12 +6189,13 @@ it.each<{ label: string; allergens: ProductEditorDraft["allergens"] }>([
   { label: "reviewed and empty", allergens: {} },
 ])("reads a product's allergens $label distinctly while closed and open", async ({ allergens }) => {
   const el = await mountPricing({ ...saved, allergens });
-  const closed = nutritionFields(el)[0]!;
+  const closed = summaryOf(el, "nutrition")[0]!;
   expect(closed).toEqual({
     label: t("modifiers.allergens"),
     value: t(
       allergens === null ? "editor.allergens_unreviewed" : "editor.nutrition.allergens_none",
     ),
+    ...(allergens === null ? { warning: true } : {}),
   });
   await openSection(el, "nutrition");
   const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
@@ -6216,7 +6211,7 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
     allergens: { milk: {}, eggs: {} },
     dietaryDeclarations: ["vegetarian", "vegan"],
   });
-  expect(nutritionFields(el)).toEqual([
+  expect(summaryOf(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: `${allergenName("milk")}, ${allergenName("eggs")}` },
     {
       label: t("editor.nutrition.dietary"),
@@ -6242,15 +6237,15 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
 it("shows a variant's blank fields folded as its parent's values, as placeholders; its names stay its own", async () => {
   const el = await mountVariant({ ...glass, kitchenName: null, customerName: null });
   const none = t("modifiers.none_specified");
-  expect(folded(el, "kitchen").summaryFields).toEqual([
+  expect(summaryOf(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: none },
     { label: t("editor.summary_course"), value: "Mains", placeholder: true },
   ]);
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: none, lines: 1 },
-    { label: t("editor.description"), value: "EN: Roasted in house", lines: 2, placeholder: true },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: none },
+    { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
   ]);
-  expect(nutritionFields(el)).toEqual([
+  expect(summaryOf(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk"), placeholder: true },
     {
       label: t("editor.nutrition.dietary"),
@@ -6260,7 +6255,7 @@ it("shows a variant's blank fields folded as its parent's values, as placeholder
   ]);
   expect(await foldedLines(el)).toEqual({
     kitchen: `${t("editor.kitchen_name")}: ${none} · ${t("editor.summary_course")}: [Mains]`,
-    descriptors: `${t("editor.name")}: ${none} / ${t("editor.description")}: [EN: Roasted in house]`,
+    descriptors: `${t("editor.customer_name")}: ${none} · ${t("editor.description")}: [EN: Roasted in house]`,
     nutrition: `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
   });
 });
@@ -6275,18 +6270,17 @@ it("shows folded what a variant will use where its parent has nothing set either
     allergens: {},
     dietaryDeclarations: [],
   });
-  expect(folded(el, "kitchen").summaryFields[1]).toEqual({
+  expect(summaryOf(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: none,
     placeholder: true,
   });
-  expect(folded(el, "descriptors").summaryRows[1]).toEqual({
+  expect(summaryOf(el, "descriptors")[1]).toEqual({
     label: t("editor.description"),
     value: none,
-    lines: 2,
     placeholder: true,
   });
-  expect(nutritionFields(el)).toEqual([
+  expect(summaryOf(el, "nutrition")).toEqual([
     {
       label: t("modifiers.allergens"),
       value: t("editor.nutrition.allergens_none"),
@@ -6300,17 +6294,18 @@ it("shows folded what a variant will use where its parent has nothing set either
   ]);
   cleanupWidgets();
   el = await mountWith({ allergens: null, courseId: "gone", description: { en: " " } });
-  expect(nutritionFields(el)[0]).toEqual({
+  expect(summaryOf(el, "nutrition")[0]).toEqual({
     label: t("modifiers.allergens"),
     value: t("editor.allergens_unreviewed"),
     placeholder: true,
+    warning: true,
   });
-  expect(folded(el, "kitchen").summaryFields[1]).toEqual({
+  expect(summaryOf(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: t("editor.missing_choice"),
     placeholder: true,
   });
-  expect(folded(el, "descriptors").summaryRows[1]!.value).toBe(none);
+  expect(summaryOf(el, "descriptors")[1]!.value).toBe(none);
 });
 
 it("shows a variant's own values folded as its own, never as placeholders", async () => {
@@ -6321,15 +6316,15 @@ it("shows a variant's own values folded as its own, never as placeholders", asyn
     allergens: { eggs: {} },
     dietaryDeclarations: ["vegan"],
   });
-  expect(folded(el, "kitchen").summaryFields).toEqual([
+  expect(summaryOf(el, "kitchen")).toEqual([
     { label: t("editor.kitchen_name"), value: "GLS" },
     { label: t("editor.summary_course"), value: "Desserts" },
   ]);
-  expect(folded(el, "descriptors").summaryRows).toEqual([
-    { label: t("editor.name"), value: "EN: A glass", lines: 1 },
-    { label: t("editor.description"), value: "EN: Iced", lines: 2 },
+  expect(summaryOf(el, "descriptors")).toEqual([
+    { label: t("editor.customer_name"), value: "EN: A glass" },
+    { label: t("editor.description"), value: "EN: Iced" },
   ]);
-  expect(nutritionFields(el)).toEqual([
+  expect(summaryOf(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("eggs") },
     {
       label: t("editor.nutrition.dietary"),
@@ -6346,7 +6341,7 @@ it("names a product's course missing from the course list as unavailable on the 
     units: [unit],
     courses: [{ id: "course-1", name: "Starters" }],
   });
-  expect(folded(el, "kitchen").summaryFields[1]).toEqual({
+  expect(summaryOf(el, "kitchen")[1]).toEqual({
     label: t("editor.summary_course"),
     value: t("editor.missing_choice"),
   });
