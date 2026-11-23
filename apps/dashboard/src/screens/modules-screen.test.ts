@@ -395,6 +395,8 @@ it("offers localized column choices and restores a hidden module state", async (
   try {
     const el = await mount();
     const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    const heading = root.querySelector('thead th[data-pinned="end"]')!;
+    await expect.element(page.elementLocator(heading)).toHaveAccessibleName("Acciones");
     const chooser = root.querySelector<HTMLElement>(".columns-trigger");
     expect(chooser?.getAttribute("aria-label")).toBe(
       TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],

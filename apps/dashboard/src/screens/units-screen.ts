@@ -423,7 +423,7 @@ export class UnitsScreen extends LitElement {
         sortValue: (product) => (product.active ? 1 : 0),
       },
       {
-        key: "actions",
+        key: "edit",
         label: t("units.actions"),
         pinned: "end",
         cell: (product) => html`

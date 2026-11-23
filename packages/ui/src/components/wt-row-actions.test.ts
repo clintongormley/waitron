@@ -120,8 +120,10 @@ describe("row actions", () => {
   });
   it("shows the kebab icon on its trigger, not the hamburger — this is a per-row menu, not navigation", async () => {
     const el = await mount('<wt-row-actions label="Department actions"></wt-row-actions>');
-    const icon = el.shadowRoot!.querySelector("button wt-icon")!;
+    const icon = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-icon"]>("button wt-icon")!;
     expect(icon.getAttribute("name")).toBe("kebab");
+    await icon.updateComplete;
+    expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
   });
   it("shows a caller-supplied icon instead of the kebab, for a non-row menu (e.g. account menu) reusing this same disclosure", async () => {
     const { el } = await mountWidget<WtRowActions>("wt-row-actions", {

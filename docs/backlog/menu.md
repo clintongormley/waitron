@@ -30,9 +30,9 @@ the full scans and translation-gap read remain.
 
 ## Sold-out tile appearance (A292, #1310): owner review
 
-- A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
-  C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
-  sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
+- The dark theme's contrast is still for the owner to judge. An available plain tile was
+  about 1.10:1 lighter than a sold-out one in #1310's captures (lane C's `a292-shots/`). The owner
+  kept the light-theme stripe at 4 px on 2026-11-23.
 
 ## Each menu has one Device Home Page (W93, #1287): left open
 
@@ -78,8 +78,9 @@ DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
   8 px indent step were left as they were.
   Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
   folder icon too at phone width so product and category names line up again (since A294 that
-  slot holds the category's colour square, so this now means moving or hiding the square); narrow the indent
-  step. Before/after screenshots: `~/waitron-campaign/w85e-shots/pair-*.png` (local).
+  slot holds the category's colour square, so this now means moving or hiding the square).
+  The owner kept the 8 px indent step on 2026-11-23. Before/after screenshots:
+  `~/waitron-campaign/w85e-shots/pair-*.png` (local).
 
 ## Menu: no two categories with one parent, and no two Active products, share a name (W72 to W72h): left open
 

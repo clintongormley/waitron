@@ -1754,7 +1754,7 @@ export class DevicesScreen extends LitElement {
             }`,
       },
       {
-        key: "actions",
+        key: "pair",
         label: t("devices.actions"),
         pinned: "end",
         cell: (request) =>

@@ -33,6 +33,7 @@ registerIcons({
 });
 
 export interface DataTableColumn<Row> {
+  /** The `actions` key is reserved for a pinned row-menu column. */
   key: string;
   label: string;
   group?: string;
@@ -296,6 +297,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       th[data-align="end"],
       td[data-align="end"] {
         text-align: end;
+      }
+
+      th[data-actions][data-pinned="end"] {
+        text-align: center;
       }
 
       tbody tr td[data-pinned="end"]:has(wt-row-actions[data-fallback-popover-open]) {
@@ -2704,7 +2709,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   this.#withHelp(
                     column,
                     column.sortValue === undefined
-                      ? column.label
+                      ? column.key === "actions" && column.pinned === "end"
+                        ? html`<wt-icon name="kebab"></wt-icon
+                            ><span class="visually-hidden">${column.label}</span>`
+                        : column.label
                       : html`<button
                           class="sort"
                           data-sort=${column.key}
