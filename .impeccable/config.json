@@ -1,0 +1,15 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": ["apps/dashboard/src/widgets/variant-table.ts"],
+        "createdAt": "2026-11-23T16:11:14.403Z",
+        "reason": "Claude, 2026-11-23: the only match is a 2px danger edge on a refused variant's table row (tr.invalid td:first-child, since #1049), marking which row the server rejected; a status marker in a table, not a decorative side tab on a rounded box"
+      }
+    ]
+  }
+}
