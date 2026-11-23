@@ -1013,6 +1013,9 @@ same file is the writer behind the API; a configuration import inserts a bundle'
 day's name, dates, Every year and the paint of each department or zone and date it changed, in one
 request (see [design-system.md](design-system.md), "Forms").
 
+**2026-11-24.** `specialDateIn` and `sharedSpecialDate` now live in
+`packages/venue-service/src/repeat-rules.ts`.
+
 **2026-10-14, A506-11.** The refusing `DELETE …/menu-periods/:periodId`, `deleteMenuPeriod` and
 `menu_period.in_use` are gone; `POST …/menu-periods/:periodId/delete` is the only delete.
 
