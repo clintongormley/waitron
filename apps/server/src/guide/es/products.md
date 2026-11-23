@@ -357,9 +357,9 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
 Abre **Vista previa** para revisar tus cambios antes de publicar. Pulsa **Ver** junto a un cambio
-para ver dónde aparece. Para modificar un producto compartido o una carta incluida, sigue
-el enlace **Editar** junto al cambio. Si el precio viene de una carta incluida, ese enlace abre
-su pestaña **Precios propios**.
+para ver dónde aparece. Sigue el enlace **Editar** para abrir el producto o la carta incluida. Si
+cambió un precio, **Editar producto** abre el producto y el enlace **Editar** de la carta incluida
+abre su pestaña **Precios propios**.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 

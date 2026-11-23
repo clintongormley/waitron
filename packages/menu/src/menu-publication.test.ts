@@ -2234,10 +2234,82 @@ describe("previewMenu", () => {
         name: "Lemonade",
         from: "3.00",
         to: "3.20",
-        source: "included_menu",
-        includedMenu: { id: f.drinksMenu, name: "Drinks" },
+        source: "shared_product",
       },
     ]);
+  });
+
+  it("credits the product through nested includes when its variant follows the dish price", async () => {
+    const f = await menusFixture(fx.db);
+    const outer = await app(async (tx) => {
+      await setProductVariants(
+        tx,
+        f.lemonade,
+        (await listProductVariants(tx, f.lemonade)).map((variant) => ({
+          ...variant,
+          unitPrice: null,
+        })),
+        "en",
+      );
+      const menu = await createMenu(tx, { name: "Outer" });
+      await addMember(tx, await requireMenuRoot(tx, menu.id), section(f.dinnerRoot));
+      return menu.id;
+    });
+    await publish(outer);
+    await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" }));
+    const preview = await app((tx) => previewMenu(tx, outer));
+    expect(changeBodies(preview.changes)).toEqual([
+      {
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        from: "3.00",
+        to: "3.20",
+        source: "shared_product",
+      },
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["variants"],
+        source: "shared_product",
+      },
+    ]);
+    expect(preview.live!.document.priceOrigins?.[f.lemonade]).toEqual({ kind: "product" });
+    expect(preview.live!.document.priceOrigins?.[f.large]).toEqual({ kind: "product" });
+  });
+
+  it("keeps a publication without price origins current and retains its original Preview link", async () => {
+    const f = await menusFixture(fx.db);
+    const { versionId } = await publish(f.dinner);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = { ...row!.document };
+    delete document.priceOrigins;
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        ...row!,
+        id: undefined,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuReleases)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuReleases.versionId, versionId));
+    expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
+    await app((tx) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" }));
+    expect(changeBodies((await app((tx) => previewMenu(tx, f.dinner))).changes)).toContainEqual({
+      kind: "price_changed",
+      productId: f.lemonade,
+      name: "Lemonade",
+      from: "3.00",
+      to: "3.20",
+      source: "included_menu",
+      includedMenu: { id: f.drinksMenu, name: "Drinks" },
+    });
   });
 
   it("compares no other menu when every change is this menu's own", async () => {
