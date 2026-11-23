@@ -2,8 +2,10 @@ import { LitElement, css, html, nothing, svg, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  bottomMessage,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -13,6 +15,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import {
   SMTP_TEST_CODES,
@@ -86,7 +89,7 @@ export class EmailSettingsForm extends LitElement {
     from: "",
     authenticate: false,
   };
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private busy?: "save" | "test";
   @state() private refusal?: { code: string; field?: Field };
   @state() private accepted = false;
@@ -142,7 +145,7 @@ export class EmailSettingsForm extends LitElement {
           this.values = value;
           this.accepted = false;
           this.refusal = undefined;
-          this.attempted = false;
+          this.#feedback.reset();
           ++this.#revision;
         },
       });
@@ -194,7 +197,7 @@ export class EmailSettingsForm extends LitElement {
       (kind === "save" && saveActionState(this.#scope).unchanged)
     )
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = undefined;
     this.accepted = false;
     if (this.#errors().size) {
@@ -284,34 +287,39 @@ export class EmailSettingsForm extends LitElement {
     >
       ${
         field === "password"
-          ? html`<wt-button
-              slot="end"
-              variant="ghost"
-              data-test="reveal"
-              aria-label=${t(this.passwordVisible ? "email.settings.hide_password" : "email.settings.show_password")}
-              @click=${() => {
-                this.passwordVisible = !this.passwordVisible;
-              }}
-              ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
-                <circle cx="8" cy="8" r="2"></circle>
-                ${this.passwordVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
-              </svg></wt-button
-            >`
+          ? html`<wt-help-tooltip
+                slot="help"
+                mode="help-mode"
+                aria-label=${t("email.settings.password_help_label")}
+                guide-href=${guideHref("email.google-workspace")}
+                guide-label=${t("email.settings.password_help_guide")}
+                >${t("email.settings.password_help")}</wt-help-tooltip
+              ><wt-button
+                slot="end"
+                variant="ghost"
+                data-test="reveal"
+                aria-label=${t(this.passwordVisible ? "email.settings.hide_password" : "email.settings.show_password")}
+                @click=${() => {
+                  this.passwordVisible = !this.passwordVisible;
+                }}
+                ><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+                  <circle cx="8" cy="8" r="2"></circle>
+                  ${this.passwordVisible ? svg`<path d="m2 2 12 12"></path>` : nothing}
+                </svg></wt-button
+              >`
           : nothing
       }
     </wt-input>`;
   }
   override render(): TemplateResult {
-    const errors = this.attempted ? this.#errors() : new Set<Field>(),
+    const errors = this.#feedback.attempted ? this.#errors() : new Set<Field>(),
       save = saveActionState(this.#scope);
     const marked = errors.size > 0 || !!this.refusal?.field;
-    const error = [
-      marked ? t("form.fix_fields") : "",
-      this.refusal && !this.refusal.field ? codeMessage(this.refusal.code) : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const error = bottomMessage(
+      marked ? t("form.fix_fields") : null,
+      this.refusal && !this.refusal.field ? codeMessage(this.refusal.code) : null,
+    );
     return html`${this.settings?.hasAuthentication ? html`<p>${t("email.settings.fresh_authentication")}</p>` : nothing}
       <div class="fields">
         ${this.#field("server", errors)}

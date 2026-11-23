@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import { setHelpMode } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
 import { cleanupWidgets, mountWidget, reattachAfterDetachedUpdate } from "./test-helpers.js";
 import "./email-settings-form.js";
@@ -7,6 +9,7 @@ import { setLocale } from "../i18n/t.js";
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
   cleanupWidgets();
+  setHelpMode(false);
   setLocale("en-GB");
 });
 type Form = HTMLElementTagNameMap["dashboard-email-settings-form"];
@@ -580,3 +583,25 @@ it.each([
   const { el } = await mount();
   expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(href);
 });
+
+it.each([
+  ["en-GB", "en", "Help with the mail password", /2-Step Verification/],
+  ["es-ES", "es", "Ayuda con la contraseña del correo", /verificación en dos pasos/],
+])(
+  "opens Google app password instructions from the password field in %s",
+  async (locale, lang, label, verification) => {
+    setLocale(locale);
+    const { el } = await mount();
+    const help = page.elementLocator(field(el, "password")).getByRole("button", { name: label });
+    await expect.element(help).not.toBeInTheDocument();
+
+    setHelpMode(true);
+    await expect.element(help, { timeout: 1000 }).toBeVisible();
+    await help.click();
+    await expect.element(page.getByRole("tooltip")).toBeVisible();
+    await expect.element(help).toHaveAccessibleDescription(verification);
+    await expect
+      .element(page.getByRole("link", { name: /Google Workspace/ }))
+      .toHaveAttribute("href", `/help/${lang}/email#google-workspace`);
+  },
+);

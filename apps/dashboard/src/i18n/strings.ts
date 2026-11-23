@@ -1541,6 +1541,10 @@ export const en = {
   "email.settings.encryption": "Encryption",
   "email.settings.user": "User",
   "email.settings.password": "Password",
+  "email.settings.password_help_label": "Help with the mail password",
+  "email.settings.password_help":
+    "For Google Workspace, turn on 2-Step Verification in your Google account. Create an app password and paste it into Password. Your organisation’s settings may block app passwords.",
+  "email.settings.password_help_guide": "Set up Google Workspace mail",
   "email.settings.from": "Sender address",
   "email.settings.server_error": "Enter the mail server hostname.",
   "email.settings.port_error": "Enter a whole port number from 1 to 65535.",
@@ -6300,6 +6304,10 @@ export const es: Record<StringKey, string> = {
   "email.settings.encryption": "Cifrado",
   "email.settings.user": "Usuario",
   "email.settings.password": "Contraseña",
+  "email.settings.password_help_label": "Ayuda con la contraseña del correo",
+  "email.settings.password_help":
+    "Si usas Google Workspace, activa la verificación en dos pasos en tu cuenta de Google. Crea una contraseña de aplicación y pégala en Contraseña. La configuración de tu organización puede impedir que uses contraseñas de aplicación.",
+  "email.settings.password_help_guide": "Configura el correo de Google Workspace",
   "email.settings.from": "Dirección del remitente",
   "email.settings.server_error": "Escribe el nombre del servidor de correo.",
   "email.settings.port_error": "Escribe un puerto entero entre 1 y 65535.",

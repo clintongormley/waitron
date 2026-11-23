@@ -1192,11 +1192,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   (BOX-EMAIL-RELAY), the paid Cloud plan and the remaining free notice work.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
-- **A venue on Google Workspace or Microsoft 365 uses its own mail server (owner, 2026-11-23).**
-  Google: instructions only, nothing built: the guide's mail-server section and the help beside the
-  password field say to create a Google app password (two-step sign-in must be on, and an
-  administrator can switch app passwords off) and paste it into the password field. Microsoft 365:
-  from the end of December 2026 Microsoft switches off password sign-in for sending mail by
+- **A venue on Microsoft 365 uses its own mail server (owner, 2026-11-23).**
+  From the end of December 2026 Microsoft switches off password sign-in for sending mail by
   default, so a saved password stops working; support "Sign in with Microsoft" for the venue's
   mail server, but not immediately (owner: "microsoft 365 we should support but not
   immediately"). Until then, a Microsoft 365 venue can choose "Waitron sends as your domain"
