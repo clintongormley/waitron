@@ -499,6 +499,8 @@ The first seven columns are new and describe the record:
 | Sent to AEAT (Waiting / Being sent / Accepted / Accepted with errors / Refused / Stopped / Held) | Envío a la AEAT (Pendiente / Enviándose / Aceptado / Aceptado con errores / Rechazado / Detenido / Retenido) |
 | Whole chain listed (Yes when the main box's copy could not be matched) | Cadena completa (Sí cuando no se ha podido cotejar la copia del servidor principal) |
 
+2026-11-23 pointer: PR #4152 shows every time in the old box's download in the venue's local time with its UTC offset, and the headings no longer say UTC (the owner's choice, 2026-11-23).
+
 The rest are the workbook's invoice columns and words, unchanged. Unlike the workbook, the file
 **includes** a record whose sale is a substitution (F3), because that record is unreturned too.
 The seven filing states are the module's own (`packages/fiscal-verifactu/src/filing-states.ts:5-13`).

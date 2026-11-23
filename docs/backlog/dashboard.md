@@ -150,6 +150,11 @@ The historical menu-only warning was not reproduced.
   [Detail](dashboard.md#still-open-from-298305317-device-checks-before-deployment)
 - **Check field focus on a real iPhone.**
   [Detail](../developers/design-system.md#structure)
+- **A focused field marked invalid may look the same as an unfocused one.** In
+  `packages/ui-core/src/field-styles.ts`, `.field[data-invalid]` and
+  `.field[data-invalid]:focus-within` share one rule, so a keyboard user correcting an error may not
+  see where they landed. Read, not run (PR #4152's review, 2026-11-23); the box pages' own form
+  gained a focus ring for this case in that PR.
 
 ## Bundle: Wt dialog lifecycle
 
