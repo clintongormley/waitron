@@ -22,7 +22,6 @@ import {
 } from "./conflict-recovery-contract.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { filingCases } from "./schema/filing-cases.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { lookupConflict } from "./history.js";
 import { withHourAdmission } from "./allocation-envelope.js";
@@ -76,19 +75,14 @@ async function checkOriginal(
     .select()
     .from(verifactuRecords)
     .where(eq(verifactuRecords.id, conflict.registroId));
-  const [incident] = await tx.select().from(filingCases).where(eq(filingCases.id, conflict.caseId));
-  if (
-    original?.nodeId !== node.nodeId ||
-    original.sifId !== conflict.sifId ||
-    incident?.registroId !== conflict.registroId
-  )
-    return refuse("event_mismatch");
   const [reply] = await tx
     .select()
     .from(verifactuSubmissions)
     .where(eq(verifactuSubmissions.registroId, conflict.registroId));
+  if (original?.nodeId !== node.nodeId || original.sifId !== conflict.sifId || !reply?.caseOpenedAt)
+    return refuse("event_mismatch");
   const lookup = await lookupConflict(tx, conflict.registroId);
-  if (reply?.estado !== "rechazado" && lookup === null) return refuse("conflict_not_active");
+  if (reply.estado !== "rechazado" && lookup === null) return refuse("conflict_not_active");
 }
 
 async function checkActive(tx: Transaction, node: ProvisionedNode, conflict: ConflictRef) {

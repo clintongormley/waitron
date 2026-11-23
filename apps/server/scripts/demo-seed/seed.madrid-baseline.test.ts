@@ -502,6 +502,8 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "filing_cases",
+  "filing_case_events",
   "clock_checks",
   "clock_confirmations",
   "clock_stop_restarts",
@@ -1348,6 +1350,27 @@ for (const locale of ["en", "es"] as const) {
           ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
         );
       }
+      const submissions = expected[phase].tables.verifactu_submissions!;
+      for (const name of [
+        "case_cause",
+        "case_evidence",
+        "case_opened_at",
+        "case_open_seq",
+        "case_resolved_at",
+        "case_resolved_by",
+        "case_resolution_action",
+        "case_resolution_key",
+        "case_remedy_registro_id",
+      ]) {
+        submissions.columns.push({
+          name,
+          type: name === "case_open_seq" ? "INTEGER" : "TEXT",
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        });
+        for (const row of Object.values(submissions.rows)) row[name] = null;
+      }
       const records = expected[phase].tables.verifactu_records!;
       for (const name of [
         "corrects_registro_id",
@@ -1401,6 +1424,13 @@ for (const locale of ["en", "es"] as const) {
             ["receipt_department_id", "departments", "NO ACTION"],
             ["operator_id", "persons", "RESTRICT"],
             ["authorized_by", "persons", "RESTRICT"],
+          ],
+        ],
+        [
+          "verifactu_submissions",
+          [
+            ["case_remedy_registro_id", "verifactu_records", "NO ACTION"],
+            ["case_resolved_by", "persons", "RESTRICT"],
           ],
         ],
         ["sale_voids", [["voided_by", "persons", "RESTRICT"]]],

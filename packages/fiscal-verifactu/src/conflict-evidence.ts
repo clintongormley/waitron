@@ -4,7 +4,7 @@ import { invoiceSeries, type Transaction } from "@waitron/db";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import "./errors.js";
 import { appendHistory, historyNodeForRecord } from "./history.js";
-import { filingCases } from "./schema/filing-cases.js";
+import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuHistory } from "./schema/verifactu-history.js";
@@ -42,17 +42,17 @@ export async function readActiveConflicts(
   const rows = await tx
     .select({
       registroId: verifactuRecords.id,
-      caseId: filingCases.id,
       sifId: verifactuIdentities.id,
       installationIdentity: verifactuIdentities.numeroInstalacion,
       invoiceIdentity: verifactuRecords.numSerieFactura,
-      caseCause: filingCases.cause,
-      openedAt: filingCases.openedAt,
+      caseCause: verifactuSubmissions.caseCause,
+      openedAt: verifactuSubmissions.caseOpenedAt,
       observation: { id: observed.id, at: observed.at, data: observed.data },
       observedCause,
       lookup: { id: lookup.id, at: lookup.at, data: lookup.data },
     })
-    .from(verifactuRecords)
+    .from(verifactuSubmissions)
+    .crossJoin(verifactuRecords)
     .innerJoin(
       verifactuIdentities,
       and(
@@ -60,7 +60,6 @@ export async function readActiveConflicts(
         eq(verifactuIdentities.nodeId, verifactuRecords.nodeId),
       ),
     )
-    .innerJoin(filingCases, eq(filingCases.registroId, verifactuRecords.id))
     .leftJoin(
       observed,
       and(eq(observed.registroId, verifactuRecords.id), eq(observed.kind, "conflict.observed")),
@@ -71,12 +70,17 @@ export async function readActiveConflicts(
     )
     .where(
       and(
+        eq(verifactuSubmissions.registroId, verifactuRecords.id),
+        isNotNull(verifactuSubmissions.caseOpenedAt),
         eq(verifactuIdentities.nodeId, nodeId),
         isNull(verifactuIdentities.revocadoEn),
         or(
           isNotNull(observed.id),
           isNotNull(lookup.id),
-          inArray(filingCases.cause, ["fiscal.huella_divergente", "fiscal.duplicado_anulado"]),
+          inArray(verifactuSubmissions.caseCause, [
+            "fiscal.huella_divergente",
+            "fiscal.duplicado_anulado",
+          ]),
         ),
       ),
     )
@@ -96,11 +100,10 @@ export async function readActiveConflicts(
     found.add(row.registroId);
     active.push({
       registroId: row.registroId,
-      caseId: row.caseId,
       sifId: row.sifId,
       installationIdentity: row.installationIdentity,
       invoiceIdentity: row.invoiceIdentity,
-      observedAt: (row.observation?.at ?? row.lookup?.at ?? row.openedAt).toISOString(),
+      observedAt: (row.observation?.at ?? row.lookup?.at ?? row.openedAt!).toISOString(),
       evidence:
         (row.observation?.data.evidence as ConflictEvidence | undefined) ??
         (row.lookup?.data.evidence as LookupConflictEvidence | undefined) ??

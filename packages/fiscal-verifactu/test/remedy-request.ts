@@ -9,7 +9,7 @@ export function remedyRequestBody(request: {
   const { kind, caseId, recordId, actionKey, reason, facts } = request;
   return {
     kind,
-    caseId,
+    caseRegistroId: caseId,
     registroId: recordId,
     actionKey,
     reason,

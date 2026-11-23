@@ -333,6 +333,9 @@ the cap. If the re-pointed tests run past ~350 lines, split at Task 3: fi6a land
 (columns, guard, note kind, the A805 delete refusal and its test deletes) with its own protection
 list; fi6b lands Tasks 3–5. The slice rules' size stop (§5.6) applies past ~1,200.
 
+The watcher cleared keeping Fi6 in one pull request on 2026-11-23 at 18:46, after
+the test re-pointing reached the split threshold. This keeps one venue reset.
+
 ## Finish line
 
 ```bash

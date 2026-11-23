@@ -157,7 +157,7 @@ it("finalises an already captured bill once after the actual administrator switc
   let conflict!: NonNullable<ConflictRequest["conflict"]>;
   venue.card.collect = async (input) => {
     const result = await collect(input);
-    const incident = await withTransaction(suite.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await tx.run(
         sql`update verifactu_submissions set estado = 'rechazado' where registro_id = ${original.id}`,
       );
@@ -168,7 +168,7 @@ it("finalises an already captured bill once after the actual administrator switc
         now: venue.clock.now().instant,
       });
     });
-    conflict = { registroId: original.id, sifId: original.sif_id, caseId: incident.id };
+    conflict = { registroId: original.id, sifId: original.sif_id };
     return result;
   };
   const billId = await tabWith(venue, "Paella");
@@ -178,7 +178,9 @@ it("finalises an already captured bill once after the actual administrator switc
   });
   const captures = suite.db.all(sql`select * from payments`);
   const records = suite.db.all(sql`select * from verifactu_records`);
-  const cases = suite.db.all(sql`select * from filing_cases`);
+  const cases = suite.db.all(
+    sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+  );
   const orders = suite.db.all(sql`select * from working_orders`);
   const node = { nodeId: venue.cfg.nodeId };
   const key = "synthetic-conflict-current-key";
@@ -277,7 +279,11 @@ it("finalises an already captured bill once after the actual administrator switc
   expect(suite.db.all(sql`select * from payments`)).toEqual(captures);
   expect(suite.db.all(sql`select * from working_orders`)).toEqual(orders);
   expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(records);
-  expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
+  expect(
+    suite.db.all(
+      sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+    ),
+  ).toEqual(cases);
   const deps = {
     admission: testTradingAdmission(),
     db: suite.db,

@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { caseIdForRecord } from "./record-remedy.js";
+import { findFilingCase } from "./filing-cases.js";
 
 export function invalid(): never {
   throw new AppError("fiscal.remedy_request_invalid", {});
@@ -21,11 +21,14 @@ export function text(value: unknown): string {
   return value;
 }
 
-/** The request's `caseId`, or, when it names none, the case open for its record. */
-export async function requestCaseId(
+/** The request's `caseRegistroId`, or, when it names none, the case open for its record. */
+export async function requestCaseRegistroId(
   tx: Transaction,
-  caseId: unknown,
+  caseRegistroId: unknown,
   registroId: string,
 ): Promise<string> {
-  return caseId === undefined ? caseIdForRecord(tx, registroId) : text(caseId);
+  if (caseRegistroId !== undefined) return text(caseRegistroId);
+  if ((await findFilingCase(tx, registroId)) === undefined)
+    throw new AppError("fiscal.remedy_invalid", { registroId });
+  return registroId;
 }

@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
@@ -27,13 +28,17 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
-import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
+import {
+  openFilingCase,
+  recordCaseEvent,
+  listFilingCases,
+  type FilingCaseCause,
+} from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import * as remedies from "./record-remedy.js";
 import { correctiveRemedy } from "./record-remedy-corrective.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents, type FilingCaseCause } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
@@ -41,7 +46,7 @@ import { verifyChain } from "./verify.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-03-01T12:07:00Z");
 type Request = {
-  caseId: string;
+  caseRegistroId: string;
   registroId: string;
   actionKey: string;
   reason: string;
@@ -54,7 +59,7 @@ type Input = {
   backend: VerifactuBackend;
   request: Request;
 };
-type Result = { saleId: string; registroId: string; eventId: string };
+type Result = { saleId: string; registroId: string; actionKey: string };
 let node: SeededNode;
 let personId: string;
 let input: Input;
@@ -145,7 +150,7 @@ beforeEach(async () => {
         },
       },
       request: {
-        caseId: filingCase.id,
+        caseRegistroId: filingCase.registroId,
         registroId: original.fiscal.recordId,
         actionKey: "corrective-1",
         reason: "Explicit synthetic factual invoice correction",
@@ -190,8 +195,10 @@ async function snapshot() {
     refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    events: await suite.db.select().from(filingCaseEvents),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    events: await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
 }
@@ -257,7 +264,7 @@ async function anotherInvoice(
             },
             now: NOW,
           });
-    return { registroId: original.fiscal.recordId, caseId: filingCase?.id };
+    return { registroId: original.fiscal.recordId, caseRegistroId: filingCase?.registroId };
   });
 }
 
@@ -330,8 +337,8 @@ it("creates an independently numbered corrective invoice and its case event with
   expect(after.head.ultimoRegistroId).toBe(result.registroId);
   expect(after.events).toMatchObject([
     {
-      id: result.eventId,
-      caseId: input.request.caseId,
+      actionKey: result.actionKey,
+      registroId: input.request.caseRegistroId,
       personId,
       kind: "resolved",
       remedyRegistroId: result.registroId,
@@ -392,7 +399,7 @@ it.each(["detenido", "pendiente", "enviando", "retenido", "aceptado"] as const)(
 it("supports an explicit non-conflicting rejection with matching evidence", async () => {
   const other = await anotherInvoice("rechazado", "fiscal.registro_rechazado");
   input.request.registroId = other.registroId;
-  input.request.caseId = other.caseId!;
+  input.request.caseRegistroId = other.caseRegistroId!;
   const result = await apply();
   expect(result.saleId).toBeTypeOf("string");
 });
@@ -403,7 +410,7 @@ it.each([
 ] as FilingCaseCause[])("refuses conflict or unsuitable case %s", async (cause) => {
   const other = await anotherInvoice("rechazado", cause);
   input.request.registroId = other.registroId;
-  input.request.caseId = other.caseId!;
+  input.request.caseRegistroId = other.caseRegistroId!;
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses another record's case even with the same totals", async () => {
@@ -467,7 +474,7 @@ it("retains core below-zero accounting refusal without burning a number", async 
 });
 
 // Removing any admission below must turn a refusal into a write or a different domain refusal.
-it.each(["caseId", "registroId", "actionKey", "reason"] as const)(
+it.each(["caseRegistroId", "registroId", "actionKey", "reason"] as const)(
   "refuses an empty %s",
   async (key) => {
     input.request[key] = " ";
@@ -484,7 +491,7 @@ it("refuses a missing target", async () => {
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses a missing case", async () => {
-  input.request.caseId = "missing-case";
+  input.request.caseRegistroId = "missing-case";
   await refuses("fiscal.remedy_invalid");
 });
 it.each([null, "3000", "different-code"])(
@@ -500,7 +507,7 @@ it.each([null, "3000", "different-code"])(
 it.each([null, 1161])("refuses absent or mismatching case evidence %s", async (code) => {
   const other = await anotherInvoice("aceptado_con_errores", "fiscal.aceptado_con_errores", code);
   input.request.registroId = other.registroId;
-  input.request.caseId = other.caseId!;
+  input.request.caseRegistroId = other.caseRegistroId!;
   await refuses("fiscal.remedy_invalid");
 });
 it("refuses a superseded version without selecting another record automatically", async () => {
@@ -512,7 +519,7 @@ it("refuses a superseded version without selecting another record automatically"
       new Set(["record-correction", remedies.ACCEPTED_WITH_ERRORS_CORRECTION]),
       {
         kind: "record-correction",
-        caseId: input.request.caseId,
+        caseRegistroId: input.request.caseRegistroId,
         registroId: input.request.registroId,
         actionKey: "record-version",
         reason: "Synthetic record amendment",
@@ -542,7 +549,7 @@ it.each([false, true])(
 it("refuses a saved note using the same action key", async () => {
   await withTransaction(suite.db, (tx) =>
     recordCaseEvent(tx, {
-      caseId: input.request.caseId,
+      caseRegistroId: input.request.caseRegistroId,
       actionKey: input.request.actionKey,
       kind: "note",
       personId,
@@ -555,7 +562,7 @@ it("refuses a saved note using the same action key", async () => {
 it("refuses a saved resolution without a remedy record", async () => {
   await withTransaction(suite.db, (tx) =>
     recordCaseEvent(tx, {
-      caseId: input.request.caseId,
+      caseRegistroId: input.request.caseRegistroId,
       actionKey: input.request.actionKey,
       kind: "resolved",
       personId,
@@ -577,7 +584,7 @@ it("rolls back accounting and numbering when the backend stamps the wrong enviro
 it("refuses a duplicate-conflict code even when the case evidence matches it", async () => {
   const other = await anotherInvoice("rechazado", "fiscal.registro_rechazado", 3000);
   input.request.registroId = other.registroId;
-  input.request.caseId = other.caseId!;
+  input.request.caseRegistroId = other.caseRegistroId!;
   await suite.db
     .update(verifactuSubmissions)
     .set({ codigoError: "3000" })

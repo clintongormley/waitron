@@ -828,9 +828,11 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(
         (await withTransaction(suite.db, (tx) => heldRecords(tx))).map((h) => [
           h.registroId,
-          h.caseId,
+          h.caseRegistroId,
         ]),
-      ).toEqual([[later.registroId, (await cases()).find((c) => c.registroId === first)!.id]]);
+      ).toEqual([
+        [later.registroId, (await cases()).find((c) => c.registroId === first)!.registroId],
+      ]);
 
       await drain(deps(wire.client), at(HOUR + 59 * MINUTE));
       expect(wire.sent).toEqual([[first]]);

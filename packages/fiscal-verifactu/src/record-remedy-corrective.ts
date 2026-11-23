@@ -7,14 +7,12 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, saleId, type NodeId, type SaleId } from "@waitron/shared";
 import type { VerifactuBackend } from "./backend.js";
-import { recordCaseEvent } from "./filing-cases.js";
+import { caseEventByActionKey, findFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
-import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export interface InvoiceRemedyRequest {
-  caseId: string;
+  caseRegistroId: string;
   registroId: string;
   actionKey: string;
   reason: string;
@@ -28,8 +26,7 @@ export interface InvoiceRemedy {
   action: Record<string, unknown>;
   /** This remedy's own checks of the case, its latest delivery and its record. */
   admits?: (facts: {
-    filingCase: typeof filingCases.$inferSelect;
-    delivery: typeof verifactuSubmissions.$inferSelect;
+    filingCase: NonNullable<Awaited<ReturnType<typeof findFilingCase>>>;
     target: typeof verifactuRecords.$inferSelect;
   }) => boolean;
   issue: (
@@ -74,7 +71,7 @@ export async function applyCorrectiveInvoice(
     request: InvoiceRemedyRequest;
     remedy: InvoiceRemedy;
   },
-): Promise<{ saleId: string; registroId: string; eventId: string }> {
+): Promise<{ saleId: string; registroId: string; actionKey: string }> {
   const { request, generation, remedy } = input;
   const personId = await admitRecordRemedy(
     tx,
@@ -83,7 +80,7 @@ export async function applyCorrectiveInvoice(
     input.enabledRemedies,
   );
   if (
-    [request.caseId, request.registroId, request.actionKey, request.reason].some(
+    [request.caseRegistroId, request.registroId, request.actionKey, request.reason].some(
       (value) => value.trim() === "",
     )
   )
@@ -103,20 +100,17 @@ export async function applyCorrectiveInvoice(
   const action = canonicalJson(
     JSON.parse(JSON.stringify({ kind: remedy.kind, ...request, ...remedy.action })) as unknown,
   );
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, request.actionKey));
+  const stored = await caseEventByActionKey(tx, request.actionKey);
   if (stored !== undefined) {
     if (
-      stored.caseId !== request.caseId ||
+      stored.registroId !== request.caseRegistroId ||
       stored.personId !== personId ||
       stored.kind !== "resolved" ||
       stored.action !== action ||
       stored.remedyRegistroId === null
     )
       throw new AppError("filing_case.action_mismatch", {
-        caseId: request.caseId,
+        caseRegistroId: request.caseRegistroId,
         actionKey: request.actionKey,
       });
     const [remedyRecord] = await tx
@@ -125,16 +119,13 @@ export async function applyCorrectiveInvoice(
       .where(eq(verifactuRecords.id, stored.remedyRegistroId));
     if (remedyRecord === undefined)
       throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
-    return { saleId: remedyRecord.saleId, registroId: stored.remedyRegistroId, eventId: stored.id };
+    return {
+      saleId: remedyRecord.saleId,
+      registroId: stored.remedyRegistroId,
+      actionKey: stored.actionKey,
+    };
   }
-  const [filingCase] = await tx
-    .select()
-    .from(filingCases)
-    .where(eq(filingCases.id, request.caseId));
-  const [delivery] = await tx
-    .select()
-    .from(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, request.registroId));
+  const filingCase = await findFilingCase(tx, request.caseRegistroId);
   const [replacement] = await tx
     .select({ id: verifactuRecords.id })
     .from(verifactuRecords)
@@ -154,16 +145,16 @@ export async function applyCorrectiveInvoice(
     filingCase?.registroId !== request.registroId ||
     !(
       (filingCase.cause === "fiscal.aceptado_con_errores" &&
-        delivery?.estado === "aceptado_con_errores") ||
-      (filingCase.cause === "fiscal.registro_rechazado" && delivery?.estado === "rechazado")
+        filingCase.estado === "aceptado_con_errores") ||
+      (filingCase.cause === "fiscal.registro_rechazado" && filingCase.estado === "rechazado")
     ) ||
-    delivery.codigoError === null ||
-    delivery.codigoError === "3000" ||
+    filingCase.codigoError === null ||
+    filingCase.codigoError === "3000" ||
     filingCase.evidence.codigo === null ||
-    String(filingCase.evidence.codigo) !== delivery.codigoError ||
+    String(filingCase.evidence.codigo) !== filingCase.codigoError ||
     replacement !== undefined ||
     cancellation !== undefined ||
-    (remedy.admits !== undefined && !remedy.admits({ filingCase, delivery, target }))
+    (remedy.admits !== undefined && !remedy.admits({ filingCase, target }))
   )
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
   const correctsSaleId = saleId(target.saleId);
@@ -182,7 +173,7 @@ export async function applyCorrectiveInvoice(
   )
     throw new AppError("fiscal.remedy_invalid", { registroId: request.registroId });
   const event = await recordCaseEvent(tx, {
-    caseId: request.caseId,
+    caseRegistroId: request.caseRegistroId,
     actionKey: request.actionKey,
     kind: "resolved",
     personId,
@@ -190,5 +181,5 @@ export async function applyCorrectiveInvoice(
     remedyRegistroId: result.fiscal.recordId,
     now: result.fiscal.issuedAt,
   });
-  return { saleId: result.saleId, registroId: result.fiscal.recordId, eventId: event.id };
+  return { saleId: result.saleId, registroId: result.fiscal.recordId, actionKey: event.actionKey };
 }

@@ -18,6 +18,22 @@ import { seedTaxpayerWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
+const submissions = verifactuSubmissions;
+export const deliveryColumns = {
+  registroId: submissions.registroId,
+  estado: submissions.estado,
+  intentos: submissions.intentos,
+  proximoIntentoEn: submissions.proximoIntentoEn,
+  incidencia: submissions.incidencia,
+  technicalIncidence: submissions.technicalIncidence,
+  csv: submissions.csv,
+  codigoError: submissions.codigoError,
+  mensajeError: submissions.mensajeError,
+  enviadoEn: submissions.enviadoEn,
+  confirmadoEn: submissions.confirmadoEn,
+  reconciledResubmitAt: submissions.reconciledResubmitAt,
+};
+
 /**
  * Every row here is inserted through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
  * header gives: the `$defaultFn` generators are drizzle-side, and a raw statement reaches none.

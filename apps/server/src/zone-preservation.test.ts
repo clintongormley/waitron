@@ -317,7 +317,7 @@ it("brake probe, release and filing-case resolution retain the original fiscal a
   const cases = await withTransaction(v.db, (tx) => listFilingCases(tx));
   expect(cases).toHaveLength(3);
   const input = {
-    caseId: cases[0]!.id,
+    caseRegistroId: cases[0]!.registroId,
     actionKey: randomUUID(),
     kind: "resolved" as const,
     personId: v.operator.personId,
@@ -328,7 +328,7 @@ it("brake probe, release and filing-case resolution retain the original fiscal a
   expect(await withTransaction(v.db, (tx) => recordCaseEvent(tx, input))).toEqual(event);
   expect(
     (await withTransaction(v.db, (tx) => listFilingCases(tx))).find(
-      (row) => row.id === input.caseId,
+      (row) => row.registroId === input.caseRegistroId,
     ),
   ).toMatchObject({ status: "resolved", events: [event] });
   expect(records()).toEqual(saved);

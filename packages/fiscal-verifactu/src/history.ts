@@ -76,6 +76,8 @@ export async function appendHistory(
   return row === undefined ? null : { id: row.id, seq };
 }
 
+export const CASE_NOTE_PREFIX = "case.note:";
+
 function keyFor(entry: HistoryEntry): string | null {
   switch (entry.kind) {
     case "clock.confirmed":
@@ -85,7 +87,7 @@ function keyFor(entry: HistoryEntry): string | null {
     case "conflict.lookup":
       return `lookup:${entry.registroId}`;
     case "case.note":
-      return `case.note:${entry.actionKey}`;
+      return CASE_NOTE_PREFIX + entry.actionKey;
   }
 }
 

@@ -248,7 +248,9 @@ it.each([
   ],
   [
     "filing",
-    "insert into filing_cases(id, registro_id, cause, evidence, opened_at) values ('filing', 'registro', 'retained', '{}', 1)",
+    `insert into verifactu_history(id, seq, kind, node_id, person_id, at, data, event_key, registro_id)
+      values ('filing', 1, 'case.note', 'node', 'person', '2026-11-23T12:00:00.000Z',
+        '{"action":"retained"}', 'case.note:retained', 'record')`,
   ],
 ])("a retained %s independently refuses password-free unused-PDF reset", async (_name, sql) => {
   const f = await fixture();

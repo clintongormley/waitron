@@ -48,9 +48,9 @@ export async function readFilingOverview(
 
   const heldByCase = new Map<string, number>();
   let heldWithoutCase = 0;
-  for (const { caseId } of held) {
-    if (caseId === null) heldWithoutCase += 1;
-    else heldByCase.set(caseId, (heldByCase.get(caseId) ?? 0) + 1);
+  for (const { caseRegistroId } of held) {
+    if (caseRegistroId === null) heldWithoutCase += 1;
+    else heldByCase.set(caseRegistroId, (heldByCase.get(caseRegistroId) ?? 0) + 1);
   }
   const conflictsByRecord = groupBy(conflictRows, (row) => row.registroId);
   const lookupsByRecord = groupBy(lookupRows, (row) => row.registroId);
@@ -85,7 +85,7 @@ export async function readFilingOverview(
         recordedAt: row.recordedAt.toISOString(),
         ...lookupEvidence(row.evidence),
       })),
-      heldBehind: heldByCase.get(found.caseId) ?? 0,
+      heldBehind: heldByCase.get(found.registroId) ?? 0,
     })),
     totalCases: total,
     heldWithoutCase,

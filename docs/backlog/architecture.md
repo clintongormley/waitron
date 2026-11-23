@@ -880,7 +880,6 @@ Include `menu_versions.created_by` when indexing the menu history. On a developm
 download's first write-lock turn took a median 25 ms with a seeded year and 216 ms with five years.
 
 - **`verifactu_sending_state`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`verifactu_submissions`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`verifactu_identities`: decide the remaining DELETE restriction (A805 follow-up).**
 - **Finish the remaining person-id foreign keys.**
   Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations

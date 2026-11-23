@@ -97,7 +97,7 @@ export async function seedLiveConflict(
   const original = await withTransaction(db, (tx) =>
     recordSale(tx, backend, saleInput({ nodeId: node.nodeId, seriesId: seriesId(series!.id) })),
   );
-  const incident = await withTransaction(db, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await tx
       .update(verifactuSubmissions)
       .set({ estado: "rechazado" })
@@ -110,5 +110,5 @@ export async function seedLiveConflict(
     });
   });
   const [allocation] = await db.select().from(fiscalAllocations);
-  return { registroId: original.fiscal.recordId, caseId: incident.id, sifId: allocation!.sifId };
+  return { registroId: original.fiscal.recordId, sifId: allocation!.sifId };
 }

@@ -13,8 +13,6 @@ const OWNED = [
   "declaraciones_responsables",
   "verifactu_sending_state",
   "verifactu_submissions",
-  "filing_case_events",
-  "filing_cases",
   "fiscal_allocations",
   "verifactu_certificates",
   "fiscal_certificate_reminders",

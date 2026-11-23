@@ -138,12 +138,6 @@ async function capture(populate = true) {
       secuencia: 1,
       huella: "A".repeat(64),
     });
-    await suite.db.execute(
-      sql`insert into filing_cases (id, registro_id, cause, evidence, opened_at) select '10000000-0000-4000-8000-000000000001', id, 'fiscal.registro_rechazado', '{"codigo":1,"mensaje":"retained","csv":null}', ${time} from verifactu_records limit 1`,
-    );
-    await suite.db.execute(
-      sql`insert into filing_case_events (id, case_id, action_key, kind, person_id, action, remedy_registro_id, recorded_at) values ('10000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','note-1','note','10000000-0000-4000-8000-000000000003','retained note',null,${time})`,
-    );
     const original = suite.db.get<{
       id: string;
       id_emisor_factura: string;
@@ -181,7 +175,10 @@ async function capture(populate = true) {
       }),
     );
     await suite.db.execute(
-      sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en, csv) select id, 'aceptado', ${time}, 'retained-csv' from verifactu_records`,
+      sql`insert into verifactu_submissions (registro_id, estado, proximo_intento_en, csv,
+        case_cause, case_evidence, case_opened_at, case_open_seq)
+      select id, 'aceptado', ${time}, 'retained-csv', 'fiscal.registro_rechazado',
+        '{"codigo":1,"mensaje":"retained","csv":null}', ${time}, 1 from verifactu_records`,
     );
     await suite.db.execute(
       sql`insert into acks (registro_id, submitted_at, csv, state) select id, ${time}, 'retained-csv', 'accepted' from verifactu_records`,
@@ -197,6 +194,15 @@ async function capture(populate = true) {
     );
     await withTransaction(suite.db, async (tx) => {
       const personId = await seedPerson(tx, { id: "10000000-0000-4000-8000-000000000003" });
+      await appendHistory(tx, {
+        kind: "case.note",
+        nodeId: node.nodeId,
+        registroId: original.id,
+        at: new Date(time),
+        personId,
+        actionKey: "note-1",
+        data: { action: "retained note" },
+      });
       await appendHistory(tx, {
         kind: "clock.confirmed",
         nodeId: node.nodeId,
@@ -328,9 +334,12 @@ it.each([
     "historical series node",
     "update invoice_series set node_id='missing' where retired_at is not null",
   ],
-  ["filing case parent", "update filing_cases set registro_id='missing'"],
-  ["filing event parent", "update filing_case_events set case_id='missing'"],
-  ["filing remedy parent", "update filing_case_events set remedy_registro_id='missing'"],
+  [
+    "filing note parent",
+    "update verifactu_history set registro_id='missing' where kind='case.note'",
+  ],
+  ["filing remedy parent", "update verifactu_submissions set case_remedy_registro_id='missing'"],
+  ["filing resolution person", "update verifactu_submissions set case_resolved_by='missing'"],
   ["send parent", "update verifactu_submissions set registro_id='missing'"],
   ["ack parent", "update acks set registro_id='missing'"],
   ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
@@ -388,8 +397,6 @@ it.each([
 it.each([
   "verifactu_identities",
   "fiscal_allocations",
-  "filing_cases",
-  "filing_case_events",
   "verifactu_submissions",
   "verifactu_sending_state",
   "acks",
@@ -398,6 +405,15 @@ it.each([
 ])("retains every captured %s row", async (table) => {
   await capture();
   edit("after", (db) => db.exec(`delete from "${table}"`));
+  expect(await verify()).toEqual(result("invalid"));
+});
+
+it.each([
+  "update verifactu_submissions set case_cause=null, case_evidence=null, case_opened_at=null, case_open_seq=null",
+  "delete from verifactu_history where kind='case.note'",
+])("retains case evidence when the rest of its row or history survives", async (statement) => {
+  await capture();
+  edit("after", (db) => db.exec(statement));
   expect(await verify()).toEqual(result("invalid"));
 });
 
@@ -815,7 +831,11 @@ it.each(["block", "consumption"])("rejects malformed signed %s envelopes", async
 });
 it("retains every captured column even if both histories remain internally valid", async () => {
   await capture();
-  edit("after", (db) => db.exec("update filing_case_events set action='different valid note'"));
+  edit("after", (db) =>
+    db.exec(
+      "update verifactu_history set data=json_set(data, '$.action', 'different valid note') where kind='case.note'",
+    ),
+  );
   expect(await verify()).toEqual(result("invalid"));
 });
 
@@ -947,7 +967,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','fiscal_allocations','fiscal_reservations','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','acks','verifactu_certificates','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);

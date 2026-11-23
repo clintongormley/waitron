@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -15,12 +16,11 @@ import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
 import { writeAck, pendingAcks } from "./acks.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "./drain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import type { RemedyKind } from "./record-remedy.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
@@ -71,7 +71,7 @@ beforeEach(async () => {
         evidence: { codigo: 1161, mensaje: null, csv: null },
         now: NOW,
       })
-    ).id;
+    ).registroId;
     const held = await appendToChain(
       tx,
       node.nodeId,
@@ -90,7 +90,7 @@ beforeEach(async () => {
     body = {
       kind: KIND,
       registroId: held.id,
-      caseId: heldCase.id,
+      caseRegistroId: heldCase.registroId,
       actionKey: "release-held-1",
       reason: "Explicit synthetic release after original correction",
     };
@@ -99,7 +99,7 @@ beforeEach(async () => {
     {
       kind: "record-correction",
       registroId: originalId,
-      caseId: originalCaseId,
+      caseRegistroId: originalCaseId,
       actionKey: "correct-original",
       reason: "Correct rejected stored facts",
       facts: { description: "Corrected restaurant service" },
@@ -149,7 +149,7 @@ async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     deliveries: await suite.db
-      .select()
+      .select(deliveryColumns)
       .from(verifactuSubmissions)
       .orderBy(verifactuSubmissions.registroId),
     cases: await withTransaction(suite.db, listFilingCases),
@@ -167,7 +167,7 @@ it("releases the existing held cancellation and resolves its case without a new 
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(200);
-  const result = (await response.json()) as { registroId: string; eventId: string };
+  const result = (await response.json()) as { registroId: string; actionKey: string };
   expect(result.registroId).toBe(body.registroId);
   const after = await snapshot();
   expect(after.records).toEqual(before.records);
@@ -179,7 +179,7 @@ it("releases the existing held cancellation and resolves its case without a new 
   expect(after.cases[0]).toEqual(before.cases[0]);
   expect(after.cases[1]).toMatchObject({
     status: "resolved",
-    events: [{ id: result.eventId, kind: "resolved", personId, remedyRegistroId: null }],
+    events: [{ actionKey: result.actionKey, kind: "resolved", personId, remedyRegistroId: null }],
   });
   expect(JSON.parse(after.cases[1]!.events[0]!.action)).toEqual({
     ...body,
@@ -302,19 +302,22 @@ it.each(["pendiente", "enviando", "rechazado", "detenido", "aceptado", "aceptado
   },
 );
 
-it.each(["caseId", "registroId", "acceptedRegistroId"])("refuses a missing %s row", async (key) => {
-  await acceptCurrent();
-  const before = await snapshot();
-  const response = await send({ ...body, [key]: "missing" });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
-  expect(await snapshot()).toEqual(before);
-});
+it.each(["caseRegistroId", "registroId", "acceptedRegistroId"])(
+  "refuses a missing %s row",
+  async (key) => {
+    await acceptCurrent();
+    const before = await snapshot();
+    const response = await send({ ...body, [key]: "missing" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it("refuses another case even when both records belong to the same invoice", async () => {
   await acceptCurrent();
   const before = await snapshot();
-  const response = await send({ ...body, caseId: originalCaseId });
+  const response = await send({ ...body, caseRegistroId: originalCaseId });
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: { code: "fiscal.remedy_invalid" } });
   expect(await snapshot()).toEqual(before);
@@ -362,7 +365,7 @@ it("refuses an unrelated accepted invoice with the same amount", async () => {
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["reason", "acceptedRegistroId", "caseId"])(
+it.each(["reason", "acceptedRegistroId", "caseRegistroId"])(
   "refuses changed %s on replay",
   async (field) => {
     await acceptCurrent();
@@ -422,14 +425,16 @@ it.each([false, true])("checks host node and environment on replay=%s", async (r
 
 it("rolls the release and ack removal back when the case already has another resolution", async () => {
   await acceptCurrent();
-  await suite.db.insert(filingCaseEvents).values({
-    caseId: body.caseId as string,
-    actionKey: "older-decision",
-    kind: "resolved",
-    personId,
-    action: "Earlier different decision",
-    recordedAt: NOW,
-  });
+  await withTransaction(suite.db, (tx) =>
+    recordCaseEvent(tx, {
+      caseRegistroId: body.caseRegistroId as string,
+      actionKey: "older-decision",
+      kind: "resolved",
+      personId,
+      action: "Earlier different decision",
+      now: NOW,
+    }),
+  );
   const before = await snapshot();
   const response = await send();
   expect(response.status).toBe(409);
@@ -437,7 +442,7 @@ it("rolls the release and ack removal back when the case already has another res
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(["reason", "actionKey", "caseId", "registroId", "acceptedRegistroId"])(
+it.each(["reason", "actionKey", "caseRegistroId", "registroId", "acceptedRegistroId"])(
   "refuses a blank %s",
   async (field) => {
     await acceptCurrent();
@@ -552,7 +557,7 @@ it("refuses an absent-original cancellation even with a matching accepted invoic
     body = {
       ...body,
       registroId: cancellation.id,
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       acceptedRegistroId: accepted.id,
     };
   });
@@ -616,7 +621,7 @@ it("a set-aside cancellation on another chain is released once its original is a
     {
       kind: "record-correction",
       registroId: refused.id,
-      caseId: refusedCase.id,
+      caseRegistroId: refusedCase.registroId,
       actionKey: "correct-inherited-original",
       reason: "Correct rejected stored facts",
       facts: { description: "Corrected restaurant service" },
@@ -637,7 +642,7 @@ it("a set-aside cancellation on another chain is released once its original is a
 
   const response = await send({
     ...body,
-    caseId: cancellationCase.id,
+    caseRegistroId: cancellationCase.registroId,
     registroId: cancellation.id,
     acceptedRegistroId: corrected,
     actionKey: "release-inherited-1",

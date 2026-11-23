@@ -153,6 +153,9 @@ changing enforcement, keeping each legitimate mutation path.
 | `workforce_chains`       | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
 | `working_order_counters` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 
+**2026-11-23:** A1308 Fi6 settled `envios`, now `verifactu_submissions`. The
+`verifactu_submissions_no_delete` trigger refuses deletion of a submission row.
+
 **2026-11-23:** A1308 fi3 makes series retirement final. The series guard permits setting
 `retired_at` once. Foreign keys from sales and Veri*Factu series conflicts keep referenced series
 from being deleted.

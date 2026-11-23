@@ -1,22 +1,64 @@
-import { and, count, eq, min, notExists, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, min, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import {
-  filingCaseEvents,
-  filingCases,
-  type FilingCaseCause,
-  type FilingCaseEvidence,
-} from "./schema/filing-cases.js";
+import type { FilingCaseCause } from "./filing-states.js";
+import { appendHistory, CASE_NOTE_PREFIX, historyNodeForRecord } from "./history.js";
+import { verifactuHistory } from "./schema/verifactu-history.js";
 
-export type { FilingCaseCause, FilingCaseEvidence };
+export type { FilingCaseCause };
 
-export type FilingCase = typeof filingCases.$inferSelect;
-export type FilingCaseEvent = typeof filingCaseEvents.$inferSelect;
-export type FilingCaseEventKind = FilingCaseEvent["kind"];
+export interface FilingCaseEvidence {
+  codigo: number | null;
+  mensaje: string | null;
+  csv: string | null;
+}
+
+export interface FilingCase {
+  registroId: string;
+  cause: FilingCaseCause;
+  evidence: FilingCaseEvidence;
+  openedAt: Date;
+}
+
+interface FilingCaseAction {
+  registroId: string;
+  actionKey: string;
+  personId: string;
+  action: string;
+  recordedAt: Date;
+}
+
+export type FilingCaseEvent = FilingCaseAction &
+  (
+    | { kind: "resolved"; remedyRegistroId: string | null }
+    | { kind: "note"; id: string; remedyRegistroId: null }
+  );
+
+const cases = verifactuSubmissions;
+const caseColumns = {
+  registroId: cases.registroId,
+  cause: cases.caseCause,
+  evidence: cases.caseEvidence,
+  openedAt: cases.caseOpenedAt,
+};
+type NullableCase = { [K in keyof FilingCase]: FilingCase[K] | null };
+
+function filingCase(row: NullableCase): FilingCase {
+  // The case CHECK sets cause, evidence and time together.
+  return row as FilingCase;
+}
+
+export async function findFilingCase(tx: Transaction, registroId: string) {
+  const [row] = await tx
+    .select({ ...caseColumns, estado: cases.estado, codigoError: cases.codigoError })
+    .from(cases)
+    .where(and(eq(cases.registroId, registroId), isNotNull(cases.caseOpenedAt)));
+  return row === undefined ? undefined : { ...row, ...filingCase(row) };
+}
 
 export interface FilingCaseReport extends FilingCase {
   estado: string | null;
@@ -46,7 +88,7 @@ export function recordsBefore(record: "r" | "d" | "p" | "h" | "held" | "runs"): 
 export interface HeldRecord {
   registroId: string;
   /** The case that holds this record (see `heldRecords`), or null when none does. */
-  caseId: string | null;
+  caseRegistroId: string | null;
 }
 
 /** Opens the case for a record, or returns the one it already has untouched. */
@@ -54,21 +96,27 @@ export async function openFilingCase(
   tx: Transaction,
   input: { registroId: string; cause: FilingCaseCause; evidence: FilingCaseEvidence; now: Date },
 ): Promise<FilingCase> {
-  const [existing] = await tx
-    .select()
-    .from(filingCases)
-    .where(eq(filingCases.registroId, input.registroId));
-  if (existing !== undefined) return existing;
   const [opened] = await tx
-    .insert(filingCases)
-    .values({
-      registroId: input.registroId,
-      cause: input.cause,
-      evidence: input.evidence,
-      openedAt: input.now,
+    .update(cases)
+    .set({
+      caseCause: input.cause,
+      caseEvidence: input.evidence,
+      caseOpenedAt: input.now,
+      // Opening order survives equal times and a backward clock step.
+      caseOpenSeq: sql`(select coalesce(max(case_open_seq), 0) + 1
+        from verifactu_submissions where case_opened_at is not null)`,
     })
-    .returning();
-  return opened!;
+    .where(and(eq(cases.registroId, input.registroId), isNull(cases.caseOpenedAt)))
+    .returning(caseColumns);
+  if (opened !== undefined) return filingCase(opened);
+  const existing = await findFilingCase(tx, input.registroId);
+  if (existing === undefined) throw new Error("A filing case needs a submission row");
+  return {
+    registroId: existing.registroId,
+    cause: existing.cause,
+    evidence: existing.evidence,
+    openedAt: existing.openedAt,
+  };
 }
 
 /** The accepted-with-errors codes taken to need no correction. AEAT's validation document
@@ -102,140 +150,166 @@ export async function openAcceptedWithErrorsCase(
   });
 }
 
+const resolutionColumns = {
+  registroId: cases.registroId,
+  recordedAt: cases.caseResolvedAt,
+  personId: cases.caseResolvedBy,
+  action: cases.caseResolutionAction,
+  actionKey: cases.caseResolutionKey,
+  remedyRegistroId: cases.caseRemedyRegistroId,
+};
+
+function resolution(
+  row: {
+    [K in keyof FilingCaseAction]: FilingCaseAction[K] | null;
+  } & { remedyRegistroId: string | null },
+): FilingCaseEvent {
+  // Every resolution fact except the optional remedy record is set together.
+  return { ...(row as FilingCaseAction), kind: "resolved", remedyRegistroId: row.remedyRegistroId };
+}
+
+function note(row: typeof verifactuHistory.$inferSelect): FilingCaseEvent {
+  return {
+    kind: "note",
+    id: row.id,
+    registroId: row.registroId!,
+    actionKey: row.eventKey!.slice(CASE_NOTE_PREFIX.length),
+    personId: row.personId!,
+    action: row.data.action as string,
+    remedyRegistroId: null,
+    recordedAt: row.at,
+  };
+}
+
+export async function caseEventByActionKey(
+  tx: Transaction,
+  actionKey: string,
+): Promise<FilingCaseEvent | undefined> {
+  const [decided] = await tx
+    .select(resolutionColumns)
+    .from(cases)
+    .where(eq(cases.caseResolutionKey, actionKey));
+  if (decided !== undefined) return resolution(decided);
+  const [recorded] = await tx
+    .select()
+    .from(verifactuHistory)
+    .where(eq(verifactuHistory.eventKey, CASE_NOTE_PREFIX + actionKey));
+  return recorded === undefined ? undefined : note(recorded);
+}
+
 /**
- * Records what a person did about a case. `actionKey` is the caller's idempotency key: a retry with
- * the same content returns the event already stored, and the same key with other content is
- * refused. A case takes one resolution; notes may follow it. Only a resolution names a corrective
- * record, and never the case's own record.
+ * A case takes one resolution. A note may follow it. A retry returns the stored event when
+ * the key and action facts match, even if the retry carries a later time.
  */
 export async function recordCaseEvent(
   tx: Transaction,
   input: {
-    caseId: string;
+    caseRegistroId: string;
     actionKey: string;
-    kind: FilingCaseEventKind;
+    kind: FilingCaseEvent["kind"];
     personId: string;
     action: string;
     remedyRegistroId?: string | null;
     now: Date;
   },
 ): Promise<FilingCaseEvent> {
+  const { caseRegistroId, actionKey, kind, personId, action, now } = input;
   const remedyRegistroId = input.remedyRegistroId ?? null;
-  const [found] = await tx
-    .select({ registroId: filingCases.registroId })
-    .from(filingCases)
-    .where(eq(filingCases.id, input.caseId));
-  if (found === undefined) throw new AppError("filing_case.not_found", { caseId: input.caseId });
-  if (
-    remedyRegistroId !== null &&
-    (input.kind === "note" || remedyRegistroId === found.registroId)
-  ) {
-    throw new AppError("filing_case.remedy_invalid", { caseId: input.caseId, remedyRegistroId });
-  }
+  if ((await findFilingCase(tx, caseRegistroId)) === undefined)
+    throw new AppError("filing_case.not_found", { caseRegistroId });
+  if (remedyRegistroId !== null && (kind === "note" || remedyRegistroId === caseRegistroId))
+    throw new AppError("filing_case.remedy_invalid", { caseRegistroId, remedyRegistroId });
 
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, input.actionKey));
+  const stored = await caseEventByActionKey(tx, actionKey);
   if (stored !== undefined) {
-    const sameContent =
-      stored.caseId === input.caseId &&
-      stored.kind === input.kind &&
-      stored.personId === input.personId &&
-      stored.action === input.action &&
-      stored.remedyRegistroId === remedyRegistroId;
-    if (!sameContent) {
-      throw new AppError("filing_case.action_mismatch", {
-        caseId: input.caseId,
-        actionKey: input.actionKey,
-      });
+    if (
+      stored.registroId !== caseRegistroId ||
+      stored.kind !== kind ||
+      stored.personId !== personId ||
+      stored.action !== action ||
+      stored.remedyRegistroId !== remedyRegistroId
+    ) {
+      throw new AppError("filing_case.action_mismatch", { caseRegistroId, actionKey });
     }
     return stored;
   }
 
-  if (input.kind === "resolved") {
-    const [resolution] = await tx
-      .select({ id: filingCaseEvents.id })
-      .from(filingCaseEvents)
-      .where(and(eq(filingCaseEvents.caseId, input.caseId), eq(filingCaseEvents.kind, "resolved")));
-    if (resolution !== undefined) {
-      throw new AppError("filing_case.already_resolved", { caseId: input.caseId });
-    }
+  if (kind === "note") {
+    const { id } = await appendHistory(tx, {
+      kind: "case.note",
+      nodeId: await historyNodeForRecord(tx, caseRegistroId),
+      registroId: caseRegistroId,
+      at: now,
+      personId,
+      actionKey,
+      data: { action },
+    });
+    return {
+      kind,
+      id,
+      registroId: caseRegistroId,
+      actionKey,
+      personId,
+      action,
+      remedyRegistroId: null,
+      recordedAt: now,
+    };
   }
 
-  const [recorded] = await tx
-    .insert(filingCaseEvents)
-    .values({
-      caseId: input.caseId,
-      actionKey: input.actionKey,
-      kind: input.kind,
-      personId: input.personId,
-      action: input.action,
-      remedyRegistroId,
-      recordedAt: input.now,
+  const [decided] = await tx
+    .update(cases)
+    .set({
+      caseResolvedAt: now,
+      caseResolvedBy: personId,
+      caseResolutionAction: action,
+      caseResolutionKey: actionKey,
+      caseRemedyRegistroId: remedyRegistroId,
     })
-    .returning();
-  return recorded!;
+    .where(and(eq(cases.registroId, caseRegistroId), isNull(cases.caseResolvedAt)))
+    .returning(resolutionColumns);
+  if (decided === undefined) throw new AppError("filing_case.already_resolved", { caseRegistroId });
+  return resolution(decided);
 }
 
-/** Every case in the order it was opened, with its events in the order they were recorded. */
+/** Cases in opening order, with notes in write order and the resolution placed by time. */
 export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport[]> {
-  // By `rowid`, not `opened_at`/`recorded_at` (the caller's clock): SQLite gives a new row a `rowid`
-  // one larger than the table's largest. `VACUUM` may change the rowids of a table with no INTEGER
-  // PRIMARY KEY, as here; measured (node:sqlite, SQLite 3.53.4, Node v26.7.0, 2026-10-06), `VACUUM`
-  // and `VACUUM INTO` kept them, and a drizzle-style table rebuild renumbered them in order.
-  const cases = await tx
-    .select({ filingCase: filingCases, estado: verifactuSubmissions.estado })
-    .from(filingCases)
-    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, filingCases.registroId))
-    .orderBy(sql`${filingCases}.rowid`);
-  const events = await tx
+  const rows = await tx
+    .select({ ...caseColumns, estado: cases.estado, decision: resolutionColumns })
+    .from(cases)
+    .where(isNotNull(cases.caseOpenedAt))
+    .orderBy(cases.caseOpenSeq);
+  const notes = await tx
     .select()
-    .from(filingCaseEvents)
-    .orderBy(sql`rowid`);
+    .from(verifactuHistory)
+    .where(eq(verifactuHistory.kind, "case.note"))
+    .orderBy(verifactuHistory.seq);
   const byCase = new Map<string, FilingCaseEvent[]>();
-  for (const event of events) {
-    const own = byCase.get(event.caseId);
-    if (own === undefined) byCase.set(event.caseId, [event]);
+  for (const row of notes) {
+    const event = note(row);
+    const own = byCase.get(event.registroId);
+    if (own === undefined) byCase.set(event.registroId, [event]);
     else own.push(event);
   }
-  return cases.map(({ filingCase, estado }) => {
-    const own = byCase.get(filingCase.id) ?? [];
-    return {
-      ...filingCase,
-      estado,
-      status: own.some((event) => event.kind === "resolved") ? "resolved" : "open",
-      events: own,
-    };
+  return rows.map(({ estado, decision, ...row }) => {
+    const events = byCase.get(row.registroId) ?? [];
+    if (decision.recordedAt === null) return { ...filingCase(row), estado, status: "open", events };
+    const before = events.findIndex((event) => event.recordedAt >= decision.recordedAt!);
+    events.splice(before === -1 ? events.length : before, 0, resolution(decision));
+    return { ...filingCase(row), estado, status: "resolved", events };
   });
 }
 
-/** A `filing_cases` row has no resolution yet. */
-function caseIsOpen(tx: Transaction): SQL {
-  return notExists(
-    tx
-      .select({ id: filingCaseEvents.id })
-      .from(filingCaseEvents)
-      .where(
-        and(eq(filingCaseEvents.caseId, filingCases.id), eq(filingCaseEvents.kind, "resolved")),
-      ),
-  );
-}
+const openCase = and(isNotNull(cases.caseOpenedAt), isNull(cases.caseResolvedAt));
 
 /**
  * The newest `limit` cases with no resolution yet, newest first (every one when `limit` is null),
- * each with its record, identity and submission, and how many cases are open in all. Newest by
- * `rowid`, for the reason `listFilingCases` gives. `recordIds` is the same list as a subquery of
+ * each with its record, identity and submission, and how many cases are open in all. `recordIds` is the same list as a subquery of
  * the cases' record ids, so a caller can restrict a read to them without binding a list that grows.
  */
 export async function openFilingCases(tx: Transaction, limit: number | null) {
   const query = tx
     .select({
-      caseId: filingCases.id,
-      registroId: filingCases.registroId,
-      cause: filingCases.cause,
-      evidence: filingCases.evidence,
-      openedAt: filingCases.openedAt,
+      ...caseColumns,
       record: {
         tipoRegistro: verifactuRecords.tipoRegistro,
         idEmisorFactura: verifactuRecords.idEmisorFactura,
@@ -257,18 +331,17 @@ export async function openFilingCases(tx: Transaction, limit: number | null) {
         enviadoEn: verifactuSubmissions.enviadoEn,
       },
     })
-    .from(filingCases)
-    .innerJoin(verifactuRecords, eq(verifactuRecords.id, filingCases.registroId))
+    .from(cases)
+    .innerJoin(verifactuRecords, eq(verifactuRecords.id, cases.registroId))
     .innerJoin(verifactuIdentities, eq(verifactuIdentities.id, verifactuRecords.sifId))
-    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, filingCases.registroId))
-    .where(caseIsOpen(tx))
-    .orderBy(sql`${filingCases}.rowid desc`);
+    .where(openCase)
+    .orderBy(desc(cases.caseOpenSeq));
   const listed = limit === null ? query : query.limit(limit);
-  const cases = await listed;
-  const [{ total }] = await tx.select({ total: count() }).from(filingCases).where(caseIsOpen(tx));
+  const rows = await listed;
+  const [{ total }] = await tx.select({ total: count() }).from(cases).where(openCase);
   const inList = listed.as("listed");
   const recordIds = tx.select({ registroId: inList.registroId }).from(inList);
-  return { cases, total, recordIds };
+  return { cases: rows.map((row) => ({ ...row, ...filingCase(row) })), total, recordIds };
 }
 
 /** How many cases have no resolution yet, and when the oldest of them opened; null when none. */
@@ -276,9 +349,9 @@ export async function openFilingCasesSummary(
   tx: Transaction,
 ): Promise<{ count: number; oldestOpenedAt: Date } | null> {
   const [{ n, oldest }] = await tx
-    .select({ n: count(), oldest: min(filingCases.openedAt) })
-    .from(filingCases)
-    .where(caseIsOpen(tx));
+    .select({ n: count(), oldest: min(cases.caseOpenedAt) })
+    .from(cases)
+    .where(openCase);
   // `opened_at` is not null, so the oldest is null exactly when no case is open.
   if (oldest === null) return null;
   return { count: n, oldestOpenedAt: new Date(oldest) };
@@ -308,19 +381,16 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
     select e.registro_id, r.sif_id, e.estado, r.tipo_registro,
       r.id_emisor_factura || '|' || r.num_serie_factura || '|' || r.fecha_expedicion_factura
         as identity,
-      c.id as case_id,
-      case when e.estado = 'detenido' and c.id is null then (
-        select case when preceding_envio.estado = 'rechazado' then (
-          select preceding_case.id from filing_cases preceding_case
-          where preceding_case.registro_id = preceding.id
-        ) end
+      case when e.case_opened_at is not null then e.registro_id end as case_id,
+      case when e.estado = 'detenido' and e.case_opened_at is null then (
+        select case when preceding_envio.estado = 'rechazado'
+          and preceding_envio.case_opened_at is not null then preceding.id end
         ${recordsBefore("r")}
         order by preceding.secuencia desc
         limit 1
       ) end as refused_before_case_id
     from verifactu_submissions e
     join verifactu_records r on r.id = e.registro_id
-    left join filing_cases c on c.registro_id = e.registro_id
     where e.estado in ('detenido', 'rechazado')
     order by r.sif_id, r.secuencia
   `);
@@ -337,20 +407,20 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
       heldEarlier = false;
       altaCases.clear();
     }
-    let caseId = row.case_id;
-    if (row.estado === "detenido" && caseId === null) {
-      caseId =
+    let caseRegistroId = row.case_id;
+    if (row.estado === "detenido" && caseRegistroId === null) {
+      caseRegistroId =
         row.tipo_registro === "anulacion" && altaCases.has(row.identity)
           ? altaCases.get(row.identity)!
           : heldEarlier
             ? holding
             : row.refused_before_case_id;
-      held.push({ registroId: row.registro_id, caseId });
+      held.push({ registroId: row.registro_id, caseRegistroId });
     }
     if (row.tipo_registro === "alta" && row.estado === "detenido")
-      altaCases.set(row.identity, caseId);
+      altaCases.set(row.identity, caseRegistroId);
     if (row.estado === "detenido") {
-      holding = caseId;
+      holding = caseRegistroId;
       heldEarlier = true;
     }
   }

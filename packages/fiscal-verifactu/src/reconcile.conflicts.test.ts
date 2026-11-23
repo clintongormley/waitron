@@ -49,10 +49,17 @@ async function immutableSnapshot() {
     "invoice_series",
     "fiscal_allocations",
     "fiscal_reservations",
-    "verifactu_submissions",
     "acks",
   ];
-  const result: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {
+    verifactu_submissions: (
+      await suite.db.execute(sql`
+      select registro_id, estado, intentos, proximo_intento_en, incidencia, technical_incidence,
+        csv, codigo_error, mensaje_error, enviado_en, confirmado_en, reconciled_resubmit_at
+      from verifactu_submissions order by rowid
+    `)
+    ).rows,
+  };
   for (const table of tables)
     result[table] = (
       await suite.db.execute(
@@ -256,7 +263,13 @@ describe("runtime lookup conflicts use the administrator stop without changing f
     );
     try {
       await expect(run(f, client)).rejects.toThrow("lookup evidence refused");
-      expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+          )
+        ).rows,
+      ).toEqual([]);
       expect(
         (
           await suite.db.execute(
@@ -406,7 +419,13 @@ describe("runtime lookup conflicts use the administrator stop without changing f
       (await suite.db.execute(sql`select * from verifactu_history where kind = 'conflict.lookup'`))
         .rows,
     ).toEqual([]);
-    expect((await suite.db.execute(sql`select * from filing_cases`)).rows).toEqual([]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+        )
+      ).rows,
+    ).toEqual([]);
     expect((await suite.db.execute(sql`select * from incidents`)).rows).toEqual([]);
   });
   it.each(["fingerprint", "taxId", "softwareId", "installation", "different-date"] as const)(
@@ -490,7 +509,9 @@ describe("runtime lookup conflicts use the administrator stop without changing f
         now: f.seeded.clock.now().instant,
       }),
     );
-    const before = await suite.db.execute(sql`select * from filing_cases`);
+    const before = await suite.db.execute(
+      sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+    );
     const client: VerifactuClient = {
       submit: f.client.submit.bind(f.client),
       consultar: async () => ({
@@ -504,12 +525,16 @@ describe("runtime lookup conflicts use the administrator stop without changing f
 
     await run(f, client);
 
-    expect(await suite.db.execute(sql`select * from filing_cases`)).toEqual(before);
+    expect(
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+      ),
+    ).toEqual(before);
     expect(
       await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
     ).toEqual([
       expect.objectContaining({
-        caseId: existing.id,
+        registroId: existing.registroId,
         cause: "fiscal.huella_divergente",
         evidence: expect.objectContaining({ source: "consulta" }),
       }),

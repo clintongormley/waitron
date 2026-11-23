@@ -99,7 +99,6 @@ async function snapshot() {
     "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
-    "filing_cases",
   ])
     result[table] = (
       await suite.db.execute(sql`select * from ${sql.identifier(table)} order by rowid`)

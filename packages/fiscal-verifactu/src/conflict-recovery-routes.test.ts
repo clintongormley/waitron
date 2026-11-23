@@ -176,7 +176,7 @@ it.each([
   { targetNodeId: "other" },
   { command: { kind: "status", extra: true } },
   { oldMachineOffline: null },
-  { conflict: { registroId: "r", caseId: "c" } },
+  { conflict: { registroId: "r" } },
   { command: { kind: "activate", input: {} } },
   {
     command: {
@@ -254,7 +254,7 @@ it("checks the committed conflict reference before preparing a clock", async () 
   const m = mount();
   const response = await m.request(
     status({
-      conflict: { ...conflict, caseId: "wrong" },
+      conflict: { ...conflict, registroId: "wrong" },
       oldMachineOffline: true,
       noParallelRecovery: true,
       command: { kind: "prepare", proposal: { action: "clock-challenge" } },

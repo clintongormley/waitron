@@ -219,7 +219,9 @@ async function selected(m: ReturnType<typeof mounted>): Promise<ConflictAllocati
 it("runs the sessionless real key/clock/activation route and reconciles its committed result after reconstruction", async () => {
   const m = mounted();
   const before = suite.db.all(sql`select * from verifactu_records`);
-  const cases = suite.db.all(sql`select * from filing_cases`);
+  const cases = suite.db.all(
+    sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+  );
   const input = await selected(m);
   const activated = await publicAnswer(
     await m.send(request({ command: { kind: "activate", input } })),
@@ -237,7 +239,11 @@ it("runs the sessionless real key/clock/activation route and reconciles its comm
     },
   });
   expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(before);
-  expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
+  expect(
+    suite.db.all(
+      sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+    ),
+  ).toEqual(cases);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   const reopened = mounted();
   const status = await publicAnswer(
@@ -482,7 +488,9 @@ it.each([false, true])(
     });
     const input = await selected(m);
     const before = suite.db.all(sql`select * from verifactu_records`);
-    const cases = suite.db.all(sql`select * from filing_cases`);
+    const cases = suite.db.all(
+      sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+    );
     const oldSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     hold = true;
     const switching = m.send(request({ command: { kind: "activate", input } }));
@@ -513,7 +521,11 @@ it.each([false, true])(
     release.resolve();
     const response = await switching;
     const outcome = await sale;
-    expect(suite.db.all(sql`select * from filing_cases`)).toEqual(cases);
+    expect(
+      suite.db.all(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
+      ),
+    ).toEqual(cases);
     if (rollback) {
       expect(response.status).toBe(500);
       expect(outcome).toMatchObject({

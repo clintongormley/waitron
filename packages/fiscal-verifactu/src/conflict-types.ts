@@ -34,7 +34,6 @@ export type ActiveConflictEvidence = ConflictEvidence | LookupConflictEvidence;
 
 export interface ConflictRef {
   registroId: string;
-  caseId: string;
   sifId: string;
 }
 
@@ -42,7 +41,6 @@ export interface LookupConflictRef {
   lookupId: string;
   sifId: string;
   registroId?: never;
-  caseId?: never;
 }
 export type RecoveryConflictRef = ConflictRef | LookupConflictRef;
 

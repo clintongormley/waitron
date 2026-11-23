@@ -246,7 +246,7 @@ it("requires both isolation answers, compares clocks and switches only on explic
     expect(screen.shadowRoot!.querySelector("[data-complete]")?.textContent).toContain("A-0CNQR"),
   );
   const activation = calls.find((c) => c.command.kind === "activate")!;
-  expect(activation.conflict).toEqual({ registroId: "record-1", caseId: "case-1", sifId: "sif-1" });
+  expect(activation.conflict).toEqual({ registroId: "record-1", sifId: "sif-1" });
   expect(activation.oldMachineOffline).toBe(true);
   expect(activation.noParallelRecovery).toBe(true);
   expect(screen.shadowRoot!.querySelector("wt-input")).toBeNull();
@@ -524,7 +524,7 @@ it("retains only event and conflict across Stop and reopening, and authenticates
   const retained = JSON.parse(sessionStorage.getItem("vf-conflict-attempt")!);
   expect(retained).toEqual({
     eventId: before.eventId,
-    conflict: { registroId: "record-1", caseId: "case-1", sifId: "sif-1" },
+    conflict: { registroId: "record-1", sifId: "sif-1" },
   });
   first.screen.remove();
   const second = await mount(answer);
@@ -919,9 +919,7 @@ it("refuses a committed result for another event without clearing the current ke
 it.each(["en", "es"] as const)(
   "%s recovers a lookup-only conflict using its observation id through the existing screen",
   async (locale) => {
-    const rest = Object.fromEntries(
-      Object.entries(active).filter(([key]) => key !== "registroId" && key !== "caseId"),
-    );
+    const rest = Object.fromEntries(Object.entries(active).filter(([key]) => key !== "registroId"));
     const observed = { ...rest, lookupId: "lookup-1" };
     const { screen, calls } = await mount(async (body) => {
       if (body.command.kind === "status")

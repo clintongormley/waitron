@@ -1,3 +1,4 @@
+import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -20,12 +21,11 @@ import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
-import { listFilingCases, openFilingCase } from "./filing-cases.js";
+import { listFilingCases, openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { ACCEPTED_WITH_ERRORS_CORRECTION, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -96,7 +96,7 @@ beforeEach(async () => {
     });
     body = {
       kind: "record-correction",
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.id,
       actionKey: "http-correction",
       reason: "Correct recorded description",
@@ -157,7 +157,7 @@ function sendUnder(
 async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords),
-    deliveries: await suite.db.select().from(verifactuSubmissions),
+    deliveries: await suite.db.select(deliveryColumns).from(verifactuSubmissions),
     cases: await withTransaction(suite.db, listFilingCases),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
@@ -202,7 +202,7 @@ async function acceptedDescriptionDecision() {
     });
     return {
       ...body,
-      caseId: filingCase.id,
+      caseRegistroId: filingCase.registroId,
       registroId: original.id,
       actionKey: "accepted-description-correction",
       priorOutcome: "accepted-with-errors",
@@ -283,7 +283,7 @@ it("appends an explicitly selected accepted-with-errors description correction w
   const before = await snapshot();
   const res = await send(decision);
   expect(res.status).toBe(200);
-  const result = (await res.json()) as { registroId: string; eventId: string };
+  const result = (await res.json()) as { registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records).toHaveLength(3);
   expect(after.records.slice(0, 2)).toEqual(before.records);
@@ -299,12 +299,12 @@ it("appends an explicitly selected accepted-with-errors description correction w
   });
   expect(after.deliveries.slice(0, 2)).toEqual(before.deliveries);
   expect(after.deliveries[2]).toMatchObject({ registroId: result.registroId, estado: "pendiente" });
-  expect(after.cases.find((item) => item.id === body.caseId)).toEqual(
-    before.cases.find((item) => item.id === body.caseId),
+  expect(after.cases.find((item) => item.registroId === body.caseRegistroId)).toEqual(
+    before.cases.find((item) => item.registroId === body.caseRegistroId),
   );
-  expect(after.cases.find((item) => item.id === decision.caseId)).toMatchObject({
+  expect(after.cases.find((item) => item.registroId === decision.caseRegistroId)).toMatchObject({
     status: "resolved",
-    events: [{ id: result.eventId, remedyRegistroId: result.registroId, personId }],
+    events: [{ actionKey: result.actionKey, remedyRegistroId: result.registroId, personId }],
   });
 });
 
@@ -428,7 +428,7 @@ it("retains S/N and the same invoice identity across two accepted-with-errors co
   const before = await snapshot();
   const res = await send({
     ...decision,
-    caseId: nextCase.id,
+    caseRegistroId: nextCase.registroId,
     registroId: saved.registroId,
     actionKey: "second-accepted-correction",
     facts: { description: "Second corrected service" },
@@ -447,8 +447,8 @@ it("retains S/N and the same invoice identity across two accepted-with-errors co
     descripcionOperacion: "Second corrected service",
   });
   expect(after.deliveries.slice(0, 3)).toEqual(before.deliveries);
-  expect(after.cases.find((item) => item.id === decision.caseId)).toEqual(
-    before.cases.find((item) => item.id === decision.caseId),
+  expect(after.cases.find((item) => item.registroId === decision.caseRegistroId)).toEqual(
+    before.cases.find((item) => item.registroId === decision.caseRegistroId),
   );
 });
 
@@ -470,7 +470,7 @@ it("appends a description correction through HTTP with the server's clock, insta
   const res = await send();
   expect(res.status).toBe(200);
   expect(res.headers.get("cache-control")).toBe("no-store");
-  const result = (await res.json()) as { registroId: string; eventId: string };
+  const result = (await res.json()) as { registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records).toHaveLength(2);
   expect(after.records[0]).toEqual(before.records[0]);
@@ -505,11 +505,11 @@ it("appends a description correction through HTTP with the server's clock, insta
   });
   expect(after.cases[0]).toMatchObject({
     status: "resolved",
-    events: [{ id: result.eventId, personId, remedyRegistroId: result.registroId }],
+    events: [{ actionKey: result.actionKey, personId, remedyRegistroId: result.registroId }],
   });
 });
 
-it("names the case by its record when the body sends no caseId", async () => {
+it("names the case by its record when the body sends no caseRegistroId", async () => {
   const saleId = await seedSale(suite.db, node, 2);
   const other = await withTransaction(suite.db, async (tx) => {
     const record = await appendToChain(
@@ -527,36 +527,44 @@ it("names the case by its record when the body sends no caseId", async () => {
       now: NOW,
     });
   });
-  const { caseId, ...withoutCase } = body;
+  const { caseRegistroId, ...withoutCase } = body;
   // Both records have an open case, so a lookup that ignored the record names the wrong one for one of them.
   const first = await send(withoutCase);
   expect(first.status).toBe(200);
-  const firstResult = (await first.json()) as { registroId: string; eventId: string };
+  const firstResult = (await first.json()) as { registroId: string; actionKey: string };
   const second = await send({
     ...withoutCase,
     registroId: other.registroId,
     actionKey: "http-other-record",
   });
   expect(second.status).toBe(200);
-  const secondResult = (await second.json()) as { registroId: string; eventId: string };
-  expect(await suite.db.select().from(filingCaseEvents)).toEqual(
+  const secondResult = (await second.json()) as { registroId: string; actionKey: string };
+  expect(
+    await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+  ).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        id: firstResult.eventId,
-        caseId,
+        actionKey: firstResult.actionKey,
+        registroId: caseRegistroId,
         remedyRegistroId: firstResult.registroId,
       }),
       expect.objectContaining({
-        id: secondResult.eventId,
-        caseId: other.id,
+        actionKey: secondResult.actionKey,
+        registroId: other.registroId,
         remedyRegistroId: secondResult.registroId,
       }),
     ]),
   );
-  expect(await suite.db.select().from(filingCaseEvents)).toHaveLength(2);
+  expect(
+    await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
+  ).toHaveLength(2);
 });
 
-it("refuses a body with no caseId whose record has no case, writing nothing", async () => {
+it("refuses a body with no caseRegistroId whose record has no case, writing nothing", async () => {
   const first = await send();
   const saved = (await first.json()) as { registroId: string };
   await suite.db
@@ -566,7 +574,7 @@ it("refuses a body with no caseId whose record has no case, writing nothing", as
   const before = await snapshot();
   const res = await send({
     ...body,
-    caseId: undefined,
+    caseRegistroId: undefined,
     registroId: saved.registroId,
     actionKey: "http-no-case",
   });
@@ -608,14 +616,16 @@ it("reports a competing replacement as a conflict and preserves the committed re
 });
 
 it("reports an already-resolved case as a conflict and rolls back the proposed correction", async () => {
-  await suite.db.insert(filingCaseEvents).values({
-    caseId: body.caseId as string,
-    actionKey: "earlier-resolution",
-    kind: "resolved",
-    personId,
-    action: "Earlier decision",
-    recordedAt: NOW,
-  });
+  await withTransaction(suite.db, (tx) =>
+    recordCaseEvent(tx, {
+      caseRegistroId: body.caseRegistroId as string,
+      actionKey: "earlier-resolution",
+      kind: "resolved",
+      personId,
+      action: "Earlier decision",
+      now: NOW,
+    }),
+  );
   const before = await snapshot();
   const res = await send();
   expect(res.status).toBe(409);
@@ -823,7 +833,7 @@ it("corrects a second rejected version without changing the first two records or
   const res = await send({
     ...body,
     registroId: saved.registroId,
-    caseId: filingCase.id,
+    caseRegistroId: filingCase.registroId,
     actionKey: "http-second-correction",
     facts: { description: "Second corrected service" },
   });
@@ -876,7 +886,11 @@ it.each(["R1", "F3"] as const)(
     });
     const before = await snapshot();
     instant = new Date("2026-12-20T17:20:35Z");
-    const res = await send({ ...body, caseId: filingCase.id, registroId: filingCase.registroId });
+    const res = await send({
+      ...body,
+      caseRegistroId: filingCase.registroId,
+      registroId: filingCase.registroId,
+    });
     expect(res.status).toBe(200);
     const after = await snapshot();
     expect(after.records.slice(0, 2)).toEqual(before.records);
@@ -938,7 +952,11 @@ it("keeps a replacement's operation date while correcting its description", asyn
   const before = await snapshot();
   expect(before.records[1]!.fechaOperacion).toBe("2026-07-18");
 
-  const res = await send({ ...body, caseId: filingCase.id, registroId: filingCase.registroId });
+  const res = await send({
+    ...body,
+    caseRegistroId: filingCase.registroId,
+    registroId: filingCase.registroId,
+  });
 
   expect(res.status).toBe(200);
   expect((await snapshot()).records[2]).toMatchObject({
@@ -954,7 +972,7 @@ it("refuses to turn a replacement into a version corrected by differences", asyn
 
   const res = await send({
     ...body,
-    caseId: filingCase.id,
+    caseRegistroId: filingCase.registroId,
     registroId: filingCase.registroId,
     facts: {
       description: "Corrected restaurant service",
@@ -1070,7 +1088,12 @@ it("refuses a production correction while no producer is set, writing nothing", 
       evidence: { codigo: 1161, mensaje: null, csv: null },
       now: NOW,
     });
-    return { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "http-prod" };
+    return {
+      ...body,
+      caseRegistroId: filingCase.registroId,
+      registroId: original.id,
+      actionKey: "http-prod",
+    };
   });
   environment = "production";
   const before = await snapshot();

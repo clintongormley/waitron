@@ -22,12 +22,11 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
-import { openFilingCase } from "./filing-cases.js";
+import { openFilingCase, listFilingCases } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { FULL_INVOICE_REPLACEMENT, type RemedyPolicy } from "./record-remedy.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedNode, type SeededNode } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
@@ -123,7 +122,11 @@ async function refusedOriginal(
       evidence: { codigo: Number(codigo), mensaje: null, csv: null },
       now: at,
     });
-    return { saleId: original.saleId, registroId: original.fiscal.recordId, caseId: filingCase.id };
+    return {
+      saleId: original.saleId,
+      registroId: original.fiscal.recordId,
+      caseRegistroId: filingCase.registroId,
+    };
   });
 }
 
@@ -165,7 +168,7 @@ beforeEach(async () => {
   const original = await refusedOriginal();
   body = {
     kind: "replacement-invoice",
-    caseId: original.caseId,
+    caseRegistroId: original.caseRegistroId,
     registroId: original.registroId,
     actionKey: "replace-1",
     reason: "AEAT refused the invoice for a future date",
@@ -192,7 +195,9 @@ async function snapshot() {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    events: await suite.db.select().from(filingCaseEvents),
+    events: await withTransaction(suite.db, async (tx) =>
+      (await listFilingCases(tx)).flatMap((item) => item.events),
+    ),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
 }
@@ -208,7 +213,7 @@ it("issues one R5 'S' naming the refused invoice, with the day the sale really h
   const before = await snapshot();
   const res = await send();
   expect(res.status).toBe(200);
-  const result = (await res.json()) as { saleId: string; registroId: string; eventId: string };
+  const result = (await res.json()) as { saleId: string; registroId: string; actionKey: string };
   const after = await snapshot();
   expect(after.records).toHaveLength(2);
   expect(after.records[0]).toEqual(before.records[0]);
@@ -245,9 +250,9 @@ it("issues one R5 'S' naming the refused invoice, with the day the sale really h
   });
   expect(after.events).toMatchObject([
     {
-      id: result.eventId,
+      actionKey: result.actionKey,
       personId,
-      caseId: body.caseId,
+      registroId: body.caseRegistroId,
       kind: "resolved",
       remedyRegistroId: result.registroId,
     },
@@ -264,7 +269,7 @@ it("copies the target's operation description byte for byte into the replacement
   });
   const response = await send({
     ...body,
-    caseId: original.caseId,
+    caseRegistroId: original.caseRegistroId,
     registroId: original.registroId,
   });
   expect(response.status).toBe(200);
@@ -280,7 +285,7 @@ it("sends no operation date when the day given is the replacement's own day", as
   const original = await refusedOriginal(new Date("2026-03-01T20:00:00Z"));
   const res = await send({
     ...body,
-    caseId: original.caseId,
+    caseRegistroId: original.caseRegistroId,
     registroId: original.registroId,
     operationDate: "2026-03-01",
   });
@@ -293,12 +298,14 @@ it("sends no operation date when the day given is the replacement's own day", as
   expect(record).toMatchObject({ tipoRectificativa: "S", fechaOperacion: null });
 });
 
-it("names the case by its record when the body sends no caseId", async () => {
-  const { caseId, ...withoutCase } = body;
+it("names the case by its record when the body sends no caseRegistroId", async () => {
+  const { caseRegistroId, ...withoutCase } = body;
   const res = await send(withoutCase);
   expect(res.status).toBe(200);
-  const { eventId } = (await res.json()) as { eventId: string };
-  expect(await suite.db.select().from(filingCaseEvents)).toMatchObject([{ id: eventId, caseId }]);
+  const { actionKey } = (await res.json()) as { actionKey: string };
+  expect(await withTransaction(suite.db, (tx) => listFilingCases(tx))).toMatchObject([
+    { registroId: caseRegistroId, events: [{ actionKey }] },
+  ]);
 });
 
 it("answers a repeat with the same action key from the saved decision", async () => {
@@ -334,7 +341,7 @@ it.each(["registroId", "actionKey", "reason"])("requires a nonblank %s", async (
 it("refuses a case AEAT refused with another code", async () => {
   const original = await refusedOriginal(undefined, { codigo: "1100" });
   await refuses(
-    { ...body, caseId: original.caseId, registroId: original.registroId },
+    { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "fiscal.remedy_invalid",
   );
 });
@@ -353,7 +360,7 @@ it("refuses a case AEAT accepted with errors", async () => {
     estado: "aceptado_con_errores",
   });
   await refuses(
-    { ...body, caseId: original.caseId, registroId: original.registroId },
+    { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "fiscal.remedy_invalid",
   );
 });
@@ -361,7 +368,7 @@ it("refuses a case AEAT accepted with errors", async () => {
 it("refuses a full invoice while full-invoice replacement is switched off, as it is by default", async () => {
   const original = await refusedOriginal(undefined, { customer: CUSTOMER });
   await refuses(
-    { ...body, caseId: original.caseId, registroId: original.registroId },
+    { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "fiscal.remedy_invalid",
   );
 });
@@ -370,9 +377,13 @@ it("replaces a full invoice with an R4 'S' naming the same customer, and resolve
   enabledRemedies = FULL_INVOICES_ON;
   const original = await refusedOriginal(undefined, { customer: CUSTOMER });
   const before = await snapshot();
-  const res = await send({ ...body, caseId: original.caseId, registroId: original.registroId });
+  const res = await send({
+    ...body,
+    caseRegistroId: original.caseRegistroId,
+    registroId: original.registroId,
+  });
   expect(res.status).toBe(200);
-  const result = (await res.json()) as { saleId: string; registroId: string; eventId: string };
+  const result = (await res.json()) as { saleId: string; registroId: string; actionKey: string };
   const after = await snapshot();
   const refused = before.records.find((row) => row.id === original.registroId)!;
   expect(refused.tipoFactura).toBe("F1");
@@ -413,8 +424,8 @@ it("replaces a full invoice with an R4 'S' naming the same customer, and resolve
   });
   expect(after.events).toMatchObject([
     {
-      id: result.eventId,
-      caseId: original.caseId,
+      actionKey: result.actionKey,
+      registroId: original.caseRegistroId,
       kind: "resolved",
       remedyRegistroId: result.registroId,
     },
@@ -429,7 +440,7 @@ it("refuses a full invoice when the business has no registered address, using no
   const original = await refusedOriginal(undefined, { customer: CUSTOMER });
   await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
   await refuses(
-    { ...body, caseId: original.caseId, registroId: original.registroId },
+    { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "fiscal.taxpayer_domicile_missing",
     409,
   );
@@ -484,7 +495,7 @@ it("refuses an exchanged ticket (F3) with full-invoice replacement switched on",
       evidence: { codigo: 1112, mensaje: null, csv: null },
       now: TODAY,
     });
-    return { registroId: recorded.recordId, caseId: filingCase.id };
+    return { registroId: recorded.recordId, caseRegistroId: filingCase.registroId };
   });
   const [record] = await suite.db
     .select({ tipoFactura: verifactuRecords.tipoFactura })
@@ -597,7 +608,7 @@ it("measures today in the venue's zone, from the clock reading that dates the re
   const original = await refusedOriginal(new Date("2026-02-28T23:20:00Z"));
   const res = await send({
     ...body,
-    caseId: original.caseId,
+    caseRegistroId: original.caseRegistroId,
     registroId: original.registroId,
     operationDate: "2026-03-01",
   });
@@ -612,7 +623,7 @@ it("chains the replacement after a refused original stamped tomorrow, the newest
   await refuses(
     {
       ...body,
-      caseId: tomorrow.caseId,
+      caseRegistroId: tomorrow.caseRegistroId,
       registroId: tomorrow.registroId,
       actionKey: "replace-tomorrow",
       operationDate: "2026-03-02",
@@ -621,7 +632,7 @@ it("chains the replacement after a refused original stamped tomorrow, the newest
   );
   const res = await send({
     ...body,
-    caseId: tomorrow.caseId,
+    caseRegistroId: tomorrow.caseRegistroId,
     registroId: tomorrow.registroId,
     actionKey: "replace-tomorrow",
   });

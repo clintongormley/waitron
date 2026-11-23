@@ -21,7 +21,7 @@ only until the next recorded pass replaces it. The error-level `reconcile.run_pa
 written by the pass that parks, is the signal to look for afterwards. It is **not** a claim that
 every individual fiscal record has actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
 `lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
-`drain.complete` log line, the `incidents` and `filing_cases` tables, and the dashboard's alerts
+`drain.complete` log line, the `incidents` table, the case columns on `verifactu_submissions`, and the dashboard's alerts
 bell and Alerts screen (as `fiscal.` alerts, among them `fiscal.filing_cases_open`, to anyone
 holding `fiscal.view`), deliberately, not through this endpoint — see
 ["What `/health` means"](#what-health-means) below for the exact boundary, and why, before treating
@@ -733,7 +733,7 @@ period is queued for a day later (`retryParkedAfterMs`, `src/reconcile-duty.ts`)
 see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
 all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
 fed into `/health`: a record AEAT rejected, or a cancellation set aside because AEAT rejected its original, gets a row in the
-`incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
+`incidents` table and a filing case on the submission row (open ones raise the `fiscal.filing_cases_open`
 alert), except that the hourly retry of a chain held by a run of rejections, rejected again with
 the run's code, gets the filing case and no incident; a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
 (and, when a run of rejections with one error code holds its chain, in the

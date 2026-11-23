@@ -157,7 +157,7 @@ it("refuses clock.unconfirmed before writing while the start's time check holds"
       headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
       body: JSON.stringify({
         kind: "record-correction",
-        caseId: crypto.randomUUID(),
+        caseRegistroId: crypto.randomUUID(),
         registroId: crypto.randomUUID(),
         actionKey: "correct-facts",
         reason: "Correct the stored record facts",

@@ -1015,7 +1015,7 @@ const HELD_HEADS = sql`
       where earlier.sif_id = d.sif_id and earlier.secuencia < d.secuencia
         and earlier_envio.estado = 'detenido'
     )
-    and not exists (select 1 from filing_cases own where own.registro_id = d.id)
+    and de.case_opened_at is null
 `;
 
 /**
@@ -1045,7 +1045,7 @@ function brakeHeldHeads(environment: Entorno): SQL {
 export async function releaseBrakeHold(
   tx: Transaction,
   registroId: string,
-  caseId: string,
+  caseRegistroId: string,
   environment: Entorno,
   now: Date,
 ): Promise<boolean> {
@@ -1054,12 +1054,12 @@ export async function releaseBrakeHold(
     where registro_id in (
       select r.id from (${brakeHeldHeads(environment)}) heads
       join verifactu_records r on r.id = heads.id
-      join filing_cases c on c.registro_id = (
+      join verifactu_submissions c on c.registro_id = (
         select preceding.id ${recordsBefore("r")}
         order by preceding.secuencia desc limit 1
       )
-      where r.id = ${registroId} and c.id = ${caseId}
-        and c.cause = 'fiscal.registro_rechazado'
+      where r.id = ${registroId} and c.registro_id = ${caseRegistroId}
+        and c.case_cause = 'fiscal.registro_rechazado'
         and not ${cancelsRefusedOriginal("r")}
     )
     returning registro_id
@@ -1184,10 +1184,9 @@ async function releaseSettledBrakeHolds(
           and not exists (
             select 1 from verifactu_records stop
             join verifactu_submissions stop_envio on stop_envio.registro_id = stop.id
-            join filing_cases stop_case on stop_case.registro_id = stop.id
             where stop.node_id = r.node_id and stop.sif_id = r.sif_id
               and stop.secuencia > ${head.secuencia} and stop.secuencia <= r.secuencia
-              and stop_envio.estado = 'detenido'
+              and stop_envio.estado = 'detenido' and stop_envio.case_opened_at is not null
           )
       )
       returning registro_id

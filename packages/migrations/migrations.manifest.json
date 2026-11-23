@@ -64,8 +64,6 @@
     "appendOnlyTables": [
       "verifactu_records",
       "returned_invoice_records",
-      "filing_cases",
-      "filing_case_events",
       "verifactu_series_conflicts",
       "fiscal_allocations",
       "fiscal_reservations",

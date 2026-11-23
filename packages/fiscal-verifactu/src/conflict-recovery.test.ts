@@ -1,6 +1,6 @@
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { invoiceSeries, stampDeployment, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
@@ -23,7 +23,6 @@ import type { HourSelectionStore } from "./hour-selection.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { filingCases } from "./schema/filing-cases.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { VerifactuBackend } from "./backend.js";
 import { readChainHead } from "./chain.js";
@@ -86,7 +85,7 @@ function bindingFor(ref: RecoveryConflictRef = conflict, eventId = "conflict-swi
     sourceId:
       "lookupId" in ref
         ? JSON.stringify(["lookup-conflict", ref.sifId, ref.lookupId])
-        : JSON.stringify(["conflict", ref.sifId, ref.registroId, ref.caseId]),
+        : JSON.stringify(["conflict", ref.sifId, ref.registroId]),
     targetNodeId: node.nodeId,
   };
 }
@@ -110,7 +109,11 @@ async function snapshot() {
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     records: await suite.db.select().from(verifactuRecords),
-    cases: await suite.db.select().from(filingCases),
+    cases: (
+      await suite.db.execute(
+        sql`select registro_id, case_cause, case_evidence, case_opened_at from verifactu_submissions where case_opened_at is not null`,
+      )
+    ).rows,
     replies: await suite.db.select().from(verifactuSubmissions),
   };
 }
@@ -133,7 +136,7 @@ beforeEach(async () => {
     }),
   });
   const binding = {
-    ...bindingFor({ sifId: "", registroId: "", caseId: "" }),
+    ...bindingFor({ sifId: "", registroId: "" }),
     action: "setup",
     eventId: "first",
   };
@@ -169,7 +172,7 @@ beforeEach(async () => {
     ),
   );
   const [record] = await suite.db.select().from(verifactuRecords);
-  const opened = await withTransaction(suite.db, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await tx
       .update(verifactuSubmissions)
       .set({ estado: "rechazado" })
@@ -181,7 +184,7 @@ beforeEach(async () => {
       now: new Date(),
     });
   });
-  conflict = { registroId: record!.id, sifId: record!.sifId, caseId: opened.id };
+  conflict = { registroId: record!.id, sifId: record!.sifId };
   instant = Date.parse("2026-10-16T12:38:00Z");
   monotonic = 0;
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
@@ -412,7 +415,7 @@ it.each(["binding", "input", "conflict", "operator"])(
     const a = await attempt();
     const before = await snapshot();
     const binding = change === "binding" ? { ...a.binding, sourceId: "other-conflict" } : a.binding;
-    const ref = change === "conflict" ? { ...conflict, caseId: "other-case" } : conflict;
+    const ref = change === "conflict" ? { ...conflict, registroId: "other-record" } : conflict;
     const input = structuredClone(a.input);
     if (change === "input") input.allocation.installationIdentity = "0CNQS";
     await withOperationAuthority(

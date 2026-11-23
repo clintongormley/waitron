@@ -1,15 +1,13 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
-  UNIQUE_VIOLATION,
   captureError,
   checkFailed,
-  newId,
-  refusalOn,
   triggerRaised,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -27,7 +25,12 @@ import {
   type FilingCaseEvidence,
 } from "./filing-cases.js";
 
+import { SUBMISSION_CHANGE_REFUSAL, SUBMISSION_DELETE_REFUSAL } from "./trigger-refusals.js";
+
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+beforeEach(async () => {
+  await seedPerson(suite.db, { id: PERSON });
+});
 
 const OPENED_AT = new Date("2026-07-21T00:00:00.000Z");
 const LATER = new Date("2026-07-21T01:00:00.000Z");
@@ -41,10 +44,11 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
-async function rowCount(table: string): Promise<number> {
-  const { rows } = await suite.db.execute<{ n: number }>(
-    sql`select count(*) as n from ${sql.identifier(table)}`,
-  );
+async function eventCount(): Promise<number> {
+  const { rows } = await suite.db.execute<{ n: number }>(sql`
+    select (select count(*) from verifactu_submissions where case_resolved_at is not null)
+      + (select count(*) from verifactu_history where kind = 'case.note') as n
+  `);
   return rows[0]!.n;
 }
 
@@ -76,7 +80,6 @@ describe("openFilingCase", () => {
   it("opens one case per record, and a second open returns that case and writes nothing", async () => {
     const { registroId, opened } = await openCaseOnFirstRecord();
     expect(opened).toEqual({
-      id: expect.any(String),
       registroId,
       cause: "fiscal.registro_rechazado",
       evidence: EVIDENCE,
@@ -93,7 +96,10 @@ describe("openFilingCase", () => {
     );
 
     expect(again).toEqual(opened);
-    expect(await rowCount("filing_cases")).toBe(1);
+    const { rows } = await suite.db.execute(
+      sql`select case_opened_at from verifactu_submissions where case_opened_at is not null`,
+    );
+    expect(rows).toEqual([{ case_opened_at: OPENED_AT.toISOString() }]);
   });
 });
 
@@ -102,7 +108,7 @@ describe("recordCaseEvent", () => {
     const { opened } = await openCaseOnFirstRecord();
     const first = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-1",
         kind: "note",
         personId: PERSON,
@@ -112,7 +118,7 @@ describe("recordCaseEvent", () => {
     );
     expect(first).toEqual({
       id: expect.any(String),
-      caseId: opened.id,
+      registroId: opened.registroId,
       actionKey: "note-1",
       kind: "note",
       personId: PERSON,
@@ -123,7 +129,7 @@ describe("recordCaseEvent", () => {
 
     const retry = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-1",
         kind: "note",
         personId: PERSON,
@@ -133,13 +139,13 @@ describe("recordCaseEvent", () => {
     );
 
     expect(retry).toEqual(first);
-    expect(await rowCount("filing_case_events")).toBe(1);
+    expect(await eventCount()).toBe(1);
   });
 
   it("returns the stored resolution for a retry of that resolution, rather than refusing it", async () => {
     const { opened } = await openCaseOnFirstRecord();
     const input = {
-      caseId: opened.id,
+      caseRegistroId: opened.registroId,
       actionKey: "resolve-1",
       kind: "resolved" as const,
       personId: PERSON,
@@ -148,7 +154,7 @@ describe("recordCaseEvent", () => {
     const first = await inTx((tx) => recordCaseEvent(tx, { ...input, now: LATER }));
     const retry = await inTx((tx) => recordCaseEvent(tx, { ...input, now: MUCH_LATER }));
     expect(retry).toEqual(first);
-    expect(await rowCount("filing_case_events")).toBe(1);
+    expect(await eventCount()).toBe(1);
   });
 
   it("keeps the corrective record a resolution names", async () => {
@@ -164,7 +170,7 @@ describe("recordCaseEvent", () => {
     );
     const event = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
         personId: PERSON,
@@ -185,7 +191,7 @@ describe("recordCaseEvent", () => {
     async (_what, change) => {
       const { opened } = await openCaseOnFirstRecord();
       const input = {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-1",
         kind: "note" as "note" | "resolved",
         personId: PERSON,
@@ -199,7 +205,7 @@ describe("recordCaseEvent", () => {
       );
 
       expect(appErrorCode(error)).toBe("filing_case.action_mismatch");
-      expect(await rowCount("filing_case_events")).toBe(1);
+      expect(await eventCount()).toBe(1);
     },
   );
 
@@ -215,7 +221,7 @@ describe("recordCaseEvent", () => {
       }),
     );
     const input = {
-      caseId: opened.id,
+      caseRegistroId: opened.registroId,
       actionKey: "resolve-1",
       kind: "resolved" as const,
       personId: PERSON,
@@ -246,7 +252,7 @@ describe("recordCaseEvent", () => {
     const error = await captureError(() =>
       inTx((tx) =>
         recordCaseEvent(tx, {
-          caseId: opened.id,
+          caseRegistroId: opened.registroId,
           actionKey: "note-1",
           kind: "note",
           personId: PERSON,
@@ -258,7 +264,7 @@ describe("recordCaseEvent", () => {
     );
 
     expect(appErrorCode(error)).toBe("filing_case.remedy_invalid");
-    expect(await rowCount("filing_case_events")).toBe(0);
+    expect(await eventCount()).toBe(0);
   });
 
   it("refuses a resolution naming the case's own record as its remedy: filing_case.remedy_invalid", async () => {
@@ -267,7 +273,7 @@ describe("recordCaseEvent", () => {
     const error = await captureError(() =>
       inTx((tx) =>
         recordCaseEvent(tx, {
-          caseId: opened.id,
+          caseRegistroId: opened.registroId,
           actionKey: "resolve-1",
           kind: "resolved",
           personId: PERSON,
@@ -279,14 +285,14 @@ describe("recordCaseEvent", () => {
     );
 
     expect(appErrorCode(error)).toBe("filing_case.remedy_invalid");
-    expect(await rowCount("filing_case_events")).toBe(0);
+    expect(await eventCount()).toBe(0);
   });
 
   it("refuses an event for a case that does not exist: filing_case.not_found", async () => {
     const error = await captureError(() =>
       inTx((tx) =>
         recordCaseEvent(tx, {
-          caseId: UNKNOWN_CASE,
+          caseRegistroId: UNKNOWN_CASE,
           actionKey: "note-1",
           kind: "note",
           personId: PERSON,
@@ -296,14 +302,14 @@ describe("recordCaseEvent", () => {
       ),
     );
     expect(appErrorCode(error)).toBe("filing_case.not_found");
-    expect(await rowCount("filing_case_events")).toBe(0);
+    expect(await eventCount()).toBe(0);
   });
 
   it("refuses a second resolution under another key: filing_case.already_resolved", async () => {
     const { opened } = await openCaseOnFirstRecord();
     await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
         personId: PERSON,
@@ -315,7 +321,7 @@ describe("recordCaseEvent", () => {
     const error = await captureError(() =>
       inTx((tx) =>
         recordCaseEvent(tx, {
-          caseId: opened.id,
+          caseRegistroId: opened.registroId,
           actionKey: "resolve-2",
           kind: "resolved",
           personId: OTHER_PERSON,
@@ -326,14 +332,14 @@ describe("recordCaseEvent", () => {
     );
 
     expect(appErrorCode(error)).toBe("filing_case.already_resolved");
-    expect(await rowCount("filing_case_events")).toBe(1);
+    expect(await eventCount()).toBe(1);
   });
 
   it("still accepts a note on a resolved case", async () => {
     const { opened } = await openCaseOnFirstRecord();
     await inTx(async (tx) => {
       await recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
         personId: PERSON,
@@ -341,7 +347,7 @@ describe("recordCaseEvent", () => {
         now: LATER,
       });
       await recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-1",
         kind: "note",
         personId: PERSON,
@@ -349,7 +355,7 @@ describe("recordCaseEvent", () => {
         now: MUCH_LATER,
       });
     });
-    expect(await rowCount("filing_case_events")).toBe(2);
+    expect(await eventCount()).toBe(2);
   });
 });
 
@@ -375,7 +381,7 @@ describe("listFilingCases", () => {
     ]);
     const [note, resolution] = await inTx(async (tx) => [
       await recordCaseEvent(tx, {
-        caseId: resolvedCase.id,
+        caseRegistroId: resolvedCase.registroId,
         actionKey: "note-1",
         kind: "note",
         personId: PERSON,
@@ -383,7 +389,7 @@ describe("listFilingCases", () => {
         now: LATER,
       }),
       await recordCaseEvent(tx, {
-        caseId: resolvedCase.id,
+        caseRegistroId: resolvedCase.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
         personId: PERSON,
@@ -409,7 +415,7 @@ describe("listFilingCases", () => {
     const { opened } = await openCaseOnFirstRecord();
     const first = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-first",
         kind: "note",
         personId: PERSON,
@@ -420,7 +426,7 @@ describe("listFilingCases", () => {
     // A clock set back between the two calls stamps the later event with the earlier time.
     const second = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-second",
         kind: "note",
         personId: PERSON,
@@ -458,19 +464,23 @@ describe("listFilingCases", () => {
 
     const listed = await inTx((tx) => listFilingCases(tx));
 
-    expect(listed.map((filingCase) => filingCase.id)).toEqual([first.id, second.id]);
+    expect(listed.map((filingCase) => filingCase.registroId)).toEqual([
+      first.registroId,
+      second.registroId,
+    ]);
   });
 
-  it("changes no submission row when a case is resolved", async () => {
+  it("records the resolution without changing delivery state", async () => {
     const { registroId, opened } = await openCaseOnFirstRecord();
     await setEstado(registroId, "rechazado");
-    const before = await suite.db.execute(
-      sql`select * from verifactu_submissions order by registro_id`,
-    );
+    const delivery = sql`select registro_id, estado, intentos, proximo_intento_en, incidencia,
+      technical_incidence, csv, codigo_error, mensaje_error, enviado_en, confirmado_en,
+      reconciled_resubmit_at from verifactu_submissions order by registro_id`;
+    const before = await suite.db.execute(delivery);
 
     await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "resolve-1",
         kind: "resolved",
         personId: PERSON,
@@ -479,10 +489,20 @@ describe("listFilingCases", () => {
       }),
     );
 
-    const after = await suite.db.execute(
-      sql`select * from verifactu_submissions order by registro_id`,
-    );
+    const after = await suite.db.execute(delivery);
     expect(after.rows).toEqual(before.rows);
+    const { rows } = await suite.db.execute(sql`select case_resolved_at, case_resolved_by,
+      case_resolution_key, case_resolution_action, case_remedy_registro_id
+      from verifactu_submissions where registro_id = ${registroId}`);
+    expect(rows).toEqual([
+      {
+        case_resolved_at: LATER.toISOString(),
+        case_resolved_by: PERSON,
+        case_resolution_key: "resolve-1",
+        case_resolution_action: "Accepted as filed",
+        case_remedy_registro_id: null,
+      },
+    ]);
   });
 });
 
@@ -523,9 +543,9 @@ describe("heldRecords", () => {
     expect(held).toHaveLength(3);
     expect(held).toEqual(
       expect.arrayContaining([
-        { registroId: heldAfterFirst, caseId: firstCase.id },
-        { registroId: heldAfterSecond, caseId: secondCase.id },
-        { registroId: otherChain.registroId, caseId: null },
+        { registroId: heldAfterFirst, caseRegistroId: firstCase.registroId },
+        { registroId: heldAfterSecond, caseRegistroId: secondCase.registroId },
+        { registroId: otherChain.registroId, caseRegistroId: null },
       ]),
     );
     expect(held.map((record) => record.registroId)).not.toContain(waiting);
@@ -555,7 +575,7 @@ describe("heldRecords", () => {
 
     const listed = await inTx((tx) => heldRecords(tx));
 
-    expect(listed).toEqual([{ registroId: held, caseId: conflictCase.id }]);
+    expect(listed).toEqual([{ registroId: held, caseRegistroId: conflictCase.registroId }]);
   });
 
   it("names a held cancellation's original's case, and the records held behind it the same case", async () => {
@@ -586,8 +606,8 @@ describe("heldRecords", () => {
     const held = await inTx((tx) => heldRecords(tx));
 
     expect(held).toEqual([
-      { registroId: cancellation, caseId: originalCase.id },
-      { registroId: behind.registroId, caseId: originalCase.id },
+      { registroId: cancellation, caseRegistroId: originalCase.registroId },
+      { registroId: behind.registroId, caseRegistroId: originalCase.registroId },
     ]);
   });
 
@@ -621,8 +641,8 @@ describe("heldRecords", () => {
     const listed = await inTx((tx) => heldRecords(tx));
 
     expect(listed).toEqual([
-      { registroId: held, caseId: lastRefusalCase.id },
-      { registroId: behind, caseId: lastRefusalCase.id },
+      { registroId: held, caseRegistroId: lastRefusalCase.registroId },
+      { registroId: behind, caseRegistroId: lastRefusalCase.registroId },
     ]);
   });
 
@@ -643,7 +663,7 @@ describe("heldRecords", () => {
 
     const listed = await inTx((tx) => heldRecords(tx));
 
-    expect(listed).toEqual([{ registroId: held, caseId: null }]);
+    expect(listed).toEqual([{ registroId: held, caseRegistroId: null }]);
   });
 
   it("names what an earlier held record names, even when the record immediately before is a rejected one", async () => {
@@ -664,39 +684,38 @@ describe("heldRecords", () => {
     const listed = await inTx((tx) => heldRecords(tx));
 
     expect(listed).toEqual([
-      { registroId: heldFirst, caseId: null },
-      { registroId: heldLater, caseId: null },
+      { registroId: heldFirst, caseRegistroId: null },
+      { registroId: heldLater, caseRegistroId: null },
     ]);
   });
 });
 
 describe("the cause column", () => {
-  // A fixed list in the table would make each new cause a table rebuild, which fails once events
-  // point at the cases; the closed set lives in the `FilingCaseCause` type instead.
-  const insertCase = (registroId: string, cause: string) =>
+  const putCause = (registroId: string, cause: string) =>
     suite.db.execute(sql`
-      insert into filing_cases (id, registro_id, cause, evidence, opened_at)
-      values (${newId()}, ${registroId}, ${cause}, '{}', ${OPENED_AT.toISOString()})
+      update verifactu_submissions set case_cause = ${cause}, case_evidence = '{}',
+        case_opened_at = ${OPENED_AT.toISOString()}, case_open_seq = 1
+      where registro_id = ${registroId}
     `);
 
   it("accepts a cause the code does not name yet, and refuses an empty one", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [first, second] = seeded.registroIds as [string, string];
 
-    await insertCase(first, "fiscal.cause_added_later");
-    const error = await captureError(() => insertCase(second, ""));
+    await putCause(first, "fiscal.cause_added_later");
+    const error = await captureError(() => putCause(second, ""));
 
-    expect(checkFailed(error, "filing_cases_cause_ck")).toBe(true);
-    expect(await rowCount("filing_cases")).toBe(1);
+    expect(checkFailed(error, "verifactu_submissions_case_ck")).toBe(true);
+    expect(await inTx((tx) => listFilingCases(tx))).toHaveLength(1);
   });
 });
 
-describe("the case tables are append-only", () => {
+describe("case evidence is retained", () => {
   async function caseWithEvent() {
     const { opened } = await openCaseOnFirstRecord();
     const event = await inTx((tx) =>
       recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note-1",
         kind: "note",
         personId: PERSON,
@@ -704,77 +723,83 @@ describe("the case tables are append-only", () => {
         now: LATER,
       }),
     );
+    if (event.kind !== "note") throw new Error("Expected a case note");
     return { opened, event };
   }
 
   it("refuses an update and a delete of a case", async () => {
     const { opened } = await caseWithEvent();
     const update = await captureError(() =>
-      suite.db.execute(sql`update filing_cases set cause = 'x' where id = ${opened.id}`),
+      suite.db.execute(
+        sql`update verifactu_submissions set case_cause = 'x' where registro_id = ${opened.registroId}`,
+      ),
     );
-    expect(triggerRaised(update, "filing_cases is append-only")).toBe(true);
+    expect(triggerRaised(update, SUBMISSION_CHANGE_REFUSAL)).toBe(true);
     const remove = await captureError(() =>
-      suite.db.execute(sql`delete from filing_cases where id = ${opened.id}`),
+      suite.db.execute(
+        sql`delete from verifactu_submissions where registro_id = ${opened.registroId}`,
+      ),
     );
-    expect(triggerRaised(remove, "filing_cases is append-only")).toBe(true);
+    expect(triggerRaised(remove, SUBMISSION_DELETE_REFUSAL)).toBe(true);
   });
 
   it("refuses an update and a delete of a case event", async () => {
     const { event } = await caseWithEvent();
     const update = await captureError(() =>
-      suite.db.execute(sql`update filing_case_events set action = 'x' where id = ${event.id}`),
+      suite.db.execute(sql`update verifactu_history set data = '{}' where id = ${event.id}`),
     );
-    expect(triggerRaised(update, "filing_case_events is append-only")).toBe(true);
+    expect(triggerRaised(update, "verifactu_history is append-only")).toBe(true);
     const remove = await captureError(() =>
-      suite.db.execute(sql`delete from filing_case_events where id = ${event.id}`),
+      suite.db.execute(sql`delete from verifactu_history where id = ${event.id}`),
     );
-    expect(triggerRaised(remove, "filing_case_events is append-only")).toBe(true);
+    expect(triggerRaised(remove, "verifactu_history is append-only")).toBe(true);
   });
 
   it("refuses a replacing insert over an existing case and an existing event", async () => {
     const { opened, event } = await caseWithEvent();
     const replaceCase = await captureError(() =>
       suite.db.execute(sql`
-        insert or replace into filing_cases (id, registro_id, cause, evidence, opened_at)
-        values (${opened.id}, ${opened.registroId}, 'fiscal.huella_divergente', '{}',
-          ${OPENED_AT.toISOString()})
+        insert or replace into verifactu_submissions (registro_id, proximo_intento_en,
+          case_cause, case_evidence, case_opened_at, case_open_seq)
+        values (${opened.registroId}, ${OPENED_AT.toISOString()}, 'fiscal.huella_divergente',
+          '{}', ${OPENED_AT.toISOString()}, 1)
       `),
     );
-    expect(triggerRaised(replaceCase, "filing_cases is append-only")).toBe(true);
+    expect(triggerRaised(replaceCase, SUBMISSION_DELETE_REFUSAL)).toBe(true);
     const replaceEvent = await captureError(() =>
       suite.db.execute(sql`
-        insert or replace into filing_case_events
-          (id, case_id, action_key, kind, person_id, action, remedy_registro_id, recorded_at)
-        values (${event.id}, ${opened.id}, 'note-1', 'note', ${PERSON}, 'x', null,
-          ${LATER.toISOString()})
+        insert or replace into verifactu_history
+          (id, seq, kind, node_id, registro_id, event_key, person_id, data, at)
+        select id, seq, kind, node_id, registro_id, event_key, person_id, '{"action":"x"}', at
+        from verifactu_history where id = ${event.id}
       `),
     );
-    expect(triggerRaised(replaceEvent, "filing_case_events is append-only")).toBe(true);
+    expect(triggerRaised(replaceEvent, "verifactu_history is append-only")).toBe(true);
     const { rows } = await suite.db.execute<{ action: string }>(
-      sql`select action from filing_case_events`,
+      sql`select json_extract(data, '$.action') as action from verifactu_history`,
     );
     expect(rows.map((row) => row.action)).toEqual(["Called the asesor"]);
-    const cases = await suite.db.execute<{ cause: string }>(sql`select cause from filing_cases`);
+    const cases = await suite.db.execute<{ cause: string }>(
+      sql`select case_cause as cause from verifactu_submissions`,
+    );
     expect(cases.rows.map((row) => row.cause)).toEqual(["fiscal.registro_rechazado"]);
   });
 
-  it("refuses a second resolution of one case written straight to the table, and not a second note", async () => {
+  it("allows a second note and refuses a second resolution written straight to the database", async () => {
     const { opened } = await caseWithEvent();
-    const insert = (actionKey: string, kind: string) =>
-      suite.db.execute(sql`
-        insert into filing_case_events
-          (id, case_id, action_key, kind, person_id, action, remedy_registro_id, recorded_at)
-        values (${actionKey + "-id"}, ${opened.id}, ${actionKey}, ${kind}, ${PERSON}, 'x', null,
-          ${LATER.toISOString()})
-      `);
-    // The control: a second note on the same case is accepted, so the index is partial.
-    await insert("note-2", "note");
-    await insert("resolve-1", "resolved");
+    const resolve = (actionKey: string) =>
+      suite.db
+        .execute(sql`update verifactu_submissions set case_resolved_at = ${LATER.toISOString()},
+        case_resolved_by = ${PERSON}, case_resolution_action = 'x', case_resolution_key = ${actionKey}
+        where registro_id = ${opened.registroId}`);
+    await suite.db.execute(sql`insert into verifactu_history
+        (id, seq, kind, node_id, registro_id, event_key, person_id, data, at)
+      select 'second-note', seq + 1, kind, node_id, registro_id, 'case.note:note-2', person_id, data, at
+      from verifactu_history where event_key = 'case.note:note-1'`);
+    await resolve("resolve-1");
 
-    const error = await captureError(() => insert("resolve-2", "resolved"));
+    const error = await captureError(() => resolve("resolve-2"));
 
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "filing_case_events", columns: ["case_id"] }),
-    ).toBe(true);
+    expect(triggerRaised(error, SUBMISSION_CHANGE_REFUSAL)).toBe(true);
   });
 });

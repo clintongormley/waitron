@@ -51,7 +51,7 @@ async function refusalsRepeated(now: Date) {
 
 async function casesAndIncidents() {
   const cases = await suite.db.execute<{ registro_id: string; cause: string }>(
-    sql`select registro_id, cause from filing_cases order by registro_id`,
+    sql`select registro_id, case_cause as cause from verifactu_submissions where case_opened_at is not null order by registro_id`,
   );
   const incidents = await suite.db.execute<{ params: string }>(
     sql`select params from incidents where code = 'fiscal.registro_rechazado'`,

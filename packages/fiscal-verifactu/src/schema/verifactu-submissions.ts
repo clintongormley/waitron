@@ -1,7 +1,7 @@
 import { isNotNull, sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, json, label, now, persons, table, ts } from "@waitron/db";
-import type { FilingCaseCause, FilingCaseEvidence } from "./filing-cases.js";
+import type { FilingCaseCause, FilingCaseEvidence } from "../filing-cases.js";
 import { verifactuRecords } from "./verifactu-records.js";
 
 /**

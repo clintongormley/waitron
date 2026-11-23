@@ -144,7 +144,11 @@ it("does not mistake a pending cancellation or refusal-braked successor for a se
     deliveries: (
       await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
     ).rows,
-    cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
+    cases: (
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null order by case_open_seq`,
+      )
+    ).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   };
@@ -153,7 +157,11 @@ it("does not mistake a pending cancellation or refusal-braked successor for a se
     deliveries: (
       await suite.db.execute(sql`select * from verifactu_submissions order by registro_id`)
     ).rows,
-    cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
+    cases: (
+      await suite.db.execute(
+        sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null order by case_open_seq`,
+      )
+    ).rows,
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     acks: (await suite.db.execute(sql`select * from acks order by registro_id`)).rows,
   }).toEqual(before);

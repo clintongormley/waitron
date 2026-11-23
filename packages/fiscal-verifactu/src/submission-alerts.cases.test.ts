@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -47,10 +48,10 @@ describe("fiscalSubmissionSource — open filing cases", () => {
         now: new Date("2026-07-21T08:00:00.000Z"),
       });
       await recordCaseEvent(tx, {
-        caseId: resolved.id,
+        caseRegistroId: resolved.registroId,
         actionKey: "resolve",
         kind: "resolved",
-        personId: PERSON,
+        personId: await seedPerson(tx, { id: PERSON }),
         action: "Corrected with a new record",
         now: EARLIER,
       });
@@ -90,10 +91,10 @@ describe("fiscalSubmissionSource — open filing cases", () => {
         now: LATER,
       });
       await recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: "note",
         kind: "note",
-        personId: PERSON,
+        personId: await seedPerson(tx, { id: PERSON }),
         action: "Asked the adviser",
         now: LATER,
       });
@@ -137,7 +138,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
 
   async function caseOpenedAt(registroId: string): Promise<string> {
     const { rows } = await suite.db.execute<{ opened_at: string }>(
-      sql`select opened_at from filing_cases where registro_id = ${registroId}`,
+      sql`select case_opened_at as opened_at from verifactu_submissions where registro_id = ${registroId}`,
     );
     return new Date(rows[0]!.opened_at).toISOString();
   }

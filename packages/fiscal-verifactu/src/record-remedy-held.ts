@@ -5,10 +5,9 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError } from "@waitron/shared";
 import { deleteAck } from "./acks.js";
-import { recordCaseEvent } from "./filing-cases.js";
+import { caseEventByActionKey, findFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyPolicy } from "./record-remedy.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
-import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
 export async function releaseHeldCancellation(
@@ -17,16 +16,23 @@ export async function releaseHeldCancellation(
   token: string,
   enabledRemedies: RemedyPolicy,
   raw: Record<string, unknown>,
-): Promise<{ registroId: string; eventId: string }> {
+): Promise<{ registroId: string; actionKey: string }> {
   const personId = await admitRecordRemedy(tx, token, "release-held-cancellation", enabledRemedies);
-  const keys = ["kind", "caseId", "registroId", "acceptedRegistroId", "actionKey", "reason"];
+  const keys = [
+    "kind",
+    "caseRegistroId",
+    "registroId",
+    "acceptedRegistroId",
+    "actionKey",
+    "reason",
+  ];
   if (
     Object.keys(raw).some((key) => !keys.includes(key)) ||
     keys.some((key) => typeof raw[key] !== "string" || (raw[key] as string).trim() === "")
   )
     throw new AppError("fiscal.remedy_request_invalid", {});
-  const { caseId, registroId, acceptedRegistroId, actionKey } = raw as {
-    caseId: string;
+  const { caseRegistroId, registroId, acceptedRegistroId, actionKey } = raw as {
+    caseRegistroId: string;
     registroId: string;
     acceptedRegistroId: string;
     actionKey: string;
@@ -46,27 +52,20 @@ export async function releaseHeldCancellation(
     throw new AppError("fiscal.remedy_invalid", { registroId });
   }
   const action = canonicalJson(raw);
-  const [stored] = await tx
-    .select()
-    .from(filingCaseEvents)
-    .where(eq(filingCaseEvents.actionKey, actionKey));
+  const stored = await caseEventByActionKey(tx, actionKey);
   if (stored !== undefined) {
     if (
-      stored.caseId !== caseId ||
+      stored.registroId !== caseRegistroId ||
       stored.personId !== personId ||
       stored.kind !== "resolved" ||
       stored.action !== action ||
       stored.remedyRegistroId !== null
     ) {
-      throw new AppError("filing_case.action_mismatch", { caseId, actionKey });
+      throw new AppError("filing_case.action_mismatch", { caseRegistroId, actionKey });
     }
-    return { registroId, eventId: stored.id };
+    return { registroId, actionKey: stored.actionKey };
   }
-  const [filingCase] = await tx.select().from(filingCases).where(eq(filingCases.id, caseId));
-  const [delivery] = await tx
-    .select()
-    .from(verifactuSubmissions)
-    .where(eq(verifactuSubmissions.registroId, registroId));
+  const filingCase = await findFilingCase(tx, caseRegistroId);
   const [accepted] = await tx
     .select({ record: verifactuRecords, delivery: verifactuSubmissions })
     .from(verifactuRecords)
@@ -79,7 +78,7 @@ export async function releaseHeldCancellation(
   if (
     filingCase?.registroId !== registroId ||
     filingCase.cause !== "fiscal.anulacion_retenida" ||
-    delivery?.estado !== "retenido" ||
+    filingCase.estado !== "retenido" ||
     accepted === undefined ||
     accepted.delivery.estado !== "aceptado" ||
     accepted.record.tipoRegistro !== "alta" ||
@@ -104,12 +103,12 @@ export async function releaseHeldCancellation(
     );
   await deleteAck(tx, registroId);
   const event = await recordCaseEvent(tx, {
-    caseId,
+    caseRegistroId,
     actionKey,
     kind: "resolved",
     personId,
     action,
     now,
   });
-  return { registroId, eventId: event.id };
+  return { registroId, actionKey: event.actionKey };
 }

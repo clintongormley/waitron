@@ -8,7 +8,7 @@ import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@wait
 import type { AltaInput, RegistroAlta } from "@waitron/verifactu";
 import { applyRecordCorrection, type RemedyPolicy } from "./record-remedy.js";
 import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
-import { invalid, object, only, requestCaseId, text } from "./record-remedy-request.js";
+import { invalid, object, only, requestCaseRegistroId, text } from "./record-remedy-request.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import {
@@ -127,12 +127,20 @@ export async function applyCorrectedRecordFacts(
   raw: unknown,
 ) {
   const body = object(raw);
-  only(body, ["kind", "caseId", "registroId", "actionKey", "reason", "facts", "priorOutcome"]);
+  only(body, [
+    "kind",
+    "caseRegistroId",
+    "registroId",
+    "actionKey",
+    "reason",
+    "facts",
+    "priorOutcome",
+  ]);
   const priorOutcome = body.priorOutcome === undefined ? "rejected" : body.priorOutcome;
   if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
   const facts = readCorrectedRecordFacts(body.facts);
   const registroId = text(body.registroId);
-  const caseId = await requestCaseId(tx, body.caseId, registroId);
+  const caseRegistroId = await requestCaseRegistroId(tx, body.caseRegistroId, registroId);
   const actionKey = text(body.actionKey);
   const reason = text(body.reason);
   generation.requireWritable();
@@ -235,7 +243,7 @@ export async function applyCorrectedRecordFacts(
     history,
     correctionDecision: { ...facts, priorOutcome },
     request: {
-      caseId,
+      caseRegistroId,
       registroId,
       actionKey,
       reason,

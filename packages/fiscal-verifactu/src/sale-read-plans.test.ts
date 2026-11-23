@@ -139,7 +139,7 @@ describe("reads of a sale's filed alta", () => {
           .token,
         request: {
           kind: "absent-original-cancellation",
-          caseId: filingCase.id,
+          caseRegistroId: filingCase.registroId,
           registroId: original.id,
           actionKey: "absent-1",
           reason: "Explicit synthetic absent-original decision",

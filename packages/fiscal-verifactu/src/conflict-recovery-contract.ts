@@ -128,8 +128,7 @@ export function parseConflictInput(value: unknown): ConflictAllocationInput | nu
 }
 function validRef(value: unknown): value is ConflictRef {
   return (
-    (exact(value, ["registroId", "caseId", "sifId"]) &&
-      [value.registroId, value.caseId, value.sifId].every(text)) ||
+    (exact(value, ["registroId", "sifId"]) && [value.registroId, value.sifId].every(text)) ||
     (exact(value, ["lookupId", "sifId"]) && [value.lookupId, value.sifId].every(text))
   );
 }
@@ -290,9 +289,7 @@ export function parseConflictResult(value: unknown): ConflictResult | null {
     !value.active.every(
       (row: unknown) =>
         exact(row, [
-          ...(record(row) && Object.hasOwn(row, "lookupId")
-            ? ["lookupId"]
-            : ["registroId", "caseId"]),
+          ...(record(row) && Object.hasOwn(row, "lookupId") ? ["lookupId"] : ["registroId"]),
           "sifId",
           "installationIdentity",
           "invoiceIdentity",
@@ -302,7 +299,7 @@ export function parseConflictResult(value: unknown): ConflictResult | null {
           "evidenceId",
         ]) &&
         [
-          ...(Object.hasOwn(row, "lookupId") ? [row.lookupId] : [row.registroId, row.caseId]),
+          ...(Object.hasOwn(row, "lookupId") ? [row.lookupId] : [row.registroId]),
           row.sifId,
           row.installationIdentity,
           row.invoiceIdentity,

@@ -1951,7 +1951,11 @@ async function resendAfterRestart(boxes: Boxes, recordId: string): Promise<Resen
     answers: outside.answers.slice(from.answers).filter((line) => line.recordId === recordId),
     lookups: outside.lookups.slice(from.lookups),
     estado: filingStateOf(m2.venueFile, recordId),
-    cases: readRows(m2.venueFile, "select cause from filing_cases where registro_id = ?", recordId),
+    cases: readRows(
+      m2.venueFile,
+      "select case_cause as cause from verifactu_submissions where registro_id = ? and case_opened_at is not null",
+      recordId,
+    ),
   };
 }
 

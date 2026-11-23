@@ -448,7 +448,7 @@ describe("active fiscal conflict stops new money", () => {
         now: clock.now().instant,
       });
       await recordCaseEvent(tx, {
-        caseId: opened.id,
+        caseRegistroId: opened.registroId,
         actionKey: randomUUID(),
         kind: "resolved",
         personId: OPERATOR,
