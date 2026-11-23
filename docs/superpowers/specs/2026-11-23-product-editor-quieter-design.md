@@ -117,3 +117,12 @@ variant means the wrapped line is too close". To two options for the price field
     reverses A647 point 6 ("the base price field's own unit button stays as it is"). This is in
     `wt-price-input`, for every screen.
 15. **On a narrow variants table, a variant's price under its name has `--wt-space-1` above it.**
+
+The owner then answered "yes" to teal arrows on both unit links, and "that's fine" to a narrower
+price field:
+
+16. **The arrow in both unit links is teal, like the word.** That covers the price field's "Each ▾"
+    and the variants table's "Price · Each ▾".
+17. **In the product editor, the base price field is at most six tap targets wide** (264px at the
+    default token), so the unit link sits near the amount. The field still fills a narrower card.
+    Other screens' price fields are unchanged.
