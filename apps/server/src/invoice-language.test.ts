@@ -1,94 +1,61 @@
 import { createCanvas } from "@napi-rs/canvas";
-import { COUNTRY_PACKS } from "@waitron/country-packs";
+import { COUNTRY_PACKS, receiptLabelsFor } from "@waitron/country-packs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { invoiceFont } from "./invoice-font.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { renderInvoiceRaster } from "./invoice-raster.js";
+import { CONTACT_SEPARATOR } from "./receipt-facts.js";
+import { formatMoney } from "./receipt-money.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
-const languages = [
-  {
-    locale: "en-GB",
-    name: "Pine nut and coffee menu",
-    want: [
-      "INVOICE FF/1",
-      "1 Pine nut and coffee menu 10.00 10.00 21%",
-      "Prices exclude VAT",
-      "Discount 10% -1.00 21%",
-      "Taxable base 21% €9.00 VAT 21% €1.89 Taxable base 10% €8.00 VAT 10% €0.80",
-      "TOTAL €19.69",
-      "Cash €20.00",
-      "Change €0.31",
-      "DUPLICATE",
-      "TEST DOCUMENT",
-    ],
-  },
-  {
-    locale: "es-ES",
-    name: "Menú de piñón y café",
-    want: [
-      "FACTURA FF/1",
-      "1 Menú de piñón y café 10,00 10,00 21%",
-      "Precios sin IVA",
-      "Descuento 10% -1,00 21%",
-      "Base imponible 21% 9,00 € IVA 21% 1,89 € Base imponible 10% 8,00 € IVA 10% 0,80 €",
-      "TOTAL 19,69 €",
-      "Efectivo 20,00 €",
-      "Cambio 0,31 €",
-      "DUPLICADO",
-      "DOCUMENTO DE PRUEBA",
-    ],
-  },
-  {
-    locale: "ca-ES",
-    name: "Menú de pinyó amb cafè i il·lusió",
-    want: [
-      "FACTURA FF/1",
-      "1 Menú de pinyó amb cafè i il·lusió 10,00 10,00 21%",
-      "Preus sense IVA",
-      "Descompte 10% -1,00 21%",
-      "Base imposable 21% 9,00 € IVA 21% 1,89 € Base imposable 10% 8,00 € IVA 10% 0,80 €",
-      "TOTAL 19,69 €",
-      "Efectiu 20,00 €",
-      "Canvi 0,31 €",
-      "DUPLICAT",
-      "PROVA",
-    ],
-  },
-  {
-    locale: "gl-ES",
-    name: "Menú de piñón e café",
-    want: [
-      "FACTURA FF/1",
-      "1 Menú de piñón e café 10,00 10,00 21%",
-      "Prezos sen IVE",
-      "Desconto 10% -1,00 21%",
-      "Base impoñible 21% 9,00 € IVE 21% 1,89 € Base impoñible 10% 8,00 € IVE 10% 0,80 €",
-      "TOTAL 19,69 €",
-      "Efectivo 20,00 €",
-      "Cambio 0,31 €",
-      "DUPLICADO",
-      "PROBA",
-    ],
-  },
-  {
-    locale: "eu-ES",
-    name: "Pinoi eta kafe menua",
-    want: [
-      "FAKTURA FF/1",
-      "1 Pinoi eta kafe menua 10,00 10,00 21%",
-      "Prezioak BEZik gabe",
-      "Deskontua 10% -1,00 21%",
-      "Zerga-oinarria 21% 9,00 € BEZ 21% 1,89 € Zerga-oinarria 10% 8,00 € BEZ 10% 0,80 €",
-      "GUZTIRA 19,69 €",
-      "Eskudirua 20,00 €",
-      "Itzulia 0,31 €",
-      "BIKOIZKARIA",
-      "PROBA",
-    ],
-  },
-];
+const names: Record<string, string> = {
+  "en-GB": "Pine nut and coffee menu",
+  "es-ES": "Menú de piñón y café",
+  "ca-ES": "Menú de pinyó amb cafè i il·lusió",
+  "gl-ES": "Menú de piñón e café",
+  "eu-ES": "Pinoi eta kafe menua",
+};
+
+/** What the new A4 page prints for the fixture, in the order it prints it, read from the word tables. */
+function wanted(locale: string, name: string): string[] {
+  const labels = receiptLabelsFor(locale);
+  const money = (value: string) => formatMoney(value, locale);
+  return [
+    `${labels.invoiceHeading} FF/1 ${labels.duplicate}`,
+    [
+      labels.descriptionColumn,
+      labels.quantityColumn,
+      labels.unitPriceExVatColumn,
+      labels.totalExVatColumn,
+      labels.vatColumn,
+      labels.totalWithVatColumn,
+    ].join(" "),
+    `${name} 1 ${money("10.00")} ${money("10.00")} 21% ${money("12.10")}`,
+    `${labels.discount} 10% ${money("-1.00")} 21% ${money("-1.21")}`,
+    [
+      labels.taxRateColumn,
+      labels.vatSummaryBaseColumn,
+      labels.vatSummaryAmountColumn,
+      labels.taxTotalColumn,
+      `21% ${money("9.00")} ${money("1.89")} ${money("10.89")}`,
+      `10% ${money("8.00")} ${money("0.80")} ${money("8.80")}`,
+    ].join(" "),
+    `${labels.total} ${money("19.69")}`,
+    `${labels.paymentMethodHeading} ${[
+      labels.paid,
+      `${labels.cash} ${money("20.00")}`,
+      `${labels.change} ${money("0.31")}`,
+    ].join(CONTACT_SEPARATOR)}`,
+    labels.practice,
+  ];
+}
+
+const languages = Object.entries(names).map(([locale, name]) => ({
+  locale,
+  name,
+  want: wanted(locale, name),
+}));
 
 describe("invoice receipt languages", () => {
   it("exercises every receipt language labelled by an installed country pack", () => {
@@ -111,7 +78,7 @@ describe("invoice receipt languages", () => {
         .flatMap((item) => ("str" in item ? [item.str] : []))
         .join(" ")
         .replace(/\s+/g, " ");
-      expect(text).toContain("Preus sense IVA");
+      expect(text).toContain(receiptLabelsFor("ca-ES").unitPriceExVatColumn);
       expect(text).toContain("Menú del día con un nombre especialmente largo");
       expect(text).not.toContain("Set menu with a particularly long name");
     } finally {
@@ -159,7 +126,7 @@ describe("invoice receipt languages", () => {
         expect(text).not.toContain("Wrong frozen name from another language");
         for (const character of new Set(text)) {
           expect(
-            invoiceFont.hasGlyphForCodePoint(character.codePointAt(0)!),
+            invoiceFont().hasGlyphForCodePoint(character.codePointAt(0)!),
             `${locale} missing glyph ${character}`,
           ).toBe(true);
         }

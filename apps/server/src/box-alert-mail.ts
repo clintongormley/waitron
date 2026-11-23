@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
-import { cancelMail, incidents, readVenue } from "@waitron/db";
-import { boxEmailMessage, type BoxAlertCode } from "./box-alert-email.js";
+import { cancelMail, incidents, persons, readVenue } from "@waitron/db";
+import {
+  BANK_ACCOUNT_CHANGED_EMAIL_CODE,
+  boxEmailMessage,
+  type BoxAlertCode,
+} from "./box-alert-email.js";
 import { cloudEmailLocale, cloudNoticeLabel, type CloudBoxAlertFacts } from "./cloud-email.js";
 import type { Logger } from "./logger.js";
 import { readManagerEmailRecipient } from "./manager-email-recipients.js";
@@ -112,6 +116,14 @@ export function boxAlertMail(deps: {
       } else {
         params =
           typeof mail.params.wording === "string" ? JSON.parse(mail.params.wording) : undefined;
+        const editorId = params?.["editorId"];
+        if (code === BANK_ACCOUNT_CHANGED_EMAIL_CODE && typeof editorId === "string") {
+          const [editor] = await tx
+            .select({ name: persons.displayName })
+            .from(persons)
+            .where(eq(persons.id, editorId));
+          if (editor) params = { ...params, editorName: editor.name };
+        }
       }
       const venue = await readVenue(tx);
       return {

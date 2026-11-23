@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import sharp from "sharp";
 import { expect, it } from "vitest";
@@ -31,8 +32,12 @@ it("renders English sample identities and dishes while retaining the Spanish inv
         await loading.destroy();
       }
     }
-    expect(Object.keys(texts)).toHaveLength(13);
-    expect(texts["full-weighed-and-counted-a4.pdf"]).toContain("1 Bloody Mary");
+    expect(Object.keys(texts)).toHaveLength(34);
+    const spanish = receiptLabelsFor("es-ES");
+    const deferredEs = texts["a1566-deferred-es-ES-a4.pdf"]!;
+    expect(deferredEs).toContain(`${spanish.iban}: ES91 2100 0418 4502 0005 1332`);
+    expect(deferredEs).not.toContain(spanish.paid);
+    expect(texts["full-weighed-and-counted-a4.pdf"]).toContain("Bloody Mary 1 ");
     expect(texts["full-weighed-and-counted-a4.pdf"]).toContain("0,35 kg");
     const target = texts["full-addresses-match-a4.pdf"]!;
     for (const text of [
@@ -50,7 +55,7 @@ it("renders English sample identities and dishes while retaining the Spanish inv
       "Customer with a particularly long registered company name Ltd",
       "Set menu with a particularly long name",
       "Mineral water",
-      "2 Mineral water",
+      "Mineral water 2 ",
       "19,69",
     ])
       expect(fixture).toContain(text);

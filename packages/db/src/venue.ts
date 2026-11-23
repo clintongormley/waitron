@@ -6,7 +6,12 @@ import type { Transaction } from "./client.js";
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 import { settings } from "./schema/settings.js";
 import { decodeSettingsRow, readSettings, saveSettings, type SettingsRead } from "./settings.js";
-import { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, type VenueSettings } from "./venue-settings.js";
+import {
+  VENUE_SETTINGS,
+  BUSINESS_DAY_SETTINGS,
+  type BankAccount,
+  type VenueSettings,
+} from "./venue-settings.js";
 
 function requireVenue<T>(read: SettingsRead<T>): SettingsRead<T> {
   if (read.revision === 0) throw new AppError("venue.not_found", {});
@@ -84,7 +89,18 @@ export interface VenuePlace {
 }
 
 export async function readVenue(tx: Transaction): Promise<Venue> {
-  const { first, doc, businessDay } = await clockRows(tx);
+  return venueOf(await clockRows(tx));
+}
+
+/** {@link readVenue} and the venue's bank account from the same read. */
+export async function readVenueAndBankAccount(
+  tx: Transaction,
+): Promise<{ venue: Venue; bankAccount: BankAccount | null }> {
+  const rows = await clockRows(tx);
+  return { venue: venueOf(rows), bankAccount: rows.doc.bankAccount };
+}
+
+function venueOf({ first, doc, businessDay }: Awaited<ReturnType<typeof clockRows>>): Venue {
   return {
     name: doc.name,
     invoiceLocales: doc.invoiceLocales,

@@ -419,6 +419,8 @@ The hosted test release and live Google qualification remain open.
 The owner decided on 2026-11-21 that a paid Cloud plan sends every email the box would send, from
 the venue's own domain or a Waitron address. On 2026-11-22 the owner chose five free notice types
 in addition to invitations, resets and email-change codes. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
+The bank-account change notice (A1566, `venue.bank_account_changed`) is not yet among the box
+alerts Cloud relays, so a box that sends email only through Cloud does not send it.
 The setup email test issue below remains separate open work.
 
 ## A box in first setup still sends a test email through a mail server whose login the caller holds (A987 review, 2026-10-22) — OPEN

@@ -116,6 +116,7 @@ export const PATH_PATTERNS = [
   "/management-api/venue-default-menu",
   "/management-api/venue-defaults",
   "/management-api/venue-details",
+  "/management-api/venue-details/bank-account",
   "/management-api/venue-details/business-day-start",
   "/management-api/venue-details/legal-name",
   "/management-api/venue-details/registered-address",

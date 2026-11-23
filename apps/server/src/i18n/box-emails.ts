@@ -111,3 +111,27 @@ export const UPGRADE_ROLLBACK_EMAIL_WORDS = {
     text: "La actualización a {toVersion} no se completó. El servidor ha vuelto a la versión {fromVersion}. Abre Sistema → Estado del servidor para consultar el resultado.",
   },
 } as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+
+/** `text` joins `changed`, `previous`, `current` and `check`; `none` stands for no account. */
+export const BANK_ACCOUNT_CHANGED_EMAIL_WORDS = {
+  en: {
+    subject: "The bank account of {venue} was changed",
+    changed:
+      "{editorName} changed the bank account shown on deferred-payment invoices on {changedAt}.",
+    previous: "Before: {previousAccount}",
+    current: "Now: {newAccount}",
+    none: "none",
+    check:
+      "If you do not recognise this change, check it in Venue settings → Venue details before issuing any more invoices.",
+  },
+  es: {
+    subject: "Se ha cambiado la cuenta bancaria de {venue}",
+    changed:
+      "{editorName} cambió la cuenta bancaria que aparece en las facturas de pago aplazado el {changedAt}.",
+    previous: "Antes: {previousAccount}",
+    current: "Ahora: {newAccount}",
+    none: "ninguna",
+    check:
+      "Si no reconoces este cambio, revísalo en Ajustes del local → Datos del local antes de emitir más facturas.",
+  },
+} as const satisfies Record<"en" | "es", Record<string, string>>;

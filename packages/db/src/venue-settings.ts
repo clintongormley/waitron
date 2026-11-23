@@ -1,6 +1,12 @@
-import { privacyContactProblem, isUuid } from "@waitron/shared";
+import { ibanShapeProblem, isUuid, normalizeIban, privacyContactProblem } from "@waitron/shared";
 import { DEFAULT_TIME_ZONE } from "./schema/taxpayer.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
+
+/** `iban` is stored as `normalizeIban` writes it; `bankName` is never blank. */
+export interface BankAccount {
+  iban: string;
+  bankName: string | null;
+}
 
 export interface VenueSettings {
   privacyNoticeUrl: string | null;
@@ -23,6 +29,25 @@ export interface VenueSettings {
   postalCode: string | null;
   city: string | null;
   province: string | null;
+  bankAccount: BankAccount | null;
+}
+
+function parseBankAccount(input: unknown): BankAccount | null | undefined {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== "object" || Array.isArray(input)) return undefined;
+  const { iban, bankName, ...rest } = input as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) return undefined;
+  // The checksum and the country's format are enforced at save only: a rule tightened later
+  // must not fail every venue read.
+  if (
+    typeof iban !== "string" ||
+    iban !== normalizeIban(iban) ||
+    ibanShapeProblem(iban) !== undefined
+  )
+    return undefined;
+  if (bankName !== null && (typeof bankName !== "string" || bankName.trim() === ""))
+    return undefined;
+  return { iban, bankName };
 }
 
 export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
@@ -45,6 +70,7 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     postalCode: null,
     city: null,
     province: null,
+    bankAccount: null,
   }),
   parse(input: unknown): SettingsParse<VenueSettings> {
     if (typeof input !== "object" || input === null || Array.isArray(input))
@@ -65,6 +91,7 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         field !== "streamId" &&
         field !== "name" &&
         field !== "fiscalTerritory" &&
+        field !== "bankAccount" &&
         !["invoiceLocales", "contentLanguages", "defaultContentLanguage", "holidayArea"].includes(
           field,
         ) &&
@@ -130,6 +157,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
       )
         return { ok: false, field };
     }
+    const bankAccount = parseBankAccount(value.bankAccount);
+    if (bankAccount === undefined) return { ok: false, field: "bankAccount" };
     return {
       ok: true,
       doc: {
@@ -148,6 +177,7 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         postalCode: value.postalCode as string | null,
         city: value.city as string | null,
         province: value.province as string | null,
+        bankAccount,
       },
     };
   },

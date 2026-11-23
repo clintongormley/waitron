@@ -30,6 +30,10 @@ const SETTINGS: TaxpayerFieldSettings = {
 export class LegalNameDialog extends TaxpayerFieldDialog {
   protected readonly settings = SETTINGS;
 
+  protected override fieldErrors(draft: string): Record<string, string> {
+    return draft.trim() === "" ? { legalName: t("venue_details.required") } : {};
+  }
+
   protected override renderFields(view: TaxpayerFieldsView<string>): TemplateResult {
     return html`<wt-input
       name="legalName"

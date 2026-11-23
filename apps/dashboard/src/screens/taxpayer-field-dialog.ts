@@ -23,10 +23,13 @@ export interface VenueIdentityChanged {
   model: VenueDetailsModel;
 }
 
-export type TaxpayerField = "legalName" | "taxpayerDomicile";
+export type TaxpayerField = "legalName" | "taxpayerDomicile" | "bankAccount";
 
-export interface TaxpayerFieldSettings {
-  field: TaxpayerField;
+export interface TaxpayerFieldSettings<V = string> {
+  /** The field a `venue.detail_invalid` refusal names when it is this dialog's. */
+  field: string;
+  /** Further fields of this dialog whose `venue.detail_invalid` refusals it shows beside them. */
+  otherFields?: readonly string[];
   /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
   dataTest: string;
   heading: StringKey;
@@ -36,13 +39,13 @@ export interface TaxpayerFieldSettings {
   notSaved: StringKey;
   /** This field's own refusal reasons; `required` is common to every field. */
   refusals: Record<string, StringKey>;
-  send(api: DashboardApi, value: string, expected: string): Promise<{ model: VenueDetailsModel }>;
+  send(api: DashboardApi, value: V, expected: V): Promise<{ model: VenueDetailsModel }>;
 }
 
 /** A draft and the value it made then, which the draft scope compares. */
-interface Snapshot<Draft> {
+interface Snapshot<Draft, V> {
   draft: Draft;
-  value: string;
+  value: V;
 }
 
 /** What a subclass's fields are drawn from. */
@@ -59,7 +62,7 @@ export interface TaxpayerFieldsView<Draft> {
 
 /** The server's own normalisation (`normalizeVenueText`), so a stored spelling it would accept as
  *  unchanged does not count as an edit. */
-function normalized(value: string): string {
+export function normalizedText(value: string): string {
   return value.normalize("NFC").trim();
 }
 
@@ -67,31 +70,44 @@ function normalized(value: string): string {
  *  carrying the answered model, so the panel and the dashboard banner can show the new value.
  *  A `venue.detail_changed` refusal sends a bubbling, composed `venue-identity-stale`, so both
  *  read the stored value again. */
-export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
-  protected abstract readonly settings: TaxpayerFieldSettings;
+export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends LitElement {
+  protected abstract readonly settings: TaxpayerFieldSettings<V>;
 
   /** What the stored value opens as. */
-  protected draftFor(stored: string): Draft {
-    return stored as Draft;
+  protected draftFor(stored: V): Draft {
+    return stored as unknown as Draft;
   }
 
   /** The value the fields make, which is sent and which the draft scope compares. */
-  protected valueFor(draft: Draft): string {
-    return draft as string;
+  protected valueFor(draft: Draft): V {
+    return draft as unknown as V;
+  }
+
+  /** `value` as the server would store it, which is what is sent and compared. Assumes `V` is a
+   *  string: a subclass whose value is not one must override it. */
+  protected storedForm(value: V): V {
+    return normalizedText(value as unknown as string) as unknown as V;
+  }
+
+  /** Assumes `V` is a string or other value `===` compares: a subclass whose value is not a
+   *  string must override it. */
+  protected sameValue(a: V, b: V): boolean {
+    return a === b;
   }
 
   /** The fields' own errors by field name, in the order the fields are drawn; shown once Save
    *  is pressed. */
-  protected fieldErrors(draft: Draft): Record<string, string> {
-    return this.valueFor(draft).trim() === ""
-      ? { [this.settings.field]: t("venue_details.required") }
-      : {};
-  }
+  protected abstract fieldErrors(draft: Draft): Record<string, string>;
 
-  /** A `venue.detail_invalid` refusal for this field, `message`, by the field it is shown under;
+  /** A `venue.detail_invalid` refusal naming `field`, `message`, by the field it is shown under;
    *  focus goes to the first. */
-  protected refusalFor(_reason: string, _draft: Draft, message: string): Record<string, string> {
-    return { [this.settings.field]: message };
+  protected refusalFor(
+    _reason: string,
+    _draft: Draft,
+    message: string,
+    field: string,
+  ): Record<string, string> {
+    return { [field]: message };
   }
 
   /** Errors kept by these names belong to no field: they are the bottom message. */
@@ -122,7 +138,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
 
   /** The stored spelling the dialog opened with, sent as `expected`; null while it is shut. */
-  @state() private opened: string | null = null;
+  @state() private opened: V | null = null;
   @state() private draft!: Draft;
   @state() private busy = false;
   /** A refusal's sentence by field name, kept until a field changes or Save is pressed again. */
@@ -130,11 +146,11 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   @state() private bottom = "";
 
   readonly #feedback = new FormFeedback(this);
-  #scope?: DraftScope<Snapshot<Draft>>;
+  #scope?: DraftScope<Snapshot<Draft, V>>;
   #leave?: LeaveCoordinator;
   #opening = 0;
 
-  show(stored: string): void {
+  show(stored: V): void {
     if (this.opened !== null) return;
     this.#opening += 1;
     this.opened = stored;
@@ -145,11 +161,11 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     this.refusal = {};
     this.bottom = "";
     this.reset();
-    const { coordinator, scope } = draftScopeFor<Snapshot<Draft>>(this, {
+    const { coordinator, scope } = draftScopeFor<Snapshot<Draft, V>>(this, {
       id: {},
       current: () => this.#snapshot(this.draft),
       snapshot: (value) => value,
-      equal: (a, b) => a.value === b.value,
+      equal: (a, b) => this.sameValue(a.value, b.value),
       restore: (value) => {
         this.draft = value.draft;
         this.refusal = {};
@@ -164,8 +180,8 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   }
 
   /** The value is taken when the snapshot is, as `valueFor` can read more than the draft. */
-  #snapshot(draft: Draft): Snapshot<Draft> {
-    return { draft, value: normalized(this.valueFor(draft)) };
+  #snapshot(draft: Draft): Snapshot<Draft, V> {
+    return { draft, value: this.storedForm(this.valueFor(draft)) };
   }
 
   /** Closes without asking. For a page that hides this dialog's host: a native modal left open
@@ -234,7 +250,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
       return;
     }
     const draft = this.draft;
-    const value = normalized(this.valueFor(draft));
+    const value = this.storedForm(this.valueFor(draft));
     const opening = this.#opening;
     const reportLateRefusal = this.lateRefusalFor?.(this.settings.notSaved);
     this.busy = true;
@@ -268,16 +284,21 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
         typeof error === "object" && error !== null
           ? (error as { params?: Record<string, unknown> }).params
           : undefined;
-      if (code === "venue.detail_invalid" && params?.field === this.settings.field) {
+      const refused = String(params?.field);
+      if (
+        code === "venue.detail_invalid" &&
+        (refused === this.settings.field || this.settings.otherFields?.includes(refused) === true)
+      ) {
         const refusals: Record<string, StringKey> = {
           required: "venue_details.required",
           ...this.settings.refusals,
         };
-        const reason = String(params.reason);
+        const reason = String(params?.reason);
         this.refusal = this.refusalFor(
           reason,
           draft,
           t(refusals[reason] ?? "venue_details.invalid"),
+          refused,
         );
         await this.#focusField(Object.keys(this.refusal)[0]!);
       } else {

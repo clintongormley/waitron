@@ -54,12 +54,15 @@ import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { buildReceiptDocument } from "./receipt-document.js";
-import { formatAmount } from "./receipt-money.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { adjustmentLabel, CONTACT_SEPARATOR } from "./receipt-facts.js";
+import { formatMoney } from "./receipt-money.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { TillSaleLine } from "./till-sale.js";
-import { INVOICE_PAGE_WIDTH, invoiceTextWidth, layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import { pageRows } from "./testing/invoice-page-rows.js";
+import { INVOICE_PAGE_WIDTH, invoiceTextWidth } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { clearThemes, putThemeInUse, THEME_LOGO, UNTRUSTED_CASES } from "./testing/theme-logo.js";
 
@@ -158,6 +161,11 @@ async function issue(
 }
 const read = (backend: FiscalBackend, saleId: string) =>
   withTransaction(suite.db, (tx) => readInvoiceDocument(backend, tx, venue.cfg, saleId));
+/** Every line of text the printed A4 pages carry, in drawing order. */
+const pageTexts = (document: ReceiptDocumentInput): string[] =>
+  layoutA4Invoice(document).flatMap((page) =>
+    page.elements.flatMap((element) => (element.kind === "text" ? [element.text] : [])),
+  );
 
 describe("stored invoice document projection", () => {
   it("rebuilds a no-regime full invoice from stored lines without a draft or filed receipt", async () => {
@@ -245,11 +253,10 @@ describe("stored invoice document projection", () => {
       "es-ES": `${stored!.descriptions["es-ES"]} (${stored!.variantDescriptions!["es-ES"]})`,
     });
     expect(JSON.stringify(document.result.lines)).not.toContain("Staff meat");
-    const rendered = buildReceiptDocument(document);
-    const text = JSON.stringify(rendered);
+    const text = pageTexts(document).join("\n");
     expect(text).toContain(receiptLabelsFor("es-ES").invoiceHeading);
-    expect(text).toContain(receiptLabelsFor("es-ES").pricesExcludeVat);
-    expect(text).not.toContain("Prices exclude VAT");
+    expect(text).toContain(receiptLabelsFor("es-ES").totalWithVatColumn);
+    expect(text).not.toContain(receiptLabelsFor("en-GB").totalWithVatColumn);
   });
 
   it("keeps the filed issuer, customer and issue-day facts after taxpayer and trim changes", async () => {
@@ -273,13 +280,9 @@ describe("stored invoice document projection", () => {
       expect(after.receipt).toEqual({});
       expect(after.result.qr).toContain("nif=62000003F");
       expect(after.result.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
-      const content = buildReceiptDocument(after);
-      expect(content.elements).toContainEqual({ kind: "text", text: "Saved domicile", indent: 0 });
-      expect(content.elements).not.toContainEqual({
-        kind: "text",
-        text: "Changed issuer",
-        indent: 0,
-      });
+      const content = pageTexts(after);
+      expect(content).toContain("Saved domicile");
+      expect(content.join("\n")).not.toContain("Changed issuer");
     } finally {
       await suite.db.update(taxpayer).set({
         legalName: taxpayerRow!.legalName,
@@ -634,9 +637,7 @@ describe("A4 current optional source matrix", () => {
         expect(document.venueAddress).toEqual([]);
         expect(document.receiptHeader).toBeUndefined();
         expect(document.receipt).toEqual({});
-        const text = buildReceiptDocument(document)
-          .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
-          .join("\n");
+        const text = pageTexts(document).join("\n");
         expect(text).toContain("Saved domicile");
         expect(text).not.toContain("Current street differs");
       }
@@ -728,9 +729,7 @@ describe("A4 recorded null department", () => {
     const document = await read(backend, issued.saleId);
     expect(document.receiptHeader).toBeUndefined();
     expect(document.venueAddress).toEqual([]);
-    const text = buildReceiptDocument(document)
-      .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
-      .join("\n");
+    const text = pageTexts(document).join("\n");
     expect(text).not.toContain("Stray department name");
     expect(text).toContain("Saved domicile");
   });
@@ -824,22 +823,15 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
     expect(document.namesLocale).toBe("ca-ES");
     expect(document.result.locale).toBe("es-ES");
     expect(document.result.namesLocale).toBe("ca-ES");
-    const text = buildReceiptDocument(document)
-      .elements.flatMap((element) =>
-        element.kind === "text"
-          ? [element.text]
-          : element.kind === "amount"
-            ? [[element.caption, element.amount].filter(Boolean).join(" ")]
-            : element.kind === "table"
-              ? element.table.rows.map((row) => [row.units, row.item].filter(Boolean).join(" "))
-              : [],
-      )
-      .join("\n");
-    expect(text).not.toMatch(/^Pedido 0$/mu);
-    expect(text).toMatch(/^Fecha /mu);
+    const labels = receiptLabelsFor("es-ES");
+    const lines = pageTexts(document);
+    const text = lines.join("\n");
+    expect(lines).not.toContain(labels.order);
+    expect(lines).toContain(labels.date);
     expect(text).not.toContain("Comanda");
     expect(text).not.toContain("Data");
-    expect(text).toMatch(/^2 CA-rac CA Torrada$/mu);
+    const dish = lines.indexOf("CA Torrada");
+    expect(lines.slice(dish, dish + 2)).toEqual(["CA Torrada", "2 CA-rac"]);
     expect(text).toContain("CA Tipus de pa: CA Sègol");
     for (const other of ["ES Tostada", "ES-rac", "ES Tipo de pan", "ES Centeno"]) {
       expect(text, other).not.toContain(other);
@@ -899,9 +891,7 @@ describe("A4 department-only decoration", () => {
         printTradingName: true,
       });
       expect(document.venueAddress).toEqual([]);
-      const text = buildReceiptDocument(document)
-        .elements.flatMap((e) => (e.kind === "text" ? [e.text] : []))
-        .join("\n");
+      const text = pageTexts(document).join("\n");
       expect(text).toContain("Own subtitle");
       expect(text).toContain("Own footer");
       expect(text).not.toContain("Never printed description");
@@ -1008,8 +998,8 @@ describe("the theme's logo on the A4 invoice", () => {
     return (document.receipt as PrintedReceiptTrim).logo;
   }
 
-  function printedOf(document: Awaited<ReturnType<typeof read>>): string {
-    return JSON.stringify(buildReceiptDocument(document).elements);
+  function printedOf(document: Awaited<ReturnType<typeof read>>): string[] {
+    return pageTexts(document);
   }
 
   it("a department with no receipt logo prints the theme's 80 mm logo, and its trim names it", async () => {
@@ -1102,7 +1092,9 @@ describe("the theme's logo on the A4 invoice", () => {
       }
       expect(document.logo).toBeNull();
       expect(trimLogo(document)).toBeUndefined();
-      expect(printedOf(document)).toContain(`"${invoiceNumber}"`);
+      expect(printedOf(document)).toContain(
+        `${receiptLabelsFor(document.invoiceLocale).invoiceHeading} ${invoiceNumber}`,
+      );
     } finally {
       warning.mockRestore();
       await clearThemes(suite.db);
@@ -1123,17 +1115,17 @@ describe("the theme's logo on the A4 invoice", () => {
     },
   );
 
-  it("the page draws the theme's dots centred, above the department's trading name", async () => {
+  it("the page draws the theme's dots at the right edge, above the department's trading name", async () => {
     const backend = none();
     const saleId = await saleIn(backend, await department());
     await putThemeInUse(suite.db);
     try {
-      const [first] = layoutInvoicePages(await read(backend, saleId));
+      const [first] = layoutA4Invoice(await read(backend, saleId));
       const logos = first!.elements.filter((element) => element.kind === "logo");
       expect(logos).toHaveLength(1);
       const [logo] = logos;
       expect(logo).toMatchObject({ raster: THEME_80MM });
-      expect(logo!.x + logo!.width / 2).toBeCloseTo(INVOICE_PAGE_WIDTH / 2);
+      expect(logo!.x + logo!.width).toBeCloseTo(INVOICE_PAGE_WIDTH - 36);
       const name = first!.elements.find(
         (element) => element.kind === "text" && element.text === "Recorded dining",
       );
@@ -1193,10 +1185,7 @@ describe("a takeaway sale's A4 invoice", () => {
       return sale!.id;
     });
   }
-  const texts = (document: Parameters<typeof buildReceiptDocument>[0]) =>
-    buildReceiptDocument({ ...document, surface: "a4" }).elements.flatMap((e) =>
-      e.kind === "text" ? [e.text] : [],
-    );
+  const texts = pageTexts;
 
   // Fails if the A4 invoice of a takeaway sale stops saying so, or an eat-in one starts to.
   it("says Para llevar on a takeaway sale's invoice, and nothing on an eat-in one", async () => {
@@ -1237,7 +1226,7 @@ describe("a takeaway sale's A4 invoice", () => {
 
 describe("a card payment on the A4 page", () => {
   it("the A4 page names the card", () => {
-    const [page] = layoutInvoicePages({
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1250,21 +1239,23 @@ describe("a card payment on the A4 page", () => {
         },
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const caption = texts.findIndex(({ text }) => text === "Visa ****4034 (Sin contacto)");
-    expect(caption).toBeGreaterThanOrEqual(0);
-    const amount = texts.find(
-      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "19,69 €",
-    );
-    expect(amount).toBeDefined();
-    const authorisation = texts.find(({ text }) => text === "Autorización 354739");
-    expect(authorisation!.y).toBeGreaterThan(texts[caption]!.y);
+    const heading = texts.find(({ text }) => text === labels.paymentMethodHeading)!;
+    const footer = texts.filter(({ y }) => y > heading.y && y < heading.y + 20);
+    expect(footer.map(({ text }) => text)).toEqual([
+      [
+        labels.paid,
+        `Visa ****4034 (${labels.paymentContactless}) 19,69 €`,
+        `${labels.paymentAuthorization} 354739`,
+      ].join(CONTACT_SEPARATOR),
+    ]);
   });
 });
 
 describe("what is still owed on the A4 page", () => {
-  it("the A4 page prints Pendiente in bold after the payments", () => {
-    const [page] = layoutInvoicePages({
+  it("the A4 page prints Pendiente in bold after the payments, and no Pagado", () => {
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1282,22 +1273,19 @@ describe("what is still owed on the A4 page", () => {
         owed: "9.69",
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const cash = texts.findIndex(({ text }) => text === "Efectivo");
-    const caption = texts.findIndex(({ text }) => text === "Pendiente");
-    expect(cash).toBeGreaterThanOrEqual(0);
-    expect(texts[caption]!.y).toBeGreaterThan(texts[cash]!.y);
-    const amount = texts.find(
-      ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "9,69 €",
-    );
-    expect(amount).toBeDefined();
-    expect([texts[caption]!.bold, amount!.bold]).toEqual([true, true]);
+    const cash = texts.find(({ text }) => text === `${labels.cash} 10,00 €`)!;
+    const owed = texts.find(({ text }) => text === `${labels.owed} 9,69 €`)!;
+    expect(owed.y).toBeGreaterThan(cash.y);
+    expect([cash.weight, owed.weight]).toEqual(["regular", "bold"]);
+    expect(texts.some(({ text }) => text.startsWith(labels.paid))).toBe(false);
   });
 });
 
 describe("the simplified receipt's A4 tax table", () => {
   it("draws the simplified tax table on A4", () => {
-    const [page] = layoutInvoicePages({
+    const [page] = layoutA4Invoice({
       ...FULL_INVOICE_DOCUMENT_FIXTURE,
       result: {
         ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
@@ -1309,37 +1297,42 @@ describe("the simplified receipt's A4 tax table", () => {
         })),
       },
     });
+    const labels = receiptLabelsFor("es-ES");
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-    const at = (text: string, after = 0): (typeof texts)[number] =>
-      texts.find((element, index) => index >= after && element.text === text)!;
-    const heading = at("Tipo");
-    const start = texts.indexOf(heading);
-    expect(texts.slice(start, start + 4).map(({ text }) => text)).toEqual([
-      "Tipo",
-      "Base",
-      "IVA",
-      "Total",
+    const right = (cell: (typeof texts)[number]): number =>
+      cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
+    const heading = texts.find(({ text }) => text === labels.taxRateColumn)!;
+    const firstRow = texts.find(({ text, y }) => y > heading.y && text === "A 21%")!;
+    const headingLines = texts.filter(({ y }) => y >= heading.y && y < firstRow.y);
+    const headings = headingLines.filter(({ y }) => y === heading.y);
+    expect(
+      headings.map((top) =>
+        headingLines
+          .filter((line) => Math.abs(right(line) - right(top)) < 0.01)
+          .map(({ text }) => text)
+          .join(" "),
+      ),
+    ).toEqual([
+      labels.taxRateColumn,
+      labels.vatSummaryBaseColumn,
+      labels.vatSummaryAmountColumn,
+      labels.taxTotalColumn,
     ]);
-    expect(texts.slice(start, start + 4).every(({ bold }) => bold)).toBe(true);
+    expect(headingLines.every(({ weight, tone }) => weight === "regular" && tone === "muted")).toBe(
+      true,
+    );
     const rows = [
-      ["A 21%", "9,00", "1,89", "10,89"],
-      ["B 10%", "8,00", "0,80", "8,80"],
+      ["A 21%", "9,00 €", "1,89 €", "10,89 €"],
+      ["B 10%", "8,00 €", "0,80 €", "8,80 €"],
     ];
     for (const row of rows) {
-      const first = texts.findIndex((element, index) => index > start && element.text === row[0]);
+      const first = texts.findIndex(({ text, y }) => y > heading.y && text === row[0]);
       const cells = texts.slice(first, first + 4);
       expect(cells.map(({ text }) => text)).toEqual(row);
       expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
-      expect(cells[0]!.x).toBe(heading.x);
-      for (const [index, cell] of cells.entries()) {
-        if (index === 0) continue;
-        const head = texts[start + index]!;
-        expect(cell.x + invoiceTextWidth(cell.text, cell.size)).toBeCloseTo(
-          head.x + invoiceTextWidth(head.text, head.size),
-        );
-      }
+      for (const [index, cell] of cells.entries())
+        expect(right(cell)).toBeCloseTo(right(headings[index]!));
     }
-    expect(texts.some(({ text }) => text.startsWith("Base imponible"))).toBe(false);
   });
 
   it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
@@ -1361,28 +1354,39 @@ describe("the simplified receipt's A4 tax table", () => {
           vatRate: `${net!.rate}.00`,
         })),
       };
-      const [page] = layoutInvoicePages({
+      const [page] = layoutA4Invoice({
         ...FULL_INVOICE_DOCUMENT_FIXTURE,
         result,
         invoiceLocale,
       });
       const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
-      const heading = texts.findIndex(
+      const right = (cell: (typeof texts)[number]): number =>
+        cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
+      const heading = texts.find(
         ({ text }) => text === receiptLabelsFor(invoiceLocale).taxRateColumn,
-      );
+      )!;
+      const below = [...new Set(texts.map(({ y }) => y))]
+        .filter((y) => y >= heading.y)
+        .sort((first, second) => first - second);
       const amounts = ["-2727.27", "-272.73", "-2479.34", "-520.66", "-3000.00"].map((amount) =>
-        formatAmount(amount, invoiceLocale),
+        formatMoney(amount, invoiceLocale),
       );
-      const table = texts.slice(heading, heading + 12);
+      const isHeading = (y: number) =>
+        texts.some((cell) => cell.y === y && cell.size === heading.size);
+      const headingLines = below.slice(
+        0,
+        below.findIndex((y) => !isHeading(y)),
+      );
+      const rateRows = below.slice(headingLines.length, headingLines.length + 2);
+      const table = texts.filter(({ y }) => rateRows.includes(y));
       for (const amount of amounts) expect(table.map(({ text }) => text)).toContain(amount);
-      for (let row = 0; row < 3; row++) {
-        const cells = table.slice(row * 4, row * 4 + 4);
-        expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
+      for (const y of [...headingLines, ...rateRows]) {
+        const cells = texts.filter((cell) => cell.y === y);
+        if (y === heading.y || rateRows.includes(y)) expect(cells).toHaveLength(4);
         expect(cells[0]!.x).toBeGreaterThanOrEqual(36);
-        const right = (cell: (typeof cells)[number]): number =>
-          cell.x + invoiceTextWidth(cell.text, cell.size);
-        for (let at = 1; at < 4; at++) expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
-        expect(right(cells[3]!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
+        for (let at = 1; at < cells.length; at++)
+          expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
+        expect(right(cells.at(-1)!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
       }
     },
   );
@@ -1411,14 +1415,8 @@ it.each(["sumup", "simulator"] as const)(
     );
     expect(ticket.simulatedCardPayment).toBe(provider === "simulator");
     expect(document.simulated).toBe(true);
-    expect(
-      buildReceiptDocument(document).elements.some(
-        (element) => element.kind === "text" && element.text === "SIN COBRO REAL",
-      ),
-    ).toBe(provider === "simulator");
-    expect(buildReceiptDocument(document).elements).toContainEqual(
-      expect.objectContaining({ kind: "text", text: "DOCUMENTO DE PRUEBA" }),
-    );
+    expect(pageTexts(document).includes("SIN COBRO REAL")).toBe(provider === "simulator");
+    expect(pageTexts(document)).toContain("DOCUMENTO DE PRUEBA");
   },
 );
 
@@ -1541,6 +1539,15 @@ describe("a free item holding its share of the price paid", () => {
       readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId),
     );
     expect(shown(document.result.lines)).toEqual(SOLD);
+    // Fails if the page prints the filed shares (8,33 and 1,67) rather than the dishes as sold.
+    const comp = adjustmentLabel({ kind: "comp" }, "es-ES", receiptLabelsFor("es-ES"));
+    expect(pageRows(document).map((cells) => cells.map((cell) => cell.replace(/ €/u, "")))).toEqual(
+      [
+        ["House salad", "1", "", "10,00 A"],
+        ["Mineral water", "1", "", "2,00 B"],
+        [comp, "", "", "-2,00 B"],
+      ],
+    );
   });
 
   it("a comped ticket eaten here reprints with its comp", async () => {
@@ -1554,10 +1561,15 @@ describe("a free item holding its share of the price paid", () => {
     ]);
   });
 
-  const tableRows = (document: Parameters<typeof buildReceiptDocument>[0]) =>
-    buildReceiptDocument({ ...document, surface: "a4" })
-      .elements.flatMap((e) => (e.kind === "table" ? e.table.rows : []))
-      .map(({ item, price, amount, rate }) => ({ item, price, amount, rate }));
+  // The full invoice's rows on the page: description, unit price and total before VAT, VAT rate.
+  const tableRows = (document: ReceiptDocumentInput) =>
+    pageRows(document).map(([item, , price, amount, rate]) => ({
+      item,
+      price: price!.replace(/ €$/u, ""),
+      amount: amount!.replace(/ €$/u, ""),
+      rate,
+    }));
+  const DISCOUNT = receiptLabelsFor("es-ES").discount;
 
   // D3b: each line comes to its filed base. The water's 0,27 is a bare discount like the salad's
   // 1,61: its comp's "100%" would contradict the amount.
@@ -1566,15 +1578,15 @@ describe("a free item holding its share of the price paid", () => {
     const document = await read(venue.backend, saleId);
     expect(tableRows(document)).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
-      { item: "Descuento", price: "", amount: "-1,61", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-1,61", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,27", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,27", rate: "21%" },
     ]);
     expect(tableRows({ ...document, invoiceLocale: "en-GB" }).map(({ item }) => item)).toEqual([
       "House salad",
-      "Discount",
+      receiptLabelsFor("en-GB").discount,
       "Mineral water",
-      "Discount",
+      receiptLabelsFor("en-GB").discount,
     ]);
   });
 
@@ -1584,9 +1596,9 @@ describe("a free item holding its share of the price paid", () => {
     const saleId = await comped("takeaway", true, { dishOffBp: 5000, paid: 500 });
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
-      { item: "Descuento", price: "", amount: "-5,61", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-5,61", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,96", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,96", rate: "21%" },
     ]);
   });
 
@@ -1594,9 +1606,9 @@ describe("a free item holding its share of the price paid", () => {
     const saleId = await comped("takeaway", true, { dish: "Pizza", dishOffBp: 1000, paid: 810 });
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "Margherita pizza", price: "8,18", amount: "8,18", rate: "10%" },
-      { item: "Descuento", price: "", amount: "-2,15", rate: "10%" },
+      { item: DISCOUNT, price: "", amount: "-2,15", rate: "10%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,44", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-0,44", rate: "21%" },
     ]);
   });
 
@@ -1605,8 +1617,8 @@ describe("a free item holding its share of the price paid", () => {
     expect(tableRows(await read(venue.backend, saleId))).toEqual([
       { item: "House salad", price: "9,62", amount: "9,62", rate: "4%" },
       { item: "Mineral water", price: "1,65", amount: "1,65", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-0,41", rate: "21%" },
-      { item: "Descuento", price: "", amount: "-2,41", rate: "4%" },
+      { item: DISCOUNT, price: "", amount: "-0,41", rate: "21%" },
+      { item: DISCOUNT, price: "", amount: "-2,41", rate: "4%" },
     ]);
   });
 
@@ -1616,7 +1628,7 @@ describe("a free item holding its share of the price paid", () => {
     expect(tableRows(document)).toEqual([
       { item: "House salad", price: "9,09", amount: "9,09", rate: "10%" },
       { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
-      { item: "Descuento 100%", price: "", amount: "-1,82", rate: "10%" },
+      { item: `${DISCOUNT} 100%`, price: "", amount: "-1,82", rate: "10%" },
     ]);
   });
 });
@@ -1719,17 +1731,12 @@ describe("a correction's receipts", () => {
     { gross: "-2.45", listGross: undefined, adjustments: undefined },
     { gross: "-0.55", listGross: undefined, adjustments: undefined },
   ];
-  const itemRows = (document: Parameters<typeof buildReceiptDocument>[0]) => {
-    const elements = buildReceiptDocument({ ...document, surface: "a4" }).elements;
-    const rules = elements.flatMap((e, i) => (e.kind === "rule" ? [i] : []));
-    // The item rows sit between the rules around them, after the invoice numbers.
-    return elements
-      .slice(rules[2]! + 1, rules[3])
-      .map((e) => (e.kind === "amount" ? { caption: e.caption, amount: e.amount } : e));
-  };
+  // The simplified page's rows: description, quantity, price and amount.
+  const itemRows = (document: ReceiptDocumentInput) =>
+    pageRows(document).map((cells) => cells.map((cell) => cell.replace(/ €$/u, "")));
 
   // Fails if the corrective's lines take the list prices they copied from the original: the page
-  // then prints the salad at -10,00 with a discount of --7,55.
+  // then prints the salad at -10,00 and a discount row of 7,55 beneath it.
   it("the A4 page of a correction shows the filed figures and no discount", async () => {
     const saleId = await corrected();
     const document = await withTransaction(suite.db, (tx) =>
@@ -1737,8 +1744,8 @@ describe("a correction's receipts", () => {
     );
     expect(shown(document.result.lines)).toEqual(FILED);
     expect(itemRows(document)).toEqual([
-      { caption: "-1  House salad", amount: "-2,45" },
-      { caption: "-1  Mineral water", amount: "-0,55" },
+      ["House salad", "-1", "", "-2,45"],
+      ["Mineral water", "-1", "", "-0,55"],
     ]);
   });
 

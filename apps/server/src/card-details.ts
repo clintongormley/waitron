@@ -1,3 +1,4 @@
+import type { ReceiptLabels } from "@waitron/country";
 import type { CardDetails } from "@waitron/payments";
 
 export interface StoredCard {
@@ -35,4 +36,17 @@ export function cardName(card: CardDetails, cardWord: string): string {
           return letters[0]!.toUpperCase() + letters.slice(1).join("").toLowerCase();
         });
   return `${scheme} ****${card.last4}`;
+}
+
+/** How the card was presented, for the documents that name it; nothing for an unknown mode. */
+export function cardEntryLabel(
+  entryMode: CardDetails["entryMode"],
+  labels: Pick<ReceiptLabels, "paymentContactless" | "paymentChip" | "paymentSwipe">,
+): string | undefined {
+  return {
+    contactless: labels.paymentContactless,
+    chip: labels.paymentChip,
+    swipe: labels.paymentSwipe,
+    unknown: undefined,
+  }[entryMode];
 }

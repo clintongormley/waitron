@@ -16,7 +16,7 @@ import { inTx, OPERATOR, order, revisionOf, seat, setupPartyVenue } from "./test
 import { completeBillPayment } from "./bill-payments.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument } from "./receipt-document.js";
-import { layoutInvoicePages } from "./invoice-page.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 
 import { billPayments, taxpayer, workingOrders } from "@waitron/db";
@@ -179,8 +179,8 @@ describe("whole-order instructions and issued customer documents", () => {
       "es-ES": "Hamburguesa de la casa",
     });
     expect(JSON.stringify(first)).not.toContain("KITCHEN-ONLY");
-    const printed = buildReceiptDocument({ ...first.document, surface: "a4" });
-    const layout = layoutInvoicePages(first.document);
+    const printed = buildReceiptDocument(first.document);
+    const layout = layoutA4Invoice(first.document);
     expect(JSON.stringify(printed)).toContain("Invoice customer");
     expect(JSON.stringify(layout)).toContain("Invoice customer");
     expect(JSON.stringify(printed)).not.toContain("KITCHEN-ONLY");

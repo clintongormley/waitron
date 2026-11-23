@@ -1091,6 +1091,7 @@ for (const locale of ["en", "es"] as const) {
               Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_notice_url ?? null,
             privacyEmail:
               Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_email ?? null,
+            bankAccount: null,
           },
         },
       );

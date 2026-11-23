@@ -241,7 +241,7 @@ describe("invoice SMTP transport", () => {
         expect(message).toContain("filename=receipt.pdf");
         const pdf = (await attachmentText(message)).replace(/\s+/g, " ");
         expect(pdf).toContain(
-          `S/1 ${receiptDateTime(document.result.issuedAt, locale, document.result.issuedOffsetMinutes)}`,
+          `${caption}${duplicate ? ` ${labels.duplicate}` : ""} ${labels.date} ${receiptDateTime(document.result.issuedAt, locale, document.result.issuedOffsetMinutes)}`,
         );
         expect(pdf).toContain(total);
         expect(pdf.includes(labels.duplicate)).toBe(duplicate);

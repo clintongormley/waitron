@@ -83,6 +83,7 @@ export {
   readVenueClock,
   readBusinessDayRevision,
   readVenueClockAndPlace,
+  readVenueAndBankAccount,
   readVenueInvoiceLocales,
 } from "./venue.js";
 export type { Venue, VenuePlace } from "./venue.js";
@@ -496,7 +497,7 @@ export type {
 } from "./activity-log.js";
 
 export { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, FIRST_DAY_START } from "./venue-settings.js";
-export type { VenueSettings, BusinessDaySettings } from "./venue-settings.js";
+export type { BankAccount, VenueSettings, BusinessDaySettings } from "./venue-settings.js";
 
 export { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 

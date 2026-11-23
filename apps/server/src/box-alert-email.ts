@@ -22,6 +22,7 @@ import { fillTemplate } from "./fill-template.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import {
   BACKUP_DELETED_EMAIL_WORDS,
+  BANK_ACCOUNT_CHANGED_EMAIL_WORDS,
   BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
   CLOCK_CORRECTED_EMAIL_WORDS,
@@ -64,11 +65,15 @@ export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
 
 const UPGRADE_ROLLBACK_EMAIL_CODE = "upgrade.rolled_back";
 
+/** Queued by `queueBankAccountChangedMail`, outside the duty's episodes. */
+export const BANK_ACCOUNT_CHANGED_EMAIL_CODE = "venue.bank_account_changed";
+
 export type BoxAlertCode =
   | BoxEmailCode
   | IncidentEmailCode
   | typeof BACKUP_REFUSED_EMAIL_CODE
-  | typeof UPGRADE_ROLLBACK_EMAIL_CODE;
+  | typeof UPGRADE_ROLLBACK_EMAIL_CODE
+  | typeof BANK_ACCOUNT_CHANGED_EMAIL_CODE;
 type EmailCode = BoxAlertCode;
 export const boxAlertMailKey = (episodeId: string, personId: string) =>
   `alert:${episodeId}:${personId}`;
@@ -79,7 +84,7 @@ export function transientBoxAlertMail() {
     isNull(outgoingMail.subjectId),
     inArray(outgoingMail.status, ["pending", "rejected"]),
     isNull(outgoingMail.finishedAt),
-    sql`json_extract(${outgoingMail.params}, '$.code') is not ${UPGRADE_ROLLBACK_EMAIL_CODE}`,
+    sql`coalesce(json_extract(${outgoingMail.params}, '$.code'), '') not in (${UPGRADE_ROLLBACK_EMAIL_CODE}, ${BANK_ACCOUNT_CHANGED_EMAIL_CODE})`,
   );
 }
 
@@ -88,6 +93,7 @@ const TIME_PLACEHOLDERS = {
   clockAt: "offsetMinutes",
   before: "beforeOffsetMinutes",
   after: "afterOffsetMinutes",
+  changedAt: "changedAtOffset",
 } as const;
 
 /** A code's subject and text, with the slots only that code fills in `values`. */
@@ -130,6 +136,23 @@ function wordsFor(
       values: {
         fromVersion: String(params?.["fromVersion"] ?? ""),
         toVersion: String(params?.["toVersion"] ?? ""),
+      },
+    };
+  }
+  if (code === BANK_ACCOUNT_CHANGED_EMAIL_CODE) {
+    const words = BANK_ACCOUNT_CHANGED_EMAIL_WORDS[language];
+    const account = (name: string) => {
+      const value = params?.[name];
+      return typeof value === "string" ? value : words.none;
+    };
+    const editor = params?.["editorName"];
+    return {
+      subject: words.subject,
+      text: [`${words.changed}\n`, words.previous, `${words.current}\n`, words.check].join("\n"),
+      values: {
+        editorName: typeof editor === "string" ? editor : "—",
+        previousAccount: account("previousAccount"),
+        newAccount: account("newAccount"),
       },
     };
   }

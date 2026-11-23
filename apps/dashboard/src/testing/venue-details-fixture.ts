@@ -27,6 +27,7 @@ export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): V
     },
     issuer: { country: "ES", legalName: "Issuer SL", taxId: "B12345678" },
     taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+    bankAccount: null,
     hasSales: false,
     hasOrderHistory: false,
     policy: {

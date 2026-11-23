@@ -175,6 +175,12 @@ fiscal** en la tarjeta **Negocio**. Si usas **Igual que la dirección del local*
 local. Las facturas que se emitan después
 muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirse.
 
+Para las cuentas cerradas como [pago aplazado](table-service.md#deferred-payment), indica tu cuenta bancaria con
+**Cambiar cuenta bancaria** en la misma tarjeta **Negocio**: introduce el **IBAN** y, si quieres,
+el banco. Si [añades tu propio servidor de correo](email.md#set-up), Waitron envía un correo a cada
+administrador con correo electrónico por cada cambio; si
+recibes uno por un cambio que nadie de tu personal ha hecho, revisa la cuenta enseguida.
+
 ## Elegir un documento y una impresora {#invoice-printer}
 
 Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.
@@ -1078,6 +1084,10 @@ El botón solo aparece en una cuenta sin nada cobrado. En la cuenta de una mesa,
 tienen que estar servidos o cancelados antes; en el mostrador, la cuenta tiene que llevar factura
 simplificada. Un responsable lo permite en un dispositivo activando **Cierra cuentas
 como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.
+
+El ticket y la factura piden al cliente que pague por transferencia bancaria, con el número de
+factura como referencia, e imprimen tu cuenta bancaria. Sin cuenta bancaria en **Ajustes del local →
+Datos del local** ([cómo indicarla](table-service.md#full-invoice)), dicen solo **Pago aplazado**.
 
 Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página
 **Ventas y recaudación** del panel.

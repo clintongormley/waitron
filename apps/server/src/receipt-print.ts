@@ -33,6 +33,7 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt, type FormatReceiptInput } from "./receipt-ticket.js";
 import { readPrintedGuests } from "./receipt-guests.js";
+import { readDeferredPayment } from "./receipt-deferred-payment.js";
 import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
@@ -307,6 +308,7 @@ async function buildReceiptBytes(
   /* v8 ignore stop */
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
   const guests = await readPrintedGuests(tx, saleId);
+  const deferredPayment = await readDeferredPayment(tx, saleId);
   return formatReceipt({
     result: ticket,
     ...venue,
@@ -319,6 +321,7 @@ async function buildReceiptBytes(
     simulatedCardPayment: ticket.simulatedCardPayment,
     duplicate,
     ...(guests === undefined ? {} : { guests }),
+    ...(deferredPayment === undefined ? {} : { deferredPayment }),
   });
 }
 

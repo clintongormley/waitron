@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { expect, it } from "vitest";
-import { receiptLabelsFor } from "@waitron/country-packs";
 import { readLiveSeriesIdTx, taxpayer, workingOrders } from "@waitron/db";
 import { recordReplacement } from "@waitron/core";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
@@ -14,8 +13,10 @@ import {
   readReceiptEmailDocument,
 } from "./invoice-document.js";
 import { composeInvoiceEmail } from "./invoice-email.js";
+import { layoutA4Invoice } from "./invoice-layout.js";
+import { pageRows } from "./testing/invoice-page-rows.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
-import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
+import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -85,17 +86,12 @@ async function saleOf(billId: string) {
   return brandSaleId((await specSaleLines(spec, billId))[0]!.saleId);
 }
 
-/** The A4 document's item rows: name, unit price and amount before tax. */
+/** The A4 page's item rows: name, unit price and amount before tax, without the euro sign. */
 function rows(input: ReceiptDocumentInput): [string, string, string][] {
-  return buildReceiptDocument({ ...input, surface: "a4" }).elements.flatMap((element) =>
-    element.kind === "table"
-      ? element.table.rows.map(({ item, price, amount }): [string, string, string] => [
-          item,
-          price,
-          amount,
-        ])
-      : [],
-  );
+  return pageRows(input).map((cells) => {
+    const cell = (index: number) => cells[index]!.replace(/ €$/u, "");
+    return [cell(0), cell(2), cell(3)];
+  });
 }
 
 async function pdfText(bytes: Uint8Array): Promise<string> {
@@ -245,9 +241,8 @@ it("a full invoice without filed figures follows the same rule", () => {
     parentLineNo: null,
     ...(role === undefined ? {} : { setMenuRole: role }),
   });
-  const { elements } = buildReceiptDocument({
+  const input: ReceiptDocumentInput = {
     ...FULL_INVOICE_DOCUMENT_FIXTURE,
-    surface: "a4",
     result: {
       ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
       total: "20.50",
@@ -260,17 +255,12 @@ it("a full invoice without filed figures follows the same rule", () => {
         dish("Sirloin", "5.00", "dish"),
       ],
     },
-  });
-  const amounts = elements.flatMap((element) =>
-    element.kind === "amount" ? [[element.caption.trim(), element.amount]] : [],
-  );
-  const from = amounts.findIndex(([caption]) => caption.includes("Daily menu"));
-  const included = receiptLabelsFor(FULL_INVOICE_DOCUMENT_FIXTURE.result.locale).vatIncluded;
-  expect(amounts.slice(from, from + 4)).toEqual([
-    [`1  Daily menu (${included})`, "14,00 €"],
-    [`1  Soup (${included})`, ""],
-    ["Bread 1", "1,50 €"],
-    [`1  Sirloin (${included})`, "5,00 €"],
+  };
+  expect(pageRows(input).map((cells) => [cells[0], cells[1], cells.at(-1)])).toEqual([
+    ["Daily menu", "1", "14,00 €"],
+    ["Soup", "1", ""],
+    ["Bread", "1", "1,50 €"],
+    ["Sirloin", "1", "5,00 €"],
   ]);
-  expect(JSON.stringify(elements)).not.toContain("Hake");
+  expect(JSON.stringify(layoutA4Invoice(input))).not.toContain("Hake");
 });

@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { readSettings, VENUE_SETTINGS, withTransaction, type Transaction } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -15,6 +15,7 @@ import {
   firstSetupPublicationDigest,
   planVenue,
   parseEmailSettings,
+  saveBankAccount,
   savePrivacyContact,
   venueFiscalSelection,
   type FirstSetupState,
@@ -102,7 +103,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-async function configurationArtifact() {
+async function configurationArtifact(
+  alsoSave?: (tx: Transaction, personId: string) => Promise<unknown>,
+) {
   const { password: _password, pin: _pin, ...admin } = request.admin;
   void _password;
   void _pin;
@@ -132,6 +135,7 @@ async function configurationArtifact() {
       },
       null,
     );
+    await alsoSave?.(tx, (await tx.select().from(persons))[0]!.id);
   });
   const bundle = await buildConfigurationBundle(
     source.db,
@@ -142,6 +146,28 @@ async function configurationArtifact() {
   );
   return encodeConfigurationBundle(bundle, "synthetic import passphrase");
 }
+
+it("leaves a saved bank account out of the configuration export", async () => {
+  const iban = "ES9121000418450200051332";
+  const artifact = await configurationArtifact((tx, personId) =>
+    saveBankAccount(tx, {
+      expected: { iban: "", bankName: "" },
+      iban,
+      bankName: "Openbank",
+      personId,
+    }),
+  );
+  expect((await readSettings(source.db, VENUE_SETTINGS)).doc.bankAccount).toEqual({
+    iban,
+    bankName: "Openbank",
+  });
+  const exported = JSON.stringify(
+    decodeConfigurationBundle(artifact, "synthetic import passphrase"),
+  );
+  expect(exported).toContain("privacy@example.com");
+  expect(exported).not.toContain(iban);
+  expect(exported).not.toContain("Openbank");
+});
 
 it.each([
   { newTaxpayer: false, change: "none", launch: "direct", staffLanguage: "en" },

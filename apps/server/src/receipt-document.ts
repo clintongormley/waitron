@@ -1,105 +1,39 @@
-import { customerOptionSnapshotLabels } from "@waitron/menu";
 import type { CardDetails } from "@waitron/payments";
-import type { ReceiptLabels } from "@waitron/country";
-import {
-  recipientIdentifierLabel,
-  receiptCountryNameFor,
-  receiptLabelsFor,
-} from "@waitron/country-packs";
+import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
 import {
   addDecimal,
-  compareDecimal,
   decimal,
   divideDecimal,
-  isZeroDecimal,
+  formatIban,
   MONEY_SCALE,
-  multiplyDecimal,
-  perDishOptionQuantity,
-  resolveSnapshotText,
+  negateDecimal,
   subtractDecimal,
   type Decimal,
   type ReceiptElement,
   type ReceiptIndent,
-  type ReceiptLogoRaster,
   type ReceiptStyle,
-  type ReceiptPaperWidth,
-  type ReceiptPresentation,
 } from "@waitron/shared";
-import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import {
-  beforeVatFigures,
-  invoiceDiscounts,
-  isFiled,
-  quantityText,
-  type FiguredGroup,
-  type FiguredLine,
-  type FiledLine,
-  type GroupDiscount,
-} from "./receipt-figures.js";
+  filedRates,
+  receiptFacts,
+  type DatedInvoice,
+  type ReceiptDocumentInput,
+  type FiledFigureRow,
+  type WithVatFigures,
+} from "./receipt-facts.js";
 import {
   receiptDateTime,
   receiptDateTimeNumeric,
   receiptDay,
   receiptDayNumeric,
 } from "./receipt-dates.js";
-import { cardName } from "./card-details.js";
-import { printsAsFullInvoice } from "./invoice-typing.js";
-import {
-  groupByParent,
-  isCoveredDish,
-  isSurcharge,
-  mergeIdenticalGroups,
-  printsOnTicket,
-  type LineGroup,
-} from "./receipt-lines.js";
+import { cardEntryLabel, cardName } from "./card-details.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
-import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
-
-export interface ReceiptIssuer {
-  venueName: string;
-  nif: string;
-  domicile?: string;
-}
-
-export interface ReceiptTrim {
-  headerSubtitle?: string;
-  phone?: string;
-  email?: string;
-  footerMessage?: string;
-}
-
-export interface ReceiptDocumentInput {
-  surface?: "thermal" | "a4";
-  /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
-  paperWidth?: ReceiptPaperWidth;
-  logo?: ReceiptLogoRaster | null;
-  result: Omit<
-    TillSaleResult,
-    keyof ReceiptPresentation | "simulatedCardPayment" | "venueAddressLine"
-  >;
-  issuer: ReceiptIssuer;
-  receiptHeader?: { tradingName: string | null; printTradingName: boolean };
-  receipt: ReceiptTrim;
-  venueAddress?: readonly string[];
-  /** The venue's address joined as a registered address is, so that one naming the province
-   *  `venueAddress` leaves out still prints once. */
-  venueAddressLine?: string;
-  invoiceLocale: string;
-  namesLocale?: string;
-  /** Marks a practice document, regardless of whether money moved. */
-  simulated?: boolean;
-  simulatedCardPayment?: boolean;
-  duplicate?: boolean;
-  guests?: number;
-  /**
-   * A printer's test page: the no-invoice notice prints at the top and bottom, after the practice
-   * mark where there is one, and the printer's own line ends the page.
-   */
-  testPage?: { printer: string };
-}
+import type { TenderBlock } from "./till-sale.js";
 
 export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
+export type { ReceiptDocumentInput, ReceiptIssuer, ReceiptTrim } from "./receipt-facts.js";
 
 /** A part of the trim the dashboard's preview highlights. */
 export type ReceiptPart =
@@ -118,34 +52,9 @@ export interface ReceiptDocument {
    * only the drawing knows whether a picture prints.
    */
   parts: Partial<Record<ReceiptPart, ElementRange>>;
-  /** The element of an A4 full invoice's "address · Tel. … · email" line, wrapped at its " · ". */
-  contactLine?: number;
   duplicate: boolean;
   practice: boolean;
 }
-
-function lineName(descriptions: Record<string, string>, locale: string): string {
-  return resolveSnapshotText(descriptions, locale, locale);
-}
-
-const percentFormatters = new Map<string, Intl.NumberFormat>();
-
-function adjustmentLabel(
-  adjustment: ReceiptAdjustment,
-  locale: string,
-  label: ReceiptLabels,
-): string {
-  const percentBp = adjustment.kind === "comp" ? 10000 : adjustment.percentBp;
-  if (percentBp === undefined) return label.discount;
-  let formatter = percentFormatters.get(locale);
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
-    percentFormatters.set(locale, formatter);
-  }
-  return `${label.discount} ${formatter.format(percentBp / 100)}%`;
-}
-
-export const CONTACT_SEPARATOR = " · ";
 
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
 function sameAddress(lines: readonly string[], line: string, domicile: string): boolean {
@@ -157,43 +66,14 @@ function sameAddress(lines: readonly string[], line: string, domicile: string): 
   return [lines.join(", "), line].some((venue) => venue !== "" && fold(venue) === fold(domicile));
 }
 
-/** A letter per VAT rate, in `vatBreakdown` order; `null` when the bill has a single rate. */
-export function rateLetters(vatBreakdown: readonly { rate: string }[]): Map<string, string> | null {
-  const letters = new Map<string, string>();
-  for (const { rate } of vatBreakdown) {
-    if (![...letters.keys()].some((seen) => compareDecimal(decimal(seen), decimal(rate)) === 0)) {
-      letters.set(rate, String.fromCharCode(65 + letters.size));
-    }
-  }
-  return letters.size > 1 ? letters : null;
-}
-
-export function buildReceiptDocument({
-  result,
-  issuer: currentIssuer,
-  receiptHeader,
-  receipt,
-  venueAddress = [],
-  venueAddressLine = "",
-  surface = "thermal",
-  paperWidth,
-  invoiceLocale,
-  namesLocale = invoiceLocale,
-  simulated = false,
-  simulatedCardPayment = false,
-  duplicate = false,
-  guests,
-  testPage,
-}: ReceiptDocumentInput): ReceiptDocument {
-  const issuer = result.issuer ?? currentIssuer;
-  const locale = invoiceLocale;
-  const label = receiptLabelsFor(locale);
-  const simplified = !printsAsFullInvoice(result.invoiceType);
+export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocument {
+  const { result, venueAddressLine = "", paperWidth } = input;
+  const facts = receiptFacts(input);
+  const { labels: label, locale, simplified, practice, testPage, letterhead, band } = facts;
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
   const parts: ReceiptDocument["parts"] = {};
-  let contactLine: number | undefined;
   const part = (name: ReceiptPart, add: () => void): void => {
     const start = elements.length;
     add();
@@ -225,92 +105,57 @@ export function buildReceiptDocument({
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
   };
-  const letters = simplified ? rateLetters(result.vatBreakdown) : null;
-  const rateLetter = (rate: string): string | undefined =>
-    letters === null
-      ? undefined
-      : [...letters].find(([seen]) => compareDecimal(decimal(seen), decimal(rate)) === 0)?.[1];
-  const letter = ({ vatRate }: TillSaleLine): string => {
-    const found = vatRate === undefined ? undefined : rateLetter(vatRate);
-    return found === undefined ? "" : ` ${found}`;
-  };
-  const sharedLetter = (covered: readonly TillSaleLine[]): string => {
-    const [first, ...rest] = covered.map(letter);
-    return rest.every((one) => one === first) ? first! : "";
-  };
-  // The advance is named as read from it, never from the words stored on the line.
-  const itemName = (line: TillSaleLine): string => {
-    if (line.advance === undefined) return lineName(line.descriptions, namesLocale);
-    const { invoiceNumber, issuedOn } = line.advance;
-    return label.advanceTakenOff
-      .replace("{paymentOnAccount}", () => label.paymentOnAccount)
-      .replace("{number}", () => invoiceNumber)
-      .replace("{date}", () => receiptDayNumeric(issuedOn, locale));
-  };
-  const takenOff = (adjustment: ReceiptAdjustment, indent: number, suffix = ""): void => {
+  const lettered = (letter: string): string => (letter === "" ? "" : ` ${letter}`);
+  const takenOff = (item: string, amount: Decimal, indent: number, letter = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
-    const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
-    row(name, `-${itemAmount(adjustment.amount)}${suffix}`, indent);
+    const name = `${" ".repeat(indent)}${item}${included}`;
+    row(name, `-${itemAmount(negateDecimal(amount))}${lettered(letter)}`, indent);
   };
-  if (simulated) {
+  const practiceMark = (): void => {
+    if (practice === undefined) return;
     text(label.practice);
-    if (simulatedCardPayment) text(label.noRealCharge);
-  }
+    if (practice.noRealCharge) text(label.noRealCharge);
+  };
+  practiceMark();
   if (testPage) text(label.paymentNotice);
-  if (simulated || testPage) rule();
+  if (practice || testPage) rule();
 
-  if (result.qr !== "") {
+  if (facts.qr !== undefined) {
+    const { text: qr, caption, legend } = facts.qr;
     align("center");
-    if (result.qrText) text(result.qrText.caption);
-    elements.push({ kind: "qr", text: result.qr });
-    if (result.qrText) text(result.qrText.legend);
+    if (caption !== undefined) text(caption);
+    elements.push({ kind: "qr", text: qr });
+    if (legend !== undefined) text(legend);
     rule();
     align("left");
   }
 
   align("center");
   part("logo", () => elements.push({ kind: "logo" }));
-  const tradingName = receiptHeader?.tradingName?.trim();
-  const printsTradingName =
-    receiptHeader?.printTradingName === true &&
-    !!tradingName &&
-    tradingName !== issuer.venueName.trim();
-  if (printsTradingName) text(tradingName, 0, { bold: true });
-  const { headerSubtitle, phone, email, footerMessage } = receipt;
+  const { tradingName, headerSubtitle, legalName, nif, domicile, phone, email } = letterhead;
+  if (tradingName !== undefined) text(tradingName, 0, { bold: true });
   if (headerSubtitle) part("headerSubtitle", () => text(headerSubtitle));
-  text(issuer.venueName, 0, printsTradingName ? undefined : { bold: true });
-  text(`${label.nif}: ${issuer.nif}`);
-  const venueLines = surface === "thermal" ? venueAddress : [];
+  text(legalName, 0, tradingName !== undefined ? undefined : { bold: true });
+  text(`${label.nif}: ${nif}`);
+  const venueLines = letterhead.venueAddress;
   if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
   const phoneLine = phone ? `${label.phone} ${phone}` : "";
-  if (surface === "a4" && !simplified) {
-    const line = [issuer.domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
-    if (line) {
-      contactLine = elements.length;
-      text(line);
-    }
-  } else {
-    if (phoneLine) part("phone", () => text(phoneLine));
-    if (email) part("email", () => text(email));
-  }
-  if (surface === "thermal" && !simplified && issuer.domicile) {
-    if (venueLines.length === 0) text(issuer.domicile);
-    else if (!sameAddress(venueLines, venueAddressLine, issuer.domicile)) {
-      text(`${label.registeredAddress}: ${issuer.domicile}`);
+  if (phoneLine) part("phone", () => text(phoneLine));
+  if (email) part("email", () => text(email));
+  if (!simplified && domicile) {
+    if (venueLines.length === 0) text(domicile);
+    else if (!sameAddress(venueLines, venueAddressLine, domicile)) {
+      text(`${label.registeredAddress}: ${domicile}`);
     }
   }
-  if (duplicate) text(label.duplicate);
+  if (band.duplicate) text(label.duplicate);
   rule();
   align("left");
 
-  if (result.orderLabel !== null || result.orderNumber !== 0)
-    row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
-  if (result.takeAway === true) text(label.takeAway, 0, { bold: true });
-  const dated = (invoice: {
-    invoiceNumber: string;
-    issuedAt: string;
-    issuedOffsetMinutes?: number;
-  }) => {
+  if (band.orderLabel !== null || band.orderNumber !== 0)
+    row(band.orderLabel ?? "", `${label.order} ${band.orderNumber}`, 0, undefined, 2);
+  if (band.takeAway) text(label.takeAway, 0, { bold: true });
+  const dated = (invoice: DatedInvoice) => {
     const date =
       paperWidth === "58mm"
         ? receiptDateTimeNumeric(invoice.issuedAt, locale, invoice.issuedOffsetMinutes)
@@ -318,223 +163,123 @@ export function buildReceiptDocument({
     // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(invoice.invoiceNumber, date, 0, undefined, 2);
   };
-  if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
+  const { corrects, customer } = facts;
+  if (corrects) text(label.correctiveInvoice, 0, { bold: true });
   if (simplified) {
-    dated(result);
+    dated(band);
   } else {
-    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));
+    row(label.invoiceHeading, band.invoiceNumber, 0, { bold: true });
+    row(label.date, receiptDateTime(band.issuedAt, locale, band.issuedOffsetMinutes));
   }
-  if (result.saleDay !== undefined) {
+  if (band.saleDay !== undefined) {
     const day = paperWidth === "58mm" ? receiptDayNumeric : receiptDay;
-    row(label.saleDate, day(result.saleDay, locale));
+    row(label.saleDate, day(band.saleDay, locale));
   }
-  if (result.corrects) {
-    text(result.corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
-    dated(result.corrects);
+  if (corrects) {
+    text(corrects.inFull ? label.replacesInvoiceInFull : label.correctsInvoice);
+    dated(corrects);
     // Invoicing regulation art. 15.5: a replacement states the rectification's amount, zero.
-    if (result.corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
+    if (corrects.inFull) row(label.rectificationAmount, formatMoney("0.00", locale));
   }
   rule();
-  if (!simplified && result.recipient) {
+  if (customer) {
     text(label.customer);
-    text(result.recipient.legalName);
-    text(
-      `${recipientIdentifierLabel(result.recipient.identifierType, locale)}: ${result.recipient.taxId}`,
-    );
-    text(result.recipient.address);
-    text(receiptCountryNameFor(result.recipient.countryCode, locale));
+    text(customer.legalName);
+    text(`${recipientIdentifierLabel(customer.identifierType, locale)}: ${customer.taxId}`);
+    text(customer.address);
+    text(receiptCountryNameFor(customer.countryCode, locale));
     rule();
   }
-  const filedRates: string[] = [];
-  for (const line of result.lines) {
-    if (!isFiled(line)) continue;
-    const rate = line.net.rate;
-    if (!filedRates.some((seen) => compareDecimal(decimal(seen), decimal(rate)) === 0)) {
-      filedRates.push(rate);
+  const withRate = filedRates(result.lines).length > 1;
+  const tableRow = (figure: FiledFigureRow): ReceiptTableRow => {
+    const indent = figure.indent > 0 ? { itemIndent: figure.indent } : {};
+    if (figure.kind === "answer") {
+      return { units: "", item: figure.item, ...indent, price: "", amount: "" };
     }
-  }
-  const withRate = filedRates.length > 1;
-  const anyFiled = !simplified && filedRates.length > 0;
-  const billAdjustments = result.billAdjustments ?? [];
-  let tableRows: ReceiptTableRow[] = [];
-  const printedTables: ReceiptTableRow[][] = [];
-  const endTable = (): void => {
-    if (tableRows.length === 0) return;
-    const table: ReceiptTable = {
-      ...(printedTables.length === 0
-        ? {
-            header: {
-              units: label.unitsColumn,
-              item: label.itemColumn,
-              price: label.priceColumn,
-              amount: label.amountColumn,
-              ...(withRate ? { rate: label.rateColumn } : {}),
-            },
-          }
-        : {}),
-      rows: tableRows,
-      withRate,
-    };
-    elements.push({ kind: "table", table });
-    printedTables.push(tableRows);
-    tableRows = [];
-  };
-  const rateCell = (rate: string): { rate: string } => ({ rate: formatVatRate(rate, locale) });
-  const answers = (dish: TillSaleLine): string[] =>
-    customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale);
-  const figured = (line: FiledLine): FiguredLine => ({ line, figures: beforeVatFigures(line) });
-  const filedRow = (
-    { line, figures: { price, amount } }: FiguredLine,
-    indent: number,
-  ): ReceiptTableRow => {
-    const covered = isCoveredDish(line);
+    const rate = { rate: formatVatRate(figure.rate!, locale) };
+    if (figure.kind === "discount") {
+      const amount = `-${formatAmount(negateDecimal(figure.amountExVat!), locale)}`;
+      return { units: "", item: figure.item, ...indent, price: "", amount, ...rate };
+    }
     return {
-      units: quantityText(line, namesLocale, locale),
-      item: itemName(line),
-      ...(indent > 0 ? { itemIndent: indent } : {}),
-      price: covered ? "" : formatAmount(price, locale),
-      amount: covered ? "" : formatAmount(amount, locale),
-      ...rateCell(line.net.rate),
+      units: figure.units,
+      item: figure.item,
+      ...indent,
+      price: figure.unitPrice === undefined ? "" : formatAmount(figure.unitPrice, locale),
+      amount: figure.amountExVat === undefined ? "" : formatAmount(figure.amountExVat, locale),
+      ...rate,
     };
   };
-  const discountRow = (discount: GroupDiscount, indent: number): ReceiptTableRow => ({
-    units: "",
-    item:
-      discount.named !== null
-        ? adjustmentLabel(discount.named, locale, label)
-        : discount.comp
-          ? adjustmentLabel({ kind: "comp", amount: "0" }, locale, label)
-          : label.discount,
-    ...(indent > 0 ? { itemIndent: indent } : {}),
-    price: "",
-    amount: `-${formatAmount(discount.amount, locale)}`,
-    ...rateCell(discount.rate),
-  });
-  const groups = groupByParent(result.lines);
-  const filedGroups: FiguredGroup[] = [];
-  if (!simplified) {
-    let nextLine = 0;
-    groups.forEach(({ dish, options }, at) => {
-      const filedIndex = result.lines.indexOf(dish, nextLine);
-      nextLine = filedIndex + 1;
-      if (!isFiled(dish) || !options.every(isFiled)) return;
-      filedGroups.push({
-        at,
-        family: dish.dishFamily ?? filedIndex,
-        lines: [dish, ...options].map(figured),
-      });
-    });
-  }
-  const discounts = invoiceDiscounts(filedGroups, billAdjustments);
-  const tableGroup = ({ at, lines }: FiguredGroup): void => {
-    const [dishFigured, ...optionsFigured] = lines;
-    tableRows.push(filedRow(dishFigured!, 0));
-    for (const answer of answers(dishFigured!.line)) {
-      tableRows.push({ units: "", item: answer, itemIndent: 2, price: "", amount: "" });
-    }
-    for (const option of optionsFigured) tableRows.push(filedRow(option, 2));
-    for (const discount of discounts.under.get(at) ?? []) {
-      tableRows.push(discountRow(discount, 2));
-    }
-  };
-  const withVatGroup = ({ dish, options }: LineGroup): void => {
-    // Without its filed figures, a dish priced per pack prints its quantity, not its packs.
-    const { quantity: count, unitName, soldInEach } = dish;
-    const shown = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
-    const quantity = `${shown}  `;
+  const withVatGroup = (group: WithVatFigures): void => {
+    const quantity = `${group.quantity}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
-    const amount = decimal(dish.listGross ?? dish.gross);
-    const surcharge = simplified && isSurcharge(dish, amount);
-    const printedAmount = isCoveredDish(dish)
-      ? ""
-      : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;
-    row(`${quantity}${itemName(dish)}${included}`, printedAmount, { after: quantity });
-    const sold = decimal(count);
-    const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
-    if (
-      simplified &&
-      !result.corrects &&
-      recorded !== undefined &&
-      compareDecimal(decimal(dish.priceQuantity ?? "1"), decimal("1")) === 0 &&
-      !isZeroDecimal(amount) &&
-      compareDecimal(sold, decimal("1")) !== 0
-    ) {
-      const unit = decimal(recorded);
-      // A weighed amount is rounded to the cent, so the price it was sold at may not give it back.
-      if (compareDecimal(multiplyDecimal(unit, sold), amount) === 0) {
-        const price = `${surcharge ? "+" : ""}${formatMoney(unit, locale)}`;
-        // Counted exactly when the quantity printed above carries no unit name.
-        const each =
-          shown === formatDecimalInput(count, locale)
-            ? label.perUnit.replace("{price}", () => price)
-            : `${price} / ${resolveSnapshotText(unitName!, namesLocale, namesLocale)}`;
-        text(`${" ".repeat(quantity.length)}${each}`, quantity.length);
-      }
+    const plus = group.surcharge ? "+" : "";
+    row(
+      `${quantity}${group.item}${included}`,
+      group.amount === undefined
+        ? ""
+        : `${plus}${itemAmount(group.amount)}${lettered(group.rateLetter)}`,
+      { after: quantity },
+    );
+    if (group.perUnit !== undefined) {
+      const price = `${plus}${formatMoney(group.perUnit.price, locale)}`;
+      const each =
+        group.perUnit.unitName === undefined
+          ? label.perUnit.replace("{price}", () => price)
+          : `${price} / ${group.perUnit.unitName}`;
+      text(`${" ".repeat(quantity.length)}${each}`, quantity.length);
     }
-    for (const answer of answers(dish)) text(`  ${answer}`, 2);
-    for (const option of options) {
-      const name = lineName(option.descriptions, namesLocale);
-      let caption: string;
-      if (!simplified) {
-        const { quantity: count, unitName, soldInEach } = option;
-        caption = `  ${name} ${quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale)}`;
-      } else if (option.unitName == null || option.soldInEach === true) {
-        const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
-        caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;
-      } else {
-        caption = `  ${name} ${formatDecimalInput(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
-      }
-      row(caption, `${itemAmount(option.listGross ?? option.gross)}${letter(option)}`, 2);
+    for (const answer of group.answers) text(`  ${answer}`, 2);
+    for (const option of group.options) {
+      const caption =
+        option.quantity === "" ? `  ${option.item}` : `  ${option.item} ${option.quantity}`;
+      row(caption, `${itemAmount(option.amount)}${lettered(option.rateLetter)}`, 2);
     }
-    // A dish's adjustment covers its extras too (`planAdjustment`); an extra's covers it alone.
-    for (const line of [dish, ...options]) {
-      const covered = line === dish ? [dish, ...options] : [line];
-      for (const adjustment of line.adjustments ?? [])
-        takenOff(adjustment, 2, sharedLetter(covered));
+    for (const adjustment of group.adjustments) {
+      takenOff(adjustment.item, adjustment.amount, 2, adjustment.rateLetter);
     }
   };
-  let nextFiled = 0;
-  const printed = simplified
-    ? mergeIdenticalGroups(groups.filter(printsOnTicket), result.vatBreakdown.length <= 1)
-    : groups;
-  // An advance is taken off what the bill came to, so it prints after the whole-bill discounts.
-  const advances: (() => void)[] = [];
-  printed.forEach((group, at) => {
-    const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
-    // Left out only after the filed rows are paired by position, so later rows keep their figures.
-    if (!printsOnTicket(group) && !discounts.under.has(at)) return;
-    const print = (): void => {
-      if (filed !== undefined) {
-        tableGroup(filed);
-      } else {
-        endTable();
-        withVatGroup(group);
-      }
-    };
-    if (group.dish.advance === undefined) print();
-    else advances.push(print);
-  });
-  const lastRows = tableRows.length > 0 ? tableRows : printedTables.at(-1);
-  for (const discount of discounts.atEnd) lastRows?.push(discountRow(discount, 0));
-  if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
-  for (const print of advances) print();
-  endTable();
-  if (printedTables.length > 0) text(`    ${label.pricesExcludeVat}`, 4);
+  let tables = 0;
+  for (const section of facts.sections) {
+    if (section.kind === "filed") {
+      const table: ReceiptTable = {
+        ...(tables === 0
+          ? {
+              header: {
+                units: label.unitsColumn,
+                item: label.itemColumn,
+                price: label.priceColumn,
+                amount: label.amountColumn,
+                ...(withRate ? { rate: label.rateColumn } : {}),
+              },
+            }
+          : {}),
+        rows: section.rows.map(tableRow),
+        withRate,
+      };
+      elements.push({ kind: "table", table });
+      tables += 1;
+    } else if (section.kind === "withVat") {
+      withVatGroup(section.group);
+    } else {
+      for (const taken of section.rows) takenOff(taken.item, taken.amount, 0);
+    }
+  }
+  if (tables > 0) text(`    ${label.pricesExcludeVat}`, 4);
   rule();
   const vatRows = (): void => {
-    for (const v of result.vatBreakdown) {
+    for (const v of facts.vat) {
       row(`${label.taxableBase} ${formatVatRate(v.rate, locale)}`, formatMoney(v.base, locale));
       row(`${label.vat} ${formatVatRate(v.rate, locale)}`, formatMoney(v.tax, locale));
     }
   };
   const total = (): void => {
-    row(label.total, formatMoney(result.total, locale), 0, { double: true });
+    row(label.total, formatMoney(facts.total, locale), 0, { double: true });
   };
   if (simplified) {
     total();
     rule();
-    if (result.vatBreakdown.length > 0)
+    if (facts.vat.length > 0)
       elements.push({
         kind: "taxTable",
         header: {
@@ -543,14 +288,13 @@ export function buildReceiptDocument({
           tax: label.taxAmountColumn,
           total: label.taxTotalColumn,
         },
-        rows: result.vatBreakdown.map((v) => {
+        rows: facts.vat.map((v) => {
           const rate = formatVatRate(v.rate, locale);
-          const found = rateLetter(v.rate);
           return {
-            rate: found === undefined ? rate : `${found} ${rate}`,
+            rate: v.letter === undefined ? rate : `${v.letter} ${rate}`,
             base: formatAmount(v.base, locale),
             tax: formatAmount(v.tax, locale),
-            total: formatAmount(addDecimal(decimal(v.base), decimal(v.tax)), locale),
+            total: formatAmount(addDecimal(v.base, v.tax), locale),
           };
         }),
       });
@@ -560,23 +304,21 @@ export function buildReceiptDocument({
     total();
   }
   rule();
-  const t = result.tender;
+  const { payments, owed, deferred } = facts.payment;
+  // A deferred sale's own lines, below, take the place of its tender's.
+  const t: TenderBlock = deferred === undefined ? facts.payment.tender : { method: "unpaid" };
   const cardRows = (card: CardDetails | undefined, amount: Decimal): void => {
     if (card === undefined) {
       row(label.card, formatMoney(amount, locale));
       return;
     }
-    const presented = {
-      contactless: ` (${label.paymentContactless})`,
-      chip: ` (${label.paymentChip})`,
-      swipe: ` (${label.paymentSwipe})`,
-      unknown: "",
-    }[card.entryMode];
+    const entry = cardEntryLabel(card.entryMode, label);
+    const presented = entry === undefined ? "" : ` (${entry})`;
     row(`${cardName(card, label.card)}${presented}`, formatMoney(amount, locale));
     if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
   };
-  if (result.payments !== undefined && result.payments.length > 0) {
-    for (const payment of result.payments) {
+  if (payments !== undefined && payments.length > 0) {
+    for (const payment of payments) {
       if (payment.method === "cash") {
         row(label.cash, formatMoney(payment.tendered, locale));
         if (payment.change !== "0.00") row(label.change, formatMoney(payment.change, locale));
@@ -595,7 +337,7 @@ export function buildReceiptDocument({
       }
     }
   } else if (t.method === "cash") {
-    row(label.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
+    row(label.cash, formatMoney(addDecimal(facts.total, decimal(t.change)), locale));
     row(label.change, formatMoney(t.change, locale));
   } else if (t.method === "deferred") {
     text(label.deferredPayment);
@@ -608,12 +350,26 @@ export function buildReceiptDocument({
       row(label.charged, formatMoney(t.charged, locale));
     }
   }
-  if (result.owed !== undefined)
-    row(label.owed, formatMoney(result.owed, locale), 0, { bold: true });
+  if (deferred !== undefined) {
+    text(label.paymentMethodHeading, 0, { bold: true });
+    const { account } = deferred;
+    if (account === null) text(`${label.deferredPayment}.`);
+    else {
+      const instruction = label.transferInstruction.replace("{number}", () => band.invoiceNumber);
+      text(`${label.deferredPayment}. ${instruction}`);
+      const iban = formatIban(account.iban);
+      if (paperWidth === "58mm") {
+        text(`${label.iban}:`);
+        text(iban);
+      } else text(`${label.iban}: ${iban}`);
+      if (account.bankName !== null) text(`${label.bankName}: ${account.bankName}`);
+    }
+  } else if (owed !== undefined) row(label.owed, formatMoney(owed, locale), 0, { bold: true });
   rule();
+  const { guests, footerMessage } = facts;
   if (guests !== undefined) {
     const people = `${guests} ${guests === 1 ? label.guest : label.guests}`;
-    const each = divideDecimal(decimal(result.total), decimal(String(guests)), MONEY_SCALE);
+    const each = divideDecimal(facts.total, decimal(String(guests)), MONEY_SCALE);
     row(`${people} · ${label.perPerson}`, formatMoney(each, locale));
     rule();
   }
@@ -623,11 +379,8 @@ export function buildReceiptDocument({
     part("footerMessage", () => text(footerMessage));
     align("left");
   }
-  if (simulated || testPage) rule();
-  if (simulated) {
-    text(label.practice);
-    if (simulatedCardPayment) text(label.noRealCharge);
-  }
+  if (practice || testPage) rule();
+  practiceMark();
   if (testPage) {
     text(label.paymentNotice);
     text(testPage.printer);
@@ -637,8 +390,7 @@ export function buildReceiptDocument({
   return {
     elements,
     parts,
-    ...(contactLine === undefined ? {} : { contactLine }),
-    duplicate,
-    practice: simulated,
+    duplicate: band.duplicate,
+    practice: practice !== undefined,
   };
 }

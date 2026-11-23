@@ -18,7 +18,7 @@ as a deferred payment ("Pago aplazado", A275), on the A4 page and on the till re
 
 ## Goals
 
-- A4 invoices (the emailed PDF and the office-printer page; both come from `layoutInvoicePages`)
+- A4 invoices (the emailed PDF and the office-printer page; both come from `layoutA4Invoice`)
   follow the layout the owner chose from mock-ups on 2026-11-22: B's header, A's table (below).
 - Every fact today's A4 invoice can carry is still carried, in a place of its own in the new layout.
 - A bill closed as a deferred payment shows how to pay by bank transfer, on A4 and on the thermal
@@ -154,6 +154,9 @@ and for a case where per-row VAT would drift. The IVA column is
 always shown (today it shows only when rates differ).
 
 Discounts, extras, answers and advances stay where the builder puts them today, as indented rows.
+On a full invoice that has filed lines, a whole-bill discount also adds a row under each line with
+no filed figures, for that line's share of the discount with VAT included, on the A4 page and on
+the roll, so the column still adds up to TOTAL.
 
 Simplified invoices printed on A4 (`printsAsFullInvoice` false) have no customer and show amounts
 with VAT. Their table: Descripción · Cant. · Precio · Importe, VAT included, with the same VAT
@@ -163,7 +166,9 @@ summary table under it.
 
 The header (QR, letterhead, band) and the customer box are on page 1 only; the QR stays on page 1
 only, as today. The table heading row repeats on every page the table reaches. The VAT summary,
-TOTAL and payment footer move to the next page whole rather than split. Later pages carry a small
+TOTAL and payment footer move to the next page whole when they fit on one page; a block too tall
+for one page keeps the VAT summary and TOTAL together and continues the payment footer, between
+its lines, onto further pages. Later pages carry a small
 "Factura FF/1 · 2/3" line at the top so a loose page can be matched to its invoice.
 
 ## The payment footer's first word
@@ -172,8 +177,7 @@ TOTAL and payment footer move to the next page whole rather than split. Later pa
 - Owed: the payments listed, then the amount owed in bold; no "Pagado".
 - Deferred (directly or through the sale it replaces): the instructions below.
 - No payment of its own and not deferred (a corrective or refund invoice, a fully comped bill, a
-  cancellation credit): no "Pagado"; the footer lists only refunds, if any, and is left out when it
-  would be empty.
+  cancellation credit): no payment footer at all.
 
 ## Bank-transfer instructions
 
@@ -181,7 +185,8 @@ TOTAL and payment footer move to the next page whole rather than split. Later pa
 department: one per venue. Edited on the dashboard on Venue settings → Venue details → the Business
 card (`apps/dashboard/src/screens/venue-details-panel.ts`), next to the legal name and tax number.
 The IBAN is validated (country format and the mod-97 check) and stored without spaces; it prints
-in groups of four. The bank name is free text. Both are optional; the bank name is printed only
+in groups of four. The bank name is free text of at most 70 characters, checked when it is saved; reading a
+saved account does not check it. Both are optional; the bank name is printed only
 when given.
 
 **Where it is stored.** In the core `settings.venue` document (`VENUE_SETTINGS`,
@@ -195,8 +200,9 @@ legal name (`taxpayerFieldRoute` in `apps/server/src/venue-settings-api.ts`: `ve
 fresh sign-in), is written to the activity log, and sends an email to the venue's administrators
 naming who changed it and the old and new account with the middle digits hidden (first four and
 last four characters shown). The email is a box notice (`box_alert`, one per `system.manage` holder
-with an email, `readManagerEmailRecipients`), sent through the venue's own mail server like every
-other notice today; the owner's 2026-11-21 decision that a paid Cloud plan sends every email the box
+with an email, `readManagerEmailRecipients`), sent through the venue's own mail server only: Waitron
+Cloud relays five other box notices but not this one yet, so a box that sends email only through
+Cloud does not send it; the owner's 2026-11-21 decision that a paid Cloud plan sends every email the box
 would send covers it once Cloud does that. It survives a restart, as the upgrade-rolled-back notice
 does (`transientBoxAlertMail` in `apps/server/src/box-alert-email.ts`). The activity entry carries no
 account number (`data: {}`, like `taxpayer.domicile_changed`).
@@ -260,8 +266,9 @@ Banco: OPENBANK
 - A string-rendered page has nothing checking that it renders: open the PDF and the office-printer
   image and look, at both a one-page and a multi-page invoice.
 - Help guide: the Business card's new field and the deferred-payment instructions are described in
-  the dashboard guide (English and Spanish) and the invoices guide
-  (`apps/server/src/guide/{en,es}/invoices.md`).
+  the table-service guide (`apps/server/src/guide/{en,es}/table-service.md`), and the staff guide
+  (`apps/server/src/guide/{en,es}/staff.md`) adds the bank account to the changes that need a fresh
+  sign-in.
 
 ## Recording the decisions
 

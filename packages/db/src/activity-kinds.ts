@@ -120,6 +120,8 @@ export interface ActivityKindData {
 
   /** Who saved which document and its new revision; never a document value. */
   readonly "settings.saved": { readonly revision: number };
+  /** Never the account number: the change is told to administrators by email instead. */
+  readonly "venue.bank_account_changed": Record<string, never>;
   /** Who removed a never-joined standby from the membership chart, at which term. */
   readonly "membership.node_removed": { readonly contactUrl: string; readonly term: number };
   /** Who cleared a removed machine from the chart, freeing its place, at which term. */
@@ -181,6 +183,7 @@ export const ACTIVITY_KINDS = {
   "handover.reset_ordered": { subject: "node" },
   "handover.reset_acknowledged": { subject: "node" },
   "settings.saved": { subject: "settings" },
+  "venue.bank_account_changed": { subject: "settings" },
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },
   "deferred_payment_export.downloaded": { subject: "report" },

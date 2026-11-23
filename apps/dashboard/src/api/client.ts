@@ -178,6 +178,7 @@ export interface VenueDetailsModel {
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
   taxpayerDomicile: string | null;
+  bankAccount: { iban: string; bankName: string | null } | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
   policy: Record<
@@ -4219,6 +4220,14 @@ export class DashboardApi {
     expected: string;
   }): Promise<{ model: VenueDetailsModel }> {
     return this.#request("/management-api/venue-details/registered-address", "PUT", input);
+  }
+
+  saveBankAccount(input: {
+    iban: string;
+    bankName: string;
+    expected: { iban: string; bankName: string };
+  }): Promise<{ model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/bank-account", "PUT", input);
   }
 
   previewBusinessDayStart(input: {
