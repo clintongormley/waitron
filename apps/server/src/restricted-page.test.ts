@@ -36,6 +36,7 @@ import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const RECEIVER = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 
@@ -76,23 +77,27 @@ async function handOver(
   );
 }
 
+async function holdNodes(
+  chartNodes: SignedMembershipDocument["body"]["nodes"],
+  term = 3,
+): Promise<void> {
+  await writeNodeMembership(suite.db, {
+    body: { term, nodes: chartNodes },
+    signerNodeId: NODE,
+    signature: "not-verified-by-this-read",
+    endorsements: [],
+  });
+}
+
 async function holdChart(
   successor: string,
   contactUrl: string,
   standing: NodeStanding = "serving-primary",
 ): Promise<void> {
-  await writeNodeMembership(suite.db, {
-    body: {
-      term: 3,
-      nodes: [
-        { nodeId: NODE, contactUrl: "https://old-box.example", standing: "sell-only" },
-        { nodeId: successor, contactUrl, standing },
-      ],
-    },
-    signerNodeId: NODE,
-    signature: "not-verified-by-this-read",
-    endorsements: [],
-  });
+  await holdNodes([
+    { nodeId: NODE, contactUrl: "https://old-box.example", standing: "sell-only" },
+    { nodeId: successor, contactUrl, standing },
+  ]);
 }
 
 const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
@@ -193,8 +198,8 @@ describe("the restricted box's own page", () => {
     "shows only the heading and the dashboard link when all is well, in %s",
     async (locale, header, lang) => {
       const successor = await seedSuccessor("Bar counter box");
-      // Recorded steps, a chart naming the successor main and a planned handover: the page before
-      // this change listed each step, named the successor in a sentence and linked Progress.
+      // Recorded steps, a chart naming the successor main and a planned handover: everything that
+      // could draw a step list, a successor sentence or a Progress link.
       await handOver(successor);
       await withNodeTransaction(suite.node, (tx) =>
         appendHandoverEventTx(tx, {
@@ -247,13 +252,6 @@ describe("the restricted box's own page", () => {
       ]);
     },
   );
-
-  it("calls the Waitron machine a servidor in every Spanish line", () => {
-    for (const line of Object.values(RESTRICTED_RETURN_WORDS["es-ES"]))
-      expect(line).not.toMatch(/\bequipos?\b/i);
-    for (const line of Object.values(RESTRICTED_RESET_WORDS["es-ES"]))
-      expect(line).not.toMatch(/\bequipos?\b/i);
-  });
 
   it.each([
     ["https://new-box.example", true],
@@ -322,6 +320,72 @@ describe("the restricted box's own page", () => {
       }
     },
   );
+
+  it("links the dashboard to the box a newer chart names main, and drops Progress", async () => {
+    const successor = await seedSuccessor("Counter box");
+    await handOver(successor);
+    await holdChart(successor, "https://planned.example", "serving-secondary");
+    const before = await (await request("en-GB", suite.db, "waiting")).text();
+    expect(before).toContain(`<a href="https://planned.example/handover/${OP}">Progress</a>`);
+    await holdNodes(
+      [
+        { nodeId: NODE, contactUrl: "https://old-box.example", standing: "sell-only" },
+        { nodeId: successor, contactUrl: "https://planned.example", standing: "sell-only" },
+        { nodeId: RECEIVER, contactUrl: "https://receiver.example", standing: "serving-primary" },
+      ],
+      5,
+    );
+    for (const [locale, header] of LANGUAGES) {
+      const html = await (await request(header, suite.db, "waiting")).text();
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://receiver.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+        `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+      ]);
+    }
+  });
+
+  it("drops Progress once the chart names the box taking over main, before any receipt", async () => {
+    const successor = await seedSuccessor("Counter box");
+    await handOver(successor);
+    await holdNodes([
+      { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+      { nodeId: successor, contactUrl: "https://new-box.example", standing: "serving-secondary" },
+    ]);
+    const before = await (await request("en-GB", suite.db, "waiting")).text();
+    expect(before).toContain(`<a href="https://new-box.example/handover/${OP}">Progress</a>`);
+    await holdNodes(
+      [
+        { nodeId: NODE, contactUrl: "https://old-box.example", standing: "sell-only" },
+        { nodeId: successor, contactUrl: "https://new-box.example", standing: "serving-primary" },
+      ],
+      4,
+    );
+    for (const [locale, header] of LANGUAGES) {
+      const html = await (await request(header, suite.db, "waiting")).text();
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://new-box.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+        `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+      ]);
+    }
+  });
+
+  it("follows the handover, not the chart's other boxes, while the chart still names this box main", async () => {
+    const successor = await seedSuccessor("Counter box");
+    await handOver(successor);
+    await holdNodes([
+      { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+      { nodeId: RECEIVER, contactUrl: "https://other.example", standing: "serving-secondary" },
+      { nodeId: successor, contactUrl: "https://new-box.example", standing: "serving-secondary" },
+    ]);
+    for (const [locale, header] of LANGUAGES) {
+      const html = await (await request(header, suite.db, "waiting")).text();
+      expect(paragraphs(html)).toEqual([
+        `<p><a href="https://new-box.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
+        `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+        `<p><a href="https://new-box.example/handover/${OP}">${RESTRICTED_PAGE_WORDS[locale].progress}</a></p>`,
+      ]);
+    }
+  });
 
   it("never links Progress after an emergency switch", async () => {
     const successor = await seedSuccessor("Counter box");

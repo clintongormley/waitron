@@ -7,6 +7,7 @@ import {
   readHandoverOperation,
   readHandoverRestriction,
   type HandoverOperation,
+  type HandoverRestriction,
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron/shared";
@@ -21,6 +22,7 @@ import {
   RESTRICTED_RETURN_WORDS,
   RESTRICTED_MAIN_BOX_WORDS,
 } from "./i18n/restricted-page.js";
+import { mainBoxToAsk } from "./main-box-answer.js";
 import type { ReplacedResetMarker } from "./replaced-reset.js";
 
 export interface RestrictedPageDeps {
@@ -132,14 +134,16 @@ async function resetLine(
 }
 
 /**
- * The taking-over box's page for a planned handover, until that box has started running the venue.
- * It sends a return receipt only once started, refusing `activating` before
- * (`return-records-api.ts`), or when it holds no open handover from this box; either way a
- * confirmed return, or a receipt that found a payment clash, leaves no handover unfinished.
+ * The taking-over box's page for an open planned handover, offered until this box sees that the
+ * handover finished: a confirmed return or a payment-clash receipt (that box answers a return only
+ * once activated, `return-records-api.ts`), a recorded `return_confirmed` event, or a held chart
+ * naming a box other than this one main (the taking-over box names itself main in the transaction
+ * that activates it, `handover-activation.ts`).
  */
 async function progressPage(
   deps: RestrictedPageDeps,
   operation: HandoverOperation,
+  restriction: HandoverRestriction,
   returnState: ReturnState,
 ): Promise<string | undefined> {
   if (operation.scenario !== "controlled" || !isOpen(operation.state)) return undefined;
@@ -151,6 +155,8 @@ async function progressPage(
     "return_confirmed",
   );
   if (confirmed.length > 0) return undefined;
+  const chart = await readNodeMembership(deps.venue);
+  if (!mainBoxToAsk(deps.nodeId, chart, restriction).fromRestriction) return undefined;
   return await handoverPageOf({ db: deps.venue }, operation);
 }
 
@@ -162,21 +168,21 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     restriction.operationId === null
       ? null
       : await readHandoverOperation(deps.node, deps.nodeId, restriction.operationId);
-  // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
-  const successor = (await readOrWarn(
+  // The rule the return sender uses to choose the box it sends to (`return-records.ts`).
+  const mainBox = await readOrWarn(
     deps,
     requestId,
     "restricted_page.successor_link_failed",
-    () => readSuccessor(deps, restriction.successorNodeId, restriction),
-  )) ?? { kind: "id", id: restriction.successorNodeId };
+    async () => mainBoxToAsk(deps.nodeId, await readNodeMembership(deps.venue), restriction),
+  );
   const returnState = deps.returnState?.() ?? "waiting";
   return {
-    successorUrl: successor.kind === "host" ? successor.contactUrl : undefined,
+    successorUrl: mainBox?.target?.contactUrl,
     handoverPage:
       operation === null
         ? undefined
         : await readOrWarn(deps, requestId, "restricted_page.progress_link_failed", () =>
-            progressPage(deps, operation, returnState),
+            progressPage(deps, operation, restriction, returnState),
           ),
     returnState,
     reset: await resetLine(deps, requestId),
