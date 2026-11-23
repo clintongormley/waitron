@@ -2,7 +2,13 @@ import { builtInRoleForTest, seedPersons } from "@waitron/identity/test/person-r
 import { expect, it } from "vitest";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { invoiceSeries, saveVenueFields, withTransaction, type Transaction } from "@waitron/db";
+import {
+  insertMasterKey,
+  invoiceSeries,
+  saveVenueFields,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -90,6 +96,24 @@ it("keeps Cloud and stream identities out of configuration exports", async () =>
   expect(bundle.venue).not.toHaveProperty("cloudVenueId");
   expect(bundle.venue).not.toHaveProperty("streamId");
   expect(bundle.settings).not.toHaveProperty("venue");
+});
+
+it("a configuration export carries no master_keys row", async () => {
+  const target = await seed();
+  const checkValue = "c".repeat(64);
+  await withTransaction(suite.db, (tx) =>
+    insertMasterKey(tx, {
+      name: "2026-10-16 · ABCD",
+      checkValue,
+      publicKey: new Uint8Array([1, 2, 3]),
+      madeAt: now,
+      madeBy: null,
+    }),
+  );
+  const bundle = await buildConfigurationBundle(suite.db, target, modules, now, {});
+  expect(Object.keys(bundle.tables)).not.toEqual([]);
+  expect(bundle.tables).not.toHaveProperty("master_keys");
+  expect(JSON.stringify(bundle)).not.toContain(checkValue);
 });
 
 it("refuses export while a future cutover change would be lost", async () => {

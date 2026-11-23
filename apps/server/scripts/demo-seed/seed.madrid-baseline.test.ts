@@ -493,6 +493,7 @@ const ADDED_TABLES = [
   "invoice_corrections",
   "order_events",
   "recovery_packs",
+  "master_keys",
   "sale_line_dishes",
   "deferred_closures",
   "declaraciones_responsables",

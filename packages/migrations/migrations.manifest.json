@@ -22,6 +22,7 @@
       "sale_line_dishes",
       "order_amendments",
       "order_events",
+      "master_keys",
       "handover_activations",
       "menu_versions",
       "menu_version_images",

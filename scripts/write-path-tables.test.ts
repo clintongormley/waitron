@@ -5,7 +5,7 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `taxpayer`, `nodes` and
- * `deployment`, `settings`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles` and `product_takeaway_vat_rates`, and node.db's `box`, `node_pair_link`, `node_take_failures`,
+ * `deployment`, `settings`, `master_keys`, `activity_log`, `invoice_corrections`, `invoice_correction_refunds`, `bill_advances`, `roles`, `person_roles` and `product_takeaway_vat_rates`, and node.db's `box`, `node_pair_link`, `node_take_failures`,
  * `node_handover_operations`, `node_handover_events` and `node_handover_restriction`.
  *
  * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes
@@ -13,6 +13,8 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
  *
  * `packages/db/src/activity-log.ts` owns activity_log recording and pruning; new rows pass
  * through the kind registry (packages/db/src/activity-kinds.ts).
+ *
+ * `packages/db/src/master-keys.ts` insertMasterKey is the one master_keys writer.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
@@ -195,6 +197,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
       "deployment",
       "invoice_correction_refunds",
       "invoice_corrections",
+      "master_keys",
       "node_handover_events",
       "node_handover_operations",
       "node_handover_restriction",

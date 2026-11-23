@@ -12,6 +12,7 @@
     "packages/provisioning/src/venue-apply.ts"
   ],
   "settings": ["packages/db/src/settings.ts"],
+  "master_keys": ["packages/db/src/master-keys.ts"],
   "taxpayer": [
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"

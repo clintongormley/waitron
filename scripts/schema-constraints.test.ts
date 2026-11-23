@@ -45,6 +45,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["activity_log", ["device_id"], "devices"],
   ["activity_log", ["person_id"], "persons"],
   ["settings", ["updated_by"], "persons"],
+  ["master_keys", ["made_by"], "persons"],
   ["absences", ["decided_by_person_id"], "persons"],
   ["absences", ["person_id"], "persons"],
   ["acks", ["registro_id"], "verifactu_records"],
