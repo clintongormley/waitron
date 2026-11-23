@@ -10,6 +10,9 @@ import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
+import { buildReceiptDocument } from "./receipt-document.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {
   billWith,
   inTx,
@@ -68,7 +71,7 @@ async function adjust(billId: string, ask: Ask) {
 }
 
 /** Pays what is left on the bill in cash, issuing its invoice; answers the receipt. */
-async function pay(billId: string) {
+async function pay(billId: string, tendered = "1000.00") {
   const sessionId = await openTillSession(venue.db, {
     deviceId: venue.cfg.origin.deviceId,
     personId: venue.staffId,
@@ -78,7 +81,7 @@ async function pay(billId: string) {
     venue.cfg,
     { personId: venue.staffId, sessionId },
     billId,
-    "1000.00",
+    tendered,
   );
 }
 
@@ -282,4 +285,46 @@ describe("a free item on a takeaway ticket mixing VAT rates", () => {
       waterRow: { quantity: "1.000", gross: "1.67" },
     });
   });
+
+  // A reprint rebuilds its lines from the filed rows, which hold each dish's share, not the price
+  // it was sold at.
+  it.each([
+    ["a free item that takes part of its price", "Salad", "1", "Water"],
+    ["a free item whose share rounds up to its whole price", "Ham", "100.000", "Coffee"],
+  ])(
+    "reprints the ticket as its payment receipt printed it: %s",
+    async (_, paidDish, paidQuantity, freeDish) => {
+      await takeawayRates(venue, { [paidDish]: "4.00", [freeDish]: "21.00" });
+      const { billId } = await billWith(
+        venue,
+        [
+          { name: paidDish, quantity: paidQuantity },
+          { name: freeDish, quantity: "2" },
+        ],
+        { dining: "takeaway" },
+      );
+      // One portion a line: the free item's two portions follow the paid dish.
+      for (const lineNo of [2, 3])
+        await adjust(billId, { lineId: await lineIdOf(venue, billId, lineNo), action: "comp" });
+      const paid = await pay(billId, "3000.00");
+      const { saleId } = await filed(billId);
+      const reprint = await inTx(venue, (tx) =>
+        readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+      );
+      const printed = (result: typeof paid) =>
+        buildReceiptDocument({
+          ...FULL_INVOICE_DOCUMENT_FIXTURE,
+          result,
+          invoiceLocale: "en-GB",
+        }).elements.flatMap((element) =>
+          element.kind === "text"
+            ? [element.text]
+            : element.kind === "amount"
+              ? [`${element.caption} | ${element.amount}`]
+              : [],
+        );
+      expect(printed(paid)).toContain(`   €${freeDish === "Water" ? "2.00" : "1.50"} each`);
+      expect(printed(reprint)).toEqual(printed(paid));
+    },
+  );
 });
