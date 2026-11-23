@@ -37,10 +37,10 @@ suite leaves the server, when the independent package run takes over. Keep the H
 80 tests on the base via `pnpm --filter @waitron/server exec vitest run src/<file> …`.
 
 Run those five focused files, server `typecheck` and root `scripts/workspace-cycles.test.ts`.
-PR CI must run the selected server suites for the fixture's other callers. Run the unchanged
-queue gates in their packages. Fiscal runs `write-path.e2e.test.ts` and
-`inmutabilidad.test.ts`, server runs `till-api.sell-published.test.ts` including Review Focus 1
-and 2, and till runs `till-app-menu-refresh.test.ts`.
+PR CI must run the selected server suites for the fixture's other callers. Lane H's queue
+requires the unchanged fiscal and menu gates for each slice. Run `write-path.e2e.test.ts`,
+`inmutabilidad.test.ts`, `till-api.sell-published.test.ts` (Review Focus 1 and 2) and
+`till-app-menu-refresh.test.ts` in their packages to satisfy that rule.
 
 ### Expected protection-list difference
 
@@ -56,17 +56,17 @@ Of the selected suites, 67 import the bill fixture. The scan flags 44 suite cand
 following imports through test helpers. Each still needs its full dependencies checked.
 [CI assessment and sizing method](2026-11-22-a1308-orders-sales-ci-assessment.md)
 
-| Candidate PR | Size to check when planning |
+| Candidate PR | Added and removed lines |
 | --- | --- |
-| First independent package and CI wiring with `receipt-dates`, `receipt-logo`, `receipt-money` and `receipt-table` | Four sources (311 moved lines) and four suites (587 moved lines), plus package and CI wiring |
-| Orders error declarations through the existing server registry entry | One source (2,148 lines), with 61 production and 36 test importers to leave in place |
-| Trading context and till boundary | Six sources, with 44 production and 31 test importers |
-| Floor and kitchen boundary | Seven sources, with 18 production and 33 test importers |
-| Device and document boundary | Five sources, with 12 production and 18 test importers |
-| Card and refund boundary | Four sources, with six production and three test importers |
-| Move order preview with the bill seed once its dependencies are available | 56 preview source and 151 suite lines, plus the fixture budget above. Both suites also need the 9,836-line working-order module. Customer fallback adds a 327-line suite and needs the 636-line till-sale module. |
+| Independent package and CI wiring with `receipt-dates`, `receipt-logo`, `receipt-money` and `receipt-table` | Relocate +311/−311 production and +587/−587 test lines. Allow about +250/−50 for handwritten wiring and imports, using the 104-line adjustments package config, the CI job and guards as sizing references. Count lockfile and duration data separately. |
+| Orders error declarations | Size after listing the order and sale codes with their referenced parameter types in the 2,148-line registry. Keep a re-export at the old server path, leaving all 97 order and sale importers alone in this PR. |
+| Trading context and till boundary | Six source files. Size after tracing which types can move together and which route callers need to keep the server entry points. |
+| Floor and kitchen boundary | Seven source files. Size after identifying the smallest change that breaks the imports in both directions through `parties.ts` and `kitchen-print.ts`. |
+| Device and document boundary | Five source files. Size after tracing which settings reads and document dispatches can use existing package exports. |
+| Card and refund boundary | Four source files. Size after tracing which provider and refund calls need the server to supply its running provider pool. |
+| Move order preview with the bill seed | Preview +56/−56 production and +151/−151 test lines, plus about +270/−230 support and +20/−10 tests for the split. Size seed imports and any required extraction from the 9,836-line `working-order.ts` before committing to this PR. Customer fallback adds +327/−327 test lines and also needs `till-sale.ts` (636 lines). |
 
-The boundary rows give current footprint. Each needs an exact plan and line budget before build.
+The open boundary rows each need an exact plan and line budget before build.
 Split where a change would exceed three hours. For the first move, qualify assets and source
 guards, root shard wiring, package-only and server-only selection, and independent
 `98/98/98/95` coverage. Keep boot, till mounts and their integration tests in the server.
