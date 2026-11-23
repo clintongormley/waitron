@@ -5620,6 +5620,24 @@ it("separates the price, Variants and Modifiers groups by the gap between groups
   expect(modifiers.top - variants.bottom).toBe(40);
 });
 
+it("puts the identity card's rows the small gap apart", async () => {
+  const el = await mountPricing(saved);
+  el.style.setProperty("--wt-space-3", "12px");
+  const rows = [...section(el, "identity").children].map((row) => row.getBoundingClientRect());
+  for (let index = 1; index < rows.length; index++)
+    expect(rows[index]!.top - rows[index - 1]!.bottom).toBe(12);
+});
+
+it("keeps the variant table inside the price card's padding on a wide card", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountPricing({ ...saved, variants: [small] });
+    const table = variantTable(el)!.getBoundingClientRect();
+    const price = group(el, "price").getBoundingClientRect();
+    expect(table.left).toBe(price.left);
+    expect(table.right).toBe(price.right);
+  });
+});
+
 it("puts Details' groups the gap between groups apart", async () => {
   const el = await mountPricing(saved);
   el.style.setProperty("--wt-space-6", "32px");

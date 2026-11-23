@@ -242,10 +242,21 @@ export class ProductEditor extends LitElement {
         margin-block-start: calc((1lh - var(--wt-tap-min)) / 2);
       }
       .form > wt-card[data-section="identity"] > * + * {
-        margin-block-start: var(--wt-space-5);
+        margin-block-start: var(--wt-space-3);
       }
       .details {
         gap: calc(var(--wt-space-6) + var(--wt-space-2));
+      }
+      .form > wt-card[data-section="price"] {
+        container-type: inline-size;
+      }
+      /* On a narrow card the variant table runs into the card's padding, so its narrow layout
+         still fits a 320px phone with the text sizes raised. Guard: the phone-width cases in
+         product-editor.test.ts. */
+      @container (max-width: 30rem) {
+        dashboard-variant-table {
+          margin-inline: calc(-1 * var(--wt-space-4));
+        }
       }
       .form > wt-card[data-section="price"] > * + * {
         margin-block-start: calc(var(--wt-space-6) + var(--wt-space-2));
