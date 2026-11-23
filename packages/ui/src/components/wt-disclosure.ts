@@ -10,12 +10,16 @@ export interface SummaryField {
   value: string;
   /** Drawn in italic, as a field's placeholder is: what a blank field will use, not its own value. */
   placeholder?: boolean;
+  /** Drawn in the warning colour, for a value that needs someone's attention. */
+  warning?: boolean;
 }
 
-const summaryPart = ({ label, value, placeholder }: SummaryField) =>
-  html`<span class="summary-label">${label}:</span> ${
-      placeholder ? html`<span class="summary-placeholder">${value}</span>` : value
+const summaryPart = ({ label, value, placeholder, warning }: SummaryField) => {
+  const shown = warning ? html`<span class="summary-warning">${value}</span>` : value;
+  return html`<span class="summary-label">${label}:</span> ${
+      placeholder ? html`<span class="summary-placeholder">${shown}</span>` : shown
     }`;
+};
 
 /**
  * A section holding a validation error must not be hidden: while `has-error` is set the section is
@@ -96,12 +100,12 @@ export class WtDisclosure extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .summary-label {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
       .summary-placeholder {
         font-style: italic;
+      }
+
+      .summary-warning {
+        color: var(--wt-color-warning);
       }
 
       .summary-rows {
@@ -127,6 +131,8 @@ export class WtDisclosure extends LitElement {
       }
       .summary-slot {
         grid-column: 1 / -1;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       :host([ruled]) .summary-slot {
         margin-block-start: var(--wt-space-2);
@@ -153,8 +159,9 @@ export class WtDisclosure extends LitElement {
         grid-column: 2;
         grid-row: 1;
         justify-self: start;
-        width: var(--wt-font-size-lg);
-        height: var(--wt-font-size-lg);
+        width: var(--wt-font-size-sm);
+        height: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
         transition: transform 150ms ease;
       }
 
@@ -173,7 +180,7 @@ export class WtDisclosure extends LitElement {
   @property() heading = "";
   @property({ type: Boolean, reflect: true }) ruled = false;
   @property() summary = "";
-  /** The closed line as named values, each after its bold name; used instead of `summary` when it
+  /** The closed line as named values, each after its name; used instead of `summary` when it
    * holds any. */
   @property({ attribute: false }) summaryFields: readonly SummaryField[] = [];
   /** The closed line as one row per named value, each cut with an ellipsis after its `lines`

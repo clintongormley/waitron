@@ -86,6 +86,21 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("collapsed, with a value drawn as a warning", async () => {
+    const el = (await mountThemed(
+      '<wt-disclosure heading="Allergens"><p>body</p></wt-disclosure>',
+      theme,
+    )) as WtDisclosure;
+    el.summaryFields = [
+      { label: "Allergens", value: "Not yet reviewed", warning: true },
+      { label: "Course", value: "Mains", placeholder: true, warning: true },
+    ];
+    await el.updateComplete;
+    // Without this the scan could pass on a header that drew no warning value.
+    expect(el.shadowRoot!.querySelectorAll(".summary-warning")).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   test("collapsed, with a summary row drawn as a placeholder", async () => {
     const el = (await mountThemed(
       '<wt-disclosure heading="Descriptors"><p>body</p></wt-disclosure>',

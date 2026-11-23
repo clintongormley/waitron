@@ -98,10 +98,43 @@ async function finishHeightTransition(body: HTMLElement, animation: Animation): 
     .toEqual({ animating: false, height: "" });
 }
 
-test("the section chevron is large enough to read beside its heading", async () => {
+/** The colour a plain element styled `color: var(<token>)` computes to on the test host. */
+function tokenColour(token: string): string {
+  const probe = document.createElement("span");
+  probe.style.color = `var(${token})`;
+  host.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
+
+test("the section chevron is small and muted beside its heading", async () => {
   const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
+  host.style.setProperty("--wt-font-size-sm", "12px");
   const chevron = el.shadowRoot!.querySelector<HTMLElement>(".chevron")!;
-  expect(chevron.getBoundingClientRect().width).toBeGreaterThanOrEqual(18);
+  expect(chevron.getBoundingClientRect().width).toBe(12);
+  expect(getComputedStyle(chevron).color).toBe(tokenColour("--wt-color-text-muted"));
+});
+
+test("a summary the page slots in is drawn small and muted like the component's own", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="H"><span slot="summary">x</span><p>body</p></wt-disclosure>',
+  );
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const slotted = el.querySelector<HTMLElement>('[slot="summary"]')!;
+  expect(getComputedStyle(slotted).fontSize).toBe("11px");
+  expect(getComputedStyle(slotted).color).toBe(tokenColour("--wt-color-text-muted"));
+});
+
+test("a warning value is drawn in the warning colour", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Allergens"><p>body</p></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  el.summaryFields = [{ label: "Allergens", value: "Not yet reviewed", warning: true }];
+  await el.updateComplete;
+  const warning = el.shadowRoot!.querySelector(".summary-warning")!;
+  expect(warning.textContent).toBe("Not yet reviewed");
+  expect(getComputedStyle(warning).color).toBe(tokenColour("--wt-color-warning"));
 });
 
 test("collapsed by default; body hidden", async () => {
@@ -587,7 +620,7 @@ test("the header click stays inside the disclosure, so a listener above it sees 
   expect(clicks).toBe(0);
 });
 
-test("summary fields put each value after its bold name, joined with a middot, while closed", async () => {
+test("summary fields put each value after its name, joined with a middot, while closed", async () => {
   const el = (await mount(
     '<wt-disclosure heading="Pricing"><p>body</p></wt-disclosure>',
   )) as import("./wt-disclosure.js").WtDisclosure;
@@ -603,9 +636,8 @@ test("summary fields put each value after its bold name, joined with a middot, w
   );
   const names = [...summary.querySelectorAll(".summary-label")];
   expect(names.map((name) => name.textContent)).toEqual(["Base price:", "VAT:"]);
-  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
-  // The values stay in the summary's own weight; only the names are bold.
-  expect(getComputedStyle(summary).fontWeight).not.toBe("800");
+  const weight = getComputedStyle(summary).fontWeight;
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual([weight, weight]);
   el.open = true;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".summary")).toBeNull();
@@ -635,7 +667,7 @@ async function withRows(
   return el;
 }
 
-test("summary rows put each value after its bold name, one row under another, while closed", async () => {
+test("summary rows put each value after its name, one row under another, while closed", async () => {
   const el = await withRows([
     { label: "Name", value: "EN: Beef tenderloin · ES: Solomillo de ternera", lines: 1 },
     { label: "Description", value: "EN: Seared · ES: Sellado", lines: 2 },
@@ -648,8 +680,8 @@ test("summary rows put each value after its bold name, one row under another, wh
   ]);
   const names = rows.map((row) => row.querySelector(".summary-label")!);
   expect(names.map((name) => name.textContent)).toEqual(["Name:", "Description:"]);
-  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual(["800", "800"]);
-  expect(getComputedStyle(rows[0]!).fontWeight).not.toBe("800");
+  const weight = getComputedStyle(rows[0]!).fontWeight;
+  expect(names.map((name) => getComputedStyle(name).fontWeight)).toEqual([weight, weight]);
   expect(rows[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
     rows[0]!.getBoundingClientRect().bottom,
   );
