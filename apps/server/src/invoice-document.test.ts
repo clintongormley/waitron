@@ -23,15 +23,29 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { recordSale, settleSale } from "@waitron/core";
+import {
+  previewCorrectionAmounts,
+  recordCorrection,
+  recordSale,
+  settleSale,
+} from "@waitron/core";
+import { loginWithPin } from "@waitron/identity";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import { decimal, jobOrigin, seriesId, type PrintedReceiptTrim } from "@waitron/shared";
+import {
+  decimal,
+  jobOrigin,
+  negateDecimal,
+  saleId as brandSaleId,
+  seriesId,
+  type PrintedReceiptTrim,
+} from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
   billWith,
   lineIdOf,
+  PINS,
   provisionAdjustmentVenue,
   takeawayRates,
   type AdjustmentVenue,
@@ -1559,5 +1573,129 @@ describe("a free item holding its share of the price paid", () => {
       { item: "Mineral water", price: "1,82", amount: "1,82", rate: "10%" },
       { item: "Descuento 100%", price: "", amount: "-1,82", rate: "10%" },
     ]);
+  });
+});
+
+describe("a correction's receipts", () => {
+  // Salad €10.00 with 10% off and a water €2.00, eaten here and paid €11.00; then €3.00 given back,
+  // corrected as `fileCorrectionIn` files it.
+  async function corrected(): Promise<string> {
+    const { billId } = await billWith(venue, [{ name: "Salad" }, { name: "Water" }]);
+    const saladId = await lineIdOf(venue, billId, 1);
+    return withTransaction(suite.db, async (tx) => {
+      const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          admission: testTradingAdmission(),
+          expectedEdit: await readBillEditState(tx, billId),
+          orderId: billId,
+          submissionId: randomUUID(),
+          expectedRevision: order!.revision,
+          lineId: saladId,
+          reasonId: venue.reasonId.house,
+          action: "discount_percent",
+          percentBp: 1000,
+          note: null,
+          operatorId: venue.supervisorId,
+        },
+        venue.venueLocale,
+      );
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "invoice-document-corrected",
+          kind: "contribution",
+          method: "cash",
+          applied: 1100,
+          tendered: 1100,
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      await completeBillPayment(
+        tx,
+        { ...venue, admission: testTradingAdmission() },
+        venue.cfg,
+        payment!.id,
+        new Date(),
+      );
+      const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+      const original = brandSaleId(sale!.id);
+      const preview = await previewCorrectionAmounts(tx, venue.backend, original, venue.cfg.nodeId, {
+        gross: decimal("3.00"),
+      });
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, "corrective"));
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.managerId,
+        pin: PINS.manager,
+      });
+      const { saleId } = await recordCorrection(tx, venue.backend, {
+        operationDescription: "Restaurante",
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: seriesId(series!.id),
+        correctsSaleId: original,
+        total: negateDecimal(preview.gross),
+        lines: preview.lines,
+        partialVatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({
+          rate,
+          base: negateDecimal(base),
+          tax: negateDecimal(tax),
+        })),
+        authz: { sessionId: session.id },
+        clock: venue.clock,
+      });
+      return saleId;
+    });
+  }
+  const shown = (lines: readonly TillSaleLine[]) =>
+    lines.map((line) => ({
+      gross: line.gross,
+      listGross: line.listGross,
+      adjustments: line.adjustments?.map(({ kind, amount }) => ({ kind, amount })),
+    }));
+  const FILED = [
+    { gross: "-2.45", listGross: undefined, adjustments: undefined },
+    { gross: "-0.55", listGross: undefined, adjustments: undefined },
+  ];
+  const itemRows = (document: Parameters<typeof buildReceiptDocument>[0]) => {
+    const elements = buildReceiptDocument({ ...document, surface: "a4" }).elements;
+    const rules = elements.flatMap((e, i) => (e.kind === "rule" ? [i] : []));
+    // The item rows sit between the rules around them, after the invoice numbers.
+    return elements
+      .slice(rules[2]! + 1, rules[3])
+      .map((e) => (e.kind === "amount" ? { caption: e.caption, amount: e.amount } : e));
+  };
+
+  // Fails if the corrective's lines take the list prices they copied from the original: the page
+  // then prints the salad at -10,00 with a discount of --7,55.
+  it("the A4 page of a correction shows the filed figures and no discount", async () => {
+    const saleId = await corrected();
+    const document = await withTransaction(suite.db, (tx) =>
+      readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(document.result.lines)).toEqual(FILED);
+    expect(itemRows(document)).toEqual([
+      { caption: "-1  House salad", amount: "-2,45" },
+      { caption: "-1  Mineral water", amount: "-0,55" },
+    ]);
+  });
+
+  it("Find a bill's reprint of a correction shows the filed figures and no discount", async () => {
+    const saleId = await corrected();
+    const receipt = await withTransaction(suite.db, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    );
+    expect(shown(receipt.lines)).toEqual(FILED);
   });
 });
