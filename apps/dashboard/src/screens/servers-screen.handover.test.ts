@@ -452,3 +452,105 @@ it.each([
     expect(q(el, "[data-test=handover-dialog]").shadowRoot!.textContent).toContain(words),
   );
 });
+it("sends one handover when Hand over is pressed twice before the dialog redraws", async () => {
+  const { el, start, status } = await mount();
+  start.mockReturnValue(new Promise(() => {}));
+  await open(el);
+  const confirm = q(el, "[data-test=confirm-handover]");
+  confirm.click();
+  confirm.click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalled());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(start).toHaveBeenCalledTimes(1);
+  expect(status).not.toHaveBeenCalled();
+});
+it("a passkey-only account's Hand over sends nothing even when the button is pressed", async () => {
+  const { el, start } = await mount({ password: false });
+  q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
+  await vi.waitFor(() => expect(el.api.getProfile).toHaveBeenCalled());
+  await el.updateComplete;
+  q(el, "[data-test=confirm-handover]").click();
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(start).not.toHaveBeenCalled();
+  expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+    `${t("servers.handover_no_password")} ${t("profile.password_recovery")}`,
+  );
+});
+it("Stop closes the handover dialog without sending anything", async () => {
+  const { el, start } = await mount();
+  await open(el);
+  q(el, "[data-test=stop-handover]").click();
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=handover-dialog]") as HTMLElement & { open: boolean }).open).toBe(
+      false,
+    ),
+  );
+  expect(start).not.toHaveBeenCalled();
+});
+it.each([
+  ["the start answer", "start"],
+  ["a refused start", "refused"],
+  ["the status answer", "status"],
+] as const)(
+  "opens no handover page when %s arrives after the screen has gone",
+  async (_label, path) => {
+    const { el, start, status } = await mount();
+    let finish!: () => void;
+    const late = new Promise<void>((resolve) => (finish = resolve));
+    const page = { handoverPage: "https://new.example/handover/move" };
+    if (path === "start") start.mockReturnValue(late.then(() => page));
+    if (path === "refused")
+      start.mockReturnValue(late.then(() => Promise.reject({ code: "connection.failed" })));
+    if (path === "status") {
+      start.mockResolvedValue({});
+      status.mockReturnValue(late.then(() => page));
+    }
+    const navigate = vi.fn();
+    el.addEventListener("handover-open", navigate);
+    await open(el);
+    q(el, "[data-test=confirm-handover]").click();
+    if (path === "status") await vi.waitFor(() => expect(status).toHaveBeenCalled());
+    else await vi.waitFor(() => expect(start).toHaveBeenCalled());
+    el.remove();
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(navigate).not.toHaveBeenCalled();
+    expect(status).toHaveBeenCalledTimes(path === "status" ? 1 : 0);
+  },
+);
+it("ignores a failed profile read for a spare whose dialog was closed", async () => {
+  const two = structuredClone(listing);
+  two.nodes.push({ ...two.nodes[1]!, nodeId: "other", contactUrl: "https://other.example" });
+  const { el } = await mount({ listing: two });
+  let fail!: (error: unknown) => void;
+  vi.mocked(el.api.getProfile).mockReturnValueOnce(
+    new Promise((_resolve, reject) => (fail = reject)),
+  );
+  q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
+  await el.updateComplete;
+  const handoverDialog = () =>
+    q(el, "[data-test=handover-dialog]") as HTMLElement & { open: boolean };
+  const closed = new Promise((resolve) =>
+    handoverDialog().addEventListener("wt-close", resolve, { once: true }),
+  );
+  q(el, "[data-test=stop-handover]").click();
+  await closed;
+  await el.updateComplete;
+  q(q(el, "wt-data-table"), '[data-test="handover-other"]').click();
+  await vi.waitFor(() =>
+    expect(
+      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
+  );
+  expect(handoverDialog().open).toBe(true);
+  expect(q(el, "p.target").textContent).toContain("other.example");
+  fail({ code: "connection.failed" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(q(el, "[data-test=retry-handover-profile]")).toBeNull();
+  expect(
+    (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+  ).toBe(false);
+});
