@@ -36,6 +36,7 @@ function row(overrides: Partial<Row>): Row {
     correctsLineId: null,
     advanceRole: null,
     deductsSaleId: null,
+    setMenuRole: null,
     ...overrides,
   };
 }
