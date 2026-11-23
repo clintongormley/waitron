@@ -141,7 +141,10 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
       return await close(job, "expired", null);
     } catch (error) {
       if (is(error, "content.suggestion_expired")) return close(job, "expired", null);
-      if (is(error, "cloud.request_invalid")) return close(job, "failed", "rejected");
+      if (is(error, "cloud.request_invalid")) {
+        await abandon(job, signal);
+        return close(job, "failed", "rejected");
+      }
       throw error;
     }
   }
@@ -160,6 +163,20 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
     return "again";
   }
 
+  async function abandon(
+    job: SuggestionJobRow,
+    signal?: AbortSignal,
+    atExpiry = false,
+  ): Promise<void> {
+    try {
+      await translation.abandon(job.id, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (!atExpiry && !is(error, "cloud.request_invalid") && !is(error, "cloud.not_configured"))
+        throw error;
+    }
+  }
+
   async function step(signal?: AbortSignal): Promise<RunnerStep> {
     if (!deps.isPrimary()) return "idle";
     const job = await withTransaction(deps.db, (tx) => readActiveSuggestionJob(tx));
@@ -167,9 +184,17 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
     // A refusal that keeps coming back would otherwise hold the run open, refusing every new one. A
     // job made more than its lifetime ahead of now was made before the clock stepped back.
     const age = now().getTime() - Date.parse(job.createdAt);
-    if (age >= JOB_LIFETIME_MS || age < -JOB_LIFETIME_MS) return close(job, "expired", null);
-    if ((await deps.connection.translationService()) !== "on")
-      return close(job, "failed", "not_connected");
+    const incomplete = job.state === "failed" && job.failure === "rejected";
+    const unfinished = job.state === "submitting" || job.state === "running";
+    if (age >= JOB_LIFETIME_MS || age < -JOB_LIFETIME_MS) {
+      if (unfinished || incomplete) await abandon(job, signal, true);
+      return close(job, "expired", null);
+    }
+    const service = await deps.connection.translationService();
+    if (service === "not_connected") return close(job, "failed", "not_connected");
+    if (incomplete || (unfinished && service === "off")) await abandon(job, signal);
+    if (incomplete) return close(job, "failed", "rejected");
+    if (service === "off") return close(job, "failed", "not_connected");
     if (job.state === "submitting")
       return job.body === null ? close(job, "failed", "rejected") : submit(job, job.body, signal);
     if (job.cloudJobId === null) return close(job, "failed", "rejected");

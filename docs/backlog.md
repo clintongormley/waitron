@@ -507,7 +507,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **Translate all: notice, release and Cloud followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
+- **Translate all: notice and review followups** (bundle of 2, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
   (`apps/server/test/translation-cloud-fixture.ts`) with Cloud's own; vectors Cloud generates and

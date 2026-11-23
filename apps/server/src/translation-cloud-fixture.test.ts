@@ -735,6 +735,26 @@ it("collect and release answer by state, and release deletes the job but keeps t
     expect((await ask(f, "translation-status", id)).json).toMatchObject({ state: "collected" });
   }));
 
+it("abandon only expires the job with the signed submit ID, even when translation is off", () =>
+  withCloud(async (f) => {
+    const operationId = randomUUID();
+    const id = jobIdOf(await submit(f, two, operationId));
+    f.service("unconfigured");
+    const abandon = (id: string, signedBody = '{"version":1}') =>
+      f.signedRequest("translation-abandon", { operationId: id, signedBody });
+    const ack = { status: 200, json: { version: 1 } };
+
+    expect(await abandon(randomUUID())).toEqual(ack);
+    expect(await abandon(operationId, '{"version":1,"extra":0}')).toEqual(
+      refused(400, "invalid_request"),
+    );
+    expect(f.jobs.size).toBe(1);
+    expect(f.jobs.get(id)?.state).toBe("queued");
+    expect(await abandon(operationId)).toEqual(ack);
+    expect(f.jobs.get(id)).toMatchObject({ state: "expired", job: null, results: null });
+    expect(await abandon(operationId)).toEqual(ack);
+  }));
+
 it("an expired job's collect and release are 410 translation_expired", () =>
   withCloud(async (f) => {
     const id = jobIdOf(await submit(f, two));

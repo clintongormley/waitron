@@ -64,6 +64,7 @@ const ACTIONS: readonly string[] = [
   "translation-status",
   "translation-collect",
   "translation-release",
+  "translation-abandon",
 ];
 const KINDS = new Set([
   "product",
@@ -254,9 +255,10 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
 
 /**
  * Where the contract is silent, this fake chooses:
+ * - abandon accepts a valid proof independent of translation readiness.
  * - for status, collect and release, `permission_denied` comes after the signed-body check and
  *   before the job lookup;
- * - `revoked` (403) comes after the envelope, proof and lease checks, for all four actions: before
+ * - `revoked` (403) comes after the envelope, proof and lease checks, for every action: before
  *   submit's fingerprint check and the other three's signed-body check;
  * - any unexpired lease this fake issued is accepted, not only the one the box saved last;
  * - `expire()` expires a job in any state, a `collected` one included.
@@ -364,6 +366,12 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
       return answer(401, { error: "invalid_proof" });
     if (base.isRevoked()) return answer(403, { error: "revoked" });
     if (submitting) return submit(String(sent.body), signedBody, operationId, answer);
+    if (action === "translation-abandon") {
+      if (signedBody !== '{"version":1}') return answer(400, { error: "invalid_request" });
+      const job = byOperation.get(operationId);
+      if (job && job.state !== "collected" && job.state !== "expired") expire(job.jobId);
+      return answer(200, { version: 1 });
+    }
     const reference = jobIdIn(signedBody, action);
     if (!reference) return answer(400, { error: "invalid_request" });
     if (serviceState !== "ready") return answer(403, { error: "permission_denied" });

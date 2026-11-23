@@ -258,7 +258,7 @@ export async function storeSuggestionPage(
     .where(eq(contentSuggestionJobs.id, jobId));
   if (!last) return "stored";
   if (!complete) {
-    await recordSuggestionJobEnded(tx, jobId, "failed", "rejected", now);
+    await recordSuggestionJobEnded(tx, jobId, "failed", "rejected", now, { abandon: true });
     return "ended";
   }
   const sent = await sentInRun(tx, job.runId);

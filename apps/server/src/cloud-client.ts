@@ -57,10 +57,11 @@ import {
 } from "./cloud-emergency.js";
 import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
 import {
+  abandonTranslation,
   collectTranslation,
   type OnRefusal,
-  releaseTranslation,
   refusalOf,
+  releaseTranslation,
   serviceExchange,
   submitTranslation,
   translationStatus,
@@ -1459,6 +1460,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         collectTranslation(await leaseState(signal), jobId, cursor, signal, recordRefusal),
       release: async (jobId: string, signal?: AbortSignal) =>
         releaseTranslation(await leaseState(signal), jobId, signal, recordRefusal),
+      abandon: async (operationId: string, signal?: AbortSignal) =>
+        abandonTranslation(await leaseState(signal), operationId, signal, recordRefusal),
     },
     async translationService(): Promise<"on" | "off" | "not_connected"> {
       const state = await read();

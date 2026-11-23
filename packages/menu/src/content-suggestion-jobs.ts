@@ -139,9 +139,11 @@ export async function recordSuggestionJobEnded(
   state: "failed" | "expired",
   failure: SuggestionFailure | null,
   now: Date = new Date(),
+  options?: { abandon?: true },
 ): Promise<void> {
   const nothingToRelease =
-    state === "expired" || failure === "not_connected" || failure === "rejected";
+    !options?.abandon &&
+    (state === "expired" || failure === "not_connected" || failure === "rejected");
   const [job] = await tx.select().from(jobs).where(eq(jobs.id, jobId));
   const counts = job ? lostCounted(job) : {};
   await tx

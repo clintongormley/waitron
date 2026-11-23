@@ -37,6 +37,7 @@ const SUBMIT = "translation-submit";
 const STATUS = "translation-status";
 const COLLECT = "translation-collect";
 const RELEASE = "translation-release";
+const ABANDON = "translation-abandon";
 
 /** A connected fake Cloud whose last configuration reply carried the translation service. */
 async function connected(): Promise<Fake> {
@@ -486,7 +487,7 @@ it("a job Cloud deletes during a walk is refused at the next collect between pag
   }
 });
 
-it("a cursor Cloud refuses as invalid ends the job rejected without a release", async () => {
+it("abandons the job when Cloud refuses a collection cursor as invalid", async () => {
   const f = await connected();
   try {
     await venue(THREE);
@@ -496,7 +497,9 @@ it("a cursor Cloud refuses as invalid ends the job rejected without a release", 
     await inTx((tx) => tx.update(contentSuggestionJobs).set({ collectCursor: 99 }));
 
     await runToIdle(runner);
-    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    expect(actions(f).slice(-3)).toEqual([STATUS, COLLECT, ABANDON]);
+    expect(f.calls.at(-1)?.operationId).toBe(f.submissions[0]?.operationId);
+    expect([...f.jobs.values()][0]?.state).toBe("expired");
     expect(cursors(f)).toEqual([99]);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
@@ -504,7 +507,7 @@ it("a cursor Cloud refuses as invalid ends the job rejected without a release", 
   }
 });
 
-it("a walk the box ends itself between pages keeps the stored page and sends no release", async () => {
+it("a walk the box ends itself between pages keeps the stored page and abandons the Cloud job", async () => {
   const f = await connected();
   try {
     const runner = await stopBetweenPages(f);
@@ -513,8 +516,8 @@ it("a walk the box ends itself between pages keeps the stored page and sends no 
     const before = f.calls.length;
 
     await runToIdle(runner);
-    expect(f.calls).toHaveLength(before);
-    expect(actions(f)).not.toContain(RELEASE);
+    expect(actions(f).slice(before)).toEqual([ABANDON]);
+    expect(await suggestions()).toHaveLength(1);
     expect(await runView()).toMatchObject({
       state: "failed",
       code: "cloud.not_configured",
@@ -531,6 +534,29 @@ it("a walk the box ends itself between pages keeps the stored page and sends no 
     await f.close();
   }
 });
+
+it.each([0, JOB_LIFETIME_MS])(
+  "abandons an incomplete last page at job age %i, keeping the pages it stored",
+  async (age) => {
+    const f = await connected();
+    try {
+      const runner = await stopBetweenPages(f);
+      f.collectReply((page) => ({ ...page, nextCursor: null }));
+
+      expect(await runner.step()).toBe("again");
+      expect(await job()).toMatchObject({ state: "failed", failure: "rejected", released: false });
+      expect(await later(f, age).step()).toBe("again");
+      expect(f.calls.at(-1)).toMatchObject({
+        action: ABANDON,
+        operationId: f.submissions[0]!.operationId,
+      });
+      expect(await runner.step()).toBe("idle");
+      expect(await runView()).toMatchObject({ state: "failed", waiting: 2, failed: 1 });
+    } finally {
+      await f.close();
+    }
+  },
+);
 
 it("refuses a page over 16 MiB, stores nothing of it, and resumes at the same position", async () => {
   const f = await connected();
@@ -769,17 +795,19 @@ it("a body Cloud will never accept ends the job as rejected", async () => {
   }
 });
 
-it("a status Cloud refuses as a request it will never accept ends the job as rejected", async () => {
+it("an invalid status request abandons by submit ID before closing as rejected", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
     await inTx((tx) => startSuggestionRun(tx, context));
+    const operationId = (await job()).id;
     await inTx((tx) =>
       tx.update(contentSuggestionJobs).set({ state: "running", cloudJobId: "not-a-job-id" }),
     );
 
     expect(await runToIdle(createContentSuggestionRunner(deps(f)))).toEqual(["again", "idle"]);
-    expect(actions(f)).toEqual([STATUS]);
+    expect(actions(f)).toEqual([STATUS, ABANDON]);
+    expect(f.calls.at(-1)?.operationId).toBe(operationId);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
     await f.close();
@@ -850,7 +878,7 @@ it.each(broken)("%s ends rejected without a call", async (_name, patch) => {
   }
 });
 
-it("a job Cloud took but whose reply was lost, ended on the box as not connected, is marked released while Cloud still holds it", async () => {
+it("abandons a lost submit by its original ID when translation goes off, so the next run can reach Cloud", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -861,10 +889,10 @@ it("a job Cloud took but whose reply was lost, ended on the box as not connected
     });
     f.service("unconfigured");
     await f.client.refresh();
-    const before = f.calls.length;
+    const operationId = f.submissions[0]!.operationId;
 
     expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
-    expect(f.calls).toHaveLength(before);
+    expect(f.calls.at(-1)).toMatchObject({ action: ABANDON, operationId });
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.not_configured" });
     const [job] = await inTx((tx) =>
       tx
@@ -875,13 +903,20 @@ it("a job Cloud took but whose reply was lost, ended on the box as not connected
         .from(contentSuggestionJobs),
     );
     expect(job).toEqual({ released: true, cloudJobId: null });
-    expect([...f.jobs.values()].map((held) => held.state)).toEqual(["queued"]);
+    expect([...f.jobs.values()].map((held) => held.state)).toEqual(["expired"]);
+    f.service("ready");
+    await f.client.refresh();
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    expect(await runView()).toMatchObject({ state: "running" });
+    expect(f.jobs.size).toBe(2);
   } finally {
     await f.close();
   }
 });
 
-it("a job Cloud took but whose reply was lost, ended by the box's own 24-hour clock, is marked released while Cloud still holds it", async () => {
+it("abandons a lost submit by its original ID at local expiry", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -890,10 +925,10 @@ it("a job Cloud took but whose reply was lost, ended by the box's own 24-hour cl
     await expect(createContentSuggestionRunner(deps(f)).step()).rejects.toMatchObject({
       code: "cloud.unavailable",
     });
-    const before = f.calls.length;
+    const operationId = f.submissions[0]!.operationId;
 
     expect(await later(f, JOB_LIFETIME_MS).step()).toBe("again");
-    expect(f.calls).toHaveLength(before);
+    expect(f.calls.at(-1)).toMatchObject({ action: ABANDON, operationId });
     expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
     const [job] = await inTx((tx) =>
       tx
@@ -904,7 +939,91 @@ it("a job Cloud took but whose reply was lost, ended by the box's own 24-hour cl
         .from(contentSuggestionJobs),
     );
     expect(job).toEqual({ released: true, cloudJobId: null });
-    expect([...f.jobs.values()].map((held) => held.state)).toEqual(["queued"]);
+    expect([...f.jobs.values()].map((held) => held.state)).toEqual(["expired"]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("retries an unreachable abandon with the same ID after restarting, then closes at expiry", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    const operationId = f.submissions[0]!.operationId;
+    f.service("unconfigured");
+    await f.client.refresh();
+    f.offline();
+
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(await job()).toMatchObject({ state: "running" });
+    const restarted = createContentSuggestionRunner(
+      deps(f, {
+        connection: createCloudConnection(f.options),
+        now: () => new Date(Date.now() + JOB_LIFETIME_MS),
+      }),
+    );
+    expect(await runToIdle(restarted)).toEqual(["again", "idle"]);
+    expect(f.calls.slice(1).map(({ action, operationId }) => ({ action, operationId }))).toEqual([
+      { action: ABANDON, operationId },
+      { action: ABANDON, operationId },
+    ]);
+    expect(await runView()).toMatchObject({ state: "expired" });
+  } finally {
+    await f.close();
+  }
+});
+
+it.each([
+  {
+    reason: "Cloud refuses the request permanently",
+    error: new AppError("cloud.request_invalid", {}),
+    age: 0,
+    outcome: { state: "failed", code: "cloud.not_configured" },
+  },
+  {
+    reason: "saving the renewed lease fails at the deadline",
+    error: new Error("could not save the renewed Cloud lease"),
+    age: JOB_LIFETIME_MS,
+    outcome: { state: "expired", code: "content.suggestion_expired" },
+  },
+])("closes the local job when abandon fails and $reason", async ({ error, age, outcome }) => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
+    f.service("unconfigured");
+    await f.client.refresh();
+    const abandon = vi.spyOn(f.client.translation, "abandon").mockRejectedValue(error);
+
+    expect(await runToIdle(later(f, age))).toEqual(["again", "idle"]);
+    expect(abandon).toHaveBeenCalledOnce();
+    expect(await runView()).toMatchObject(outcome);
+  } finally {
+    await f.close();
+  }
+});
+
+it("a shutdown that interrupts the final abandon leaves the job for the next start", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
+    const controller = new AbortController();
+    vi.spyOn(f.client.translation, "abandon").mockImplementation(async () => {
+      controller.abort();
+      throw new AppError("cloud.unavailable", {});
+    });
+    const runner = later(f, JOB_LIFETIME_MS);
+
+    await expect(runner.step(controller.signal)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(await job()).toMatchObject({ state: "running", released: false });
   } finally {
     await f.close();
   }
@@ -929,7 +1048,7 @@ it("a job whose call meets a revoked connection ends on the next step as not con
   }
 });
 
-it("a job Cloud switched the service off for ends without a call, and the next run is not refused", async () => {
+it("a job Cloud switched the service off for is abandoned, and the next run is not refused", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -942,7 +1061,7 @@ it("a job Cloud switched the service off for ends without a call, and the next r
     const before = f.calls.length;
 
     expect(await runToIdle(runner)).toEqual(["again", "idle"]);
-    expect(f.calls).toHaveLength(before);
+    expect(actions(f).slice(before)).toEqual([ABANDON]);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.not_configured" });
     await expect(inTx((tx) => startSuggestionRun(tx, context))).resolves.toMatchObject({
       state: "sending",
@@ -974,7 +1093,7 @@ it("a stored job waiting for its release when the service goes off is released w
   }
 });
 
-it("a running job 24 hours old ends expired without asking Cloud", async () => {
+it("a running job 24 hours old is abandoned before it ends expired", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -986,7 +1105,7 @@ it("a running job 24 hours old ends expired without asking Cloud", async () => {
     const before = f.calls.length;
 
     expect(await later(f, JOB_LIFETIME_MS).step()).toBe("again");
-    expect(f.calls).toHaveLength(before);
+    expect(actions(f).slice(before)).toEqual([ABANDON]);
     expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
     expect(await inTx((tx) => readActiveSuggestionJob(tx))).toBeUndefined();
     await expect(inTx((tx) => startSuggestionRun(tx, context))).resolves.toMatchObject({
@@ -997,7 +1116,7 @@ it("a running job 24 hours old ends expired without asking Cloud", async () => {
   }
 });
 
-it("a running job made more than 24 hours ahead of the clock ends expired, as after a backward step", async () => {
+it("a running job made more than 24 hours ahead of the clock is abandoned after a backward step", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -1009,7 +1128,7 @@ it("a running job made more than 24 hours ahead of the clock ends expired, as af
     const before = f.calls.length;
 
     expect(await later(f, -JOB_LIFETIME_MS - 60_000).step()).toBe("again");
-    expect(f.calls).toHaveLength(before);
+    expect(actions(f).slice(before)).toEqual([ABANDON]);
     expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
     expect(await inTx((tx) => readActiveSuggestionJob(tx))).toBeUndefined();
   } finally {
@@ -1017,7 +1136,7 @@ it("a running job made more than 24 hours ahead of the clock ends expired, as af
   }
 });
 
-it("a job Cloud never took ends expired after 24 hours instead of being retried for good", async () => {
+it("a job Cloud never took ends expired after one last attempt to abandon it", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -1029,7 +1148,7 @@ it("a job Cloud never took ends expired after 24 hours instead of being retried 
     const before = f.calls.length;
 
     expect(await later(f, JOB_LIFETIME_MS).step()).toBe("again");
-    expect(f.calls).toHaveLength(before);
+    expect(actions(f).slice(before)).toEqual([ABANDON]);
     expect(await runView()).toMatchObject({ state: "expired", code: "content.suggestion_expired" });
   } finally {
     await f.close();

@@ -936,7 +936,7 @@ it("a page for a job that is not running, or at another cursor, is stale", async
   expect(await app(allJobs)).toEqual(completed);
 });
 
-it("a last page that leaves a sent item unaccounted ends the job without a release", async () => {
+it("a last page that leaves a sent item unaccounted ends the job and leaves it for cleanup", async () => {
   const venue = await seedSuggestionVenue(suite.db, { ca: "CLIENT-CA Bread" });
   const job = await runningJob(suite.db);
   await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
@@ -948,7 +948,7 @@ it("a last page that leaves a sent item unaccounted ends the job without a relea
   expect(jobs[0]!.state).toBe("failed");
   expect(jobs[0]).toMatchObject({
     failure: "rejected",
-    released: true,
+    released: false,
     failedRefs: [ref(venue.cheese)],
     failed: 1,
     done: 2,
@@ -974,7 +974,7 @@ it("a last page whose accounted items fall short of Cloud's total ends the job",
   );
   expect(await store(job.id, page(0, null, translateAll(job.sent)))).toBe("ended");
   expect(await jobRow(job.id)).toMatchObject({ state: "failed", failure: "rejected" });
-  expect(await jobRow(job.id)).toMatchObject({ released: true });
+  expect(await jobRow(job.id)).toMatchObject({ released: false });
   expect(await app(allJobs)).toHaveLength(1);
 });
 
