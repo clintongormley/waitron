@@ -354,8 +354,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
-- **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** Piece A of the
-  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is built: each product has its own dated
+- **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** Under the
+  [design](superpowers/specs/2026-11-21-vat-rates-design.md), each product has its own dated
   takeaway rate and everything eaten here files at the one dine-in rate. Left: set menus with no VAT
   of their own and removing the old VAT classes (piece B), and scheduled and bulk rate changes
   (piece C). Drinks served
@@ -687,8 +687,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
   a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
-  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). The VAT rates work (piece A) revisits the places the plan's
-  Global Constraints list.
+  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). The VAT rates work's piece A lands first, so
+  this plan is refreshed against it at the places its Global Constraints list.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).

@@ -14,8 +14,8 @@ que lo corriges.
 
 ## Cómo se cobra el IVA {#vat}
 
-Todo lo que se come o se bebe en el local se cobra con un único tipo, que se muestra junto al campo
-de IVA del producto («Para comer aquí: 10 % (toda la comida y bebida)»). Waitron lo actualiza cuando
+Todo lo que se come o se bebe en el local se cobra con un único tipo, que se muestra en el editor
+del producto («Para comer aquí: 10 % (toda la comida y bebida)»). Waitron lo actualiza cuando
 cambia la ley; no hay nada que configurar.
 
 Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda el tipo con el
@@ -171,7 +171,7 @@ El producto conserva su propio campo de precio, encima de su IVA. En cuanto el p
 variante activa, la etiqueta del campo empieza por **Precio base**, porque una variante que dejas sin
 precio propio se vende a ese precio. El precio vacío de esa variante muestra el precio base en gris
 como pista, en su ventana y en su fila de la tabla. La sección **Precios** se pliega entonces a una
-línea, por ejemplo **Precio base:** 38,00 € por kg; elige la línea para abrirla. Se abre sola
+línea, por ejemplo **Precio base:** 38,00 € por kg · **IVA para llevar:** 10 %; elige la línea para abrirla. Se abre sola
 cuando hay que corregir el precio base o el IVA para llevar. Al abrir un producto sin
 variantes activas, Precios empieza abierta; con variantes activas, Precios empieza cerrada y Variantes
 empieza abierta. Puedes cerrar cualquiera de las dos sin perder el borrador. El enlace de la unidad en
@@ -305,8 +305,10 @@ del árbol verás la lista afectada y el motivo.
 ## Cartas a precio fijo {#set-menus}
 
 Para ofrecer varios platos por un precio único, elige **Añadir carta** y después
-**Carta a precio fijo**. Ponle un nombre y un precio y elige la clase de IVA para comer en el
-local. Elige otra clase para llevar si el IVA es distinto. Añade los nombres para clientes en
+**Carta a precio fijo**. Ponle un nombre y un precio, y elige su **IVA para comer aquí** y, si es distinto, su **IVA para
+llevar**. Si se consume en el local, se cobra con el único tipo de
+[Cómo se cobra el IVA](products.md#vat); su IVA para comer aquí solo se usa como IVA para llevar si
+no eliges ninguno. Añade los nombres para clientes en
 los idiomas que uses y guarda.
 
 En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la

@@ -3387,7 +3387,7 @@ These forms follow the rule
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
-- batch 2a: the "VAT class for new products" default (now on Venue settings' Defaults card); the
+- batch 2a: the "VAT class for new products" default; the
   the unit form, new and existing; the options list and its
   option window; the extras list; Add to menus after a product is created; a section's Add products;
   a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's

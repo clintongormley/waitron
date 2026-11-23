@@ -14,7 +14,7 @@ open until you have fixed it.
 
 ## How VAT is charged {#vat}
 
-Everything eaten or drunk here is charged at one rate, shown beside the product's VAT field
+Everything eaten or drunk here is charged at one rate, shown in the product editor
 ("Eaten here: 10% (all food and drink)"). Waitron updates it when the law changes; there is
 nothing to set.
 
@@ -163,7 +163,7 @@ The product keeps its own price field, above its VAT. Once the product has an Ac
 field's label starts **Base price**, because a variant you leave without a price of its own sells at
 it. That variant's empty price shows the base price greyed out as a hint, in its window and in its
 row of the table. The **Pricing** section then folds to one line, such as **Base price:** €38.00
-per kg; choose the line to open it. It opens by itself when the base price or the VAT when taken
+per kg · **VAT when taken away:** 10%; choose the line to open it. It opens by itself when the base price or the VAT when taken
 away needs fixing. When you open a product without Active variants, Pricing starts open;
 with Active variants, Pricing starts closed and Variants starts open. You can close either section
 without losing the draft. The unit link in the variants' Price heading opens the same unit dialog
@@ -291,8 +291,9 @@ list and the reason.
 ## Set menus {#set-menus}
 
 To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name
-and price, and choose its eat-in VAT class. Choose a takeaway class if it differs from the eat-in
-one. Add customer names in the languages you use, then save.
+and price, and choose its **Eat-in VAT** and, if it differs, its **VAT when taken away**. Eaten
+here, it is charged the one rate in [How VAT is charged](products.md#vat); its Eat-in VAT is used
+only as its VAT when taken away when you choose none. Add customer names in the languages you use, then save.
 
 In **Dishes**, add the dishes you want to offer. Keep dishes sold by weight on the full menu,
 where staff can sell them separately. Use **Variants** to choose which versions are included.

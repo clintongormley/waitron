@@ -41,7 +41,7 @@ import { createCourse } from "./kitchen.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
-import { saveBodyOf } from "./testing/editor-save-body.js";
+import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 // The menu ROUTES end to end in-process: the body and id screens and the permission gate. The

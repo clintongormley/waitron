@@ -16,7 +16,7 @@ import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
-import { saveBodyOf } from "./testing/editor-save-body.js";
+import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 /**

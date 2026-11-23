@@ -912,9 +912,9 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
 A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates).
-Piece A ([plan](../superpowers/plans/2026-11-22-vat-rates-a.md)) is built: each product has its own
-dated takeaway rate, picked as a percentage, everything eaten here files at the one dine-in rate,
-and no screen offers an eat-in VAT class. What remains, with no plan yet:
+Each product has its own dated takeaway rate, picked as a percentage, everything eaten here files
+at the one dine-in rate, and no screen offers an eat-in VAT class (piece A,
+[plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Left, with no plan yet:
 
 - **Piece B:** set menus with no VAT of their own, and none taken away when their products'
   takeaway rates differ. Until then a takeaway set-menu line files at its set menu's own takeaway

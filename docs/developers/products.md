@@ -783,7 +783,7 @@ own words ("sends a raise to the server, and words the server's refusal" in
 `apps/till/src/till-app.test.ts`); the counter does not mark that line. A table round refused
 `product.variant_unavailable` has its line marked from the offers read again ("says a sold-out
 variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the
-dine-in rate on the day of issue, and taken away, at the product's takeaway rate, as _What a sold
+dine-in rate on the day the meal ends, and taken away, at the product's takeaway rate, as _What a sold
 line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
