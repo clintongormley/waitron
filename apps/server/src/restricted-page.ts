@@ -301,7 +301,7 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
       ? ""
       : ` aria-invalid="true" aria-describedby="old-box-data-${field}-error"`;
   const code = shown.askCode
-    ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} *</label></p>
+    ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} <span class="required">*</span></label></p>
 <p>${codeInput("old-box-data-totp", invalid("totp"), true)}</p>\n${error("totp")}`
     : "";
   const bottom =
@@ -309,10 +309,10 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
       ? ""
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
   return `<section>
-${heading}${intro}<form method="post" action="/old-box-data">
-<p><label for="old-box-data-email">${escapeHtml(words.email)} *</label></p>
+${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
+<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("old-box-data-email", view.download?.email ?? "", invalid("email"))}</p>
-${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} *</label></p>
+${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
 ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
 </form>

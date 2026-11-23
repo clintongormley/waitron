@@ -150,7 +150,7 @@ function formSection(
       : ` aria-invalid="true" aria-describedby="carry-on-${field}-error"`;
   const checked = (on: boolean) => (on ? " checked" : "");
   const code = view.askCode
-    ? `<p><label for="carry-on-totp">${escapeHtml(words.totp)} *</label></p>
+    ? `<p><label for="carry-on-totp">${escapeHtml(words.totp)} <span class="required">*</span></label></p>
 <p>${codeInput("carry-on-totp", invalid("totp"))}</p>
 <p><label for="carry-on-recovery-code">${escapeHtml(words.recoveryCode)}</label></p>
 <p><input type="text" id="carry-on-recovery-code" name="recoveryCode" autocomplete="off"${invalid("totp")}></p>
@@ -163,14 +163,14 @@ ${error("totp")}`
   // The password is never drawn back, so every drawn form starts with a required field empty.
   return `<h2>${escapeHtml(words.heading)}</h2>
 <p>${escapeHtml(words.intro[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.intro[1])}</p>
-<form method="post" action="/carry-on" id="carry-on">
+<form method="post" action="/carry-on" id="carry-on" class="box-form">
 <input type="hidden" name="returnTo" value="${escapeHtml(destination)}">
-<p><label for="carry-on-email">${escapeHtml(words.email)} *</label></p>
+<p><label for="carry-on-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("carry-on-email", view.email, invalid("email"))}</p>
-${error("email")}<p><label for="carry-on-password">${escapeHtml(words.password)} *</label></p>
+${error("email")}<p><label for="carry-on-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p><input type="password" id="carry-on-password" name="password" autocomplete="current-password" required${invalid("password")}></p>
-${error("password")}${code}<p><label><input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required${checked(view.switchedOff)}${invalid("switchedOff")}> ${escapeHtml(words.switchedOff[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.switchedOff[1])} *</label></p>
-${error("switchedOff")}<p><label><input type="checkbox" id="carry-on-no-other-recovery" name="noOtherRecovery" value="yes" required${checked(view.noOtherRecovery)}${invalid("noOtherRecovery")}> ${escapeHtml(words.noOtherRecovery)} *</label></p>
+${error("password")}${code}<p><label><input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required${checked(view.switchedOff)}${invalid("switchedOff")}> ${escapeHtml(words.switchedOff[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.switchedOff[1])} <span class="required">*</span></label></p>
+${error("switchedOff")}<p><label><input type="checkbox" id="carry-on-no-other-recovery" name="noOtherRecovery" value="yes" required${checked(view.noOtherRecovery)}${invalid("noOtherRecovery")}> ${escapeHtml(words.noOtherRecovery)} <span class="required">*</span></label></p>
 ${error("noOtherRecovery")}${bottom}<p><button type="submit" disabled>${escapeHtml(words.action)}</button></p>
 </form>
 <script>

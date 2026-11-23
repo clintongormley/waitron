@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  BOX_FORM_STYLE,
+  boxFormHead,
   GUIDE_PAGE_TOKENS,
   GUIDE_THEME_KEY,
   mountGuidePages,
@@ -412,4 +414,96 @@ it("standalone guide pages keep fixed type with a larger browser default", async
   } finally {
     await browser.close();
   }
+});
+
+describe("the box pages' form style", () => {
+  const SYSTEM_COLOURS =
+    /\b(?:Canvas|CanvasText|Highlight|HighlightText|GrayText|ButtonText|ButtonFace|LinkText)\b/;
+  const outsideForcedColours = BOX_FORM_STYLE.replace(
+    /@media \(forced-colors: active\) \{[\s\S]*\}\s*$/,
+    "",
+  );
+
+  it("reads every colour, spacing, radius and font from a --wt-* token the page declares", () => {
+    const reads = [...BOX_FORM_STYLE.matchAll(/var\((--wt-[a-z0-9-]+)\)/g)].map((m) => m[1]!);
+    expect(reads.length).toBeGreaterThan(20);
+    for (const name of reads) expect(Object.keys(GUIDE_PAGE_TOKENS), name).toContain(name);
+    const values = [...outsideForcedColours.matchAll(/(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+);/g)];
+    expect(values.length).toBeGreaterThan(20);
+    for (const [, property, value] of values) {
+      const literal = value!.replace(/var\(--wt-[a-z0-9-]+\)/g, "");
+      expect(literal, `${property}: ${value}`).not.toMatch(
+        /#|\b\d*\.?\d+(?:px|rem|em)\b|\b(?:rgb|hsl)a?\(|\b(?:white|black|red|blue|grey|gray)\b/i,
+      );
+      expect(literal, `${property}: ${value}`).not.toMatch(SYSTEM_COLOURS);
+    }
+    expect(BOX_FORM_STYLE).not.toMatch(/(?<![\w-])color:\s*var\(--wt-color-primary\)/);
+  });
+
+  it("is part of every box page, and the head handed to a page drawn without one declares its tokens", () => {
+    expect(renderBoxPage("en", "Title", "<h1>Title</h1>")).toContain(BOX_FORM_STYLE);
+    const head = boxFormHead();
+    expect(head.startsWith("<style>")).toBe(true);
+    expect(head).toContain(BOX_FORM_STYLE);
+    for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(head).toContain(`${name}:`);
+  });
+
+  it("paints a form's fields, errors and action from the tokens, light and dark", async () => {
+    const form = `<form class="box-form" method="post" action="/x">
+<p><label for="f-email">Email <span class="required">*</span></label></p>
+<p><input type="email" id="f-email" name="email" aria-invalid="true" aria-describedby="f-email-error"></p>
+<p id="f-email-error">Enter your email.</p>
+<p><label for="f-password">Password <span class="required">*</span></label></p>
+<p><input type="password" id="f-password" name="password"></p>
+<p><label><input type="checkbox" id="f-tick" name="tick"> I agree <span class="required">*</span></label></p>
+<p id="f-message" role="alert">Correct the highlighted fields to continue.</p>
+<p><button type="submit">Go</button><button type="button" disabled>Off</button></p>
+</form>`;
+    const expected = {
+      light: {
+        fill: "rgb(240, 241, 244)",
+        danger: "rgb(179, 38, 30)",
+        primary: "rgb(0, 115, 146)",
+        onPrimary: "rgb(255, 255, 255)",
+        disabled: "rgb(122, 202, 233)",
+      },
+      dark: {
+        fill: "rgb(38, 42, 51)",
+        danger: "rgb(255, 127, 115)",
+        primary: "rgb(113, 207, 235)",
+        onPrimary: "rgb(0, 16, 22)",
+        disabled: "rgb(22, 53, 62)",
+      },
+    } as const;
+    const browser = await chromium.launch();
+    try {
+      for (const scheme of ["light", "dark"] as const) {
+        const page = await browser.newPage({
+          viewport: { width: 390, height: 844 },
+          colorScheme: scheme,
+        });
+        await page.setContent(renderBoxPage("en", "Form", form));
+        const style = (selector: string, property: string) =>
+          page
+            .locator(selector)
+            .evaluate((el, name) => getComputedStyle(el).getPropertyValue(name), property);
+        const colours = expected[scheme];
+        expect(await style("#f-password", "background-color"), scheme).toBe(colours.fill);
+        expect(await style("#f-password", "width"), scheme).toBe(await style("form", "width"));
+        expect(await style("#f-email", "box-shadow"), scheme).toContain(colours.danger);
+        expect(await style("#f-email-error", "color"), scheme).toBe(colours.danger);
+        expect(await style("#f-message", "color"), scheme).toBe(colours.danger);
+        expect(await style('label[for="f-email"] .required', "color"), scheme).toBe(colours.danger);
+        expect(await style("#f-tick", "accent-color"), scheme).toBe(colours.primary);
+        expect(await style('button[type="submit"]', "background-color"), scheme).toBe(
+          colours.primary,
+        );
+        expect(await style('button[type="submit"]', "color"), scheme).toBe(colours.onPrimary);
+        expect(await style("button[disabled]", "background-color"), scheme).toBe(colours.disabled);
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  });
 });
