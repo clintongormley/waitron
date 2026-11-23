@@ -13,6 +13,7 @@ import { canonicalize, servingPrimaryNodeId, type CanonicalValue } from "@waitro
 import { appendHandoverEventTx, nodeHandoverEvents, readPinnedPrimaryKey } from "@waitron/node-db";
 import { codeOf, createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { MalformedHoldingsError } from "@waitron/module";
+import type { BackupQuery } from "@waitron/store";
 import { AppError, isAppError } from "@waitron/shared";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
@@ -22,7 +23,7 @@ import { emergencyCopyFrom } from "./handover-intervals.js";
 import { readHoldings } from "./old-box-holdings.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { raiseSetAsideOnReset } from "./reset-alert.js";
-import { readResetOrderFor, readResetOrderOperation, type ResetOrder } from "./reset-order.js";
+import { readResetOrderFor, readResetOrderOperation } from "./reset-order.js";
 import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-records.js";
 
 /** The old box's acknowledgement: it has saved its reset and set aside `lacking` if `setAside`. */
@@ -106,20 +107,21 @@ async function checkedQuery(deps: ResetOrderApiDeps, raw: unknown) {
 
 /**
  * Per module that fills the seat, which of `holdings` this box lacks, asked only while an order
- * stands (`order`): the seats read every chain's records, on the box that is selling.
+ * stands (`ordered`): the seats read every chain's records, on the box that is selling.
  */
 async function lackingFor(
   deps: ResetOrderApiDeps,
+  query: BackupQuery,
   holdings: Record<string, CanonicalValue>,
-  order: ResetOrder | null,
+  ordered: boolean,
 ): Promise<Record<string, CanonicalValue[]>> {
   const lacking: Record<string, CanonicalValue[]> = {};
   for (const [name, held] of Object.entries(holdings)) {
     const seat = deps.modules.find((m) => m.name === name)?.handover?.lacking;
     if (seat === undefined) refuse("module");
-    if (order === null) continue;
+    if (!ordered) continue;
     try {
-      lacking[name] = await seat(liveBackupQuery(deps.db), held);
+      lacking[name] = await seat(query, held);
     } catch (error) {
       if (error instanceof MalformedHoldingsError) refuse("holdings");
       throw error;
@@ -139,7 +141,7 @@ async function acknowledge(
   log: Logger,
   source: string,
   ack: ResetAcknowledgement,
-  lacking: Record<string, CanonicalValue[]>,
+  holdings: Record<string, CanonicalValue>,
 ): Promise<void> {
   const order = await readResetOrderOperation(deps.node, deps.nodeId, source, ack.orderId);
   if (order === undefined) refuse("order");
@@ -157,6 +159,11 @@ async function acknowledge(
       )
       .limit(1);
     if (acknowledged !== undefined) return;
+    // This box's own comparison, not the ack's list: that was taken before a loss order's extra
+    // return pass. Made under node.db's lock, so it sees what a return committed under it.
+    const lacking = ack.setAside
+      ? await lackingFor(deps, liveBackupQuery(deps.db), holdings, true)
+      : {};
     await withTransaction(deps.db, async (tx) => {
       await recordActivity(tx, {
         id: returnDigest({ kind: "handover.reset_acknowledged", orderId: ack.orderId }),
@@ -165,8 +172,7 @@ async function acknowledge(
         personId,
         data: ack,
       });
-      // This box's own comparison, not the ack's list: that was taken before a loss order's extra return pass.
-      if (ack.setAside && Object.values(lacking).some((chains) => chains.length > 0))
+      if (Object.values(lacking).some((chains) => chains.length > 0))
         await raiseSetAsideOnReset(tx, {
           nodeId: source,
           orderId: ack.orderId,
@@ -245,8 +251,8 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
       const { nonce, holdings, ack, source } = await checkedQuery(deps, raw);
       // Read before the acknowledgement, which writes no order and is refused unless one stands.
       const order = await readResetOrderFor(deps.node, deps.nodeId, source);
-      const lacking = await lackingFor(deps, holdings, order);
-      if (ack !== undefined) await acknowledge(deps, log, source, ack, lacking);
+      const lacking = await lackingFor(deps, liveBackupQuery(deps.db), holdings, order !== null);
+      if (ack !== undefined) await acknowledge(deps, log, source, ack, holdings);
       c.header("Cache-Control", "no-store");
       return c.json(
         await signAsThisBox(deps, "reset-order", {

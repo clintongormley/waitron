@@ -553,6 +553,60 @@ describe("POST /api/node/reset-order's copy time", () => {
 });
 
 describe("an acknowledgement", () => {
+  it("raises no alert when a return that commits while the comparison runs brings the missing record", async () => {
+    await completedReturn();
+    const order = await orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: true },
+    );
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId: main, seriesId },
+      numeroInstalacion: 23,
+      reuseExistingParents: true,
+    });
+    const chain = {
+      nodeId: main,
+      sifId: ids.sifId,
+      idSistemaInformatico: "WAITRON01",
+      numeroInstalacion: "23",
+      count: 1,
+      secuencia: 1,
+      huella: "F".repeat(64),
+    };
+    const compared = Promise.withResolvers<void>();
+    const holdingLock = Promise.withResolvers<void>();
+    const lacking = vi.fn(
+      async (...args: Parameters<NonNullable<typeof VERIFACTU_HANDOVER.lacking>>) => {
+        const missing = await VERIFACTU_HANDOVER.lacking!(...args);
+        compared.resolve();
+        return missing;
+      },
+    );
+    // A return writes its records under node.db's lock, as /api/node/return-records does.
+    const returned = withNodeTransaction(suite.node, async () => {
+      holdingLock.resolve();
+      await compared.promise;
+      await withTransaction(suite.db, (tx) => insertFiscalRecord(tx, ids));
+    });
+    await holdingLock.promise;
+    const pending = ask(
+      await queryBody({
+        holdings: { fiscal: [chain] },
+        ack: { orderId: order.orderId, setAside: true, lacking: {} },
+      }),
+      oldBox,
+      app([{ ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } }]),
+    );
+    await returned;
+    const res = await pending;
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await VERIFACTU_HANDOVER.lacking!(liveBackupQuery(suite.db), [chain])).toEqual([]);
+    expect(await incidents()).toEqual([]);
+  });
+
   it("takes the box off the list in the removal's own chart, as Clear from list leaves it", async () => {
     const order = await ordered();
     const before = (await readNodeMembership(suite.db))!.body.term;
