@@ -351,7 +351,7 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/invoice-print-api.test.ts",
   "apps/server/src/invoice-recipient-builder.test.ts",
   "apps/server/src/invoice-recipient-flow.e2e.test.ts",
-  "apps/server/src/invoice-selection.test.ts",
+  "packages/orders-sales/src/invoice-selection.test.ts",
   "apps/server/src/issuance-pass.fiscal-identity.test.ts",
   "apps/server/src/issuance-pass.test.ts",
   "apps/server/src/issue-moment.test.ts",

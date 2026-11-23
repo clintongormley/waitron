@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import "@waitron/orders-sales/errors.js";
 import type { Dining } from "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
@@ -598,22 +599,12 @@ declare module "@waitron/shared" {
     "session.person_not_signed_in": { personId: string | null };
     // `working_order.not_found` is declared in @waitron/db's errors.ts.
     /**
-     * A working order this caller tried to MODIFY is not `open` (settled, abandoned, or absent — one
-     * code for all). The triggers `working_orders_enforce_transition` and
-     * `working_order_lines_require_open_parent` are the database backstop; this code gives the
-     * caller a domain answer instead of a raw trigger error.
-     */
-    "working_order.not_open": { workingOrderId: string };
-    /**
      * An edit was made from a copy of an OPEN order that another write has since changed: the
      * `revision` the edit carried is not the order's. `revision` is the order's current one; the
      * caller reloads the order and edits again.
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
     "sale.full_invoice_unavailable": Record<string, never>;
-    "invoice.recipient_invalid": {
-      field: "taxId" | "legalName" | "address" | "identifierType" | "identifierCountryCode";
-    };
     "invoice.choice_locked": Record<string, never>;
     /** Editing or closing a bill must wait while its card payment can still settle. */
     "order.payment_in_flight": { workingOrderId: string };
