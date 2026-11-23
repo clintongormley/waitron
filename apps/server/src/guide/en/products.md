@@ -312,8 +312,9 @@ Under **What one set menu includes**, set how many dishes you offer from each co
 use one line for one starter and another for one main. Put two courses on the same line to let
 guests choose from either.
 
-If your set menu includes drinks, bread or coffee, give the products those courses. In each
-department, set Drinks and Bread to **Fire now** so you can send them with the first order.
+If your set menu includes drinks, bread or coffee, use **Courses** → **Add course** to create
+any of those courses you need. Assign each product its course. In each department, set Drinks
+and Bread to **Fire now** so you can send them with the first order.
 
 Open the full menu that will offer the set menu. In **Structure**, open the actions for the
 menu or section where it belongs, choose **Set menu…** and pick it. Use **Preview** to see the

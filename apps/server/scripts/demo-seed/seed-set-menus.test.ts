@@ -4,7 +4,7 @@ import { floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { fitSetMenus, placeInOrder, setMenuCopyOf } from "@waitron/shared";
+import { placeInOrder, setMenuCopyOf, suggestMove, withPlacements } from "@waitron/shared";
 import { listZoneOffers } from "@waitron/venue-service";
 import { listCourses } from "../../src/kitchen.js";
 import { seedDemoRestaurant } from "./seed.js";
@@ -153,28 +153,22 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
       ["daily-1", 500],
       ["daily-2", 0],
     ]);
-    const codLater = [
-      ...orderedDishes.slice(0, 4),
-      ...orderedDishes.slice(5, 7),
-      orderedDishes[4]!,
-      orderedDishes[7]!,
-    ];
-    expect(placeInOrder(state, codLater).unplaced).toEqual([orderedDishes[4]!.id]);
-    expect(
-      fitSetMenus({
-        offers: copies,
-        dishes: codLater.map(({ id, productId, variantId }) => ({
-          id,
-          productId,
-          variantId,
-          pinnedTo: null,
-        })),
-        setMenus: state.setMenus.map(({ lineId, copyId }) => ({
-          id: lineId,
-          fixedOfferId: copyId,
-        })),
-        previous: null,
-      }),
-    ).toMatchObject({ kind: "fitted", totalCents: 7300 });
+    const cod = orderedDishes[4]!;
+    const firstOrder = [...orderedDishes.slice(0, 4), ...orderedDishes.slice(5, 7)];
+    const afterSend = withPlacements(state, firstOrder, placeInOrder(state, firstOrder).placed);
+    expect(placeInOrder(afterSend, [cod]).unplaced).toEqual([cod.id]);
+    const suggestion = suggestMove(afterSend, [], cod);
+    expect(suggestion).toMatchObject({
+      moves: [
+        {
+          lineId: expect.stringMatching(/^[56]$/),
+          from: { setMenuLineId: expect.stringMatching(/^special-/) },
+          to: { setMenuLineId: expect.stringMatching(/^daily-/) },
+          priceCents: 500,
+        },
+      ],
+      place: { id: cod.id, priceCents: 0 },
+    });
+    expect(suggestion!.place.setMenuLineId).toBe(suggestion!.moves[0]!.from.setMenuLineId);
   });
 });
