@@ -24,6 +24,12 @@ export interface CancellationRead {
   billId: string;
   saleId?: string;
   refundValue?: { quantity: string; gross: string };
+  /** The free items that come back with this dish when every portion it has left is cancelled with
+   * Refund: it is the bill's last paid dish. */
+  withFree?: { lineId: string; name: string; quantity: string; refundAmount: string }[];
+  /** A dish given free that holds a share of the price paid: it gives money back only with the
+   * bill's last paid dish. */
+  givenFree?: true;
 }
 
 export interface RefundLink {
@@ -44,6 +50,8 @@ export interface CancelItemRequest {
   outcome: "remove_charge" | "keep_charge";
   preparationStarted?: boolean;
   refundHandoff?: boolean;
+  /** The free items coming back with the last paid dish, by line id. */
+  withFree?: string[];
   expectedPartyRevision?: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;

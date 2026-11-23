@@ -99,6 +99,7 @@ export const en = {
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
   "cancel_item.refund": "Cancel and refund {amount}",
+  "cancel_item.with_free": "Comes back with it, given free: {dishes}",
   "cancel_item.unavailable": "This dish cannot be cancelled here.",
 
   "device_zones.title": "Zones on this device",
@@ -2426,6 +2427,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",
   "cancel_item.refund": "Cancelar y devolver {amount}",
+  "cancel_item.with_free": "Vuelve con él, por invitación: {dishes}",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",

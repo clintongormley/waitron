@@ -3934,6 +3934,110 @@ describe("till-app: service cancellation consent", () => {
       });
     });
 
+    const waterCancelId = "44444444-4444-4444-8444-444444444444";
+    const withWater = (): CancellationRead => {
+      const read = { ...consent("settled"), saleId: "own-sale" };
+      read.refundValue = { quantity: "1.000", gross: "8.33" };
+      read.withFree = [
+        { lineId: "water-1", name: "Water", quantity: "1.000", refundAmount: "1.67" },
+      ];
+      return read;
+    };
+
+    it("refunds the last paid dish with the free items that come back with it", async () => {
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(withWater()),
+        cancelItem: vi.fn().mockResolvedValue({
+          revision: 4,
+          refundLinks: [
+            { lineId: "line-1", adjustmentId: cancelId },
+            { lineId: "water-1", adjustmentId: waterCancelId },
+          ],
+        }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: withWater(),
+        reasonId: "r-unserved",
+        withFree: ["water-1"],
+      });
+      await flush(el);
+      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+      expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
+        refundHandoff: true,
+        withFree: ["water-1"],
+      });
+      const form = refundForm(el)!;
+      expect(form.target).toBe("10.00");
+      expect(form.dishes).toBe("1 × Wine, 1 × Water");
+      await sendRefund(el);
+      expect(vi.mocked(api.refundTransaction).mock.calls[0]![1]).toMatchObject({
+        appliedAmount: "10.00",
+        cancellationIds: [cancelId, waterCancelId],
+      });
+    });
+
+    it("reads the dish again when a free item should have come back with it, and says so", async () => {
+      const before = { ...withWater(), withFree: undefined };
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValueOnce(before).mockResolvedValue(withWater()),
+        cancelItem: vi.fn().mockRejectedValue({
+          code: "tab.free_item_with_dish",
+          status: 409,
+          reason: "not_listed",
+        }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: before,
+        reasonId: "r-unserved",
+      });
+      await flush(el);
+      await expect.poll(() => cancelDialog(el)?.consent?.withFree).toEqual(withWater().withFree);
+      expect(cancelDialog(el)!.refusal).toBe(
+        "A dish given free comes back with this one. The window now lists it: check the amount and choose again.",
+      );
+      expect(methods.getCancellation).toHaveBeenCalledTimes(2);
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    });
+
+    it("explains a free item that was served instead of refunding", async () => {
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(withWater()),
+        cancelItem: vi
+          .fn()
+          .mockRejectedValue({ code: "tab.free_item_with_dish", status: 409, reason: "served" }),
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await openCancel(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: withWater(),
+        reasonId: "r-unserved",
+        withFree: ["water-1"],
+      });
+      await flush(el);
+      await expect
+        .poll(() => cancelDialog(el)?.refusal)
+        .toBe(
+          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then give the money back with Correct invoice on the receipt.",
+        );
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    });
+
     it("loads the reasons for a receipt's refund screen and retries a failed read", async () => {
       const listAdjustmentReasons = vi
         .fn()

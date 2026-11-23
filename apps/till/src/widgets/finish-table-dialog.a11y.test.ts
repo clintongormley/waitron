@@ -148,3 +148,47 @@ for (const locale of ["en-GB", "es-ES"]) {
     }
   }
 }
+
+for (const theme of ["light", "dark"] as const) {
+  it(`Finish table with a dish given free is accessible in ${theme}`, async () => {
+    setLocale("es-ES");
+    const dish = (lineId: string, name: string): UnservedDish => ({
+      lineId,
+      billId: "bill",
+      billRevision: 7,
+      name,
+      quantity: "1.000",
+      context: {
+        billStatus: "settled",
+        stage: "not_started",
+        components: [
+          {
+            id: `ticket-${lineId}`,
+            lineId,
+            state: "queued",
+            firedAt: null,
+            requestedAt: null,
+            stationId: "station-1",
+            quantity: "1.000",
+            kitchenQuantity: "1.000",
+            servedQuantity: "0.000",
+            cancelledQuantity: "0.000",
+          },
+        ],
+      },
+    });
+    const { el, host } = await mountWidget<TillFinishTableDialog>(
+      "till-finish-table-dialog",
+      {
+        dishes: [dish("salad", "Ensalada"), dish("water", "Agua mineral")],
+        refunds: { salad: "8.33", water: "1.67" },
+        freeItems: { water: ["salad"] },
+        reasons: [],
+      },
+      theme,
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll('input[name="refund"]')).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+}

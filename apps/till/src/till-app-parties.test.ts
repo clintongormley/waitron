@@ -13908,6 +13908,66 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(api.getRefundableTenders).toHaveBeenCalledOnce();
   });
 
+  function unserved(lineId: string): Dish {
+    const row = dish(lineId);
+    row.context.components[0]!.quantity = "1.000";
+    row.context.components[0]!.kitchenQuantity = "1.000";
+    row.context.components[0]!.servedQuantity = "0.000";
+    return row;
+  }
+  const freeWater = (row: Dish): Consent => ({
+    ...consent(row),
+    refundValue: { quantity: "1.000", gross: "1.67" },
+    givenFree: true,
+  });
+  const waterBack = [{ lineId: "line-w", name: "Water", quantity: "1.000", refundAmount: "1.67" }];
+
+  it("has a free item follow every paid dish of its sale in the list", async () => {
+    const rows = [unserved("line-1"), unserved("line-2"), unserved("line-w")];
+    const { el } = await mountFinish({
+      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+      getCancellation: vi.fn(async (_p: string, id: string) => {
+        const row = rows.find((candidate) => candidate.lineId === id)!;
+        return id === "line-w" ? freeWater(row) : consent(row);
+      }),
+    });
+    const dialog = await openFinish(el);
+    expect(dialog!.freeItems).toEqual({ "line-w": ["line-1", "line-2"] });
+  });
+
+  it("follows no paid dish while one keeps a served portion", async () => {
+    const rows = [unserved("line-1"), dish("line-2"), unserved("line-w")];
+    const { el } = await mountFinish({
+      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+      getCancellation: vi.fn(async (_p: string, id: string) => {
+        const row = rows.find((candidate) => candidate.lineId === id)!;
+        return id === "line-w" ? freeWater(row) : consent(row);
+      }),
+    });
+    const dialog = await openFinish(el);
+    expect(dialog!.freeItems).toEqual({ "line-w": [] });
+  });
+
+  it.each([
+    [true, ["line-1"]],
+    [false, []],
+  ])(
+    "has a free item follow a sale's one paid dish only when its consent names it (%s)",
+    async (named, follows) => {
+      const rows = [unserved("line-1"), unserved("line-w")];
+      const { el } = await mountFinish({
+        finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+        getCancellation: vi.fn(async (_p: string, id: string) => {
+          const row = rows.find((candidate) => candidate.lineId === id)!;
+          if (id === "line-w") return freeWater(row);
+          return named ? { ...consent(row), withFree: waterBack } : consent(row);
+        }),
+      });
+      const dialog = await openFinish(el);
+      expect(dialog!.freeItems).toEqual({ "line-w": follows });
+    },
+  );
+
   describe("each receipt's refund opens filled in", () => {
     // A refund left awaiting its answer is saved for its sale, and would reopen in the next case.
     afterEach(() => {

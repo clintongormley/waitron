@@ -561,3 +561,12 @@ describe("Print the bill's refused wording", () => {
     expect(catalogues[locale]?.["meal_end.unserved_full_invoice"]).toBe(message);
   });
 });
+
+describe("the Cancel item window's line for free items coming back with the last paid dish", () => {
+  it.each([
+    ["en-GB", "Comes back with it, given free: {dishes}"],
+    ["es-ES", "Vuelve con él, por invitación: {dishes}"],
+  ])("names them in %s", (locale, line) => {
+    expect(catalogues[locale]?.["cancel_item.with_free"]).toBe(line);
+  });
+});

@@ -1415,3 +1415,32 @@ it("says a bill set for a full invoice gives no part payment a receipt of its ow
     "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
   );
 });
+
+it.each([
+  [
+    "free_item",
+    "This dish was given free, so it gives money back only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it.",
+    "Este plato fue por invitación, así que solo devuelve dinero junto con el último plato pagado de la cuenta. Desmarca Devolución para cancelarlo solo, o elige Cancelar… en el último plato pagado: su ventana lo devuelve con él.",
+  ],
+  [
+    "served",
+    "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then give the money back with Correct invoice on the receipt.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuelve el dinero con Rectificar factura en el recibo.",
+  ],
+  [
+    "not_listed",
+    "A dish given free comes back with this one. The window now lists it: check the amount and choose again.",
+    "Un plato por invitación vuelve con este. La ventana ya lo muestra: revisa el importe y vuelve a elegir.",
+  ],
+])("words tab.free_item_with_dish by its reason %s", (reason, english, spanish) => {
+  expect(codeMessage("tab.free_item_with_dish", "en", { reason })).toBe(english);
+  expect(codeMessage("tab.free_item_with_dish", "es", { reason })).toBe(spanish);
+});
+
+it("words tab.free_item_with_dish with an unknown reason as a readable sentence", () => {
+  for (const locale of ["en", "es"]) {
+    const general = codeMessage("tab.free_item_with_dish", locale, { reason: "constructor" });
+    expect(general).not.toBe(codeMessage("unknown", locale));
+    expect(general).not.toContain("tab.free_item_with_dish");
+  }
+});

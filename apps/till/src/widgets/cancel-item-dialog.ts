@@ -43,6 +43,8 @@ export interface CancelItemChoice {
   quantity: string;
   outcome: Outcome;
   consent: CancellationRead;
+  /** The free items coming back with the bill's last paid dish, by line id. */
+  withFree?: string[];
   preparationStarted?: boolean;
   reasonId?: string;
   note?: string;
@@ -58,6 +60,8 @@ function consentKey(read: CancellationRead | null): string {
     read.billId,
     read.saleId,
     read.refundValue,
+    read.withFree,
+    read.givenFree,
     read.revision,
     read.billRevision,
     read.context.billStatus,
@@ -204,6 +208,7 @@ export class TillCancelItemDialog extends LitElement {
     const value = this.consent?.refundValue;
     return (
       this.refundAvailable &&
+      this.consent?.givenFree !== true &&
       value !== undefined &&
       compareDecimal(decimal(value.quantity), decimal("0")) > 0 &&
       compareDecimal(decimal(value.gross), decimal("0")) > 0
@@ -219,10 +224,22 @@ export class TillCancelItemDialog extends LitElement {
     const value = this.consent?.refundValue;
     if (value === undefined || !this.#quantityValid()) return "";
     const cancelled = sumDecimals(this.#dishes().map((row) => decimal(row.cancelledQuantity)));
+    const own = cancelRefundShare(value, cancelled, quantityValue(this.draft.quantity));
     return formatMoney(
-      cancelRefundShare(value, cancelled, quantityValue(this.draft.quantity)),
+      sumDecimals([own, ...this.#freeBack().map((item) => decimal(item.refundAmount))]),
       currentLocale(),
     );
+  }
+  /** The free items that come back with this cancel: it refunds every portion the bill's last paid
+   * dish has left. */
+  #freeBack(): NonNullable<CancellationRead["withFree"]> {
+    const free = this.consent?.withFree ?? [];
+    return free.length > 0 &&
+      this.draft.outcome === "refund" &&
+      this.#quantityValid() &&
+      compareDecimal(decimal(quantityValue(this.draft.quantity)), decimal(this.#remaining())) === 0
+      ? free
+      : [];
   }
   #asksPreparation(): boolean {
     return (
@@ -392,6 +409,9 @@ export class TillCancelItemDialog extends LitElement {
           quantity: quantityValue(this.draft.quantity),
           outcome,
           consent: structuredClone(this.consent!),
+          ...(this.#freeBack().length > 0
+            ? { withFree: this.#freeBack().map((item) => item.lineId) }
+            : {}),
           ...(this.#asksPreparation()
             ? { preparationStarted: this.draft.preparationStarted! }
             : {}),
@@ -518,14 +538,24 @@ export class TillCancelItemDialog extends LitElement {
               : this.consent?.context.billStatus === "settled"
                 ? this.#canRefund()
                   ? html`<label
-                      ><input
-                        type="checkbox"
-                        name="refund"
-                        .checked=${this.draft.outcome === "refund"}
-                        ?disabled=${this.#busy()}
-                        @change=${(event: Event) => this.#set({ outcome: (event.target as HTMLInputElement).checked ? "refund" : "keep_charge" })}
-                      />${t("find_page.refund")}</label
-                    >`
+                        ><input
+                          type="checkbox"
+                          name="refund"
+                          .checked=${this.draft.outcome === "refund"}
+                          ?disabled=${this.#busy()}
+                          @change=${(event: Event) => this.#set({ outcome: (event.target as HTMLInputElement).checked ? "refund" : "keep_charge" })}
+                        />${t("find_page.refund")}</label
+                      >${
+                        this.#freeBack().length > 0
+                          ? html`<p data-with-free>
+                              ${t("cancel_item.with_free").replace("{dishes}", () =>
+                                this.#freeBack()
+                                  .map((item) => `${quantityText(item.quantity)} × ${item.name}`)
+                                  .join(", "),
+                              )}
+                            </p>`
+                          : nothing
+                      }`
                   : nothing
                 : html`<fieldset>
                     <legend>
