@@ -261,6 +261,9 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private lost = false;
 
+  /** Set the first time the box joins or is lost, and never cleared: the key lives only in this tab. */
+  @state() private revealed = false;
+
   @state() private copyStage?: JoinCopyStage;
 
   /** The join request answered just before this screen shows, so its start counts as an answer. */
@@ -351,8 +354,9 @@ export class SetupDoneScreen extends LitElement {
       this.joined = answer === "joined";
       if (answer !== "stage_unread")
         this.copyStage = answer === "joined" || answer === "answered" ? undefined : answer;
-      if (this.joined) return;
     }
+    if (this.joined || this.lost) this.revealed = true;
+    if (this.joined) return;
     this.#timer = setTimeout(
       () => void this.#joinTick(),
       this.lost ? this.lostPollIntervalMs : this.pollIntervalMs,
@@ -764,7 +768,7 @@ export class SetupDoneScreen extends LitElement {
       <div class="choices" data-test="links">
         ${this.startFailed ? this.#serverLink() : this.#appLinks()}
       </div>
-      ${this.#mainLabel()}
+      ${this.startFailed ? nothing : this.#mainLabel()}
       ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
       ${this.#breakGlass()}
       ${
@@ -829,8 +833,8 @@ export class SetupDoneScreen extends LitElement {
   /** One task at a time: each appears once the one before it is done. */
   #renderJoining(): TemplateResult {
     const secret = this.breakGlassSecret;
-    const keyOpen = this.joined && secret !== undefined && !this.keyConfirmed;
-    const labelShown = this.joined && !keyOpen && this.contactUrl !== undefined;
+    const keyOpen = this.revealed && secret !== undefined && !this.keyConfirmed;
+    const labelShown = this.revealed && !keyOpen && this.contactUrl !== undefined;
     return html`
       <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
       <ul class="tasks" data-test="joining-tasks">
@@ -843,13 +847,24 @@ export class SetupDoneScreen extends LitElement {
             : html`<p data-test="joining-status" role="status">${this.#joiningStatus()}</p>`,
         )}
         ${
-          !this.joined || secret === undefined
+          !this.revealed || secret === undefined
             ? nothing
             : this.#task(
                 "key",
                 keyOpen ? "to_do" : "done",
                 t("done.task.key"),
-                keyOpen ? this.#keyTask(secret) : nothing,
+                keyOpen
+                  ? this.#keyTask(secret)
+                  : html`<div class="task-actions">
+                      <wt-button
+                        variant="ghost"
+                        data-test="key-again"
+                        @click=${() => {
+                          this.keyConfirmed = false;
+                        }}
+                        >${t("done.task.key_again")}</wt-button
+                      >
+                    </div>`,
               )
         }
         ${

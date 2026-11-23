@@ -116,6 +116,7 @@ export const finishEn = {
   "done.task.key_why":
     "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
   "done.task.key_wrote": "I wrote it down",
+  "done.task.key_again": "Show the key again",
   "done.task.label": "Print this box's label",
   "done.task.label_why":
     "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
@@ -250,6 +251,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.key_why":
     "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez.",
   "done.task.key_wrote": "La he anotado",
+  "done.task.key_again": "Mostrar la clave de nuevo",
   "done.task.label": "Imprimir la etiqueta de este servidor",
   "done.task.label_why":
     "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
