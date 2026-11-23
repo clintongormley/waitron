@@ -1223,8 +1223,17 @@ it("offers sign-in again after a refused emergency handover preparation", async 
   await vi.waitFor(() => expect(activations(posts)).toBe(1));
   const method = "[data-test=sign-in-passkey], [name=handover-sign-in-method]";
   expect(q(el, method)).toBeNull();
+
+  const previousUrl = "https://old-main.example.test/servers";
+  const previousLink = `a[href="${previousUrl}"]`;
+  Reflect.set(el, "refusalLink", { href: previousUrl, label: "handover.emergency.servers" });
+  await el.updateComplete;
+  expect(q(el, previousLink)).not.toBeNull();
+
   activation.open();
   await vi.waitFor(() => expect(q(el, method)).not.toBeNull());
+  expect(actions(el)).toBe(t("handover.preparation_mismatch"));
+  expect(q(el, previousLink)).toBeNull();
 });
 
 it("moves keyboard focus to the page heading when a changed copy leaves no action to offer", async () => {
