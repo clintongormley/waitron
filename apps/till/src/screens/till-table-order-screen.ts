@@ -1923,8 +1923,14 @@ export class TillTableOrderScreen extends LitElement {
         .busy=${disabled}
         .removeMenu=${change === undefined ? undefined : (remove: string) => change({ remove })}
         .moveDish=${change === undefined ? undefined : (move: DishMove) => change({ moves: [move] })}
+        .compMenu=${this.#adjustable() ? this.#compMenu : undefined}
       ></till-set-menu-summary>`;
   }
+
+  #compMenu = (lineId: string, name: string) => {
+    const line = this.lines.find(({ id }) => id === lineId);
+    if (line !== undefined) this.#adjust("comp", lineAdjustTarget(line, this.lines, name));
+  };
 
   #addSetMenu = (menuId: string) => {
     const bill = this.#setMenus;
@@ -5371,7 +5377,7 @@ export class TillTableOrderScreen extends LitElement {
   #payPart(way: PayWay, amount?: string): void {
     const detail: BillPayDetail = {
       way,
-      lines: payLines(this.lines, (line) => this.#nameForLine(line)),
+      lines: payLines(this.lines, (line) => this.#nameForLine(line), this.#setMenus),
       ...(amount === undefined ? {} : { amount }),
     };
     this.#dispatch("bill-pay", detail);

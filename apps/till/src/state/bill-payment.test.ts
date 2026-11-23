@@ -704,7 +704,7 @@ describe("payLines", () => {
       row({ lineNo: 5, name: "Tiramisu", unitPriceGross: "6.00" }),
     ];
 
-    expect(payLines(lines, (line) => line.name!)).toEqual([
+    expect(payLines(lines, (line) => line.name!, undefined)).toEqual([
       { lineNo: 1, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
       { lineNo: 2, name: "Burger", quantity: "2", total: "23.00", unitTotal: null },
       { lineNo: 4, name: "Ham", quantity: "0.25", total: "10.00", unitTotal: null },

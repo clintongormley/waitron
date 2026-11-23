@@ -106,7 +106,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.order.set_menus":
-    "Indica cuántas cartas a precio fijo lleva la cuenta. Elige los platos en su carpeta y abre el resumen para ver dónde van.",
+    "Indica cuántos menús lleva la cuenta. Elige los platos en su carpeta y abre el resumen para ver dónde van.",
   "help.order.send":
     "Marchar envía a la estación las líneas marcadas que pueden salir, para hacerlas ya, como un grupo. Enviar todo envía todas las líneas que pueden salir: las de Marchar ya se hacen enseguida, y cada Grupo llega a la estación en espera hasta que se marcha.",
   "help.more.profile":

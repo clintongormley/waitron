@@ -350,7 +350,7 @@ export class SetMenuDishChoices extends LitElement {
   }
 
   #addBody() {
-    if (this.loading) return html`<p role="status">${t("menus.loading")}</p>`;
+    if (this.loading) return html`<p role="status">${t("menus.set_menu_dishes_loading")}</p>`;
     if (this.loadError)
       return html`<p role="alert">${t("menus.set_menu_products_load_error")}</p>
         <wt-button variant="secondary" @click=${() => void this.#loadProducts()}

@@ -6,7 +6,6 @@ import {
   saleLines,
   saleSettlements,
   sales,
-  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -33,6 +32,12 @@ import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptPayments } from "./receipt-payments.js";
 import { readTenderBlock, receiptQr, type TillSaleResult } from "./till-sale.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
+import {
+  hasStoredLines,
+  readStoredOrder,
+  type GrossOrder,
+  type OrderLineIdentity,
+} from "./working-order.js";
 import "./errors.js";
 
 function receiptGrosses(
@@ -65,6 +70,45 @@ function receiptGrosses(
   return amounts;
 }
 
+/**
+ * The sale's bill as stored, null when it has none or the bill has no stored lines; and the bill
+ * line each filed row was priced from, as the settled-bill read pairs them: by position in the
+ * stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
+ * none. `identities` is null when there is no stored bill or it no longer prices to the filed rows;
+ * the receipt then prints one entry per dish, without a percentage.
+ */
+async function billLinesFiled(
+  tx: Transaction,
+  workingOrderId: string | null,
+  dishes: readonly (typeof saleLines.$inferSelect)[],
+  grosses: ReadonlyMap<string, Decimal>,
+): Promise<{
+  stored: GrossOrder | null;
+  identities: Pick<OrderLineIdentity, "id" | "lineIds">[] | null;
+}> {
+  if (workingOrderId === null || !(await hasStoredLines(tx, workingOrderId))) {
+    return { stored: null, identities: null };
+  }
+  const stored = await readStoredOrder(tx, workingOrderId);
+  const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
+  const paired =
+    stored.gross.lines.length === dishes.length &&
+    stored.gross.lines.every(
+      (line, i) =>
+        same(line.quantity, thousandthsToDecimal(dishes[i]!.quantity)) &&
+        same(line.lineGross, grosses.get(dishes[i]!.id)!),
+    );
+  return {
+    stored,
+    identities: paired
+      ? stored.identities.map(({ id, lineIds }) => ({
+          id,
+          ...(lineIds === undefined ? {} : { lineIds }),
+        }))
+      : null,
+  };
+}
+
 export async function readTransactionReceipt(
   backend: FiscalBackend,
   tx: Transaction,
@@ -89,15 +133,8 @@ export async function readTransactionReceipt(
   const grosses = receiptGrosses(rows, sale.vatBreakdown);
   // `receiptLines` adds the lines that take an advance off, naming each advance.
   const dishes = rows.filter((row) => row.advanceRole !== "deduction");
-  const orderLines =
-    sale.workingOrderId === null
-      ? []
-      : await tx
-          .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, sale.workingOrderId));
-  const orderIds = new Map(orderLines.map((row) => [row.lineNo, row.id]));
-  const lines = await receiptLines(
+  const bill = await billLinesFiled(tx, sale.workingOrderId, dishes, grosses);
+  const { lines: receiptRows, ...billAdjustments } = await receiptLines(
     tx,
     sale.workingOrderId,
     {
@@ -113,11 +150,32 @@ export async function readTransactionReceipt(
         priceQuantity: thousandthsToDecimal(row.priceQuantity),
         lineGross: grosses.get(row.id)!,
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
+        setMenuRole: row.setMenuRole,
       })),
     },
-    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row, i) => ({
+      ...(bill.identities?.[i] ?? { id: row.id }),
+      // A correction's lines take none: the bill's comps and discounts were made on the original's.
+      listUnitGross:
+        sale.correctsSaleId !== null || row.listGross === null || row.listUnitPriceGross === null
+          ? null
+          : centsToDecimal(row.listUnitPriceGross),
+    })),
     saleId,
+    bill.stored,
   );
+  // `receiptLines` answers one row per entry of `dishes`, in order, then the advances.
+  const lines = {
+    ...billAdjustments,
+    lines: receiptRows.map((line, i) =>
+      sale.correctsSaleId !== null &&
+      dishes[i]?.setMenuRole === "dish" &&
+      dishes[i].listGross !== null &&
+      line.listGross === undefined
+        ? { ...line, correctsPricedDish: true as const }
+        : line,
+    ),
+  };
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId), sale);
   const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;

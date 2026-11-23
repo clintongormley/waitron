@@ -147,7 +147,7 @@ import {
   placeSetMenuRows,
   readBillSetMenus,
   readBillsSetMenus,
-  refuseSetMenuMoney,
+  refuseTakeawaySetMenuMoney,
   refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
   SET_MENU_DRAFT_LINE,
@@ -1208,6 +1208,7 @@ const storedLineColumns = {
   variantKitchenName: workingOrderLines.variantKitchenName,
   kitchenName: workingOrderLines.kitchenName,
   classification: workingOrderLines.classification,
+  setMenuRole: workingOrderLines.setMenuRole,
 };
 
 type StoredLineRow = {
@@ -1255,7 +1256,6 @@ async function readLockedLinesForIssuance(
       ...portionColumns,
       dining: workingOrders.dining,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
-      setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
     })
@@ -1265,7 +1265,7 @@ async function readLockedLinesForIssuance(
     .leftJoin(parentProducts, parentJoin)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  if (refuseSetMenus) await refuseSetMenuMoney(tx, workingOrderId, rows);
+  if (refuseSetMenus) await refuseTakeawaySetMenuMoney(tx, workingOrderId, rows, rows[0]?.dining);
   const stored = toStoredLines(rows);
   const grouped = groupedByPortion(rows, stored);
   const rowRates = await readLineVatRates(
@@ -1349,6 +1349,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
       variantDescriptions: line.variantDescriptions,
       variantKitchenName: line.variantKitchenName,
       kitchenName: line.kitchenName,
+      ...(line.setMenuRole === null ? {} : { setMenuRole: line.setMenuRole }),
     },
   }));
 }
@@ -1450,7 +1451,7 @@ export async function readStoredOrder(
 
 /**
  * Use `refuseUnsentUnavailable: false` only to record money already captured. That path must
- * still record it after product archival or when set-menu billing is unavailable.
+ * still record it after product archival or on a takeaway bill holding a set menu.
  */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,

@@ -126,6 +126,7 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["service_zone.not_found.zoneName", "the name of a zone"],
   ["set_menu.holds_dishes.setMenuName", "the set menu's published name"],
   ["set_menu.holds_dishes.dishNames", "the stored dishes' product names"],
+  ["set_menu.move_adjusted.dishNames", "the moved dishes' product names"],
   ["set_menu.needed_by_draft.setMenuName", "the set menu's published name"],
   ["set_menu.needed_by_draft.dishNames", "the saved draft dishes' product names"],
   ["set_menu.not_selling.setMenuName", "the set menu's name"],

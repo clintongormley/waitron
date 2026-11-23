@@ -6,6 +6,7 @@ import {
   decimal,
   divideDecimal,
   grossOf,
+  isZeroDecimal,
   multiplyDecimal,
   MONEY_SCALE,
   type Decimal,
@@ -32,6 +33,7 @@ export type ReceiptSource = Pick<
   | "unitPrecision"
   | "lineGross"
   | "parentLineNo"
+  | "setMenuRole"
 > &
   // A stored order line holds the price it was sold at; a line rebuilt from a sale's rows does not.
   Partial<Pick<GrossLine, "grossUnitPrice">>;
@@ -63,6 +65,7 @@ export function ticketLinesFrom(
     gross: line.lineGross,
     ...soldAt(line, identities[i]!.listUnitGross),
     parentLineNo: line.parentLineNo ?? null,
+    ...(line.setMenuRole == null ? {} : { setMenuRole: line.setMenuRole }),
   }));
 }
 
@@ -140,6 +143,30 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   return groups;
 }
 
+/** A set menu's dish at no extra cost: a dish comped to 0.00 keeps a list price, so is not one. */
+export function isCoveredDish(line: TillSaleLine): boolean {
+  return line.setMenuRole === "dish" && !isPriced(line);
+}
+
+/** A dish placed in a set menu that costs more than the set menu covers; the simplified ticket prints its amount with a plus. */
+export function isSurcharge(line: TillSaleLine, amount: Decimal): boolean {
+  return line.setMenuRole === "dish" && compareDecimal(amount, decimal("0")) > 0;
+}
+
+function isPriced(line: TillSaleLine): boolean {
+  return (
+    !isZeroDecimal(decimal(line.gross)) ||
+    line.listGross !== undefined ||
+    line.correctsPricedDish === true ||
+    (line.adjustments ?? []).length > 0
+  );
+}
+
+/** A ticket or full invoice leaves out a covered dish whose extras all came free, with its answers. */
+export function printsOnTicket({ dish, options }: LineGroup): boolean {
+  return !isCoveredDish(dish) || options.some(isPriced);
+}
+
 /**
  * A group joins an earlier one
  * when its dish and each extra print the same at the same unit price and VAT rate, counted not
@@ -187,6 +214,7 @@ function samePrice(a: TillSaleLine, b: TillSaleLine): boolean {
 function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   const lines = (group: LineGroup) => [group.dish, ...group.options];
   if (a.options.length !== b.options.length) return false;
+  if (a.dish.setMenuRole !== b.dish.setMenuRole) return false;
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
   const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];

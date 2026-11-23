@@ -153,7 +153,7 @@ import {
 } from "./bill-advances.js";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { assertStillSignedIn } from "./till-session.js";
-import { refuseSetMenuMoney } from "./set-menu-bill.js";
+import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import {
   enqueueRequestedPaymentSlip,
@@ -1183,7 +1183,7 @@ async function issueOrSettleWhenFullyPaid(
       refuseUnsentUnavailable: options.moneyMoved !== true,
     });
   } catch (error) {
-    // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
+    // Automatic issuance must leave an edit intact while a takeaway set menu cannot be paid.
     if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
       return unpaid;
     }
@@ -1640,7 +1640,7 @@ async function requireReadyForPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
-  await refuseSetMenuMoney(tx, workingOrderId);
+  await refuseTakeawaySetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
 }
 

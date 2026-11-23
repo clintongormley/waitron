@@ -24,28 +24,39 @@ import {
 } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
-import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
+import {
+  hasStoredLines,
+  readStoredOrder,
+  type GrossOrder,
+  type OrderLineIdentity,
+} from "./working-order.js";
 
 /**
  * `lines`, each holding the gross unit price it was sold at: a line rebuilt from a sale's rows takes
  * it from its order's stored line of the same number, and only while that line still has the same
  * quantity, price quantity and total; otherwise, and when the order holds no line, it gets none.
+ * `read` is the order as a caller already read it, null when it has no stored lines.
  */
 async function withSoldPrices(
   tx: Transaction,
   workingOrderId: string | null,
   lines: readonly ReceiptSource[],
+  read?: GrossOrder | null,
 ): Promise<readonly ReceiptSource[]> {
   if (
     workingOrderId === null ||
+    read === null ||
     lines.every((line) => line.grossUnitPrice !== undefined) ||
-    !(await hasStoredLines(tx, workingOrderId))
+    (read === undefined && !(await hasStoredLines(tx, workingOrderId)))
   ) {
     return lines;
   }
   const same = (a: string, b: string) => compareDecimal(decimal(a), decimal(b)) === 0;
   const stored = new Map(
-    (await readStoredOrder(tx, workingOrderId)).gross.lines.map((line) => [line.lineNo, line]),
+    (read ?? (await readStoredOrder(tx, workingOrderId))).gross.lines.map((line) => [
+      line.lineNo,
+      line,
+    ]),
   );
   return lines.map((line) => {
     const order = stored.get(line.lineNo);
@@ -72,9 +83,10 @@ export async function receiptLines(
   priced: { lines: readonly ReceiptSource[] },
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross" | "lineIds">[],
   saleId?: string,
+  stored?: GrossOrder | null,
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const filed = saleId === undefined ? undefined : await readFiledLines(tx, saleId);
-  const dishes = await dishLines(tx, workingOrderId, priced, identities, filed);
+  const dishes = await dishLines(tx, workingOrderId, priced, identities, filed, stored);
   const advances = filed?.filter((row) => row.advance !== null) ?? [];
   if (advances.length === 0) return dishes;
   const fullInvoice = filed![0]!.counterpartyTaxId !== null;
@@ -162,6 +174,7 @@ async function dishLines(
   priced: { lines: readonly ReceiptSource[] },
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross" | "lineIds">[],
   filed: readonly FiledLine[] | undefined,
+  stored: GrossOrder | null | undefined,
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const each = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
@@ -170,7 +183,11 @@ async function dishLines(
   // A full invoice prints no price each, so it never reads the order's lines for one.
   const fullInvoice = filed?.[0]?.counterpartyTaxId != null;
   let lines = ticketLinesFrom(
-    { lines: fullInvoice ? priced.lines : await withSoldPrices(tx, workingOrderId, priced.lines) },
+    {
+      lines: fullInvoice
+        ? priced.lines
+        : await withSoldPrices(tx, workingOrderId, priced.lines, stored),
+    },
     identities,
   ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
   if (filed !== undefined) {

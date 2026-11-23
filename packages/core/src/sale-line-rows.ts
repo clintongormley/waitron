@@ -52,5 +52,6 @@ export function saleLineRows(
     correctsLineId: corrective ? (line.correctsLineId ?? null) : null,
     ...(line.advanceRole == null ? {} : { advanceRole: line.advanceRole }),
     ...(line.deductsSaleId == null ? {} : { deductsSaleId: line.deductsSaleId }),
+    ...(line.setMenuRole == null ? {} : { setMenuRole: line.setMenuRole }),
   }));
 }

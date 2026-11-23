@@ -44,7 +44,14 @@ import {
 } from "./receipt-dates.js";
 import { cardName } from "./card-details.js";
 import { printsAsFullInvoice } from "./invoice-typing.js";
-import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
+import {
+  groupByParent,
+  isCoveredDish,
+  isSurcharge,
+  mergeIdenticalGroups,
+  printsOnTicket,
+  type LineGroup,
+} from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
@@ -380,14 +387,17 @@ export function buildReceiptDocument({
   const filedRow = (
     { line, figures: { price, amount } }: FiguredLine,
     indent: number,
-  ): ReceiptTableRow => ({
-    units: quantityText(line, namesLocale, locale),
-    item: itemName(line),
-    ...(indent > 0 ? { itemIndent: indent } : {}),
-    price: formatAmount(price, locale),
-    amount: formatAmount(amount, locale),
-    ...rateCell(line.net.rate),
-  });
+  ): ReceiptTableRow => {
+    const covered = isCoveredDish(line);
+    return {
+      units: quantityText(line, namesLocale, locale),
+      item: itemName(line),
+      ...(indent > 0 ? { itemIndent: indent } : {}),
+      price: covered ? "" : formatAmount(price, locale),
+      amount: covered ? "" : formatAmount(amount, locale),
+      ...rateCell(line.net.rate),
+    };
+  };
   const discountRow = (discount: GroupDiscount, indent: number): ReceiptTableRow => ({
     units: "",
     item:
@@ -435,9 +445,11 @@ export function buildReceiptDocument({
     const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const amount = decimal(dish.listGross ?? dish.gross);
-    row(`${quantity}${itemName(dish)}${included}`, `${itemAmount(amount)}${letter(dish)}`, {
-      after: quantity,
-    });
+    const surcharge = simplified && isSurcharge(dish, amount);
+    const printedAmount = isCoveredDish(dish)
+      ? ""
+      : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;
+    row(`${quantity}${itemName(dish)}${included}`, printedAmount, { after: quantity });
     const sold = decimal(count);
     const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
     if (
@@ -451,7 +463,7 @@ export function buildReceiptDocument({
       const unit = decimal(recorded);
       // A weighed amount is rounded to the cent, so the price it was sold at may not give it back.
       if (compareDecimal(multiplyDecimal(unit, sold), amount) === 0) {
-        const price = formatMoney(unit, locale);
+        const price = `${surcharge ? "+" : ""}${formatMoney(unit, locale)}`;
         // Counted exactly when the quantity printed above carries no unit name.
         const each =
           shown === formatDecimalInput(count, locale)
@@ -484,12 +496,14 @@ export function buildReceiptDocument({
   };
   let nextFiled = 0;
   const printed = simplified
-    ? mergeIdenticalGroups(groups, result.vatBreakdown.length <= 1)
+    ? mergeIdenticalGroups(groups.filter(printsOnTicket), result.vatBreakdown.length <= 1)
     : groups;
   // An advance is taken off what the bill came to, so it prints after the whole-bill discounts.
   const advances: (() => void)[] = [];
   printed.forEach((group, at) => {
     const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
+    // Left out only after the filed rows are paired by position, so later rows keep their figures.
+    if (!printsOnTicket(group) && !discounts.under.has(at)) return;
     const print = (): void => {
       if (filed !== undefined) {
         tableGroup(filed);

@@ -22,6 +22,8 @@ import type { RecordSaleLine } from "@waitron/core/src/sale-line.js";
 import type { VatBreakdownLine } from "@waitron/fiscal/src/vat-breakdown.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 
+type SetMenuRole = NonNullable<RecordSaleLine["setMenuRole"]>;
+
 export interface UnitSnapshot {
   staffName: string;
   staffAbbreviation: string;
@@ -84,6 +86,7 @@ export interface LockedLine {
   variantDescriptions?: Record<string, string> | null;
   variantKitchenName?: string | null;
   kitchenName?: string | null;
+  setMenuRole?: SetMenuRole | null;
 }
 
 // base = gross ÷ (1 + rate/100) = gross × 100 ÷ (100 + rate). One rounded division.
@@ -177,6 +180,7 @@ interface PricingRow {
   variantDescriptions?: Record<string, string> | null;
   variantKitchenName?: string | null;
   kitchenName?: string | null;
+  setMenuRole?: SetMenuRole | null;
 }
 
 // Keep gross arithmetic shared between entry points; do not reimplement it in a caller.
@@ -196,6 +200,7 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
     variantDescriptions: row.variantDescriptions ?? null,
     variantKitchenName: row.variantKitchenName ?? null,
     kitchenName: row.kitchenName ?? null,
+    ...(row.setMenuRole == null ? {} : { setMenuRole: row.setMenuRole }),
     vatRates: row.vatRates,
     grossUnitPrice: toScale(row.grossUnit, MONEY_SCALE),
     lineGross:
@@ -318,6 +323,7 @@ export function grossLockedLines(
       variantDescriptions: line.variantDescriptions ?? null,
       variantKitchenName: line.variantKitchenName ?? null,
       kitchenName: line.kitchenName ?? null,
+      setMenuRole: line.setMenuRole ?? null,
     })),
   );
 }

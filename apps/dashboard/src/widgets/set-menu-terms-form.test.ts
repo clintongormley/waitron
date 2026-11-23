@@ -138,7 +138,7 @@ it("refuses a blank name beside the name and sends nothing", async () => {
   await vi.waitFor(() => expect(save(root).disabled).toBe(false));
   save(root).click();
   const name = root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!;
-  await vi.waitFor(() => expect(name.error).toBe("Enter a name for the menu."));
+  await vi.waitFor(() => expect(name.error).toBe("Enter a name for the set menu."));
   expect(updateMenuDetails).not.toHaveBeenCalled();
 });
 

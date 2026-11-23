@@ -3,7 +3,7 @@ import { billSetMenuCopies, menus, nowIso, workingOrderLines, type Transaction }
 import { readInvoiceLocales } from "@waitron/menu";
 import { AppError, stringToCents, type BillSetMenuState } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
-import { assertBillInvariant } from "./bill-payments.js";
+import { assertBillInvariant, readPaidQuantities, refusePaidLines } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   readBillSetMenus,
@@ -43,7 +43,10 @@ export async function setSetMenuCount(
     const occupied = new Set(state.dishes.map(({ setMenuLineId }) => setMenuLineId));
     const empty = ids.filter((id) => !occupied.has(id));
     if (empty.length < -change) throw await holdsDishes(tx, state, ids);
-    return deleteEmptyMenus(tx, billId, empty.slice(change));
+    const paid = await readPaidQuantities(tx, billId);
+    const isPaid = (id: string) => (paid.get(id) ?? 0) > 0;
+    const unpaidLast = [...empty.filter(isPaid), ...empty.filter((id) => !isPaid(id))];
+    return deleteEmptyMenus(tx, billId, unpaidLast.slice(change), paid);
   }
   if (change === 0) {
     await bumpRevisionKeepingPayment(tx, [billId]);
@@ -136,7 +139,23 @@ export async function removeSetMenuLines(
   return deleteEmptyMenus(tx, billId, lineIds);
 }
 
-async function deleteEmptyMenus(tx: Transaction, billId: string, lineIds: string[]) {
+async function deleteEmptyMenus(
+  tx: Transaction,
+  billId: string,
+  lineIds: string[],
+  paid?: ReadonlyMap<string, number>,
+) {
+  const lines = await tx
+    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, lineIds))
+    .orderBy(workingOrderLines.lineNo);
+  await refusePaidLines(
+    tx,
+    billId,
+    lines.map((line) => ({ ...line, keeps: 0 })),
+    paid,
+  );
   await refuseDraftLosingSetMenuPlace(tx, billId, new Set(lineIds));
   await tx
     .delete(workingOrderLines)

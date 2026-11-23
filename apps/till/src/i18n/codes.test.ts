@@ -1310,11 +1310,21 @@ it.each([
   ["set_menu.no_place_on_target", "Hake", "Hake"],
   ["set_menu.dish_sold_by_measure", "by weight", "al peso"],
   ["set_menu.remove_from_summary", "summary", "resumen"],
-  ["set_menu.payment_not_ready", "À la carte", "a la carta"],
+  ["set_menu.payment_not_ready", "each is then charged at its own price", "a su propio precio"],
 ] as const)("words %s in English and Spanish", (code, english, spanish) => {
   const params = { setMenuName: "Daily", dishNames: ["Hake", "Soup"], dishName: "Hake" };
   expect(codeMessage(code, "en-GB", params)).toContain(english);
   expect(codeMessage(code, "es-ES", params)).toContain(spanish);
+});
+
+it("words set_menu.move_adjusted with every dish named, in English and Spanish", () => {
+  const params = { dishNames: ["Sirloin", "Soup"] };
+  expect(codeMessage("set_menu.move_adjusted", "en-GB", params)).toBe(
+    "Because of a comp or discount, Sirloin and Soup can only move with the set menu. Move the set menu as well, or leave Sirloin and Soup on this bill.",
+  );
+  expect(codeMessage("set_menu.move_adjusted", "es-ES", params)).toBe(
+    "Por un descuento, hay que mover Sirloin y Soup junto con el menú. Mueve también el menú o deja Sirloin y Soup en esta cuenta.",
+  );
 });
 
 it("names the set menu whose removal depends on the dishes", () => {

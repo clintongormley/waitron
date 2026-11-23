@@ -36,12 +36,12 @@ describe("the till's help strings", () => {
     expect(helpBadgeLabel("Perfil")).toBe(helpEs["help.badge_label"].replace("{part}", "Perfil"));
   });
 
-  it("no Spanish help text says menú", () => {
+  it("no Spanish help text says menú, except for set menus", () => {
     const menuWord = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
-    const saysMenu = Object.entries(helpEs).filter(([, text]) =>
-      menuWord.test(text.replace(/\{[^}]*\}/g, "")),
-    );
-    expect(saysMenu).toEqual([]);
+    const saysMenu = Object.entries(helpEs)
+      .filter(([, text]) => menuWord.test(text.replace(/\{[^}]*\}/g, "")))
+      .map(([key]) => key);
+    expect(saysMenu).toEqual(["help.order.set_menus"]);
   });
 
   it("no Spanish help text says tique", () => {

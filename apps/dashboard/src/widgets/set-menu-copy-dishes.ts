@@ -95,7 +95,7 @@ export class SetMenuCopyDishes extends LitElement {
         <wt-button variant="secondary" @click=${() => void this.#load()}
           >${t("menus.retry")}</wt-button
         >`;
-    if (this.sources === null) return html`<p role="status">${t("menus.loading")}</p>`;
+    if (this.sources === null) return html`<p role="status">${t("menus.set_menu_loading")}</p>`;
     if (!this.sources.length) return html`<p>${t("menus.set_menu_no_copy_source")}</p>`;
     return html`<wt-combobox
       name="sourceMenu"

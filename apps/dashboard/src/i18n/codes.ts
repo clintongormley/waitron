@@ -588,23 +588,23 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "set_menu.not_found": {
     en: "That set menu could not be found. Reload the menu list and choose a set menu.",
-    es: "No se ha encontrado esa carta a precio fijo. Recarga la lista y elige una carta a precio fijo.",
+    es: "No se ha encontrado ese menú. Recarga la lista y elige un menú.",
   },
   "set_menu.invalid": {
     en: "Check the set-menu details and try again.",
-    es: "Revisa los datos de la carta a precio fijo e inténtalo de nuevo.",
+    es: "Revisa los datos del menú e inténtalo de nuevo.",
   },
   "set_menu.dishes_only": {
     en: "A set menu lists dishes only. Add products to it. To group them, set each product's course.",
-    es: "Una carta a precio fijo solo admite platos. Añade productos y asigna un curso a cada uno para agruparlos.",
+    es: "Un menú solo admite platos. Añade productos y asigna un curso a cada uno para agruparlos.",
   },
   "set_menu.not_publishable": {
     en: "Fix the problems in the set menu before publishing this menu.",
-    es: "Corrige los problemas de la carta a precio fijo antes de publicar esta carta.",
+    es: "Corrige los problemas del menú antes de publicar esta carta.",
   },
   "set_menu.wrong_place": {
     en: "A set menu is sold by placing it in a menu. Open that menu's Structure and add the set menu there.",
-    es: "Para vender una carta a precio fijo, abre la Estructura de la carta que quieres publicar y añádela allí.",
+    es: "Para vender un menú, abre la Estructura de la carta que quieres publicar y añádelo allí.",
   },
   "node.operation_page_required": {
     en: "This operation needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
@@ -2023,7 +2023,7 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
   },
   lines: {
     en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",
-    es: "Una carta a precio fijo puede tener hasta 20 líneas. Combina varios cursos en una línea o elimina una.",
+    es: "Un menú puede tener hasta 20 líneas. Combina varios cursos en una línea o elimina una.",
   },
   count: {
     en: "Enter a whole number from 1 to 99.",
@@ -2141,7 +2141,7 @@ export function codeMessage(
     return pickLocale(
       {
         en: `${name} has ${count} ${count === 1 ? "problem" : "problems"}. Correct the set-menu draft before publishing this menu.`,
-        es: `${name} tiene ${count} ${count === 1 ? "problema" : "problemas"}. Corrige el borrador de la carta a precio fijo antes de publicar esta carta.`,
+        es: `${name} tiene ${count} ${count === 1 ? "problema" : "problemas"}. Corrige el borrador del menú antes de publicar esta carta.`,
       },
       locale,
     );

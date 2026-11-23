@@ -64,4 +64,7 @@ export interface RecordSaleLine {
    * in `deductsSaleId`. */
   advanceRole?: "payment_on_account" | "deduction" | null;
   deductsSaleId?: string | null;
+  /** Marks a set menu's own line, and each dish placed in one; `null` on any other line,
+   * a paid extra of a set-menu dish included. Presentation and reporting only, never hashed. */
+  setMenuRole?: "set_menu" | "dish" | null;
 }

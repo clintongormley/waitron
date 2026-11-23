@@ -164,7 +164,7 @@ export class SetMenuTermsForm extends LitElement {
 
   #validate(): Record<string, string> {
     const errors: Record<string, string> = {};
-    if (!this.draft.name.trim()) errors.name = t("menus.name_required");
+    if (!this.draft.name.trim()) errors.name = t("menus.set_menu_name_required");
     const price = this.draft.setPrice;
     if (!isProductPrice(price) || stringToCents(price) > MAX_SET_MENU_AMOUNT_CENTS)
       errors.setPrice = codeMessage("set_menu.invalid", undefined, { field: "setPrice" });

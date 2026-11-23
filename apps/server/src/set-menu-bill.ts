@@ -20,6 +20,7 @@ import {
   placeInOrder,
   setMenuCopyOf,
   type BillSetMenuState,
+  type Dining,
   type DishPlace,
   type DishToPlace,
   type PlacementResult,
@@ -60,17 +61,32 @@ export async function hasDraftSetMenuLines(tx: Transaction, draftId: string): Pr
   return line !== undefined;
 }
 
-// Set-menu billing replaces this refusal once it can price the menu and its dishes together.
-export async function refuseSetMenuMoney(
+// A takeaway set menu files at its own takeaway class beside lines at their products' takeaway
+// rates; VAT-RATES piece B's payment check replaces this refusal.
+export async function refuseTakeawaySetMenuMoney(
   tx: Transaction,
   workingOrderId: string,
   lines?: readonly LineRole[],
+  dining?: Dining,
 ): Promise<void> {
-  const hasSetMenu =
-    lines === undefined
-      ? await hasBillSetMenuLines(tx, workingOrderId)
-      : lines.some((line) => line.setMenuRole !== null);
-  if (hasSetMenu) throw new AppError("set_menu.payment_not_ready", {});
+  if (lines !== undefined && !lines.some((line) => line.setMenuRole !== null)) return;
+  if (lines !== undefined && dining !== undefined) {
+    if (dining === "takeaway") throw new AppError("set_menu.payment_not_ready", {});
+    return;
+  }
+  const [line] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        isNotNull(workingOrderLines.setMenuRole),
+        eq(workingOrders.dining, "takeaway"),
+      ),
+    )
+    .limit(1);
+  if (line !== undefined) throw new AppError("set_menu.payment_not_ready", {});
 }
 
 export async function refuseUnlessSetMenuBill(
@@ -241,6 +257,47 @@ export async function readBillsSetMenus(
   );
 }
 
+/** Which of the dishes `lineIds` carry a comp or discount, on the dish or on one of its extras:
+ * such a dish moves only with its set menu. */
+export async function adjustedDishIds(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  const extras = await tx
+    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.parentLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
+  const reduced = await reducedLineIds(tx, [...lineIds, ...extras.map(({ id }) => id)]);
+  const adjusted = new Set(lineIds.filter((id) => reduced.has(id)));
+  for (const extra of extras) if (reduced.has(extra.id)) adjusted.add(extra.parentLineId!);
+  return adjusted;
+}
+
+/** Which of `lineIds` carry a comp or discount. */
+async function reducedLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>> {
+  // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
+  // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
+  // made on.
+  const reduced = await tx
+    .select({ lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      and(
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        gt(adjustmentLines.reduction, 0),
+      ),
+    );
+  return new Set(reduced.map(({ lineId }) => lineId));
+}
+
 async function placedSetMenuDishes(
   tx: Transaction,
   placed: {
@@ -257,36 +314,29 @@ async function placedSetMenuDishes(
 ) {
   const billValues = sql`(select value from json_each(${JSON.stringify([...new Set(placed.map(({ billId }) => billId))])}))`;
   const payments = await tx
-    .select({ billId: billPayments.workingOrderId, lineId: billPaymentLines.lineId })
+    .select({ lineId: billPaymentLines.lineId })
     .from(billPaymentLines)
     .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
     .where(inArray(billPayments.workingOrderId, billValues));
-  const actions = await tx
-    .select({
-      billId: adjustments.workingOrderId,
-      lineId: adjustments.lineId,
-      action: adjustments.action,
-      reducedLineId: adjustmentLines.lineId,
-      chargeKept: adjustments.chargeKept,
-    })
+  const cancels = await tx
+    .select({ lineId: adjustments.lineId, chargeKept: adjustments.chargeKept })
     .from(adjustments)
-    .leftJoin(
-      adjustmentLines,
-      and(eq(adjustmentLines.adjustmentId, adjustments.id), gt(adjustmentLines.reduction, 0)),
-    )
-    .where(inArray(adjustments.workingOrderId, billValues));
-  const key = (billId: string, lineId: string) => `${billId}:${lineId}`;
-  const fixed = new Set(payments.map(({ billId, lineId }) => key(billId, lineId)));
+    .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
+  const fixed = new Set([
+    ...payments.map(({ lineId }) => lineId),
+    ...(await adjustedDishIds(
+      tx,
+      placed.map(({ id }) => id),
+    )),
+  ]);
   const cancelled = new Set<string>();
-  for (const { billId, lineId, action, chargeKept, reducedLineId } of actions) {
-    if (action === "cancel" && lineId !== null) {
-      if (chargeKept) fixed.add(key(billId, lineId));
-      else cancelled.add(key(billId, lineId));
-    }
-    if (reducedLineId !== null) fixed.add(key(billId, reducedLineId));
+  for (const { lineId, chargeKept } of cancels) {
+    if (lineId === null) continue;
+    if (chargeKept) fixed.add(lineId);
+    else cancelled.add(lineId);
   }
   return placed
-    .filter(({ billId, id }) => !cancelled.has(key(billId, id)))
+    .filter(({ id }) => !cancelled.has(id))
     .map((line) => ({
       billId: line.billId,
       dish: {
@@ -297,7 +347,7 @@ async function placedSetMenuDishes(
         place: line.place!,
         priceCents: line.priceCents,
         countsAsCourseId: line.countsAsCourseId!,
-        movable: line.cancellationLineId === null && !fixed.has(key(line.billId, line.id)),
+        movable: line.cancellationLineId === null && !fixed.has(line.id),
       },
     }));
 }

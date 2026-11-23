@@ -73,13 +73,41 @@ it("calls restaurant menus cartas in Spanish, keeping the account menu distinct"
 
 // Weaker than its name: reads strings.ts's es table and one code message (product.on_live_menu),
 // not the rest of codes.ts, alert-messages.ts, domain.ts or any module's catalogue.
-it("says menú in Spanish only for an on-screen menu, never a restaurant one", () => {
+it("says menú in Spanish only for an on-screen menu or a set menu, never a restaurant one", () => {
   const menu = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
   const saysMenu = Object.entries(es)
     .filter(([, text]) => menu.test(text.replace(/\{[^}]*\}/g, "")))
     .map(([key]) => key);
-  expect(saysMenu.sort()).toEqual(["appearance.colour.surface-raised", "nav.account_menu"]);
+  expect(saysMenu.sort()).toEqual([
+    "appearance.colour.surface-raised",
+    "kitchen.delete_course_set_menu_lines",
+    "kitchen.delete_course_set_menu_lines_one",
+    "menu_preview.group_set_menus",
+    "menu_preview.set_menu_problems",
+    "menu_preview.source_set_menu",
+    "menus.add_set_menu",
+    "menus.choose_set_menu",
+    "menus.place_set_menu",
+    "menus.set_menu_cannot_add_measured",
+    "menus.set_menu_copy_dishes",
+    "menus.set_menu_help",
+    "menus.set_menu_help_guide",
+    "menus.set_menu_help_label",
+    "menus.set_menu_inclusions",
+    "menus.set_menu_kind",
+    "menus.set_menu_load_error",
+    "menus.set_menu_loading",
+    "menus.set_menu_name_required",
+    "menus.set_menu_no_copy_source",
+    "menus.set_menu_no_dishes",
+    "menus.set_menu_no_lines",
+    "menus.set_menu_price",
+    "menus.set_menu_sources_load_error",
+    "nav.account_menu",
+    "sales.set_menus",
+  ]);
   expect(codeMessage("product.on_live_menu", "es")).not.toMatch(menu);
+  expect(es["sales.set_menus"]).toBe("Menús");
 });
 
 it.each([

@@ -37,6 +37,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The other bill has no place for {dishName}. Move its set menu with it, or leave it on this bill.",
     es: "La otra cuenta no tiene sitio para {dishName}. Mueve también su menú o deja el plato en esta cuenta.",
   },
+  "set_menu.move_adjusted": {
+    en: "Because of a comp or discount, {dishNames} can only move with the set menu. Move the set menu as well, or leave {dishNames} on this bill.",
+    es: "Por un descuento, hay que mover {dishNames} junto con el menú. Mueve también el menú o deja {dishNames} en esta cuenta.",
+  },
   "set_menu.dish_sold_by_measure": {
     en: "A dish sold by weight or measure cannot go in a set menu. Order it à la carte.",
     es: "Un plato vendido al peso o por medida no puede ir en un menú. Pídelo a la carta.",
@@ -46,8 +50,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este artículo es un menú. Para quitarlo, usa Anular en el resumen de menús.",
   },
   "set_menu.payment_not_ready": {
-    en: "Bills with set menus can't be paid on this version yet. À la carte dishes can be moved to another bill and paid there.",
-    es: "Las cuentas con menús aún no se pueden cobrar en esta versión. Los platos a la carta se pueden pasar a otra cuenta y cobrar allí.",
+    en: "Money can't be taken on a takeaway set menu yet. Remove the set menu and ring up its dishes separately: each is then charged at its own price.",
+    es: "Todavía no se puede cobrar un menú para llevar. Quita el menú y marca sus platos por separado: cada plato se cobra entonces a su propio precio.",
   },
   "sale.empty_basket": {
     en: "This order has no items. Add an item before continuing.",

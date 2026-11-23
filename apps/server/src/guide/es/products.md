@@ -306,10 +306,10 @@ En **Estructura**, selecciona una sección y copia la dirección de la página p
 esa misma sección. Si se rechaza quitar una fila o moverla con su control de arrastre, encima
 del árbol verás la lista afectada y el motivo.
 
-## Cartas a precio fijo {#set-menus}
+## Menús {#set-menus}
 
 Para ofrecer varios platos por un precio único, elige **Añadir carta** y después
-**Carta a precio fijo**. Ponle un nombre y un precio, y elige su **IVA para comer aquí** y, si es distinto, su **IVA para
+**Menú**. Ponle un nombre y un precio, y elige su **IVA para comer aquí** y, si es distinto, su **IVA para
 llevar**. Si se consume en el local, se cobra con el único tipo de
 [Cómo se cobra el IVA](products.md#vat); su IVA para comer aquí solo se usa como IVA para llevar si
 no eliges ninguno. Añade los nombres para clientes en
@@ -318,18 +318,18 @@ los idiomas que uses y guarda.
 En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
 incluyes. Indica el suplemento junto a cada plato que cueste más y pulsa **Guardar** en
-**Platos**. Deja el importe en blanco si el plato está incluido en el precio de la carta.
+**Platos**. Deja el importe en blanco si el plato está incluido en el precio del menú.
 Ajusta los suplementos de las variantes en **Variantes**. Cambia el **Curso** de un plato si
-lo sirves de otra manera en esta carta. Por ejemplo, pon una tapa en Entrantes
-para que cuente como entrante y salga con ese curso si la pides desde la carta a precio fijo.
+lo sirves de otra manera en este menú. Por ejemplo, pon una tapa en Entrantes
+para que cuente como entrante y salga con ese curso si la pides desde el menú.
 
-En **Qué incluye cada carta a precio fijo**, indica cuántos platos ofreces de cada curso. Por ejemplo,
+En **Qué incluye cada menú**, indica cuántos platos ofreces de cada curso. Por ejemplo,
 usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
 que el cliente elija entre ambos.
 
-Abre la carta completa que ofrecerá la carta a precio fijo. En **Estructura**, abre las acciones
-de la carta o sección donde quieras incluirla, elige **Carta a precio fijo…** y selecciónala.
-En **Vista previa**, revisa dónde la has puesto, los cambios y cualquier problema que debas
+Abre la carta completa que ofrecerá el menú. En **Estructura**, abre las acciones
+de la carta o sección donde quieras incluirlo, elige **Menú…** y selecciónalo.
+En **Vista previa**, revisa dónde lo has puesto, los cambios y cualquier problema que debas
 corregir. Publica la carta completa para enviar la versión actual a las cajas. Cada cambio
 posterior llega a las cajas cuando vuelves a publicar la carta completa.
 

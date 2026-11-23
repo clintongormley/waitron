@@ -396,6 +396,7 @@ it("builds lines in allocation order from the invoice line's frozen facts, negat
     correctsLineId: ids[0],
     advanceRole: null,
     deductsSaleId: null,
+    setMenuRole: null,
   });
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
 });
@@ -414,6 +415,19 @@ it("keeps an invoice line's advance role, and a deduction line's sale", async ()
     { advanceRole: "payment_on_account", deductsSaleId: null },
     { advanceRole: "deduction", deductsSaleId: "advance-sale" },
   ]);
+});
+
+it("keeps an invoice line's set-menu role", async () => {
+  const { rows, ids } = await sell();
+  const lines = correctionLinesFor(
+    [
+      { ...rows[0]!, setMenuRole: "set_menu" },
+      { ...rows[1]!, setMenuRole: "dish" },
+    ],
+    [allocation(ids[0]!, "10.00", "0.55", "0.50"), allocation(ids[1]!, "21.00", "1.21", "1.00")],
+  );
+
+  expect(lines.map(({ setMenuRole }) => setMenuRole)).toEqual(["set_menu", "dish"]);
 });
 
 function preview(saleId: SaleId, of = backend as FiscalBackend) {

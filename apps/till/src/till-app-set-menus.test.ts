@@ -24,6 +24,8 @@ import {
 } from "../test/bill-pay-app.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import type { TillApp } from "./till-app.js";
+import type { TabLine } from "./api/client.js";
+import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
@@ -680,4 +682,197 @@ it("saves later set-menu changes on a parked counter takeaway and shows a refusa
   await expect(counter.saveSetMenuCount!(daily.menuId, 3)).resolves.toBe(notSelling);
   expect(counter.store.revision).toBe(9);
   expect(parkOrder).toHaveBeenCalledOnce();
+});
+
+const tabRow = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLine => ({
+  changesAfterSending: null,
+  stationId: null,
+  movable: false,
+  productId: null,
+  quantity: "1.000",
+  unitPrecision: 0,
+  unitPriceGross: "0.00",
+  servedAt: null,
+  courseId: null,
+  sentAt: "2026-11-19T12:00:00Z",
+  firedAt: null,
+  state: null,
+  groupId: null,
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
+  ...over,
+});
+
+it("pays a set-menu bill by items without its covered dishes", async () => {
+  const lines = [
+    tabRow({ id: "daily-1", lineNo: 1, name: "Daily menu", unitPriceGross: "14.00" }),
+    tabRow({ id: "daily-2", lineNo: 2, name: "Daily menu", unitPriceGross: "14.00" }),
+    tabRow({ id: "special-1", lineNo: 3, name: "Special menu", unitPriceGross: "19.00" }),
+    tabRow({
+      id: "sent-sirloin",
+      lineNo: 4,
+      productId: "product-sirloin",
+      name: "Sirloin",
+      unitPriceGross: "5.00",
+    }),
+    tabRow({ id: "sent-soup", lineNo: 5, productId: "product-soup", name: "Soup" }),
+  ];
+  const withSoup = {
+    ...bill,
+    dishes: [
+      ...bill.dishes,
+      { ...bill.dishes[0]!, lineId: "sent-soup", productId: "product-soup", priceCents: 0 },
+    ],
+  };
+  const { screen } = await tableWithSetMenus({
+    getTabLines: vi.fn().mockResolvedValue({ lines, revision: 6 }),
+    getPartyBills: vi.fn(async () => [
+      {
+        ...partyBillOf("v1", "wo-4", 1, { outstanding: "52.00" }),
+        setMenus: withSoup,
+        setMenuCopies: [daily, special],
+      },
+    ]),
+  });
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(5));
+  const paid = vi.fn();
+  screen.addEventListener("bill-pay", (event) => paid((event as CustomEvent).detail));
+
+  await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
+
+  expect(
+    paid.mock.calls[0]![0].lines.map(({ lineNo, total }: { lineNo: number; total: string }) => [
+      lineNo,
+      total,
+    ]),
+  ).toEqual([
+    [1, "14.00"],
+    [2, "14.00"],
+    [3, "19.00"],
+    [4, "5.00"],
+  ]);
+});
+
+it("the panel total after a comped set menu equals the server's balance", async () => {
+  const twoDaily = { ...bill, setMenus: bill.setMenus.slice(0, 2) };
+  const lines = [
+    tabRow({
+      id: "daily-1",
+      lineNo: 1,
+      name: "Daily menu",
+      unitPriceGross: "0.00",
+      listUnitPriceGross: "14.00",
+    }),
+    tabRow({ id: "daily-2", lineNo: 2, name: "Daily menu", unitPriceGross: "14.00" }),
+    tabRow({
+      id: "sent-sirloin",
+      lineNo: 3,
+      productId: "product-sirloin",
+      name: "Sirloin",
+      unitPriceGross: "5.00",
+    }),
+  ];
+  const { el, screen } = await tableWithSetMenus({
+    getTabLines: vi.fn().mockResolvedValue({ lines, revision: 6 }),
+    getPartyBills: vi.fn(async () => [
+      {
+        ...partyBillOf("v1", "wo-4", 1, { outstanding: "19.00" }),
+        setMenus: twoDaily,
+        setMenuCopies: [daily],
+      },
+    ]),
+  });
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(3));
+  const sirloin = setMenuProduct({
+    offer: daily.offers[1]!,
+    setMenuId: daily.menuId,
+    versionId: "lunch",
+  });
+  screen.draftStore!.addProduct(sirloin, "1", { setMenu: { id: daily.menuId } });
+  await flush(el);
+
+  // The draft Sirloin takes Daily 2's open main at +5.00; the bill's balance is 19.00.
+  await vi.waitFor(() =>
+    expect(screen.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain("24.00"),
+  );
+});
+
+const soupBill = {
+  ...bill,
+  dishes: [
+    ...bill.dishes,
+    { ...bill.dishes[0]!, lineId: "sent-soup", productId: "product-soup", priceCents: 0 },
+  ],
+};
+
+const soupLines = [
+  tabRow({ id: "daily-1", lineNo: 1, name: "Daily menu", unitPriceGross: "14.00" }),
+  tabRow({ id: "daily-2", lineNo: 2, name: "Daily menu", unitPriceGross: "14.00" }),
+  tabRow({ id: "special-1", lineNo: 3, name: "Special menu", unitPriceGross: "19.00" }),
+  tabRow({ id: "sent-soup", lineNo: 4, productId: "product-soup", name: "Soup" }),
+];
+
+const soupPartyBill = (setMenus: typeof bill) => ({
+  ...partyBillOf("v1", "wo-4", 1, { outstanding: "47.00" }),
+  setMenus,
+  setMenuCopies: [daily, special],
+});
+
+const payDialogLines = (el: TillApp) =>
+  el
+    .shadowRoot!.querySelector("till-bill-pay-dialog")
+    ?.lines.map(({ lineNo, total }) => [lineNo, total]);
+
+it("a refund's pay window leaves out a covered dish at 0.00", async () => {
+  const { el, screen } = await tableWithSetMenus({
+    getTabLines: vi.fn().mockResolvedValue({ lines: soupLines, revision: 6 }),
+    getPartyBills: vi.fn(async () => [soupPartyBill(soupBill)]),
+  });
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(4));
+
+  emitApp(screen, "refund-excess", { excess: "5.00" });
+
+  await vi.waitFor(() =>
+    expect(payDialogLines(el)).toEqual([
+      [1, "14.00"],
+      [2, "14.00"],
+      [3, "19.00"],
+    ]),
+  );
+});
+
+it("an open pay window drops a covered dish when the bills read after the lines places it", async () => {
+  const stream = liveReadFixture();
+  const getTabLines = vi.fn().mockResolvedValue({ lines: soupLines, revision: 6 });
+  const getPartyBills = vi.fn(async () => [soupPartyBill(bill)]);
+  const { el, screen } = await tableWithSetMenus({
+    readLiveEvents: stream.read,
+    getTabLines,
+    getPartyBills,
+  });
+  stream.event("ready");
+  await flush(el);
+  await vi.waitFor(() => expect(screen.lines).toHaveLength(4));
+  await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
+  await vi.waitFor(() => expect(payDialogLines(el)).toContainEqual([4, "0.00"]));
+
+  const reads = getPartyBills.mock.calls.length;
+  getPartyBills.mockImplementation(async () => [soupPartyBill(soupBill)]);
+  getTabLines.mockRejectedValue(new TypeError("Failed to fetch"));
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el, 10);
+
+  await vi.waitFor(() => expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads));
+  await vi.waitFor(() =>
+    expect(screen.bills[0]!.setMenus!.dishes.map(({ lineId }) => lineId)).toContain("sent-soup"),
+  );
+  await vi.waitFor(() =>
+    expect(payDialogLines(el)).toEqual([
+      [1, "14.00"],
+      [2, "14.00"],
+      [3, "19.00"],
+    ]),
+  );
 });

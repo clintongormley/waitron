@@ -343,6 +343,24 @@ describe("formatCategorySalesPage", () => {
     );
   });
 
+  it("names Set menus, in English and in Spanish", () => {
+    const report = sampleReport({
+      tree: [
+        node({
+          kind: "set_menus",
+          id: "set_menus",
+          gross: "68.00",
+          net: "61.82",
+          direct: { gross: "68.00", net: "61.82", lines: 4 },
+        }),
+      ],
+    });
+    expect(lineFor(page({ report }), "Set menus")).toMatch(/^Set menus +€68\.00 +€61\.82$/);
+    expect(lineFor(page({ report, locale: "es-ES" }), "Menús")).toMatch(
+      /^Menús +68,00 € +61,82 €$/,
+    );
+  });
+
   it("prints the total and no label section, in English and in Spanish", () => {
     const lines = page();
     expect(lineFor(lines, "Total")).toMatch(/^Total +€17\.71 +€23\.00$/);

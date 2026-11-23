@@ -111,6 +111,7 @@ async function readDocument(
         priceQuantity: thousandthsToDecimal(row.priceQuantity),
         lineGross: centsToDecimal(row.lineGross ?? row.lineTotal),
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
+        setMenuRole: row.setMenuRole,
       })),
     },
     dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),

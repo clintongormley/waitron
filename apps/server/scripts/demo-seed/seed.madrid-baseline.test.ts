@@ -1431,7 +1431,7 @@ for (const locale of ["en", "es"] as const) {
         ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 7 })),
       ];
       const saleLines = expected[phase].tables.sale_lines!;
-      for (const name of ["advance_role", "deducts_sale_id"]) {
+      for (const name of ["advance_role", "deducts_sale_id", "set_menu_role"]) {
         saleLines.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(saleLines.rows)) row[name] = null;
       }

@@ -564,26 +564,23 @@ enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sal
 pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
 al otro.
 
-## Cartas a precio fijo {#set-menus}
+## Menús {#set-menus}
 
-Indica cuántas cartas de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
+Indica cuántos menús de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
 o escribe su nombre en **Buscar** y pulsa el resultado. Después, elige los platos. En la
-carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento. Si la comida es
-para llevar, elige **Para llevar** en la cuenta antes de añadir una carta a precio fijo.
+carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento. Todavía no se puede
+cobrar ni imprimir una cuenta para llevar que tenga un menú: si la comida es para llevar, marca
+los platos por separado.
 
 Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
 Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
-para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otra carta
-de la misma cuenta o cancelar una carta vacía.
+para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otro menú
+de la misma cuenta o cancelar un menú vacío. Para invitar o hacer un descuento en un menú,
+pulsa **Descuento…** en él dentro del resumen.
 
-Para pasar una carta a otra cuenta, abre **Mover platos** y selecciona la carta. Sus
-platos se mueven con ella. Si eliges un solo plato, comprueba su precio en la otra
+Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus
+platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
 cuenta antes de confirmar.
-
-En el **Mostrador**, elige **Para llevar**, indica cuántas cartas quieres y abre la
-carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los
-platos. Para añadirlos después, busca la cuenta en **Pedidos aparcados** y pulsa
-**Recuperar**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 

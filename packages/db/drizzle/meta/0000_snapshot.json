@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "da7bf0c7-6f85-4db5-b24d-08f3ecfee6d1",
+  "id": "bfbf90ba-de81-42fb-9f16-22e7b06dead1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9183,6 +9183,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "set_menu_role": {
+          "name": "set_menu_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -9269,6 +9276,10 @@
         "sale_lines_advance_role_ck": {
           "name": "sale_lines_advance_role_ck",
           "value": "\"sale_lines\".\"advance_role\" in ('payment_on_account', 'deduction')"
+        },
+        "sale_lines_set_menu_role_ck": {
+          "name": "sale_lines_set_menu_role_ck",
+          "value": "\"sale_lines\".\"set_menu_role\" in ('set_menu', 'dish')"
         },
         "sale_lines_advance_ck": {
           "name": "sale_lines_advance_ck",

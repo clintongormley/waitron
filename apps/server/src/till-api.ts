@@ -448,6 +448,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "set_menu.no_place": 409,
   "set_menu.no_place_on_target": 409,
   "set_menu.place_taken": 409,
+  "set_menu.move_adjusted": 409,
   "set_menu.remove_from_summary": 409,
   "set_menu.dish_sold_by_measure": 409,
   "set_menu.not_seated": 409,

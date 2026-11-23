@@ -35,6 +35,7 @@ export interface LineSpec {
   quantity?: string;
   advanceRole?: "payment_on_account" | "deduction";
   deductsSaleId?: SaleId;
+  setMenuRole?: "set_menu" | "dish";
 }
 
 let invoiceNumber = 0;
@@ -72,6 +73,7 @@ export function sellLines(
       correctsLineId: l.correctsLineId,
       advanceRole: l.advanceRole,
       deductsSaleId: l.deductsSaleId,
+      setMenuRole: l.setMenuRole,
     })),
   });
 }

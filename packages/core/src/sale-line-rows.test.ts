@@ -306,4 +306,22 @@ describe("saleLineRows", () => {
     expect(dish).not.toHaveProperty("advanceRole");
     expect(dish).not.toHaveProperty("deductsSaleId");
   });
+
+  it("writes a line's set-menu role, and none on a line without one", () => {
+    const base = {
+      descriptions: { "es-ES": "Menú" },
+      quantity: "1",
+      unitPrice: "12.73",
+      vatRate: "10.00",
+      lineTotal: "12.73",
+    };
+    const [setMenu, dish, extra] = saleLineRows("sale-1", [
+      { ...base, lineNo: 1, name: "Daily menu", setMenuRole: "set_menu" },
+      { ...base, lineNo: 2, name: "Soup", setMenuRole: "dish" },
+      { ...base, lineNo: 3, name: "Bread", parentLineNo: 2, setMenuRole: null },
+    ]);
+    expect(setMenu).toMatchObject({ setMenuRole: "set_menu" });
+    expect(dish).toMatchObject({ setMenuRole: "dish" });
+    expect(extra).not.toHaveProperty("setMenuRole");
+  });
 });

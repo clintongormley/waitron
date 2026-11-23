@@ -46,6 +46,8 @@ export const fiscalState = enumType(["recorded", "not_applicable"]);
 
 export const saleLineAdvanceRole = enumType(["payment_on_account", "deduction"]);
 
+const saleLineSetMenuRole = enumType(["set_menu", "dish"]);
+
 export const tenderMethod = enumType(["cash", "card", "voucher", "deferred", "other"]);
 
 /**
@@ -271,6 +273,7 @@ export const saleLines = table(
     // in `deducts_sale_id`.
     advanceRole: saleLineAdvanceRole("advance_role"),
     deductsSaleId: id("deducts_sale_id"),
+    setMenuRole: saleLineSetMenuRole("set_menu_role"),
   },
   (t) => [
     foreignKey({
@@ -294,6 +297,7 @@ export const saleLines = table(
       name: "sale_lines_deducts_sale_fk",
     }).onDelete("restrict"),
     check("sale_lines_advance_role_ck", enumCheck(t.advanceRole)),
+    check("sale_lines_set_menu_role_ck", enumCheck(t.setMenuRole)),
     check(
       "sale_lines_advance_ck",
       sql`(${t.advanceRole} is 'deduction') = (${t.deductsSaleId} is not null)`,

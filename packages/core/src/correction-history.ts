@@ -386,6 +386,7 @@ export function correctionLinesFor(
       correctsLineId: line.id,
       advanceRole: line.advanceRole,
       deductsSaleId: line.deductsSaleId,
+      setMenuRole: line.setMenuRole,
     } satisfies Required<RecordSaleLine>;
   });
 }

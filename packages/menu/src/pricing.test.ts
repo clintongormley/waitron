@@ -421,6 +421,23 @@ describe("rateLines — each line's own list of dated rates", () => {
     expect(gross.lines.map((l) => l.vatRates)).toEqual([[], []]);
   });
 
+  it("grossLockedLines carries a line's set-menu role, and none on a line without one", () => {
+    const stored = {
+      grossUnitPrice: "14.00",
+      quantity: "1",
+      name: "Daily menu",
+      descriptions: { en: "Daily menu" },
+      category: null,
+    };
+    const gross = grossLockedLines([
+      { ...stored, setMenuRole: "set_menu" },
+      { ...stored, name: "Soup", grossUnitPrice: "0.00", setMenuRole: "dish" },
+      { ...stored, name: "Bread", setMenuRole: null },
+    ]);
+    expect(gross.lines.map((l) => l.setMenuRole)).toEqual(["set_menu", "dish", undefined]);
+    expect(gross.lines[2]).not.toHaveProperty("setMenuRole");
+  });
+
   it("grossLockedLines with rates gives each line its own list", () => {
     const stored = {
       grossUnitPrice: "1.00",

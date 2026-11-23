@@ -9,6 +9,7 @@ import {
   subtractDecimal,
   sumDecimals,
   toScale,
+  type BillSetMenuState,
   type Decimal,
 } from "@waitron/shared";
 import {
@@ -406,13 +407,20 @@ export function paidQuantities(balance: BillBalance): ReadonlyMap<number, string
 
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.
  * A dish is paid a unit at a time only when sold by the unit, in several units, with no extras; the
- * server refuses part of any other. */
-export function payLines(lines: readonly TabLine[], name: (line: TabLine) => string): PayLine[] {
+ * server refuses part of any other. A set-menu dish whose amount, extras included, is 0.00 is left
+ * out (owner, 2026-11-21); its set menu is listed as a line of its own. */
+export function payLines(
+  lines: readonly TabLine[],
+  name: (line: TabLine) => string,
+  setMenus: BillSetMenuState | undefined,
+): PayLine[] {
+  const inSetMenu = new Set(setMenus?.dishes.map(({ lineId }) => lineId));
   return lines
     .filter((line) => (line.parentLineNo ?? null) === null)
-    .map((line) => {
+    .flatMap((line) => {
       const extras = lines.filter((row) => row.parentLineNo === line.lineNo);
       const total = toScale(sumDecimals([line, ...extras].map(tabLineGross)), MONEY_SCALE);
+      if (inSetMenu.has(line.id) && compareDecimal(decimal(total), decimal("0")) === 0) return [];
       const portionKey = tabLinePortionKey(line, lines);
       return {
         lineNo: line.lineNo,
