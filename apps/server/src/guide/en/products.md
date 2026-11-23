@@ -288,8 +288,9 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
-In **Structure**, select a section and copy the page address to open that same section later. If a
-remove or move fails, look just above the tree for the affected list and the reason.
+In **Structure**, select a section and copy the page address to open that same section later.
+While you are in **Structure**, a refused row removal or drag shows the list and the reason just
+above the tree.
 
 ## Set menus {#set-menus}
 

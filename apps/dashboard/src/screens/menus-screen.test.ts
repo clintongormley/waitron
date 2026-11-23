@@ -1,6 +1,6 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
-import { LeaveController, setHelpMode } from "@waitron/ui";
+import { LeaveController, NavigationGuard, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -2911,15 +2911,28 @@ it("creates a section without leaving the editor and adds it to the list being e
   expect(currentPlace(el)).toBe("Lunch Menu › Drinks");
 });
 
-it("closes the new-section form, sending nothing, when another change takes its list off the menu before Save", async () => {
+it("corrects the address without asking to leave when an open section form loses its list", async () => {
+  const host = await placementLeaveHost();
   const live = new LiveData();
   const client = api({ liveData: live });
   const el = await mountLunch(client);
+  const request = vi.fn((proceed: () => void | Promise<void>, signal: AbortSignal) =>
+    host.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+  );
+  const guard = new NavigationGuard(window, {
+    isDirty: () => host.leave.coordinator.isDirty(),
+    request,
+  });
+  onTestFinished(() => guard.dispose());
   await editDrinks(el);
+  expect(location.pathname).toBe(LUNCH_PATH + "/section/m-drinks");
   await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
+  await vi.waitFor(() => expect(host.leave.coordinator.isDirty()).toBe(true));
   await takeDrinksOff(el, client, live);
+  expect(request).not.toHaveBeenCalled();
+  expect(location.pathname).toBe(LUNCH_PATH);
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await new Promise((resolve) => setTimeout(resolve));
   expect(client.addSectionMember.mock.calls).toEqual([]);
@@ -4489,15 +4502,20 @@ it("closes a new-section form whose section is refused while the person is on th
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
-it("names the list on the menus list when a change to it is refused after the person pressed Back", async () => {
+it.each(["back", "prices"])("names the list in a late refusal on %s", async (destination) => {
   const removing = deferred<void>();
   const client = api({ removeSectionMember: vi.fn(() => removing.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
   await rowAction(el, "m-drinks/m-lemonade", "remove");
   await vi.waitFor(() => expect(client.removeSectionMember).toHaveBeenCalledOnce());
-  await click(el, "back");
-  expect(table(el)).not.toBeNull();
+  if (destination === "back") {
+    await click(el, "back");
+    expect(table(el)).not.toBeNull();
+  } else {
+    await chooseTab(el, "prices");
+    expect(location.pathname).toBe(PRICES_PATH);
+  }
   removing.reject({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(

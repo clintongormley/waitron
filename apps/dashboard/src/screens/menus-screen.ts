@@ -20,6 +20,7 @@ import {
   setContentLanguages,
   currentContentLanguages,
   UrlStateController,
+  encodePathSegment,
   paleSwatch,
   type DataTableColumn,
 } from "@waitron/ui";
@@ -968,13 +969,30 @@ export class MenusScreen extends LitElement {
     if (this.structure === null) return;
     const trail = trailOf(this.structure, this.path);
     if (trail.length < this.path.length) this.path = this.path.slice(0, trail.length);
+    if (this.view === "structure") this.#writeSectionAddress(this.path.join("/") || null);
+  }
+
+  #writeSectionAddress(section: string | null): void {
+    const menu = this.menuId;
     if (
-      this.view === "structure" &&
-      this.#url.read("dashboard") === "menus" &&
-      this.#url.read("menu") === this.menuId &&
-      this.#url.read("view") === "structure"
+      menu === null ||
+      this.#url.read("dashboard") !== "menus" ||
+      this.#url.read("menu") !== menu ||
+      this.#url.read("view") !== "structure" ||
+      this.#url.read("section") === section
     )
-      void this.#url.write({ section: this.path.join("/") || null }, true);
+      return;
+    const guard = navigationGuardFor(window);
+    if (guard === undefined) {
+      void this.#url.write({ section }, true);
+      return;
+    }
+    // A live change can shorten the path while the person still has a draft on this page.
+    const url = new URL(guard.href);
+    url.pathname =
+      tabAddress(menu, "structure") +
+      (section === null ? "" : `/section/${encodePathSegment(section)}`);
+    guard.rewrite(url);
   }
 
   /** Whether the target's path, followed as far as the menu on screen still has it, ends at the
