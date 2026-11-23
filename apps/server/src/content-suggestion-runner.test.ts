@@ -487,7 +487,7 @@ it("a job Cloud deletes during a walk is refused at the next collect between pag
   }
 });
 
-it("a cursor Cloud refuses as invalid ends the job rejected without a release", async () => {
+it("abandons the job when Cloud refuses a collection cursor as invalid", async () => {
   const f = await connected();
   try {
     await venue(THREE);
@@ -497,7 +497,9 @@ it("a cursor Cloud refuses as invalid ends the job rejected without a release", 
     await inTx((tx) => tx.update(contentSuggestionJobs).set({ collectCursor: 99 }));
 
     await runToIdle(runner);
-    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    expect(actions(f).slice(-3)).toEqual([STATUS, COLLECT, ABANDON]);
+    expect(f.calls.at(-1)?.operationId).toBe(f.submissions[0]?.operationId);
+    expect([...f.jobs.values()][0]?.state).toBe("expired");
     expect(cursors(f)).toEqual([99]);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
@@ -793,7 +795,7 @@ it("a body Cloud will never accept ends the job as rejected", async () => {
   }
 });
 
-it("a status Cloud refuses as a request it will never accept ends the job as rejected", async () => {
+it("an invalid status request abandons by submit ID before closing as rejected", async () => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -803,7 +805,7 @@ it("a status Cloud refuses as a request it will never accept ends the job as rej
     );
 
     expect(await runToIdle(createContentSuggestionRunner(deps(f)))).toEqual(["again", "idle"]);
-    expect(actions(f)).toEqual([STATUS]);
+    expect(actions(f)).toEqual([STATUS, ABANDON]);
     expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
   } finally {
     await f.close();
@@ -972,7 +974,20 @@ it("retries an unreachable abandon with the same ID after restarting, then close
   }
 });
 
-it("an abandon Cloud permanently refuses closes the job locally", async () => {
+it.each([
+  {
+    reason: "Cloud refuses the request permanently",
+    error: new AppError("cloud.request_invalid", {}),
+    age: 0,
+    outcome: { state: "failed", code: "cloud.not_configured" },
+  },
+  {
+    reason: "saving the renewed lease fails at the deadline",
+    error: new Error("could not save the renewed Cloud lease"),
+    age: JOB_LIFETIME_MS,
+    outcome: { state: "expired", code: "content.suggestion_expired" },
+  },
+])("closes the local job when abandon fails and $reason", async ({ error, age, outcome }) => {
   const f = await connected();
   try {
     await venue(["STAFF Bread"]);
@@ -980,21 +995,33 @@ it("an abandon Cloud permanently refuses closes the job locally", async () => {
     expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
     f.service("unconfigured");
     await f.client.refresh();
-    const abandon = vi.fn(async () => {
-      throw new AppError("cloud.request_invalid", {});
-    });
-    const runner = createContentSuggestionRunner(
-      deps(f, {
-        connection: {
-          translationService: () => f.client.translationService(),
-          translation: { ...f.client.translation, abandon },
-        },
-      }),
-    );
+    const abandon = vi.spyOn(f.client.translation, "abandon").mockRejectedValue(error);
 
-    expect(await runToIdle(runner)).toEqual(["again", "idle"]);
+    expect(await runToIdle(later(f, age))).toEqual(["again", "idle"]);
     expect(abandon).toHaveBeenCalledOnce();
-    expect(await runView()).toMatchObject({ state: "failed", code: "cloud.not_configured" });
+    expect(await runView()).toMatchObject(outcome);
+  } finally {
+    await f.close();
+  }
+});
+
+it("a shutdown that interrupts the final abandon leaves the job for the next start", async () => {
+  const f = await connected();
+  try {
+    await venue(["STAFF Bread"]);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    expect(await createContentSuggestionRunner(deps(f)).step()).toBe("again");
+    const controller = new AbortController();
+    vi.spyOn(f.client.translation, "abandon").mockImplementation(async () => {
+      controller.abort();
+      throw new AppError("cloud.unavailable", {});
+    });
+    const runner = later(f, JOB_LIFETIME_MS);
+
+    await expect(runner.step(controller.signal)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(await job()).toMatchObject({ state: "running", released: false });
   } finally {
     await f.close();
   }

@@ -141,7 +141,10 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
       return await close(job, "expired", null);
     } catch (error) {
       if (is(error, "content.suggestion_expired")) return close(job, "expired", null);
-      if (is(error, "cloud.request_invalid")) return close(job, "failed", "rejected");
+      if (is(error, "cloud.request_invalid")) {
+        await abandon(job, signal);
+        return close(job, "failed", "rejected");
+      }
       throw error;
     }
   }
@@ -163,19 +166,14 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
   async function abandon(
     job: SuggestionJobRow,
     signal?: AbortSignal,
-    final = false,
+    atExpiry = false,
   ): Promise<void> {
     try {
       await translation.abandon(job.id, signal);
     } catch (error) {
-      if (
-        is(error, "cloud.request_invalid") ||
-        is(error, "cloud.not_configured") ||
-        is(error, "content.suggestion_expired") ||
-        (final && !signal?.aborted && is(error, "cloud.unavailable"))
-      )
-        return;
-      throw error;
+      if (signal?.aborted) throw error;
+      if (!atExpiry && !is(error, "cloud.request_invalid") && !is(error, "cloud.not_configured"))
+        throw error;
     }
   }
 

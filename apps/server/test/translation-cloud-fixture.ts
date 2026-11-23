@@ -255,6 +255,7 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
 
 /**
  * Where the contract is silent, this fake chooses:
+ * - abandon accepts a valid proof independent of translation readiness.
  * - for status, collect and release, `permission_denied` comes after the signed-body check and
  *   before the job lookup;
  * - `revoked` (403) comes after the envelope, proof and lease checks, for every action: before

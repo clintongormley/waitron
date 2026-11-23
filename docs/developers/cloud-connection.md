@@ -195,14 +195,15 @@ If a job ends part-way through collection, the box keeps the suggestions it alre
 It counts each remaining item as one it could not translate, so the Translate all notice tells
 you how many were missed.
 
-When the box ends unfinished work because the service goes off, the local job expires, or
-the last page fails the accounting check, it asks Cloud to abandon the job. It signs the
-request with the original submit operation ID, which the box has even if it lost the submit
-reply. Cloud can then clear a queued or running job so you can start another Translate all
+When the box ends unfinished work because the service goes off, the local job expires,
+Cloud refuses a status or collect request as invalid, or the last page fails the accounting
+check, it asks Cloud to abandon the job. It signs the request with the original submit
+operation ID, which the box has even if it lost the submit reply. Cloud can then clear a queued or running job so you can start another Translate all
 run. If Cloud refuses the request as invalid, the box closes the job. If Cloud is unreachable,
 the box retries up to the existing 24-hour job lifetime and gives it one final attempt at expiry.
-Cloud may keep the job until its own expiry if that last attempt fails. If Cloud already
-reported the job gone, or the installation is disconnected, the box closes it locally.
+You can start a new run once the box finishes this cleanup. Cloud may keep the job until
+its own expiry if that last attempt fails. The box closes the job locally when Cloud
+reports it already gone or when the installation is disconnected.
 
 Translation calls take the connection's lock only to renew the access lease, or to record that
 Cloud refused the installation as revoked or its proof as invalid (`leaseState` and
