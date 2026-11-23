@@ -752,9 +752,10 @@ export class DashboardApp extends LitElement {
       }
 
       .about-foot {
-        display: flex;
-        justify-content: center;
+        display: block;
+        width: fit-content;
         margin-block-start: var(--wt-space-2);
+        margin-inline: auto;
       }
 
       .venue-row {
