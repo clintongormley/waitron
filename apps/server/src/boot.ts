@@ -2073,7 +2073,12 @@ async function bootServer(
       cors: corsForVenue(allowOrigin),
       routes: [
         restrictedPageRoute(restrictedPage),
-        oldBoxDataRoute({ page: restrictedPage, modules: enabledAtStart, totpKeyRing: ring }),
+        oldBoxDataRoute({
+          page: restrictedPage,
+          modules: enabledAtStart,
+          totpKeyRing: ring,
+          mainHoldings: () => resetOrder.mainHoldings(),
+        }),
         (restrictedApp) =>
           mountPeerStatusApi(
             restrictedApp,

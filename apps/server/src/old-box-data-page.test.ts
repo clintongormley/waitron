@@ -15,7 +15,7 @@ import { generateSync } from "otplib";
 import { AppError } from "@waitron/shared";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import type { Logger } from "./logger.js";
-import { oldBoxDataRoute } from "./old-box-data-page.js";
+import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import type { PasswordThrottle } from "./password-throttle.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
 
@@ -63,6 +63,7 @@ function appWith(
     modules?: WaitronModule[];
     resetOrdered?: () => boolean;
     throttle?: PasswordThrottle;
+    mainHoldings?: OldBoxDataDeps["mainHoldings"];
   } = {},
 ) {
   const app = new Hono();
@@ -77,6 +78,7 @@ function appWith(
     modules: options.modules ?? [fiscal],
     totpKeyRing: TOTP_KEY_RING,
     throttle: options.throttle,
+    mainHoldings: options.mainHoldings,
   })(app);
   return app;
 }
@@ -131,8 +133,24 @@ describe("POST /old-box-data on the old box", () => {
     const bytes = new Uint8Array(await response.arrayBuffer());
     expect([...bytes.slice(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
     const sheet = strFromU8(unzipSync(bytes)["xl/worksheets/sheet1.xml"]!);
-    // No main box summary is passed yet, so the tab says no comparison was made.
+    // With no main box summary heard, the tab says no comparison was made.
     expect(sheet).toContain(OLD_BOX_DATA_WORDS.en.uncomparedIntro.split("{time}")[0]!.trim());
+  });
+
+  it("compares with the main box's summary the reset-order duty last heard, naming when it arrived", async () => {
+    await admin();
+    const heardAt = new Date("2026-11-23T08:15:00.000Z");
+    const response = await post(
+      appWith({ mainHoldings: () => ({ holdings: { fiscal: [] }, heardAt }) }),
+      signIn,
+    );
+    expect(response.status).toBe(200);
+    const sheet = strFromU8(
+      unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
+    );
+    expect(sheet).toContain(
+      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 08:15 UTC"),
+    );
   });
 
   it("follows the browser's language", async () => {

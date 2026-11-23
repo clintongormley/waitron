@@ -2,7 +2,7 @@ export const OLD_BOX_DATA_WORDS = {
   en: {
     invoiceSheet: "Invoices",
     invoiceIntro:
-      "Invoice records the new main box did not have when this file was made, {time}. The old main box may still send some of these to it before it is wiped.",
+      "Invoice records the new main box did not have at {time}, when it last told this box what it holds. This box may still send some of these to it before it is wiped.",
     uncomparedIntro:
       "Every invoice record this box holds, {time}. No comparison with the new main box was made, so some of these may already be on it.",
     chainFields: {
@@ -36,7 +36,7 @@ export const OLD_BOX_DATA_WORDS = {
   es: {
     invoiceSheet: "Facturas",
     invoiceIntro:
-      "Registros de facturación que el nuevo servidor principal no tenía cuando se creó este archivo, {time}. Es posible que el antiguo servidor principal aún le envíe algunos antes de borrarse.",
+      "Registros de facturación que el nuevo servidor principal no tenía a las {time}, la última vez que indicó a este servidor lo que tiene. Es posible que este servidor aún le envíe algunos antes de borrarse.",
     uncomparedIntro:
       "Todos los registros de facturación de este servidor, {time}. No se ha comparado con el nuevo servidor principal, así que algunos pueden estar ya en él.",
     chainFields: {

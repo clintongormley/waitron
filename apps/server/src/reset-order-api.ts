@@ -18,7 +18,7 @@ import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { reloadAfterRemoval, removeStandby } from "./membership-removal.js";
-import type { OldBoxHoldings } from "./old-box-holdings.js";
+import { readHoldings, type OldBoxHoldings } from "./old-box-holdings.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { raiseSetAsideOnReset } from "./reset-alert.js";
 import { readResetOrderFor, readResetOrderOperation, type ResetOrder } from "./reset-order.js";
@@ -225,6 +225,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
           sourceNodeId: source,
           order: order === null ? null : { orderId: order.orderId, acceptLoss: order.acceptLoss },
           lacking,
+          holdings: await readHoldings(deps.db, deps.modules),
         }),
         200,
       );

@@ -1,9 +1,9 @@
 import { liveBackupQuery, type Database } from "@waitron/db";
-import type { CanonicalValue } from "@waitron/membership";
-import type { UnreturnedChain, WaitronModule } from "@waitron/module";
+import { MalformedHoldingsError, type UnreturnedChain, type WaitronModule } from "@waitron/module";
 import { invoiceLineCells, paymentOnAccount, readAccountantInvoices } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 import { renderWorkbook, type Cell } from "./xlsx-workbook.js";
 
 export interface OldBoxWorkbookInput {
@@ -11,10 +11,11 @@ export interface OldBoxWorkbookInput {
   db: Database;
   modules: readonly WaitronModule[];
   /**
-   * The main box's chain summary, by module name, as its download request carries it; null when
-   * the main box was not asked. A module it does not name has every chain listed whole.
+   * The main box's chain summary from its latest answer, and when it arrived; null when none was
+   * heard. A module it does not name, or whose seat cannot read its part, has every chain listed
+   * whole.
    */
-  mainHoldings: Readonly<Record<string, CanonicalValue>> | null;
+  mainHoldings: HeardHoldings | null;
   madeAt: Date;
   language: "en" | "es";
 }
@@ -35,9 +36,19 @@ export async function buildOldBoxWorkbook(
   for (const module of input.modules) {
     const seat = module.handover?.unreturned;
     if (seat === undefined) continue;
-    const held = input.mainHoldings?.[module.name];
-    if (held === undefined) compared = false;
-    chains.push(...(await seat(liveBackupQuery(input.db), held)));
+    const held = input.mainHoldings?.holdings[module.name];
+    let listed: UnreturnedChain[] | undefined;
+    if (held !== undefined)
+      try {
+        listed = await seat(liveBackupQuery(input.db), held);
+      } catch (error) {
+        if (!(error instanceof MalformedHoldingsError)) throw error;
+      }
+    if (listed === undefined) {
+      compared = false;
+      listed = await seat(liveBackupQuery(input.db), undefined);
+    }
+    chains.push(...listed);
   }
   const saleIds = [...new Set(chains.flatMap((chain) => chain.records.map((r) => r.saleId)))];
   const invoices = new Map(
@@ -84,7 +95,10 @@ export async function buildOldBoxWorkbook(
         ]);
     }
   }
-  const time = `${input.madeAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  const time = minute(
+    compared && input.mainHoldings !== null ? input.mainHoldings.heardAt : input.madeAt,
+  );
   return renderWorkbook([
     {
       name: words.invoiceSheet,

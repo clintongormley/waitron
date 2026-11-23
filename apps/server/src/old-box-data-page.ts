@@ -8,6 +8,7 @@ import { FALLBACK_LOCALE, hasCode, isAppError, type AppError } from "@waitron/sh
 import { isSecure } from "./encrypted-connection.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import type { HeardHoldings } from "./old-box-holdings.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { formBody } from "./recovery-start-again.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
@@ -24,6 +25,8 @@ export interface OldBoxDataDeps {
   modules: readonly WaitronModule[];
   totpKeyRing: KeyRing;
   throttle?: PasswordThrottle;
+  /** The main box's summary the reset-order duty last heard. */
+  mainHoldings?: () => HeardHoldings | null;
 }
 
 type RefusalStatus = 400 | 401 | 403 | 409 | 429 | 500;
@@ -133,8 +136,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
           bytes = await buildOldBoxWorkbook({
             db: deps.page.venue,
             modules: deps.modules,
-            // The main box's summary from the reset-order answer is not passed yet.
-            mainHoldings: null,
+            mainHoldings: deps.mainHoldings?.() ?? null,
             madeAt,
             language: locale === "es-ES" ? "es" : "en",
           });

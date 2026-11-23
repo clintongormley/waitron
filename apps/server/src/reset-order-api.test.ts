@@ -423,6 +423,7 @@ describe("POST /api/node/reset-order answers", () => {
       sourceNodeId: oldBox,
       order: null,
       lacking: {},
+      holdings: { fiscal: [] },
     });
     expect(lacking).not.toHaveBeenCalled();
   });
@@ -438,8 +439,32 @@ describe("POST /api/node/reset-order answers", () => {
       sourceNodeId: oldBox,
       order: { orderId: order.orderId, acceptLoss: false },
       lacking: { fiscal: [LACKING_CHAIN] },
+      holdings: { fiscal: [] },
     });
     expect(events("reset_acknowledged")).toEqual([]);
+  });
+
+  it("this box's own chain summary, with or without an order, read without the write lock", async () => {
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId: main, seriesId },
+      reuseExistingParents: true,
+    });
+    await insertFiscalRecord(suite.db, ids);
+    const own = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
+    expect(own).toHaveLength(1);
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+
+    const before = await answerOf(await ask(await queryBody({ nonce: "no-order" })));
+    expect(before?.order).toBeNull();
+    expect(before?.holdings).toEqual({ fiscal: own });
+    expect(lock).not.toHaveBeenCalled();
+
+    await ordered();
+    const after = await answerOf(await ask(await queryBody({ nonce: "ordered" })));
+    expect(after?.order).not.toBeNull();
+    expect(after?.holdings).toEqual({ fiscal: own });
   });
 });
 

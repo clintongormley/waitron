@@ -19,8 +19,14 @@ export type ReplacedResetCheck =
       acceptLoss: boolean;
       setAside: boolean;
       lacking: Record<string, CanonicalValue[]>;
+      holdings?: Record<string, CanonicalValue>;
     }
-  | { outcome: "no-order"; lacking: Record<string, CanonicalValue[]> }
+  | {
+      outcome: "no-order";
+      lacking: Record<string, CanonicalValue[]>;
+      /** The main box's own summary; absent when it sent none or sent something else. */
+      holdings?: Record<string, CanonicalValue>;
+    }
   /** The main box answered `handover.reset_query_refused`. */
   | { outcome: "refused"; reason: unknown }
   | {
@@ -82,7 +88,7 @@ export async function replacedResetCheck(
     sent.nonce,
   );
   if (!checked.ok) return failed(checked.check);
-  const { sourceNodeId, order, lacking } = checked.body;
+  const { sourceNodeId, order, lacking, holdings } = checked.body;
   if (sourceNodeId !== deps.nodeId) return failed("source");
   if (
     !isRecord(lacking) ||
@@ -96,7 +102,8 @@ export async function replacedResetCheck(
   )
     return failed("answer");
   const lackingChains = lacking as Record<string, CanonicalValue[]>;
-  if (order === null) return { outcome: "no-order", lacking: lackingChains };
+  const heard = isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {};
+  if (order === null) return { outcome: "no-order", lacking: lackingChains, ...heard };
 
   const acceptLoss = order.acceptLoss as boolean;
   if (!acceptLoss) {
@@ -111,5 +118,6 @@ export async function replacedResetCheck(
     acceptLoss,
     setAside: acceptLoss || Object.values(lackingChains).some((chains) => chains.length > 0),
     lacking: lackingChains,
+    ...heard,
   };
 }

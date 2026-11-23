@@ -100,6 +100,7 @@ async function signedOrder(
   seen: Seen,
   order: { orderId: string; acceptLoss: boolean } | null,
   lacking: Record<string, CanonicalValue[]> = { sample: [] },
+  holdings?: CanonicalValue,
 ) {
   return Response.json(
     await signAsThisBox({ node: suite.node, ring, nodeId: receiver }, "reset-order", {
@@ -107,6 +108,7 @@ async function signedOrder(
       sourceNodeId: source,
       order,
       lacking,
+      ...(holdings === undefined ? {} : { holdings }),
     }),
   );
 }
@@ -324,6 +326,47 @@ it("keeps an answer without an order, saves nothing, and asks again 30 seconds l
   expect(duty.answer()).toEqual({ order: null, lacking: { sample: LACKING } });
   expect(await markerOnDisk()).toBeNull();
   expect(restart).not.toHaveBeenCalled();
+  resume();
+  await duty.stop();
+});
+
+it("keeps a verified answer's summary of the main box with the time it arrived, through a later refusal", async () => {
+  const MAIN_HELD = { sample: [{ chain: "main-box", count: 9 }] };
+  const main = await standIn((seen, index) =>
+    index === 0 ? signedOrder(seen, null, { sample: [] }, MAIN_HELD) : refused(),
+  );
+  const { time, sleep, resume } = parkedClock();
+  const { duty } = start(main.fetch, time);
+  expect(duty.mainHoldings()).toBeNull();
+  await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));
+  expect(main.seen).toHaveLength(2);
+  expect(duty.answer()).toBeNull();
+  expect(duty.mainHoldings()).toEqual({
+    holdings: MAIN_HELD,
+    heardAt: new Date("2026-11-22T10:00:00Z"),
+  });
+  resume();
+  await duty.stop();
+});
+
+it.each([
+  ["carries none", undefined],
+  ["carries one that is not a summary", "not a summary"],
+])("keeps no summary after a later verified answer that %s", async (_, later) => {
+  const main = await standIn((seen, index) =>
+    signedOrder(
+      seen,
+      null,
+      { sample: [] },
+      index === 0 ? { sample: [{ chain: "main-box", count: 9 }] } : later,
+    ),
+  );
+  const { time, sleep, resume } = parkedClock();
+  const { duty } = start(main.fetch, time);
+  await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));
+  expect(main.seen).toHaveLength(2);
+  expect(duty.answer()).toEqual({ order: null, lacking: { sample: [] } });
+  expect(duty.mainHoldings()).toBeNull();
   resume();
   await duty.stop();
 });
