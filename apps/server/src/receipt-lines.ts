@@ -104,7 +104,7 @@ export function withReceiptListPrices<T extends ReceiptSource>(
 }
 
 /** The line's total at its list price, rounded as a line total is (`grossRows`), when it differs. */
-function listGrossOf(
+export function listGrossOf(
   line: Pick<GrossLine, "quantity" | "priceQuantity" | "lineGross">,
   listUnit: Decimal | null,
 ): { listGross?: string } {
