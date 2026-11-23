@@ -232,6 +232,10 @@ it.each([
     const root = table(el)!;
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
     expect(headings(el)).toHaveLength(5);
+    const actionsHeading = root.querySelector("th[data-actions]")!;
+    await expect
+      .element(page.elementLocator(actionsHeading))
+      .toHaveAccessibleName(VENUE_SERVICE_STRINGS[locale]["prep.actions"]);
     expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
     const heading = root.querySelectorAll("th")[3]!;
     const range = document.createRange();
@@ -243,11 +247,13 @@ it.each([
       const bounds = cell.getBoundingClientRect();
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
-        if (!walker.currentNode.textContent!.trim()) continue;
-        range.selectNodeContents(walker.currentNode);
+        const textNode = walker.currentNode;
+        const text = textNode.textContent!;
+        if (!text.trim() || textNode.parentElement?.closest(".visually-hidden")) continue;
+        range.selectNodeContents(textNode);
         for (const box of range.getClientRects()) {
-          expect(box.left, walker.currentNode.textContent!).toBeGreaterThanOrEqual(bounds.left - 1);
-          expect(box.right, walker.currentNode.textContent!).toBeLessThanOrEqual(bounds.right + 1);
+          expect(box.left, text).toBeGreaterThanOrEqual(bounds.left - 1);
+          expect(box.right, text).toBeLessThanOrEqual(bounds.right + 1);
         }
       }
     }
