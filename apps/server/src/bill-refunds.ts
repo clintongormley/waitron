@@ -8,7 +8,7 @@ import { authorize, type PinAttempts } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import { MANUAL_PROVIDER, assertReversible, findPaymentByBillPayment } from "@waitron/payments";
 import type { PaymentProvider, RefundRefusalReason } from "@waitron/payments";
-import { AppError, decimal, decimalToCents, isAppError, rawCentsToDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal, decimalToCents, isAppError } from "@waitron/shared";
 import { money, ZERO } from "./bill-allocation.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
@@ -274,7 +274,7 @@ export async function refundBillPayment(
               provider: provided.provider,
               paymentRef: provided.paymentRef,
               kind: "refund",
-              amount: rawCentsToDecimal(String(applied + tip)),
+              amount: centsToDecimal(applied + tip),
             });
           }
           const reserved = await insertRefundReservation(tx, cfg, {

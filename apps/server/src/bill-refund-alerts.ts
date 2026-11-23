@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { billPayments, type refunds, type Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
-import { AppError, jobOrigin, rawCentsToDecimal, readOrigin, saleId } from "@waitron/shared";
+import { AppError, centsToDecimal, jobOrigin, readOrigin, saleId } from "@waitron/shared";
 import type { Decimal, Origin } from "@waitron/shared";
 import "./errors.js";
 
@@ -9,7 +9,7 @@ type RefundRow = typeof refunds.$inferSelect;
 
 /** What a refund gives back: its applied money and its tip. */
 export const refundAmountOf = (refund: RefundRow): Decimal =>
-  rawCentsToDecimal(String(refund.appliedAmount + refund.tipAmount));
+  centsToDecimal(refund.appliedAmount + refund.tipAmount);
 
 export function raiseRefundOutcomeConflict(
   tx: Transaction,
@@ -67,7 +67,7 @@ export function raiseTenderRefundConflict(
       refundId: refund.id,
       saleId: refund.saleId!,
       tenderId: refund.tenderId!,
-      amount: refundAmountOf(refund),
+      amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
       providerRefundRef,
     }),
     severity: "error",
@@ -94,7 +94,7 @@ export async function raisePendingRefundUnresolved(
       refundId: refund.id,
       saleId: refund.saleId!,
       tenderId: refund.tenderId!,
-      amount: refundAmountOf(refund),
+      amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
       pendingSince: refund.createdAt,
     }),
     severity: "warning",

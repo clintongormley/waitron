@@ -703,6 +703,39 @@ async function fileRestPreview(saleId: SaleId, gross: string, lineIds?: string[]
   return shown;
 }
 
+it("preserves the correction decisions when the meal before its advance exceeds the stored amount limit", async () => {
+  const dish: Dish = ["0.00", "600000000000.00", "600000000000.00"];
+  const rest = await sellRest(
+    [dish, dish],
+    ["0.00", "400000000000.00", "400000000000.00"],
+    "800000000000.00",
+  );
+
+  expect(await captureError(() => restPreview(rest.saleId, "1.00"))).toMatchObject({
+    code: "sale.correction_history_unusable",
+  });
+  const line: RecordSaleLine = {
+    lineNo: 1,
+    name: "Dish 1",
+    descriptions: { "es-ES": "Dish 1" },
+    quantity: "-1",
+    unitPrice: "1.00",
+    vatRate: "0.00",
+    lineTotal: "-1.00",
+    lineGross: "-1.00",
+    correctsLineId: rest.dishIds[0]!,
+  };
+  const result = await withTransaction(suite.db, (tx) =>
+    recordCorrection(tx, backend, {
+      ...correctionInput(rest.saleId, "-1.00", [line]),
+      partialVatBreakdown: [
+        { rate: decimal("0.00"), base: decimal("-1.00"), tax: decimal("0.00") },
+      ],
+    }),
+  );
+  expect(result.saleId).toEqual(expect.any(String));
+});
+
 it("example 1: correcting the rest's invoice never takes from its deduction line, and the preview shows what the writer files", async () => {
   const rest = await sellRest(
     [["10.00", "109.09", "120.00"]],

@@ -21,7 +21,6 @@ import {
   decimalToCents,
   decimal,
   diskFullIn,
-  rawCentsToDecimal,
   subtractDecimal,
   timeZoneOffsetMinutes,
   type Decimal,
@@ -413,7 +412,7 @@ async function enqueueSlips(
   const timeZone = knownZone(doc.timeZone);
   const order = await readReceiptOrder(tx, workingOrderId);
   for (const payment of cards) {
-    const charged = rawCentsToDecimal(String(payment.charged));
+    const charged = centsToDecimal(payment.charged);
     const tip = centsToDecimal(payment.tip);
     const payload = formatPaymentSlip({
       issuer: header.issuer,

@@ -6218,7 +6218,7 @@ vocabulary itself imports, so `blob` passes anywhere.
 
 **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
 (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
-for a raw-SQL read, which casts `cast(x as text)`). Above the row every amount stays the exact `Decimal`; a money
+for raw counts from `cast(x as text)` and totals expressed as integer text). Above the row every amount stays the exact `Decimal`; a money
 total summed out of JSON is summed in JavaScript at the money scale. **Nothing guards the boundary
 itself, and there is no LOUD form of getting it wrong**. Guards, both narrower than their names:
 `packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.
