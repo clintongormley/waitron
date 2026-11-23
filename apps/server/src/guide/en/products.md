@@ -100,8 +100,8 @@ to, as described below.
 
 When you drop products or categories, the Move window opens with the destination selected. Review
 any preparation station changes and choose **Move to…** to save. You can also drop onto
-**All products** to move items out of their category. Check the station changes too when you delete
-a category.
+**All products** to move items out of their category. Check the station changes too when you open
+the window with **Move to…** or delete a category.
 
 While you add or rename a category, the square beside its name shows its own colour, or the colour
 it inherits from the nearest coloured category above it, then the venue's default. A dashed border
