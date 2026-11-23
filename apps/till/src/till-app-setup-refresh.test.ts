@@ -1204,9 +1204,12 @@ describe("A841 the till follows the theme in use", () => {
 
   const kds = { ...first, formFactor: "kds" as FormFactor, capabilities: ["act-as-kds"] };
 
-  async function openKitchen(setup: TillInfo = kds, activity?: SessionActivity): Promise<TillApp> {
+  async function openKitchen(
+    inactivityTimeoutSeconds: number | null = null,
+    activity?: SessionActivity,
+  ): Promise<TillApp> {
     const device = {
-      getTill: vi.fn().mockResolvedValue(setup),
+      getTill: vi.fn().mockResolvedValue({ ...kds, inactivityTimeoutSeconds }),
       getDeviceIdentity: vi.fn().mockResolvedValue({
         deviceId: "dev-1",
         formFactor: "kds",
@@ -1255,7 +1258,7 @@ describe("A841 the till follows the theme in use", () => {
           due = undefined;
         },
       });
-      const el = await openKitchen({ ...kds, inactivityTimeoutSeconds: initialTimeout }, activity);
+      const el = await openKitchen(initialTimeout, activity);
       const board = el.shadowRoot!.querySelector("till-station-screen");
       const loginPanel = () =>
         el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen[compact]")!;
