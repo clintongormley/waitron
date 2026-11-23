@@ -15,12 +15,14 @@ attribution. An included override two menus down keeps the existing link to the 
   from a product price carried through an include. A variant that takes the dish price takes its
   origin. A clash has no resolved origin. Equal candidates keep the existing first source.
 - Compare origins only for changed prices. A change to this menu’s own setting keeps its current
-  attribution and inherited-price reporting. With both origins known, take the proposed included override if
-  present, else the published included override if present, else use the product attribution.
+  attribution and inherited-price reporting. With both origins known, use the proposed included
+  override first. Use the published override's menu only if it still carries the dish, under its
+  current name. Otherwise use the product attribution.
   If either origin is missing, keep the current attribution. Existing editions will therefore
   still offer the old link until a changed menu is published. Keep format 4 and leave the origin
   map out of `menuDocumentHash` so adding it alone leaves a published menu current. The same hash
-  verifies content in backups. Scheduled editions record the map when they are built.
+  verifies published content in backups and leaves out the price origins there too. Scheduled
+  editions record the map when they are built.
 - Cloud reads the same published menu through `readGuestMenuPages` in `apps/server/src/guest-menu-api.ts`.
   It receives the existing JSON of rendered pages by language. `publicGuestMenu` projects customer
   fields and amounts, so no price origin goes into the HTML. Republishing can change the displayed

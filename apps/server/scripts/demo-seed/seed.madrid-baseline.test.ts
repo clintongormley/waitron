@@ -536,7 +536,7 @@ for (const locale of ["en", "es"] as const) {
       provisioned.tables.dashboard_sessions!.rows,
     );
     expect(seeded.tables.products!.rows.length).toBeGreaterThan(45);
-    // Price origins are Preview metadata outside the historical content hash.
+    // The recorded baseline predates Preview price origins.
     for (const snapshot of [before, provisioned, seeded])
       for (const row of snapshot.tables.menu_versions?.rows ?? []) {
         const document = JSON.parse(String(row.document)) as Record<string, unknown>;

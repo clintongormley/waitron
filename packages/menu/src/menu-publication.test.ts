@@ -1825,7 +1825,7 @@ describe("previewMenu", () => {
       ).toEqual([{ source: "included_menu", includedMenu: { id: f.drinksMenu, name: "Drinks" } }]);
     });
 
-    it("credits Drinks clearing its own Lemonade price to Drinks on Dinner", async () => {
+    it("uses the current name when an included menu clears its own price", async () => {
       const f = await menusFixture(fx.db);
       await app(async (tx) =>
         updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
@@ -1833,11 +1833,12 @@ describe("previewMenu", () => {
         }),
       );
       await publish(f.dinner);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+      await app(async (tx) => {
+        await updateMenuDetails(tx, f.drinksMenu, { name: "Refreshments" });
+        await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
           grossPrice: null,
-        }),
-      );
+        });
+      });
       expect(
         (await priceChange(f.dinner)).map(({ source, includedMenu, from, to }) => ({
           source,
@@ -1848,10 +1849,27 @@ describe("previewMenu", () => {
       ).toEqual([
         {
           source: "included_menu",
-          includedMenu: { id: f.drinksMenu, name: "Drinks" },
+          includedMenu: { id: f.drinksMenu, name: "Refreshments" },
           from: "3.40",
           to: "3.00",
         },
+      ]);
+    });
+
+    it("does not direct a price edit to an include that no longer carries the dish", async () => {
+      const f = await menusFixture(fx.db);
+      await app(async (tx) =>
+        updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        }),
+      );
+      await publish(f.dinner);
+      await app(async (tx) => {
+        await removeMember(tx, f.dinnerRoot, await sectionMemberOf(f.dinnerRoot, f.drinks));
+        await addMember(tx, f.dinnerRoot, product(f.lemonade));
+      });
+      expect((await priceChange(f.dinner)).map((change) => change.source)).toEqual([
+        "shared_product",
       ]);
     });
 
@@ -1905,9 +1923,14 @@ describe("previewMenu", () => {
         ),
       );
       await publish(f.lunch);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: null }),
-      );
+      await app(async (tx) => {
+        await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
+          grossPrice: "3.40",
+        });
+        await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
+          grossPrice: null,
+        });
+      });
       expect(
         changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)
           .filter((change) => change.kind === "price_changed" || change.kind === "product_changed")
@@ -2242,15 +2265,7 @@ describe("previewMenu", () => {
   it("credits the product through nested includes when its variant follows the dish price", async () => {
     const f = await menusFixture(fx.db);
     const outer = await app(async (tx) => {
-      await setProductVariants(
-        tx,
-        f.lemonade,
-        (await listProductVariants(tx, f.lemonade)).map((variant) => ({
-          ...variant,
-          unitPrice: null,
-        })),
-        "en",
-      );
+      await updateProduct(tx, f.large, { unitPrice: null });
       const menu = await createMenu(tx, { name: "Outer" });
       await addMember(tx, await requireMenuRoot(tx, menu.id), section(f.dinnerRoot));
       return menu.id;
@@ -2611,9 +2626,11 @@ it("filters inactive top-level and transitive menus before combining", async () 
   expect(await app((tx) => operations.listMenuOffers(tx, [outer]))).toEqual([]);
 });
 
-it("attributes included variant decisions to the directly included menu", async () => {
+it.each([false, true])("credits included variant price, own dish price=%s", async (ownPrice) => {
   const f = await menusFixture(fx.db);
-  await publish(f.dinner);
+  const menuId = ownPrice ? f.lunch : f.dinner;
+  if (ownPrice) await app((tx) => updateProduct(tx, f.large, { unitPrice: null }));
+  await publish(menuId);
   await app(async (tx) =>
     setMenuVariants(
       tx,
@@ -2622,7 +2639,7 @@ it("attributes included variant decisions to the directly included menu", async 
       f.drinksMenu,
     ),
   );
-  const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes;
+  const changes = (await app((tx) => previewMenu(tx, menuId))).changes;
   expect(changes).toContainEqual(
     expect.objectContaining({
       kind: "product_changed",
