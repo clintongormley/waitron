@@ -2151,20 +2151,19 @@ export class PaymentsScreen extends LitElement {
               @click=${(event: Event) => this.#openEditor(reader, "details", event)}
               >${t("payments.details")}</wt-button
             >
-            ${
+            ${rowActionTail(true, [
               reader.canEnable &&
               this.providers?.find((p) => p.providerId === reader.provider)?.canUnpair
-                ? html` <wt-button
+                ? html`<wt-button
                     icon="menu-disconnect"
+                    variant="danger"
                     data-test=${`unpair-${reader.id}`}
                     ?disabled=${this.busy}
                     @click=${(event: Event) => this.#openEditor(reader, "unpair", event)}
                   >
                     ${fill("payments.unpair_dialog", { provider: this.#providerName(reader.provider) })}</wt-button
                   >`
-                : nothing
-            }
-            ${rowActionTail(true, [
+                : nothing,
               html`<wt-button
                 icon="menu-delete"
                 variant="danger"

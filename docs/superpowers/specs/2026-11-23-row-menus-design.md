@@ -120,7 +120,8 @@ The watcher cleared the additions below after the owner's “icons: fine, we can
 if we need to” at 21:16 in Lane K. Each icon is registered once in
 `packages/ui/src/components/wt-icon.ts` under its action name. The check uses the same column in the
 bill and counter-zone pickers. New bill uses Add. The separate reader dialog and the floor's
-List/Map toggle keep their existing layouts.
+List/Map toggle keep their existing layouts. Disconnect and Unpair are red below the divider.
+The watcher confirmed Unpair at 21:58. Delete stays last.
 
 | Action | Material Symbol |
 | --- | --- |
