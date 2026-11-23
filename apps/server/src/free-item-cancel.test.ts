@@ -388,6 +388,81 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     expect(refund.status, JSON.stringify(refund.json)).toBe(200);
   });
 
+  it("hands back every filed cent of a salads row that does not split evenly, the water with the last", async () => {
+    const t = await ticket([{ name: "Salad", quantity: "3" }, { name: "Water" }]);
+    const salads = [0, 1, 2].map((nth) => dish(t, "Salad", nth));
+    const water = dish(t, "Water");
+    const row = salads.map((salad) => salad.id);
+    // The salads row filed €28.13 and the water €1.87; the row's cents go to its portions in line
+    // order, the cent left over to the earliest.
+    expect(
+      await Promise.all(
+        salads.map(
+          async (salad) => ((await consent(t, salad)) as { refundValue?: unknown }).refundValue,
+        ),
+      ),
+    ).toEqual([
+      { quantity: "1.000", gross: "9.38" },
+      { quantity: "1.000", gross: "9.38" },
+      { quantity: "1.000", gross: "9.37" },
+    ]);
+    expect(await consent(t, salads[0]!, row)).toMatchObject({
+      refundValue: { quantity: "3.000", gross: "28.13" },
+      withFree: [{ lineId: water.id, refundAmount: "1.87" }],
+    });
+
+    for (const one of [
+      await cancel(t, salads[0]!, { lineIds: row, quantity: "1" }),
+      await cancel(t, salads[0]!, { lineIds: row, quantity: "1" }),
+    ])
+      expect(one.status, JSON.stringify(one.json)).toBe(200);
+    await refused(t, () => cancel(t, salads[0]!, { lineIds: row, quantity: "1" }), "not_listed");
+    const last = await cancel(t, salads[0]!, { lineIds: row, quantity: "1", withFree: [water.id] });
+    expect(last.status, JSON.stringify(last.json)).toBe(200);
+
+    const cancels = (await written(t)).cancels;
+    expect(cancels.map((row) => row.refundValue)).toEqual([938, 937, 938, 187]);
+    expect(cancels.at(-1)).toEqual({ lineId: water.id, refundValue: 187 });
+    expect(cancels.reduce((total, row) => total + row.refundValue!, 0)).toBe(3000);
+    const refund = await send(
+      venue.app,
+      venue.cookie.manager,
+      "POST",
+      `/api/transactions/${t.saleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: t.tenderId,
+        appliedAmount: "30.00",
+        tipAmount: "0.00",
+        reason: "Brought back",
+        cancellationIds: (
+          await venue.db
+            .select({ id: adjustments.id, action: adjustments.action })
+            .from(adjustments)
+            .where(eq(adjustments.workingOrderId, t.billId))
+        )
+          .filter((row) => row.action === "cancel")
+          .map((row) => row.id),
+      },
+    );
+    expect(refund.status, JSON.stringify(refund.json)).toBe(200);
+  });
+
+  it("keeps the water from the soup while a salads row that does not split evenly stays", async () => {
+    await takeawayRates(venue, { Soup: "4.00" });
+    const t = await ticket([{ name: "Salad", quantity: "2" }, { name: "Soup" }, { name: "Water" }]);
+    const soup = dish(t, "Soup");
+    const water = dish(t, "Water");
+    // Filed: the salads row €18.57, the soup €5.57 and the water €1.86.
+    expect(await consent(t, soup)).not.toHaveProperty("withFree");
+    const answer = await consent(t, water);
+    expect(answer).toMatchObject({ givenFree: true });
+    expect([...(answer.comesBackWith as string[])].sort()).toEqual(
+      [dish(t, "Salad", 0).id, dish(t, "Salad", 1).id, soup.id].sort(),
+    );
+    await refused(t, () => cancel(t, soup, { withFree: [water.id] }), "not_listed");
+  });
+
   it.each([
     ["the kitchen started the salad", "kitchen"],
     ["staff say the fired salad was started", "staff"],

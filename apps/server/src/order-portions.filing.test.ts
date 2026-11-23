@@ -866,7 +866,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
     ).toEqual([undefined, undefined, undefined, { quantity: "1.000", gross: "3.68" }]);
   });
 
-  it("A803 portions: a portion whose filed row does not split into whole cents between its links has no refund value", async () => {
+  it("A803 portions: a portion whose filed row is linked to more portions than the row holds has no refund value", async () => {
     const { billId, portions } = await seed(sweets("2"));
     await payInCash(billId);
     const stray = await seed(sweets("2"));
@@ -875,7 +875,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
         .select({ id: saleLineDishes.saleLineId })
         .from(saleLineDishes)
         .where(eq(saleLineDishes.dishLineId, portions[0]!.lineId));
-      // 2.000 between four portions is 0.500 each; 0.10 is not a whole number of cents.
+      // 2.000 between four portions is 0.500 each, not the portion's stored 1.000.
       await tx
         .insert(saleLineDishes)
         .values(

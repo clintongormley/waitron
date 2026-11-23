@@ -191,6 +191,19 @@ function refundValues(filing: BillFiling, lineIds: readonly string[]): (Value | 
   const linked = new Set(links.map((link) => link.saleLineId));
   const unboundStored = stored.filter((row) => !bindings.has(row.parentLineId ?? row.id));
   const unlinkedFiled = filed.filter((row) => !linked.has(row.id));
+  const position = new Map(stored.map((row, i) => [row.id, i]));
+  const portionsOf = new Map<string, string[]>();
+  for (const link of links) {
+    const portions = portionsOf.get(link.saleLineId);
+    if (portions === undefined) portionsOf.set(link.saleLineId, [link.dishLineId]);
+    else portions.push(link.dishLineId);
+  }
+  for (const portions of portionsOf.values())
+    portions.sort(
+      (a, b) =>
+        (position.get(a) ?? stored.length) - (position.get(b) ?? stored.length) ||
+        a.localeCompare(b),
+    );
   return lineIds.map((lineId) => {
     const parent = stored.find((row) => row.id === lineId && row.parentLineId === null);
     if (parent === undefined) return undefined;
@@ -199,7 +212,7 @@ function refundValues(filing: BillFiling, lineIds: readonly string[]): (Value | 
     if (binding === undefined) return byPosition(unboundStored, unlinkedFiled, lineId);
     return byPortion(
       filed,
-      links,
+      portionsOf,
       binding.lineId,
       stored.filter((row) => row.id === lineId || row.parentLineId === lineId),
     );
@@ -238,30 +251,28 @@ function byPosition(
 
 /**
  * One portion's share of each filed row linked to it: its dish row and its extras' rows, which must
- * match its stored dish line and extras.
+ * match its stored dish line and extras. `portionsOf` lists each row's linked dish lines in stored
+ * line order; a row's cents go to them evenly, the cents left over one each to the earliest, so the
+ * portions of a row sum to what it filed.
  */
 function byPortion(
   filed: readonly Filed[],
-  links: readonly { saleLineId: string; dishLineId: string }[],
+  portionsOf: ReadonlyMap<string, readonly string[]>,
   dishLineId: string,
   family: readonly Stored[],
 ): { quantity: string; gross: string } | undefined {
-  const count = new Map<string, number>();
-  const mine = new Set<string>();
-  for (const link of links) {
-    count.set(link.saleLineId, (count.get(link.saleLineId) ?? 0) + 1);
-    if (link.dishLineId === dishLineId) mine.add(link.saleLineId);
-  }
-  const rows = filed.filter((row) => mine.has(row.id));
+  const rows = filed.filter((row) => portionsOf.get(row.id)?.includes(dishLineId) === true);
   const dish = rows.find((row) => row.parentLineId === null);
   let gross = decimal("0.00");
   let quantity = 0;
   const shares: string[] = [];
   for (const row of rows) {
-    const portions = count.get(row.id)!;
-    const shareQuantity = row.quantity / portions;
-    const shareGross = row.lineGross === null ? null : row.lineGross / portions;
-    if (shareGross === null || !Number.isInteger(shareGross)) return undefined;
+    if (row.lineGross === null) return undefined;
+    const portions = portionsOf.get(row.id)!;
+    const shareQuantity = row.quantity / portions.length;
+    const base = Math.floor(row.lineGross / portions.length);
+    const left = row.lineGross - base * portions.length;
+    const shareGross = base + (portions.indexOf(dishLineId) < left ? 1 : 0);
     if (row === dish) quantity = shareQuantity;
     shares.push(`${row === dish}:${shareQuantity}`);
     gross = addDecimal(gross, centsToDecimal(shareGross));
