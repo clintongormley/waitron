@@ -1,7 +1,12 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { CORE_MIGRATIONS, stampDeployment, withFoldedPersonChanges } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  stampDeployment,
+  withFoldedPersonChanges,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { signEnvelope } from "@waitron/handover";
@@ -10,8 +15,15 @@ import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { NODE_MIGRATIONS, setNodeMode } from "@waitron/node-db";
 import { isAppError } from "@waitron/shared";
+import type { Context } from "hono";
 import { signAsThisBox } from "./handover-signing.js";
-import { SWITCH_PROOF_TTL_MS, checkSwitchProof, makeSwitchProof } from "./handover-switch-proof.js";
+import {
+  SWITCH_PROOF_TTL_MS,
+  checkSwitchProof,
+  createSwitchChallenges,
+  keepSwitchSignInAlive,
+  makeSwitchProof,
+} from "./handover-switch-proof.js";
 import { establishNodeIdentity } from "./node-identity.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -113,5 +125,37 @@ describe("checking a switch proof", () => {
     [encode({ purpose: "x" }), "malformed"],
   ])("refuses a missing or unreadable proof (%s)", async (proof, reason) => {
     expect(await verdictOf(proof)).toBe(reason);
+  });
+});
+
+describe("the switch's passkey challenges", () => {
+  it("holds no more than 32 however many are asked for at once", async () => {
+    const challenges = createSwitchChallenges();
+    const made = await Promise.all(
+      Array.from({ length: 40 }, () => challenges.make("spare.example")),
+    );
+    expect(made.filter((options) => challenges.live(options.challenge))).toHaveLength(32);
+  });
+});
+
+describe("keeping a switch sign-in alive while the spare catches up", () => {
+  it("passes on a failure that is not a refusal", async () => {
+    const proof = await makeSwitchProof({ ...deps(), now: Date.now }, personId);
+    const failing = {
+      select: () => {
+        throw new Error("synthetic read failure");
+      },
+    } as unknown as Database;
+    const sw = {
+      node: box.node,
+      ring: RING,
+      nodeId,
+      rpId: "spare.example",
+      origin: "https://spare.example",
+      challenges: createSwitchChallenges(),
+    };
+    await expect(
+      keepSwitchSignInAlive({} as Context, sw, failing, { kind: "proof", proof }),
+    ).rejects.toThrow("synthetic read failure");
   });
 });

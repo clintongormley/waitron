@@ -863,6 +863,7 @@ describe("the switch's passkey and proof", () => {
       expect(accepted.body.error?.code ?? accepted.status).toBe(
         step === "backup" ? "handover.backup_key_missing" : 200,
       );
+      expect(accepted.setCookie?.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
       const refused = await s.post(bodies[step](), true, step, await proofCookie("not-a-proof"));
       expect(refused.body.error?.code).toBe("password.invalid");
     },
@@ -883,6 +884,20 @@ describe("the switch's passkey and proof", () => {
     expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
   });
 
+  it("a step passed on the proof cookie renews it for another 15 minutes from then", async () => {
+    const s = service();
+    const first = await proofCookie();
+    vi.setSystemTime(Date.now() + 10 * 60_000);
+    const renewed = await s.post({}, true, "preview", first);
+    expect(renewed.status).toBe(200);
+    const [pair] = renewed.setCookie!.split("; ");
+    expect(pair!.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
+    expect(pair).not.toBe(first.cookie);
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+    expect((await s.post({}, true, "preview", first)).body.error?.code).toBe("password.invalid");
+    expect((await s.post({}, true, "preview", { cookie: pair! })).status).toBe(200);
+  });
+
   it("refuses a passkey whose person does not hold node.manage", async () => {
     const passkey = await enrolledPasskey();
     await setBuiltInRoleForTest(placed.venue, ADMIN, "staff");
@@ -891,6 +906,19 @@ describe("the switch's passkey and proof", () => {
     const answer = await s.post({ signIn: { passkey: assertion } }, true, "preview");
     expect(answer.body.error?.code).toBe("authorization.not_permitted");
     expect(answer.setCookie).toBeNull();
+  });
+
+  it("a passkey answer refused for lacking node.manage is used up", async () => {
+    const passkey = await enrolledPasskey();
+    await setBuiltInRoleForTest(placed.venue, ADMIN, "staff");
+    const s = service();
+    const signIn = { passkey: passkey.assert(await challenge(s), "https://spare.example") };
+    expect((await s.post({ signIn }, true, "preview")).body.error?.code).toBe(
+      "authorization.not_permitted",
+    );
+    expect((await s.post({ signIn }, true, "preview")).body.error?.code).toBe(
+      "passkey.challenge_expired",
+    );
   });
 
   it.each([

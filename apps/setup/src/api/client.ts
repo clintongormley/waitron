@@ -479,7 +479,7 @@ export class SetupApi {
     return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
   }
 
-  /** WebAuthn sign-in options for one emergency step; the spare keeps the challenge two minutes. */
+  /** WebAuthn sign-in options for an emergency step; the spare keeps an unanswered challenge two minutes. */
   switchPasskeyChallenge(): Promise<{ options: unknown }> {
     return this.#request("/api/node/handover/emergency/passkey-challenge", "POST");
   }

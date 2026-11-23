@@ -68,6 +68,7 @@ import {
   createSwitchChallenges,
   parseSwitchSignIn,
   SWITCH_SIGN_IN_STATUS,
+  keepSwitchSignInAlive,
   precheckSwitchCredentials,
   switchCredentials,
   type SwitchSignIn,
@@ -500,8 +501,12 @@ export function mountHandoverEmergencyApi(
       seen.state !== "following" ||
       seen.appliedTXID === null ||
       seen.appliedTXID !== seen.uploadedTXID
-    )
+    ) {
+      // Unlike the dashboard's automatic reads, the page's catch-up requests renew the sign-in: one
+      // check covers the whole switch (owner, 2026-11-23).
+      await keepSwitchSignInAlive(c, switchSignIn, deps.db, signIn);
       return { state: "catching-up" as const };
+    }
     await refuseRepeatedFailures();
     // A passkey challenge this box no longer holds, or a proof that fails a check needing no copy,
     // is refused here, not after the stop restarts the box.
@@ -512,6 +517,7 @@ export function mountHandoverEmergencyApi(
       const stopped = await follow.stopForSwitch({ catchUpMs: 0 });
       if (stopped.kind === "catching-up") {
         stopping = false;
+        await keepSwitchSignInAlive(c, switchSignIn, deps.db, signIn);
         return { state: "catching-up" as const };
       }
       await stageFollowedAsCopy(

@@ -369,7 +369,7 @@ export class SetupHandoverScreen extends LitElement {
   #passkeyAgain?: string;
   /** An emergency start refused for a stale clock reading was retried; a second refusal is shown. */
   #staleRetried = false;
-  /** Sent until a step answers it; never written to storage or the address. */
+  /** Sent until a step uses it up (see `#step`); never stored or put in the address. */
   #assertion?: unknown;
   @state() private email = "";
   @state() private password = "";
@@ -686,7 +686,8 @@ export class SetupHandoverScreen extends LitElement {
   /**
    * With the passkey a step first leans on the proof cookie, which the page cannot read, and unlocks
    * once when the spare refuses. An answer uses up the passkey answer sent, except a take still
-   * catching up, which signs nobody in.
+   * catching up, which signs nobody in; `#previewCopy` puts back an answer its preview's copy
+   * refused as unknown.
    */
   async #step<T>(
     send: (signIn: HandoverSignIn | undefined) => Promise<T>,
@@ -1091,13 +1092,23 @@ export class SetupHandoverScreen extends LitElement {
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
       let preview: EmergencyHandoverPreview | undefined;
+      const sent: { signIn?: HandoverSignIn } = {};
+      let unknownAnswer: unknown;
       try {
-        preview = await this.#step((signIn) => this.api.previewEmergencyHandover(signIn), unlock);
+        preview = await this.#step((signIn) => {
+          sent.signIn = signIn;
+          return this.api.previewEmergencyHandover(signIn);
+        }, unlock);
       } catch (cause) {
-        if (!HELD_SIGN_IN_REFUSALS.has((cause as { code?: string } | null)?.code ?? ""))
-          throw cause;
+        const code = (cause as { code?: string } | null)?.code ?? "";
+        if (!HELD_SIGN_IN_REFUSALS.has(code)) throw cause;
+        if (code === "passkey.not_registered" && sent.signIn && "passkey" in sent.signIn)
+          unknownAnswer = sent.signIn.passkey;
       }
       if (controller.signal.aborted) return;
+      // The spare holds a challenge again, once, when its copy does not know the answer, so the take
+      // checks that same answer against the newer copy instead of asking again.
+      if (unknownAnswer !== undefined) this.#assertion = unknownAnswer;
       if (preview?.operation != null || preview?.copy.source === "selected-backup") {
         await this.#showPreview(preview);
         return;
@@ -1129,7 +1140,8 @@ export class SetupHandoverScreen extends LitElement {
       const refusal = FOLLOWED_REFUSALS[code];
       if (refusal === undefined) {
         this.actionError = this.#emergencyError(cause);
-        // A retry while catching up resends the passkey answer, whose challenge lasts two minutes.
+        // A take resent while catching up carries the same passkey answer, which the spare forgets
+        // when it restarts or once its challenge lapses.
         if (unlock === "none" && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
           this.#reopenSignIn();

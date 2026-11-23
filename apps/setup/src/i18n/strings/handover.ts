@@ -48,7 +48,7 @@ export const handoverEn = {
   "handover.emergency.passkey_again_try":
     "Your passkey sign-in needs checking again. Choose Try again, or use your password.",
   "handover.emergency.passkey_lapsed":
-    "The spare took a while to catch up and your passkey sign-in expired. Choose Use your passkey to try again.",
+    "Your passkey sign-in on the spare has expired. Choose Use your passkey to try again.",
   "handover.emergency.held_passkey_refused":
     "This spare's own copy did not accept your passkey. To use it, sign in with your password.",
   "handover.emergency.saved": "The switch is saved and cannot be undone.",
@@ -254,7 +254,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.passkey_again_try":
     "Hay que volver a comprobar tu passkey. Elige Volver a intentarlo o usa tu contraseña.",
   "handover.emergency.passkey_lapsed":
-    "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Usar tu passkey para volver a intentarlo.",
+    "Tu identificación con passkey en el servidor de reserva ha caducado. Elige Usar tu passkey para volver a intentarlo.",
   "handover.emergency.held_passkey_refused":
     "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, identifícate con tu contraseña.",
   "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",

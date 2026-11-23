@@ -149,7 +149,7 @@ la del dispositivo que estás usando; después de **El servidor tiene la hora co
 están mal**, corrige la hora de este dispositivo y elige **Volver a comprobar**. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
 passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
-normalmente una vez, y de nuevo pasados 15 minutos; si en su lugar dice que hay que volver a
+normalmente una vez, y de nuevo solo si la página pasa 15 minutos esperando a que elijas un paso; si en su lugar dice que hay que volver a
 comprobar tu passkey, vuelve a elegir el paso (después de **Cambiar a este servidor**, elige
 **Volver a intentarlo** o usa tu contraseña). El motivo y las declaraciones se conservan.
 
