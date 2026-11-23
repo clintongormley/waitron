@@ -463,7 +463,11 @@ describe("POST /api/node/reset-order answers", () => {
     expect(answer?.order).toEqual({ orderId: order.orderId, acceptLoss: false });
     expect(answer).not.toHaveProperty("holdings");
     expect(lines).toEqual([
-      { level: "warn", event: "reset-order.holdings_unread", fields: { errorCode: "unknown" } },
+      {
+        level: "warn",
+        event: "reset-order.holdings_unread",
+        fields: { nodeId: oldBox, errorCode: "unknown" },
+      },
     ]);
   });
 
@@ -878,6 +882,7 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     const listing = await listServers(suite.db, suite.node, main, undefined, {
       holdings: oldBoxHoldings,
       modules: seats,
+      log: (level, event, fields) => lines.push({ level, event, fields }),
     });
     return listing.nodes.find((n) => n.nodeId === oldBox)?.oldBoxHoldsMore;
   }
@@ -902,7 +907,7 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     expect(await field()).toBe(true);
   });
 
-  it("fails the listing on a seat fault that is not an unreadable summary", async () => {
+  it("is true, with a warning, on a seat fault that is not an unreadable summary", async () => {
     await completedReturn("controlled");
     await ask(await queryBody({ holdings: { fiscal: [MISSING_CHAIN] } }));
     const faulty: WaitronModule[] = [
@@ -916,7 +921,14 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
         },
       },
     ];
-    await expect(field(faulty)).rejects.toThrow("disk I/O error");
+    expect(await field(faulty)).toBe(true);
+    expect(lines).toEqual([
+      {
+        level: "warn",
+        event: "membership.old_box_comparison_failed",
+        fields: { nodeId: oldBox, errorCode: "unknown" },
+      },
+    ]);
   });
 
   it("counts nothing for a module the listing finds no lacking seat for", async () => {
@@ -981,6 +993,7 @@ describe("the Servers listing's oldBoxHoldsMore for the old box", () => {
     const listing = await listServers(suite.db, suite.node, main, undefined, {
       holdings: oldBoxHoldings,
       modules: watched,
+      log: (level, event, fields) => lines.push({ level, event, fields }),
     });
     expect(listing.nodes.find((n) => n.nodeId === oldBox)).toMatchObject({
       canReset: false,

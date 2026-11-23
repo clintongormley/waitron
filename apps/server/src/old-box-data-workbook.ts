@@ -1,5 +1,11 @@
 import { liveBackupQuery, type Database } from "@waitron/db";
-import { MalformedHoldingsError, type UnreturnedChain, type WaitronModule } from "@waitron/module";
+import type { CanonicalValue } from "@waitron/membership";
+import {
+  MalformedHoldingsError,
+  type ModuleHandoverContribution,
+  type UnreturnedChain,
+  type WaitronModule,
+} from "@waitron/module";
 import { invoiceLineCells, paymentOnAccount, readAccountantInvoices } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
@@ -12,44 +18,62 @@ export interface OldBoxWorkbookInput {
   modules: readonly WaitronModule[];
   /**
    * The main box's chain summary from its latest answer, and when it arrived; null when none was
-   * heard. A module it does not name, or whose seat cannot read its part, has every chain listed
-   * whole.
+   * heard. When it does not name some module that fills the `unreturned` seat, or that module's
+   * comparison throws `MalformedHoldingsError`, every module is listed whole.
    */
   mainHoldings: HeardHoldings | null;
   madeAt: Date;
   language: "en" | "es";
 }
 
+type Seat = { name: string; unreturned: NonNullable<ModuleHandoverContribution["unreturned"]> };
+
+/**
+ * Each seat's records the summary does not cover; null, so that every module is listed whole and
+ * the first line can say so truly, when the summary does not name a module or a seat cannot read
+ * its part.
+ */
+async function comparedChains(
+  db: Database,
+  seats: readonly Seat[],
+  summary: Readonly<Record<string, CanonicalValue>> | undefined,
+): Promise<UnreturnedChain[] | null> {
+  if (summary === undefined || seats.some(({ name }) => summary[name] === undefined)) return null;
+  const chains: UnreturnedChain[] = [];
+  for (const { name, unreturned } of seats)
+    try {
+      for (const chain of await unreturned(liveBackupQuery(db), summary[name])) chains.push(chain);
+    } catch (error) {
+      if (error instanceof MalformedHoldingsError) return null;
+      throw error;
+    }
+  return chains;
+}
+
+async function wholeChains(db: Database, seats: readonly Seat[]): Promise<UnreturnedChain[]> {
+  const chains: UnreturnedChain[] = [];
+  for (const { unreturned } of seats)
+    for (const chain of await unreturned(liveBackupQuery(db), undefined)) chains.push(chain);
+  return chains;
+}
+
 /**
  * The workbook an old main box makes: an Invoices tab listing, for each module that fills the
- * `unreturned` seat, the records the main box's summary does not show it holds (all of them for a
- * module the summary does not name), each with its invoice's accountant columns, one line per VAT
- * rate.
+ * `unreturned` seat, the records the main box's summary does not show it holds (all of them, for
+ * every module, when one module's part is not compared), each with its invoice's accountant
+ * columns, one line per VAT rate.
  */
 export async function buildOldBoxWorkbook(
   input: OldBoxWorkbookInput,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
-  const chains: UnreturnedChain[] = [];
-  let compared = input.mainHoldings !== null;
-  for (const module of input.modules) {
-    const seat = module.handover?.unreturned;
-    if (seat === undefined) continue;
-    const held = input.mainHoldings?.holdings[module.name];
-    let listed: UnreturnedChain[] | undefined;
-    if (held !== undefined)
-      try {
-        listed = await seat(liveBackupQuery(input.db), held);
-      } catch (error) {
-        if (!(error instanceof MalformedHoldingsError)) throw error;
-      }
-    if (listed === undefined) {
-      compared = false;
-      listed = await seat(liveBackupQuery(input.db), undefined);
-    }
-    chains.push(...listed);
-  }
+  const seats = input.modules.flatMap((module) => {
+    const unreturned = module.handover?.unreturned;
+    return unreturned === undefined ? [] : [{ name: module.name, unreturned }];
+  });
+  const compared = await comparedChains(input.db, seats, input.mainHoldings?.holdings);
+  const chains = compared ?? (await wholeChains(input.db, seats));
   const saleIds = [...new Set(chains.flatMap((chain) => chain.records.map((r) => r.saleId)))];
   const invoices = new Map(
     (await readAccountantInvoices(input.db, { saleIds })).map((invoice) => [invoice.id, invoice]),
@@ -96,12 +120,19 @@ export async function buildOldBoxWorkbook(
     }
   }
   const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  const time = minute((compared ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt);
+  const time = minute(
+    (compared !== null ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt,
+  );
   return renderWorkbook([
     {
       name: words.invoiceSheet,
       rows: [
-        [(compared ? words.invoiceIntro : words.uncomparedIntro).replace("{time}", () => time)],
+        [
+          (compared !== null ? words.invoiceIntro : words.uncomparedIntro).replace(
+            "{time}",
+            () => time,
+          ),
+        ],
         headings,
         ...rows,
       ],

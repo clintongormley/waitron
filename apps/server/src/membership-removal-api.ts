@@ -86,7 +86,7 @@ export function mountMembershipRemovalApi(
         deps.node,
         deps.nodeId,
         deps.readBackup,
-        deps.oldBoxes,
+        deps.oldBoxes === undefined ? undefined : { ...deps.oldBoxes, log },
       );
       return c.json({
         term: listing.term,

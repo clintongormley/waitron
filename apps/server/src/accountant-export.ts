@@ -243,7 +243,8 @@ async function readPaymentsOnAccount(
   const rows: PartPaymentRow[] = [];
   const half = Math.floor(SQL_VARIABLE_LIMIT / 2);
   for (let start = 0; start < saleIds.length; start += half)
-    rows.push(...(await partPaymentsAmong(tx, saleIds.slice(start, start + half))));
+    for (const row of await partPaymentsAmong(tx, saleIds.slice(start, start + half)))
+      rows.push(row);
   return linkPaymentsOnAccount(
     rows,
     await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]),
@@ -462,22 +463,20 @@ export async function readAccountantInvoices(
         and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
       );
   type Row = Awaited<ReturnType<ReturnType<typeof query>["execute"]>>[number];
-  const rows: Row[] = [];
+  let rows: Row[];
   if ("range" in selection)
-    rows.push(
-      ...(await query()
-        .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
-        .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id))),
-    );
+    rows = await query()
+      .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
+      .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
   else {
+    rows = [];
     // Half the limit leaves room for the values the query binds besides the ids.
     const chunk = Math.floor(SQL_VARIABLE_LIMIT / 2);
     for (let start = 0; start < selection.saleIds.length; start += chunk)
-      rows.push(
-        ...(await query().where(
-          inArray(sales.id, [...selection.saleIds.slice(start, start + chunk)]),
-        )),
-      );
+      for (const row of await query().where(
+        inArray(sales.id, [...selection.saleIds.slice(start, start + chunk)]),
+      ))
+        rows.push(row);
   }
   const invoices: AccountantInvoice[] = rows.map(
     ({

@@ -334,7 +334,7 @@ describe("the old box's Invoices tab", () => {
     expect(row(compared, 3)).toEqual([]);
   });
 
-  it("asks a module the main box's summary does not name for every chain, and says no comparison was made", async () => {
+  it("asks every module for every chain when the main box's summary does not name one, and says no comparison was made", async () => {
     const named = vi.fn(async (): Promise<UnreturnedChain[]> => []);
     const unnamed = vi.fn(async (): Promise<UnreturnedChain[]> => []);
     const modules: WaitronModule[] = [
@@ -344,8 +344,8 @@ describe("the old box's Invoices tab", () => {
 
     const xml = sheet(await build(suite.db, modules, "en", { named: ["held"] }));
 
-    expect(named).toHaveBeenCalledWith(expect.anything(), ["held"]);
-    expect(unnamed).toHaveBeenCalledWith(expect.anything(), undefined);
+    expect(named.mock.calls).toEqual([[expect.anything(), undefined]]);
+    expect(unnamed.mock.calls).toEqual([[expect.anything(), undefined]]);
     expect(row(xml, 1)[0]).toMatch(/^Every invoice record this box holds/);
     expect(
       row(sheet(await build(suite.db, modules, "en", { named: [], unnamed: [] })), 1)[0],
@@ -408,6 +408,28 @@ describe("the old box's Invoices tab with the main box's summary from its last a
     expect(OLD_BOX_DATA_WORDS.en.invoiceIntro).toBe(
       "Invoice records the new main box did not have at {time}, when it last told this box what it holds. This box may still send some of these to it before it is wiped.",
     );
+  });
+
+  it("lists every module whole, the records the summary covers too, when another module's part is not named", async () => {
+    const { first, second, held } = await twoSales();
+    const other = vi.fn(async (): Promise<UnreturnedChain[]> => []);
+    const xml = sheet(
+      await build(
+        suite.db,
+        [
+          fiscal,
+          { ...fiscal, name: "other", handover: { ...VERIFACTU_HANDOVER, unreturned: other } },
+        ],
+        "en",
+        { fiscal: held },
+      ),
+    );
+    expect(row(xml, 1)).toEqual([
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+    ]);
+    expect([row(xml, 3)[0], row(xml, 4)[0]].sort()).toEqual([first, second].sort());
+    expect(row(xml, 5)).toEqual([]);
+    expect(other).toHaveBeenCalledWith(expect.anything(), undefined);
   });
 
   it("says no comparison was made when no summary was heard, even with no module to ask", async () => {

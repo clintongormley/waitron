@@ -589,6 +589,26 @@ describe("accountant period selection", () => {
     expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
   });
 
+  // A range read spread into one call overflowed the stack at this size (RangeError).
+  it("lists a period of 180,000 invoices", { timeout: 60_000 }, async () => {
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-10T12:00:00.000Z",
+      total: "11.00",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    const columns = (await suite.db.execute<{ name: string }>(sql`pragma table_info(sales)`)).rows
+      .map((column) => `"${column.name}"`)
+      .filter((name) => name !== `"id"` && name !== `"invoice_number"`)
+      .join(", ");
+    await suite.db.execute(
+      sql.raw(`with recursive n(i) as (select 2 union all select i + 1 from n where i < 180000)
+        insert into sales (id, invoice_number, ${columns})
+        select 'copy-' || i, i, ${columns} from n, (select * from sales limit 1)`),
+    );
+    expect((await list()).invoices).toHaveLength(180_000);
+  });
+
   it("reads unpaid invoices across nodes by their inclusive recorded civil dates and keeps customer and VAT facts", async () => {
     const other = await seedNodeAndSeries(suite.db, "B");
     const [full] = await suite.db

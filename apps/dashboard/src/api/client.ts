@@ -2044,9 +2044,9 @@ export interface ServerRow {
    */
   recoveredRecordsBackup: "backed-up" | "awaiting-backup" | "no-backups" | null;
   /**
-   * After a planned handover whose return completed, with no wipe asked: whether the old box's last
-   * summary names invoice records this box lacks. Null otherwise, or before the old box has asked
-   * since this box started.
+   * After a planned handover, while Wipe and remove is offered and no wipe is asked: whether the old
+   * box's last summary names invoice records this box lacks (true when the comparison fails). Null
+   * otherwise, or before the old box has asked since this box started.
    */
   oldBoxHoldsMore: boolean | null;
 }

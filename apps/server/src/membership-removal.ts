@@ -182,9 +182,9 @@ export interface ServerListing {
     /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
     readonly recoveredRecordsBackup: RecoveredRecordsBackup | null;
     /**
-     * After a planned handover from the box whose return completed, with no order standing,
-     * whether its latest summary names a chain this box lacks; null otherwise, or before it has
-     * asked since this box started.
+     * After a planned handover, while Wipe and remove is offered and no order stands, whether its
+     * latest summary names a chain this box lacks, a comparison that fails counting as true; null
+     * otherwise, or before it has asked since this box started.
      */
     readonly oldBoxHoldsMore: boolean | null;
   }[];
@@ -217,7 +217,7 @@ export async function listServers(
   node: NodeDatabase,
   selfNodeId: string,
   readBackup?: () => Promise<BackupStatus>,
-  oldBoxes?: OldBoxComparison,
+  oldBoxes?: OldBoxComparison & { readonly log: Logger },
 ): Promise<ServerListing> {
   const held = await readNodeMembership(db);
   if (held === null) return { term: null, nodes: [] };
@@ -257,7 +257,15 @@ export async function listServers(
         !orders.has(nodeId) &&
         canResetOf(nodeId)
       )
-        holdsMoreBy.set(nodeId, await holdsMore(db, oldBoxes.modules, summary));
+        try {
+          holdsMoreBy.set(nodeId, await holdsMore(db, oldBoxes.modules, summary));
+        } catch (error) {
+          holdsMoreBy.set(nodeId, true);
+          oldBoxes.log("warn", "membership.old_box_comparison_failed", {
+            nodeId,
+            errorCode: codeOf(error),
+          });
+        }
     }
   return {
     term: held.body.term,

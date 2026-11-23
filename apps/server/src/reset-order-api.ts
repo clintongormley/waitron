@@ -203,11 +203,12 @@ async function acknowledge(
 async function ownHoldings(
   deps: ResetOrderApiDeps,
   log: Logger,
+  source: string,
 ): Promise<{ holdings?: Record<string, CanonicalValue> }> {
   try {
     return { holdings: await readHoldings(deps.db, deps.modules) };
   } catch (error) {
-    log("warn", "reset-order.holdings_unread", { errorCode: codeOf(error) });
+    log("warn", "reset-order.holdings_unread", { nodeId: source, errorCode: codeOf(error) });
     return {};
   }
 }
@@ -238,7 +239,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
           sourceNodeId: source,
           order: order === null ? null : { orderId: order.orderId, acceptLoss: order.acceptLoss },
           lacking,
-          ...(await ownHoldings(deps, log)),
+          ...(await ownHoldings(deps, log, source)),
         }),
         200,
       );
