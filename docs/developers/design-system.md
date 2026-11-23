@@ -1642,6 +1642,495 @@ heading's text" cases there. The list keeps its column choices under `waitron.me
 choice saved while the list had a Changes column names a column it no longer has, and the table
 ignores it.
 
+**A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
+versions" heading and table appear only while a version is queued. The table lists waiting
+schedules soonest first, with their time on the venue's clock. Publish later and Publish now share
+a row above the list, in that order; each appears independently when its own conditions allow it.
+Cancelled and activated editions stay in the API response but have no row or Status column here.
+The time adds its UTC offset only when the venue's clock shows that
+minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
+reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
+and a time; it is offered only when the preview has loaded with no clashes and the draft
+differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+with two separate actions: "Change time", which opens the same form starting at that version's date
+and time, and "Cancel this version", which asks first. A request that would put a newer version live
+before an older one is refused with a sentence naming each version in the way and its time, under
+the time field (for a new schedule or a changed time) or in the publish result (for Publish): those
+that must go live first, then those that must go live after this one. The refusal never offers to
+cancel anything; the manager cancels or moves the version in the way through its own row, then tries
+again; a refused Publish clears only once each version in the way is cancelled or has gone live, so
+its sentence says to cancel the version or publish once it is live, never to move it (A376). The
+form's dismiss button reads "Close", not "Cancel", because a refusal shown above it can tell the
+manager to cancel a version.
+
+**Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
+returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside
+`wt-data-table`'s shadow root — not your screen's. A stylesheet only reaches nodes inside the shadow
+root that adopted it, so a `.swatch` rule in your screen's `static styles` silently matches nothing:
+the element is in the page, correct in every attribute, and completely unstyled. Put `part="swatch"`
+on the markup and write `wt-data-table::part(swatch)` in your screen instead — that crosses exactly
+the one boundary involved. A nested primitive (`wt-button`, `wt-lozenge`) is unaffected, because it
+carries its own styles wherever it is mounted. Reaching _inside_ such a primitive is one boundary
+further than `::part()` can select on its own: set the token it reads on the host instead — the
+categories screen's muted ancestor row points `--wt-color-text` at `--wt-color-text-muted` through
+`wt-data-table::part(name-muted)`, and the button's own ghost-variant rule picks it up by
+inheritance. For a property whose token is a shared scale value it would be wrong to redefine
+(its padding or weight), or one it reads no token for (an underline), put
+`exportparts="button: <name>"` on the `wt-button` and style `wt-data-table::part(<name>)`, as
+`apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. The tree swatches
+follow this: a category's or section's swatch is `part="swatch-button"` (or `part="swatch-box"`
+where it opens nothing) around `part="color-swatch"`, styled by `swatchPartStyles`
+(`apps/dashboard/src/widgets/swatch-styles.ts`); a product's is `part="product-media media-link"`,
+plus `media-link-busy` while the tree is busy (or `product-media swatch-box` where it opens
+nothing), styled by `productMediaStyles` (`apps/dashboard/src/widgets/product-media.ts`).
+Cost: the categories
+screen's colour swatches, thumbnail boxes and ancestor-row muting
+never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
+cannot see it, so assert a computed width or colour when you add a styled cell.
+
+**What the guard does not see.** `scripts/data-table-cell-classes.test.ts` reports a class that one
+file both puts on cell markup and styles in its own `css`, and is weaker than its name. It reads
+each file alone, and only a file whose text contains `<wt-data-table`. Cell markup is the value of a
+`cell` property, each argument of a call to a function named `cell` (the till's find-bill screen
+builds its columns that way) and a `.rowControls=${…}` binding, plus the bodies of the functions
+those call: `this.foo()` is the method of the class the call sits in, and `foo()` the function the
+nearest enclosing scope declares. It misses a method inherited from a superclass, a function passed
+as a value (`.map(this.#row)`) rather than called, a getter read as `this.name`, a static method
+called through the class name, and a helper imported from another file, and it skips the
+placeholder of an `@event=${…}` binding, though it follows calls in any other callback the cell
+builds. It reads only the static text of `class="…"`
+and the keys of `classMap({…})`, so a class written as `class=${…}`, or joined to a placeholder, is
+invisible. It reads only the class selectors of the file's own `css` templates, never a stylesheet
+imported from another module or a selector built by an interpolation, and leaves out declaration
+values and the arguments of `:host()`, `:host-context()`, `::slotted()` and `:not()`. It can wrongly
+refuse a class that another element in the same file styles, markup a function the cell calls but
+stores elsewhere, markup reached through a callback the cell builds but does not run (a listener held
+in a variable, a menu item's callback), the arguments of an unrelated function named `cell`, and an outer function whose name a
+destructured or loop variable reuses at the call.
+
+**A last column with `pinned: "end"` stays at the trailing edge of the table's box while the other
+columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
+fitting it. It is set per column, and every row-menu column keyed `actions` sets it (A155; guard:
+`scripts/pinned-actions-column.test.ts`, weaker than its name: it knows a row-menu column only by
+a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`, and never checks that the column is
+the table's last; its header lists the rest). A pinned `actions` column shows the same three-dot
+icon as the row menus. Screen readers get the supplied column label. A column of direct buttons
+uses a different key, so its heading keeps its text. The row-menu column takes only the width its
+icon or widest cell needs, including when another column follows it. Any pinned last column gets
+the same width rule regardless of its key; other columns take spare width. The pinned header and cells paint the row's own
+background (`--wt-color-surface`, `--wt-color-surface-raised` while a row that opens nothing is
+hovered, and `--wt-color-surface-lifted` while a clickable row is hovered or anything in it has
+focus; a row that joins its parent paints `--wt-color-bg` while it is not hovered and, if it opens
+something, nothing in it has focus), sit above a clickable row's lifted controls, and draw a
+`--wt-color-border` line on their leading side from the cell's own `::before`: the table collapses
+its borders, and in the 2026-09-30 screenshots a border set on the pinned cell itself showed only
+once the table was scrolled to its end, never while the cell was held at the edge. That line starts
+2px above the cell, so it stays unbroken where a row's edge falls between screen pixels (at
+fractional screen scaling); guard: `packages/ui/src/components/wt-data-table.scaled.test.ts`, at 150%
+only. A table with no
+pinned column puts no `data-pinned` attribute on any cell. Guards: the pinned cases in
+`packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, a phone-width
+case per dashboard table in its own suite, most built on `expectRowMenusOnScreen`
+(`packages/ui/src/test-helpers.ts`) — the alerts and in-use products tables, whose column holds a
+button, check it by hand — and `scripts/pinned-actions-column.test.ts`. In a table with
+`rowClick`, a click on a pinned cell's empty space opens the row while its `rowActivation` is unset
+or answers `"click"` (in a tree, a `"toggle"` branch opens or closes instead), and a click on
+anything inside the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
+
+Cost: most tables put the menu past a phone's right edge.
+
+**What the guard does not see.** `scripts/pinned-actions-column.test.ts` misses a key not written as the
+literal `key: "actions"` (a variable, a shorthand, a computed name, an `as const`). It does not know
+which objects are table columns, so every object with that literal key is held to the rule and a
+data column must take another key.
+
+**Long dashboard tables keep their controls and column headings while their rows scroll.**
+The dashboard's main column supplies `--wt-table-max`, its block size less the body's two block
+gutters. A table takes its natural height up to that cap. Short and empty tables leave the next
+action directly below them; there is no row-height minimum. This applies to Products, Structure
+and other dashboard tables without a screen-specific flag or a chain of flex containers.
+
+In landscape at a viewport height of at most `25rem` (normally 400px), the shell removes the cap.
+Rows, toolbar and headings then scroll together in the content column, giving short screens room
+to show rows. After selecting lower rows, scroll back to use the selection actions. The cutoff is
+a chosen boundary; taller landscape screens have no whole-row minimum.
+
+With the cap in place, the page heading and tabs can scroll away. On a phone, drag the page heading
+or table toolbar to move the content column, or drag a row to scroll the rows inside the table. The toolbar stays above
+the rows' box. Column headings stay at its top and line up with their columns while scrolling
+sideways; the pinned heading stays over the other headings and the pinned cells. Headings paint
+`--wt-color-surface` and draw their lower line in `--wt-color-border`; filtered headings keep their
+coloured line. Row menus, Customise and the phone Filters panel use the native top layer where available; see Browser support for the Popover fallback.
+
+`revealRow` and keyboard focus bring a row clear of the held headings, using scroll padding that
+follows their measured height. A row taller than the view is handled as described below.
+Outside the dashboard, a table grows naturally unless its caller supplies a cap or bounds its
+height. `wt-dialog` resets the inherited cap to `none`, including for `wt-modal` and slotted tables,
+so the dialog body owns its vertical scrolling.
+
+Guards: the capped-table cases in `packages/ui/src/components/wt-data-table.test.ts`, heading
+resize/reconnect cases in `wt-data-table.lifecycle.test.ts`, both-theme cases in
+`wt-data-table.a11y.test.ts`, Products focus/reveal cases in its widget suite, and the shell's
+Products and native touch cases in `apps/dashboard/src/dashboard-app*.test.ts`. Geometry also
+uses screenshots; these suites do not inventory every dashboard table.
+
+Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
+top-level row — to switch the same table into tree mode, as the Products screen does for its
+categories, products and variants. A row whose declared parent key isn't present among the current rows floats to the top
+level rather than disappearing. A row that has children gets its own expand/collapse toggle
+(`collapseLabel`/`expandLabel` give it a localized accessible name, or `rowToggleLabel` one naming its own row),
+unless `rowCollapsible` refuses it, or the table holds it open with `collapseDescendants` off (below), when it draws none; where
+`rowActivation` returns `"toggle"`, the arrow is only a picture and a button over the whole row carries
+that name instead. Collapsed state lives inside the component, not the caller. A tree table is a tree grid: it renders `role="treegrid"` with `aria-level`/`aria-expanded` on
+each row and `aria-expanded` on its toggle. The four arrow keys work row by row (Home, End and moving
+between cells do not). Down and Up
+move to the next and previous row shown, passing over the rows of a closed branch; Right opens a
+closed branch and, on an open one, moves to its first row; Left closes an open branch and, elsewhere,
+moves to its parent row. Focus lands on the row's toggle button or row button, or
+on the row itself when it has neither. The keys are left alone with a modifier held, or when they
+come from a field, list, menu or other control inside a cell that uses them itself (including one
+that cancels the key or names an arrow in `aria-keyshortcuts`, as Menu structure's grips do), or from
+anywhere inside a table nested in a cell, not only its rows. Guard:
+`packages/ui/src/components/wt-data-table.tree-keys.test.ts`, weaker than its name: of the controls
+that keep their keys it tries a text field, a control that cancels the key, one naming an arrow in
+`aria-keyshortcuts`, and a nested table's row button and empty-table button, never a list, a menu or
+Menu structure's real grips. A sortable column sorts each level of siblings independently rather than flattening the
+whole tree into one sort, except the children of a row `rowKeepsChildOrder` returns true for, which
+keep the order `rows` gives them. Leave `rowParent` unset for the ordinary flat table — the two modes share
+every other property. Set `initiallyCollapsed` when parent rows are summaries and children are
+on-demand detail; a branch is seeded closed once, so a later row refresh does not close it again
+after the person expands it. `rowInitiallyExpanded` gives selected branches an open first-visit
+state, applied only when a new branch is seeded. Remembered open and closed choices take precedence.
+When search keeps an ancestor solely to reveal a matching descendant,
+the table opens that branch without showing an ineffective collapse control; clearing search restores
+the branch's own collapsed state. With `searchOpensPath`, every row above a match is held open
+while a search is typed, even one that matches itself, and what passes the filters under a match
+stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
+match's place is held open. A tree whose box is 440px wide or less indents each level
+`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
+one cell padding (`--wt-table-cell-padding-inline`, normally `--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
+`--wt-tap-min` wide by reaching back over that padding, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
+whole; its focus ring is then drawn inside the button, because a top-level
+one can sit against the scrolling box's edge. The table publishes
+the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
+or its own slots (W85e, owner 2026-10-05). A CSS condition cannot
+read a token, so the table watches a tree's box in code and, a frame after each change to the box's
+width, sets a `narrow` attribute on itself if the box is that narrow and removes it if not; a flat
+table is not watched and carries no `narrow`. A screen may style its cells on
+`wt-data-table[narrow]`, as the Products tree does for its category name box.
+
+A tree using `flatTreeSearch` can set `filterCandidates(rows, hasFilters)` to narrow the rows offered to
+search and to expanded results. When a column filter is active, its cells receive
+`context.filterMatches`, the rows that passed all column filters before the tree narrows or ranks
+them. The Products tree uses that set to keep and count the categories with matching products.
+
+Set `collapseDescendants` when reopening a branch should show its children closed. Closing then
+clears descendant openings from the complete parent graph, including branches hidden by filters or
+search. It also clears ordinary openings when you close a flat search result. A matching descendant
+keeps its separate flat result. Opening a branch opens only that branch; opening a flat search result
+also opens its ordinary ancestors for when you clear the search.
+
+With this option, filter-held ancestors have effective toggles. A deliberate closure takes precedence
+over the filter's automatic opening. `isExpanded`, the row's `aria-expanded` and traversal use that
+same effective state. With `rememberExpanded` and a `viewKey`, deliberate closures are saved at
+`${viewKey}:collapsed` alongside `${viewKey}:expanded`; a closure wins if both lists contain a key.
+Explicit opening or `revealRow` clears closures along the requested path. Missing, malformed or
+blocked storage leaves the first-visit defaults. Trees without the option preserve descendant
+openings and their existing search/filter behavior.
+
+Products and Menus Structure opt into `flatTreeSearch`. Search lists only each row's own matches,
+closest first, with the table's sort breaking ties. A matching branch starts collapsed; opening it
+reveals filter-passing contents beneath it; matching descendants keep their flat result too.
+New search text starts with collapsed results. Clearing it keeps branches opened during search
+and opens their parents in the remembered tree. Closing a search branch affects that query only. The cell context's
+`searchRoot` is true only for a result drawn at the top level. Those cells show the ancestor path
+after the name, in muted small text, wrapping before Actions when space runs out. Expanded contents
+keep their ordinary tree cells. Menu Structure shows every member path; repeated views of one
+list/member share a tick through `rowSelectionKey`, while distinct memberships stay separate.
+Products has one category placement per product. Filters alone keep the ordinary tree rules.
+
+Repeated search copies share a row key. Pointer geometry and insertion marks use the rendered copy
+under the pointer; keyboard reordering returns focus to the grip copy that received the key.
+A menu member's tick follows its list/member identity when a live update removes one owned path
+but leaves another. The open Move or Remove snapshot follows the surviving path too.
+
+A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpanded(key, expanded)`
+(no event), reports the order it would draw a set of siblings in with `sortedSiblings(rows)`, and
+`revealRow(key)` opens every closed branch above a row and scrolls the row into view. With held headings, Chromium rounds the scroll position to a whole pixel (measured at a device pixel
+ratio of 1), which can leave a row brought in at the top edge part of a pixel under the headings;
+`revealRow` then scrolls back to the whole pixel below. It corrects an overlap of less than one
+pixel only, so a row taller than the view that already spans it keeps its scroll position. The
+tests ran rows 30.3 px tall at a device pixel ratio of 1, each revealed from the box's end, and one
+900 px row revealed while it spanned the view. A row brought in at the bottom edge gets no
+correction.
+
+Any table, flat or a tree, answers `filterValues(key)` and takes a filter choice with
+`chooseFilter(key, values)` (below, "Remembered, searchable, filterable tables"). `shownKeys()`
+lists the keys of the rows the search and filters show now, in a tree with the rows it keeps around
+a match, and including rows a closed branch hides.
+
+**A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
+`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
+menu itself, like Products' All products row (A453, 2026-10-10; it replaced A337's toolbar plus
+button): the menu's name in bold, then its counts, such as "3 sections, 12 products", each section
+and product counted once, those inside included menus too. The menu's colour chip is drawn before
+the name only when the menu has a colour; it is a picture, not a button, since the colour is edited
+in the menu's settings. That row's ⋮ holds the menu's own adds — Add section, Include a menu and Add
+products. Its chevron opens its own level; closing it closes every descendant. It starts open,
+has no checkbox or grip in Select mode, nothing can
+be dropped on it, and no search or filter matches it, so while one is set the row is drawn only
+above a match. Under it the menu's members are the top-level rows,
+in menu order, with no sort, and any of them can close. While the menu is empty the table draws no
+rows and no toolbar, so its empty box says
+"Nothing is on this menu yet." with the same three adds as buttons under it, and Select turns off. A row's key
+is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
+of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
+section from whichever place it was chosen, and makes that row the current one, whose name is drawn
+bold and underlined with `aria-current="true"`. A product's ⋮ holds Edit product, a link to the
+product's page, then "Remove from <list>", naming the
+list that holds it. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
+"Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
+tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
+"Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
+and photo, each following the included menu until it is changed. **Use included menu colour** and
+**Use included menu photo** stage a return to the menu’s value when the folder fixes that field.
+The included menu’s row menu (⋮) also holds "Remove from this menu".
+Rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name.
+In Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
+In Select mode, put every grip in one leading column before the tree arrow and indentation.
+Reserve that column on read-only rows. Keep the arrow and media slot inside
+the indented name column, so names at one level and the Name heading stay aligned. The media slot
+holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
+colour, then to the venue's default. On an owned row the product slot is a link to the product's Edit dialog on the Menu
+screen, which opens with its photo field focused; on an included menu's row, or for a product the
+library no longer holds, it opens nothing. Section squares still open their colour picker directly. Hide
+media in both trees when the tree's box is at most 440px wide. In the Products list the product
+editor remains available through the row's Actions menu, and a Menus Structure product row's
+Actions menu offers Edit product at every width.
+
+The toolbar has a search box ("Search this menu" / "Buscar en esta carta") that matches the names the
+rows show and lists their own matches with inline paths, and the Available column has a Yes / No filter; a
+section or an included menu answers neither, so it stays only on the way to a match. There is no
+filter on Type: its three values are already told apart by the folder frame and the arrow.
+Dragging remains available during search and carries only visible ticks; hidden ticks remain
+selected. Move, Remove and Delete use all ticks. A changed query cancels a held drag. While search or
+the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
+The search clears when another menu opens or the menu empties.
+
+The toolbar has one Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
+mode every row the menu owns has a box and a drag handle named "<name>, in <list>" (rows inside an included menu have
+none), and a bar under the toolbar shows how many rows are ticked with four buttons: **Move to
+section…**, **Remove from menu**, **Delete** and Done, which leaves the mode and puts focus back on Select.
+Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
+shown only because something inside it matches has no box, so Select all never ticks a section whose
+hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
+the Available filter, which no section answers. Search and filter changes keep ticks, including hidden rows, so you can gather items across searches.
+Select all changes only rendered eligible rows and keeps hidden ticks. The selection clears when the
+mode turns off, another menu opens, or a bulk change succeeds. A re-read drops removed rows or rows
+no longer owned by this menu from the selection and open operation; a rename or availability change
+keeps them. The operation closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
+travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
+the confirms and the dialog count what is sent. Remove from menu and Delete are judged on the rows sent, so a row inside a selected section does
+not count. Delete is enabled when every sent row is a section the menu owns, and Remove from menu
+when none is, because a section the menu owns is deleted, never removed; each is quiet while its
+rule rules it out. A selection that mixes a section the menu owns with anything else disables both,
+with the line "Delete sections and remove other items separately." under the bar. Remove from menu
+asks first ("Remove 2 items?", "¿Quitar 2 elementos?") and lists each item with the list it leaves.
+Delete asks first too ("Delete 2 sections?", "¿Eliminar 2 secciones?") and lists each section once,
+leaving out one that another listed section holds; a section with sections the menu owns below it
+reads "Wines and the 2 sections below it", and the list ends "Its products stay." for one section
+or "Their products stay." for more.
+Move to section… opens a dialog with one required destination: "Top level" first, then every section
+the menu owns, by its path joined with " › ", leaving out each selected section and every section
+below it; never a list inside an included menu. Its Move action is quiet until a destination is
+chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
+first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Each sends one request: `POST
+/management-api/section-members/remove`, `POST /management-api/sections/delete` (`deleteSections`,
+`packages/menu/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
+which moves the member rows themselves, so a moved product keeps the menu's price for it and an
+included menu keeps its folder setting (`moveMembersInto`, `packages/menu/src/sections.ts`).
+A Move to section…, Remove from menu or Delete answered after another menu has been opened moves no
+focus there. A refusal that arrives once its confirm has closed — opening another menu closes it, and
+so does a live update that takes away every row it named — shows as "Your change to <menu> was not
+saved." and the reason, naming the menu it was sent from (`#sendSelected`,
+`apps/dashboard/src/screens/menus-screen.ts`).
+Copying products into another section is not built.
+
+The grips show only in Select mode, alongside the checkboxes. Done leaves both selection and
+reordering and returns focus to Select; pressing Select again also leaves the mode. Opening
+another menu, returning to the list or emptying the menu clears the mode. A live re-read keeps it
+(`structureSelecting`, `apps/dashboard/src/screens/menus-screen.ts`). Products and Structure have
+no Expand all button. Closing any branch closes its descendants, including those hidden by a
+search or filter; opening it shows only its own level. Preview keeps Expand all. Closing a current
+Structure branch returns editing to its parent, or to the menu when its root closes. Search
+closures reconcile the current path when you clear the search.
+
+A grip moves a member anywhere in its own menu, not only among its siblings (owner decision
+2026-10-07, A338: "if i drag a product in the menu into a different section, it doesn't move"). A
+pointer drag starts from the grip only, with Products' ghost and gap (the shared
+`apps/dashboard/src/widgets/tree-drag.ts`). Over the middle half of the row of a closed or empty
+section the menu owns, a release puts the member at the end of that section; the row's first cell
+is marked `part="drop-target"`, every cell of the row is tinted `--wt-color-surface-lifted` inside a
+`--wt-color-primary` ring (`markInto`; the Products tree marks a category the same way), and no gap is drawn. Over any other row, or the top or bottom
+quarter of that one, the gap shows beside the row. Beside a sibling the release reorders the
+list (`wt-member-move`), with the gap before a sibling above the member and after the last drawn
+row of one below it. Beside a row of another list it moves the member into that list at that place
+(`wt-member-move-into`), with the gap before the row while the pointer is in its upper half and
+after its last drawn row while in its lower half. Nothing is offered — no gap, no mark, and a
+release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
+dragged section wherever that list is drawn, over a row inside an included menu, over another list
+that already holds the same product or section, over the dragged member's own list where it is drawn in
+another place, and, for a product no longer in the menu, anywhere but beside its siblings. On
+a grip, ArrowUp and ArrowDown move the member one place within its own list. ArrowRight moves it to
+the end of the sibling drawn directly above it, when that sibling is a section the menu owns that
+does not already hold the same product or section and is not the moved section or one inside it.
+ArrowLeft moves a member out of its section to the place directly after that section, unless that
+list already holds the same product or section; at the top level it does nothing. Neither of
+these two keys moves a product no longer in the menu. Each key
+announces the move, and the grip lists the four keys in `aria-keyshortcuts`. A move into another
+list sends the same request as Move to section… (`moveMembersInto`), so a moved product keeps the
+menu's price for it. The screen then reads the menu again and, while the menu on screen still has the
+destination where it was, opens it so the moved row is drawn; otherwise the member error line says
+the move was saved but another change took the destination away; after ArrowLeft or ArrowRight, focus goes to the moved row's grip, or back to the old
+grip when no such row is drawn. A refusal shows in the tab's member error line, naming the
+destination list when it is not the list on screen, and the menu is read again; a move whose source or
+destination list another change has moved or taken off the menu by the time it is sent, or one
+still waiting when another menu is opened, sends nothing and reads the menu again. When a window
+opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
+the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
+member; at the top level, to the root row's ⋮, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
+`menu-structure-table.a11y.test.ts` beside it, and the Structure tree cases in
+`apps/dashboard/src/screens/menus-screen.test.ts`, inside `describe("the Structure tree")` and the member-move cases above it.
+
+Hold a dragged row or tile near the visible top or bottom edge to reach rows outside the current
+view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
+across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
+scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
+Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, the Customise
+column list and the Home page tab's shortcut preview use this helper. Shared reorder tables keep
+the moves already made when the system cancels the pointer, and put the row back when Escape
+cancels a drag. Menu Structure and the shortcut preview apply their move on release. A valid
+Products drop opens the Move dialog.
+
+### Remembered, searchable, filterable tables
+
+Dashboard main lists offer remembered column choices. `scripts/dashboard-table-customisation.test.ts`
+checks literal table tags for a preference key and chooser label. It is weaker than a rendered check:
+it cannot see dynamically built tags or determine whether the runtime columns offer a choice. Its
+file-and-label exceptions cover dialogs, pickers, the owner's Servers and Departments/zones choices,
+and tables with fewer than two movable columns. Browser tests check each added chooser.
+
+A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. An editor opened and closed from the keyboard returns visible focus; later keyboard navigation shows focus. Dialogs record whether the opening control had visible focus before moving into their content.
+
+`wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty.
+When the table has source rows, it draws a toolbar if `searchable` is set, a column carries a
+`filter`, a column is `choosable` and the columns hold at least two movable ones (every column
+but the first and a `pinned: "end"` one), a tree has an `expandAllLabel`, or the screen supplies a
+`toolbar-start`, `toolbar-end` or `toolbar-search` control. A filter or search that hides every source row leaves
+the toolbar available so you can change the choice.
+
+The search box appears only when `searchable` is set. **Filters sits at the toolbar's start and
+opens its panel beside the rows.** It is an icon button (a funnel) drawn before the `toolbar-start`
+slot and the search box, named by `filtersLabel`, with the shared tooltip ("Icon buttons with a
+tooltip", below). Its count badge counts each filter whose current choice is not "all", including
+an `initial` choice; while it shows, the count follows the label in the button's name ("Filters
+1"), so the name holds the drawn text axe reads (see "Accessible names"). The button reads as pressed
+while the panel is open. The panel lists every filtered column, including one that is hidden. Each
+section keeps its heading and choice control visible. Choose the column's "Any …" option to clear
+it; Clear all resets every filter. Opening focuses the first choice. A filtered column's heading
+has a coloured inset bottom line and includes the filtered state in its accessible name. The
+panel's labels are supplied through `filtersLabel`, `filteredColumnLabel`, `filtersClearAllLabel`
+and `filtersCloseLabel`.
+
+While the table is at least 768px wide (`SIDE_FILTERS_WIDTH`), the panel opens in the flow at the
+rows' leading side, seven `--wt-tap-min` steps wide. The rows' box narrows beside it and takes its
+full width back when the panel closes; column widths held for a choice made there are let go on
+closing. A press outside does not close it: its Close button, Escape inside it, or the Filters
+button do, and the first two return focus to the button. In a capped table it fills the rows'
+height with `overflow-y: auto`, so it and its button stay put while the rows scroll. Narrower than
+768px, it opens as a full-screen popover, with Tab kept inside.
+The breakpoint is fixed. The default panel width and gap leave enough room for the tree's wide
+layout at 768px. [Filters sizing decision and test](../backlog/menu.md#filters-keeps-a-fixed-breakpoint).
+A width change across 768px while it is open moves it to the other form, still open and with its
+choices. It stays open when a choice in it hides every row (beside the no-matches message from
+768px wide), so the choice can be changed back, and focus stays on the filter used, as it does when a choice brings rows back.
+Toolbar controls follow their markup order at every width: Filters, `toolbar-start`,
+Expand all, `toolbar-end`, search, then Customise. Put a screen-owned search field in
+`toolbar-search`; Products forwards that slot through its product list. Search and Customise
+share the final line when the table is 640px wide (`STACKED_SEARCH_WIDTH`) or less, so Customise
+stays last in both the drawn order and the order Tab follows. Wider tables keep the group beside
+the preceding controls where it fits. The table measures its own width, including a search
+forwarded through slots, so a narrow list inside a wide page follows the same rule.
+Guards: the "Tab follows" and A462 Customise cases in
+`packages/ui/src/components/wt-data-table.test.ts` and
+`apps/dashboard/src/widgets/product-browser.test.ts`.
+A frame after a width change, the table sets `stacked-search`; a hidden table measured 0 wide
+has no such attribute. Assigning or removing a forwarded search in an existing toolbar updates
+width tracking too. Guards: the hidden-table, forwarded-slot and "only while it is searchable"
+cases in `packages/ui/src/components/wt-data-table.test.ts`, and the phone-width search-and-Customise
+case in `wt-data-table.a11y.test.ts`.
+
+Each section retains the `wt-combobox` choices its column's `filter` descriptor supplies. Its
+"all" row is shown as a chosen value while its empty string means no filter. A filter with
+`multiple` holds any number of choices at once: its dropdown is a `multiple` `wt-combobox`, the
+"all" row still first and shown chosen while nothing is ticked, and picking that row unticks
+everything. A row passes it when it matches any chosen value, and it counts once in the Filters
+badge however many it holds. The search box is
+named `search` and each dropdown `<column key>-filter`. A row must pass every active filter and
+the search to show. A column exposes text to the search with `searchValue`; a column without one is
+not searched. A filter's `value` may return a list for a row that belongs under several options
+at once, such as a product placed in two sections; the row shows when the list holds a chosen
+option. Pass `sortKey`/`sortDirection` to choose the starting sort; the table then owns it and
+emits `wt-sort-change`.
+
+**One search rule.** The table, `wt-combobox`, the screens with their own search and the server's
+searches all use the matcher in `@waitron/shared` (`textSearch`, `packages/shared/src/text-search.ts`;
+the venue store registers it with SQLite as `waitron_search_rank`). A row matches when its
+`searchValue` columns — its names, and on the Users screen also email and telephone — hold every word typed, in any order, ignoring accents, capitals and
+punctuation. A word followed by a space or punctuation must be a whole word; the word still being
+typed may be any part of one. A search of only spaces is no search, and a search of only
+punctuation matches nothing. Matches are listed closest first (`compareSearchRanks`: a whole word,
+then the start of a word, then the inside of one), ahead of the table's own sort, which then orders
+rows that tie; `rowGroup` still comes before both. In a tree the closest come first among the rows
+under each parent, and in a grouped `wt-combobox` within each group.
+
+Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
+— never the search text. It restores them once it has columns: a stored sort only if a current
+column can still sort by it — its direction is restored with that column or not at all, so the
+starting sort stands whole — and every stored filter value that is a string or a list of strings. Once its column is declared
+with a `filter` (a column the chooser hides included), a stored value of the wrong shape for it (a
+string for a `multiple` filter, a list for a single-choice one, as a view saved before a filter
+became multi-select holds) is dropped and the view rewritten without it. Once the column offers a
+non-empty options list, a stored list loses the values that list does not include, and a list left
+with none is removed, so the column starts again as if nothing were stored; while the column offers
+an empty list, a stored list waits unchanged, as a single choice does. A stored empty list, an
+explicit "all", is kept only where the column names an `initial`. A `filter` may name
+an `initial` option, which it starts on until a choice is made or restored, while the column's
+options include it; choosing the "all"
+option over it is then stored as a choice of its own (an empty string, or an empty list for a
+`multiple` filter), so it survives a reload. A
+filter choice, restored or picked, narrows rows only while its column offers it, and its dropdown
+in the panel then shows it. Each time the columns change, every choice is checked against its column. A chosen
+option the column's current option values no longer include is cleared, and the stored view is
+rewritten without it, rather than hiding every row behind a panel choice that reads "all". A
+single-choice dropdown then returns to the column's `initial` option when it names one still
+offered, and to its "all" option otherwise; a multi-select list loses only that value, and returns
+the same way only once it holds none. A chosen option whose column is not rendered, has no `filter`, or has
+an empty option list (a screen still loading the data it builds them from) waits instead: it hides
+no rows, stays in storage when the view is saved for another change, and is checked when the column
+next has a non-empty list. Clear all removes those waiting choices too; choosing a column's
+"Any …" option removes its own waiting choice. So one `viewKey` can serve two layouts that show different columns. A
+stored "all" does not wait: it is kept only while its column is rendered with a `filter` that names
+an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
+leaves the column out forgets that "all" was chosen.
+
+`filterValues(key)` answers the values a column's filter narrows rows by now — a choice, a
+restored choice or its `initial` option — and none while it narrows by "all" or its choice waits.
+`chooseFilter(key, values)` chooses as a person would: only the values the filter offers now, the
+first of them on a single-choice filter, and "all" when given none. The choice is reported with
+`wt-filter-change` and remembered under the `viewKey`. Given one or more values, none of which the
+filter offers now (which is every value while its option list is empty), it changes nothing, so unlike a restored
+choice it does not wait for options to load; a column without a `filter` is left alone too.
 Guards: the `filterValues` and `chooseFilter` cases in
 `packages/ui/src/components/wt-data-table.test.ts`.
 
