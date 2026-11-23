@@ -14,7 +14,11 @@ import {
   FULL_INVOICE_DOCUMENT_FIXTURE,
 } from "./testing/full-invoice-fixture.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { burgerAndBread } from "./testing/receipt-cases.js";
+import {
+  burgerAndBread,
+  billDiscountOverTwoRatesWithAnUnfiledLine,
+} from "./testing/receipt-cases.js";
+import { adjustmentLabel } from "./receipt-facts.js";
 import {
   receiptDateTime,
   receiptDateTimeNumeric,
@@ -1047,6 +1051,16 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     );
     const tables = document.elements.flatMap((e) => (e.kind === "table" ? [e.table] : []));
     expect(tables.flatMap((t) => t.rows.map((r) => r.item))).toEqual(["Agua mineral"]);
+  });
+
+  it("prints an unfiled dish's share of a bill discount under it, VAT included", () => {
+    const label = receiptLabelsFor("es-ES");
+    const billDiscount = adjustmentLabel({ kind: "discount", percentBp: 1000 }, "es-ES", label);
+    const rows = amountRows(buildReceiptDocument(billDiscountOverTwoRatesWithAnUnfiledLine()));
+    expect(rows).toContainEqual([
+      `${billDiscount} (${label.vatIncluded})`,
+      formatMoney("-0.25", "es-ES"),
+    ]);
   });
 
   it("prints a with-VAT dish priced per pack by its quantity and unit, not its count of packs", () => {

@@ -910,6 +910,25 @@ describe("layoutA4Invoice", () => {
     );
   });
 
+  it("takes an unfiled line's share of a bill discount off under it, so the last column still adds up to TOTAL", () => {
+    const [page] = layoutA4Invoice(receiptCases.billDiscountOverTwoRatesWithAnUnfiledLine());
+    const elements = page!.elements;
+    const summaryTop = named(elements, labels.taxRateColumn).y;
+    const amounts = texts(elements).filter(
+      (text) => text.y < summaryTop && text.text.endsWith("€"),
+    );
+    const rightmost = Math.max(...amounts.map(textRight));
+    const column = amounts
+      .filter((text) => Math.abs(textRight(text) - rightmost) < 0.01)
+      .sort((one, other) => one.y - other.y)
+      .map((text) => text.text);
+    expect(column).toEqual([money("30.00"), money("-3.00"), money("2.50"), money("-0.25")]);
+    const total = named(elements, labels.total);
+    expect(texts(elements).some((text) => text.y === total.y && text.text === money("29.25"))).toBe(
+      true,
+    );
+  });
+
   it("puts a plus before a simplified page's surcharge and its price each, and leaves a covered dish's amount blank", () => {
     const input = fixture();
     input.result.invoiceType = "F2";

@@ -378,6 +378,28 @@ export function receiptFigures({
         });
       }
     }
+    // The end rows carry only filed lines' share of the bill, so an unfiled group prints its own.
+    if (anyFiled && billAdjustments.length > 0) {
+      const shown = sumDecimals([
+        group.amount ?? ZERO,
+        ...group.options.map((option) => option.amount),
+        ...group.adjustments.map((adjustment) => adjustment.amount),
+      ]);
+      const billShare = subtractDecimal(
+        shown,
+        sumDecimals([dish, ...options].map((line) => decimal(line.gross))),
+      );
+      if (compareDecimal(billShare, ZERO) > 0) {
+        group.adjustments.push({
+          item:
+            billAdjustments.length === 1
+              ? adjustmentLabel(billAdjustments[0]!, locale, label)
+              : label.discount,
+          amount: negateDecimal(billShare),
+          rateLetter: sharedLetter([dish, ...options]),
+        });
+      }
+    }
     return group;
   };
 

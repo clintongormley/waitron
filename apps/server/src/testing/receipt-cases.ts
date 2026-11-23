@@ -93,6 +93,14 @@ export const billDiscountOverTwoRates = (): ReceiptDocumentInput => {
   return input;
 };
 
+/** The same bill with the bread's filed figures missing: its share of the bill discount has no
+ *  filed row at its rate to sit in. */
+export const billDiscountOverTwoRatesWithAnUnfiledLine = (): ReceiptDocumentInput => {
+  const input = billDiscountOverTwoRates();
+  delete input.result.lines[1]!.net;
+  return input;
+};
+
 export const fullComp = (): ReceiptDocumentInput => {
   const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
   input.result.lines = [

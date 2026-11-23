@@ -1,12 +1,19 @@
 import { addDecimal, decimal, type Decimal } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { rateLetters, receiptFacts, receiptFigures, type ReceiptFigures } from "./receipt-facts.js";
+import {
+  adjustmentLabel,
+  rateLetters,
+  receiptFacts,
+  receiptFigures,
+  type ReceiptFigures,
+} from "./receipt-facts.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {
   advanceTakenOff,
   billDiscountOverTwoRates,
+  billDiscountOverTwoRatesWithAnUnfiledLine,
   burgerAndBread,
   burgerAndBreadWithBillDiscount,
   dishDiscountOverExtraAtAnotherRate,
@@ -111,6 +118,25 @@ describe("receiptFigures", () => {
     expect(charged(figures)).toEqual(["30.00", "2.50", "-3.00", "-0.25"]);
   });
 
+  it("takes an unfiled line's share of a bill discount off under that line, VAT included", () => {
+    const figures = receiptFigures(billDiscountOverTwoRatesWithAnUnfiledLine());
+    expect(charged(figures)).toEqual(["30.00", "-3.00", "2.50", "-0.25"]);
+    const [unfiled] = figures.sections.flatMap((section) =>
+      section.kind === "withVat" ? [section.group] : [],
+    );
+    expect(unfiled!.adjustments).toEqual([
+      {
+        item: adjustmentLabel(
+          { kind: "discount", percentBp: 1000 },
+          "es-ES",
+          receiptLabelsFor("es-ES"),
+        ),
+        amount: "-0.25",
+        rateLetter: "",
+      },
+    ]);
+  });
+
   it("splits a dish's own discount over its extra at another rate, VAT included", () => {
     const figures = receiptFigures(dishDiscountOverExtraAtAnotherRate());
     expect(charged(figures)).toEqual(["10.00", "2.00", "-1.00", "-0.20"]);
@@ -167,6 +193,7 @@ describe("receiptFigures", () => {
     ["burgerAndBread", burgerAndBread],
     ["burgerAndBread with a bill discount", burgerAndBreadWithBillDiscount],
     ["a bill discount split over two rates", billDiscountOverTwoRates],
+    ["the same with one line unfiled", billDiscountOverTwoRatesWithAnUnfiledLine],
     ["three 0,03 € rows", threeCentRows],
     ["an own adjustment above what the dish lost", ownAdjustmentAboveWhatTheDishLost],
   ])("adds up to TOTAL exactly: %s", (_name, input) => {
