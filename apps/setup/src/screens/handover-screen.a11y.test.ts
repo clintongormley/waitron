@@ -368,6 +368,17 @@ describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
         await el.updateComplete;
         await expectNoA11yViolations(host);
         await shoot("07-ready");
+        // A refused sign-in reopens it on Ready to switch, where the method is only chosen.
+        Reflect.set(el, "signInOpen", true);
+        Reflect.set(el, "signInStep", "method");
+        await vi.waitFor(() =>
+          expect(
+            root.querySelector('wt-segmented-control[name="handover-sign-in-method"]'),
+          ).not.toBeNull(),
+        );
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        await shoot("07-ready-sign-in");
         host.remove();
         const reopened = await mountWidget<SetupHandoverScreen>(
           "setup-handover-screen",
