@@ -3,12 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "The till, devices and table service". This file holds
 their full text.
 
-## Loose ends left by A429 slice 1 (#1493).
-
-- Small floor-plan refusals still missing: `dining_tables.plan_table_id` has no unique index (no
-  writer makes two live tables follow one master table today); the delivery-release trigger
-  accepts an empty label.
-
 ## The table screen's redundant exit configuration was not audited
 
 - Found by #616 (`apps/till/src/widgets`). Read, not run: the table screen still needs its

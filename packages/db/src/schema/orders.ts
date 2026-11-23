@@ -130,6 +130,10 @@ export const workingOrders = table(
       "working_orders_bill_name_ck",
       sql`${t.billName} is null or (length(${t.billName}) between 1 and 40 and ${t.billName} = trim(${t.billName}))`,
     ),
+    check(
+      "working_orders_delivery_table_label_ck",
+      sql`${t.deliveryTableLabel} is null or trim(${t.deliveryTableLabel}) <> ''`,
+    ),
     check("working_orders_editor_version_ck", sql`${t.editorVersion} >= 0`),
     uniqueIndex("working_orders_order_number_key").on(t.orderNumber),
     index("working_orders_uncollected_idx")

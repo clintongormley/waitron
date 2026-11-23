@@ -234,6 +234,7 @@ CREATE TABLE `working_orders` (
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_orders_bill_number_ck" CHECK("working_orders"."bill_number" is null or ("working_orders"."party_id" is not null and typeof("working_orders"."bill_number") = 'integer' and "working_orders"."bill_number" >= 1)),
 	CONSTRAINT "working_orders_bill_name_ck" CHECK("working_orders"."bill_name" is null or (length("working_orders"."bill_name") between 1 and 40 and "working_orders"."bill_name" = trim("working_orders"."bill_name"))),
+	CONSTRAINT "working_orders_delivery_table_label_ck" CHECK("working_orders"."delivery_table_label" is null or trim("working_orders"."delivery_table_label") <> ''),
 	CONSTRAINT "working_orders_editor_version_ck" CHECK("working_orders"."editor_version" >= 0),
 	CONSTRAINT "working_orders_status_ck" CHECK("working_orders"."status" in ('open', 'placed', 'settled', 'abandoned')),
 	CONSTRAINT "working_orders_dining_ck" CHECK("working_orders"."dining" in ('eat_in', 'takeaway')),
@@ -381,11 +382,13 @@ CREATE TABLE `dining_tables` (
 	CONSTRAINT "dining_tables_today_rotation_ck" CHECK("dining_tables"."today_rotation" is null or ("dining_tables"."today_rotation" between 0 and 345 and "dining_tables"."today_rotation" % 15 = 0)),
 	CONSTRAINT "dining_tables_today_shape_ck" CHECK("dining_tables"."today_shape" in ('rect', 'round')),
 	CONSTRAINT "dining_tables_today_placement_ck" CHECK(("dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null) or ("dining_tables"."today_x" is not null and "dining_tables"."today_y" is not null and "dining_tables"."today_width" is not null and "dining_tables"."today_height" is not null and "dining_tables"."today_shape" is not null and "dining_tables"."today_rotation" is not null)),
-	CONSTRAINT "dining_tables_off_floor_ck" CHECK("dining_tables"."on_floor" = 1 or ("dining_tables"."today_seats" is null and "dining_tables"."today_fixed" = 0 and "dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null and "dining_tables"."taken_off" = 0 and "dining_tables"."today_name" is null and "dining_tables"."merge_id" is null))
+	CONSTRAINT "dining_tables_off_floor_ck" CHECK("dining_tables"."on_floor" = 1 or ("dining_tables"."today_seats" is null and "dining_tables"."today_fixed" = 0 and "dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null and "dining_tables"."taken_off" = 0 and "dining_tables"."today_name" is null and "dining_tables"."merge_id" is null)),
+	CONSTRAINT "dining_tables_label_ck" CHECK(trim("dining_tables"."label") <> '')
 );
 --> statement-breakpoint
 CREATE INDEX `dining_tables_merge_idx` ON `dining_tables` (`merge_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `dining_tables_short_name_key_uq` ON `dining_tables` (`short_name_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `dining_tables_plan_table_key` ON `dining_tables` (`plan_table_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `dining_tables_label_key` ON `dining_tables` (`label`);--> statement-breakpoint
 CREATE TABLE `floor_plan_placements` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -430,6 +433,7 @@ CREATE TABLE `floor_plan_tables` (
 	`part_of_table_id` text,
 	FOREIGN KEY (`part_of_table_id`) REFERENCES `floor_plan_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "floor_plan_tables_label_ck" CHECK(trim("floor_plan_tables"."label") <> ''),
 	CONSTRAINT "floor_plan_tables_seats_ck" CHECK("floor_plan_tables"."seats" is null or "floor_plan_tables"."seats" between 0 and 999),
 	CONSTRAINT "floor_plan_tables_part_of_not_self_ck" CHECK("floor_plan_tables"."part_of_table_id" <> "floor_plan_tables"."id")
 );

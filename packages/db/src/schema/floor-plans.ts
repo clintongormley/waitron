@@ -144,6 +144,7 @@ export const floorPlanTables = table(
   },
   (t) => [
     unique("floor_plan_tables_zone_label_key").on(t.zoneId, t.label),
+    check("floor_plan_tables_label_ck", sql`trim(${t.label}) <> ''`),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],

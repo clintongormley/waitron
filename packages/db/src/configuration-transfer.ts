@@ -144,6 +144,8 @@ export function validateCoreConfiguration(
     const field = `${table}.short_name`;
     const keys = new Set<string>();
     for (const row of tables[table] ?? []) {
+      if (row.label !== undefined && (typeof row.label !== "string" || row.label.trim() === ""))
+        throw new AppError("setup.request_invalid", { field: `${table}.label` });
       const shortName = row.short_name;
       if (shortName === undefined || shortName === null) {
         // The till shows a table with no short name by its full name, where a "+" reads as a join.
@@ -162,6 +164,25 @@ export function validateCoreConfiguration(
       if (keys.has(key)) throw new AppError("setup.request_invalid", { field });
       keys.add(key);
     }
+  }
+  // A room's reset looks for a saved table's live table, and a part's joined table, only in that
+  // room.
+  const savedZone = new Map((tables.floor_plan_tables ?? []).map((row) => [row.id, row.zone_id]));
+  for (const row of tables.floor_plan_tables ?? []) {
+    const joinedId = row.part_of_table_id;
+    if (joinedId === undefined || joinedId === null) continue;
+    if (savedZone.get(joinedId) !== row.zone_id)
+      throw new AppError("setup.request_invalid", { field: "floor_plan_tables.part_of_table_id" });
+  }
+  // Finding no live table for a saved one, the reset makes another, which the one-follower index
+  // refuses when the first follows from another room.
+  const followed = new Set<unknown>();
+  for (const row of tables.dining_tables ?? []) {
+    const planTableId = row.plan_table_id;
+    if (planTableId === undefined || planTableId === null) continue;
+    if (followed.has(planTableId) || savedZone.get(planTableId) !== row.zone_id)
+      throw new AppError("setup.request_invalid", { field: "dining_tables.plan_table_id" });
+    followed.add(planTableId);
   }
 }
 

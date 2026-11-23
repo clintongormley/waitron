@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { refusalOn, triggerRaised } from "../constraint-target.js";
+import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
 import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
@@ -265,6 +265,29 @@ describe("working_orders", () => {
         (await db.execute(sql`select bill_number from working_orders where id in (${one}, ${two})`))
           .rows,
       ).toEqual([{ bill_number: 2 }, { bill_number: 2 }]);
+    });
+
+    it("refuses a blank kept delivery table name and accepts a name or none", async () => {
+      const id = await openOrder(db);
+      for (const name of ["", " ", "   "]) {
+        const error = await captureError(() =>
+          db.execute(
+            sql`update working_orders set delivery_table_label = ${name} where id = ${id}`,
+          ),
+        );
+        expect(checkFailed(error, "working_orders_delivery_table_label_ck")).toBe(true);
+      }
+      await db.execute(
+        sql`update working_orders set delivery_table_label = ' T4' where id = ${id}`,
+      );
+      await db.execute(sql`update working_orders set delivery_table_label = null where id = ${id}`);
+      await db.execute(
+        sql`update working_orders set delivery_table_label = 'Terrace 4' where id = ${id}`,
+      );
+      expect(
+        (await db.execute(sql`select delivery_table_label from working_orders where id = ${id}`))
+          .rows,
+      ).toEqual([{ delivery_table_label: "Terrace 4" }]);
     });
 
     it("keeps two named counter bills with no numbers", async () => {

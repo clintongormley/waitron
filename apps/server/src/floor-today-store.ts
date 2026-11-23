@@ -294,7 +294,6 @@ async function takenOffIn(
   return new Set(rows.map((row) => row.tableId));
 }
 
-/** Skips a joined table more than one live table follows: its parts would join two copied tables. */
 async function copyParts(
   tx: Transaction,
   zoneId: string,
@@ -310,10 +309,9 @@ async function copyParts(
     rowsOf.set(row.planTableId, [...(rowsOf.get(row.planTableId) ?? []), row.id]);
   }
   const copied = master.flatMap(({ joined, part }) => {
-    const joinedRows = rowsOf.get(joined!) ?? [];
-    if (joinedRows.length !== 1) return [];
+    const joinedRow = rowsOf.get(joined!)![0]!;
     return (rowsOf.get(part) ?? []).map((partRow) => ({
-      joinedResetTableId: joinedRows[0]!,
+      joinedResetTableId: joinedRow,
       partResetTableId: partRow,
     }));
   });

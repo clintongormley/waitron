@@ -379,6 +379,122 @@ describe("validateCoreConfiguration", () => {
     });
   });
 
+  describe.each(["dining_tables", "floor_plan_tables"])("%s names", (table) => {
+    it.each(["", " ", " \t", 5, null])("refuses a blank or non-text table name: %j", (label) => {
+      expect(() => validateCoreConfiguration({ [table]: [{ label }] })).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.label` },
+        }),
+      );
+    });
+
+    it("accepts a table name with a space in it", () => {
+      expect(() => validateCoreConfiguration({ [table]: [{ label: "Terrace 4" }] })).not.toThrow();
+    });
+  });
+
+  describe("a live table's saved table", () => {
+    const linkRefusal = expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "dining_tables.plan_table_id" },
+    });
+    const saved = [
+      { id: "s1", zone_id: "inside", label: "S1" },
+      { id: "s2", zone_id: "inside", label: "S2" },
+      { id: "s3", zone_id: "terrace", label: "S3" },
+    ];
+
+    it("refuses two live tables following one saved table", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: saved,
+          dining_tables: [
+            { id: "t1", zone_id: "inside", label: "T1", plan_table_id: "s1" },
+            { id: "t2", zone_id: "inside", label: "T2", plan_table_id: "s1" },
+          ],
+        }),
+      ).toThrowError(linkRefusal);
+    });
+
+    it("refuses a live table following a saved table in another room", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: saved,
+          dining_tables: [{ id: "t1", zone_id: "inside", label: "T1", plan_table_id: "s3" }],
+        }),
+      ).toThrowError(linkRefusal);
+    });
+
+    it("refuses a live table following a saved table the file does not hold", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: saved,
+          dining_tables: [{ id: "t1", zone_id: "inside", label: "T1", plan_table_id: "gone" }],
+        }),
+      ).toThrowError(linkRefusal);
+    });
+
+    it("accepts live tables each following its own saved table in its room, and any following none", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: saved,
+          dining_tables: [
+            { id: "t1", zone_id: "inside", label: "T1", plan_table_id: "s1" },
+            { id: "t2", zone_id: "inside", label: "T2", plan_table_id: "s2" },
+            { id: "t3", zone_id: "terrace", label: "T3", plan_table_id: "s3" },
+            { id: "t4", zone_id: "terrace", label: "T4", plan_table_id: null },
+            { id: "t5", zone_id: "terrace", label: "T5" },
+          ],
+        }),
+      ).not.toThrow();
+    });
+  });
+
+  describe("a saved part's joined table", () => {
+    const partRefusal = expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "floor_plan_tables.part_of_table_id" },
+    });
+    const joined = { id: "j1", zone_id: "inside", label: "J1" };
+
+    it("refuses a part whose joined table is saved in another room", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: [
+            joined,
+            { id: "p1", zone_id: "terrace", label: "P1", part_of_table_id: "j1" },
+          ],
+        }),
+      ).toThrowError(partRefusal);
+    });
+
+    it("refuses a part whose joined table the file does not hold", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: [
+            joined,
+            { id: "p1", zone_id: "inside", label: "P1", part_of_table_id: "gone" },
+          ],
+        }),
+      ).toThrowError(partRefusal);
+    });
+
+    it("accepts parts of a joined table in their room, and saved tables that are no part", () => {
+      expect(() =>
+        validateCoreConfiguration({
+          floor_plan_tables: [
+            joined,
+            { id: "p1", zone_id: "inside", label: "P1", part_of_table_id: "j1" },
+            { id: "p2", zone_id: "inside", label: "P2", part_of_table_id: "j1" },
+            { id: "s1", zone_id: "terrace", label: "S1", part_of_table_id: null },
+            { id: "s2", zone_id: "terrace", label: "S2" },
+          ],
+        }),
+      ).not.toThrow();
+    });
+  });
+
   it("is the core transfer's validate", () => {
     expect(validateCoreConfiguration).toBeTypeOf("function");
     expect(CORE_CONFIGURATION_TRANSFER.validate).toBe(validateCoreConfiguration);

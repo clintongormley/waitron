@@ -4108,8 +4108,8 @@ Find reads and writes with `git grep -niw printers -- apps packages ':!*.test.ts
 
 Change the TypeScript schema and write hand-written SQL only in `<package>/triggers/<set>.sql`.
 Run `pnpm --filter @waitron/server migration-baseline rebuild --set <name>`. This replaces the
-starting migration and resets every venue; backups and exports from before it cannot be restored
-or imported. Work beside A1308 changes a schema the same way (the slice rules' §8).
+starting migration and resets every venue; backups from before it cannot be restored. Work beside
+A1308 changes a schema the same way (the slice rules' §8).
 
 On a rebase conflict in a set's `drizzle/` files or `scripts/migration-baseline-epoch.json`, take
 main's side with `git checkout --ours -- <those paths>` during the rebase, keep your schema and
