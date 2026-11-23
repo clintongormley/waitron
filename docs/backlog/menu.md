@@ -678,9 +678,11 @@ The numbered decision above records the approved design and describes the earlie
 it says “today”. The owner supplied Spanish wording the same day: Venta; Pedir por separado;
 Cualquiera / Solo el personal / Nadie.
 
-2026-11-23 (owner): points 2 to 5, and point 6's last sentence (the base price field's unit
-button), superseded by `docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`;
-point 1, point 6's variants-table link and point 7 still stand. That spec's decision 11 (three cards
+2026-11-23 (owner): points 2, 3 and 5, point 4's Selling section, and point 6's last sentence (the
+base price field's unit button), superseded by
+`docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`; point 1, point 4's three-way
+ordering toggle with its choice names and hints (now Details' Ordering group), point 6's
+variants-table link and point 7 still stand. That spec's decision 11 (three cards
 on a grey dialog, with the price, Variants and Modifiers always open) also supersedes A219's
 Pricing fold (2026-10-02, #1065).
 
