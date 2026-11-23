@@ -65,6 +65,7 @@ import {
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -165,9 +166,12 @@ function fixture(
     evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
     loadFonts?: typeof loadRecoveryPackFonts;
     readBoxEnv?: () => Promise<Record<string, string | undefined>>;
+    requestLog?: boolean;
   } = {},
 ) {
   const local = new Hono();
+  if (options.requestLog === true)
+    local.use(requestIdMiddleware((...values) => logs.push(values), Date.now));
   const app = options.remote
     ? createStaffApp(local, async () => "https://staff.example.test")
     : local;
@@ -577,6 +581,19 @@ describe("a made pack", () => {
       [1, name],
       [2, again.masterKeyName],
     ]);
+  });
+
+  it("the request log line for Make a new master key does not carry the key", async () => {
+    const response = await fixture({ requestLog: true }).make(true);
+    const masterKey = response.headers.get("x-waitron-master-key")!;
+    expect(masterKey).toMatch(/^(?:\S{4} ){6}\S{4}$/);
+    const requestLines = logs.filter(([, event]) => event === "http.request");
+    expect(requestLines).toMatchObject([
+      [expect.any(String), "http.request", { routePath: "/api/backup/recovery-pack", status: 200 }],
+    ]);
+    const logged = JSON.stringify(logs);
+    expect(logged).not.toContain(masterKey.slice(0, 9));
+    expect(logged).not.toContain(masterKey.replaceAll(" ", "").slice(0, 8));
   });
 
   it("a pack without a new box key makes no master key", async () => {
