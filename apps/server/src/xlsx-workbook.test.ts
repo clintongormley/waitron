@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { decimal } from "@waitron/shared";
 import { renderWorkbook } from "./xlsx-workbook.js";
 
 describe("renderWorkbook", () => {
@@ -55,5 +56,24 @@ describe("renderWorkbook", () => {
     expect(sheet).toContain(
       '<row r="2"><c r="A2" t="inlineStr"><is><t xml:space="preserve">a</t></is></c><c r="B2" t="inlineStr"><is><t xml:space="preserve">b</t></is></c></row>',
     );
+  });
+  it("a three-place number cell uses the 0.000 style, and a plain number cell keeps two places", async () => {
+    const files = unzipSync(
+      await renderWorkbook([
+        {
+          name: "Numbers",
+          rows: [[{ number: decimal("0.125"), places: 3 }, { number: decimal("1.50") }]],
+        },
+      ]),
+    );
+    const sheet = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+    expect(sheet).toContain('<c r="A1" t="n" s="2"><v>0.125</v></c>');
+    expect(sheet).toContain('<c r="B1" t="n" s="1"><v>1.50</v></c>');
+    const styles = strFromU8(files["xl/styles.xml"]!);
+    expect(styles).toContain('<numFmt numFmtId="164" formatCode="0.000"/>');
+    const formats = [...styles.matchAll(/<cellXfs count="(\d+)">([\s\S]*?)<\/cellXfs>/g)][0]!;
+    const xfs = [...formats[2]!.matchAll(/<xf numFmtId="(\d+)"/g)].map((xf) => xf[1]);
+    expect(xfs).toEqual(["0", "2", "164"]);
+    expect(formats[1]).toBe("3");
   });
 });

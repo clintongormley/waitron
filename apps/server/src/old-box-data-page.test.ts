@@ -20,7 +20,7 @@ import type { Logger } from "./logger.js";
 import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import type { PasswordThrottle } from "./password-throttle.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
-import { row } from "./testing/xlsx-rows.js";
+import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -337,9 +337,9 @@ describe("the since tabs of POST /old-box-data", () => {
     await admin();
     const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
     expect(response.status).toBe(200);
-    const activity = (await files(response))["xl/worksheets/sheet2.xml"];
+    const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
     expect(activity).toBeDefined();
-    expect(row(strFromU8(activity!), 1)).toEqual([
+    expect(row(activity!, 1)).toEqual([
       OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 09:50 UTC"),
     ]);
   });
@@ -401,9 +401,15 @@ describe("the since tabs of POST /old-box-data", () => {
     const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
     expect(response.status).toBe(200);
     // The control: the name reaches the file, so its absence from the log means something.
-    expect(strFromU8((await files(response))["xl/worksheets/sheet2.xml"]!)).toContain(NAME);
+    expect(sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet)).toContain(NAME);
     const downloaded = lines.find((line) => line.event === "old_box_data.downloaded");
-    expect(downloaded?.fields).toMatchObject({ since: "copy", invoiceRows: 0, activityRows: 1 });
+    expect(downloaded?.fields).toMatchObject({
+      since: "copy",
+      invoiceRows: 0,
+      orderRows: 0,
+      paymentRows: 0,
+      activityRows: 1,
+    });
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
   });

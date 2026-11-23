@@ -6,9 +6,10 @@ const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const SHEET = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const WORKSHEET_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
-const STYLES = `${XML}<styleSheet xmlns="${SHEET}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+const STYLES = `${XML}<styleSheet xmlns="${SHEET}"><numFmts count="1"><numFmt numFmtId="164" formatCode="0.000"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
-export type Cell = string | null | { number: Decimal };
+/** A number cell shows two places unless it asks for three. */
+export type Cell = string | null | { number: Decimal; places?: 3 };
 export const numeric = (value: string): Cell => ({ number: toScale(decimal(value), 2) });
 
 export interface WorkbookSheet {
@@ -44,7 +45,7 @@ async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
         .map((cell, column) => {
           const reference = `${columnName(column)}${index + 1}`;
           return cell !== null && typeof cell === "object"
-            ? `<c r="${reference}" t="n" s="1"><v>${cell.number}</v></c>`
+            ? `<c r="${reference}" t="n" s="${cell.places === 3 ? 2 : 1}"><v>${cell.number}</v></c>`
             : `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell ?? "")}</t></is></c>`;
         })
         .join("")}</row>`,

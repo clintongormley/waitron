@@ -1,13 +1,22 @@
 import { strFromU8, unzipSync } from "fflate";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { recordActivity, withTransaction } from "@waitron/db";
+import {
+  appendDrawerEntry,
+  billPayments,
+  recordActivity,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { payments } from "@waitron/payments";
+import { createPrinter } from "@waitron/printing";
 import { seedPerson } from "@waitron/identity/test/fixtures.js";
 import {
   seedFiredOrder,
   seedKitchenStation,
+  seedOpenOrder,
   seedSale,
   seedVenueWithSeries,
   type SeededVenue,
@@ -15,7 +24,7 @@ import {
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
-import { row } from "./testing/xlsx-rows.js";
+import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -33,8 +42,7 @@ beforeEach(async () => {
 });
 
 function sheet(bytes: Uint8Array, name: string): string | undefined {
-  const file = unzipSync(bytes)[name];
-  return file === undefined ? undefined : strFromU8(file);
+  return sheetNamed(unzipSync(bytes), name);
 }
 
 function build(since: SinceRule, language: "en" | "es" = "en") {
@@ -127,7 +135,7 @@ describe("the old box's Activity tab", () => {
       await signedIn(null, CUTOFF);
       const xml = sheet(
         await build({ kind: "copy", fromMs: CUTOFF }, language),
-        "xl/worksheets/sheet2.xml",
+        words.activitySheet,
       )!;
       expect(row(xml, 1)).toEqual([words.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC")]);
       expect(row(xml, 2)).toEqual([...words.activityColumns]);
@@ -149,12 +157,15 @@ describe("the old box's Activity tab", () => {
       const names = strFromU8(
         unzipSync(await build({ kind: "all" }, language))["xl/workbook.xml"]!,
       );
-      expect(names).toContain(`<sheet name="${words.activitySheet}" sheetId="2"`);
+      expect(names).toContain(`<sheet name="${words.activitySheet}" sheetId="4"`);
     },
   );
 
   it("takes the 7-day rule's first line from its own words", async () => {
-    const xml = sheet(await build({ kind: "own", fromMs: CUTOFF }), "xl/worksheets/sheet2.xml")!;
+    const xml = sheet(
+      await build({ kind: "own", fromMs: CUTOFF }),
+      OLD_BOX_DATA_WORDS.en.activitySheet,
+    )!;
     expect(row(xml, 1)).toEqual([
       OLD_BOX_DATA_WORDS.en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
     ]);
@@ -163,7 +174,7 @@ describe("the old box's Activity tab", () => {
   it("an empty Activity tab still has its first line and headings, read without a write transaction", async () => {
     const lock = vi.spyOn(suite.db, "withWriteLock");
     const transaction = vi.spyOn(suite.db, "transaction");
-    const xml = sheet(await build({ kind: "all" }), "xl/worksheets/sheet2.xml")!;
+    const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
     expect(await sinceRule(suite.db, null)).toEqual({ kind: "all" });
     expect(lock).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
@@ -174,7 +185,303 @@ describe("the old box's Activity tab", () => {
 
   it("lists every entry under the rule that lists everything", async () => {
     await signedIn(null, CUTOFF - 365 * DAY);
-    const xml = sheet(await build({ kind: "all" }), "xl/worksheets/sheet2.xml")!;
+    const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
     expect(row(xml, 3)[0]).toBe(new Date(CUTOFF - 365 * DAY).toISOString());
+  });
+});
+
+const iso = (ms: number) => new Date(ms).toISOString();
+
+async function order(
+  number: number,
+  times: { opened: number; settled?: number; collected?: number; label?: string },
+): Promise<string> {
+  const { orderId } = await seedOpenOrder(suite.db, venue, number);
+  await suite.db.run(
+    sql`update working_orders set opened_at = ${iso(times.opened)}, label = ${times.label ?? null} where id = ${orderId}`,
+  );
+  return orderId;
+}
+
+async function close(
+  orderId: string,
+  times: { settled?: number; collected?: number },
+): Promise<void> {
+  if (times.settled !== undefined)
+    await suite.db.run(
+      sql`update working_orders set status = 'settled', settled_at = ${iso(times.settled)} where id = ${orderId}`,
+    );
+  if (times.collected !== undefined)
+    await suite.db.run(
+      sql`update working_orders set collected_at = ${iso(times.collected)} where id = ${orderId}`,
+    );
+}
+
+async function line(
+  orderId: string,
+  lineNo: number,
+  opts: {
+    sent?: number;
+    served?: number;
+    name?: string;
+    variantName?: string;
+    quantity?: number;
+    unitPrice?: number;
+  } = {},
+): Promise<void> {
+  const quantity = opts.quantity ?? 1000;
+  const unitPrice = opts.unitPrice ?? 250;
+  await suite.db.insert(workingOrderLines).values({
+    workingOrderId: orderId,
+    lineNo,
+    name: opts.name ?? `Dish ${lineNo}`,
+    variantName: opts.variantName ?? null,
+    kitchenName: "Kitchen dish name",
+    variantKitchenName: opts.variantName === undefined ? null : "Kitchen variant name",
+    descriptions: { "es-ES": "Customer dish name" },
+    variantDescriptions:
+      opts.variantName === undefined ? null : { "es-ES": "Customer variant name" },
+    quantity,
+    unitPriceGross: unitPrice,
+    vatClass: "reduced",
+    takeawayVatClass: "reduced",
+    lineTotal: Math.round((unitPrice * quantity) / 1000),
+    sentAt: opts.sent === undefined ? null : iso(opts.sent),
+    servedAt: opts.served === undefined ? null : iso(opts.served),
+  });
+}
+
+describe("the old box's Orders tab", () => {
+  const orders = async (since: SinceRule, language: "en" | "es" = "en") =>
+    sheet(await build(since, language), OLD_BOX_DATA_WORDS[language].ordersSheet)!;
+
+  it("lists an order opened, settled or collected from the cutoff, with every line, and not one whose every time is earlier", async () => {
+    const earlier = await order(1, { opened: CUTOFF - 60 * MINUTE });
+    await line(earlier, 1, { sent: CUTOFF - 50 * MINUTE, served: CUTOFF - 40 * MINUTE });
+    await close(earlier, { settled: CUTOFF - 1, collected: CUTOFF - 1 });
+    const opened = await order(2, { opened: CUTOFF, label: "Table 4" });
+    await line(opened, 2);
+    await line(opened, 1, { sent: CUTOFF + MINUTE });
+    const settled = await order(3, { opened: CUTOFF - 90 * MINUTE });
+    await line(settled, 1, { sent: CUTOFF - 80 * MINUTE });
+    await close(settled, { settled: CUTOFF + 5 * MINUTE });
+    const collected = await order(4, { opened: CUTOFF - 90 * MINUTE });
+    await close(collected, { collected: CUTOFF + 10 * MINUTE });
+
+    const xml = await orders({ kind: "copy", fromMs: CUTOFF });
+    expect(row(xml, 1)).toEqual([
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+    ]);
+    expect(row(xml, 2)).toEqual([...OLD_BOX_DATA_WORDS.en.orderColumns]);
+    // prettier-ignore
+    expect([3, 4, 5, 6, 7].map((n) => row(xml, n))).toEqual([
+      ["2", "Table 4", "Open", iso(CUTOFF), "", "", "1", "Dish 1", "1.000", "2.50", "2.50", iso(CUTOFF + MINUTE), ""],
+      ["2", "Table 4", "Open", iso(CUTOFF), "", "", "2", "Dish 2", "1.000", "2.50", "2.50", "", ""],
+      ["3", "", "Settled", iso(CUTOFF - 90 * MINUTE), iso(CUTOFF + 5 * MINUTE), "", "1", "Dish 1", "1.000", "2.50", "2.50", iso(CUTOFF - 80 * MINUTE), ""],
+      ["4", "", "Open", iso(CUTOFF - 90 * MINUTE), "", iso(CUTOFF + 10 * MINUTE), "", "", "", "", "", "", ""],
+      [],
+    ]);
+    expect(row(await orders({ kind: "all" }), 3)[0]).toBe("1");
+  });
+
+  it("lists an order whose only later change is a line sent after the cutoff, with all its lines", async () => {
+    const sentLater = await order(7, { opened: CUTOFF - 60 * MINUTE });
+    await line(sentLater, 1, { sent: CUTOFF - 30 * MINUTE });
+    await line(sentLater, 2, { sent: CUTOFF + 30 * MINUTE });
+    const servedLater = await order(8, { opened: CUTOFF - 60 * MINUTE });
+    await line(servedLater, 1, { sent: CUTOFF - 30 * MINUTE, served: CUTOFF + 20 * MINUTE });
+    const untouched = await order(9, { opened: CUTOFF - 60 * MINUTE });
+    await line(untouched, 1, { sent: CUTOFF - 30 * MINUTE, served: CUTOFF - 20 * MINUTE });
+
+    const xml = await orders({ kind: "own", fromMs: CUTOFF });
+    expect([3, 4, 5, 6].map((n) => row(xml, n).slice(0, 7))).toEqual([
+      ["7", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "1"],
+      ["7", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "2"],
+      ["8", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "1"],
+      [],
+    ]);
+  });
+
+  it("names a line by its staff name and variant, never its customer-facing or prep station name", async () => {
+    const orderId = await order(1, { opened: CUTOFF });
+    await line(orderId, 1, { name: "Fish cake", variantName: "Large" });
+    const xml = await orders({ kind: "all" });
+    expect(row(xml, 3)[7]).toBe("Fish cake (Large)");
+    for (const other of ["Customer", "Kitchen"]) expect(xml).not.toContain(other);
+  });
+
+  it("writes quantities as three-place numbers and money as two-place numbers", async () => {
+    const orderId = await order(1, { opened: CUTOFF });
+    await line(orderId, 1, { quantity: 125, unitPrice: 1000 });
+    const bytes = await build({ kind: "all" });
+    const xml = sheet(bytes, OLD_BOX_DATA_WORDS.en.ordersSheet)!;
+    expect(xml).toContain('<c r="I3" t="n" s="2"><v>0.125</v></c>');
+    expect(xml).toContain('<c r="J3" t="n" s="1"><v>10.00</v></c>');
+    expect(xml).toContain('<c r="K3" t="n" s="1"><v>1.25</v></c>');
+    const styles = strFromU8(unzipSync(bytes)["xl/styles.xml"]!);
+    expect(styles).toMatch(/<cellXfs count="3">(?:<xf [^>]*\/>){2}<xf numFmtId="164"/);
+    expect(styles).toContain('<numFmt numFmtId="164" formatCode="0.000"/>');
+  });
+});
+
+async function partPayment(
+  orderId: string,
+  personId: string,
+  at: number,
+  opts: { method?: "cash" | "card"; applied?: number; tip?: number } = {},
+): Promise<string> {
+  const [saved] = await suite.db
+    .insert(billPayments)
+    .values({
+      workingOrderId: orderId,
+      submissionId: crypto.randomUUID(),
+      fingerprint: "fixture",
+      kind: "contribution",
+      method: opts.method ?? "cash",
+      applied: opts.applied ?? 500,
+      tip: opts.tip ?? 0,
+      tendered: (opts.method ?? "cash") === "cash" ? (opts.applied ?? 500) + (opts.tip ?? 0) : null,
+      state: "received",
+      requestedBy: personId,
+      source: "device",
+      deviceId: venue.deviceId,
+      createdAt: iso(at),
+      receivedAt: iso(at),
+    })
+    .returning({ id: billPayments.id });
+  return saved!.id;
+}
+
+async function cardPayment(
+  orderId: string,
+  at: number,
+  ref: string,
+  billPaymentId: string | null,
+): Promise<string> {
+  const [saved] = await suite.db
+    .insert(payments)
+    .values({
+      workingOrderId: orderId,
+      source: "device",
+      deviceId: venue.deviceId,
+      provider: "simulator",
+      paymentRef: ref,
+      amount: 700,
+      state: "captured",
+      createdAt: iso(at),
+      updatedAt: iso(at),
+      billPaymentId,
+    })
+    .returning({ id: payments.id });
+  return saved!.id;
+}
+
+async function drawerEntry(
+  personId: string,
+  at: number,
+  entry: { kind: "cash_payment"; billPaymentId: string } | { kind: "cash_in" },
+): Promise<string> {
+  return withTransaction(suite.db, async (tx) => {
+    const printer = await createPrinter(tx, {
+      name: `Drawer ${at}`,
+      transport: "network_tcp",
+      host: `drawer-${at}.test`,
+      hasCashDrawer: true,
+    });
+    const saved = await appendDrawerEntry(tx, {
+      printerId: printer.id,
+      nodeId: venue.nodeId,
+      recordedAt: iso(at),
+      personId,
+      amount: 500,
+      ...entry,
+    });
+    return saved.id;
+  });
+}
+
+describe("the old box's Payments and cash tab", () => {
+  it("lists a part payment, a card payment with no part payment, a card payment that names its part payment, and a drawer entry from the cutoff, and none from before", async () => {
+    const marta = await namedPerson("Marta Ruiz");
+    const orderId = await order(12, { opened: CUTOFF - 60 * MINUTE });
+    const before = await partPayment(orderId, marta, CUTOFF - 1);
+    await cardPayment(orderId, CUTOFF - 1, "ref-before", null);
+    await drawerEntry(marta, CUTOFF - 1, { kind: "cash_payment", billPaymentId: before });
+    await drawerEntry(marta, CUTOFF - 2, { kind: "cash_in" });
+    const part = await partPayment(orderId, marta, CUTOFF, { tip: 50 });
+    const alone = await cardPayment(orderId, CUTOFF + MINUTE, "ref-alone", null);
+    const cardPart = await partPayment(orderId, marta, CUTOFF + 2 * MINUTE, { method: "card" });
+    const named = await cardPayment(orderId, CUTOFF + 3 * MINUTE, "ref-named", cardPart);
+    const drawer = await drawerEntry(marta, CUTOFF + 4 * MINUTE, {
+      kind: "cash_payment",
+      billPaymentId: part,
+    });
+
+    const xml = sheet(
+      await build({ kind: "copy", fromMs: CUTOFF }),
+      OLD_BOX_DATA_WORDS.en.paymentsSheet,
+    )!;
+    // `row` returns cell text as written, so the apostrophe is still escaped.
+    expect(row(xml, 2)).toEqual(
+      OLD_BOX_DATA_WORDS.en.paymentColumns.map((heading) => heading.replace("'", "&apos;")),
+    );
+    // prettier-ignore
+    expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n))).toEqual([
+      ["Part payment", iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "Marta Ruiz", part],
+      ["Card payment", iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", alone],
+      ["Part payment", iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "Marta Ruiz", cardPart],
+      ["Card payment", iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", cardPart, "", named],
+      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "5.00", "", "", "Cash payment", "12", "", "", part, "Marta Ruiz", drawer],
+      [],
+    ]);
+  });
+});
+
+describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
+  it("in Spanish, the sheet names, headings and state words", async () => {
+    const es = OLD_BOX_DATA_WORDS.es;
+    const marta = await namedPerson("Marta Ruiz");
+    const orderId = await order(5, { opened: CUTOFF });
+    await line(orderId, 1);
+    await close(orderId, { settled: CUTOFF + MINUTE });
+    const part = await partPayment(orderId, marta, CUTOFF);
+    await cardPayment(orderId, CUTOFF + MINUTE, "ref-es", null);
+    await drawerEntry(marta, CUTOFF + 2 * MINUTE, { kind: "cash_payment", billPaymentId: part });
+    const bytes = await build({ kind: "all" }, "es");
+    const names = strFromU8(unzipSync(bytes)["xl/workbook.xml"]!);
+    expect([...names.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      es.invoiceSheet,
+      es.ordersSheet,
+      es.paymentsSheet,
+      es.activitySheet,
+    ]);
+    const orders = sheet(bytes, es.ordersSheet)!;
+    expect(row(orders, 1)).toEqual([es.sinceAllIntro]);
+    expect(row(orders, 2)).toEqual([...es.orderColumns]);
+    expect(row(orders, 3)[2]).toBe(es.orderStatuses.settled);
+    const cash = sheet(bytes, es.paymentsSheet)!;
+    expect(row(cash, 2)).toEqual([...es.paymentColumns]);
+    expect([3, 4, 5].map((n) => row(cash, n).slice(0, 6))).toEqual([
+      [
+        es.paymentKinds.part,
+        iso(CUTOFF),
+        "5.00",
+        "0.00",
+        es.methods.cash,
+        es.partPaymentStates.received,
+      ],
+      [es.paymentKinds.card, iso(CUTOFF + MINUTE), "7.00", "", "", es.cardPaymentStates.captured],
+      [
+        es.paymentKinds.drawer,
+        iso(CUTOFF + 2 * MINUTE),
+        "5.00",
+        "",
+        "",
+        es.drawerKinds.cash_payment,
+      ],
+    ]);
+    // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
+    expect(es.ordersSheet).not.toBe(OLD_BOX_DATA_WORDS.en.ordersSheet);
+    expect(es.paymentKinds.part).not.toBe(OLD_BOX_DATA_WORDS.en.paymentKinds.part);
   });
 });

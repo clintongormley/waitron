@@ -10,7 +10,14 @@ import { invoiceLineCells, paymentOnAccount, readAccountantInvoices } from "./ac
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import type { HeardHoldings } from "./old-box-holdings.js";
-import { readActivitySince, type SinceRule } from "./old-box-data-since.js";
+import {
+  readActivitySince,
+  readOrdersSince,
+  readPaymentsSince,
+  type PaymentRow,
+  type SinceRule,
+} from "./old-box-data-since.js";
+import type { Decimal } from "@waitron/shared";
 import { renderWorkbook, type Cell, type WorkbookSheet } from "./xlsx-workbook.js";
 
 export interface OldBoxWorkbookInput {
@@ -32,12 +39,69 @@ export interface OldBoxWorkbookInput {
 /** The workbook's bytes and how many rows each tab lists, for the download's log line. */
 export interface OldBoxWorkbook {
   bytes: Uint8Array<ArrayBuffer>;
-  counts: { invoiceRows: number; activityRows?: number };
+  counts: { invoiceRows: number; orderRows?: number; paymentRows?: number; activityRows?: number };
 }
 
 const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
-function sinceIntro(rule: SinceRule, words: (typeof OLD_BOX_DATA_WORDS)["en" | "es"]): string {
+type Words = (typeof OLD_BOX_DATA_WORDS)["en" | "es"];
+
+const amount = (value: Decimal | null): Cell => (value === null ? null : { number: value });
+
+function paymentCells(fact: PaymentRow, words: Words): Cell[] {
+  const kind = words.paymentKinds[fact.kind];
+  const common = { at: fact.recordedAt, amount: amount(fact.amount), order: fact.orderNumber };
+  const order = common.order === null ? null : String(common.order);
+  switch (fact.kind) {
+    case "part":
+      return [
+        kind,
+        common.at,
+        common.amount,
+        amount(fact.tip),
+        words.methods[fact.method] ?? fact.method,
+        words.partPaymentStates[fact.state] ?? fact.state,
+        order,
+        null,
+        null,
+        null,
+        fact.personName,
+        fact.id,
+      ];
+    case "card":
+      return [
+        kind,
+        common.at,
+        common.amount,
+        null,
+        null,
+        words.cardPaymentStates[fact.state] ?? fact.state,
+        order,
+        fact.provider,
+        fact.reference,
+        fact.partPaymentId,
+        null,
+        fact.id,
+      ];
+    case "drawer":
+      return [
+        kind,
+        common.at,
+        common.amount,
+        null,
+        null,
+        words.drawerKinds[fact.drawerKind] ?? fact.drawerKind,
+        order,
+        null,
+        null,
+        fact.partPaymentId,
+        fact.personName,
+        fact.id,
+      ];
+  }
+}
+
+function sinceIntro(rule: SinceRule, words: Words): string {
   if (rule.kind === "all") return words.sinceAllIntro;
   const time = minute(new Date(rule.fromMs));
   return (rule.kind === "copy" ? words.sinceCopyIntro : words.sinceOwnIntro).replace(
@@ -165,8 +229,40 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
   const counts: OldBoxWorkbook["counts"] = { invoiceRows: rows.length };
   if (input.since !== undefined) {
     const intro = sinceIntro(input.since, words);
+    const orders = await readOrdersSince(input.db, input.since);
+    const facts = await readPaymentsSince(input.db, input.since);
     const activity = await readActivitySince(input.db, input.since);
+    counts.orderRows = orders.length;
+    counts.paymentRows = facts.length;
     counts.activityRows = activity.length;
+    sheets.push(
+      {
+        name: words.ordersSheet,
+        rows: [
+          [intro],
+          words.orderColumns,
+          ...orders.map((order): Cell[] => [
+            String(order.orderNumber),
+            order.label,
+            words.orderStatuses[order.status] ?? order.status,
+            order.openedAt,
+            order.settledAt,
+            order.collectedAt,
+            order.lineNo === null ? null : String(order.lineNo),
+            order.item,
+            order.quantity === null ? null : { number: order.quantity, places: 3 },
+            amount(order.unitPrice),
+            amount(order.lineTotal),
+            order.sentAt,
+            order.servedAt,
+          ]),
+        ],
+      },
+      {
+        name: words.paymentsSheet,
+        rows: [[intro], words.paymentColumns, ...facts.map((fact) => paymentCells(fact, words))],
+      },
+    );
     sheets.push({
       name: words.activitySheet,
       rows: [
