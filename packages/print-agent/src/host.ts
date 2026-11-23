@@ -177,7 +177,7 @@ export interface Host {
   /** Devices the agent can deliver a job to now — reported to the server on every pull. */
   visibleDevices(): Promise<VisibleDevice[]>;
   /** An active discovery pass over the given transports (all discoverable kinds when omitted); run
-   * only while the server holds a discovery window open. The deadline uses the host's clock. */
+   * only while the server holds a discovery window open. The deadline is a wall-clock time from now(). */
   scan(kinds?: TransportKind[], deadline?: number): Promise<DiscoveredDevice[]>;
   /** Bounded TCP connection checks; send no bytes and return only reachable targets. */
   probeNetwork(targets: NetworkProbe[]): Promise<DiscoveredDevice[]>;

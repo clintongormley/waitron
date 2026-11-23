@@ -5256,6 +5256,13 @@ is given up (test: `agent.test.ts`, "resends an unsent report across wall-clock 
 gives it up by an injected steady clock", and its twin for the default steady clock). The print agent row below keeps its earlier `host.now`
 wording for that check.
 
+**2026-11-24:** the print agent's discovery window, scan and address-check spacing, address and
+result expiry, self-enrol retry, and reset wait now use elapsed time. Setup gets the wall-clock
+time of the reset, and `Host.scan` gets the wall-clock end of the discovery window. Linux converts
+that end at scan entry so a clock change during USB discovery or between TCP dials leaves the sweep
+cutoff in place. The print agent row below records the earlier guards. See the focused clock cases
+in `agent.test.ts`, `linux-devices.test.ts` and `sweep.test.ts`.
+
 | Job | +400 | −400 | Decision |
 | --- | --- | --- | --- |
 | Dashboard sessions (`packages/identity/src/management-session.ts:79`) | expired, as before | expired once last seen more than the 30-minute idle timeout ahead; a smaller step ends none | fixed (test: `management-session.test.ts`, "a last-seen time ahead of the clock") |

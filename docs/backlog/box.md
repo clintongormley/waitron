@@ -11,24 +11,9 @@ that measures elapsed time on a steady clock. Start by listing every site
 (`git grep -n -i -E "went backwards|step(s|ped)? back|backward"` outside tests) and the rule each
 applies today; behaviour is kept site by site. Raised by #2331's review.
 
-**Still open:** these waits measured inside one process still guard by hand against a backward
-wall-clock step:
-
-- The print agent's `passed()` deadlines in `packages/print-agent/src/agent.ts`: the discovery
-  window, how long an address the server asked to have checked stays checkable, the spacing between
-  discovery scans and between address checks, how long a device an address check found stays
-  listed, the self-enrol retry spacing and the network-reset window. Each
-  counts a deadline further ahead than its own length as passed. Two of them leave `agent.ts` as
-  wall-clock times, so moving them changes what their readers receive: the setup page shows
-  `resetAt` as a countdown, and `host.scan` receives the discovery window's end as the network
-  sweep's deadline.
-- The network sweep in `apps/print-agent/src/sweep.ts` (`sweepPort`), which starts no further dial
-  once its deadline lies further ahead than it did at the sweep's start. The search below finds
-  neither this nor the print agent's `passed()` (its comment splits "stepped back" across two
-  lines), so neither has a row.
-- The backup schedule's interval fire in `apps/server/src/backup-sweep.ts` (`createBackupSchedule`),
-  held in memory as one interval after the time it was worked out (on a first pass with Cloud,
-  after the last saved Cloud copy); its row is in the table below.
+**Still open:** the backup schedule's interval fire in `apps/server/src/backup-sweep.ts`
+(`createBackupSchedule`), held in memory as one interval after the time it was worked out (on a
+first pass with Cloud, after the last saved Cloud copy). Its row is in the table below.
 
 The other rows below are saved dates, a heartbeat shared between processes, orderings, calendar time
 or declared limits, sorted on 2026-11-23 from each row's rule as the table states it, not by running

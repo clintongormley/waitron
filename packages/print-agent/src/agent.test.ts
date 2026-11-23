@@ -459,18 +459,18 @@ describe("createAgent — phases", () => {
       });
 
     it("with no token, asks its own box to vouch for it at once, then every 30 s while refused, and never knocks at the main box", async () => {
-      let now = 0;
-      const host = fakeHost({ config: ON_BOX, now: () => now });
+      let steady = 5_000;
+      const host = fakeHost({ config: ON_BOX, now: () => 1_000 });
       const c = followsMain();
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => steady });
       await agent.runOnce();
       expect(c.enrolSelf).toHaveBeenCalledTimes(1);
       for (let round = 0; round < 14; round += 1) {
-        now += 2_000;
+        steady += 2_000;
         await agent.runOnce();
       }
       expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after the refusal: still waiting
-      now += 2_000;
+      steady += 2_000;
       await agent.runOnce();
       expect(c.join).not.toHaveBeenCalled();
       expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
@@ -821,6 +821,7 @@ describe("createAgent — setup controls", () => {
 
   it("starts one five-minute reset window only for an approved out-of-touch agent", async () => {
     let now = 1_000;
+    let steady = 5_000;
     const host = fakeHost({
       config: { ...CONFIG, environment: "preproduction" },
       token: "a1.s",
@@ -829,7 +830,7 @@ describe("createAgent — setup controls", () => {
     const c = client({
       probeNode: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
     });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => steady });
     await agent.runOnce();
     expect((await agent.setupSnapshot()).outOfTouch).toBe(true);
     await expect(agent.beginNetworkReset()).resolves.toBe(true);
@@ -837,6 +838,7 @@ describe("createAgent — setup controls", () => {
     expect(await host.token()).toBe("a1.s");
 
     now = 2_000;
+    steady = 6_000;
     await expect(agent.beginNetworkReset()).resolves.toBe(true);
     expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
   });
@@ -944,7 +946,7 @@ describe("createAgent — setup controls", () => {
           : okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
       ),
     });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => 5_000 });
     await agent.runOnce();
     await agent.beginNetworkReset();
     expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
@@ -1000,7 +1002,7 @@ describe("createAgent — setup controls", () => {
   });
 
   it("expires the reset, retains the configured identity and environment, then joins again", async () => {
-    let now = 1_000;
+    let steady = 5_000;
     const host = fakeHost({
       config: {
         ...CONFIG,
@@ -1008,15 +1010,15 @@ describe("createAgent — setup controls", () => {
         servers: [{ url: "http://b.test", nodeId: "n2" }],
       },
       token: "a1.s",
-      now: () => now,
+      now: () => 1_000,
     });
     const c = client({
       pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
     });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => steady });
     await agent.runOnce();
     await agent.beginNetworkReset();
-    now = 301_000;
+    steady = 305_000;
     await agent.runOnce();
     expect(await host.token()).toBeNull();
     expect(await host.config()).toEqual({
@@ -1030,29 +1032,41 @@ describe("createAgent — setup controls", () => {
     expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
   });
 
-  // Asked at 1_000, so due at 301_000; a clock read earlier than 1_000 leaves it further ahead than
-  // its five minutes.
-  it.each([
-    ["400 days back", 1_000 - 400 * 86_400_000, null],
-    ["five minutes ahead exactly", 1_000, "a1.s"],
-    ["a millisecond past five minutes", 999, null],
-  ])(
-    "resets at once when the reset lies further ahead than its five minutes (%s)",
-    async (_case, steppedTo, token) => {
-      let now = 1_000;
-      const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+  it("keeps a pending reset across wall-clock jumps and projects its countdown for setup", async () => {
+    let wall = 1_700_000_000_000;
+    let steady = 5_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => steady);
+    try {
+      const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => wall });
       const c = client({
         pullJobs: vi.fn(async () => failR({ kind: "unreachable", detail: "offline" })),
       });
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
-      await agent.beginNetworkReset();
-      expect((await agent.setupSnapshot()).resetAt).toBe(301_000);
-      now = steppedTo;
+      await expect(agent.beginNetworkReset()).resolves.toBe(true);
+      expect((await agent.setupSnapshot()).resetAt).toBe(wall + 300_000);
+
+      wall -= 400 * 86_400_000;
+      steady += 1_000;
       await agent.runOnce();
-      expect(await host.token()).toBe(token);
-    },
-  );
+      expect(await host.token()).toBe("a1.s");
+      await expect(agent.beginNetworkReset()).resolves.toBe(true);
+      expect((await agent.setupSnapshot()).resetAt).toBe(wall + 299_000);
+
+      wall += 800 * 86_400_000;
+      steady = 304_999;
+      await agent.runOnce();
+      expect(await host.token()).toBe("a1.s");
+      expect((await agent.setupSnapshot()).resetAt).toBe(wall + 1);
+
+      steady = 305_000;
+      await agent.runOnce();
+      expect(await host.token()).toBeNull();
+      expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+    } finally {
+      clock.mockRestore();
+    }
+  });
 
   it.each([
     [null, null, false],
@@ -1201,9 +1215,12 @@ describe("createAgent — on-node self-enrol", () => {
 
   it("a spare promoted while a refusal's wait runs never knocks, and self-enrols when the wait ends", async () => {
     const loopback = "https://127.0.0.1";
-    let now = 0;
+    let steady = 5_000;
     let promoted = false;
-    const host = fakeHost({ config: { serverUrl: loopback, name: "kitchen-pi" }, now: () => now });
+    const host = fakeHost({
+      config: { serverUrl: loopback, name: "kitchen-pi" },
+      now: () => 1_000,
+    });
     const c = client({
       probeNode: vi.fn(async () =>
         okR<NodeProbe>(
@@ -1215,11 +1232,11 @@ describe("createAgent — on-node self-enrol", () => {
         promoted ? okR({ token: "id.self" }) : failR({ kind: "refused" }),
       ),
     });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => steady });
     await agent.runOnce();
     promoted = true;
     for (let round = 0; round < 16; round += 1) {
-      now += 2_000;
+      steady += 2_000;
       await agent.runOnce();
     }
     expect(c.join).not.toHaveBeenCalled();
@@ -1311,24 +1328,24 @@ describe("createAgent — on-node self-enrol", () => {
 
   it(`a halted agent asks its own box at once, then at most every ${SELF_ENROL_RETRY_INTERVAL_MS / 1000} s`, async () => {
     expect(SELF_ENROL_RETRY_INTERVAL_MS).toBe(30_000);
-    let now = 0;
-    const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+    let wall = 1_700_000_000_000;
+    let steady = 5_000;
+    const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => wall });
     const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })) });
-    const agent = createAgent({ host, client: c });
+    const agent = createAgent({ host, client: c, steady: () => steady });
     await agent.runOnce(); // the token is refused: halted
-    expect(c.enrolSelf).toHaveBeenCalledTimes(0);
-    now += 2_000;
+    expect(c.enrolSelf).not.toHaveBeenCalled();
     await agent.runOnce(); // the first round after the halt asks
     expect(c.enrolSelf).toHaveBeenCalledTimes(1);
-    for (let round = 0; round < 14; round++) {
-      now += 2_000;
-      await agent.runOnce();
-    }
-    expect(now).toBe(30_000);
-    expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after that ask: still waiting
-    now += 2_000;
+
+    wall += 400 * 86_400_000;
+    steady = 34_999;
     await agent.runOnce();
-    expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+    wall -= 800 * 86_400_000;
+    steady = 35_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2);
     expect(agent.status.phase).toBe("unauthorized");
   });
 });
@@ -1572,7 +1589,8 @@ describe("createAgent — inventory, discovery and resolve", () => {
     "uses the local clock for a discovery duration (offset %s)",
     async (offset) => {
       const scan = vi.fn(async () => []);
-      let now = 1_000 + offset;
+      const now = 1_000 + offset;
+      let steady = 5_000;
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan, now: () => now });
       const c = client({
         pullJobs: vi
@@ -1582,11 +1600,11 @@ describe("createAgent — inventory, discovery and resolve", () => {
           )
           .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
       });
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => steady });
       await agent.runOnce();
       await agent.runOnce();
       expect(scan).toHaveBeenCalledWith(undefined, 2234 + offset);
-      now += 1234;
+      steady += 1234;
       await agent.runOnce();
       expect(scan).toHaveBeenCalledTimes(1);
     },
@@ -1606,7 +1624,8 @@ describe("createAgent — inventory, discovery and resolve", () => {
           throw new Error("no Bluetooth");
         },
       });
-      let now = 1000 + offset;
+      const now = 1000 + offset;
+      let steady = 5_000;
       host.now = () => now;
       const c = client({
         pullJobs: vi.fn().mockResolvedValue(
@@ -1619,7 +1638,7 @@ describe("createAgent — inventory, discovery and resolve", () => {
           }),
         ),
       });
-      const agent = createAgent({ host, client: c });
+      const agent = createAgent({ host, client: c, steady: () => steady });
       await agent.runOnce();
       expect(probeNetwork).not.toHaveBeenCalled();
       vi.mocked(c.pullJobs).mockResolvedValue(failR({ kind: "unreachable", detail: "offline" }));
@@ -1630,75 +1649,88 @@ describe("createAgent — inventory, discovery and resolve", () => {
       await agent.runOnce();
       expect(inventoryOf(c, 2).scanned).toEqual([found]);
       expect(probeNetwork).toHaveBeenCalledTimes(2);
-      now = 30000 + offset;
+      steady = 34_000;
       await agent.runOnce();
       expect(probeNetwork).toHaveBeenCalledTimes(2);
       expect(inventoryOf(c, 3).scanned).toEqual([]);
     },
   );
 
-  // Received at 1_000 ending at 181_000; a clock read earlier than 1_000 leaves that end further
-  // ahead than it was when it arrived. The pulls after the first fail, so nothing replaces it.
-  it.each([
-    ["400 days back", 1_000 - 400 * 86_400_000, 0],
-    ["as far ahead as it arrived", 1_000, 1],
-    ["a millisecond further ahead than it arrived", 999, 0],
-  ])(
-    "stops scanning when the discovery window's end lies further ahead than it arrived (%s)",
-    async (_case, steppedTo, scans) => {
-      const scan = vi.fn(async () => []);
-      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
-      let now = 1_000;
-      host.now = () => now;
-      const c = client({
-        pullJobs: vi
-          .fn()
-          .mockResolvedValueOnce(
-            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
-          )
-          .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
-      });
-      const agent = createAgent({ host, client: c });
-      await agent.runOnce();
-      now = steppedTo;
-      await agent.runOnce();
-      expect(scan).toHaveBeenCalledTimes(scans);
-    },
-  );
+  it("keeps a discovery window across wall-clock jumps when subsequent pulls fail", async () => {
+    let wall = 1_700_000_000_000;
+    let steady = 5_000;
+    const scan = vi.fn(async () => []);
+    const host = fakeHost({ config: CONFIG, token: "a1.s", scan, now: () => wall });
+    const c = client({
+      pullJobs: vi
+        .fn()
+        .mockResolvedValueOnce(
+          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 180_000 }),
+        )
+        .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
+    });
+    const agent = createAgent({ host, client: c, steady: () => steady });
+    await agent.runOnce();
 
-  // Received at 1_000 for 29 s, so it ends at 30_000; a clock read earlier than 1_000 leaves that
-  // end further ahead than the check's own length.
-  it.each([
-    ["400 days back", 1_000 - 400 * 86_400_000, 0],
-    ["its length ahead exactly", 1_000, 1],
-    ["a millisecond past its length", 999, 0],
-  ])(
-    "drops an address check whose end lies further ahead than its length (%s)",
-    async (_case, steppedTo, probes) => {
-      const target = { host: "192.168.20.247", port: 9100, expiresInMs: 29000 };
-      const probeNetwork = vi.fn().mockResolvedValue([]);
-      const host = fakeHost({ config: CONFIG, token: "a1.s", probeNetwork });
-      let now = 1000;
-      host.now = () => now;
-      const c = client({
-        pullJobs: vi.fn().mockResolvedValue(
-          okR({
+    wall -= 400 * 86_400_000;
+    steady += 1_000;
+    await agent.runOnce();
+    expect(scan).toHaveBeenNthCalledWith(1, undefined, wall + 179_000);
+
+    wall += 800 * 86_400_000;
+    steady = 184_999;
+    await agent.runOnce();
+    expect(scan).toHaveBeenNthCalledWith(2, undefined, wall + 1);
+
+    steady = 185_000;
+    await agent.runOnce();
+    expect(scan).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks and reports an address through wall-clock jumps until its elapsed expiry", async () => {
+    let wall = 1_700_000_000_000;
+    let steady = 5_000;
+    const target = { host: "192.168.20.247", port: 9100, expiresInMs: 29_000 };
+    const found: DiscoveredDevice = {
+      transport: "network_tcp",
+      host: target.host,
+      port: target.port,
+    };
+    const probeNetwork = vi.fn(async () => [found]);
+    const host = fakeHost({ config: CONFIG, token: "a1.s", probeNetwork, now: () => wall });
+    const c = client({
+      pullJobs: vi
+        .fn()
+        .mockResolvedValueOnce(
+          okR<PullReply>({
             nodeId: "n1",
             servers: [],
             jobs: [],
             discoveryExpiresInMs: null,
             networkProbes: [target],
           }),
-        ),
-      });
-      const agent = createAgent({ host, client: c });
-      await agent.runOnce();
-      vi.mocked(c.pullJobs).mockResolvedValue(failR({ kind: "unreachable", detail: "offline" }));
-      now = steppedTo;
-      await agent.runOnce();
-      expect(probeNetwork).toHaveBeenCalledTimes(probes);
-    },
-  );
+        )
+        .mockResolvedValue(failR({ kind: "unreachable", detail: "offline" })),
+    });
+    const agent = createAgent({ host, client: c, steady: () => steady });
+    await agent.runOnce();
+
+    wall -= 400 * 86_400_000;
+    steady += 1_000;
+    await agent.runOnce();
+    expect(probeNetwork).toHaveBeenNthCalledWith(1, [target]);
+
+    wall += 800 * 86_400_000;
+    steady = 33_999;
+    await agent.runOnce();
+    expect(probeNetwork).toHaveBeenNthCalledWith(2, [target]);
+    expect(inventoryOf(c, 2).scanned).toEqual([found]);
+
+    steady = 34_000;
+    await agent.runOnce();
+    expect(probeNetwork).toHaveBeenCalledTimes(2);
+    expect(inventoryOf(c, 3).scanned).toEqual([]);
+  });
 
   it("does not carry a server's address checks to a different primary", async () => {
     const B = "http://b.test";
@@ -2411,20 +2443,19 @@ describe("createAgent — inventory, discovery and resolve", () => {
     });
 
     it("contains a clock failure when a discovery pass starts", async () => {
-      let reads = 0;
+      const now = vi.fn(() => 1_000);
       const scan = vi.fn(async () => [bt]);
       const host = fakeHost({
         config: CONFIG,
         token: "a1.s",
         scan,
-        now: () => {
-          reads += 1;
-          if (reads === 4) throw new Error("clock boom");
-          return 1_000;
-        },
+        now,
       });
       const agent = createAgent({ host, client: client({ pullJobs: vi.fn(async () => open()) }) });
       await agent.runOnce();
+      now.mockImplementationOnce(() => {
+        throw new Error("clock boom");
+      });
       await agent.runOnce();
       expect(host.logs).toContain('warn scan failed {"error":"clock boom"}');
       expect(scan).not.toHaveBeenCalled();
@@ -2672,28 +2703,32 @@ describe("createAgent — start/stop and logging", () => {
   );
 
   it("starts another empty scan at the next polling interval", async () => {
-    let clock = 1_000;
+    let steady = 5_000;
     const held = heldPulls();
     const scan = vi.fn(async () => {
-      clock += 20;
+      steady += 20;
       return [];
     });
     const host = fakeHost({
       config: CONFIG,
       token: "a1.s",
       scan,
-      now: () => clock,
     });
     const pulls = held.pull.mockResolvedValueOnce(
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
     );
-    const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+    const agent = createAgent({
+      host,
+      client: client({ pullJobs: pulls }),
+      intervalMs: 50,
+      steady: () => steady,
+    });
     await agent.runOnce();
     const loop = agent.start();
     try {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(scan).toHaveBeenCalledTimes(1);
-      clock = 1_050;
+      steady = 5_050;
       held.waits[0]!.resolve(
         okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
       );
@@ -2706,44 +2741,47 @@ describe("createAgent — start/stop and logging", () => {
     }
   });
 
-  // The next pass is due at 1_050, worked out at 1_000; a clock read earlier than 1_000 leaves it
-  // further ahead than one interval. The server's window follows its clock, so the first poll after
-  // a step back only brings a fresh window and the pass runs on the next.
-  it.each([
-    ["400 days back", 1_000 - 400 * 86_400_000, 2],
-    ["one interval ahead exactly", 1_000, 1],
-    ["a millisecond past one interval", 999, 2],
-  ])(
-    "starts the next scan within two polls when its time lies further ahead than one interval (%s)",
-    async (_case, steppedTo, scans) => {
-      let clock = 1_000;
+  it.each([-1, 1])(
+    "spaces scans and typed-address checks by the polling interval after a wall-clock jump (%s)",
+    async (direction) => {
+      let wall = 1_700_000_000_000;
+      let steady = 5_000;
       const held = heldPulls();
       const scan = vi.fn(async () => []);
-      const host = fakeHost({
-        config: CONFIG,
-        token: "a1.s",
-        scan,
-        now: () => clock,
+      const probeNetwork = vi.fn(async () => []);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan, probeNetwork, now: () => wall });
+      const reply = okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryExpiresInMs: 10_000,
+        networkProbes: [{ host: "192.168.20.247", port: 9100, expiresInMs: 29_000 }],
       });
-      const pulls = held.pull.mockResolvedValueOnce(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
-      );
-      const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+      const agent = createAgent({
+        host,
+        client: client({ pullJobs: held.pull.mockResolvedValueOnce(reply) }),
+        intervalMs: 50,
+        steady: () => steady,
+      });
       await agent.runOnce();
       const loop = agent.start();
       try {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await vi.waitFor(() => expect(held.waits).toHaveLength(1), { interval: 1 });
         expect(scan).toHaveBeenCalledTimes(1);
-        clock = steppedTo;
-        held.waits[0]!.resolve(
-          okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        held.waits[1]!.resolve(
-          okR({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: 10_000 }),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(scan).toHaveBeenCalledTimes(scans);
+        expect(probeNetwork).toHaveBeenCalledTimes(1);
+
+        wall += direction * 400 * 86_400_000;
+        steady = 5_049;
+        held.waits[0]!.resolve(reply);
+        await vi.waitFor(() => expect(held.waits).toHaveLength(2), { interval: 1 });
+        expect(scan).toHaveBeenCalledTimes(1);
+        expect(probeNetwork).toHaveBeenCalledTimes(1);
+
+        steady = 5_050;
+        held.waits[1]!.resolve(reply);
+        await vi.waitFor(() => expect(held.waits).toHaveLength(3), { interval: 1 });
+        expect(scan).toHaveBeenCalledTimes(2);
+        expect(probeNetwork).toHaveBeenCalledTimes(2);
       } finally {
         agent.stop();
         held.finish();

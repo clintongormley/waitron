@@ -1,5 +1,5 @@
 import type { networkInterfaces } from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice } from "@waitron/print-agent";
 import { hostsInSubnet, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 
@@ -33,38 +33,40 @@ const iface = (
 };
 
 describe("sweep deadline", () => {
-  it.each(["expiry", "backward"])(
-    "keeps partial hits and stops dialling after %s",
-    async (step) => {
-      let now = 1_000;
+  it("bounds each dial by the steady deadline and keeps hits found before it", async () => {
+    let steady = 1_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => steady);
+    try {
       const calls: [string, number][] = [];
       const found = await sweepPort({
-        hosts: ["10.0.0.1", "10.0.0.2", "10.0.0.3"],
+        hosts: ["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"],
         port: 9100,
         concurrency: 1,
         timeoutMs: 500,
-        deadline: 1_600,
-        now: () => now,
+        steadyDeadline: 1_600,
         connect: async (host, _port, timeout) => {
           calls.push([host, timeout]);
-          now = calls.length === 1 ? 1_500 : step === "expiry" ? 1_600 : 999;
+          steady = [1_500, 1_599, 1_600][calls.length - 1]!;
           return true;
         },
       });
       expect(calls).toEqual([
         ["10.0.0.1", 500],
         ["10.0.0.2", 100],
+        ["10.0.0.3", 1],
       ]);
-      expect(found.map((d) => d.host)).toEqual(["10.0.0.1", "10.0.0.2"]);
-    },
-  );
+      expect(found.map((d) => d.host)).toEqual(["10.0.0.1", "10.0.0.2", "10.0.0.3"]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it("opens no socket when the deadline has already passed", async () => {
     const calls: string[] = [];
     const found = await sweepPort({
       hosts: ["10.0.0.1"],
       port: 9100,
-      deadline: 1_000,
-      now: () => 1_000,
+      steadyDeadline: 1_000,
+      steady: () => 1_000,
       connect: async (host) => {
         calls.push(host);
         return true;

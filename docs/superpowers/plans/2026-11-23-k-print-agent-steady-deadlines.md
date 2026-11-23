@@ -3,7 +3,9 @@
 A system time correction should leave discovery, typed-address checks, self-enrol retries and a
 pending reset with the same amount of time left. The setup countdown and `Host.scan` still receive
 local wall-clock times. This slice of the [clock backlog](../../backlog/box.md#one-steady-clock-helper-instead-of-hand-written-clock-step-back-guards)
-covers the print agent and its network sweep. The backup schedule remains listed there.
+covers the print agent and its network sweep. The backup schedule remains listed there. Claude
+reviewed the plan. The watcher cleared it with two changes at 23:56 on 2026-11-23, recorded in
+Lane K’s `questions.md` and reflected below.
 
 ## Agent deadlines
 
@@ -25,9 +27,8 @@ covers the print agent and its network sweep. The backup schedule remains listed
 - [ ] In `packages/print-agent/src/agent.ts`, use `AgentOptions.steady` for all of those deadlines.
   Compare the steady time directly with each deadline. Remove the backward-step clause in
   `passed()`, `discoveryLength` and the redundant length on found probes. Keep the inclusive cutoff,
-  reset and refresh points and wall-clock job timestamps. Use a shared `steadyNow(): number` default
-  exported through `packages/print-agent/src/index.ts`. The app already depends on that package,
-  which can provide one reader for both without depending on another workspace package.
+  reset and refresh points and wall-clock job timestamps. Keep the inline `performance.now()`
+  default and the existing package boundary.
 - [ ] Project the remaining time onto `host.now()` in `setupSnapshot` and inside `discover`'s existing
   error handler before calling `host.scan`. Document the clock domains in `AgentOptions`,
   `AgentSetupSnapshot` and `packages/print-agent/src/host.ts`. Rerun the same agent tests and record
@@ -36,15 +37,15 @@ covers the print agent and its network sweep. The backup schedule remains listed
 ## Network sweep
 
 - [ ] In `apps/print-agent/src/linux-devices.test.ts`, move the wall clock during USB discovery and
-  between dial batches in the real scan path. Assert the time that remains at the first dial,
-  subsequent bounded timeouts and expiry on the steady clock. In `sweep.test.ts`, replace the
-  backward-allowance assertion (currently line 36) with the elapsed cutoff. Keep partial hits
-  and the per-dial cap assertions. Run both files against the old behavior.
+  between dial batches in the real scan path. Assert that conversion at scan entry preserves the
+  cutoff through both moves. In `sweep.test.ts`, replace the backward-allowance assertion with the
+  elapsed cutoff, keeping partial hits and the per-dial cap assertions there. Run both files
+  against the old behavior.
 - [ ] In `apps/print-agent/src/linux-devices.ts`, translate the wall deadline to a steady deadline
   at `scan` entry before asynchronous work. Pass that deadline through the internal scan paths,
   including the test-only injected scan. Name the numeric cutoff `steadyDeadline` and the injected
-  reader `steady`. In `apps/print-agent/src/sweep.ts`, use the shared reader by default, remove the
-  backward allowance, and give each dial the lesser of its cap and the time remaining. Keep the
+  reader `steady`. Pass Linux’s existing reader to the sweep. In `apps/print-agent/src/sweep.ts`,
+  use inline `performance.now()` by default, remove the backward allowance, and give each dial the lesser of its cap and the time remaining. Keep the
   existing no-deadline behavior, mDNS, subnet and concurrency limits, and results already received.
   A wall step between the caller's projection and the host's conversion can shift that scan's
   cutoff. The required wall-clock boundary carries only the projected date.
