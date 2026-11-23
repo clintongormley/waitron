@@ -8,6 +8,7 @@ export const GUIDE_LINKS = {
   "servers.handover": { page: "servers", section: "hand-over" },
   "servers.handed-over": { page: "servers", section: "handed-over" },
   "email.set-up": { page: "email", section: "set-up" },
+  "email.google-workspace": { page: "email", section: "google-workspace" },
   "email.remove": { page: "email", section: "remove" },
   "email.test-results": { page: "email", section: "test-results" },
   "venue.time-zone": { page: "time-zone", section: "confirm" },

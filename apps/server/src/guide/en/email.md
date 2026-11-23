@@ -29,6 +29,16 @@ development boxes keep invoice email locally even when account email uses a save
 
 In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Admin to open captured messages.
 
+## Use a Google Workspace app password {#google-workspace}
+
+In the Google account you use to send mail, turn on **2-Step Verification**.
+Open `https://myaccount.google.com/apppasswords` and create an app password.
+In **System → Email** in Waitron, turn on **Use authentication**. Enter your full Google Workspace
+email address in **User**, paste the app password into **Password** and send a test.
+
+If Google does not offer app passwords, check your organisation’s sign-in policy. For example,
+a policy that requires only security keys can block app passwords.
+
 ## Email the daily sales report {#daily-report}
 
 In **System → Email**, turn on **Email the daily report**, choose recipients and save. Each
