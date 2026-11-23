@@ -2043,6 +2043,11 @@ export interface ServerRow {
    * backups are not set up.
    */
   recoveredRecordsBackup: "backed-up" | "awaiting-backup" | "no-backups" | null;
+  /**
+   * After a planned handover with no wipe asked: whether the box's last summary names invoice
+   * records this server lacks. Null otherwise, or before the box has asked since this server started.
+   */
+  oldBoxHoldsMore: boolean | null;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */

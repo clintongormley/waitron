@@ -1155,7 +1155,8 @@ export class ServersScreen extends LitElement {
           : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
               <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
               ${
-                action === "reset" && target.returnScenario === "emergency"
+                action === "reset" &&
+                (target.returnScenario === "emergency" || target.oldBoxHoldsMore === true)
                   ? this.#renderDownload(target)
                   : nothing
               }

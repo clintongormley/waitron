@@ -26,6 +26,7 @@ const primaryRow = {
   canReset: false,
   returnScenario: null,
   recoveredRecordsBackup: null,
+  oldBoxHoldsMore: null,
 } as const;
 
 const asking = {

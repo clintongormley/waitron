@@ -18,6 +18,7 @@ import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { reloadAfterRemoval, removeStandby } from "./membership-removal.js";
+import type { OldBoxHoldings } from "./old-box-holdings.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { raiseSetAsideOnReset } from "./reset-alert.js";
 import { readResetOrderFor, readResetOrderOperation, type ResetOrder } from "./reset-order.js";
@@ -33,6 +34,8 @@ export interface ResetAcknowledgement {
 
 export interface ResetOrderApiDeps extends ReturnRecordsDeps {
   reloadStream(): Promise<void>;
+  /** Where each verified question's summary is kept, for the Servers list to compare. */
+  oldBoxHoldings: OldBoxHoldings;
 }
 
 const ACKNOWLEDGED = "reset_acknowledged";
@@ -213,6 +216,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
       // Read before the acknowledgement, which writes no order and is refused unless one stands.
       const order = await readResetOrderFor(deps.node, deps.nodeId, source);
       const lacking = await lackingFor(deps, holdings, order);
+      deps.oldBoxHoldings.record(source, holdings);
       if (ack !== undefined) await acknowledge(deps, log, source, ack);
       c.header("Cache-Control", "no-store");
       return c.json(

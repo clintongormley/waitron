@@ -1413,6 +1413,7 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
+          oldBoxHoldsMore: null,
         },
         {
           ...neverJoined,
@@ -1426,6 +1427,7 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
+          oldBoxHoldsMore: null,
         },
         {
           ...joined,
@@ -1439,6 +1441,7 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
+          oldBoxHoldsMore: null,
         },
         {
           ...former,
@@ -1452,6 +1455,7 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
+          oldBoxHoldsMore: null,
         },
         {
           ...evicted,
@@ -1465,6 +1469,7 @@ describe("GET /management-api/servers", () => {
           canReset: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
+          oldBoxHoldsMore: null,
         },
       ],
     });

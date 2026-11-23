@@ -24,6 +24,7 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
+      oldBoxHoldsMore: null,
     },
     {
       nodeId: "new",
@@ -39,6 +40,7 @@ const listing: ServerListing = {
       canReset: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
+      oldBoxHoldsMore: null,
     },
   ],
 };

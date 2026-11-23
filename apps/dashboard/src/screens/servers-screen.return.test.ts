@@ -25,6 +25,7 @@ const row = (overrides: Partial<ServerRow>): ServerRow => ({
   canReset: false,
   returnScenario: null,
   recoveredRecordsBackup: null,
+  oldBoxHoldsMore: null,
   ...overrides,
 });
 
@@ -307,6 +308,28 @@ describe("Wipe and remove", () => {
     expect(link.target).toBe("_blank");
     expect(link.rel).toContain("noopener");
   });
+
+  it.each([
+    ["controlled", true, true],
+    ["controlled", false, false],
+    ["controlled", null, false],
+    ["emergency", true, true],
+    ["emergency", false, true],
+    ["emergency", null, true],
+  ] as const)(
+    "after a %s handover with oldBoxHoldsMore %s, the download line shows: %s",
+    async (returnScenario, oldBoxHoldsMore, shown) => {
+      const el = await mount(
+        stubApi(listingWith({ removable: true, canReset: true, returnScenario, oldBoxHoldsMore })),
+      );
+      await openAction(el, "reset");
+      expect(lineIn(el, "reset-download")).toBe(
+        shown
+          ? "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it."
+          : null,
+      );
+    },
+  );
 
   it.each([
     [

@@ -53,6 +53,7 @@ import { loadConfig } from "./config.js";
 import { readModuleConfig } from "./module-config.js";
 import { runEntry } from "./node-entry.js";
 import { FRESH, type RecoveryState } from "./recovery-state.js";
+import { createOldBoxHoldings } from "./old-box-holdings.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
 import { ASK_AFTER_REFUSAL_MS, startResetOrderDuty } from "./reset-order-duty.js";
 import { ALL_MODULES } from "./modules.js";
@@ -524,6 +525,7 @@ async function oldBoxBackRestricted(
       nodeId: spareId,
       modules,
       reloadStream: async () => {},
+      oldBoxHoldings: createOldBoxHoldings(),
     },
     () => undefined,
   );
