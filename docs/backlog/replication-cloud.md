@@ -598,12 +598,16 @@ Slice 3.
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
 - **What A1558 left open (22 November 2026).** Wiping a replaced main box from its Servers row once
-  its records are back is built (PR 10a). Left for PR 10b
+  its records are back is built (PR 10a). PR 10b's first part lets a "Manage boxes" holder download
+  the invoice records the new main box lacks from the old box's own page, and the Wipe and remove
+  dialog always points to it. Left for its second part
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): wiping it before
-  its return completes, the download of the data the old box holds that this box lacks (after an
-  emergency switch the 10a dialog already points to the old box's address for it), and checking in
-  the dialog whether the old box holds records this box lacks. As its own pull request: the old box
+  its return completes, the download's tabs of what changed after the copy an emergency switch
+  started from, and a Download button on the new main box. As its own pull request: the old box
   also returning other boxes' invoice records it holds.
+  An old main box that cannot reach the new main box, so never learns it was replaced, starts on
+  the waiting page rather than its own page, and so offers no download; whether the waiting page
+  should offer one is open (PR 10b first part's finish review, 23 November 2026).
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 

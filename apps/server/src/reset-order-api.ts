@@ -11,13 +11,14 @@ import {
 import { verifyEnvelope } from "@waitron/handover";
 import { canonicalize, servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
 import { appendHandoverEventTx, nodeHandoverEvents, readPinnedPrimaryKey } from "@waitron/node-db";
-import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { MalformedHoldingsError } from "@waitron/module";
 import { AppError, isAppError } from "@waitron/shared";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { reloadAfterRemoval, removeStandby } from "./membership-removal.js";
+import { readHoldings } from "./old-box-holdings.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { raiseSetAsideOnReset } from "./reset-alert.js";
 import { readResetOrderFor, readResetOrderOperation, type ResetOrder } from "./reset-order.js";
@@ -196,6 +197,20 @@ async function acknowledge(
   await reloadAfterRemoval({ log, reloadStream: deps.reloadStream }, source);
 }
 
+/** This box's summary for the answer; left out when it cannot be read, so an order still goes. */
+async function ownHoldings(
+  deps: ResetOrderApiDeps,
+  log: Logger,
+  source: string,
+): Promise<{ holdings?: Record<string, CanonicalValue> }> {
+  try {
+    return { holdings: await readHoldings(deps.db, deps.modules) };
+  } catch (error) {
+    log("warn", "reset-order.holdings_unread", { nodeId: source, errorCode: codeOf(error) });
+    return {};
+  }
+}
+
 /** `POST /api/node/reset-order`: a replaced old main box asks whether it is ordered to reset. */
 export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logger): void {
   const run = createErrorBoundary(
@@ -221,6 +236,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
           sourceNodeId: source,
           order: order === null ? null : { orderId: order.orderId, acceptLoss: order.acceptLoss },
           lacking,
+          ...(await ownHoldings(deps, log, source)),
         }),
         200,
       );

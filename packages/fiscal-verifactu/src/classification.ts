@@ -1,6 +1,6 @@
 import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 
-const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
+const LEDGER = "what happened, keyed by the writing node";
 
 export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("verifactu_records", "ledger", LEDGER),

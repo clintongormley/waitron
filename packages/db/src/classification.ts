@@ -2,8 +2,8 @@ import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolm
 import { SETTINGS_CHANGE_TYPE, type ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
-const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
-const STATE = "manager configuration / live service; copied to a standby, never drained back";
+const LEDGER = "what happened, keyed by the writing node";
+const STATE = "manager configuration / live service; copied to a standby";
 
 /**
  * The tables core's own module code owns. Core's change sources and its own backup check read this
@@ -31,7 +31,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "node_id and recovery_epoch scope every protocol access; admission validates referenced ids",
   ),
 
-  // ledger — copied to a standby AND drained back from a returned box.
+  // ledger — copied to a standby.
   appendOnly("sales", "ledger", LEDGER),
   appendOnly("sale_lines", "ledger", LEDGER),
   appendOnly("tenders", "ledger", LEDGER),
@@ -109,7 +109,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "which dish lines each filed sale row stands for; written with the sale, never corrected",
   ),
 
-  // state — manager configuration and live service; copied to a standby, never drained back.
+  // state — manager configuration and live service; copied to a standby.
   classify("taxpayer", "state", STATE),
   classify("day_cutover_changes", "state", STATE),
   classify("nodes", "state", STATE),
@@ -140,7 +140,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("print_agents", "state", STATE),
   classify("custom_themes", "state", STATE),
   classify("incidents", "state", STATE),
-  classify("working_orders", "state", "orders in flight; copied to a standby, never drained back"),
+  classify("working_orders", "state", "orders in flight; copied to a standby"),
   classify(
     "working_order_lines",
     "state",
@@ -303,7 +303,11 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("content_suggestions", "state", SUGGESTIONS),
 
   // venue-service
-  classify("departments", "state", SERVICE_STATE),
+  classify(
+    "departments",
+    "state",
+    "venue service configuration or live order state; copied to a standby",
+  ),
   classify("department_courses", "state", SERVICE_STATE),
   classify("service_steps", "state", SERVICE_STATE),
   classify("service_step_completions", "state", SERVICE_STATE),

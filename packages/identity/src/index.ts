@@ -200,4 +200,4 @@ export { assertUsableAdminRemains } from "./admin-anchor.js";
 
 export { resealTwoStepSecrets } from "./reseal.js";
 
-export { checkLockedCopyLogin } from "./locked-copy-login.js";
+export { checkLockedCopyLogin, checkPasswordInCopy } from "./locked-copy-login.js";

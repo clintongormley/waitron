@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { liveBackupQuery, readNodeMembership } from "@waitron/db";
+import { readNodeMembership } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
 import { readHandoverRestriction } from "@waitron/node-db";
 import { probeEnvironmentMove } from "@waitron/provisioning";
@@ -10,6 +10,7 @@ import { signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { realSleep } from "./loop.js";
 import { mainBoxToAsk } from "./main-box-answer.js";
+import { readHoldings, type HeardHoldings } from "./old-box-holdings.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { replacedResetCheck, type ReplacedResetCheck } from "./replaced-reset-check.js";
 import { writeReplacedResetMarker } from "./replaced-reset.js";
@@ -47,15 +48,6 @@ type Asked =
   | ReplacedResetCheck
   | { outcome: "waiting" }
   | { outcome: "unreachable"; fields: Record<string, unknown> };
-
-async function readHoldings(deps: ResetOrderDutyDeps): Promise<Record<string, CanonicalValue>> {
-  const holdings: Record<string, CanonicalValue> = {};
-  for (const module of deps.modules) {
-    const seat = module.handover?.holdings;
-    if (seat) holdings[module.name] = await seat(liveBackupQuery(deps.db));
-  }
-  return holdings;
-}
 
 async function ask(
   deps: ResetOrderDutyDeps,
@@ -108,12 +100,20 @@ async function ask(
  */
 export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   answer(): ResetOrderAnswer | null;
+  /** The main box's summary from the latest verified answer; kept through refusals and silence. */
+  mainHoldings(): HeardHoldings | null;
   stop(): Promise<void>;
 } {
   const stopping = new AbortController();
   const sleep = deps.sleep ?? realSleep;
   const now = deps.now ?? (() => new Date());
   let answer: ResetOrderAnswer | null = null;
+  let heard: HeardHoldings | null = null;
+  // Stamped with the time the question left: records are only added, so the main box held no
+  // less then than the summary it read afterwards.
+  const hear = (asked: Extract<ReplacedResetCheck, { lacking: unknown }>, askedAt: Date) => {
+    heard = asked.holdings === undefined ? null : { holdings: asked.holdings, heardAt: askedAt };
+  };
   // Each cause is logged once, and again only when it changes.
   let lastCause: string | null = null;
   let extraPassFor: string | null = null;
@@ -124,7 +124,7 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   };
   // A restricted start writes no venue data (`restricted-start.ts`), so one reading lasts it.
   let holdings: Record<string, CanonicalValue> | undefined;
-  const holdingsOf = async () => (holdings ??= await readHoldings(deps));
+  const holdingsOf = async () => (holdings ??= await readHoldings(deps.db, deps.modules));
   const attempt = async (ack?: ResetAcknowledgement): Promise<Asked | null> => {
     try {
       return await ask(deps, holdingsOf, ack);
@@ -196,9 +196,11 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
 
   const task = (async () => {
     while (!stopping.signal.aborted) {
+      const askedAt = now();
       const asked = await attempt();
       if (asked?.outcome === "ordered") {
         answer = { order: null, lacking: asked.lacking };
+        hear(asked, askedAt);
         if (stopping.signal.aborted) return;
         try {
           if (await acknowledgeAndRestart(asked)) return;
@@ -207,6 +209,7 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
         }
       } else if (asked?.outcome === "no-order") {
         answer = { order: null, lacking: asked.lacking };
+        hear(asked, askedAt);
         lastCause = null;
       } else if (asked?.outcome === "refused") {
         answer = null;
@@ -222,6 +225,7 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   })();
   return {
     answer: () => answer,
+    mainHoldings: () => heard,
     stop: async () => {
       stopping.abort();
       await task;

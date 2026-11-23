@@ -1,7 +1,7 @@
 import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
-const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
+const LEDGER = "what happened, keyed by the writing node";
 const STATE = "manager configuration / live service; copied to a standby, never drained back";
 
 /**

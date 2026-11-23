@@ -2423,6 +2423,8 @@ export const en = {
     "Wiping this box removes it from the venue, after which you can re-add it as a spare.",
   "servers.reset_download":
     "The old main box may hold data that this box does not have. You should download that data from {address} before wiping and reusing it.",
+  "servers.reset_download_no_address":
+    "The old main box may hold data that this box does not have. You should download that data from the old main box's own page before wiping and reusing it.",
   "servers.reset_caution_label": "CAUTION:",
   "servers.reset_caution_awaiting":
     "The records recovered from the old main box will exist only on the new main box until the next backup is made.",
@@ -7205,6 +7207,8 @@ export const es: Record<StringKey, string> = {
     "Al borrar este servidor, se retira del local; después puedes volver a añadirlo como servidor de reserva.",
   "servers.reset_download":
     "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde {address} antes de borrarlo y volver a usarlo.",
+  "servers.reset_download_no_address":
+    "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde la propia página del servidor principal anterior antes de borrarlo y volver a usarlo.",
   "servers.reset_caution_label": "ATENCIÓN:",
   "servers.reset_caution_awaiting":
     "Los registros recuperados del servidor principal anterior solo existirán en el nuevo servidor principal hasta que se haga la próxima copia de seguridad.",

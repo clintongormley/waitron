@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handoverActivations,
+  invoiceSeries,
+  liveBackupQuery,
   readNodeMembership,
   stampDeployment,
   withNodeTransaction,
@@ -36,6 +38,7 @@ import { returnDigest, returnVenue } from "./return-records.js";
 import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
+import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import { earlierBoxChain, lackingChainOf } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const ring = loadKeyRing({
@@ -135,7 +138,9 @@ function app(seats: WaitronModule[] = modules) {
 }
 
 /** A completed return from the old box to this one, against a closed takeover. */
-async function completedReturn(): Promise<string> {
+async function completedReturn(
+  scenario: "controlled" | "emergency" = "emergency",
+): Promise<string> {
   const operationId = randomUUID();
   const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
   const inventory = returnDigest(digests);
@@ -144,7 +149,7 @@ async function completedReturn(): Promise<string> {
       operationId,
       sourceNodeId: oldBox,
       destinationNodeId: main,
-      scenario: "emergency",
+      scenario,
       evidence: {
         purpose: "waitron.handover.declaration.v1",
         body: {},
@@ -414,6 +419,7 @@ describe("POST /api/node/reset-order answers", () => {
       sourceNodeId: oldBox,
       order: null,
       lacking: {},
+      holdings: { fiscal: [] },
     });
     expect(lacking).not.toHaveBeenCalled();
   });
@@ -429,8 +435,59 @@ describe("POST /api/node/reset-order answers", () => {
       sourceNodeId: oldBox,
       order: { orderId: order.orderId, acceptLoss: false },
       lacking: { fiscal: [LACKING_CHAIN] },
+      holdings: { fiscal: [] },
     });
     expect(events("reset_acknowledged")).toEqual([]);
+  });
+
+  it("the standing order without a summary, and a warning, when this box's summary cannot be read", async () => {
+    const order = await ordered();
+    const unreadable: WaitronModule[] = [
+      {
+        ...modules[0]!,
+        handover: {
+          ...VERIFACTU_HANDOVER,
+          holdings: async () => {
+            throw new Error("unreadable");
+          },
+        },
+      },
+    ];
+    const res = await ask(await queryBody({ nonce: "unread" }), oldBox, app(unreadable));
+    expect(res.status).toBe(200);
+    const answer = await answerOf(res);
+    expect(answer?.order).toEqual({ orderId: order.orderId, acceptLoss: false });
+    expect(answer).not.toHaveProperty("holdings");
+    expect(lines).toEqual([
+      {
+        level: "warn",
+        event: "reset-order.holdings_unread",
+        fields: { nodeId: oldBox, errorCode: "unknown" },
+      },
+    ]);
+  });
+
+  it("this box's own chain summary, with or without an order, read without the write lock", async () => {
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId: main, seriesId },
+      reuseExistingParents: true,
+    });
+    await insertFiscalRecord(suite.db, ids);
+    const own = await VERIFACTU_HANDOVER.holdings!(liveBackupQuery(suite.db));
+    expect(own).toHaveLength(1);
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+
+    const before = await answerOf(await ask(await queryBody({ nonce: "no-order" })));
+    expect(before?.order).toBeNull();
+    expect(before?.holdings).toEqual({ fiscal: own });
+    expect(lock).not.toHaveBeenCalled();
+
+    await ordered();
+    const after = await answerOf(await ask(await queryBody({ nonce: "ordered" })));
+    expect(after?.order).not.toBeNull();
+    expect(after?.holdings).toEqual({ fiscal: own });
   });
 });
 

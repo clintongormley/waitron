@@ -15,6 +15,28 @@ export interface ReturnDiscrepancy {
   held: CanonicalValue;
 }
 
+/** A record this box holds, on any of its chains, that the main box's holdings do not cover. */
+export interface UnreturnedRecord {
+  saleId: string;
+  /** The record's position in its chain. */
+  number: number;
+  type: "issue" | "cancellation";
+  createdAt: string;
+  /** The module's own filing state; null when the record was never queued for filing. */
+  filingState: string | null;
+}
+
+export interface UnreturnedChain {
+  ids: Readonly<Record<string, string>>;
+  /**
+   * True when the main box's summary does not show it holds this box's part of the chain (it lacks
+   * the chain, disagrees with it, or is ahead of this box on it, which this box cannot check), so
+   * every record is listed.
+   */
+  whole: boolean;
+  records: UnreturnedRecord[];
+}
+
 /** Thrown by a module's `lacking` seat when another box's `holdings` are not in its shape. */
 export class MalformedHoldingsError extends Error {}
 
@@ -45,6 +67,16 @@ export interface ModuleHandoverContribution {
    * Holdings not in the module's shape throw `MalformedHoldingsError`.
    */
   lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;
+  /**
+   * The records in this database that the main box's `holdings` do not cover, by chain; a chain is
+   * left out only when those holdings show the main box holds this box's part of it. With no
+   * holdings (`undefined`, the main box was not asked), every chain is listed whole. Holdings not in
+   * the module's shape throw `MalformedHoldingsError`.
+   */
+  unreturned?(
+    query: BackupQuery,
+    mainHoldings: CanonicalValue | undefined,
+  ): Promise<UnreturnedChain[]>;
 }
 
 function byName(modules: readonly WaitronModule[]): WaitronModule[] {

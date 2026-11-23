@@ -57,13 +57,13 @@ const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = 
     file: "apps/server/src/recovery-start-again.ts",
     lines: 1,
     reason:
-      "an HTML string the server builds for the page a box serves when it cannot start; it loads no script or front-end bundle, so no field primitive can run on it",
+      "an HTML string the server builds for the page a box serves when it cannot start, whose password field the replaced main box's page also draws; neither page loads a script or front-end bundle, so no field primitive can run on them",
   },
   {
     file: "apps/server/src/carry-on.ts",
     lines: 4,
     reason:
-      "an HTML string the server builds for the carry-on form on the page a box serves while it waits for its peers; it loads no front-end bundle (only a short inline script that enables its button), so no field primitive can run on it",
+      "an HTML string the server builds for the carry-on form on the page a box serves while it waits for its peers, whose email and code fields the replaced main box's page also draws; neither page loads a front-end bundle (the carry-on form only a short inline script that enables its button), so no field primitive can run on them",
   },
   {
     file: "apps/server/src/start-clock-waiting.ts",

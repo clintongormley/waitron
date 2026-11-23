@@ -16,6 +16,7 @@ import type { BackupQuery, BackupValue } from "@waitron/store";
 import { ENVIO_STATES, type EnvioState } from "./filing-states.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { chainHeads, fiscalHoldings, fiscalLacking, text } from "./handover-holdings.js";
+import { fiscalUnreturned } from "./handover-unreturned.js";
 
 export { ENVIO_STATES, type EnvioState };
 
@@ -105,6 +106,7 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
   checkCopy: checkFiscalChains,
   holdings: fiscalHoldings,
   lacking: fiscalLacking,
+  unreturned: fiscalUnreturned,
   returnRecords: {
     read: async (tx, source) =>
       makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],

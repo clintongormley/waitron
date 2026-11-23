@@ -1,5 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedManager } from "@waitron/identity/test/fixtures.js";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -109,6 +110,7 @@ vi.mock("./card-follow-up.js", async (importOriginal) => {
 const migrations = migrationOptionsFor(manifestSets(), null);
 
 const QUIET_MS = 5_000;
+const ADMIN_EMAIL = "admin@example.test";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -125,6 +127,8 @@ interface Observed {
   runner: number;
   /** The status of a GET of `/` made during the quiet period. */
   pageStatus: number;
+  /** A download made on the old box's page during the quiet period, on a restricted start. */
+  download?: { status: number; contentType: string | null; head: number[] };
   mailStatus: string;
 }
 
@@ -208,6 +212,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
         }),
       );
     }
+    await seedManager(suite.db, { email: ADMIN_EMAIL, role: "admin" });
     // A pending change row, as a write outside `withTransaction` leaves one: a GET that opened a
     // write transaction would drain it and change the file.
     suite.db.run(
@@ -266,12 +271,27 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     );
     // A person opening the box's address is part of the quiet period: the page must not write.
     const pageStatus = (await fetch(`https://127.0.0.1:${httpPort()}/`, via)).status;
+    let download: Observed["download"];
+    if (options.restricted) {
+      const response = await fetch(`https://127.0.0.1:${httpPort()}/old-box-data`, {
+        ...via,
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ email: ADMIN_EMAIL, password: "correct horse" }).toString(),
+      });
+      download = {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        head: [...new Uint8Array(await response.arrayBuffer()).slice(0, 4)],
+      };
+    }
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
     observed = {
       hashBefore,
       hashAfter: await venueHash(suite),
       ...calls,
       pageStatus,
+      download,
       mailStatus: suite.db.get<{ status: string }>(
         sql`select status from outgoing_mail where dedupe_key = 'quiet-mail'`,
       )!.status,
@@ -296,8 +316,13 @@ function observeStart(options: { restricted: boolean }): () => Observed {
 describe("a restricted start touches nothing outside and nothing in venue.db", () => {
   const observed = observeStart({ restricted: true });
 
-  it("writes nothing to venue.db, with its own page opened", () => {
+  it("writes nothing to venue.db, with its own page opened and its data downloaded", () => {
     expect(observed().pageStatus).toBe(200);
+    expect(observed().download).toEqual({
+      status: 200,
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      head: [0x50, 0x4b, 0x03, 0x04],
+    });
     expect(observed().hashAfter).toBe(observed().hashBefore);
   });
 

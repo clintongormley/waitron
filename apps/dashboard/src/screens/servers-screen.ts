@@ -1109,6 +1109,11 @@ export class ServersScreen extends LitElement {
   }
 
   #renderDownload(target: ServerRow): TemplateResult {
+    if (target.contactUrl === "") {
+      return html`<p class="explanation follows" data-test="reset-download">
+        ${t("servers.reset_download_no_address")}
+      </p>`;
+    }
     const [before, after] = t("servers.reset_download").split("{address}");
     return html`<p class="explanation follows" data-test="reset-download">
       ${before}${
@@ -1116,7 +1121,7 @@ export class ServersScreen extends LitElement {
           ? html`<a href=${target.contactUrl} target="_blank" rel="noopener noreferrer"
               >${target.contactUrl}</a
             >`
-          : this.#address(target)
+          : target.contactUrl
       }${after}
     </p>`;
   }
@@ -1154,11 +1159,7 @@ export class ServersScreen extends LitElement {
           ? nothing
           : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
               <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
-              ${
-                action === "reset" && target.returnScenario === "emergency"
-                  ? this.#renderDownload(target)
-                  : nothing
-              }
+              ${action === "reset" ? this.#renderDownload(target) : nothing}
               ${action === "reset" ? this.#renderCaution(target) : nothing}
               ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}
               ${

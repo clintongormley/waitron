@@ -1,6 +1,9 @@
 import { escapeHtml } from "./html-page.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { createHash } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -23,11 +26,14 @@ import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { ReturnState } from "./return-records.js";
 import {
   readSuccessor,
+  restrictedPageAnswer,
   restrictedPageRoute,
   successorText,
+  type OldBoxDownloadState,
   type RestrictedPageDeps,
 } from "./restricted-page.js";
 import {
+  RESTRICTED_DOWNLOAD_WORDS,
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RESET_WORDS,
   RESTRICTED_RETURN_WORDS,
@@ -176,9 +182,15 @@ const LANGUAGES = [
   ["es-ES", "es-ES,es;q=0.9", "es"],
 ] as const;
 
-/** Every `<p>` on the page, as written. */
+/** The page above its download section. */
+function statusPart(html: string): string {
+  const section = html.indexOf("<section");
+  return section === -1 ? html : html.slice(0, section);
+}
+
+/** Every `<p>` on the page above its download section, as written. */
 function paragraphs(html: string): string[] {
-  return [...html.matchAll(/<p>[\s\S]*?<\/p>/g)].map((match) => match[0]);
+  return [...statusPart(html).matchAll(/<p>[\s\S]*?<\/p>/g)].map((match) => match[0]);
 }
 
 async function recordConfirmedReturn(destinationNodeId: string): Promise<void> {
@@ -223,7 +235,7 @@ describe("the restricted box's own page", () => {
         `<p><a href="https://bar-counter.example">${escapeHtml(WORDS[locale].dashboard)}</a></p>`,
       ]);
       expect(html).not.toContain("bar-counter.example</strong>");
-      expect(html).not.toMatch(/<h2|<ul|<li/);
+      expect(statusPart(html)).not.toMatch(/<h2|<ul|<li/);
       expect(html).not.toContain(`>${RESTRICTED_PAGE_WORDS[locale].progress}<`);
       expect(html).not.toContain("/handover/");
       expect(html).not.toMatch(/Handover begun|Traspaso iniciado|tax agency|Hacienda/);
@@ -408,15 +420,6 @@ describe("the restricted box's own page", () => {
     const html = await (await request("en-GB", suite.db, "waiting")).text();
     expect(html).toContain(`<a href="https://new-box.example">`);
     expect(html).not.toContain("/handover/");
-  });
-
-  it("carries no form", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    for (const language of ["en-GB", "es-ES"]) {
-      const { html } = await page(language);
-      expect(html).toContain("<h1>");
-      expect(html).not.toMatch(/<form|<button|<input|<select|<textarea/);
-    }
   });
 
   it.each([
@@ -912,4 +915,377 @@ describe("the restricted page after the main box asks this box to reset", () => 
       expect.objectContaining({ level: "warn", event: "restricted_page.reset_marker_unreadable" }),
     );
   });
+});
+
+describe("the restricted page's download section", () => {
+  const DOWNLOAD = {
+    "en-GB": {
+      heading: "Download this box's data",
+      emergency:
+        "This box may hold data that the new main box does not have. To keep it, download it here before this box is wiped.",
+      planned: "Download the invoice records this box holds that the new main box does not.",
+      email: "Email",
+      password: "Password",
+      totp: "Authenticator code",
+      action: "Download",
+      insecure: "To download this box's data, open this page at its https:// address.",
+      signInRefused:
+        "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
+      notPermitted:
+        "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
+      busy: "This box is already making the file. Try again in a minute.",
+      otherPage: "The download must be asked for on this page. Nothing was changed.",
+      totpRequired: "Enter your password again and the code from your authenticator app.",
+      throttled: "Too many incorrect attempts. Wait 2 minutes and try again. Nothing was changed.",
+      emailMissing: "Enter your email.",
+      passwordMissing: "Enter your password.",
+      fixFields: "Correct the highlighted fields to continue.",
+      wipeUnderWay: "This box is being wiped, so its data can no longer be downloaded.",
+      failed:
+        "Nothing was changed: this is a fault in Waitron or this box. Try again. If it fails again, switch this box off and on, then try once more.",
+    },
+    "es-ES": {
+      heading: "Descargar los datos de este servidor",
+      emergency:
+        "Este servidor puede tener datos que el nuevo servidor principal no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
+      planned:
+        "Descarga los registros de facturación que tiene este servidor y que el nuevo servidor principal no tiene.",
+      email: "Correo electrónico",
+      password: "Contraseña",
+      totp: "Código del autenticador",
+      action: "Descargar",
+      insecure:
+        "Para descargar los datos de este servidor, abre esta página en su dirección https://.",
+      signInRefused:
+        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban cuando dejó de llevar el local. No se ha cambiado nada.",
+      notPermitted:
+        "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que tenga Gestionar servidores. No se ha cambiado nada.",
+      busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
+      otherPage: "La descarga debe pedirse en esta página. No se ha cambiado nada.",
+      totpRequired:
+        "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
+      throttled:
+        "Demasiados intentos incorrectos. Espera 2 minutos y vuelve a intentarlo. No se ha cambiado nada.",
+      emailMissing: "Introduce tu correo electrónico.",
+      passwordMissing: "Introduce tu contraseña.",
+      fixFields: "Corrige los campos marcados para continuar.",
+      wipeUnderWay: "Este servidor se está borrando, así que ya no se pueden descargar sus datos.",
+      failed:
+        "No se ha cambiado nada: es un fallo de Waitron o de este servidor. Vuelve a intentarlo. Si vuelve a fallar, apaga y enciende este servidor y después inténtalo otra vez.",
+    },
+  } as const;
+
+  async function answer(
+    language: string,
+    options: {
+      secure?: boolean;
+      download?: OldBoxDownloadState;
+      resetOrdered?: boolean;
+    } = {},
+  ): Promise<{ response: Response; html: string }> {
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("requestId", "request-1");
+      await next();
+    });
+    const deps: RestrictedPageDeps = {
+      venue: suite.db,
+      node: suite.node,
+      nodeId: NODE,
+      returnState: () => "waiting",
+      log: (level, event, fields) => logged.push({ level, event, fields }),
+      ...(options.resetOrdered === undefined ? {} : { resetOrdered: () => options.resetOrdered! }),
+    };
+    app.get("/", (c) =>
+      restrictedPageAnswer(deps, c, options.download === undefined ? 200 : 401, options.download),
+    );
+    const socket = new TLSSocket(new Socket());
+    try {
+      const response = await app.request(
+        "https://old-box.test/",
+        { headers: { "Accept-Language": language } },
+        options.secure === false ? {} : { incoming: { socket } },
+      );
+      return { response, html: await response.text() };
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  async function noOperation(): Promise<void> {
+    await withNodeTransaction(suite.node, (tx) =>
+      recordHandoverRestrictionTx(tx, {
+        nodeId: NODE,
+        operationId: null,
+        kind: "superseded",
+        successorNodeId: RECEIVER,
+        membershipTerm: 3,
+      }),
+    );
+  }
+
+  /** The download section's opening tag to its end. */
+  function section(html: string): string {
+    const start = html.indexOf("<section");
+    expect(start).toBeGreaterThan(-1);
+    return html.slice(start, html.indexOf("</section>", start) + "</section>".length);
+  }
+
+  it("words every line in English and in Spanish", () => {
+    for (const [locale] of LANGUAGES) {
+      const words = RESTRICTED_DOWNLOAD_WORDS[locale];
+      const expected = DOWNLOAD[locale];
+      expect({
+        heading: words.heading,
+        emergency: words.emergency,
+        planned: words.planned,
+        email: words.email,
+        password: words.password,
+        totp: words.totp,
+        action: words.action,
+        insecure: words.insecure,
+        signInRefused: words.signInRefused,
+        notPermitted: words.notPermitted,
+        busy: words.busy,
+        otherPage: words.otherPage,
+        totpRequired: words.totpRequired,
+        throttled: words.throttled(2),
+        emailMissing: words.emailMissing,
+        passwordMissing: words.passwordMissing,
+        fixFields: words.fixFields,
+        wipeUnderWay: words.wipeUnderWay,
+        failed: words.failed,
+      }).toEqual(expected);
+    }
+  });
+
+  it.each(LANGUAGES)(
+    "asks for the data after an emergency switch, below the status line, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header);
+      inOrder(html, [
+        `<p>${escapeHtml(WORDS[locale].waiting)}</p>`,
+        `<h2>${escapeHtml(DOWNLOAD[locale].heading)}</h2>`,
+        `<p>${escapeHtml(DOWNLOAD[locale].emergency)}</p>`,
+        "<form",
+      ]);
+      expect(html).not.toContain(escapeHtml(DOWNLOAD[locale].planned));
+    },
+  );
+
+  it("uses the emergency sentence when the restriction names no operation", async () => {
+    await seedSuccessor("Counter box");
+    await noOperation();
+    for (const [locale, header] of LANGUAGES) {
+      const { html } = await answer(header);
+      expect(section(html)).toContain(`<p>${escapeHtml(DOWNLOAD[locale].emergency)}</p>`);
+    }
+  });
+
+  it.each(LANGUAGES)(
+    "names the invoice records after a planned handover, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"));
+      const { html } = await answer(header);
+      const drawn = section(html);
+      expect(drawn).toContain(`<h2>${escapeHtml(DOWNLOAD[locale].heading)}</h2>`);
+      expect(drawn).toContain(`<p>${escapeHtml(DOWNLOAD[locale].planned)}</p>`);
+      expect(drawn).not.toContain(escapeHtml(DOWNLOAD[locale].emergency));
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "draws a form posted to this box, its email and password marked required, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { response, html } = await answer(header);
+      const drawn = section(html);
+      expect(drawn).toMatch(/<form method="post" action="\/old-box-data"[^>]*>/);
+      expect(drawn).not.toContain("enctype");
+      expect(drawn).toContain(
+        `<label for="old-box-data-email">${escapeHtml(DOWNLOAD[locale].email)} *</label>`,
+      );
+      expect(drawn).toContain(
+        `<label for="old-box-data-password">${escapeHtml(DOWNLOAD[locale].password)} *</label>`,
+      );
+      expect(drawn).toMatch(
+        /<input type="email" id="old-box-data-email" name="email"[^>]* required/,
+      );
+      expect(drawn).toMatch(
+        /<input type="password" id="old-box-data-password" name="password"[^>]* required/,
+      );
+      expect(drawn).not.toContain('name="totp"');
+      expect(drawn).toContain(
+        `<button type="submit">${escapeHtml(DOWNLOAD[locale].action)}</button>`,
+      );
+      expect(drawn).not.toContain('role="alert"');
+      const script = html.slice(html.indexOf("<script>") + 8, html.indexOf("</script>"));
+      const hash = createHash("sha256").update(script).digest("base64");
+      expect(response.headers.get("content-security-policy")).toBe(
+        `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'`,
+      );
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "draws no form over plain HTTP, only the HTTPS sentence, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header, { secure: false });
+      const drawn = section(html);
+      expect(drawn).toContain(`<p>${escapeHtml(DOWNLOAD[locale].insecure)}</p>`);
+      expect(html).not.toMatch(/<form|<input|<button/);
+    },
+  );
+
+  it.each(LANGUAGES)("draws no form while a wipe is under way, in %s", async (locale, header) => {
+    await handOver(await seedSuccessor("Counter box"), "emergency");
+    for (const download of [
+      undefined,
+      { refusal: "wipeUnderWay", email: "owner@example.test" } as const,
+    ]) {
+      const { html } = await answer(header, {
+        resetOrdered: true,
+        ...(download === undefined ? {} : { download }),
+      });
+      const drawn = section(html);
+      // An alert only when it answers a refused download.
+      const alert = download === undefined ? "" : ' role="alert"';
+      expect(drawn).toContain(`<p${alert}>${escapeHtml(DOWNLOAD[locale].wipeUnderWay)}</p>`);
+      expect(drawn).not.toContain(escapeHtml(DOWNLOAD[locale].emergency));
+      expect(html).not.toMatch(/<form|<input|<button/);
+    }
+  });
+
+  const BOTTOM = LANGUAGES.flatMap(([locale, header]) =>
+    (
+      [
+        ["signInRefused", undefined, DOWNLOAD[locale].signInRefused],
+        ["notPermitted", undefined, DOWNLOAD[locale].notPermitted],
+        ["busy", undefined, DOWNLOAD[locale].busy],
+        ["otherPage", undefined, DOWNLOAD[locale].otherPage],
+        ["throttled", 90, DOWNLOAD[locale].throttled],
+        ["failed", undefined, DOWNLOAD[locale].failed],
+      ] as const
+    ).map(([refusal, retry, message]) => [locale, header, refusal, retry, message] as const),
+  );
+
+  it.each(BOTTOM)(
+    "draws the %s refusal (%s) on the bottom line, the email kept and no field marked: %s",
+    async (_locale, header, refusal, retryAfterSeconds, message) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const email = `o"wner<b>@example.test`;
+      const { response, html } = await answer(header, {
+        download: {
+          refusal,
+          email,
+          ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+        },
+      });
+      expect(response.status).toBe(401);
+      const drawn = section(html);
+      expect(drawn).toContain(`value="${escapeHtml(email)}"`);
+      expect(drawn).not.toContain(email);
+      expect(drawn).not.toContain("aria-invalid");
+      inOrder(drawn, [
+        'name="password"',
+        `<p id="old-box-data-message" role="alert">${escapeHtml(message)}</p>`,
+        "<button",
+      ]);
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "asks for the authenticator code after totp.required, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header, {
+        download: { refusal: "totpRequired", email: "owner@example.test" },
+      });
+      const drawn = section(html);
+      inOrder(drawn, [
+        'name="password"',
+        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
+        `<p id="old-box-data-totp-error">${escapeHtml(DOWNLOAD[locale].totpRequired)}</p>`,
+        `<p id="old-box-data-message" role="alert">${escapeHtml(DOWNLOAD[locale].fixFields)}</p>`,
+        "<button",
+      ]);
+      expect(drawn).toMatch(
+        /<input type="text" id="old-box-data-totp" name="totp"[^>]* required aria-invalid="true" aria-describedby="old-box-data-totp-error">/,
+      );
+      expect(drawn).toContain('value="owner@example.test"');
+    },
+  );
+
+  const KEPT_CODE = LANGUAGES.flatMap(([locale, header]) =>
+    (
+      [
+        ["signInRefused", undefined, DOWNLOAD[locale].signInRefused],
+        ["busy", undefined, DOWNLOAD[locale].busy],
+        ["throttled", 90, DOWNLOAD[locale].throttled],
+        ["failed", undefined, DOWNLOAD[locale].failed],
+      ] as const
+    ).map(([refusal, retry, message]) => [locale, header, refusal, retry, message] as const),
+  );
+
+  it.each(KEPT_CODE)(
+    "keeps the code field after a %s refusal (%s) to a form that had one: %s",
+    async (locale, header, refusal, retryAfterSeconds, message) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header, {
+        download: {
+          refusal,
+          email: "owner@example.test",
+          askCode: true,
+          ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+        },
+      });
+      const drawn = section(html);
+      inOrder(drawn, [
+        'name="password"',
+        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
+        `<p id="old-box-data-message" role="alert">${escapeHtml(message)}</p>`,
+        "<button",
+      ]);
+      expect(drawn).toMatch(/<input type="text" id="old-box-data-totp" name="totp"[^>]* required>/);
+      expect(drawn).not.toContain("aria-invalid");
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "marks the missing field beside it and says so above the button, in %s",
+    async (locale, header) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const words = DOWNLOAD[locale];
+      const emailGone = section(
+        (await answer(header, { download: { refusal: "fieldsMissing", email: "" } })).html,
+      );
+      expect(emailGone).toMatch(
+        /id="old-box-data-email"[^>]* aria-invalid="true" aria-describedby="old-box-data-email-error"/,
+      );
+      expect(emailGone).toContain(
+        `<p id="old-box-data-email-error">${escapeHtml(words.emailMissing)}</p>`,
+      );
+      expect(emailGone).not.toContain("old-box-data-password-error");
+      expect(emailGone).toContain(
+        `<p id="old-box-data-message" role="alert">${escapeHtml(words.fixFields)}</p>`,
+      );
+      const passwordGone = section(
+        (
+          await answer(header, {
+            download: { refusal: "fieldsMissing", email: "owner@example.test" },
+          })
+        ).html,
+      );
+      expect(passwordGone).toMatch(
+        /id="old-box-data-password"[^>]* aria-invalid="true" aria-describedby="old-box-data-password-error"/,
+      );
+      expect(passwordGone).toContain(
+        `<p id="old-box-data-password-error">${escapeHtml(words.passwordMissing)}</p>`,
+      );
+      expect(passwordGone).not.toContain("old-box-data-email-error");
+      expect(passwordGone).toContain('value="owner@example.test"');
+    },
+  );
 });

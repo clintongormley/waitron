@@ -204,6 +204,13 @@ export async function insertFiscalRegistro(
   return { registroId: row!.id, huella, entorno, secuencia };
 }
 
+/** {@link insertFiscalRegistro} under an English name, for suites the English-only guard reads. */
+export const insertFiscalRecord = insertFiscalRegistro;
+
+/** {@link insertFiscalRecord} under its own invoice number, for suites the English-only guard reads. */
+export const insertNumberedFiscalRecord = (db: Database, ids: FiscalIds, invoiceNumber: string) =>
+  insertFiscalRegistro(db, ids, { numSerie: invoiceNumber });
+
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /** Also seed an `verifactu_submissions` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };

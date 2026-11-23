@@ -27,6 +27,14 @@ function xmlText(value: string): string {
     .replaceAll("\r", "&#13;");
 }
 
+/** The spreadsheet name of the zero-based `column`: A to Z, then AA, AB and on. */
+function columnName(column: number): string {
+  let name = "";
+  for (let n = column + 1; n > 0; n = Math.floor((n - 1) / 26))
+    name = String.fromCharCode(65 + ((n - 1) % 26)) + name;
+  return name;
+}
+
 async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
   const parts = [`${XML}<worksheet xmlns="${SHEET}"><sheetData>`];
   for (const [index, row] of rows.entries()) {
@@ -34,7 +42,7 @@ async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
     parts.push(
       `<row r="${index + 1}">${row
         .map((cell, column) => {
-          const reference = `${String.fromCharCode(65 + column)}${index + 1}`;
+          const reference = `${columnName(column)}${index + 1}`;
           return cell !== null && typeof cell === "object"
             ? `<c r="${reference}" t="n" s="1"><v>${cell.number}</v></c>`
             : `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell ?? "")}</t></is></c>`;

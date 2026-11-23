@@ -6,9 +6,10 @@ import {
   asc,
   between,
   eq,
+  exists,
   inArray,
   isNotNull,
-  isNull,
+  not,
   notExists,
   or,
   sql,
@@ -54,7 +55,7 @@ export interface AccountantInvoice {
   id: string;
   nodeId: string;
   invoiceNumber: string;
-  invoiceType: "F1" | "F2" | "corrective" | "replacement";
+  invoiceType: "F1" | "F2" | "F3" | "corrective" | "replacement";
   issueDate: string;
   /** The day the sale happened, present only when it is earlier than `issueDate`. */
   saleDate?: string;
@@ -147,7 +148,7 @@ export function refundVatShares(
   });
 }
 
-function paymentOnAccount(
+export function paymentOnAccount(
   invoice: AccountantInvoice,
   words: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
 ): string | null {
@@ -242,11 +243,47 @@ async function readPaymentsOnAccount(
   const rows: PartPaymentRow[] = [];
   const half = Math.floor(SQL_VARIABLE_LIMIT / 2);
   for (let start = 0; start < saleIds.length; start += half)
-    rows.push(...(await partPaymentsAmong(tx, saleIds.slice(start, start + half))));
+    for (const row of await partPaymentsAmong(tx, saleIds.slice(start, start + half)))
+      rows.push(row);
   return linkPaymentsOnAccount(
     rows,
     await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]),
   );
+}
+
+/**
+ * The accountant's invoice columns from the id to the void, one line per VAT rate, the total on
+ * the first; an invoice with no VAT groups is one line with its VAT facts blank.
+ */
+export function invoiceLineCells(
+  invoice: AccountantInvoice,
+  words: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+): Cell[][] {
+  const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
+  return groups.map((vat, index) => [
+    invoice.id,
+    invoice.nodeId,
+    invoice.invoiceNumber,
+    invoice.invoiceType === "F1" || invoice.invoiceType === "F2" || invoice.invoiceType === "F3"
+      ? invoice.invoiceType
+      : words[invoice.invoiceType],
+    invoice.issueDate,
+    invoice.customerName,
+    invoice.customerTaxId,
+    invoice.customerIdentifierType === null
+      ? null
+      : words.identifierTypes[invoice.customerIdentifierType as keyof typeof words.identifierTypes],
+    invoice.customerIdentifierCountry,
+    invoice.customerCountry,
+    invoice.customerAddress,
+    vat === null ? null : numeric(vat.rate),
+    vat === null ? null : numeric(vat.base),
+    vat === null ? null : numeric(vat.tax),
+    index === 0 ? numeric(invoice.total) : null,
+    invoice.correctsSaleId,
+    invoice.originalInvoiceNumber,
+    invoice.voidedAt,
+  ]);
 }
 
 export async function renderAccountantWorkbook(
@@ -257,40 +294,11 @@ export async function renderAccountantWorkbook(
   const invoiceRows: Cell[][] = [];
   for (const [position, invoice] of data.invoices.entries()) {
     if (position % 250 === 0) await nextTurn();
-    const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
     const trailing: Cell[] = [invoice.saleDate ?? null, paymentOnAccount(invoice, words)];
     // Empty trailing cells are left off rather than written blank: a missing one reads as empty.
     while (trailing.at(-1) === null) trailing.pop();
-    for (const [index, vat] of groups.entries()) {
-      invoiceRows.push([
-        invoice.id,
-        invoice.nodeId,
-        invoice.invoiceNumber,
-        invoice.invoiceType === "F1" || invoice.invoiceType === "F2"
-          ? invoice.invoiceType
-          : words[invoice.invoiceType],
-        invoice.issueDate,
-        invoice.customerName,
-        invoice.customerTaxId,
-        invoice.customerIdentifierType === null
-          ? null
-          : words.identifierTypes[
-              invoice.customerIdentifierType as keyof typeof words.identifierTypes
-            ],
-        invoice.customerIdentifierCountry,
-        invoice.customerCountry,
-        invoice.customerAddress,
-        vat === null ? null : numeric(vat.rate),
-        vat === null ? null : numeric(vat.base),
-        vat === null ? null : numeric(vat.tax),
-        index === 0 ? numeric(invoice.total) : null,
-        invoice.correctsSaleId,
-        invoice.originalInvoiceNumber,
-        invoice.voidedAt,
-        null,
-        ...trailing,
-      ]);
-    }
+    for (const cells of invoiceLineCells(invoice, words))
+      invoiceRows.push([...cells, null, ...trailing]);
   }
   const purchaseRows: Cell[][] = [];
   for (const [position, purchase] of data.purchases.entries()) {
@@ -384,14 +392,29 @@ function saleVatDay(sale: {
   return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 
-export async function listAccountantExport(
+/** Which sales {@link readAccountantInvoices} reads. */
+export type InvoiceSelection =
+  { range: { from: string; to: string } } | { saleIds: readonly string[] };
+
+/**
+ * The invoices of `selection`, with their part payments. A range lists them by the day the
+ * workbook lists them under and leaves out substitution (F3) invoices; a list of sale ids reads
+ * each named sale that exists, F3 included, in no particular order.
+ */
+export async function readAccountantInvoices(
   tx: Transaction,
-  range: { from: string; to: string },
-): Promise<AccountantExport> {
+  selection: InvoiceSelection,
+): Promise<AccountantInvoice[]> {
   const original = alias(sales, "original_invoice");
   const originalSeries = alias(invoiceSeries, "original_series");
   const replacement = alias(sales, "replacement_invoice");
   const civilDate = stampDate(sales.issuedAt, sales.issuedOffsetMinutes);
+  const substitutes = exists(
+    tx
+      .select({ id: saleSubstitutions.id })
+      .from(saleSubstitutions)
+      .where(eq(saleSubstitutions.substitutionSaleId, sales.id)),
+  );
   // The day the workbook lists the sale under: a replacement goes with the original it repeats.
   const periodDay = sql<string>`case when ${sales.replacesOriginal} = 1
     then ${saleVatDay({
@@ -406,42 +429,66 @@ export async function listAccountantExport(
       issuedAt: sales.issuedAt,
       issuedOffsetMinutes: sales.issuedOffsetMinutes,
     })} end`;
-  const rows = await tx
-    .select({
-      id: sales.id,
-      nodeId: sales.nodeId,
-      code: invoiceSeries.code,
-      number: sales.invoiceNumber,
-      issueDate: civilDate,
-      supplyDay: sales.supplyDay,
-      customerName: sales.counterpartyLegalName,
-      customerTaxId: sales.counterpartyTaxId,
-      customerIdentifierType: sales.counterpartyIdentifierType,
-      customerIdentifierCountry: sales.counterpartyIdentifierCountryCode,
-      customerCountry: sales.counterpartyCountryCode,
-      customerAddress: sales.counterpartyAddress,
-      total: sales.total,
-      vatBreakdown: sales.vatBreakdown,
-      correctsSaleId: sales.correctsSaleId,
-      replacesOriginal: sales.replacesOriginal,
-      originalCode: originalSeries.code,
-      originalNumber: original.invoiceNumber,
-      voidedAt: saleVoids.voidedAt,
-    })
-    .from(sales)
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .leftJoin(original, eq(original.id, sales.correctsSaleId))
-    .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
-    .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
-    .leftJoin(
-      replacement,
-      and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
-    )
-    .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id))
-    .where(and(between(periodDay, range.from, range.to), isNull(saleSubstitutions.id)))
-    .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
+  const query = () =>
+    tx
+      .select({
+        id: sales.id,
+        nodeId: sales.nodeId,
+        code: invoiceSeries.code,
+        number: sales.invoiceNumber,
+        issueDate: civilDate,
+        supplyDay: sales.supplyDay,
+        customerName: sales.counterpartyLegalName,
+        customerTaxId: sales.counterpartyTaxId,
+        customerIdentifierType: sales.counterpartyIdentifierType,
+        customerIdentifierCountry: sales.counterpartyIdentifierCountryCode,
+        customerCountry: sales.counterpartyCountryCode,
+        customerAddress: sales.counterpartyAddress,
+        total: sales.total,
+        vatBreakdown: sales.vatBreakdown,
+        correctsSaleId: sales.correctsSaleId,
+        replacesOriginal: sales.replacesOriginal,
+        substitution: sql<number>`${substitutes}`.mapWith(Boolean),
+        originalCode: originalSeries.code,
+        originalNumber: original.invoiceNumber,
+        voidedAt: saleVoids.voidedAt,
+      })
+      .from(sales)
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+      .leftJoin(original, eq(original.id, sales.correctsSaleId))
+      .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
+      .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
+      .leftJoin(
+        replacement,
+        and(eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)),
+      );
+  type Row = Awaited<ReturnType<ReturnType<typeof query>["execute"]>>[number];
+  let rows: Row[];
+  if ("range" in selection)
+    rows = await query()
+      .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
+      .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
+  else {
+    rows = [];
+    // Half the limit leaves room for the values the query binds besides the ids.
+    const chunk = Math.floor(SQL_VARIABLE_LIMIT / 2);
+    for (let start = 0; start < selection.saleIds.length; start += chunk)
+      for (const row of await query().where(
+        inArray(sales.id, [...selection.saleIds.slice(start, start + chunk)]),
+      ))
+        rows.push(row);
+  }
   const invoices: AccountantInvoice[] = rows.map(
-    ({ code, number, originalCode, originalNumber, replacesOriginal, supplyDay, ...row }) => ({
+    ({
+      code,
+      number,
+      originalCode,
+      originalNumber,
+      replacesOriginal,
+      substitution,
+      supplyDay,
+      ...row
+    }) => ({
       ...row,
       ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
       invoiceNumber: formatInvoiceNumber(code, number),
@@ -449,9 +496,11 @@ export async function listAccountantExport(
         ? "replacement"
         : row.correctsSaleId !== null
           ? "corrective"
-          : row.customerTaxId === null
-            ? "F2"
-            : "F1",
+          : substitution
+            ? "F3"
+            : row.customerTaxId === null
+              ? "F2"
+              : "F1",
       originalInvoiceNumber:
         originalCode === null || originalNumber === null
           ? null
@@ -469,6 +518,14 @@ export async function listAccountantExport(
     const takesOff = onAccount.takesOff.get(invoice.id);
     if (takesOff !== undefined) invoice.takesOff = takesOff;
   }
+  return invoices;
+}
+
+export async function listAccountantExport(
+  tx: Transaction,
+  range: { from: string; to: string },
+): Promise<AccountantExport> {
+  const invoices = await readAccountantInvoices(tx, { range });
   const nextDay = new Date(`${range.to}T00:00:00.000Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const purchases = await listPurchaseInvoices(tx, {

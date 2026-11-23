@@ -347,6 +347,18 @@ describe("a box holding a handover restriction starts restricted", () => {
     expect((await fetch(`http://127.0.0.1:${port}/api/something-unknown`)).status).toBe(404);
   }, 60_000);
 
+  it("serves the old box's download, refusing it over plain HTTP with its page", async () => {
+    const { port } = start();
+    const response = await fetch(`http://127.0.0.1:${port}/old-box-data`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: "a@example.test", password: "x" }).toString(),
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("content-type")).toMatch(/^text\/html/);
+    expect(await response.text()).toContain("<h1>This box no longer runs the venue</h1>");
+  }, 60_000);
+
   it("reads the refused set-aside from this box's own state folder", async () => {
     const { port } = start();
     const text = RESTRICTED_RESET_WORDS["en-GB"].setAsideRefused;
@@ -380,6 +392,16 @@ describe("a full start's stepdown, through its test seam", () => {
     );
     expect(acceptance.status).toBe(404);
     expect(await acceptance.text()).not.toContain("handover.");
+  }, 60_000);
+
+  it("a full start answers the old box's download 404", async () => {
+    const { port } = await boot(suite, { restricted: false });
+    const response = await fetch(`http://127.0.0.1:${port}/old-box-data`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: "a@example.test", password: "x" }).toString(),
+    });
+    expect(response.status).toBe(404);
   }, 60_000);
 
   it("a full start answers the handover status read", async () => {

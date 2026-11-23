@@ -263,7 +263,12 @@ import { mountDiskStopApi } from "./disk-stop-api.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
 import { mainServerUrl, mountMainServerApi, mountNodeApi } from "./node-api.js";
-import { readBoxAddresses, restrictedPageRoute } from "./restricted-page.js";
+import {
+  readBoxAddresses,
+  restrictedPageRoute,
+  type RestrictedPageDeps,
+} from "./restricted-page.js";
+import { oldBoxDataRoute } from "./old-box-data-page.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { startRestricted } from "./restricted-start.js";
@@ -2048,6 +2053,15 @@ async function bootServer(
     });
     undoOnFailure.push(() => resetOrder.stop());
     health.takesNoSales = true;
+    const restrictedPage: RestrictedPageDeps = {
+      venue: db,
+      node: store.node,
+      nodeId: node.nodeId,
+      log,
+      returnState: returnRecords.state,
+      resetOrdered: () => resetOrder.answer()?.order != null,
+      resetPhase: () => readReplacedResetPhase(config.stateDir),
+    };
     return startRestricted({
       app,
       returnRecords,
@@ -2057,14 +2071,12 @@ async function bootServer(
       readMembership: () => readNodeMembership(db),
       cors: corsForVenue(allowOrigin),
       routes: [
-        restrictedPageRoute({
-          venue: db,
-          node: store.node,
-          nodeId: node.nodeId,
-          log,
-          returnState: returnRecords.state,
-          resetOrdered: () => resetOrder.answer()?.order != null,
-          resetPhase: () => readReplacedResetPhase(config.stateDir),
+        restrictedPageRoute(restrictedPage),
+        oldBoxDataRoute({
+          page: restrictedPage,
+          modules: enabledAtStart,
+          totpKeyRing: ring,
+          mainHoldings: () => resetOrder.mainHoldings(),
         }),
         (restrictedApp) =>
           mountPeerStatusApi(

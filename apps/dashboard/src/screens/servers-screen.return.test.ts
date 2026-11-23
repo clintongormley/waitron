@@ -282,7 +282,7 @@ describe("Wipe and remove", () => {
     expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
   });
 
-  it("says wiping removes the box and it can come back as a spare, with no download line after a planned handover", async () => {
+  it("says wiping removes the box and it can come back as a spare, with the download line after a planned handover", async () => {
     const el = await mount(stubApi(resettable));
     await openAction(el, "reset");
     expect(dialog(el, "reset").heading).toBe("Wipe the old main box and remove it?");
@@ -290,7 +290,9 @@ describe("Wipe and remove", () => {
     expect(lineIn(el, "reset-warning")).toBe(
       "Wiping this box removes it from the venue, after which you can re-add it as a spare.",
     );
-    expect(lineIn(el, "reset-download")).toBeNull();
+    expect(lineIn(el, "reset-download")).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+    );
     expect(dialog(el, "reset").textContent).not.toMatch(/Machine|will be lost/);
   });
 
@@ -307,6 +309,67 @@ describe("Wipe and remove", () => {
     expect(link.target).toBe("_blank");
     expect(link.rel).toContain("noopener");
   });
+
+  it("with no address for the old box, sends the person to its own page instead of naming an address", async () => {
+    const el = await mount(
+      stubApi(
+        listingWith({
+          removable: true,
+          canReset: true,
+          returnScenario: "emergency",
+          contactUrl: "",
+        }),
+      ),
+    );
+    await openAction(el, "reset");
+    const line = lineIn(el, "reset-download");
+    expect(line).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from the old main box's own page before wiping and reusing it.",
+    );
+    expect(line).not.toContain("No address");
+    expect(dialog(el, "reset").querySelector("[data-test=reset-download] a")).toBeNull();
+  });
+
+  it("names an address that is not a web address as plain text", async () => {
+    const el = await mount(
+      stubApi(
+        listingWith({
+          removable: true,
+          canReset: true,
+          returnScenario: "emergency",
+          contactUrl: "old.venue.example:8443",
+        }),
+      ),
+    );
+    await openAction(el, "reset");
+    expect(lineIn(el, "reset-download")).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from old.venue.example:8443 before wiping and reusing it.",
+    );
+    expect(dialog(el, "reset").querySelector("[data-test=reset-download] a")).toBeNull();
+  });
+
+  it("does not put the download line in the Remove dialog", async () => {
+    const el = await mount(stubApi(resettable));
+    await openAction(el, "remove");
+    expect(dialog(el, "remove").querySelector("[data-test=reset-download]")).toBeNull();
+  });
+
+  it.each([
+    ["a planned handover", "controlled"],
+    ["an emergency switch", "emergency"],
+    ["no recorded handover", null],
+  ] as const)(
+    "after %s, says the old box may hold data and to download it first",
+    async (_, returnScenario) => {
+      const el = await mount(
+        stubApi(listingWith({ removable: true, canReset: true, returnScenario })),
+      );
+      await openAction(el, "reset");
+      expect(lineIn(el, "reset-download")).toBe(
+        "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+      );
+    },
+  );
 
   it.each([
     [

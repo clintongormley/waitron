@@ -1743,7 +1743,14 @@ describe("GET /management-api/servers", () => {
       const p = await primary();
       const oldMain = former(await seedNode(p.db));
       await holdChart(p, [self(p), oldMain]);
+      await pinMainBoxKey(suite.node, p.nodeId, { nodeId: oldMain.nodeId, publicKey: "old" });
       await returnFrom(p.db, oldMain.nodeId, p.nodeId);
+      expect(await resetFields(p)).toContainEqual({
+        nodeId: oldMain.nodeId,
+        reset: null,
+        canReset: true,
+        returnScenario: "emergency",
+      });
       await withNodeTransaction(suite.node, (tx) =>
         beginHandoverOperationTx(tx, {
           nodeId: p.nodeId,
