@@ -143,6 +143,9 @@ That rule is why compose has to repeat the passkey domain and origin today (`com
 The print agent keeps its own short list in its own `config.ts`, because the print-agent package
 imports nothing else from this repository (root `CLAUDE.md` §3). One guard reads both lists.
 
+**2026-11-23.** ENV8 adds the source `command or start input`. See the decision under
+[Measure 1](#5-measure-or-test-before-building).
+
 Result: the product side goes from 111 `WAITRON_*` names to **51**, or **55 until A951 lands**, because
 the four `WAITRON_TUNNEL_*` names stay until then. Counted from §2: 32 before the database opens, 9
 in the box's files, 8 one-off command inputs and 2 internal hand-offs. Of the 51, 13 are build or
@@ -263,6 +266,9 @@ left to A947 slice 3b and is not counted; it would add one if 3b keeps it.
 `WAITRON_ADMIN_PIN`, `WAITRON_ADMIN_PASSWORD`, `WAITRON_INITIAL_VENUE_INPUT`,
 `WAITRON_SETUP_SETTINGS_FILE`, and `WAITRON_BACKUP_RECOVERY_KEY` for `restore`.
 
+**2026-11-23.** The node recovery key and recovery operation file also remain startup inputs.
+See the ENV8 decision under [Measure 1](#5-measure-or-test-before-building).
+
 **Internal hand-off, not an operator setting:** `WAITRON_STREAM_ACCESS_KEY_ID`, and
 `WAITRON_STREAM_SECRET_ACCESS_KEY`, which go into Litestream's own environment only.
 
@@ -362,8 +368,8 @@ adding the runbook's two folder names, gives this table's 151 `WAITRON_*` names.
 | `WAITRON_BREAKGLASS_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_BREAKGLASS_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_RECOVERY_PASSPHRASE` | delete | (none) | Owner, 2026-11-04: it goes with the recovery bundle, read only by the `unpack` command (recovery-unpack-command.ts:58). What the bundle's removal reaches: §1. |
-| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
-| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
+| `WAITRON_NODE_RECOVERY_KEY` | keep | command or start input | The `restore` command reads the key. A staged restore can also use the startup key when the request carries no staged key. See the 2026-11-23 decision under [Measure 1](#5-measure-or-test-before-building). |
+| `WAITRON_RECOVERY_OPERATION_FILE` | keep | command or start input | The `restore` command reads the file. A staged restore can also use the startup file when the request carries no operation. See the 2026-11-23 decision under [Measure 1](#5-measure-or-test-before-building). |
 | `WAITRON_ADMIN_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_ADMIN_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_INITIAL_VENUE_INPUT` | keep | one-off command input | Read only by a command an operator runs by hand. |
@@ -590,6 +596,10 @@ adding the runbook's two folder names, gives this table's 151 `WAITRON_*` names.
    command (`snapshot-authorised-archive.test.ts:95`). *If any current flow stages a marker
    without them,* the server keeps the fallback and the two names are listed as "command input
    or start input".
+
+   **ENV8 decision, 2026-11-23 (watcher).** Setup can stage an archive restore without either
+   field when the server has an operation file. The inventory therefore lists both variables as
+   command or start inputs. The `restore` command also reads both.
 2. **Whether a hosted profile injects the vault key through the environment.** `box-env.ts:10-12`
    says "a cloud profile [can] inject the vault key without a `secrets.env`". In this repo only
    the Cloud fixture does that (`cloud-integration-fixture.ts:93,123`), and the `waitron-cloud`
