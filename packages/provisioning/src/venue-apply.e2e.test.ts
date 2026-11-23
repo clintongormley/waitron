@@ -153,7 +153,7 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
       select
         (select count(*) from verifactu_records where node_id = ${venue.nodeId}) as registros,
         (select secuencia from verifactu_records where sale_id = ${saleId}) as secuencia,
-        (select secuencia from cadenas where node_id = ${venue.nodeId}) as head_secuencia`);
+        (select coalesce(max(secuencia), 0) from verifactu_records where node_id = ${venue.nodeId}) as head_secuencia`);
     expect(chained.rows[0]).toEqual({ registros: 1, secuencia: 1, head_secuencia: 1 });
   });
 });

@@ -82,7 +82,7 @@ async function seedOverview() {
   const heldFirst = (await appendPendingAlta(suite.db, seeded, 5)).registroId;
   const heldSecond = (await appendPendingAlta(suite.db, seeded, 6)).registroId;
   const diverged = (await appendPendingAlta(suite.db, seeded, 7)).registroId;
-  const cancellation = await appendCancellation(suite.db, seeded, accepted, 8);
+  const cancellation = await appendCancellation(suite.db, accepted, 8);
   const resolved = (await appendPendingAlta(suite.db, seeded, 9)).registroId;
   const heldAlone = (await seedSecondChain(suite.db, seeded, 10)).registroId;
 

@@ -950,7 +950,7 @@ describe("drain — a cancellation on another chain", () => {
     const other = await seedSecondChain(suite.db, seeded, 5);
     await drain(deps(aeat.client()), FIRST);
     const original = await appendPendingAlta(suite.db, seeded, 2);
-    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 6, {
+    const cancellation = await appendCancellation(suite.db, original.registroId, 6, {
       otherChainHeadId: other.registroId,
     });
     const wire = recording(aeat.client());
@@ -980,7 +980,7 @@ describe("drain — a cancellation on another chain", () => {
       .from(verifactuRecords)
       .where(eq(verifactuRecords.id, other.registroId));
     const otherChain = { ...seeded, nodeId: brandNodeId(head!.nodeId), sifId: head!.sifId };
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 6, {
+    const cancellation = await appendCancellation(suite.db, original!, 6, {
       otherChainHeadId: other.registroId,
     });
     const later = await appendPendingAlta(suite.db, otherChain, 7);
@@ -1002,7 +1002,7 @@ describe("drain — a cancellation on another chain", () => {
     aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), SECOND);
     expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 6, {
+    const cancellation = await appendCancellation(suite.db, original.registroId, 6, {
       otherChainHeadId: other.registroId,
     });
     const wire = recording(aeat.client());
@@ -1047,7 +1047,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
     expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 13, {
+    const cancellation = await appendCancellation(suite.db, original.registroId, 13, {
       sinRegistroPrevio: "S",
       otherChainHeadId: other.registroIds[2]!,
     });
@@ -1067,7 +1067,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
     expect(await envioOf(lastRefusal)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellation(suite.db, seeded, original, 5, {
+    const cancellation = await appendCancellation(suite.db, original, 5, {
       sinRegistroPrevio: "S",
     });
 
@@ -1086,7 +1086,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
     expect(await envioOf(original)).toMatchObject({ estado: "rechazado" });
-    const correction = await appendCorrection(suite.db, seeded, original, 2);
+    const correction = await appendCorrection(suite.db, original, 2);
     await suite.db.execute(
       sql`update verifactu_submissions set estado = 'aceptado' where registro_id = ${correction}`,
     );
@@ -1098,7 +1098,7 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     }
     await drain(deps(aeat.client()), SECOND);
     expect(await envioOf(refusals[2]!)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellation(suite.db, seeded, original, 6);
+    const cancellation = await appendCancellation(suite.db, original, 6);
 
     await drain(deps(aeat.client()), THIRD);
 
@@ -1116,7 +1116,7 @@ describe("drain — a cancellation whose original was not accepted", () => {
     const [original] = seeded.registroIds;
     aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, original!, 2);
     const later = await appendPendingAlta(suite.db, seeded, 3);
     const wire = recording(aeat.client());
 
@@ -1145,7 +1145,7 @@ describe("drain — a cancellation whose original was not accepted", () => {
     const [original] = seeded.registroIds;
     await collideAtAeat(suite.db, aeat, seeded, original!);
     await drain(deps(aeat.client()), FIRST);
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, original!, 2);
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), SECOND);
@@ -1327,7 +1327,7 @@ describe("drain — a cancellation answered Anulada whose lookup finds nothing",
     const [original] = seeded.registroIds;
     await drain(deps(aeat.client()), FIRST);
     aeat.annul(seeded.facturaKeys[0]!);
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, original!, 2);
     const real = aeat.client();
     const lookupFindsNothing: VerifactuClient = {
       submit: (cabecera, registros) => real.submit(cabecera, registros),
@@ -1457,7 +1457,7 @@ describe("drain — resolving a case releases nothing", () => {
     const before = await suite.db.execute(
       sql`select * from verifactu_submissions where registro_id = ${original}`,
     );
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
+    const cancellation = await appendCancellation(suite.db, original!, 2);
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), new Date(SECOND.getTime() + 60_000));
@@ -1931,7 +1931,7 @@ describe("drain — reply lines are paired with the records sent by position", (
     if (operation === "Alta") return { id: original!, now: FIRST, facturaKey };
     await drain(deps(aeat.client()), FIRST);
     expect((await envioOf(original!)).estado).toBe("aceptado");
-    const id = await appendCancellation(suite.db, seeded, original!, 2);
+    const id = await appendCancellation(suite.db, original!, 2);
     return { id, now: SECOND, facturaKey };
   }
 

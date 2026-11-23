@@ -3,7 +3,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { currentSif, esPrimerRegistro, writeReservedSif } from "./registro-sif.js";
+import { readChainHead } from "./chain.js";
+import { currentSif, writeReservedSif } from "./registro-sif.js";
 import { seedNodesForSifContention, type SifContentionFixture } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -20,7 +21,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // These fixtures have no filed records; clear only their mutable identity rows.
   await suite.db.transaction(async (tx) => {
-    for (const table of ["cadenas", "verifactu_identities", "nodes", "taxpayer"]) {
+    for (const table of ["verifactu_identities", "nodes", "taxpayer"]) {
       await tx.execute(sql`delete from ${sql.identifier(table)}`);
     }
   });
@@ -75,8 +76,8 @@ describe("reserved-sif primitives", () => {
     const sif = await withTx((tx) => currentSif(tx, cloud));
     expect(sif.numeroInstalacion).toBe(numero);
     expect(sif.revocadoEn).toBeNull();
-    // ...on a brand-new empty chain (first record).
-    expect(await withTx((tx) => esPrimerRegistro(tx, cloud))).toBe(true);
+    const head = await withTx((tx) => readChainHead(tx, cloud));
+    expect(head.ultimoRegistroId).toBeNull();
   });
 
   it("the unique index rejects re-persisting the same (nif, idSistema, numero)", async () => {

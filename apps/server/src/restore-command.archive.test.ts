@@ -20,7 +20,11 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { cadenas, verifactuIdentities, verifactuRecords } from "@waitron/fiscal-verifactu";
+import {
+  readChainHead as readFiscalChainHead,
+  verifactuIdentities,
+  verifactuRecords,
+} from "@waitron/fiscal-verifactu";
 import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin, nodeId } from "@waitron/shared";
@@ -200,7 +204,7 @@ afterAll(async () => {
   await rm(scratch, { recursive: true, force: true });
 });
 
-/** One filed sale and a chain head pointing at it, as `restore-fiscal-e2e.test.ts` seeds them. */
+/** One filed sale, as `restore-fiscal-e2e.test.ts` seeds them. */
 async function seedFiscalRecord(db: Database): Promise<void> {
   await seedDevice(db, {});
   const device = sql`(select id from devices)`;
@@ -220,46 +224,37 @@ async function seedFiscalRecord(db: Database): Promise<void> {
     fiscalBackend: "verifactu",
     fiscalState: "recorded",
   });
-  const [registro] = await db
-    .insert(verifactuRecords)
-    .values({
-      source: "device",
-      deviceId: device,
-      nodeId: ids.node,
-      sifId: ids.sif,
-      saleId: ids.sale,
-      secuencia: 1,
-      tipoRegistro: "alta",
-      idEmisorFactura: "89890001K",
-      numSerieFactura: "FA/4",
-      fechaExpedicionFactura: "2026-07-20",
-      nombreRazonEmisor: "Archive source",
-      tipoFactura: "F2",
-      descripcionOperacion: "Venta",
-      desglose: [],
-      cuotaTotal: "12.35",
-      importeTotal: "123.45",
-      primerRegistro: true,
-      sistemaInformatico: {},
-      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
-      offsetMinutos: 60,
-      tipoHuella: "01",
-      huella: HUELLA,
-    })
-    .returning({ id: verifactuRecords.id });
-  await db.insert(cadenas).values({
+  await db.insert(verifactuRecords).values({
+    source: "device",
+    deviceId: device,
     nodeId: ids.node,
+    sifId: ids.sif,
+    saleId: ids.sale,
     secuencia: 1,
-    ultimoRegistroId: registro!.id,
-    ultimaHuella: HUELLA,
+    tipoRegistro: "alta",
+    idEmisorFactura: "89890001K",
+    numSerieFactura: "FA/4",
+    fechaExpedicionFactura: "2026-07-20",
+    nombreRazonEmisor: "Archive source",
+    tipoFactura: "F2",
+    descripcionOperacion: "Venta",
+    desglose: [],
+    cuotaTotal: "12.35",
+    importeTotal: "123.45",
+    primerRegistro: true,
+    sistemaInformatico: {},
+    fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
+    offsetMinutos: 60,
+    tipoHuella: "01",
+    huella: HUELLA,
   });
 }
 
-async function chainHead(db: Database): Promise<unknown[]> {
-  return db
-    .select({ ultimaHuella: cadenas.ultimaHuella, secuencia: cadenas.secuencia })
-    .from(cadenas)
-    .where(eq(cadenas.nodeId, ids.node));
+async function chainHead(db: Database) {
+  const { ultimaHuella, secuencia } = await withTransaction(db, (tx) =>
+    readFiscalChainHead(tx, nodeId(ids.node)),
+  );
+  return { ultimaHuella, secuencia };
 }
 
 async function seriesOfNode(
@@ -435,7 +430,7 @@ describe("waitron-restore restore --from-archive", () => {
     const expectedChain = await readChain(suite.db, chainKey);
     const expectedHead = await suite.db.transaction((tx) => readChainHead(tx, chainKey));
     expect(expectedChain.map((e) => e.sequenceNo)).toEqual([1, 2]);
-    expect(await chainHead(suite.db)).toEqual([{ ultimaHuella: HUELLA, secuencia: 1 }]);
+    expect(await chainHead(suite.db)).toEqual({ ultimaHuella: HUELLA, secuencia: 1 });
     expect(await seriesOfNode(suite.db)).toEqual([
       { code: "FA", retired: false, next: 5 },
       { code: "FF", retired: false, next: 1 },
@@ -476,7 +471,7 @@ describe("waitron-restore restore --from-archive", () => {
       expect(sifs[1]!.numeroInstalacion).toBe("P000042");
       expect(sifs[1]!.numeroInstalacion).not.toBe(sifs[0]!.numeroInstalacion);
       const n = sifs[1]!.numeroInstalacion;
-      expect(await chainHead(db)).toEqual([{ ultimaHuella: null, secuencia: 1 }]);
+      expect(await chainHead(db)).toEqual({ ultimaHuella: null, secuencia: 1 });
       expect(await seriesOfNode(db)).toEqual([
         { code: "FA", retired: true, next: 5 },
         { code: `FA-${n}`, retired: false, next: 1 },

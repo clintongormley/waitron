@@ -25,7 +25,6 @@ export interface ReturnedOriginals {
   devices: ReturnRow[];
   staff: ReturnRow[];
   departments: ReturnRow[];
-  heads: ReturnRow[];
   deliveries: ReturnRow[];
   tenders: ReturnRow[];
   refunds: ReturnRow[];
@@ -88,7 +87,6 @@ export async function readReturnedOriginals(
       join refunds r on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
       where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
-  const heads = tx.all<ReturnRow>(sql`select * from cadenas where node_id = ${sourceNodeId}`);
   const deliveries = tx.all<ReturnRow>(sql`select e.* from verifactu_submissions e
     join verifactu_records r on r.id = e.registro_id
     where r.node_id = ${sourceNodeId} order by e.registro_id`);
@@ -117,7 +115,6 @@ export async function readReturnedOriginals(
     devices,
     staff,
     departments,
-    heads,
     deliveries,
     tenders,
     refunds,
@@ -503,15 +500,6 @@ export async function receiveReturnedOriginals(
       if (conflict) missing = true;
     }
   }
-  const [last] = tx.all<ReturnRow>(sql`select * from verifactu_records
-    where node_id = ${sourceNodeId} order by secuencia desc limit 1`);
-  const head = held(tx, "cadenas", sourceNodeId, "node_id");
-  if (last && Number(last.secuencia) > Number(head?.secuencia ?? 0)) {
-    await tx.execute(sql`update cadenas set secuencia = ${last.secuencia},
-      ultimo_registro_id = ${last.id}, ultima_huella = ${last.huella},
-      actualizado_en = ${returned.heads[0]?.actualizado_en ?? now.toISOString()}
-      where node_id = ${sourceNodeId}`);
-  }
   if (inserted && (await checkFiscalChains(liveBackupQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
   for (const [table, rows] of [
@@ -604,7 +592,6 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     devices: [],
     staff: [],
     departments: [],
-    heads: [],
     deliveries: [],
     tenders: [],
     refunds: [],
@@ -673,7 +660,6 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     unit.departments = [...departmentIds(unit.sales)]
       .filter((id) => departments.has(id))
       .map((id) => departments.get(id)!);
-    unit.heads = snapshot.heads;
     unit.deliveries = deliveries.get(record.id) ?? [];
     if (!returnBatchFits(unit))
       throw new AppError("fiscal.return_invalid", {
@@ -719,7 +705,6 @@ export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
     "devices",
     "staff",
     "departments",
-    "heads",
     "deliveries",
     "tenders",
     "refunds",

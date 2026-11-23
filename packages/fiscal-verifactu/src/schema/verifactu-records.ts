@@ -119,7 +119,6 @@ export const verifactuRecords = table(
       .on(t.idEmisorFactura, t.numSerieFactura, t.fechaExpedicionFactura, t.tipoRegistro)
       .where(sql`${t.correctsRegistroId} is null`),
     index("verifactu_records_sale_idx").on(t.saleId),
-    index("verifactu_records_node_secuencia_idx").on(t.nodeId, t.secuencia),
     index("verifactu_records_generado_idx").on(t.fechaHoraHusoGenRegistro),
     ...originChecks("verifactu_records", t.source, t.deviceId),
     check("verifactu_records_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),

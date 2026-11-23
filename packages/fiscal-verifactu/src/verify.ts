@@ -3,7 +3,6 @@ import type { Transaction } from "@waitron/db";
 import type { NodeId } from "@waitron/shared";
 import type { IntegrityIssue, IntegrityReport } from "@waitron/fiscal";
 import { computeHuella, verifyHuella } from "@waitron/verifactu";
-import { readChainHead } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 
 /**
@@ -39,10 +38,6 @@ import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro
  * incident on the first record of every node's chain.
  */
 export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
-  // In the same transaction as the append that follows: verifying a predecessor another writer is
-  // concurrently replacing verifies nothing.
-  await readChainHead(tx, nodeId);
-
   // (node_id, secuencia) is already uniquely indexed (verifactu_records_node_secuencia_uq). Ordered
   // by chain POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
   // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure

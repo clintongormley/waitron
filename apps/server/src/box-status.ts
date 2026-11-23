@@ -20,8 +20,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import type { JobView } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 
-/** "No records" is `chain.height === 0`, never `chain.lastAt`: a provisioned node's head row carries a
- * time at height 0. */
+/** A node with no fiscal record has a chain height of zero and a null record time. */
 export type BoxStatus = {
   mode: DeploymentMode;
   environment: DeploymentEnvironment;

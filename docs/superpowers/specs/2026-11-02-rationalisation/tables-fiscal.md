@@ -101,6 +101,10 @@ slice, so the owner lands it.
   `secuencia`, last-at = the latest record's `creado_en`), and `backup-verification-chain.ts:55-140`,
   whose head-matches-records check disappears with the copy.
 
+**2026-11-23, fiscal 2:** `readChainHead(tx, nodeId)` reads the current identity. The watcher
+cleared removing `esPrimerRegistro` and the optional identity argument because their only
+callers were tests. See the [Fi2 review follow-up](../../plans/2026-11-08-a1308-fi2-chain-head-derived.md).
+
 ### 0.2 Can the next invoice number be read from the sales? Yes; the series row stays.
 
 - Every number allocated becomes a `sales` row (`record-sale.ts:270`, `record-correction.ts:265`,
@@ -827,6 +831,10 @@ How `clock_confirmations`' protections land in `verifactu_history`:
    - Failing result: a plan that shows `SCAN` instead of `SEARCH … USING INDEX`, or a sale's write
      transaction that gets measurably slower. Either one keeps `cadenas` and `next_number`.
    - `daily_closes` needs no measurement: one row a day, and the read is on a close, not on a sale.
+   - **2026-11-23, fiscal 2:** On the box image's SQLite, the chain-head read and both
+     preceding-record walks used `SEARCH` with the unique position index after removal of the
+     duplicate. The 100,000- and 500,000-record timing comparisons remain on the periodic bench
+     schedule.
 2. **The case check now reads a table with one row per record.**
    - `readActiveConflicts` runs on every sale (`backend.ts:187`, `conflict-evidence.ts:25`). Today it
      starts from the small `filing_cases` table; in this design it reads `verifactu_submissions`,

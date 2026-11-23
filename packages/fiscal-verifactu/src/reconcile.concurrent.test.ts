@@ -42,7 +42,6 @@ async function snapshot() {
     incidents: (await suite.db.execute(sql`select * from incidents order by id`)).rows,
     cases: (await suite.db.execute(sql`select * from filing_cases order by id`)).rows,
     records: (await suite.db.execute(sql`select * from verifactu_records order by id`)).rows,
-    heads: (await suite.db.execute(sql`select * from cadenas order by node_id`)).rows,
   };
 }
 
@@ -164,7 +163,6 @@ describe("reconciliation alongside filing", () => {
     expect(after.acknowledgements).toHaveLength(2);
     expect(after.acknowledgements.some((row) => row.registro_id === refused)).toBe(false);
     expect(after.records).toEqual(before.records);
-    expect(after.heads).toEqual(before.heads);
     expect(after.incidents).toEqual([]);
     expect(after.cases).toEqual([]);
   });
@@ -251,7 +249,6 @@ describe("reconciliation alongside filing", () => {
     expect(finished.deliveries.every((row) => row.estado === "aceptado")).toBe(true);
     expect(finished.acknowledgements).toHaveLength(3);
     expect(finished.records).toEqual(before!.records);
-    expect(finished.heads).toEqual(before!.heads);
   });
 
   it("defers records whose delivery rows disappeared during the lookup", async () => {

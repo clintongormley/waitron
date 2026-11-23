@@ -17,7 +17,6 @@ import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { filingCaseEvents } from "./schema/filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { cadenas } from "./schema/cadenas.js";
 import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -264,26 +263,19 @@ it("reports a malformed synthetic predecessor while preserving it and appending 
   const [original] = await suite.db.select().from(verifactuRecords);
   const saleId = await seedSale(suite.db, node, 2);
   await withTransaction(suite.db, async (tx) => {
-    const [inserted] = await tx
-      .insert(verifactuRecords)
-      .values({
-        ...original!,
-        id: crypto.randomUUID(),
-        saleId,
-        secuencia: 2,
-        numSerieFactura: "A/2",
-        primerRegistro: false,
-        anteriorIdEmisorFactura: original!.idEmisorFactura,
-        anteriorNumSerieFactura: "A/1",
-        anteriorFechaExpedicionFactura: original!.fechaExpedicionFactura,
-        anteriorHuella: original!.huella,
-        huella: "F".repeat(64),
-      })
-      .returning();
-    await tx
-      .update(cadenas)
-      .set({ secuencia: 2, ultimoRegistroId: inserted!.id, ultimaHuella: inserted!.huella })
-      .where(eq(cadenas.nodeId, node.nodeId));
+    await tx.insert(verifactuRecords).values({
+      ...original!,
+      id: crypto.randomUUID(),
+      saleId,
+      secuencia: 2,
+      numSerieFactura: "A/2",
+      primerRegistro: false,
+      anteriorIdEmisorFactura: original!.idEmisorFactura,
+      anteriorNumSerieFactura: "A/1",
+      anteriorFechaExpedicionFactura: original!.fechaExpedicionFactura,
+      anteriorHuella: original!.huella,
+      huella: "F".repeat(64),
+    });
   });
   const before = await snapshot();
   const result = await apply();

@@ -173,7 +173,7 @@ async function snapshot() {
   for (const table of [
     "verifactu_identities",
     "invoice_series",
-    "cadenas",
+    "verifactu_records",
     "fiscal_allocations",
     "fiscal_reservations",
     "node_membership",

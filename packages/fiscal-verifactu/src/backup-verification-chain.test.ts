@@ -10,7 +10,14 @@ import { computeHuella } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
-import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
+import {
+  altaFor,
+  anulacionFor,
+  seedSale,
+  seedNode,
+  seedNodesForSifContention,
+  type SeededNode,
+} from "./testing/seed.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { verifyBackupFiscalChains } from "./backup-verification-chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -180,10 +187,6 @@ function rehash(side: "before" | "after", keepPredecessorAt?: number) {
         row.anterior_huella,
         row.id,
       );
-      db.prepare("update cadenas set ultima_huella = ? where ultimo_registro_id = ?").run(
-        row.huella,
-        row.id,
-      );
       previous = row;
     }
     for (const trigger of triggers) db.exec(trigger.sql);
@@ -223,12 +226,12 @@ describe("complete captured fiscal chains", () => {
     expect(await verify()).toBe(true);
   });
 
-  it("accepts honestly empty fiscal history without creating identities or heads", async () => {
+  it("accepts honestly empty fiscal history without creating identities or records", async () => {
     await capture(false);
     expect(await verify()).toBe(true);
     await queries(async (a) => {
       const rows = [];
-      for await (const row of a.rows("select * from cadenas")) rows.push(row);
+      for await (const row of a.rows("select * from verifactu_records")) rows.push(row);
       expect(rows).toEqual([]);
     });
   });
@@ -263,14 +266,6 @@ describe("complete captured fiscal chains", () => {
       "duplicate genesis",
       "update verifactu_records set primer_registro = 1, anterior_id_emisor_factura = null, anterior_num_serie_factura = null, anterior_fecha_expedicion_factura = null, anterior_huella = null where secuencia = 3",
     ],
-    ["missing head", "delete from cadenas"],
-    ["lost tail", "delete from verifactu_records where secuencia = 6"],
-    ["head sequence", "update cadenas set secuencia = secuencia + 1"],
-    [
-      "head hash",
-      "update cadenas set ultima_huella = 'wrong' where ultimo_registro_id is not null",
-    ],
-    ["half head", "update cadenas set ultima_huella = null where ultimo_registro_id is not null"],
     ["missing identity", "delete from verifactu_identities where revocado_en is not null"],
     [
       "wrong installation",
@@ -300,12 +295,6 @@ describe("complete captured fiscal chains", () => {
       "update verifactu_records set tipo_registro = 'other' where secuencia = 1",
     ],
     ["missing current identity", "delete from verifactu_identities where revocado_en is null"],
-    ["unsafe head", "update cadenas set secuencia = 9007199254740992"],
-    ["negative head", "update cadenas set secuencia = -1"],
-    [
-      "wrong head pointer",
-      "update cadenas set ultimo_registro_id = 'missing' where ultimo_registro_id is not null",
-    ],
     [
       "offset out of range",
       "update verifactu_records set offset_minutos = 841 where secuencia = 1",
@@ -321,10 +310,6 @@ describe("complete captured fiscal chains", () => {
       "update verifactu_identities set numero_instalacion = '' where id = (select id from verifactu_identities limit 1)",
     ],
     ["orphan node", "delete from nodes"],
-    [
-      "orphan head",
-      "insert into cadenas (node_id, secuencia, actualizado_en) values ('missing', 0, '2026-10-20T00:00:00Z')",
-    ],
     [
       "duplicate sequence",
       "drop index verifactu_records_node_secuencia_uq; update verifactu_records set secuencia = 2 where secuencia = 1",
@@ -391,28 +376,14 @@ describe("complete captured fiscal chains", () => {
     });
   });
 
-  it("detects a shortened but independently valid target and head", async () => {
+  it("detects a shortened but independently valid target", async () => {
     await capture();
     const node = other.nodeId;
-    damage(
-      "after",
-      `delete from verifactu_records where node_id = '${node}' and secuencia = 6;
-      update cadenas set secuencia = 5,
-      ultimo_registro_id = (select id from verifactu_records where node_id = '${node}' and secuencia = 5),
-      ultima_huella = (select huella from verifactu_records where node_id = '${node}' and secuencia = 5)
-      where node_id = '${node}'`,
-    );
+    damage("after", `delete from verifactu_records where node_id = '${node}' and secuencia = 6`);
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(b, b)).toBe(true);
       expect(await verifyBackupFiscalChains(a, b)).toBe(false);
     });
-  });
-
-  it("refuses a reset head when its current identity already traded", async () => {
-    await capture();
-    for (const side of ["before", "after"] as const)
-      damage(side, "update cadenas set ultimo_registro_id = null, ultima_huella = null");
-    expect(await verify()).toBe(false);
   });
 
   it("never invents a link across registrations", async () => {
@@ -482,19 +453,6 @@ describe("complete captured fiscal chains", () => {
     expect(await verify()).toBe(false);
   });
 
-  it("rejects a reset empty identity whose head points back to retired work", async () => {
-    await capture();
-    for (const side of ["before", "after"] as const)
-      damage(
-        side,
-        `update cadenas set
-        ultimo_registro_id = (select id from verifactu_records where verifactu_records.node_id = cadenas.node_id and secuencia = 4),
-        ultima_huella = (select huella from verifactu_records where verifactu_records.node_id = cadenas.node_id and secuencia = 4)
-        where ultimo_registro_id is null and secuencia = 4`,
-      );
-    expect(await verify()).toBe(false);
-  });
-
   it("rejects reusing a retired segment after another retired segment", async () => {
     await capture(true, true);
     for (const side of ["before", "after"] as const) {
@@ -529,12 +487,9 @@ describe("complete captured fiscal chains", () => {
     });
   });
 
-  it.each([
-    ["identity", "update verifactu_identities set registrado_en = '2026-10-19T00:00:00Z'"],
-    ["head", "update cadenas set actualizado_en = '2026-10-19T00:00:00Z'"],
-  ])("preserves the complete captured %s rows", async (_name, statement) => {
+  it("preserves the complete captured identity rows", async () => {
     await capture();
-    damage("after", statement);
+    damage("after", "update verifactu_identities set registrado_en = '2026-10-19T00:00:00Z'");
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(b, b)).toBe(true);
       expect(await verifyBackupFiscalChains(a, b)).toBe(false);
@@ -543,17 +498,14 @@ describe("complete captured fiscal chains", () => {
 
   it("refuses invented valid target history for a source without fiscal tables", async () => {
     await capture();
-    damage(
-      "before",
-      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
-    );
+    damage("before", "drop table verifactu_records; drop table verifactu_identities");
     await queries(async (a, b) => {
       expect(await verifyBackupFiscalChains(b, b)).toBe(true);
       expect(await verifyBackupFiscalChains(a, b)).toBe(false);
     });
   });
 
-  it.each(["verifactu_records", "verifactu_identities", "cadenas"])(
+  it.each(["verifactu_records", "verifactu_identities"])(
     "refuses a partial schema missing %s",
     async (table) => {
       await capture(false);
@@ -563,25 +515,23 @@ describe("complete captured fiscal chains", () => {
   );
 
   it("accepts a source without fiscal tables only when target tables remain empty", async () => {
+    await seedNodesForSifContention(suite.db, 1);
     await capture(false);
-    damage(
-      "before",
-      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
-    );
+    damage("before", "drop table verifactu_records; drop table verifactu_identities");
     expect(await verify()).toBe(true);
     damage(
       "after",
-      "insert into cadenas (node_id, secuencia, actualizado_en) values ('missing', 0, '2026-10-20T00:00:00Z')",
+      `insert into verifactu_identities
+        (id, node_id, nif, id_sistema_informatico, numero_instalacion, registrado_en)
+        select 'invented-sif', id, '89890001K', 'WT', '1', '2026-10-20T00:00:00Z'
+        from nodes`,
     );
     expect(await verify()).toBe(false);
   });
 
   it("refuses a target without captured fiscal tables", async () => {
     await capture(false);
-    damage(
-      "after",
-      "drop table cadenas; drop table verifactu_records; drop table verifactu_identities",
-    );
+    damage("after", "drop table verifactu_records; drop table verifactu_identities");
     expect(await verify()).toBe(false);
   });
 

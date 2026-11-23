@@ -25,7 +25,7 @@ import {
 } from "@waitron/db";
 import {
   FISCAL_RESTORE,
-  cadenas,
+  readChainHead,
   verifactuIdentities,
   verifactuRecords,
 } from "@waitron/fiscal-verifactu";
@@ -114,40 +114,29 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     fiscalBackend: "verifactu",
     fiscalState: "recorded",
   });
-  const [registro] = await db
-    .insert(verifactuRecords)
-    .values({
-      source: "device",
-      deviceId: sql`(select id from devices)`,
-      nodeId: F.nodeId,
-      sifId: F.sifId,
-      saleId: F.saleId,
-      secuencia: 1,
-      tipoRegistro: "alta",
-      idEmisorFactura: "89890001K",
-      numSerieFactura: "FA/4",
-      fechaExpedicionFactura: "2026-07-20",
-      nombreRazonEmisor: "Waitron SL",
-      tipoFactura: "F2",
-      descripcionOperacion: "Venta en establecimiento",
-      desglose: [],
-      cuotaTotal: "12.35",
-      importeTotal: "123.45",
-      primerRegistro: true,
-      sistemaInformatico: {},
-      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
-      offsetMinutos: 60,
-      tipoHuella: "01",
-      huella: HUELLA,
-    })
-    .returning({ id: verifactuRecords.id });
-  // The chain head: no row exists until an append or a registration creates one — insert it
-  // explicitly, pointing at the record, at sequence 1 (both pointers set: `cadenas_puntero_ck`).
-  await db.insert(cadenas).values({
+  await db.insert(verifactuRecords).values({
+    source: "device",
+    deviceId: sql`(select id from devices)`,
     nodeId: F.nodeId,
+    sifId: F.sifId,
+    saleId: F.saleId,
     secuencia: 1,
-    ultimoRegistroId: registro!.id,
-    ultimaHuella: HUELLA,
+    tipoRegistro: "alta",
+    idEmisorFactura: "89890001K",
+    numSerieFactura: "FA/4",
+    fechaExpedicionFactura: "2026-07-20",
+    nombreRazonEmisor: "Waitron SL",
+    tipoFactura: "F2",
+    descripcionOperacion: "Venta en establecimiento",
+    desglose: [],
+    cuotaTotal: "12.35",
+    importeTotal: "123.45",
+    primerRegistro: true,
+    sistemaInformatico: {},
+    fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
+    offsetMinutos: 60,
+    tipoHuella: "01",
+    huella: HUELLA,
   });
 }
 
@@ -252,10 +241,8 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
       await mintBreakGlassSecret({ venue: store.venue, node: store.node }, F.nodeId),
     );
     await seedImage(store.venue);
-    const head = await store.venue
-      .select({ secuencia: cadenas.secuencia, ultimaHuella: cadenas.ultimaHuella })
-      .from(cadenas);
-    expect(head).toEqual([{ secuencia: 1, ultimaHuella: HUELLA }]);
+    const head = await withTransaction(store.venue, (tx) => readChainHead(tx, nodeId(F.nodeId)));
+    expect(head).toMatchObject({ secuencia: 1, ultimaHuella: HUELLA });
     // The journal table is left alone: this database is at the head of the SHIPPED chain and one
     // behind `olderMigrationsRoot`, which is what the artifact's manifest then records.
     if (older) {
@@ -422,11 +409,8 @@ describe("fiscal restore, end to end", () => {
       expect(sifs[1]!.numeroInstalacion).toBe("P000042");
       expect(sifs[1]!.numeroInstalacion).not.toBe(sifs[0]!.numeroInstalacion);
       const n = sifs[1]!.numeroInstalacion;
-      const head = await db
-        .select({ ultimaHuella: cadenas.ultimaHuella, secuencia: cadenas.secuencia })
-        .from(cadenas)
-        .where(eq(cadenas.nodeId, F.nodeId));
-      expect(head[0]).toEqual({ ultimaHuella: null, secuencia: 1 });
+      const head = await withTransaction(db, (tx) => readChainHead(tx, nodeId(F.nodeId)));
+      expect(head).toEqual({ secuencia: 1, ultimoRegistroId: null, ultimaHuella: null });
       expect(await seriesOfNode(db)).toEqual([
         { code: "FA", retired: true, next: 5 },
         { code: `FA-${n}`, retired: false, next: 1 },

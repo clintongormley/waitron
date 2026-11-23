@@ -126,7 +126,9 @@ async function rows() {
   return {
     sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
-    chains: (await suite.db.execute(sql`select * from cadenas`)).rows,
+    chains: (
+      await suite.db.execute(sql`select * from verifactu_records order by node_id, secuencia`)
+    ).rows,
     counters: (
       await suite.db.execute(
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,

@@ -1,22 +1,16 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
-/**
- * This node's fiscal-chain head: `height` is `cadenas.secuencia`, the monotonic chain height that is
- * never reset, and `lastAt` is `cadenas.actualizado_en` (when the head last advanced) as an ISO
- * string. `{ height: 0, lastAt: null }` when this node has no `cadenas` row at all — an unrecognised
- * `node_id`; a provisioned node always has one, seeded at secuencia 0 by `registerSif`.
- */
 export type ChainHeight = { height: number; lastAt: string | null };
 
-/** Read this node's chain head, filtered by `node_id` for this SIF's chain. */
+/** The latest fiscal record by chain position, across identities on this node. */
 export async function readChainHeight(tx: Transaction, nodeId: string): Promise<ChainHeight> {
-  // A raw `.execute()` bypasses the column's read mapping, so `actualizado_en` arrives as the stored
-  // TEXT; `new Date(…).toISOString()` normalises whatever spelling the writer stored.
-  const result = await tx.execute<{ secuencia: number; actualizado_en: string }>(
-    sql`select secuencia, actualizado_en from cadenas where node_id = ${nodeId}`,
+  const {
+    rows: [row],
+  } = await tx.execute<{ secuencia: number; creado_en: string }>(
+    sql`select secuencia, creado_en from verifactu_records where node_id = ${nodeId}
+        order by secuencia desc limit 1`,
   );
-  const row = result.rows[0];
   if (row === undefined) return { height: 0, lastAt: null };
-  return { height: row.secuencia, lastAt: new Date(row.actualizado_en).toISOString() };
+  return { height: row.secuencia, lastAt: new Date(row.creado_en).toISOString() };
 }

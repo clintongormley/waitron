@@ -25,7 +25,7 @@ import { verifyRetainedPaperReservation, type PaperCustodianTrust } from "./pape
 import { FISCAL_BACKUP_PUBLIC_TRUST } from "./backup-verification-trust.js";
 
 const TABLES = FISCAL_CLASSIFICATION.map((row) => row.table).filter(
-  (table) => !["verifactu_records", "cadenas"].includes(table),
+  (table) => table !== "verifactu_records",
 );
 type RecordValue = Record<string, unknown>;
 function object(value: unknown): value is RecordValue {

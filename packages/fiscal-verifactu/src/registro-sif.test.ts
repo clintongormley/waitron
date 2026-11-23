@@ -1,3 +1,4 @@
+import { readChainHead } from "./chain.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import {
   UNIQUE_VIOLATION,
@@ -12,7 +13,7 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { currentSif, esPrimerRegistro, writeReservedSif } from "./registro-sif.js";
+import { currentSif, writeReservedSif } from "./registro-sif.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { TAXPAYER_A, TAXPAYER_B, seedSoldRegistro, seedTaxpayers } from "../test/fixtures.js";
 
@@ -195,9 +196,6 @@ describe("a new SIF identity begins a new chain", () => {
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );
 
-    // Simulate the node having recorded a sale: the chain head now points at a real registro and carries a
-    // huella. See seedSoldRegistro's doc comment for why this must be a real
-    // verifactu_records row rather than a bare column update.
     await seedSoldRegistro(db, {
       nodeId: TAXPAYER_A.nodeId,
       sifId: first.id,
@@ -206,7 +204,8 @@ describe("a new SIF identity begins a new chain", () => {
       huella: "C".repeat(64),
     });
 
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(false);
+    const predecessor = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(predecessor.ultimoRegistroId).not.toBeNull();
 
     const second = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
@@ -214,31 +213,18 @@ describe("a new SIF identity begins a new chain", () => {
     expect(first.numeroInstalacion).toBe("S000001");
     expect(second.numeroInstalacion).toBe("P000042");
 
-    const head = await db.execute<{
-      secuencia: number;
-      ultima_huella: string | null;
-      ultimo_registro_id: string | null;
-    }>(
-      sql`select secuencia, ultima_huella, ultimo_registro_id from cadenas
-          where node_id = ${TAXPAYER_A.nodeId}`,
-    );
-    // The chain POINTER is broken — the next record cannot chain to the old one.
-    expect(head.rows[0]?.ultima_huella).toBeNull();
-    expect(head.rows[0]?.ultimo_registro_id).toBeNull();
-    // But the sequence is NOT reset. It is ours, an ordering aid for the outbox, and resetting it
-    // would collide with UNIQUE (node_id, secuencia) on the very next append.
-    expect(head.rows[0]?.secuencia).toBe(7);
+    const head = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(head.ultimaHuella).toBeNull();
+    expect(head.ultimoRegistroId).toBeNull();
+    expect(head.secuencia).toBe(7);
   });
 
-  it("reports PrimerRegistro from local state, not from a flag", async () => {
-    // AEAT returns a non-rejecting warning if PrimerRegistro="S" is claimed when records already
-    // exist for that SIF+NIF — a useful signal that a node was accidentally re-provisioned. It is
-    // only useful if the value is DERIVED. A caller-set flag would make the warning report the
-    // caller's belief back to itself.
+  it("finds a predecessor after the first sale", async () => {
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TAXPAYER_A.nodeId }),
     );
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(true);
+    const empty = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(empty.ultimoRegistroId).toBeNull();
 
     await seedSoldRegistro(db, {
       nodeId: TAXPAYER_A.nodeId,
@@ -247,7 +233,8 @@ describe("a new SIF identity begins a new chain", () => {
       secuencia: 1,
       huella: "D".repeat(64),
     });
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(false);
+    const predecessor = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(predecessor.ultimoRegistroId).not.toBeNull();
   });
 });
 

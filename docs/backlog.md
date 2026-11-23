@@ -1504,6 +1504,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Invoice delivery records describe the request and its outcome. The shared mail and print queues keep the retry schedule and active claims.
   The till can take whole or part payments on a presented bill before its invoice is issued.
   The counter saves its basket and takes payment in one request.
+  Veri*Factu reads the chain head from the latest fiscal record on the box.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 

@@ -1,3 +1,4 @@
+import { readChainHead } from "./chain.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,7 @@ import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TAXPAYER_A, seedSoldRegistro, seedTaxpayers } from "../test/fixtures.js";
 import { appendToChain } from "./chain.js";
-import { currentSif, esPrimerRegistro, type SifRegistration } from "./registro-sif.js";
+import { currentSif, type SifRegistration } from "./registro-sif.js";
 import { MAX_BASE_CODE_LENGTH, liveSeriesBases } from "./reserved-series.js";
 import { FISCAL_RESTORE, restoreFiscal } from "./restore.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
@@ -99,11 +100,9 @@ describe("restoreFiscal", () => {
       sql`select revocado_en from verifactu_identities where id = ${first.id}`,
     );
     expect(old[0]?.revocado_en).not.toBeNull();
-    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TAXPAYER_A.nodeId))).toBe(true);
-    const { rows: head } = await db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${TAXPAYER_A.nodeId}`,
-    );
-    expect(head[0]?.secuencia).toBe(7); // ours; never reset
+    const head = await withTransaction(db, (tx) => readChainHead(tx, TAXPAYER_A.nodeId));
+    expect(head.secuencia).toBe(7);
+    expect(head.ultimoRegistroId).toBeNull();
     const { rows: ledger } = await db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from verifactu_records`,
     );

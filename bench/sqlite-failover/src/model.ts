@@ -27,8 +27,7 @@ CREATE TRIGGER IF NOT EXISTS records_reject_update BEFORE UPDATE ON records
 BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS records_reject_delete BEFORE DELETE ON records
 BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
--- MODEL of cadenas (packages/fiscal-verifactu/src/schema/cadenas.ts:44). Per-node chain tip,
--- updated in place by the owner.
+-- MODEL of the former cadenas table. Waitron now reads the head from verifactu_records.
 CREATE TABLE IF NOT EXISTS chain_head (
   node_id TEXT PRIMARY KEY, last_secuencia INTEGER NOT NULL, last_huella TEXT NOT NULL
 );

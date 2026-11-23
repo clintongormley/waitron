@@ -119,7 +119,7 @@ export function scanTree(root) {
 }
 
 export function inspectTables(tables) {
-  const owners = new Set(["invoice_series", "verifactu_identities", "cadenas"]);
+  const owners = new Set(["invoice_series", "verifactu_identities"]);
   return tables.flatMap(({ name, columns, keys }) => {
     const failures = columns
       .filter((column) => /till/i.test(column))

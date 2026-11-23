@@ -24,7 +24,6 @@ export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "the declaraciones responsables this venue has run; one row per release version, the same on every box",
   ),
-  classify("cadenas", "ledger", LEDGER),
   classify("verifactu_identities", "ledger", LEDGER),
   classify("verifactu_submissions", "ledger", LEDGER),
   classify("verifactu_sending_state", "ledger", LEDGER),

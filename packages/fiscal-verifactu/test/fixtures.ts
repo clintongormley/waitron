@@ -1,6 +1,5 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedFixtureSif as registerSif } from "./sif-fixture.js";
-import { sql } from "drizzle-orm";
 import {
   invoiceSeries,
   nodes,
@@ -132,19 +131,7 @@ export async function seedVenueNodes(db: Database): Promise<void> {
   ]);
 }
 
-/**
- * Advances a node's chain head to point at a fabricated-but-real `verifactu_records` row,
- * standing in for "this node has actually sold something".
- *
- * Not a bare `update cadenas set ultima_huella = ...`, even though that would be enough to make
- * `esPrimerRegistro` observe a non-empty chain. `cadenas_puntero_ck`
- * (packages/fiscal-verifactu/src/schema/cadenas.ts) requires `ultimo_registro_id` and
- * `ultima_huella` to be BOTH null or BOTH set, so giving the chain head a huella without a real
- * row for `ultimo_registro_id`'s foreign key to point at is rejected by the database outright. The
- * fabricated `invoice_series` and `sales` rows exist
- * only to satisfy `verifactu_records`'s own foreign keys; nothing about their content is
- * asserted on anywhere.
- */
+/** Seeds a sold record and the series and sale its foreign keys require. */
 export async function seedSoldRegistro(
   db: Database,
   params: {
@@ -182,35 +169,26 @@ export async function seedSoldRegistro(
       fiscalState: "recorded",
     })
     .returning({ id: sales.id });
-  const [registro] = await db
-    .insert(verifactuRecords)
-    .values({
-      source: "device",
-      deviceId,
-      nodeId: params.nodeId,
-      sifId: params.sifId,
-      saleId: sale!.id,
-      secuencia: params.secuencia,
-      tipoRegistro: "alta",
-      idEmisorFactura: params.nif,
-      numSerieFactura: `S${String(params.secuencia)}/1`,
-      fechaExpedicionFactura: "2026-07-20",
-      nombreRazonEmisor: "Waitron SL",
-      primerRegistro: true,
-      sistemaInformatico: {},
-      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
-      offsetMinutos: 60,
-      tipoHuella: "01",
-      huella: params.huella,
-      entorno,
-    })
-    .returning({ id: verifactuRecords.id });
-  const registroId = registro!.id;
-  await db.execute(sql`
-    update cadenas
-    set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where node_id = ${params.nodeId}
-  `);
+  await db.insert(verifactuRecords).values({
+    source: "device",
+    deviceId,
+    nodeId: params.nodeId,
+    sifId: params.sifId,
+    saleId: sale!.id,
+    secuencia: params.secuencia,
+    tipoRegistro: "alta",
+    idEmisorFactura: params.nif,
+    numSerieFactura: `S${String(params.secuencia)}/1`,
+    fechaExpedicionFactura: "2026-07-20",
+    nombreRazonEmisor: "Waitron SL",
+    primerRegistro: true,
+    sistemaInformatico: {},
+    fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+    offsetMinutos: 60,
+    tipoHuella: "01",
+    huella: params.huella,
+    entorno,
+  });
 }
 
 export interface SeededNodeWithSif {

@@ -4,12 +4,10 @@ import {
   appendToChain,
   FISCAL_MIGRATIONS,
   FISCAL_VOCABULARY,
-  cadenas,
   fiscalAllocations,
   activateAllocation,
   currentSif,
   verifactuSubmissions,
-  esPrimerRegistro,
   fromRegistroRow,
   readChainHead,
   registerSif,
@@ -25,18 +23,16 @@ import {
 describe("package public surface (./index.js)", () => {
   it("re-exports FISCAL_MIGRATIONS and every owned table from the package root", () => {
     expect(FISCAL_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_fiscal");
-    expect(getTableName(cadenas)).toBe("cadenas");
     expect(getTableName(fiscalAllocations)).toBe("fiscal_allocations");
     expect(getTableName(verifactuSubmissions)).toBe("verifactu_submissions");
     expect(getTableName(verifactuIdentities)).toBe("verifactu_identities");
     expect(getTableName(verifactuRecords)).toBe("verifactu_records");
   });
 
-  it("re-exports the registration surface (registerSif, currentSif, esPrimerRegistro) from the package root", () => {
+  it("re-exports the fiscal registration operations", () => {
     expect(typeof registerSif).toBe("function");
     expect(typeof activateAllocation).toBe("function");
     expect(typeof currentSif).toBe("function");
-    expect(typeof esPrimerRegistro).toBe("function");
   });
 
   it("re-exports the chain-append surface (appendToChain, readChainHead, toRegistroRow) from the package root", () => {

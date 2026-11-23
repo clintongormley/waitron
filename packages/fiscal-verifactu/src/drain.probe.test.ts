@@ -630,7 +630,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       .select()
       .from(verifactuRecords)
       .where(eq(verifactuRecords.id, other.registroId));
-    const cancellation = await appendCancellation(suite.db, seeded, original!, 11, {
+    const cancellation = await appendCancellation(suite.db, original!, 11, {
       otherChainHeadId: other.registroId,
     });
     const later = await appendPendingAlta(
@@ -744,7 +744,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       const seeded = await seedPendingEnvios(suite.db, { count: 3 });
       for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
-      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[2]!, 4);
+      const cancellation = await appendCancellation(suite.db, seeded.registroIds[2]!, 4);
       await drain(deps(aeat.client()), T);
       expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       const wire = recording(aeat.client());
@@ -758,7 +758,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
       const [first] = held;
-      const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const cancellation = await appendCancellation(suite.db, first!, 5);
       const later = await appendPendingAlta(suite.db, seeded, 6);
       await drain(deps(aeat.client()), at(MINUTE));
       expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
@@ -794,7 +794,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
       const [first] = held;
-      const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const cancellation = await appendCancellation(suite.db, first!, 5);
       const later = await appendPendingAlta(suite.db, seeded, 6);
       await drain(deps(aeat.client()), at(MINUTE));
       expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
@@ -845,7 +845,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       const seeded = await seedPendingEnvios(suite.db, { count: 3 });
       for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
-      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      const cancellation = await appendCancellation(suite.db, seeded.registroIds[0]!, 4);
       await drain(deps(aeat.client()), T);
       expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       const sale = await appendPendingAlta(suite.db, seeded, 5);
@@ -863,7 +863,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       const seeded = await seedPendingEnvios(suite.db, { count: 3 });
       for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
-      const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+      const cancellation = await appendCancellation(suite.db, seeded.registroIds[0]!, 4);
       const sale = await appendPendingAlta(suite.db, seeded, 5);
       const wire = recording(aeat.client());
 

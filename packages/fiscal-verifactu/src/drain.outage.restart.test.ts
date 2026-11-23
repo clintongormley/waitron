@@ -137,7 +137,7 @@ it("does not mistake a pending cancellation or refusal-braked successor for a se
     now,
   );
   const { appendPendingAlta, appendCancellation } = await import("../test/drain-fixtures.js");
-  await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 4);
+  await appendCancellation(suite.db, seeded.registroIds[0]!, 4);
   await appendPendingAlta(suite.db, seeded, 5);
   await stampDeployment(suite.db, "production");
   const before = {

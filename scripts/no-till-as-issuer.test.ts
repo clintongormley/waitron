@@ -116,7 +116,7 @@ it("discovers new files and ignores a screenshot directory named like a test fil
   }
 });
 
-const owned = ["invoice_series", "verifactu_identities", "cadenas"];
+const owned = ["invoice_series", "verifactu_identities"];
 function tables() {
   return [
     ...owned.map((name) => ({ name, columns: ["id", "node_id"], keys: [["node_id"]] })),
@@ -132,7 +132,7 @@ it("accepts node ownership and distinct recorded device origins", () => {
 });
 it("rejects a fiscal column named for a cash register", () => {
   const rows = tables();
-  rows[3]!.columns.push("till_id");
+  rows.find(({ name }) => name === "verifactu_records")!.columns.push("till_id");
   expect(inspectTables(rows)).toEqual(["verifactu_records: fiscal till column till_id"]);
 });
 it.each(owned)("requires the node column and a node ownership key on %s", (name) => {

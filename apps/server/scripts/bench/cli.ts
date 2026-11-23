@@ -3,6 +3,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildYear } from "./build-year.js";
 import { compareTimings, formatComparison } from "./compare-timings.js";
+import { growFiscal } from "./grow-fiscal.js";
 import { measureVenue, type MeasureResult } from "./measure.js";
 import { BENCH_PROFILE } from "./profile.js";
 import { describeRuntime } from "./runtime.js";
@@ -11,7 +12,9 @@ const USAGE =
   "Usage: build --out <absolute dir> [--days 360] [--bills-per-day 250] [--seed 1]\n" +
   "  A stopped build resumes from its last finished day when run again with the same --out.\n" +
   "       measure --venue <built dir> --out <absolute file> [--samples 200] [--rounds 3]\n" +
-  "       compare --before <file> --after <file>";
+  "       compare --before <file> --after <file>\n" +
+  "       grow-fiscal --venue <copied single-box bench venue> --records <n>\n" +
+  "  Grown records keep the template record's timestamps.";
 
 const REPOSITORY = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
 
@@ -53,6 +56,11 @@ export async function runCli(argv: readonly string[], print: (text: string) => v
   const [command, ...rest] = argv;
   if (command === "measure") return measure(rest, print);
   if (command === "compare") return compare(rest, print);
+  if (command === "grow-fiscal") {
+    const found = flags(rest, ["--venue", "--records"]);
+    const venue = outsideRepository("--venue", found.get("--venue"), found.get("--venue") ?? "");
+    return growFiscal(venue, wholeNumber(found, "--records", 0), print);
+  }
   if (command !== "build") throw new Error(USAGE);
   const found = flags(rest, ["--out", "--days", "--bills-per-day", "--seed"]);
   const out = found.get("--out");

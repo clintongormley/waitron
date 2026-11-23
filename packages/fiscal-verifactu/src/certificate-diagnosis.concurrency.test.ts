@@ -9,7 +9,8 @@ import { diagnosticTransport } from "./certificate-diagnosis-transport.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { VerifactuBackend } from "./backend.js";
 import { installCertificate } from "./certificate-install.js";
-import { verifactuRecords, cadenas } from "./schema/index.js";
+import { verifactuRecords } from "./schema/index.js";
+import { readChainHead } from "./chain.js";
 import { startDiagnosticServer } from "../test/certificate-diagnosis-fixtures.js";
 import {
   authority,
@@ -116,7 +117,7 @@ describe("certificate diagnosis without a sale or install lock", () => {
         .from(verifactuRecords)
         .where(eq(verifactuRecords.saleId, saleId));
       expect(record).toMatchObject({ saleId, secuencia: 1 });
-      const [chain] = await suite.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
+      const chain = await withTransaction(suite.db, (tx) => readChainHead(tx, nodeId));
       expect(chain).toMatchObject({ ultimoRegistroId: record!.id, ultimaHuella: record!.huella });
       const [series] = await suite.db
         .select()

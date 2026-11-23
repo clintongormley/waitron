@@ -5,7 +5,7 @@ import {
   walkFiscalChains,
 } from "./backup-verification-chain.js";
 
-/** Every record of every chain in a copy, rehashed and linked. Reads only. */
+/** Rehashes and links the records present. A copy can pass after losing its final records. */
 export async function checkFiscalChains(query: BackupQuery): Promise<"ok" | "broken"> {
   const tables = await fiscalChainTables(query);
   // A handover with this module enabled requires its tables even in an empty copy.

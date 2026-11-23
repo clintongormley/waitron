@@ -8,17 +8,6 @@ CREATE TABLE `acks` (
 	CONSTRAINT "acks_state_ck" CHECK("acks"."state" in ('accepted', 'accepted_with_errors', 'rejected', 'halted'))
 );
 --> statement-breakpoint
-CREATE TABLE `cadenas` (
-	`node_id` text PRIMARY KEY NOT NULL,
-	`secuencia` integer DEFAULT 0 NOT NULL,
-	`ultimo_registro_id` text,
-	`ultima_huella` text,
-	`actualizado_en` text NOT NULL,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`ultimo_registro_id`) REFERENCES `verifactu_records`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "cadenas_puntero_ck" CHECK(("cadenas"."ultimo_registro_id" is null) = ("cadenas"."ultima_huella" is null))
-);
---> statement-breakpoint
 CREATE TABLE `clock_checks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seq` integer NOT NULL,
@@ -309,7 +298,6 @@ CREATE UNIQUE INDEX `verifactu_records_node_secuencia_uq` ON `verifactu_records`
 CREATE UNIQUE INDEX `verifactu_records_corrects_registro_uq` ON `verifactu_records` (`corrects_registro_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `verifactu_records_identidad_uq` ON `verifactu_records` (`id_emisor_factura`,`num_serie_factura`,`fecha_expedicion_factura`,`tipo_registro`) WHERE "verifactu_records"."corrects_registro_id" is null;--> statement-breakpoint
 CREATE INDEX `verifactu_records_sale_idx` ON `verifactu_records` (`sale_id`);--> statement-breakpoint
-CREATE INDEX `verifactu_records_node_secuencia_idx` ON `verifactu_records` (`node_id`,`secuencia`);--> statement-breakpoint
 CREATE INDEX `verifactu_records_generado_idx` ON `verifactu_records` (`fecha_hora_huso_gen_registro`);--> statement-breakpoint
 CREATE TABLE `verifactu_sending_state` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,

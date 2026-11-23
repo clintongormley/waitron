@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -189,6 +197,11 @@ describe("fiscal rename command", () => {
         mkdirSync(join(scratch, dirname(path)), { recursive: true });
       }
       copyFileSync(join(import.meta.dirname, "../..", baseline), join(scratch, baseline));
+      // This command checks a baseline from before the duplicate position index was retired.
+      appendFileSync(
+        join(scratch, baseline),
+        "\nCREATE INDEX registros_node_secuencia_idx ON verifactu_records (node_id, secuencia);\n",
+      );
       const old = 'export const envios = table("envios", fields);';
       writeFileSync(join(scratch, source), old);
       writeFileSync(join(scratch, backlog), "including `registros` and `envios`");

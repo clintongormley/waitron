@@ -1,6 +1,6 @@
 // Side-effect only: registers this package's error codes on the shared `ErrorParams` registry.
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { IssuanceRefusal, recordIncident } from "@waitron/core";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
@@ -25,7 +25,7 @@ import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
 import type { Entorno } from "./registro-row.js";
-import { cadenas } from "./schema/cadenas.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { refuseUntilRecordable } from "./clock-behind.js";
 
@@ -87,54 +87,40 @@ export interface ChainHead {
   ultimaHuella: string | null;
 }
 
-/**
- * This node's chain head, or `undefined` when it has none yet.
- *
- * No row lock: the sequence read here decides the next position several statements later, and
- * that is safe because one write transaction runs on the venue file at a time (the pattern is
- * stated on `assertExtraListForWrite`, `packages/menu/src/extras.ts`). What refuses a forked
- * position whatever wrote it is `verifactu_records`'s unique index on the chain position.
- */
-async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
+// Reads and appends share the venue write transaction. The unique position index refuses a fork.
+async function selectHead(tx: Transaction, nodeId: NodeId) {
   const [row] = await tx
     .select({
-      secuencia: cadenas.secuencia,
-      ultimoRegistroId: cadenas.ultimoRegistroId,
-      ultimaHuella: cadenas.ultimaHuella,
+      id: verifactuRecords.id,
+      secuencia: verifactuRecords.secuencia,
+      sifId: verifactuRecords.sifId,
+      idEmisorFactura: verifactuRecords.idEmisorFactura,
+      numSerieFactura: verifactuRecords.numSerieFactura,
+      fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
+      huella: verifactuRecords.huella,
     })
-    .from(cadenas)
-    .where(eq(cadenas.nodeId, nodeId));
+    .from(verifactuRecords)
+    .where(eq(verifactuRecords.nodeId, nodeId))
+    .orderBy(desc(verifactuRecords.secuencia))
+    .limit(1);
   return row;
 }
 
-/**
- * This node's chain head, creating it if this is a fresh node.
- *
- * Exported separately from `appendToChain` because art. 7.i verification (`verifyChain`) must read
- * the last two records in the SAME transaction as the append — a verification that examines a
- * predecessor another writer is concurrently replacing has verified nothing.
- *
- * Insert-then-re-select, not one statement: `on conflict do nothing ... returning` gives nothing
- * back for a conflicting row.
- */
 export async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
-  const existing = await selectHead(tx, nodeId);
-  if (existing !== undefined) return existing;
+  const head = await selectHead(tx, nodeId);
+  if (head === undefined) return { secuencia: 0, ultimoRegistroId: null, ultimaHuella: null };
 
-  await tx
-    .insert(cadenas)
-    .values({ nodeId })
-    .onConflictDoNothing({ target: [cadenas.nodeId] });
-
-  const created = await selectHead(tx, nodeId);
-  /* v8 ignore start */
-  if (created === undefined) {
-    // Unreachable: the insert either wrote the row or found one there. Thrown rather than a `!`
-    // so a broken invariant surfaces as an AppError, not a TypeError.
-    throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
-  }
-  /* v8 ignore stop */
-  return created;
+  const [active] = await tx
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .limit(1);
+  const previous = head.sifId === active?.id ? head : undefined;
+  return {
+    secuencia: head.secuencia,
+    ultimoRegistroId: previous?.id ?? null,
+    ultimaHuella: previous?.huella ?? null,
+  };
 }
 
 /**
@@ -159,7 +145,6 @@ async function attemptAppend(
     instant: registro.input.generadoEn,
     offsetMinutes: registro.input.offsetMinutes,
   });
-  const head = await readChainHead(tx, nodeId);
   // Chain identity is sif_id, resolved independently of `secuencia`: secuencia is OUR outbox
   // ordering aid, sif_id is which SIF identity generated the record, and neither is derived from
   // the other or from the invoice counter.
@@ -170,32 +155,12 @@ async function attemptAppend(
     throw new Error(`appendToChain: supplied SIF is for node ${sif.nodeId}, not ${nodeId}`);
   }
   const resolvedSif = sif ?? (await currentSif(tx, nodeId));
-  const secuencia = head.secuencia + 1;
-
-  let encadenamiento: Encadenamiento;
-  if (head.ultimoRegistroId === null) {
-    // Start of chain: the huella is computed as for every other record, over an EMPTY predecessor
-    // huella.
-    encadenamiento = { PrimerRegistro: "S" };
-  } else {
-    const [previous] = await tx
-      .select({
-        idEmisorFactura: verifactuRecords.idEmisorFactura,
-        numSerieFactura: verifactuRecords.numSerieFactura,
-        fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
-        huella: verifactuRecords.huella,
-      })
-      .from(verifactuRecords)
-      .where(eq(verifactuRecords.id, head.ultimoRegistroId));
-    /* v8 ignore start */
-    if (previous === undefined) {
-      // Unreachable: the FK to verifactu_records(id) and that table's append-only triggers
-      // mean a non-null `cadenas.ultimo_registro_id` always resolves.
-      throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
-    }
-    /* v8 ignore stop */
-    encadenamiento = { RegistroAnterior: pointerTo(previous) };
-  }
+  const head = await selectHead(tx, nodeId);
+  const secuencia = (head?.secuencia ?? 0) + 1;
+  const encadenamiento: Encadenamiento =
+    head?.sifId === resolvedSif.id
+      ? { RegistroAnterior: pointerTo(head) }
+      : { PrimerRegistro: "S" };
 
   const record =
     registro.tipo === "alta"
@@ -274,11 +239,6 @@ async function attemptAppend(
     throw new Error("verifactu_records: insert returned no row");
   }
   /* v8 ignore stop */
-
-  await tx
-    .update(cadenas)
-    .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
-    .where(eq(cadenas.nodeId, nodeId));
 
   // On the caller's transaction: an incident that committed while its sale rolled back would
   // report a failure for a sale that never existed.

@@ -3,7 +3,7 @@ import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { validate, verifyHuella } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 
-export const FISCAL_CHAIN_TABLES = ["verifactu_records", "verifactu_identities", "cadenas"];
+export const FISCAL_CHAIN_TABLES = ["verifactu_records", "verifactu_identities"];
 
 function integer(value: BackupValue | undefined): number | null {
   const number = typeof value === "bigint" ? Number(value) : value;
@@ -66,7 +66,7 @@ async function walk(query: BackupQuery): Promise<boolean> {
   if (tables.length !== FISCAL_CHAIN_TABLES.length) return false;
 
   for await (const node of query.rows(
-    "select node_id from verifactu_records union select node_id from verifactu_identities union select node_id from cadenas order by node_id",
+    "select node_id from verifactu_records union select node_id from verifactu_identities order by node_id",
   )) {
     if (typeof node.node_id !== "string") return false;
     const nodes = [];
@@ -142,23 +142,11 @@ async function walk(query: BackupQuery): Promise<boolean> {
         return false;
       previous = row;
     }
-
-    let heads = 0;
-    for await (const head of query.rows("select * from cadenas where node_id = ?", [
-      node.node_id,
-    ])) {
-      heads++;
-      if (integer(head.secuencia) !== sequence) return false;
-      if (previous !== null && previous.sif_id === current) {
-        if (head.ultimo_registro_id !== previous.id || head.ultima_huella !== previous.huella)
-          return false;
-      } else if (head.ultimo_registro_id !== null || head.ultima_huella !== null) return false;
-    }
-    if (heads !== 1) return false;
   }
   return true;
 }
 
+// A loss of the same final records in both copies leaves no independent end position to check.
 export async function verifyBackupFiscalChains(
   before: BackupQuery,
   after: BackupQuery,

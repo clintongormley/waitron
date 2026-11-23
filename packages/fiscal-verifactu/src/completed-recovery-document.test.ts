@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { cadenas } from "./schema/cadenas.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 
 const suite = useVenueDb({
@@ -68,7 +68,7 @@ async function snapshot() {
   return {
     series: await suite.db.select().from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
-    chains: await suite.db.select().from(cadenas),
+    records: await suite.db.select().from(verifactuRecords),
     allocations: await suite.db.select().from(fiscalAllocations),
   };
 }

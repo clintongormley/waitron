@@ -18,7 +18,6 @@ export const FISCAL_VOCABULARY: readonly string[] = [
   "huella",
   "huellas",
   "cadena",
-  "cadenas",
   "encadenamiento",
   "secuencia",
   "secuencias",

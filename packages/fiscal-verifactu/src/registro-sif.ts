@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { cadenas } from "./schema/cadenas.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 /**
@@ -46,32 +45,10 @@ export interface SifRegistration {
 }
 
 /**
- * Reset a node's `cadenas` head to a fresh, empty chain — a distinct chain, never a resume of
- * anyone's (CLAUDE.md §5). Upserts the node's row to a both-null pointer
- * (`ultimoRegistroId`/`ultimaHuella`), so the next append is treated as the chain's first record.
- * `secuencia` is deliberately left OUT of the SET clause: it is OUR outbox ordering aid, never
- * AEAT's, and resetting it would collide with UNIQUE (node_id, secuencia) on the very next
- * append.
- *
- * Shared verbatim by `registerSif` (a new installation number is a new SIF identity, hence a new
- * chain) and `writeReservedSif` (a reserved node is brand-new, with no prior identity to retire).
- */
-function resetChainHead(tx: Transaction, nodeId: NodeId): Promise<unknown> {
-  return tx
-    .insert(cadenas)
-    .values({ nodeId })
-    .onConflictDoUpdate({
-      target: [cadenas.nodeId],
-      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: now() },
-    });
-}
-
-/**
  * Persist a DORMANT reserved SIF on a standby's own database, keyed to the standby's
  * OWN nodeId with the number the PRIMARY allocated (`numeroInstalacion`) — NOT re-allocated here. It
- * is inert because no sale resolves this node, and `currentSif` gates on the node. A fresh empty
- * `cadenas` head (both-null pointer) makes it a brand-new chain, never a resume of anyone's
- * (CLAUDE.md §5). No prior identity to retire — a reserved node is new.
+ * is inert because no sale resolves this node, and `currentSif` gates on the node. A reserved
+ * node has no prior identity to retire.
  * The `verifactu_identities_instalacion_uq` unique on (nif, id_sistema_informatico, numero_instalacion)
  * is the never-reuse backstop.
  */
@@ -102,8 +79,6 @@ export async function writeReservedSif(
     throw new Error("verifactu_identities: reserved insert returned no row");
   }
   /* v8 ignore stop */
-
-  await resetChainHead(tx, params.nodeId);
 
   return { id: inserted.id };
 }
@@ -145,9 +120,6 @@ export async function registerSif(
   }
   /* v8 ignore stop */
 
-  // A new installation number is a new SIF identity, therefore a NEW CHAIN.
-  await resetChainHead(tx, params.nodeId);
-
   return {
     id: inserted.id,
     nodeId: params.nodeId,
@@ -178,24 +150,4 @@ export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRe
   }
 
   return { ...row, nodeId };
-}
-
-/**
- * Whether the next record on this node's chain carries `PrimerRegistro="S"`.
- *
- * DERIVED from local state — the node's own chain being empty — never from a flag anyone sets.
- * AEAT returns a non-rejecting warning when it is claimed and records already exist for that
- * SIF+NIF; that warning is a useful re-provisioning signal only because this value reports what
- * the database holds rather than what a caller believes. No chain row at all is also a first
- * record — a node registered but never sold — and a chain row whose pointer was just reset by
- * `registerSif` reports the same thing, which is the point: a replacement identity begins a new chain.
- */
-export async function esPrimerRegistro(tx: Transaction, nodeId: NodeId): Promise<boolean> {
-  const [row] = await tx
-    .select({ ultimaHuella: cadenas.ultimaHuella })
-    .from(cadenas)
-    .where(eq(cadenas.nodeId, nodeId))
-    .limit(1);
-
-  return (row?.ultimaHuella ?? null) === null;
 }

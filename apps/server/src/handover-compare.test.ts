@@ -1370,8 +1370,7 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       alter(
         r.path,
-        `delete from cadenas where node_id = '${r.m2.nodeId}';
-         delete from verifactu_identities where node_id = '${r.m2.nodeId}';
+        `delete from verifactu_identities where node_id = '${r.m2.nodeId}';
          delete from invoice_series where node_id = '${r.m2.nodeId}';
          delete from nodes where id = '${r.m2.nodeId}'`,
       );

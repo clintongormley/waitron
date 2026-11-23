@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6fcb6a20-c06c-489e-8fa2-f0e3d9bd0bbf",
+  "id": "d57f6bca-6b16-49b7-b10a-a1ddc8288b3d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -65,84 +65,6 @@
         "acks_state_ck": {
           "name": "acks_state_ck",
           "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
-        }
-      }
-    },
-    "cadenas": {
-      "name": "cadenas",
-      "columns": {
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "secuencia": {
-          "name": "secuencia",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "ultimo_registro_id": {
-          "name": "ultimo_registro_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "ultima_huella": {
-          "name": "ultima_huella",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "actualizado_en": {
-          "name": "actualizado_en",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "cadenas_node_id_nodes_id_fk": {
-          "name": "cadenas_node_id_nodes_id_fk",
-          "tableFrom": "cadenas",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "cadenas_ultimo_registro_id_verifactu_records_id_fk": {
-          "name": "cadenas_ultimo_registro_id_verifactu_records_id_fk",
-          "tableFrom": "cadenas",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "ultimo_registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "cadenas_puntero_ck": {
-          "name": "cadenas_puntero_ck",
-          "value": "(\"cadenas\".\"ultimo_registro_id\" is null) = (\"cadenas\".\"ultima_huella\" is null)"
         }
       }
     },
@@ -1869,14 +1791,6 @@
           "name": "verifactu_records_sale_idx",
           "columns": [
             "sale_id"
-          ],
-          "isUnique": false
-        },
-        "verifactu_records_node_secuencia_idx": {
-          "name": "verifactu_records_node_secuencia_idx",
-          "columns": [
-            "node_id",
-            "secuencia"
           ],
           "isUnique": false
         },

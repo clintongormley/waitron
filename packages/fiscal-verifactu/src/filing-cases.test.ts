@@ -578,7 +578,7 @@ describe("heldRecords", () => {
       });
       return opened;
     });
-    const cancellation = await appendCancellation(suite.db, seeded, original, 3);
+    const cancellation = await appendCancellation(suite.db, original, 3);
     await setEstado(cancellation, "detenido");
     const behind = await appendPendingAlta(suite.db, seeded, 4);
     await setEstado(behind.registroId, "detenido");

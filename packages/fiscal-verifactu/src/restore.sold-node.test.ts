@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { ProvisionedNode } from "@waitron/module";
-import { appendToChain } from "./chain.js";
-import { currentSif, esPrimerRegistro } from "./registro-sif.js";
+import { appendToChain, readChainHead } from "./chain.js";
+import { currentSif } from "./registro-sif.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
 import { altaFor, seedSale, seedNode } from "./testing/seed.js";
@@ -40,9 +40,8 @@ describe("restoreFiscal", () => {
     expect(after.id).not.toBe(before.id);
     expect(after.numeroInstalacion).toBe("P000042");
     expect(after.numeroInstalacion).not.toBe(before.numeroInstalacion);
-    expect(await withTransaction(suite.db, (tx) => esPrimerRegistro(tx, seededNode.nodeId))).toBe(
-      true,
-    );
+    const head = await withTransaction(suite.db, (tx) => readChainHead(tx, seededNode.nodeId));
+    expect(head.ultimoRegistroId).toBeNull();
     const { rows: ledger } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from verifactu_records where node_id = ${seededNode.nodeId}`,
     );

@@ -23,7 +23,6 @@ import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { currentSif } from "./registro-sif.js";
-import { cadenas } from "./schema/cadenas.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { verifyDeclaredDormantReservation } from "./declared-paper-evidence.js";
 import { verifyRetainedPaperReservation } from "./paper-evidence.js";
@@ -453,13 +452,6 @@ async function activate(
     idSistemaInformatico: validated.allocation.softwareId,
     numeroInstalacion: validated.allocation.installationIdentity,
   });
-  await tx
-    .insert(cadenas)
-    .values({ nodeId: node.nodeId })
-    .onConflictDoUpdate({
-      target: cadenas.nodeId,
-      set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: retiredAt },
-    });
   await tx
     .update(invoiceSeries)
     .set({ retiredAt })

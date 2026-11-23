@@ -1,14 +1,28 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { seedFixtureSif } from "../test/sif-fixture.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { captureError, constraintTarget, isUniqueViolation, refusalError } from "@waitron/db";
+import {
+  captureError,
+  constraintTarget,
+  isUniqueViolation,
+  refusalError,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError } from "@waitron/shared";
+import { AppError, quoteLiteral } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { appendToChain, readChainHead } from "./chain.js";
+import { appendToChain, readChainHead, type PendingRegistro } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
-import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
+import {
+  altaFor,
+  anulacionFor,
+  seedSale,
+  seedNode,
+  seedNodesForSifContention,
+  type SeededNode,
+} from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -45,6 +59,29 @@ async function records(): Promise<
     .orderBy(verifactuRecords.secuencia);
 }
 
+function insertAtSamePosition(tx: Transaction, saleId: string, decoyId: string) {
+  return tx.run(
+    sql.raw(`
+    create temp trigger collide_at_append before insert on verifactu_records
+    when new.sale_id = ${quoteLiteral(saleId)}
+    begin
+      insert into verifactu_records (
+        id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+        id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
+        primer_registro, sistema_informatico, fecha_hora_huso_gen_registro, offset_minutos,
+        tipo_huella, huella, creado_en
+      ) values (
+        ${quoteLiteral(decoyId)}, new.source, new.device_id, new.node_id, new.sif_id,
+        ${quoteLiteral(decoyId)}, new.secuencia, 'alta', new.id_emisor_factura, 'A/999',
+        new.fecha_expedicion_factura, new.nombre_razon_emisor, 1, '{}',
+        new.fecha_hora_huso_gen_registro, new.offset_minutos, new.tipo_huella,
+        '${"1".repeat(64)}', new.creado_en
+      );
+    end
+  `),
+  );
+}
+
 describe("appendToChain", () => {
   it("assigns secuencia 1 to the first record of a chain", async () => {
     const saleId = await seedSale(suite.db, node, 1);
@@ -79,16 +116,57 @@ describe("appendToChain", () => {
     expect(second?.anterior_huella).toBe(first?.huella);
   });
 
+  it("opens a fresh chain on identity activation and continues its sequence under the supplied identity", async () => {
+    const inputs: PendingRegistro[] = [];
+    for (let number = 1; number <= 4; number++) {
+      const saleId = await seedSale(suite.db, node, number);
+      inputs.push(altaFor(node, saleId, number, number));
+    }
+    await suite.db.transaction(async (tx) => {
+      await appendToChain(tx, node.nodeId, inputs[0]!);
+      await appendToChain(tx, node.nodeId, inputs[1]!);
+      const previous = await currentSif(tx, node.nodeId);
+      const sif = await seedFixtureSif(tx, {
+        nodeId: node.nodeId,
+        nif: previous.nif,
+        idSistemaInformatico: previous.idSistemaInformatico,
+      });
+      await appendToChain(tx, node.nodeId, inputs[2]!, { sif });
+      await appendToChain(tx, node.nodeId, inputs[3]!, { sif });
+    });
+
+    const [, , first, second] = await records();
+    expect(first).toMatchObject({
+      secuencia: 3,
+      primer_registro: true,
+      anterior_huella: null,
+    });
+    expect(second).toMatchObject({
+      secuencia: 4,
+      primer_registro: false,
+      anterior_huella: first!.huella,
+    });
+    const pointers = await suite.db.all(sql`
+      select anterior_id_emisor_factura, anterior_num_serie_factura, anterior_fecha_expedicion_factura
+      from verifactu_records where node_id = ${node.nodeId} and secuencia = 3
+    `);
+    expect(pointers).toEqual([
+      {
+        anterior_id_emisor_factura: null,
+        anterior_num_serie_factura: null,
+        anterior_fecha_expedicion_factura: null,
+      },
+    ]);
+  });
+
   it("advances the chain head to the record just written", async () => {
     const a = await seedSale(suite.db, node, 1);
     const { huella } = await suite.db.transaction((tx) =>
       appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)),
     );
-    const { rows } = await suite.db.execute<{ secuencia: number; ultima_huella: string }>(sql`
-      select secuencia, ultima_huella from cadenas where node_id = ${node.nodeId}
-    `);
-    expect(rows[0]?.secuencia).toBe(1);
-    expect(rows[0]?.ultima_huella).toBe(huella);
+    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
+    expect(head.secuencia).toBe(1);
+    expect(head.ultimaHuella).toBe(huella);
   });
 
   it("interleaves alta and anulación in one chain in generation order", async () => {
@@ -218,33 +296,17 @@ describe("appendToChain", () => {
   });
 
   it("reports contention after three attempts at an occupied chain position", async () => {
-    // REAL refusals, with no concurrency: a single writer against a position that is ALREADY
-    // occupied before appendToChain runs, so it reaches exhaustion through three refusals the
-    // database issued.
-    const occupied = await seedSale(suite.db, node, 1);
-    await suite.db.insert(verifactuRecords).values({
-      source: "device",
-      deviceId: node.deviceId,
-      nodeId: node.nodeId,
-      sifId: node.sifId,
-      saleId: occupied,
-      secuencia: 1,
-      tipoRegistro: "alta",
-      idEmisorFactura: "89890001K",
-      numSerieFactura: "A/999",
-      fechaExpedicionFactura: "2026-07-20",
-      nombreRazonEmisor: "Waitron SL",
-      primerRegistro: true,
-      sistemaInformatico: {},
-      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
-      offsetMinutos: 120,
-      tipoHuella: "01",
-      huella: "1".repeat(64),
-    });
-
+    const decoy = await seedSale(suite.db, node, 1);
     const saleId = await seedSale(suite.db, node, 2);
     const error = await suite.db
-      .transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, saleId, 2, 2)))
+      .transaction(async (tx) => {
+        insertAtSamePosition(tx, saleId, decoy);
+        try {
+          return await appendToChain(tx, node.nodeId, altaFor(node, saleId, 2, 2));
+        } finally {
+          await tx.run(sql`drop trigger collide_at_append`);
+        }
+      })
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
@@ -283,14 +345,7 @@ describe("appendToChain", () => {
   });
 
   it("lands the record on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
-    // The middle of the loop, between the first-attempt cases at the top of this block and the
-    // exhaustion cases above: one refusal the database really issued, then a clean second attempt.
-    // The first attempt's savepoint plants a record at the position the attempt is about to compute
-    // (the chain head still says 0), so the attempt's own insert is refused by the position's
-    // unique index; rolling back to the savepoint takes the planted record with it, and the second
-    // attempt passes straight through. The only thing wrapped is `transaction`, the one method
-    // appendToChain calls on `tx` once the chart is supplied.
-    // The controls that fail it are in the pull request that added it.
+    // Plant the conflicting position after the head read, inside the first insert.
     const decoy = await seedSale(suite.db, node, 1);
     const saleId = await seedSale(suite.db, node, 2);
     let calls = 0;
@@ -298,36 +353,18 @@ describe("appendToChain", () => {
 
     const result = await suite.db.transaction((tx) => {
       const refusedOnce = {
-        transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
+        transaction: async <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
           calls += 1;
           if (calls > 1) return tx.transaction(body);
-          return tx
-            .transaction(async (nested) => {
-              await nested.insert(verifactuRecords).values({
-                source: "device",
-                deviceId: node.deviceId,
-                nodeId: node.nodeId,
-                sifId: node.sifId,
-                saleId: decoy,
-                secuencia: 1,
-                tipoRegistro: "alta",
-                idEmisorFactura: "89890001K",
-                numSerieFactura: "A/999",
-                fechaExpedicionFactura: "2026-07-20",
-                nombreRazonEmisor: "Waitron SL",
-                primerRegistro: true,
-                sistemaInformatico: {},
-                fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
-                offsetMinutos: 120,
-                tipoHuella: "01",
-                huella: "1".repeat(64),
-              });
-              return body(nested);
-            })
-            .catch((error: unknown) => {
-              firstRefusal = error;
-              throw error;
-            });
+          insertAtSamePosition(tx, saleId, decoy);
+          try {
+            return await tx.transaction(body);
+          } catch (error) {
+            firstRefusal = error;
+            throw error;
+          } finally {
+            await tx.run(sql`drop trigger collide_at_append`);
+          }
         },
       } as never;
       return appendToChain(refusedOnce, node.nodeId, altaFor(node, saleId, 2, 2), {
@@ -351,16 +388,12 @@ describe("appendToChain", () => {
       .where(eq(verifactuRecords.nodeId, node.nodeId));
     expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
     expect(result.secuencia).toBe(1);
-    const { rows: head } = await suite.db.execute<{
-      secuencia: number;
-      ultimo_registro_id: string;
-      ultima_huella: string;
-    }>(sql`
-      select secuencia, ultimo_registro_id, ultima_huella from cadenas where node_id = ${node.nodeId}
-    `);
-    expect(head).toEqual([
-      { secuencia: 1, ultimo_registro_id: result.id, ultima_huella: result.huella },
-    ]);
+    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
+    expect(head).toEqual({
+      secuencia: 1,
+      ultimoRegistroId: result.id,
+      ultimaHuella: result.huella,
+    });
   });
 
   it("does not retry an error that is not a chain collision", async () => {
@@ -437,35 +470,39 @@ describe("appendToChain — pre-fetched SIF", () => {
 });
 
 describe("readChainHead", () => {
-  it("creates the chain head row from scratch when a node has none yet", async () => {
-    // seedNode's registerSif already wrote a cadenas row, so every other test skips readChainHead's
-    // create-the-head branch. Deleting that row reproduces the cold start.
-    await suite.db.execute(sql`delete from cadenas where node_id = ${node.nodeId}`);
+  it("reads an empty head without creating a database row", async () => {
+    const {
+      nodeIds: [unregistered],
+    } = await seedNodesForSifContention(suite.db, 1);
 
-    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
-    expect(head).toEqual({ secuencia: 0, ultimoRegistroId: null, ultimaHuella: null });
+    await suite.db.transaction(async (tx) => {
+      const changes = () =>
+        tx.all<{ count: number }>(sql`select total_changes() as count`)[0]!.count;
+      const before = changes();
+      const head = await readChainHead(tx, unregistered!);
 
-    const { rows } = await suite.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${node.nodeId}`,
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.secuencia).toBe(0);
+      expect(head).toEqual({ secuencia: 0, ultimoRegistroId: null, ultimaHuella: null });
+      expect(changes()).toBe(before);
+    });
   });
 
-  it("locks the existing head row rather than creating a second one", async () => {
-    // The common case, exercised directly rather than only through appendToChain: a till that
-    // already sold once must have readChainHead read that same row, not silently create a rival.
+  it("reads the latest record without writing anything", async () => {
     const saleId = await seedSale(suite.db, node, 1);
-    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1)));
-
-    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
-    expect(head.secuencia).toBe(1);
-    expect(head.ultimoRegistroId).not.toBeNull();
-    expect(head.ultimaHuella).not.toBeNull();
-
-    const { rows } = await suite.db.execute<{ count: number }>(
-      sql`select count(*) as count from cadenas where node_id = ${node.nodeId}`,
+    const record = await suite.db.transaction((tx) =>
+      appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1)),
     );
-    expect(rows[0]?.count).toBe(1);
+
+    await suite.db.transaction(async (tx) => {
+      const changes = () =>
+        tx.all<{ count: number }>(sql`select total_changes() as count`)[0]!.count;
+      const before = changes();
+      const head = await readChainHead(tx, node.nodeId);
+      expect(head).toEqual({
+        secuencia: 1,
+        ultimoRegistroId: record.id,
+        ultimaHuella: record.huella,
+      });
+      expect(changes()).toBe(before);
+    });
   });
 });

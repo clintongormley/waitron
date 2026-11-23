@@ -29,7 +29,7 @@ import type { DatedRate, DeviceId, NodeId, SaleOrigin, SeriesId } from "@waitron
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { cadenas } from "./schema/cadenas.js";
+import { readChainHead } from "./chain.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
@@ -159,7 +159,7 @@ describe("the write path against the real Veri*Factu backend", () => {
       .select()
       .from(verifactuRecords)
       .where(eq(verifactuRecords.saleId, saleId));
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
+    const head = await withTransaction(pg.db, (tx) => readChainHead(tx, nodeId));
     expect(head?.secuencia).toBe(1);
     expect(head?.ultimaHuella).toBe(registro?.huella);
     expect(head?.ultimoRegistroId).toBe(registro?.id);
@@ -236,10 +236,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     expect(await pg.db.select().from(sales)).toHaveLength(0);
     expect(await pg.db.select().from(verifactuRecords)).toHaveLength(0);
     expect(await pg.db.select().from(verifactuSubmissions)).toHaveLength(0);
-    // The chain head row itself still exists — `seedTaxpayerWithSif`'s own `registerSif` call
-    // created it at provisioning time, in a transaction that already committed — but its
-    // `secuencia` is untouched by the rolled-back sale.
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
+    const head = await withTransaction(pg.db, (tx) => readChainHead(tx, nodeId));
     expect(head?.secuencia).toBe(0);
   });
 
@@ -301,7 +298,7 @@ describe("parent_line_id is not part of the huella", () => {
   // on IDEmisorFactura + NumSerieFactura + fecha + tipo), and NumSerieFactura is itself a
   // huella input; two under different obligados differ by NIF, also a huella input. So each sale is
   // recorded, its stored huella read back INSIDE its transaction, and the transaction then ROLLED
-  // BACK — which reverts `invoice_series.next_number` and the `cadenas` head, so the next sale
+  // BACK — which reverts `invoice_series.next_number`, so the next sale
   // re-allocates the identical `A/1` against the same still-empty chain, same NIF,
   // same fixed clock. Every huella input is then equal across the two except the one under test:
   // one child line's parentLineNo, which stays in `sale_lines` and never travels to the backend.
@@ -426,7 +423,7 @@ describe("a line's note is not part of the huella", () => {
   //
   // Byte-identical huellas need the same NumSerieFactura against the same empty chain, so — exactly as
   // the parent_line_id block above — each sale is recorded, its huella read back INSIDE its transaction,
-  // and the transaction then ROLLED BACK, reverting `invoice_series.next_number` and the `cadenas` head
+  // and the transaction then ROLLED BACK, reverting `invoice_series.next_number`
   // so the next call re-allocates the identical `A/1` against the same still-empty chain.
   const ROLLBACK = new Error("rollback: huella captured");
 

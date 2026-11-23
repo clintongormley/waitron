@@ -15,7 +15,7 @@ import type { HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { cadenas } from "./schema/cadenas.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TAXPAYER_A.nodeId };
@@ -101,7 +101,7 @@ async function snapshot() {
     series: await suite.db.select().from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
-    chains: await suite.db.select().from(cadenas),
+    records: await suite.db.select().from(verifactuRecords),
   };
 }
 
@@ -144,7 +144,7 @@ it("activates all next-hour bases without an advance reservation and preserves o
   ).toEqual([1, 1, 1, 1]);
   expect(after.sifs.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.sifs);
   expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
-  expect(after.chains.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.chains);
+  expect(after.records).toEqual(before.records);
 });
 
 it("replays the exact committed promotion without changing counters or fiscal rows", async () => {

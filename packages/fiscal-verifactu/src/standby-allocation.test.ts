@@ -118,7 +118,9 @@ describe("a dormant standby allocation checked against stored venue facts", () =
         sql`select name from sqlite_master where name = 'contadores_instalacion'`,
       )
     ).rows;
-    const chains = (await suite.db.execute(sql`select * from cadenas`)).rows;
+    const chains = (
+      await suite.db.execute(sql`select * from verifactu_records order by node_id, secuencia`)
+    ).rows;
     const series = await suite.db.select().from(invoiceSeries);
     const input = signed();
     expect(await check(input)).toEqual({
@@ -134,7 +136,10 @@ describe("a dormant standby allocation checked against stored venue facts", () =
         )
       ).rows,
     ).toEqual(counters);
-    expect((await suite.db.execute(sql`select * from cadenas`)).rows).toEqual(chains);
+    expect(
+      (await suite.db.execute(sql`select * from verifactu_records order by node_id, secuencia`))
+        .rows,
+    ).toEqual(chains);
     expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   });

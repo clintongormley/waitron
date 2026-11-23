@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
@@ -12,7 +12,7 @@ import { VerifactuBackend } from "./backend.js";
 import { SOFTWARE_IDENTITY } from "./software-identity.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
-import { cadenas } from "./schema/cadenas.js";
+import { readChainHead } from "./chain.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
@@ -136,7 +136,7 @@ describe("alta and anulación interleave in one chain", () => {
     const a = await sell();
     await voidSale(a.saleId);
     const row = await rawAnulacion(a.saleId);
-    const [head] = await suite.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
+    const head = await withTransaction(suite.db, (tx) => readChainHead(tx, nodeId));
     expect(head?.secuencia).toBe(2);
     expect(head?.ultimaHuella).toBe(row.huella);
   });
