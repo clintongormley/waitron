@@ -233,7 +233,7 @@ describe("a product's and a variant's takeaway VAT rate", () => {
   const saveNew = (body: unknown) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, null, body, "en"));
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
-  const save = (id: string, body: unknown) =>
+  const save = (id: string, body: object) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const listedVariant = async (parentId: string, variantId: string) =>
     (await withTransaction(fx.db, (tx) => listProducts(tx)))
@@ -457,7 +457,7 @@ describe("a removed variant in the parent's editor", () => {
       seedVenueSettings(tx, { defaultContentLanguage: "en", contentLanguages: ["en", "es"] }),
     );
   });
-  const save = (productId: string | null, body: unknown) =>
+  const save = (productId: string | null, body: object) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, saveBodyOf(body), "en"));
   const read = (productId: string) =>
     withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
@@ -813,7 +813,7 @@ describe("a variant's own page", () => {
   });
 
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
-  const save = (id: string, body: unknown) =>
+  const save = (id: string, body: object) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const storedRow = async (id: string) =>
     (
@@ -1093,7 +1093,7 @@ describe("a variant's own page", () => {
 });
 
 describe("a product an extras list offers", () => {
-  const save = (productId: string | null, body: unknown) =>
+  const save = (productId: string | null, body: object) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, productId, saveBodyOf(body), "en"));
   const read = (productId: string) =>
     withTransaction(fx.db, (tx) => readProductEditor(tx, productId));
@@ -1224,7 +1224,7 @@ describe("a product an extras list offers", () => {
 });
 
 describe("optional product customer translations", () => {
-  const save = (id: string | null, body: unknown) =>
+  const save = (id: string | null, body: object) =>
     withTransaction(fx.db, (tx) => saveProductEditor(tx, id, saveBodyOf(body), "en"));
   const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
 
@@ -1357,7 +1357,7 @@ it("preserves later dish and variant availability during an unrelated editor sav
     await updateProduct(tx, loaded.id, { available: false });
     await updateProduct(tx, loaded.variants[0]!.id, { available: false });
   });
-  const body: ProductEditorSaveBody = saveBodyOf({ ...loaded });
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = saveBodyOf({ ...loaded });
   delete body.available;
   const variants: ProductEditorSaveBody["variants"] = structuredClone(loaded.variants);
   for (const variant of variants) delete variant.available;
@@ -1387,7 +1387,7 @@ it("preserves a variant's later availability on its own page and restores it exp
     readProductEditor(tx, parent.variants[0]!.id),
   );
   await withTransaction(fx.db, (tx) => updateProduct(tx, loaded.id, { available: false }));
-  const body: ProductEditorSaveBody = saveBodyOf({ ...loaded });
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = saveBodyOf({ ...loaded });
   delete body.available;
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, loaded.id, { ...body, unitPrice: "4.00" }, "en"),

@@ -155,9 +155,9 @@ export async function readOwnTakeawayVatSchedules(
 }
 
 /**
- * The rate each schedule holds on the venue's local date today (plan D14), keyed as given. The
- * venue's date is read only when some schedule has a dated row: without one, each schedule is its
- * one row from the beginning of time.
+ * The rate each schedule holds on the venue's local date today, from its saved time zone
+ * (`venueToday`), keyed as given. The venue's date is read only when some schedule has a dated row:
+ * without one, each schedule is its one row from the beginning of time.
  */
 export async function takeawayVatRatesToday(
   tx: Transaction,

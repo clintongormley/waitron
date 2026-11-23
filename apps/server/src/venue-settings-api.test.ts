@@ -618,7 +618,7 @@ describe("venue defaults", () => {
     });
   });
 
-  it("saves the receipt language alone and leaves the VAT class", async () => {
+  it("saves the receipt language alone and leaves the hidden defaultProductVatClass untouched", async () => {
     await at("Madrid", ["es-ES"], async () => {
       const response = await write({ receiptLanguage: "gl-ES" });
       expect(response.status).toBe(200);
@@ -639,7 +639,7 @@ describe("venue defaults", () => {
     ["of null", { defaultProductVatClass: null }],
     ["beside a language", { receiptLanguage: "gl-ES", defaultProductVatClass: "zero" }],
   ])(
-    "refuses the retired VAT class for new products %s as an invalid body without writing",
+    "refuses the retired defaultProductVatClass %s as an invalid body without writing",
     async (_label, body) => {
       await at("Madrid", ["es-ES"], async () => {
         const response = await write(body);

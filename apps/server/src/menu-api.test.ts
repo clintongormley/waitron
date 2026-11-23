@@ -41,6 +41,7 @@ import { createCourse } from "./kitchen.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
+import { saveBodyOf } from "./testing/editor-save-body.js";
 import "./errors.js";
 
 // The menu ROUTES end to end in-process: the body and id screens and the permission gate. The
@@ -3617,13 +3618,6 @@ describe("mountMenuApi — null request bodies map to the route's own 4xx, never
     });
   });
 });
-
-/** An editor read without the eat-in class it still carries, which a save refuses. */
-function saveBodyOf(read: Record<string, unknown>): Record<string, unknown> {
-  const body = { ...read };
-  delete body.vatClass;
-  return body;
-}
 
 async function saveEditorFixture(app: Hono, productId: string, changes: Record<string, unknown>) {
   const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
