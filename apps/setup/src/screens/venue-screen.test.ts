@@ -877,6 +877,19 @@ describe("setup-venue-screen form errors", () => {
     expect(errorOf(el, "legalName")).toBe("");
   });
 
+  it("names each empty corrective series code field in a sentence that reads", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await fillValid(el, { correctiveSeriesCode: "", fullCorrectiveSeriesCode: "" });
+    next(el).click();
+    await el.updateComplete;
+    expect(errorOf(el, "correctiveSeriesCode")).toBe(
+      "Enter the series code for correctives of simplified invoices.",
+    );
+    expect(errorOf(el, "fullCorrectiveSeriesCode")).toBe(
+      "Enter the series code for correctives of full invoices.",
+    );
+  });
+
   it("on a failed press marks each bad field, says so above Next, focuses the first and disables Next", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
