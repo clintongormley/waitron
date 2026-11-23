@@ -53,19 +53,19 @@
 
 1. **A refusal hidden in closed Details.** A server refusal for `takeaway-tax`, `ordering`,
    `customer-name-es`, `description-en`, `kitchen-name`, `product-course` or `allergens-*` must
-   open Details and put focus in that field. Pinned in Task 2.
+   open Details and put focus in that field. Pinned in Task 2b.
 2. **A variant's page.**
    - Ordering absent; Variants and Modifiers absent; Available visible under Name.
    - The Details summary shows inherited course, description and allergens as placeholders
      (italic).
-   - Pinned in Tasks 2 and 3.
+   - Pinned in Tasks 2b and 3.
 3. **A venue with neither a dine-in rate nor takeaway VAT.** The VAT group, label included, is
-   absent rather than an empty heading. Pinned in Task 2.
+   absent rather than an empty heading. Pinned in Task 2b.
 4. **Creating, then editing.**
    - A new product opens with Details open.
    - Closing the editor and opening an existing product starts Details closed. The starting state
      is recomputed whenever `value` or `open` changes, as Pricing's is today.
-   - Pinned in Task 2.
+   - Pinned in Task 2b, by reset tests in both directions.
 5. **A long Details summary at phone width.** It is cut after two lines and never widens the dialog.
    Pinned in Task 3.
 
@@ -131,69 +131,135 @@
   summaries, and slotted summaries drawn like the component's own". The body names the reversed
   tests and decisions (#1177, A200).
 
-### Task 2: Regroup the editor: Available under Name, one Details section
+### Task 2a: Each old section's summary becomes a list of named values
+
+This keeps today's four sections. Only how their summaries are built changes, so the commit stays
+green before the regroup.
+
+**Files:**
+- Modify: `apps/dashboard/src/widgets/product-editor.ts`:
+  - `renderKitchen` 1084
+  - `renderDescriptors` 1261-1293
+  - `renderNutrition` 1324-1362
+  - `renderSelling` 1383-1395
+  - `pricingSummary` 1540-1559
+  - styles 249-252 and 315-325
+- Test: `apps/dashboard/src/widgets/product-editor.test.ts`, `product-editor.nutrition.test.ts`
+
+**Interfaces:**
+- Consumes: `SummaryField.warning` (Task 1).
+- Produces: private methods, each returning `SummaryField[]` with today's content:
+  - `kitchenSummary()`: prep station name, course
+  - `descriptorsSummary()`: customer-facing name, description
+  - `nutritionSummary()`: allergens, dietary
+  - `sellingSummary()`: Available or Unavailable, then the ordering on a product
+  - `takeawayVatSummary()`: the takeaway VAT entry that `pricingSummary` builds today
+
+  `pricingSummary` now concatenates the base price with `takeawayVatSummary()`, so its output is
+  unchanged.
+- The test helper `summaryOf(el, section)` returns the `summaryFields` of
+  `wt-disclosure[data-section=section]`. Every summary-reading test uses it, so Task 2b changes
+  only the section name it is given.
+
+- [ ] **Step 1: Write the failing tests.**
+  - Each `folded(el, "descriptors").summaryRows` assertion becomes
+    `summaryOf(el, "descriptors")`, with the same values and no `lines`. The customer-name entry's
+    label becomes `t("editor.customer_name")`, replacing the ambiguous `t("editor.name")`.
+  - Each `[data-test="nutrition-summary"]` reading, and the `nutritionFields` helper, becomes
+    `summaryOf(el, "nutrition")`:
+    - allergens "Not yet reviewed" carries `warning: true`
+    - inherited allergens or diets carry `placeholder: true`
+  - **Implied diet labels lose their italic in the summary.** A `SummaryField` value is plain
+    text. Change `product-editor.nutrition.test.ts:208-226` to expect the implied labels after the
+    chosen ones, in the same value with no italic. The open picker still marks them. The PR tells
+    the owner.
+  - Selling's slotted line becomes `summaryOf(el, "selling")`:
+    - `{ label: t("editor.available_label"), value: t("editor.available") }`, with value
+      `t("product.unavailable_badge")` and `warning: true` when off
+    - then the ordering entry, on a product
+  - Add the key `editor.available_label`: "Sale" in English, "Venta" in Spanish. It is only used
+    until Task 2b.
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/product-editor.nutrition.test.ts`.
+- [ ] **Step 3: Implement the five methods.**
+  - Pass them as `.summaryFields`.
+  - Delete the slotted `<span slot="summary">` blocks and the `.selling-summary` and
+    `.nutrition-summary` styles, including the `.inherited`, `[data-implied]` and `.unreviewed`
+    children.
+  - Descriptors uses `summaryFields`, no longer `summaryRows`.
+- [ ] **Step 4: Run and watch them pass.** Same command, plus `product-editor.a11y.test.ts`.
+- [ ] **Step 5: Commit.** Message: "Product editor: each section's closed line is built as named
+  values". The body notes that implied diets lose their italic on the closed line.
+
+### Task 2b: Regroup the editor: Available under Name, one Details section
 
 **Files:**
 - Modify: `apps/dashboard/src/widgets/product-editor.ts`:
   - `SECTION_FIELDS` 113-121
   - starting states 428-430 and 505-509
-  - `focusField` allergens branch 569-580
-  - styles 240-320
-  - `renderKitchen` 1084
-  - `renderDescriptors` 1261
-  - `renderNutrition` 1324
-  - `renderSelling` 1383
-  - `renderPrice` 1562
-  - `render` 1959-1962
-- Modify: `apps/dashboard/src/i18n/strings.ts` (English and Spanish blocks)
-- Test: `apps/dashboard/src/widgets/product-editor.test.ts`, `product-editor.a11y.test.ts`,
-  `product-editor.nutrition.test.ts`, `product-editor.variant-focus.test.ts`,
-  `product-editor.save-state.test.ts`, `apps/dashboard/src/screens/products-screen.test.ts`
+  - `focusField` 569-580
+  - styles 240-330
+  - `renderPrice` 1562-1633
+  - `render` 1959-1962, and the four section renderers
+- Modify: `apps/dashboard/src/i18n/strings.ts` (English and Spanish)
+- Test: `product-editor.test.ts`, `product-editor.a11y.test.ts`, `product-editor.nutrition.test.ts`,
+  `product-editor.dine-in-vat.test.ts`, `product-editor.variant-focus.test.ts`,
+  `product-editor.save-state.test.ts`, `product-editor.unsaved.test.ts`,
+  `product-forms.unsaved.test.ts`, `apps/dashboard/src/screens/products-screen.test.ts`
+  (1857, 2209), `apps/dashboard/src/i18n/t.test.ts`
 
 **Interfaces:**
-- Consumes: `SummaryField.warning` (Task 1).
+- Consumes: Task 2a's summary methods.
 - Produces:
-  - `renderDetails()`, a `<wt-disclosure ruled data-section="details">` whose `.summaryFields` is
-    `this.detailsSummary()`.
-  - Private `kitchenSummary()`, `descriptorsSummary()`, `nutritionSummary()`, `vatSummary()` and
-    `orderingSummary()`, each returning `SummaryField[]` with today's content. `detailsSummary()`
-    concatenates them in that order. Task 3 changes what each returns.
-  - The groups inside Details are `<div class="group" data-group="kitchen|menu|nutrition|vat|ordering">`,
-    each starting with `<div class="group-label">`.
-  - The always-visible switch sits in `<div class="group" data-section="available">`.
+  - `renderDetails()`: `keyed(this.generation, html\`<wt-disclosure ruled data-section="details" ?open=${this.#detailsStartOpen} …>\`)`,
+    with `.summaryFields=${this.detailsSummary()}`.
+  - `detailsSummary()` = `[...kitchenSummary(), ...descriptorsSummary(), ...nutritionSummary(), ...takeawayVatSummary(), ...orderingSummary()]`.
+    `orderingSummary()` is `sellingSummary()` without the Available entry, and is empty on a
+    variant.
+  - `pricingSummary` returns the base price only.
+  - Groups inside Details are `<fieldset class="group" data-group="kitchen|menu|nutrition|vat|ordering"><legend class="group-label">…</legend>…</fieldset>`.
+    This is the siblings' pattern (`extra-list-form.ts:1031`); `.group-label` and
+    `fieldset.group > legend` styles already exist.
+  - The always-visible switch is `<div class="group" data-section="available">`, drawn on products
+    and variants.
 
 - [ ] **Step 1: Write the failing tests** in `product-editor.test.ts`:
-  - "renders the sections in the designed order…" expects `.form > [data-section]` to be
-    `["categories", "name", "available", "details", "price", "variants", "modifiers"]`. It expects
-    Details' groups to be `["kitchen", "menu", "nutrition", "vat", "ordering"]`, with labels
-    `t("editor.section_kitchen")`, `t("editor.group_menu")`, `t("editor.group_nutrition")`,
-    `t("product.vat")` and `t("editor.ordered_on_own_group")`. It expects `[data-test=dine-in-vat]`
-    inside the `vat` group, and Pricing to contain `[name=unit-price]` and no `wt-combobox`. Rename
-    it "…with VAT in Details".
-  - "opens Kitchen while Descriptors and Nutritional info start collapsed" becomes "Details starts
-    closed on an existing product and open on a new one". It mounts with `value: product`, expects
-    `section(el, "details").open` false, then sets `value = null`, awaits, and expects it true.
-  - New "Details closes again when the editor reopens on an existing product after creating one",
-    for Review Focus 4.
-  - New "a refusal inside closed Details opens it and focuses the field", for Review Focus 1. It is
-    parameterised over `takeaway-tax`, `ordering`, `customer-name-en`, `kitchen-name` and
-    `allergens`. Set `fieldErrors` and expect Details open and the named field focused (for
-    `allergens`, the picker's first control).
-  - New "a variant's page has no Ordering group and keeps Available under Name", for Review Focus
-    2.
-  - New "with neither a dine-in rate nor takeaway VAT, Details has no VAT group", for Review
-    Focus 3.
-  - Every existing case that calls `openSection(el, "kitchen" | "descriptors" | "nutrition" |
-    "selling")` opens `"details"` instead.
-  - Every case reading `folded(el, "kitchen").summaryFields`,
-    `folded(el, "descriptors").summaryRows` or `[data-test="nutrition-summary"]` reads the matching
-    entries of `folded(el, "details").summaryFields` instead, with the same values. Descriptors'
-    rows become fields with no `lines`. Allergens "Not yet reviewed" carries `warning: true`, and
-    inherited values keep `placeholder: true`.
-
+  - **The order test.** "renders the sections in the designed order…", renamed "…with VAT in
+    Details":
+    - `.form > [data-section]` is
+      `["categories", "name", "available", "details", "price", "variants", "modifiers"]`.
+    - Details' `fieldset[data-group]` list is `["kitchen", "menu", "nutrition", "vat", "ordering"]`.
+      Each fieldset's accessible name (`legend` text) is `t("editor.section_kitchen")`,
+      `t("editor.group_menu")`, `t("editor.group_nutrition")`, `t("product.vat")` and
+      `t("editor.ordered_on_own_group")`.
+    - `[data-test=dine-in-vat]` is inside the `vat` group, and Pricing holds `[name=unit-price]`
+      and no `wt-combobox`.
+    - With `--wt-space-5: 24px` set on the host, `.form`'s computed `rowGap` is `"24px"` (spec
+      decision 7).
+  - **The starting-state test.** "opens Kitchen while Descriptors and Nutritional info start
+    collapsed" becomes "Details starts closed on an existing product and open on a new one".
+  - **The reset tests, both directions, for Review Focus 4:**
+    - "Details closes again when the editor moves to another existing product": open product A,
+      open Details by its header, set `value` to product B, await, expect it closed.
+    - "Details opens again for a second new product": `value = null`, close Details, set `open`
+      false then true with `value` still null, expect it open.
+  - **The refusal test, for Review Focus 1.** "a refusal inside closed Details opens it and focuses
+    the field" is parameterised over `takeaway-tax` (mounted with `takeawayVat: true`), `ordering`,
+    `customer-name-en`, `description-en`, `kitchen-name`, `product-course` and `allergens`. Set
+    `fieldErrors` and expect Details open and the named field focused (for `allergens`, the
+    picker's first control).
+  - **The variant test, for Review Focus 2.** "a variant's page has no Ordering group and keeps
+    Available under Name".
+  - **The no-VAT test, for Review Focus 3.** "with neither a dine-in rate nor takeaway VAT, Details
+    has no VAT group".
+  - **The takeaway test.** "the takeaway VAT appears in Details' line, not Pricing's".
+  - **Existing tests:**
+    - Every `openSection(el, "kitchen" | "descriptors" | "nutrition" | "selling")` opens
+      `"details"` instead.
+    - Every `summaryOf(el, <old section>)` reads `summaryOf(el, "details")`, filtered to the
+      entries that section contributed. The Available entry is gone: the switch is visible.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts`.
-
 - [ ] **Step 3: Implement.**
   - **Strings:**
 
@@ -205,113 +271,119 @@
     | `editor.ordered_on_own_group` | "Ordering" | "Pedidos" |
 
     The PR asks the owner to confirm the Spanish. Delete `editor.selling`,
-    `editor.section_descriptors` and `editor.section_nutrition` once grep shows them unused.
-  - **`render`:** order categories, name, available, `renderDetails()`, price, then variants and
+    `editor.section_descriptors`, `editor.section_nutrition` and Task 2a's
+    `editor.available_label` once grep shows them unused.
+  - **`render`:** categories, name, available, `renderDetails()`, price, then variants and
     modifiers (both absent on a variant).
-  - **`renderDetails`:** holds the five groups in spec order.
-    - **VAT group:** drawn only when `dineInVatRate` or `takeawayVat` is set. It holds
-      `renderTax()`'s output, removed from `renderPrice`.
-    - **Ordering group:** absent on a variant (`this.inherited !== null`).
-  - **Starting states:** `#detailsStartOpen = this.value === null`, set beside the other starting
-    states at 505-509. Keep the Pricing, Variants and Modifiers rules exactly.
-  - **`SECTION_FIELDS`:** `details` takes `kitchen-name`, `product-course`, `allergens`,
-    `customer-name-`, `description-`, `takeaway-tax` and `ordering`; `price` takes `unit` and
-    `unit-price`; `selling`, `kitchen`, `descriptors` and `nutrition` are deleted.
-  - **`focusField`:** waits on `[data-section="details"]` instead of `nutrition`.
+  - **VAT group:** drawn only when `dineInVatRate` or `takeawayVat` is set. It holds `renderTax()`,
+    which moves out of `renderPrice`.
+  - **Ordering group:** absent on a variant.
+  - **Starting state:** `#detailsStartOpen = this.value === null`, set beside the others at
+    505-509. The Pricing, Variants and Modifiers rules are unchanged.
+  - **`SECTION_FIELDS`:**
+    - `details` takes `kitchen-name`, `product-course`, `allergens`, `customer-name-`,
+      `description-`, `takeaway-tax` and `ordering`
+    - `price` takes `unit` and `unit-price`
+    - delete `selling`, `kitchen`, `descriptors` and `nutrition`
+  - **`focusField`:** waits on `[data-section="details"]`.
   - **Styles:**
-    - delete `.selling-summary`, `.nutrition-summary` and its children
-    - delete `.badge`, `.notice`, `.chips` and `wt-button.link`, if grep confirms each is unused
-    - keep `.group-label`
-    - give the Details groups `gap: var(--wt-space-5)` between them
-    - `.form`'s gap becomes `var(--wt-space-5)` (spec decision 7). The order test also sets
-      `--wt-space-5: 24px` on the host and expects the computed `rowGap` of `.form` to be `"24px"`.
-- [ ] **Step 4: Run and watch them pass.** Same command as Step 2. Then run
-  `product-editor.a11y.test.ts`, `product-editor.nutrition.test.ts`,
-  `product-editor.variant-focus.test.ts`, `product-editor.save-state.test.ts`,
-  `product-editor.unsaved.test.ts`, `product-forms.unsaved.test.ts`,
-  `src/screens/products-screen.test.ts` and `src/i18n/t.test.ts`, fixing what they pin to the old
-  sections the same way.
+    - `.form` gap becomes `var(--wt-space-5)`; the Details body's fieldsets also sit
+      `var(--wt-space-5)` apart
+    - delete `.badge`, `.notice`, `.chips` and `wt-button.link`, each only after grep confirms it
+      is unused
+- [ ] **Step 4: Run and watch them pass.** Same command, then every other test file listed under
+  Files. Fix what each pins to the old sections the same way.
 - [ ] **Step 5: Commit.** Message: "Product editor: Available sits under Name and one Details
   section holds the prep station, menu names, allergens, VAT and ordering". The body names the
-  reversed decisions (A647 points 4 and 5, A219 for this editor).
+  reversed decisions (A647 points 4 and 5, and A219 for this editor).
 
 ### Task 3: Summaries show only what is set
 
 **Files:**
 - Modify: `apps/dashboard/src/widgets/product-editor.ts`:
-  - the five summary methods (Task 2)
+  - the summary methods
+  - `foldedValue` 1078
   - `languagesLine` 1178
-  - `pricingSummary` 1540
   - `renderVariants`' `summary` 1651-1657
   - `renderModifiers`' `summary` 1856
   - styles
-- Test: `apps/dashboard/src/widgets/product-editor.test.ts`, `product-editor.nutrition.test.ts`
+- Modify: `packages/ui/src/components/wt-disclosure.ts`. Delete `summaryRows` (179-181, 301-311),
+  its `.summary-row` and `.summary-rows` styles, and its tests in `wt-disclosure.test.ts` (638-763)
+  and the a11y suite. No caller is left after Task 2a. Grep the whole repository first.
+- Test: `product-editor.test.ts`, `product-editor.nutrition.test.ts`
 
 - [ ] **Step 1: Write the failing tests.** Change every summary assertion that expects
   `t("modifiers.none_specified")`, `t("editor.none")` or `t("editor.nutrition.diet_none")` to
-  expect that field absent. Add these cases:
-  - "a product with nothing set shows only the allergen warning in Details". A fresh product
-    (allergens `null`) gives exactly
+  expect that entry absent. Add these cases:
+  - "a product with nothing set shows only the allergen warning in Details". Its Details line is
+    exactly
     `[{ label: t("modifiers.allergens"), value: t("editor.allergens_unreviewed"), warning: true }]`.
-  - "Details names only the languages that have text". Customer name `{ en: "Battered hake" }` with
-    locales `en` and `es` gives `{ label: t("editor.customer_name"), value: "EN: Battered hake" }`.
-  - "a reviewed product with no allergens says so". Allergens `{}` gives
-    `{ label: t("modifiers.allergens"), value: t("editor.nutrition.allergens_none") }`. A reviewed
-    "none" is a set value.
-  - "Ordering appears only when it is not Anyone". `ordering: "public"` gives no entry;
-    `"staff_only"` gives `{ label: t("editor.ordered_on_own"), value: t("product.ordering_staff_only") }`.
-  - "the takeaway VAT appears in Details, not Pricing". Pricing's `summaryFields` holds only the
-    base price.
-  - "Variants and Modifiers show no summary line when empty". `summary` is `""` with no variants
-    and no lists.
-  - "a variant's Details summary shows inherited values in italic", for Review Focus 2. It covers
-    the course, the description and the allergens, each with `placeholder: true`.
-  - "a long Details summary is cut after two lines at phone width", for Review Focus 5. At a 400px
-    wide viewport, with a long name in two languages and a long description, expect the summary
-    part's height ≤ 2 × its computed line height + 1, and the dialog's scroll width ≤ its client
-    width.
-
+  - "Details names only the languages that have text". `{ en: "Battered hake" }` with locales
+    `en` and `es` gives `{ label: t("editor.customer_name"), value: "EN: Battered hake" }`.
+  - "a reviewed product with no allergens says so". `{}` gives
+    `{ label: t("modifiers.allergens"), value: t("editor.nutrition.allergens_none") }`.
+  - "Ordering appears only when it is not Anyone". `"public"` gives no entry; `"staff_only"` gives
+    `{ label: t("editor.ordered_on_own"), value: t("product.ordering_staff_only") }`.
+  - "Variants and Modifiers show no summary line when empty". `summary` is `""`.
+  - "a variant's Details line shows inherited values in italic", for Review Focus 2: the course,
+    the description and the allergens, each with `placeholder: true`.
+  - "a long Details line is cut after two lines at phone width", for Review Focus 5. At a 400px
+    viewport, with long names in two languages and a long description:
+    - set `line-height: 20px` on the host
+    - expect the inner `.summary`'s rendered height to be ≤ `41`
+    - expect the dialog's `scrollWidth` to be ≤ its `clientWidth`
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts src/widgets/product-editor.nutrition.test.ts`.
-
 - [ ] **Step 3: Implement.**
-  - **Each summary method** omits a field with no value of its own. On a variant, it includes an
+  - **Each summary method** omits an entry with no value of its own, and on a variant includes an
     inherited value as `placeholder: true`. Delete `foldedValue`'s "None specified" branch.
-  - **`languagesLine`** returns `""` when no language has text, and otherwise lists only the
-    languages with text. Callers drop the field on `""`.
-  - **Dietary** is omitted when there are no labels.
-  - **Takeaway VAT** is included under the same condition `pricingSummary` uses today, and moves
-    out of `pricingSummary`.
-  - **Ordering** is included only when `draft.ordering !== "public"`.
+  - **`languagesLine`** returns `""` when no language has text, and otherwise lists only those
+    with text. Callers drop the entry on `""`.
+  - **Dietary** is omitted with no labels.
+  - **Ordering** appears only when `draft.ordering !== "public"`.
   - **Variants and Modifiers** drop the `|| t("editor.none")` fallback. Delete `editor.none` if
-    grep shows it unused.
+    unused.
   - **Two-line cut:** `wt-disclosure[data-section="details"]::part(summary)` gets
-    `display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;`.
-- [ ] **Step 4: Run and watch them pass.** Same command as Step 2, plus `product-editor.a11y.test.ts`.
-- [ ] **Step 5: Commit.** Message: "Product editor: a closed section's line shows only what is set".
+    `display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;`.
+- [ ] **Step 4: Run and watch them pass.** Same command, plus
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-disclosure.test.ts src/components/wt-disclosure.a11y.test.ts`
+  and `product-editor.a11y.test.ts`.
+- [ ] **Step 5: Commit.** Message: "Product editor: a closed section's line shows only what is
+  set". The body adds that `summaryRows` is removed from `wt-disclosure` because nothing uses it
+  now.
 
 ### Task 4: Guides and developer docs
 
 **Files:**
-- Modify: `apps/server/src/guide/en/products.md` and `apps/server/src/guide/es/products.md`. Rewrite
-  every passage that names Selling, Prep station, Descriptors or Nutritional info as a section, or
-  says which sections start open: the lines found by `grep -n "Selling\|Descriptors\|Nutritional
-  info\|starts open\|starts folded\|starts closed"`. Keep every `{#id}`, and don't add or remove
-  headings.
+- Modify: `apps/server/src/guide/en/products.md`. Rewrite every passage found by
+  `grep -n "Selling\|Prep station\|Descriptors\|Nutritional info\|Pricing\|above its VAT\|starts open\|starts folded\|starts closed\|summary line" apps/server/src/guide/en/products.md`.
+- Modify: `apps/server/src/guide/es/products.md`. Rewrite every passage found by
+  `grep -n "Venta\|Estación de preparación\|Descriptores\|Información nutricional\|Precios\|empieza abierta\|empieza cerrada\|empieza plegada\|plegad" apps/server/src/guide/es/products.md`.
+  Keep every `{#id}`, and don't add or remove headings.
 - Modify: `docs/developers/design-system.md`:
-  - "Fold a long form into collapsible sections with summaries" (4069-4100): the new section list,
-    and the summary rule from spec decision 5.
-  - The type table's Group label row (4824): `.group-label` is now really used.
+  - "Fold a long form into collapsible sections with summaries" (4069-4100): the new section
+    list, the summary rule from spec decision 5, and no `summaryRows`
+  - the `wt-disclosure` row near 910: plain-weight names, `warning`, no `summaryRows`
+  - 4106-4108: language codes are no longer bold
+  - 4124-4128: an empty Variants line shows nothing
+  - the type table's Group label row (4824): `.group-label` is now really used, as a `legend`
 - Modify: `docs/developers/products.md`, "The editor form" (897-915).
 - Modify: `docs/backlog/menu.md`. Add a dated pointer under A647 and A219: "2026-11-23 (owner):
   superseded for the product editor by `docs/superpowers/specs/2026-11-23-product-editor-quieter-design.md`".
-- Modify: help bubbles. Any `help.products.*` string, English or Spanish, that names a removed
-  section by name.
 
 - [ ] **Step 1:** Make the edits. Each sentence describes what the code now does: read the render
   code, not this plan. Cut a guide sentence that explains a corner case the code handles by itself.
 - [ ] **Step 2:** Run the guide guards:
-  `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`, and
-  `pnpm exec vitest run scripts/guide-links.test.ts scripts/claude-md-pointers.test.ts` from the
-  root. Expect them to pass.
+  `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`, and from the root,
+  `pnpm exec vitest run scripts/guide-links.test.ts scripts/claude-md-pointers.test.ts`. Expect
+  them to pass.
 - [ ] **Step 3: Commit.** Message: "Guides and developer docs describe the quieter product editor".
+
+## For the PR description
+
+- Implied diet labels are no longer italic on the closed line.
+- The closed line is still read out as part of the header button's name. That is deliberately
+  left as is; Details' line is now the longest such name.
+- The Spanish group labels need the owner's wording.
+- The reversed decisions are named in the commits: #1177's arrow size, A200's bold names, A647
+  points 4 and 5, A219 for this editor, and the "every field, filled or not" summary rule.
