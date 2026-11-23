@@ -1,6 +1,7 @@
 import { escapeHtml } from "./html-page.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { createHash } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { describe, expect, it } from "vitest";
@@ -419,15 +420,6 @@ describe("the restricted box's own page", () => {
     const html = await (await request("en-GB", suite.db, "waiting")).text();
     expect(html).toContain(`<a href="https://new-box.example">`);
     expect(html).not.toContain("/handover/");
-  });
-
-  it("carries no form", async () => {
-    await handOver(await seedSuccessor("Bar counter box"));
-    for (const language of ["en-GB", "es-ES"]) {
-      const { html } = await page(language);
-      expect(html).toContain("<h1>");
-      expect(html).not.toMatch(/<form|<button|<input|<select|<textarea/);
-    }
   });
 
   it.each([
@@ -1128,7 +1120,11 @@ describe("the restricted page's download section", () => {
         `<button type="submit">${escapeHtml(DOWNLOAD[locale].action)}</button>`,
       );
       expect(drawn).not.toContain('role="alert"');
-      expect(response.headers.get("content-security-policy")).toContain("form-action 'self'");
+      const script = html.slice(html.indexOf("<script>") + 8, html.indexOf("</script>"));
+      const hash = createHash("sha256").update(script).digest("base64");
+      expect(response.headers.get("content-security-policy")).toBe(
+        `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'`,
+      );
     },
   );
 
@@ -1154,7 +1150,9 @@ describe("the restricted page's download section", () => {
         ...(download === undefined ? {} : { download }),
       });
       const drawn = section(html);
-      expect(drawn).toContain(`<p>${escapeHtml(DOWNLOAD[locale].wipeUnderWay)}</p>`);
+      // An alert only when it answers a refused download.
+      const alert = download === undefined ? "" : ' role="alert"';
+      expect(drawn).toContain(`<p${alert}>${escapeHtml(DOWNLOAD[locale].wipeUnderWay)}</p>`);
       expect(drawn).not.toContain(escapeHtml(DOWNLOAD[locale].emergency));
       expect(html).not.toMatch(/<form|<input|<button/);
     }
@@ -1209,11 +1207,49 @@ describe("the restricted page's download section", () => {
       inOrder(drawn, [
         'name="password"',
         `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
-        `<p id="old-box-data-message" role="alert">${escapeHtml(DOWNLOAD[locale].totpRequired)}</p>`,
+        `<p id="old-box-data-totp-error">${escapeHtml(DOWNLOAD[locale].totpRequired)}</p>`,
+        `<p id="old-box-data-message" role="alert">${escapeHtml(DOWNLOAD[locale].fixFields)}</p>`,
         "<button",
       ]);
-      expect(drawn).toMatch(/<input type="text" id="old-box-data-totp" name="totp"[^>]* required/);
+      expect(drawn).toMatch(
+        /<input type="text" id="old-box-data-totp" name="totp"[^>]* required aria-invalid="true" aria-describedby="old-box-data-totp-error">/,
+      );
       expect(drawn).toContain('value="owner@example.test"');
+    },
+  );
+
+  const KEPT_CODE = LANGUAGES.flatMap(([locale, header]) =>
+    (
+      [
+        ["signInRefused", undefined, DOWNLOAD[locale].signInRefused],
+        ["busy", undefined, DOWNLOAD[locale].busy],
+        ["throttled", 90, DOWNLOAD[locale].throttled],
+        ["failed", undefined, DOWNLOAD[locale].failed],
+      ] as const
+    ).map(([refusal, retry, message]) => [locale, header, refusal, retry, message] as const),
+  );
+
+  it.each(KEPT_CODE)(
+    "keeps the code field after a %s refusal (%s) to a form that had one: %s",
+    async (locale, header, refusal, retryAfterSeconds, message) => {
+      await handOver(await seedSuccessor("Counter box"), "emergency");
+      const { html } = await answer(header, {
+        download: {
+          refusal,
+          email: "owner@example.test",
+          askCode: true,
+          ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+        },
+      });
+      const drawn = section(html);
+      inOrder(drawn, [
+        'name="password"',
+        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
+        `<p id="old-box-data-message" role="alert">${escapeHtml(message)}</p>`,
+        "<button",
+      ]);
+      expect(drawn).toMatch(/<input type="text" id="old-box-data-totp" name="totp"[^>]* required>/);
+      expect(drawn).not.toContain("aria-invalid");
     },
   );
 

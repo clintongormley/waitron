@@ -60,6 +60,8 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
   return (app) => {
     app.post("/old-box-data", async (c) => {
       const requestId = c.get("requestId");
+      // Whether the refused form held the code field, so the page keeps drawing it.
+      let askCode = false;
       const refuse = (
         status: RefusalStatus,
         refusal: OldBoxDownloadRefusal,
@@ -70,6 +72,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
           refusal,
           email,
           ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+          ...(askCode ? { askCode } : {}),
         });
       if (!isSecure(c)) return refuse(403, "insecure");
       if (!sentFromThisOrigin(c)) return refuse(403, "otherPage");
@@ -80,6 +83,7 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
       } catch {
         return refuse(400, "fieldsMissing");
       }
+      askCode = form.has("totp");
       const text = (key: string) => form.get(key) ?? "";
       const email = text("email").trim();
       const password = text("password");

@@ -61,6 +61,8 @@ export interface OldBoxDownloadState {
   refusal: OldBoxDownloadRefusal;
   email: string;
   retryAfterSeconds?: number;
+  /** Whether the refused form held the authenticator code field. */
+  askCode?: boolean;
 }
 
 interface RestrictedView {
@@ -230,12 +232,20 @@ async function readView(
 function downloadMessages(
   download: OldBoxDownloadState | undefined,
   words: (typeof RESTRICTED_DOWNLOAD_WORDS)[SupportedLocale],
-): { email?: string; password?: string; message?: string; askCode: boolean } {
+): { email?: string; password?: string; totp?: string; message?: string; askCode: boolean } {
   if (download === undefined) return { askCode: false };
+  const shown = refusalMessages(download, words);
+  return { ...shown, askCode: shown.askCode === true || download.askCode === true };
+}
+
+function refusalMessages(
+  download: OldBoxDownloadState,
+  words: (typeof RESTRICTED_DOWNLOAD_WORDS)[SupportedLocale],
+): { email?: string; password?: string; totp?: string; message?: string; askCode?: true } {
   switch (download.refusal) {
     case "insecure":
     case "wipeUnderWay":
-      return { askCode: false };
+      return {};
     case "fieldsMissing":
       // The route keeps the email it read; with one kept, the password was the missing field.
       return {
@@ -243,40 +253,40 @@ function downloadMessages(
           ? { email: words.emailMissing }
           : { password: words.passwordMissing }),
         message: words.fixFields,
-        askCode: false,
       };
     case "totpRequired":
-      return { message: words.totpRequired, askCode: true };
+      return { totp: words.totpRequired, message: words.fixFields, askCode: true };
     case "throttled":
       return {
         message: words.throttled(Math.max(1, Math.ceil((download.retryAfterSeconds ?? 60) / 60))),
-        askCode: false,
       };
     default:
-      return { message: words[download.refusal], askCode: false };
+      return { message: words[download.refusal] };
   }
 }
 
 function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: boolean): string {
   const words = RESTRICTED_DOWNLOAD_WORDS[locale];
   const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
-  if (view.reset === "ordered" || view.download?.refusal === "wipeUnderWay")
-    return `<section>\n${heading}<p>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
+  if (view.reset === "ordered" || view.download?.refusal === "wipeUnderWay") {
+    const alert = view.download === undefined ? "" : ' role="alert"';
+    return `<section>\n${heading}<p${alert}>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
+  }
   const intro = `<p>${escapeHtml(view.planned ? words.planned : words.emergency)}</p>\n`;
   if (!secure)
     return `<section>\n${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n</section>`;
   const shown = downloadMessages(view.download, words);
-  const error = (field: "email" | "password") =>
+  const error = (field: "email" | "password" | "totp") =>
     shown[field] === undefined
       ? ""
       : `<p id="old-box-data-${field}-error">${escapeHtml(shown[field])}</p>\n`;
-  const invalid = (field: "email" | "password") =>
+  const invalid = (field: "email" | "password" | "totp") =>
     shown[field] === undefined
       ? ""
       : ` aria-invalid="true" aria-describedby="old-box-data-${field}-error"`;
   const code = shown.askCode
     ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} *</label></p>
-<p>${codeInput("old-box-data-totp", "", true)}</p>\n`
+<p>${codeInput("old-box-data-totp", invalid("totp"), true)}</p>\n${error("totp")}`
     : "";
   const bottom =
     shown.message === undefined

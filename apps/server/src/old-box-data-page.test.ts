@@ -206,6 +206,22 @@ describe("POST /old-box-data on the old box", () => {
     expect(response.status).toBe(200);
   });
 
+  it("keeps the code field on the page after a wrong code, and only for a form that had one", async () => {
+    const personId = await admin();
+    await enrolAuthenticator(suite.db, personId, TOTP_KEY_RING);
+    const app = appWith();
+    const wrongCode = await post(app, { ...signIn, totp: "000000" });
+    expect(wrongCode.status).toBe(401);
+    const page = await wrongCode.text();
+    expect(page).toContain('name="totp"');
+    expect(page).toContain("That email and password do not match an account on this box.");
+    const noCode = await post(app, { email: EMAIL, password: "wrong" });
+    expect(noCode.status).toBe(401);
+    const plain = await noCode.text();
+    expect(plain).toContain("That email and password do not match an account on this box.");
+    expect(plain).not.toContain('name="totp"');
+  });
+
   it("refuses a second download while one is being made, after its own sign-in", async () => {
     await admin();
     let entered!: () => void;

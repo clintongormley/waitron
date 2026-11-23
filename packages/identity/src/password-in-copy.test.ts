@@ -26,7 +26,8 @@ async function account(
   } = {},
 ) {
   const personId = await seedManager(suite.db, {
-    email: "Élodie@example.test",
+    // Escaped for the English-only guard: folding must lower a non-ASCII capital E with an acute accent.
+    email: "\u00c9lodie@example.test",
     role: options.role ?? "admin",
     status: options.status ?? "active",
   });
@@ -39,7 +40,7 @@ async function account(
   vi.mocked(verifyPassword).mockClear();
   return personId;
 }
-const signIn = { email: "  éLODIE@EXAMPLE.TEST ", password: "correct horse" };
+const signIn = { email: "  \u00e9LODIE@EXAMPLE.TEST ", password: "correct horse" };
 const check = (input: { email: string; password: string; totp?: string }) =>
   identity.checkPasswordInCopy(liveBackupQuery(suite.db), input, options);
 const refused = (reason: string) => ({ code: "password.invalid", params: {}, reason });
