@@ -37,7 +37,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { RESTRICTED_RESET_WORDS } from "./i18n/restricted-page.js";
+import { RESTRICTED_RESET_WORDS, RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
 import { removeReplacedResetMarker, writeReplacedResetMarker } from "./replaced-reset.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { beginHandover } from "./handover-store.js";
@@ -332,7 +332,7 @@ describe("a box holding a handover restriction starts restricted", () => {
     }
   }, 60_000);
 
-  it("serves its own page, naming the successor, at its own, a till and a dashboard address", async () => {
+  it("serves its own page, with the return's line, at its own, a till and a dashboard address", async () => {
     const { port } = start();
     for (const path of ["/", "/till/tabs/counter", "/servers"]) {
       const response = await fetch(`http://127.0.0.1:${port}${path}`, {
@@ -341,9 +341,8 @@ describe("a box holding a handover restriction starts restricted", () => {
       expect({ path, status: response.status }).toEqual({ path, status: 200 });
       const html = await response.text();
       expect(html).toContain("<h1>This box no longer runs the venue</h1>");
-      expect(html).toContain(
-        "The box taking over the venue is <strong>00000000-0000-4000-8000-0000000000aa</strong>.",
-      );
+      expect(html).toContain(`<p>${RESTRICTED_RETURN_WORDS["en-GB"].waiting}</p>`);
+      expect(html).not.toContain("00000000-0000-4000-8000-0000000000aa");
     }
     expect((await fetch(`http://127.0.0.1:${port}/api/something-unknown`)).status).toBe(404);
   }, 60_000);

@@ -22,13 +22,12 @@ import {
   type HandoverOperation,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
-import type { RestrictedStepKind } from "./i18n/restricted-page.js";
 import "./errors.js";
 
 /** The `node_handover_events.kind` of each event read or written by name. */
 export const HANDOVER_EVENT = {
   offer: "offer",
-  finalState: "final_state" satisfies RestrictedStepKind,
+  finalState: "final_state",
   copyAccepted: "copy_accepted",
   /** That the accepted copy is the live database. */
   copyPlaced: "copy_placed",

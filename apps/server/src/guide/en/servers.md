@@ -232,28 +232,24 @@ On a till, keep the screen open; it follows the main box once that box is taking
 
 If you open a box's address, or its till or dashboard, and see a page titled **This box no longer
 runs the venue**, that box has stepped down. It takes no sales and sends nothing to the tax agency.
-The page names, in bold, the box taking over the venue; use **Open the box that runs the venue**,
-when the page shows it, to go there.
+Use **Open the dashboard on the new main box.**, when the page shows it, to go to the box that runs
+the venue.
 
-Below that, the page lists each step of the handover that this box has recorded, in the order it
-recorded them, with the date and time of each in the venue's time zone.
+The page shows one more line only while something needs you, and says what to do. While a
+[handover](servers.md#hand-over) is unfinished it can also offer **Progress**: use it to finish the
+handover on the spare.
 
-If the page offers **Progress**, use it to finish the handover on the spare.
+Keep this box running while it returns its invoice records to the main box. Filing with the tax
+agency continues on the main box.
 
-Keep this box running while it returns its invoice records to the main box. Refresh the page to
-check progress. Card refunds still in progress go with their original payments so the main box
-can check their outcome. Filing with the tax agency continues on the main box. Confirmation means
-every returned fact was either received or covered by a specifically accepted payment difference;
-for an accepted difference, the main box keeps its own payment facts.
-
-Once the return is confirmed, the main box can ask this box to reset. The page then says so, and
-the box restarts shortly on setup's first page, ready to [join again as a
-spare](servers.md#adding-a-spare). The reset removes this box's venue data, including sale lines
+Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
+page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
+spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
 and local backups, which this return does not carry; keep the old box's data if you need them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.
-A reset from a terminal remains possible, but deletes the old box's venue data, including any
+You can still wipe it from a terminal, but that deletes the old box's venue data, including any
 records still waiting.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
@@ -263,7 +259,7 @@ There is no screen for this yet. Then switch the stopped box off and on to retry
 reached clashing batch needs its own acceptance; only the exact accepted group counts.
 
 If the page reports a clock difference, check the clocks on both boxes and keep both running
-while the return retries. Do not reset the old box.
+while the return retries. Do not wipe the old box.
 
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 
@@ -283,8 +279,7 @@ Use **Refresh intervals** to check the inventory receipt. **Inventory receipt co
 the new box accounted for all batches in an inventory advertised by the old box. It does not
 confirm missing activity or amounts, or reconstruct cash-ups. An unconfirmed receipt needs a
 complete return; if the old box already stopped sending, restart it while it remains restricted
-to resend. If the old box returns, check the return status on its page before deciding whether
-to reset it.
+to resend.
 
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
 box, generating installation, original issue date and recorded amounts. Invoice rows show a

@@ -602,8 +602,8 @@ Slice 3.
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): wiping it before
   its return completes, the download of the data the old box holds that this box lacks (after an
   emergency switch the 10a dialog already points to the old box's address for it), and checking in
-  the dialog whether the old box holds records this box lacks. Each as its own pull request: the old
-  box's own page redesign, and the old box also returning other boxes' invoice records it holds.
+  the dialog whether the old box holds records this box lacks. As its own pull request: the old box
+  also returning other boxes' invoice records it holds.
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 
@@ -681,7 +681,8 @@ to fail after that test passed. The start then writes the reset marker's phase
 wiping nothing (`apps/server/src/replaced-reset.ts`). The main box has removed the box on the
 acknowledgement, or, if that removal was refused, its row still offers Remove; once removed, its
 later reset queries are refused as no longer a member. Its page says it
-did not reset, that nothing was changed or deleted, and that it can be switched off
+was asked to wipe itself but could not set its records aside, that nothing on it was changed, and
+that it can be switched off
 (`apps/server/src/i18n/restricted-page.ts`). Recovering the machine takes
 `waitron.sh reset --force-production`.
 
