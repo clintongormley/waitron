@@ -8,6 +8,7 @@ import { renderInvoiceRaster } from "../src/invoice-raster.js";
 import { renderInvoicePdf } from "../src/invoice-pdf.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../src/testing/full-invoice-fixture.js";
 import type { ReceiptDocumentInput } from "../src/receipt-document.js";
+import type { BankAccount } from "@waitron/db";
 
 const { default: sharp } = await import("sharp");
 const out = process.argv[2] ?? "/tmp/a663-look";
@@ -566,3 +567,98 @@ for (const [name, input] of Object.entries(A4)) {
       .toFile(join(out, `${name}-a4-page${index + 1}.png`));
   writeFileSync(join(out, `${name}-a4.pdf`), await renderInvoicePdf(input));
 }
+
+const LOCALES = ["es-ES", "en-GB", "ca-ES", "gl-ES", "eu-ES"] as const;
+const ACCOUNT: BankAccount = { iban: "ES9121000418450200051332", bankName: "OPENBANK" };
+const LOGO_SIZE = 160;
+const logoBits = new Uint8Array((LOGO_SIZE / 8) * LOGO_SIZE);
+for (let y = 0; y < LOGO_SIZE; y++)
+  for (let x = 0; x < LOGO_SIZE; x++) {
+    const distance = Math.hypot(x - LOGO_SIZE / 2, y - LOGO_SIZE / 2);
+    if (distance < LOGO_SIZE / 2 && (distance > LOGO_SIZE / 3 || Math.abs(x - y) < 12))
+      logoBits[y * (LOGO_SIZE / 8) + (x >> 3)]! |= 0x80 >> (x & 7);
+  }
+const LOGO = { widthDots: LOGO_SIZE, heightDots: LOGO_SIZE, bits: logoBits };
+
+const fixture = (locale = "es-ES"): ReceiptDocumentInput => ({
+  ...structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE),
+  invoiceLocale: locale,
+  logo: LOGO,
+});
+const deferred = (
+  input: ReceiptDocumentInput,
+  account: BankAccount | null,
+): ReceiptDocumentInput => ({
+  ...input,
+  result: { ...input.result, tender: { method: "deferred" }, owed: input.result.total },
+  deferredPayment: { account },
+});
+const corrective = fixture();
+corrective.result.invoiceType = "R4";
+corrective.result.invoiceNumber = "FR/1";
+corrective.result.corrects = { invoiceNumber: "FF/1", issuedAt: "2026-08-17T22:34:00.000Z" };
+const simplifiedReplacement: ReceiptDocumentInput = {
+  ...MOCKUP,
+  logo: LOGO,
+  result: {
+    ...MOCKUP.result,
+    invoiceType: "R5",
+    invoiceNumber: "TR/1",
+    corrects: {
+      invoiceNumber: "T-2026/000112",
+      issuedAt: "2026-10-13T14:53:00.000Z",
+      inFull: true,
+    },
+  },
+};
+const threePages = fixture();
+const water = threePages.result.lines[1]!;
+threePages.result.lines = [
+  ...threePages.result.lines,
+  ...Array.from({ length: 70 }, () => structuredClone(water)),
+];
+threePages.result.total = (19.69 + 70 * 8.8).toFixed(2);
+threePages.result.vatBreakdown = [
+  { rate: "21", base: "9.00", tax: "1.89" },
+  { rate: "10", base: (8 + 70 * 8).toFixed(2), tax: (0.8 + 70 * 0.8).toFixed(2) },
+];
+const noLogo = fixture();
+noLogo.logo = null;
+
+const A1566: Record<string, ReceiptDocumentInput> = {
+  "a1566-paid": fixture(),
+  "a1566-deferred-no-account": deferred(fixture(), null),
+  "a1566-deferred-no-bank-name": deferred(fixture(), { ...ACCOUNT, bankName: null }),
+  "a1566-corrective": corrective,
+  "a1566-corrective-deferred": deferred(corrective, ACCOUNT),
+  "a1566-simplified-replacement": simplifiedReplacement,
+  "a1566-simplified": { ...MOCKUP, logo: LOGO },
+  "a1566-simplified-deferred": deferred({ ...MOCKUP, logo: LOGO }, ACCOUNT),
+  "a1566-three-pages": threePages,
+  "a1566-three-pages-deferred": deferred(threePages, ACCOUNT),
+  "a1566-no-logo": noLogo,
+};
+for (const locale of LOCALES) {
+  A1566[`a1566-paid-${locale}`] = fixture(locale);
+  A1566[`a1566-deferred-${locale}`] = deferred(fixture(locale), ACCOUNT);
+}
+for (const [name, input] of Object.entries(A1566)) {
+  const pages = await renderInvoiceRaster(input, 300);
+  for (const [index, page] of pages.entries())
+    await sharp(page.pixels, { raw: { width: page.width, height: page.height, channels: 1 } })
+      .png()
+      .toFile(join(out, `${name}-a4-page${index + 1}.png`));
+  writeFileSync(join(out, `${name}-a4.pdf`), await renderInvoicePdf(input));
+}
+for (const locale of LOCALES)
+  for (const [paper, printer] of Object.entries(PRINTERS)) {
+    const simplified = deferred({ ...MOCKUP, invoiceLocale: locale }, ACCOUNT);
+    await ticketPng(
+      formatReceipt({ ...simplified, printer }),
+      `a1566-deferred-${locale}-${paper}.png`,
+    );
+  }
+await ticketPng(
+  formatReceipt({ ...deferred(MOCKUP, null), printer: PRINTERS["58mm-203"]! }),
+  "a1566-deferred-no-account-58mm-203.png",
+);

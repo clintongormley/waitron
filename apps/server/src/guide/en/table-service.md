@@ -164,6 +164,11 @@ correct it in **Venue settings → Venue details**: choose **Change registered a
 first. Invoices issued afterwards print the new address; invoices
 already issued keep the one they were issued with.
 
+For bills closed as a [deferred payment](table-service.md#deferred-payment), set your bank account with **Change
+bank account** on the same **Business** card: enter the **IBAN** and, if you want, the bank.
+Waitron emails every administrator with an email address about each change; if you get one that
+nobody in your team made, check the account straight away.
+
 ## Choose a document and printer {#invoice-printer}
 
 Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. The receipt uses
@@ -1007,6 +1012,10 @@ The button is there only on a bill with nothing paid yet. On a table's bill, eve
 served or cancelled first; at the Counter, the bill must have a simplified invoice. A manager
 allows it for a device by switching on **Closes bills as deferred payments** in the device's
 profile, under **Device profiles** on the dashboard.
+
+The receipt and the invoice ask the customer to pay by bank transfer, quoting the invoice
+number, and print your bank account. Without a bank account in **Venue settings → Venue details**
+([how to set it](table-service.md#full-invoice)), they say only **Deferred payment**.
 
 Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
 dashboard's **Sales & takings** page.
