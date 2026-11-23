@@ -103,7 +103,7 @@ it("signs in with the right authenticator code and refuses a wrong one", async (
   );
 });
 
-it("refuses an unused recovery code typed in the code field", async () => {
+it("refuses a recovery code typed as the authenticator code", async () => {
   const personId = await account({ authenticator: true });
   const code = "ABCD-0123-ABCD-0123";
   const codeHash = createHash("sha256").update(code.replaceAll("-", "")).digest("hex");
@@ -120,6 +120,22 @@ it("refuses right factors without the permission", async () => {
   expect(await refusalOf(() => check(signIn))).toEqual({
     code: "authorization.not_permitted",
     params: { permission: "node.manage" },
+    reason: undefined,
+  });
+});
+
+it("judges the permission the caller names, not a fixed one", async () => {
+  await account({ role: "staff" });
+  expect(
+    await refusalOf(() =>
+      identity.checkPasswordInCopy(liveBackupQuery(suite.db), signIn, {
+        ...options,
+        permission: "report.export",
+      }),
+    ),
+  ).toEqual({
+    code: "authorization.not_permitted",
+    params: { permission: "report.export" },
     reason: undefined,
   });
 });
