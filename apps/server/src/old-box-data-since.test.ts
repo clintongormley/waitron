@@ -191,7 +191,9 @@ describe("the old box's Activity tab", () => {
         await build({ kind: "copy", fromMs: CUTOFF }, language),
         words.activitySheet,
       )!;
-      expect(row(xml, 1)).toEqual([words.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC")]);
+      expect(row(xml, 1)).toEqual([
+        words.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+      ]);
       expect(row(xml, 2)).toEqual([...words.activityColumns]);
       expect(row(xml, 3)).toEqual([
         "2026-11-20T10:00:00.000Z",
@@ -219,11 +221,29 @@ describe("the old box's Activity tab", () => {
     const bytes = await build({ kind: "own", fromMs: CUTOFF });
     const en = OLD_BOX_DATA_WORDS.en;
     expect(row(sheet(bytes, en.activitySheet)!, 1)).toEqual([
-      en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+      en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
     ]);
     expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
-      en.paymentsOwnIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+      en.paymentsOwnIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
     ]);
+  });
+
+  it("states the cutoff to the millisecond, so a row at the boundary can be checked against it", async () => {
+    const fromMs = CUTOFF + 42_123;
+    await signedIn(null, fromMs - 1);
+    await signedIn(null, fromMs);
+    const bytes = await build({ kind: "copy", fromMs });
+    const en = OLD_BOX_DATA_WORDS.en;
+    for (const name of [en.ordersSheet, en.hoursSheet, en.activitySheet])
+      expect(row(sheet(bytes, name)!, 1), name).toEqual([
+        en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:42.123 UTC"),
+      ]);
+    expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
+      en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00:42.123 UTC"),
+    ]);
+    const activity = sheet(bytes, en.activitySheet)!;
+    expect(row(activity, 3)[0]).toBe("2026-11-20T10:00:42.123Z");
+    expect(row(activity, 4)).toEqual([]);
   });
 
   it("an empty Activity tab still has its first line and headings, read without a write transaction", async () => {
@@ -325,7 +345,7 @@ describe("the old box's Orders tab", () => {
 
     const xml = await orders({ kind: "copy", fromMs: CUTOFF });
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
     ]);
     expect(row(xml, 2)).toEqual([...OLD_BOX_DATA_WORDS.en.orderColumns]);
     // prettier-ignore
@@ -477,7 +497,7 @@ describe("the old box's Payments and cash tab", () => {
       OLD_BOX_DATA_WORDS.en.paymentsSheet,
     )!;
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00 UTC"),
+      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
     ]);
     // `row` returns cell text as written, so the apostrophe is still escaped.
     expect(row(xml, 2)).toEqual(
@@ -734,7 +754,9 @@ describe("the old box's Working hours tab", () => {
     const atCutoff = await clocked(marta, CUTOFF, { entryKind: "out" });
     const later = await clocked(marta, CUTOFF + 60 * MINUTE, { entryKind: "break_start" });
     const xml = sheet(await build({ kind: "copy", fromMs: CUTOFF }), en.hoursSheet)!;
-    expect(row(xml, 1)).toEqual([en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00 UTC")]);
+    expect(row(xml, 1)).toEqual([
+      en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+    ]);
     expect(row(xml, 2)).toEqual([...en.hoursColumns]);
     expect(row(xml, 3)).toEqual([
       "Marta Ruiz",

@@ -342,7 +342,7 @@ describe("the since tabs of POST /old-box-data", () => {
     const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
     expect(activity).toBeDefined();
     expect(row(activity!, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 09:50 UTC"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 09:50:00.000 UTC"),
     ]);
   });
 

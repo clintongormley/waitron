@@ -50,6 +50,8 @@ export interface OldBoxWorkbook {
 }
 
 const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+/** The since tabs' cutoff, exact to the millisecond their reads compare. */
+const exact = (at: Date) => `${at.toISOString().slice(0, 23).replace("T", " ")} UTC`;
 
 type Words = (typeof OLD_BOX_DATA_WORDS)["en" | "es"];
 
@@ -120,7 +122,7 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
 
 function sinceIntro(rule: SinceRule, words: Words, tab: "payments" | "other"): string {
   if (rule.kind === "all") return words.sinceAllIntro;
-  const time = minute(new Date(rule.fromMs));
+  const time = exact(new Date(rule.fromMs));
   const intros =
     tab === "payments"
       ? { copy: words.paymentsCopyIntro, own: words.paymentsOwnIntro }
