@@ -2970,6 +2970,7 @@ it("a passkey prompt the person cancels says the passkey did not sign in, and se
   const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
   expect(again).not.toBeNull();
   await vi.waitFor(() => expect(again.disabled).toBe(false));
+  expect(q(el, '[name="handover-password"]')).not.toBeNull();
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
   expect(posts.every(({ body }) => body.signIn === undefined)).toBe(true);
 });
