@@ -198,12 +198,18 @@ cursor: not-allowed;
 .box-form button:disabled { color: GrayText; border-color: GrayText; }
 }`;
 
-/** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw. It styles the
- * form alone, apart from the colour scheme its light-dark() tokens need, so the page around it keeps
- * its own look. */
+/** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw; the page's
+ * own text takes the same typeface and colours as the box pages. */
 export const BOX_FORM_HEAD = `<style>:root {
 color-scheme: light dark;
 ${tokenDeclarations()}
+}
+body {
+background: var(--wt-color-bg);
+color: var(--wt-color-text);
+font-family: var(--wt-font-family);
+font-size: var(--wt-font-size-md);
+line-height: 1.5;
 }${BOX_FORM_STYLE}</style>\n`;
 
 /** The guides' page look, shared with the `/legal/*` pages. */

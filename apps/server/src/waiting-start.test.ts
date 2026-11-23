@@ -1049,6 +1049,19 @@ describe("the waiting start", () => {
       );
     });
 
+    it("draws its whole page in the box pages' typeface and colours", async () => {
+      const head = (await page()).split("</head>")[0]!;
+      const body = /\nbody \{\n([^}]*)\}/.exec(head)?.[1];
+      expect(body).toBeDefined();
+      for (const declaration of [
+        "background: var(--wt-color-bg);",
+        "color: var(--wt-color-text);",
+        "font-family: var(--wt-font-family);",
+        "font-size: var(--wt-font-size-md);",
+      ])
+        expect(body!.split("\n")).toContain(declaration);
+    });
+
     it("either statement unticked keeps the action disabled", async () => {
       const blank = await page();
       expect(blank).toContain('<button type="submit" disabled>Carry on as the main box</button>');

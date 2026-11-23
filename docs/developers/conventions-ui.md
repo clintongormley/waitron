@@ -359,9 +359,9 @@ else. The "sends no-cache and a policy that allows only the page's own script" c
 `BOX_FORM_STYLE` (in `guide-pages.ts`) draws the two server-drawn box forms in the dashboard's
 field look, with each label above its field: the replaced box's download form on the restricted
 page, and the waiting page's Carry on form. Only those two pages carry it. The waiting page is drawn by `renderDocument`, so it
-takes the tokens and the form style alone through `BOX_FORM_HEAD`; the form takes each page's
-typeface, and the rest of that page keeps the browser's plain look, like the other pages of its flow, and follows the device's light or dark
-setting rather than the theme chosen in the apps.
+takes the tokens, the box pages' typeface and colours for its whole page, and the form style
+through `BOX_FORM_HEAD`, and follows the device's light or dark setting rather than the theme chosen
+in the apps.
 
 The page's own words (the "Waitron guide" trail, each guide's short name, the missing-twin line, the
 404 and 500 pages) are in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`.

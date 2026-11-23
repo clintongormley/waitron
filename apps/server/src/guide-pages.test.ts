@@ -464,7 +464,7 @@ describe("the box pages' form style", () => {
     for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(BOX_FORM_HEAD).toContain(`${name}:`);
   });
 
-  it("styles only the form on a page drawn without the box look, which still matches its neighbours", async () => {
+  it("draws a page drawn without the box look in the box pages' typeface and colours, form included", async () => {
     const form = `<form class="box-form" method="post" action="/x">
 <p><label for="f-email">Email <span class="required">*</span></label></p>
 <p><input type="email" id="f-email" name="email"></p>
@@ -473,19 +473,25 @@ describe("the box pages' form style", () => {
     try {
       for (const scheme of ["light", "dark"] as const) {
         const page = await browser.newPage({ colorScheme: scheme });
-        const bodyLook = () =>
-          page.locator("body").evaluate((el) => {
+        const look = (selector: string) =>
+          page.locator(selector).evaluate((el) => {
             const s = getComputedStyle(el);
             return [s.backgroundColor, s.color, s.fontFamily, s.fontSize, s.lineHeight];
           });
+        await page.setContent(renderBoxPage("en", "Box", "<h1>Box</h1><p>Restarting.</p>"));
+        const boxPage = await look("body");
         await page.setContent(renderDocument("en-GB", "Next", "<p>Restarting.</p>\n"));
-        const neighbour = await bodyLook();
+        expect(await look("body"), scheme).not.toEqual(boxPage);
         await page.setContent(renderWaitingPage("the other box", "en-GB", form));
-        expect(await bodyLook(), scheme).toEqual(neighbour);
-        expect(
-          await page.locator("#f-email").evaluate((el) => getComputedStyle(el).fontFamily),
-          scheme,
-        ).toBe(neighbour[2]);
+        expect(await look("body"), scheme).toEqual(boxPage);
+        for (const selector of ["h1", "p", "label", "#f-email"])
+          expect(
+            await page
+              .locator(selector)
+              .first()
+              .evaluate((el) => getComputedStyle(el).fontFamily),
+            `${scheme} ${selector}`,
+          ).toBe(boxPage[2]);
         // The head alone, ahead of no other style, still follows the scheme.
         await page.setContent(
           `<!doctype html><html><head>${BOX_FORM_HEAD}</head><body>${form}</body></html>`,
