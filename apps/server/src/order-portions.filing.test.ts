@@ -368,6 +368,58 @@ describe("A803 portions: filing a bill of portions", () => {
     });
   });
 
+  it("taken away, two portions whose extras' stored takeaway VAT labels differ still file as one row", async () => {
+    const { billId, portions } = await seed(burgersWithCheese("2"));
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ dining: "takeaway" })
+        .where(eq(workingOrders.id, billId));
+      const [cheese] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, "Cheese")),
+        )
+        .orderBy(workingOrderLines.lineNo)
+        .limit(1);
+      await tx
+        .update(workingOrderLines)
+        .set({ takeawayVatClass: "zero" })
+        .where(eq(workingOrderLines.id, cheese!.id));
+    });
+
+    await payInCash(billId);
+
+    // Both products keep the area's default takeaway rate, 10%.
+    expect(await filedRows(billId)).toEqual([
+      {
+        name: "Burger",
+        quantity: 2000,
+        base: 605,
+        menuId: offers.menuId,
+        portions: portionIdsOf(portions, portions[0]!),
+      },
+      {
+        name: "Cheese",
+        quantity: 2000,
+        base: 64,
+        menuId: offers.menuId,
+        portions: portionIdsOf(portions, portions[0]!),
+      },
+    ]);
+    const [sale] = await inTx(venue, (tx) =>
+      tx
+        .select({ total: sales.total, vatBreakdown: sales.vatBreakdown })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(sale).toEqual({
+      total: 736,
+      vatBreakdown: [{ rate: "10.00", base: "6.69", tax: "0.67" }],
+    });
+  });
+
   it("A803 portions: issuing an unpaid invoice links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("3"));
 

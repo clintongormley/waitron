@@ -1197,9 +1197,11 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // Eaten here no label rates a line, so none may tell portions apart; both readers join the order.
+  // Only a label that rates its line (`readLineVatRates`) may tell portions apart; both readers
+  // join the order.
   vatClass: sql<GetColumnData<typeof workingOrderLines.takeawayVatClass> | null>`case
-    when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
+    when ${workingOrders.dining} = ${"takeaway" satisfies Dining}
+      and ${workingOrderLines.setMenuRole} = ${"set_menu"} then ${workingOrderLines.takeawayVatClass}
     else null end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
@@ -1359,8 +1361,9 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity, its locked composition, and, on a takeaway order,
- * its takeaway VAT label, which grouping bound portions compares; null on an order eaten here. */
+/** A stored working-order line: its identity, its locked composition, and, on a set-menu line of a
+ * takeaway order, its takeaway VAT label, which grouping bound portions compares; null on every
+ * other line. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;

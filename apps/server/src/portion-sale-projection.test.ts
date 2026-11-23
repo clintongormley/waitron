@@ -390,6 +390,15 @@ describe("A803 monetary comparison: portions of one cohort that differ stay apar
     expect(filed(projected)).toEqual(filed(grouped([{ name: "Burger", price: "9.50", count: 2 }])));
   });
 
+  it("portions whose VAT labels differ, where a label still rates its line", () => {
+    const bill = burgers();
+    bill.lines[1] = { ...bill.lines[1]!, vatClass: "general" };
+    expect(rowsOf(projectPortionSale(bill.lines, bill.bindings))).toEqual([
+      ["Burger", "1.000", null],
+      ["Burger", "1.000", null],
+    ]);
+  });
+
   it("A803 monetary comparison: portions recorded under different classifications", () => {
     const bill = burgers();
     const other = bill.lines[1]!;

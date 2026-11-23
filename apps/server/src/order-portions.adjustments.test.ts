@@ -1212,6 +1212,24 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
     expect((await recordedOn(billId)).map((row) => row.action)).toEqual(["discount_percent"]);
   });
 
+  it("taken away, two croquette rows from two rounds whose stored takeaway VAT labels differ adjust as one row", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }], "takeaway");
+    await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, billId, roundOf([{ name: "Croquettes", quantity: "2" }])),
+    );
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
+    expect(croquetteLineIds).toHaveLength(4);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ takeawayVatClass: "zero" })
+        .where(eq(workingOrderLines.id, croquetteLineIds[2]!)),
+    );
+
+    await adjust(billId, { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds });
+    expect((await recordedOn(billId)).map((row) => row.action)).toEqual(["discount_percent"]);
+  });
+
   it("A803 portions: two identical unbound one-unit lines named together are refused the same way", async () => {
     const { billId } = await groupedBill([{ name: "Burger" }, { name: "Burger" }]);
     const burgers = await dishesNamed(billId, "Burger");
