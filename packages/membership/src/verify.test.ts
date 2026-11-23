@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "./crypto.js";
 import { sampleBody, signDoc } from "./document-fixtures.js";
 import { endorseKey } from "./endorsement.js";
-import { endorsedKeyOf, signDocumentBody, verifyMembershipDocument } from "./verify.js";
+import {
+  endorsedKeyOf,
+  isMembershipDocument,
+  signDocumentBody,
+  verifyMembershipDocument,
+} from "./verify.js";
 import type { SignedMembershipDocument, TrustSet } from "./types.js";
 
 describe("verifyMembershipDocument", () => {
@@ -88,6 +93,7 @@ describe("verifyMembershipDocument", () => {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 9 }, () => endorsement),
     };
+    expect(isMembershipDocument(doc)).toBe(false);
     expect(verifyMembershipDocument(doc, {})).toEqual({ valid: false, reason: "malformed" });
   });
 
@@ -96,6 +102,7 @@ describe("verifyMembershipDocument", () => {
       ...signDoc(sampleBody(1), "A", generateNodeKeyPair().privateKey),
       endorsements: Array.from({ length: 8 }, () => endorsement),
     };
+    expect(isMembershipDocument(doc)).toBe(true);
     const result = verifyMembershipDocument(doc, {});
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).not.toBe("malformed");
