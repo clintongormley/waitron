@@ -87,6 +87,7 @@ export class TillSetMenuSummary extends LitElement {
   @property({ attribute: false }) dishNames: ReadonlyMap<string, string> = new Map();
   @property({ attribute: false }) removeMenu?: (id: string) => Promise<string | undefined>;
   @property({ attribute: false }) moveDish?: (move: DishMove) => Promise<string | undefined>;
+  @property({ attribute: false }) compMenu?: (lineId: string) => void;
   @property({ type: Boolean }) busy = false;
   @state() private moving: string | null = null;
   @state() private pending = false;
@@ -237,6 +238,18 @@ export class TillSetMenuSummary extends LitElement {
                 })}
               >${t("action.cancel")}</wt-button
             >
+            ${
+              this.compMenu === undefined
+                ? nothing
+                : html`<wt-button
+                    variant="secondary"
+                    data-comp-menu
+                    aria-label=${`${t("comp.title")} · ${row.name} ${row.number}`}
+                    ?disabled=${disabled}
+                    @click=${() => this.compMenu!(row.id)}
+                    >${t("comp.title")}</wt-button
+                  >`
+            }
             <div class="error" role="status">${this.errors.get(row.id) ?? ""}</div>
           </article>
         `,

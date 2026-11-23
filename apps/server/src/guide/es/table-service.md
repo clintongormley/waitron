@@ -574,7 +574,8 @@ para llevar, elige **Para llevar** en la cuenta antes de añadir una carta a pre
 Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
 Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
 para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otra carta
-de la misma cuenta o cancelar una carta vacía.
+de la misma cuenta o cancelar una carta vacía. Para invitar o hacer un descuento en una carta,
+pulsa **Descuento…** en ella dentro del resumen.
 
 Para pasar una carta a otra cuenta, abre **Mover platos** y selecciona la carta. Sus
 platos se mueven con ella. Si eliges un solo plato, comprueba su precio en la otra

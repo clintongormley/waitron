@@ -536,7 +536,8 @@ their food away, choose **Takeaway** on the bill before adding a set menu.
 Open the set-menu summary on **Order** to see where dishes go and which places are free.
 If a dish has no place, choose one of the options shown, or tap **Cancel** to keep the
 order as it was. From the summary you can move a dish to another set menu on the same
-bill or cancel an empty set menu.
+bill or cancel an empty set menu. To comp or discount a set menu, choose **Comp…** on it in
+the summary.
 
 To move a set menu to another bill, open **Move dishes** and select the set menu. Its
 dishes move with it. If you choose a dish by itself, check its price on the other bill

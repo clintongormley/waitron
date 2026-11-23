@@ -1923,8 +1923,15 @@ export class TillTableOrderScreen extends LitElement {
         .busy=${disabled}
         .removeMenu=${change === undefined ? undefined : (remove: string) => change({ remove })}
         .moveDish=${change === undefined ? undefined : (move: DishMove) => change({ moves: [move] })}
+        .compMenu=${this.#adjustable() ? this.#compMenu : undefined}
       ></till-set-menu-summary>`;
   }
+
+  #compMenu = (lineId: string) => {
+    const line = this.lines.find(({ id }) => id === lineId);
+    if (line !== undefined)
+      this.#adjust("comp", lineAdjustTarget(line, this.lines, this.#adjustName(line)));
+  };
 
   #addSetMenu = (menuId: string) => {
     const bill = this.#setMenus;

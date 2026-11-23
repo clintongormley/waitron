@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { DishMove } from "@waitron/shared";
 import { es } from "../i18n/strings.js";
-import { currentLocale, fill, setLocale } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { bill, courses, seaBass } from "../../test/set-menu-widgets.js";
 
@@ -139,4 +139,33 @@ it("uses the Spanish fixed-price count and the included dish tag", async () => {
   } finally {
     setLocale(originalLocale);
   }
+});
+
+it("offers Comp on each set menu only when comping is allowed, and names that menu's line", async () => {
+  const { el } = await mount();
+  const root = el.shadowRoot!;
+  await userEvent.click(root.querySelector("summary")!);
+  expect(root.querySelector("[data-comp-menu]")).toBeNull();
+
+  const compMenu = vi.fn();
+  el.compMenu = compMenu;
+  await el.updateComplete;
+  const comps = Array.from(root.querySelectorAll<HTMLElement>("[data-comp-menu]"));
+  expect(comps.map((button) => button.textContent!.trim())).toEqual([
+    t("comp.title"),
+    t("comp.title"),
+    t("comp.title"),
+  ]);
+  expect(comps[1]!.getAttribute("aria-label")).toBe(`${t("comp.title")} · Daily menu 2`);
+  await userEvent.click(comps[1]!);
+  expect(compMenu).toHaveBeenCalledExactlyOnceWith("daily-2");
+
+  el.busy = true;
+  await el.updateComplete;
+  expect(
+    Array.from(
+      root.querySelectorAll<HTMLElement & { disabled: boolean }>("[data-comp-menu]"),
+      (b) => b.disabled,
+    ),
+  ).toEqual([true, true, true]);
 });
