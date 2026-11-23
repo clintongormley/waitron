@@ -38,8 +38,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One product per Spanish VAT class, so the VAT summary has more than one `byRate` line. Prices are
-// GROSS (VAT-inclusive).
+// One product per Spanish VAT class. Prices are GROSS (VAT-inclusive).
 const PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-general",
@@ -71,8 +70,8 @@ const PRODUCTS: SeedSalesProduct[] = [
   },
 ];
 
-// Prices whose VAT taken as base × rate rounds a cent away from gross − base: 5.00 at 10% has base
-// 4.55 and VAT 0.46, 2.10 at 21% has base 1.74 and VAT 0.37.
+// Prices whose VAT taken as base × rate rounds a cent away from gross − base: 5.00 eaten in at 10%
+// has base 4.55 and VAT 0.46, 2.10 taken away at 21% has base 1.74 and VAT 0.37.
 const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-reduced-split",
@@ -81,12 +80,15 @@ const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
     unitPrice: "5.00",
     vatClass: "reduced",
   },
+];
+const CENT_SPLIT_DELI_PRODUCTS: SeedSalesDeliProduct[] = [
   {
     id: "p-general-split",
     name: "Refresco",
     customerName: { [LOCALE]: "Refresco" },
     unitPrice: "2.10",
     vatClass: "general",
+    takeawayVatRate: "21.00",
   },
 ];
 
@@ -443,8 +445,11 @@ describe("seedSales", () => {
       invoiceLocale: "es-ES",
       days: 2,
       products: CENT_SPLIT_PRODUCTS,
+      deliProducts: CENT_SPLIT_DELI_PRODUCTS,
     });
     expect(count).toBeGreaterThan(0);
+    const rates = await suite.db.selectDistinct({ vatRate: saleLines.vatRate }).from(saleLines);
+    expect(new Set(rates.map(({ vatRate }) => vatRate))).toEqual(new Set([1000, 2100]));
 
     const previews = await withTransaction(suite.db, async (tx) => {
       const backend = await nodeBackend(suite.db, tx, venue.nodeId, PREVIEW_CLOCK, "preproduction");

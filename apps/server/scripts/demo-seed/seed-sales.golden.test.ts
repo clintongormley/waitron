@@ -130,7 +130,7 @@ const ENVIOS_COLUMNS = [
   "reconciled_resubmit_at",
 ];
 
-// One product per Spanish VAT class, and one with no customer-facing name.
+// One product with no customer-facing name.
 const PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-general",
