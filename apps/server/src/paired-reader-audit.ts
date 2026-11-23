@@ -151,7 +151,7 @@ export async function readPairedReaderAudit(
       ),
     );
   const matches = matchesIn(runs);
-  const byGeneration = candidates.toSorted((a, b) => a.generation - b.generation);
+  const byGeneration = [...candidates].sort((a, b) => a.generation - b.generation);
   const priorMatches = matchesIn(byGeneration);
   const firstCheckAt = new Map<string, string>();
   for (const run of byGeneration) {
