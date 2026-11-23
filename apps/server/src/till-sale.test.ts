@@ -50,6 +50,7 @@ import {
   writeContentLanguages,
   writeProductModifiers,
   rateLines,
+  setTakeawayVatRate,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
 import { departments } from "@waitron/venue-service";
@@ -373,7 +374,7 @@ describe("counter basket payment", () => {
     );
     expect(paid.simulatedCardPayment).toBe(false);
     expect(paid.total).toBe("2.25");
-    expect(paid.vatBreakdown).toEqual([{ rate: "21.00", base: "1.86", tax: "0.39" }]);
+    expect(paid.vatBreakdown).toEqual([{ rate: "10.00", base: "2.05", tax: "0.20" }]);
     expect(paid.tender).toMatchObject({ charged: "2.55", tip: "0.30", reference: "OP-TIP" });
     await setTipsForTest(suite.db, false);
     const replay = await payCounterBasket(deps, cfg, operator, id, basket, payment, id);
@@ -736,7 +737,7 @@ describe("counter basket payment", () => {
 
   it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const result = await payCounterCash(
       cfg,
@@ -747,7 +748,7 @@ describe("counter basket payment", () => {
     expect(result.total).toBe("3.00");
     expect(result.tender).toEqual({ method: "cash", change: "2.00" }); // 5.00 tendered − 3.00
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
-    expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
+    expect(result.vatBreakdown).toEqual([{ rate: "10.00", base: "2.73", tax: "0.27" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
     expect(await expectOneTicketItemPerDish()).toBe(2);
@@ -1597,12 +1598,14 @@ describe("ordering extras and options — parent + child lines", () => {
    * taxed at the dish's, the parent's or the variant's own rate each reads differently. The variant
    * carries three names of its own — `<stem> staff`, `<stem> customer`, `<stem> kitchen` — each
    * different from Bacon's and from each other, so a line that takes a name from the wrong product,
-   * or the wrong one of the three, fails.
+   * or the wrong one of the three, fails. `takeawayVatRate` sells the order taken away, with the
+   * Tostada at 4.00, Bacon at 10.00 and the variant at that rate of its own.
    */
   async function sellVariantAsExtra(own: {
     stem: string;
     unitPrice: number | null;
     vatClass: "general" | null;
+    takeawayVatRate?: string;
   }) {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
@@ -1627,6 +1630,11 @@ describe("ordering extras and options — parent + child lines", () => {
         unitPrice: "4.00",
         vatClass: "super_reduced",
       });
+      if (own.takeawayVatRate !== undefined) {
+        await tx.update(departments).set({ dining: "takeaway" });
+        await setTakeawayVatRate(tx, dish.id, "4.00");
+        await setTakeawayVatRate(tx, variant!.id, own.takeawayVatRate);
+      }
       const list = await createExtraList(
         tx,
         {
@@ -1688,12 +1696,13 @@ describe("ordering extras and options — parent + child lines", () => {
     });
   });
 
-  // ...and one that sets its own keeps them: general 21% and 3.50, not Bacon's 10% and 3.00.
+  // ...and one that sets its own keeps them: 21% taken away and 3.50, not Bacon's 10% and 3.00.
   it("a variant picked as an extra files its OWN VAT and price when it sets them", async () => {
     const { total, child } = await sellVariantAsExtra({
       stem: "Bacon triple",
       unitPrice: 350,
       vatClass: "general",
+      takeawayVatRate: "21.00",
     });
     // 4.00 dish + 3.50 of its own = 7.50 gross.
     expect(total).toBe("7.50");

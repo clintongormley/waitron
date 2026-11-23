@@ -36,6 +36,7 @@ import {
   createOptionList,
   listAvailableProducts,
   readContentLanguages,
+  setTakeawayVatRate,
   updateProduct,
   writeProductModifiers,
 } from "@waitron/menu";
@@ -769,7 +770,7 @@ describe("the fiscal sale path over HTTP", () => {
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
     expect(ticket.total).toBe("3.00");
     expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
-    expect(ticket.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
+    expect(ticket.vatBreakdown).toEqual([{ rate: "10.00", base: "2.73", tax: "0.27" }]);
     expect(ticket.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     // VerifactuBackend always sets a verification URL, so the QR is a non-empty string.
     expect(typeof ticket.qr).toBe("string");
@@ -802,7 +803,11 @@ describe("the fiscal sale path over HTTP", () => {
   // from it — held to the legal ticket standard (findings §14) and an intact hash chain across two
   // sales.
   it("walks the full journey: login → menu → mixed-rate sale → legal ticket + an intact fiscal chain", async () => {
-    const { cfg, operatorId } = await setupVenue();
+    const { cfg, available, operatorId } = await setupVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await tx.update(departments).set({ dining: "till_choice" });
+      await setTakeawayVatRate(tx, available.find((p) => p.pricingUnit === "each")!.id, "21.00");
+    });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -830,8 +835,8 @@ describe("the fiscal sale path over HTTP", () => {
       }[];
     };
     const products = offers.map((offer) => ({ ...offer, menuItemId: offer.id }));
-    // The two seeded, sellable products come back — the reduced-rate weighed one and the
-    // general-rate each one — so the basket below genuinely mixes VAT rates.
+    // The two seeded, sellable products come back — taken away, the weighed one at 10% and the
+    // each one at 21% — so the basket below genuinely mixes VAT rates.
     expect(products.map((p) => p.name).sort()).toEqual(["Agua mineral", "Jamón cortado"]);
     const ham = products.find((p) => p.unit.hardwareUnit === "kg")!;
     const water = products.find((p) => p.unit.hardwareUnit === null)!;
@@ -846,7 +851,7 @@ describe("the fiscal sale path over HTTP", () => {
           shareOf: 1,
           method: "cash",
           tendered: "10.00",
-          dining: "eat_in",
+          dining: "takeaway",
           basket: { lines },
         }),
       });
@@ -2777,8 +2782,10 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const { extraListId, cheeseId, optionListId, labelId } = await withTransaction(
     suite.db,
     async (tx) => {
-      // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
-      // `general`, so the filed VAT breakdown has to carry two bands.
+      // Taken away, the extra is a PRODUCT of its own, taxed at its OWN rate — 10%, where the dish
+      // is at 21% — so the filed VAT breakdown has to carry two bands.
+      await tx.update(departments).set({ dining: "till_choice" });
+      await setTakeawayVatRate(tx, product.id, "21.00");
       const cheese = await createProduct(tx, {
         categoryId: null,
         name: "Queso",
@@ -2850,7 +2857,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       headers.cookie,
       workingOrderId,
       [{ menuItemId: product.menuItemId, quantity: "2", extras, options }],
-      { method: "cash", tendered: "10.00" },
+      { method: "cash", tendered: "10.00", dining: "takeaway" },
     );
   const response = await pay();
   expect(response.status, await response.clone().text()).toBe(200);
