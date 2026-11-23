@@ -240,7 +240,7 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
   /** Whether the server can issue a full invoice naming the customer (F1). */
   fullInvoices: boolean;
-  /** Whether the venue's region charges a different VAT class on food taken away. */
+  /** Whether the venue's region charges a different VAT rate on food taken away. */
   takeawayVat: boolean;
   /** `/api/theme`'s hash for the theme in use. */
   themeHash: string;

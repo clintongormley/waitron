@@ -6894,7 +6894,7 @@ describe("menu settings routes", () => {
     expect((await send(app, "GET", "/management-api/menu-settings")).status).toBe(200);
   });
 
-  it("answers whether the venue's region charges a takeaway VAT class (A1522)", async () => {
+  it("answers whether the venue's region charges takeaway its own VAT rate (A1522)", async () => {
     const app = mountApp();
     const takeawayVat = async () =>
       (await (await send(app, "GET", "/management-api/menu-settings")).json()).takeawayVat;

@@ -107,7 +107,7 @@ export interface VenueServiceModel {
   estimatedMarginByDepartment: Record<string, string>;
   serviceSteps: ServiceStep[];
   courses: { id: string; name: string }[];
-  /** Whether the venue's region charges a different VAT class on food taken away. */
+  /** Whether the venue's region charges a different VAT rate on food taken away. */
   takeawayVat?: boolean;
 }
 export interface VenueServiceChoices {

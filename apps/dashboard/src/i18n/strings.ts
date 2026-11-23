@@ -3622,7 +3622,7 @@ export const en = {
   "menus.set_menu_help":
     "The set price covers the dishes and quantities you include. Set a surcharge on a dish or variant to charge extra for it. Place the set menu in a full menu and publish that menu to send changes to the tills.",
   "menus.set_menu_terms": "Name, price and VAT",
-  "menus.set_takeaway_vat_same": "Same as served here — {tax}",
+  "menus.set_takeaway_vat_same": "Same as Eat-in VAT — {tax}",
   "menus.set_menu_price": "Price per set menu",
   "menus.set_menu_eat_in_vat": "Eat-in VAT",
   "menus.set_menu_load_error": "The set menu could not be loaded.",
@@ -8418,7 +8418,7 @@ export const es: Record<StringKey, string> = {
   "menus.set_menu_help":
     "El precio fijo cubre los platos y las cantidades que incluyas. Añade un suplemento a un plato o variante para cobrar un extra. Inserta la carta a precio fijo en una carta completa y publícala para enviar los cambios a las cajas.",
   "menus.set_menu_terms": "Nombre, precio e IVA",
-  "menus.set_takeaway_vat_same": "Igual que en el local — {tax}",
+  "menus.set_takeaway_vat_same": "Igual que el IVA para comer aquí — {tax}",
   "menus.set_menu_price": "Importe por carta a precio fijo",
   "menus.set_menu_eat_in_vat": "IVA para comer aquí",
   "menus.set_menu_load_error": "No se ha podido cargar la carta a precio fijo.",

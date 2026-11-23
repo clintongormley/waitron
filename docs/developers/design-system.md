@@ -3387,8 +3387,7 @@ These forms follow the rule
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
-- batch 2a: the "VAT class for new products" default; the
-  the unit form, new and existing; the options list and its
+- batch 2a: the "VAT class for new products" default (retired by VAT rates piece A, PR 3b, 2026-11-23); the unit form, new and existing; the options list and its
   option window; the extras list; Add to menus after a product is created; a section's Add products;
   a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so

@@ -783,7 +783,7 @@ own words ("sends a raise to the server, and words the server's refusal" in
 `apps/till/src/till-app.test.ts`); the counter does not mark that line. A table round refused
 `product.variant_unavailable` has its line marked from the offers read again ("says a sold-out
 variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Paying a held order bills its stored lines at their stored prices; eaten here, at the
-dine-in rate on the day the meal ends, and taken away, at the product's takeaway rate, as _What a sold
+dine-in rate, and taken away, at the product's takeaway rate, as _What a sold
 line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
 sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
@@ -949,7 +949,7 @@ inside the same transaction the product write already opened (`apps/server/src/m
 rolls the whole product back, and you can choose a course as you create the product.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
-`null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
+`null`), `description`, `kitchenName`, `image`, `unitPrice` and `takeawayVatRate` (a body carrying the retired `vatClass` or `takeawayVatClass` is refused), `primaryCategoryId` (the
 main reporting category; on a variant it must be `null`, and any other value is refused with
 `product.invalid`; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and

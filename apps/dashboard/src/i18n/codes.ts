@@ -2014,8 +2014,8 @@ export const SET_MENU_FIELDS: Record<string, { en: string; es: string }> = {
     es: "Elige un tipo de IVA para consumo en el local.",
   },
   setTakeawayVatClass: {
-    en: "Choose a takeaway VAT rate or clear it to use the eat-in rate.",
-    es: "Elige un tipo de IVA para llevar o quítalo para usar el de consumo en el local.",
+    en: "Choose a takeaway VAT rate or clear it to use the Eat-in VAT.",
+    es: "Elige un tipo de IVA para llevar o quítalo para usar el IVA para comer aquí.",
   },
   lines: {
     en: "A set menu can have up to 20 inclusion lines. Combine courses in one line or remove a line.",

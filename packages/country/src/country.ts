@@ -59,7 +59,7 @@ export interface FiscalJurisdiction {
   readonly areaCodes: readonly string[];
   readonly supported: boolean;
   readonly modules?: FiscalModules;
-  /** Food and drink taken away may be charged at a different VAT class from eaten in. */
+  /** Food and drink taken away may be charged at a different VAT rate from eaten in. */
   readonly takeawayVat?: true;
   /** The rate for everything eaten or drunk on the premises, oldest first. */
   readonly dineInVatRates?: readonly DatedVatRate[];
