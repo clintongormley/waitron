@@ -127,10 +127,7 @@ const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
 /** The live version and when it went live; a menu never published says so instead. */
 function liveWords(status: MenuStatus, now: () => Date) {
-  const { label, live } = statusWords(
-    status.state === "current" ? { ...status, state: "changed" } : status,
-    now,
-  );
+  const { label, live } = statusWords(status, now);
   if (live === null) return label;
   return html`${live.version} · <span class="time">${live.time}</span>`;
 }
@@ -3650,7 +3647,7 @@ export class MenusScreen extends LitElement {
     );
   }
 
-  /** On the Prices tab the clash words stay plain words, since a link would only open it again. */
+  /** On the Prices tab the clash words stay plain words: the tab's own Show clashes does what the link would. */
   #renderClashes(menuId: string) {
     const clashes =
       this.statusError || (this.view === "preview" && this.previewError)

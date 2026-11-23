@@ -130,7 +130,11 @@ const SOURCES: Record<MenuChange["source"], StringKey> = {
   set_menu: "menu_preview.source_set_menu",
 };
 
-/** A menu's publication state in words, read against `now`: what it is, and the live version and how long ago it was published. The editor's heading shows both; the menus list shows only the time. */
+/**
+ * A menu's publication state in words, read against `now`: its label, and for a live menu its
+ * version and how long ago it was published. The editor's heading shows the version and time (the
+ * label for a menu never published); the menus list shows the label and time.
+ */
 export function statusWords(
   status: MenuStatus,
   now: () => Date,
@@ -140,7 +144,7 @@ export function statusWords(
 } {
   if (status.state === "unpublished") return { label: t("menu_status.unpublished"), live: null };
   const version = fill("menu_status.changed_version", { number: String(status.version) });
-  // No time zone: the statuses read carries none, so this reads in the browser's zone, as the date it replaced did.
+  // No time zone: the statuses read carries none, so this reads in the browser's zone.
   const time = relativeTime("{time}", status.publishedAt, { calendar: true, now });
   return {
     label: t(status.state === "current" ? "menu_status.current" : "menu_status.changed"),
