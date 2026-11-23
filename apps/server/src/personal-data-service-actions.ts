@@ -17,7 +17,7 @@ import { alias, type SQLiteTable } from "drizzle-orm/sqlite-core";
 const FILE = "service-actions.json";
 const PAGE_SIZE = 100;
 
-async function readHistory<T>(
+export async function readHistory<T>(
   db: Database,
   table: SQLiteTable,
   select: (range: SQL) => T[],
@@ -45,7 +45,7 @@ async function readHistory<T>(
 const fromOrder = alias(workingOrders, "from_order");
 const toOrder = alias(workingOrders, "to_order");
 
-function byTime<T extends { id: string; at: string | null }>(a: T, b: T): number {
+export function byTime<T extends { id: string; at: string | null }>(a: T, b: T): number {
   return (a.at ?? "").localeCompare(b.at ?? "") || a.id.localeCompare(b.id);
 }
 

@@ -132,6 +132,12 @@ búscala en `payment-holds.json`.
 Consulta `service-actions.json` para ver tus acciones en pedidos y en el servicio de mesas, y
 `department-transfers.json` para ver los traspasos entre departamentos que resolviste.
 
+Busca en `staff-actions.json` las cuentas, los borradores y las líneas que se te atribuyen,
+las alertas que atendiste, tu actividad registrada, los correos relacionados contigo,
+los recibos que entregaste y los ajustes que guardaste por última vez.
+Si decidiste sobre las ausencias, los cambios de turno o las respuestas de asistencia de otras
+personas, o publicaste un cuadrante, busca las referencias y las fechas en `workforce-decisions.json`.
+
 Consulta `menu-publications.json` para ver las ediciones de carta que publicaste o programaste
 y las cancelaciones que constan a tu nombre. Si Reservas está activado, `bookings-created.json`
 recoge las reservas que creaste.

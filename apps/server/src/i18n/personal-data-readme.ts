@@ -134,6 +134,17 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
           "your order events (including draft take-overs), group submissions and firings, party openings and closings, when you answered a party’s allergy question, dish moves (with station IDs), order amendments, the last recorded cancellation of each dish and late-dish confirmations. A group action can appear twice. A move or split can carry a cancellation or confirmation to another line, and a dish and its extras can share a confirmation. For a late dish, the time shown is when it was sent, if recorded.",
         use: "Used to track how orders were handled and who took each action.",
       },
+      "staff-actions.json": {
+        holds:
+          "the bills, drafts and lines that currently name you as editor, owner or the person credited, plus the alerts you acknowledged, your recorded activity by kind and time, the receipts you handed over and the settings that name you as the last person to save them. For recorded emails about you or requested by you, it gives the kind, status, time queued and your role. With working-time tracking enabled, your attendance reminders are in attendance.json.",
+        use: "Used to account for staff actions at the venue.",
+        kept: ["The box prunes the activity log after 30 days."],
+      },
+      "workforce-decisions.json": {
+        holds:
+          "the absence, swap and attendance decisions you made about other staff, with record references, outcomes and decision times. It also lists the rota periods you published and when.",
+        use: "Used to account for workforce decisions at the venue.",
+      },
       "department-transfers.json": {
         holds:
           "the department transfers you resolved, including those you withdrew, with the order number, department IDs, outcome and when you resolved each one.",
@@ -287,6 +298,17 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds:
           "tus acciones en pedidos (incluidas las tomas de control de borradores), los grupos que enviaste o mandaste preparar, las mesas que abriste o cerraste, cuándo respondiste a una pregunta sobre alergias, los cambios de estación de platos (con los identificadores de las estaciones), las modificaciones de pedidos, la última cancelación registrada de cada plato y las confirmaciones de platos tardíos. Una acción de grupo puede aparecer dos veces. Al mover o dividir un plato, otra línea puede conservar su cancelación o confirmación, y un plato y sus extras pueden compartir una confirmación. La hora de un plato tardío indica cuándo se envió, si consta.",
         use: "Se usa para saber cómo se gestionaron los pedidos y quién realizó cada acción.",
+      },
+      "staff-actions.json": {
+        holds:
+          "las cuentas, los borradores y las líneas en los que figuras como responsable de la edición, titular del borrador o la persona a la que se atribuye la línea. También incluye las alertas que atendiste, el tipo y la hora de tu actividad registrada, los recibos que entregaste y los ajustes que guardaste por última vez. Para los correos registrados sobre ti o que solicitaste, indica el tipo, el estado, cuándo se pusieron en cola y qué papel tuviste. Si el control horario está activado, tus recordatorios de asistencia están en attendance.json.",
+        use: "Sirve para dar cuenta de las acciones del personal del local.",
+        kept: ["El servidor borra las entradas del registro de actividad al cabo de 30 días."],
+      },
+      "workforce-decisions.json": {
+        holds:
+          "las decisiones que tomaste sobre ausencias, cambios de turno y asistencia de otras personas, con las referencias de los registros, los resultados y las fechas y horas de las decisiones. También recoge los períodos de los cuadrantes que publicaste y cuándo lo hiciste.",
+        use: "Sirve para dar cuenta de las decisiones sobre el personal del local.",
       },
       "department-transfers.json": {
         holds:

@@ -74,23 +74,12 @@ by the answers):
   data-protection guide's "Table names and notes"); whatever the download or a deletion does with
   `parties.name` applies to it too. The slice puts it in no error's details and no log line, and
   the owner ruled it never goes on a kitchen ticket (2026-10-30).
-- **A manager's own copy of what they decided about others** — the absences and swaps they
-  decided, the rotas they published and the attendance answers they authorised: the design's "who
-  did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer
-  openings (S2b decision 11).
 - **The rest of "who did what" in the download** (design §2.1 row s12). What is left:
   - **The core columns** the guard in `apps/server/src/personal-data-actions.coverage.test.ts`
-    lists as not in the download yet, by table: `sales` (`operator_id`, who rang a sale;
-    `authorized_by`, who authorised a corrective invoice); `invoice_corrections` (`requested_by`,
-    `authorized_by`, `ended_by`: who asked for, approved and ended a correction); `unpaid_departures` (`authorized_by`,
-    `recorded_by`); `invoice_pdf_downloads.person_id`; `invoice_deliveries.person_id`;
-    `order_drafts.owner_id`, who holds the current draft; `working_order_lines.credited_to`, whose
-    sale a line counts as; `working_orders.editor_id`, who is editing a bill;
-    `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves
-    and downloads of the file of deferred payments); and `recovery_packs.made_by`, who made a
-    recovery pack. The guard knows a column by its name;
-    `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss
-    them (S2c decision 2).
+    lists as not in the download yet: the actors in `sales`, `invoice_corrections`,
+    `invoice_deliveries`, `invoice_pdf_downloads`, `unpaid_departures`, `deferred_closures`,
+    `device_invoice_save_operations`, `document_delivery_requests` and `document_page_reprints`.
+    The guard also lists `recovery_packs.made_by`. A1323 removes that table.
   - **Other modules' actor columns**: fiscal operations, payment requests and resolutions, payment
     refund approvals, department transfer senders, service steps, handover activations
     (`handover_activations.person_id`, and `authorisedBy` inside its signed evidence), and the
@@ -119,6 +108,8 @@ by the answers):
   turn that reads the other parts. The two row turns scan their whole tables, because none of the
   person columns they select on has an index, so they grow with the venue's whole history, not
   only the person's (S2c decision 4). Repeat the turns and the file's size on a box.
+  Measure the paged reads and file sizes for `staff-actions.json` and `workforce-decisions.json`
+  against a venue with a long history.
   The adjustments part (S2d) reads in the first turn. Measure that read and the whole first turn
   on a box.
   The invoice customer's search and download (S3) read in a search turn, a first turn and one turn

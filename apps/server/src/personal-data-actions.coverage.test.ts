@@ -50,6 +50,16 @@ const READ = [
   "parties.opened_by",
   "ticket_item_moves.moved_by_person_id",
   "working_order_lines.late_confirmed_by",
+  "working_orders.editor_id",
+  "incidents.acknowledged_by",
+  // The workforce part reads attendance reminders when enabled.
+  "outgoing_mail.person_id",
+  "outgoing_mail.requested_by",
+  "activity_log.person_id",
+  "order_drafts.owner_id",
+  "print_jobs.handed_over_by",
+  "settings.updated_by",
+  "working_order_lines.credited_to",
 ];
 
 const NOT_YET_REASON =
@@ -57,29 +67,20 @@ const NOT_YET_REASON =
 
 const NOT_YET: Record<string, string> = Object.fromEntries(
   [
-    "working_orders.editor_id",
     "device_invoice_save_operations.person_id",
     "document_delivery_requests.person_id",
     "document_page_reprints.person_id",
-    "incidents.acknowledged_by",
     "invoice_corrections.authorized_by",
     "invoice_corrections.ended_by",
     "invoice_corrections.requested_by",
-    "outgoing_mail.person_id",
-    "outgoing_mail.requested_by",
     "invoice_deliveries.person_id",
     "invoice_pdf_downloads.person_id",
-    "activity_log.person_id",
-    "order_drafts.owner_id",
-    "print_jobs.handed_over_by",
     "recovery_packs.made_by",
     "sales.authorized_by",
     "sales.operator_id",
-    "settings.updated_by",
     "deferred_closures.actor_id",
     "unpaid_departures.authorized_by",
     "unpaid_departures.recorded_by",
-    "working_order_lines.credited_to",
   ].map((column) => [column, NOT_YET_REASON]),
 );
 

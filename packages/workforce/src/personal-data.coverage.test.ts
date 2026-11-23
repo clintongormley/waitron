@@ -13,6 +13,7 @@ import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 type Classification =
   { readonly in: readonly string[]; readonly out: readonly string[] } | "working-time record";
 
+// The publisher and other decision-maker columns also reach the server’s workforce-decisions.json.
 const CLASSIFIED: Record<string, Classification> = {
   employments: {
     in: [

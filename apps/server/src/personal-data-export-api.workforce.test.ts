@@ -85,6 +85,7 @@ const FILES = [
   "time-record.pdf",
   "time-record.csv",
   "actions.json",
+  "staff-actions.json",
 ];
 
 const MARTHA = {
@@ -424,7 +425,7 @@ beforeEach(async () => {
     },
   ] as const)
     await insertAttendanceMail(suite.db, row);
-  // The table is not exported from @waitron/workforce, so its rows are written with bound values.
+
   const response = async (row: {
     id: string;
     by: string;
@@ -682,14 +683,18 @@ async function seedActions(colleague: string): Promise<void> {
   }
 }
 
-async function download(path = PATH, as = cookie): Promise<Record<string, Uint8Array>> {
+async function download(
+  path = PATH,
+  as = cookie,
+  modules = ALL_MODULES,
+): Promise<Record<string, Uint8Array>> {
   const app = new Hono();
   mountPersonalDataExportApi(
     app,
     {
       db: suite.db,
-      modules: ALL_MODULES,
-      serverParts: personalDataServerParts(ALL_MODULES, suite.db),
+      modules,
+      serverParts: personalDataServerParts(modules, suite.db),
       venueLocale: "en-GB",
       now: () => AT,
     },
@@ -777,6 +782,24 @@ const readme = (language: "en" | "es") =>
   });
 
 describe("a staff member's whole personal-data download", () => {
+  it("adds a manager's workforce decisions only while workforce is enabled", async () => {
+    const path = `/management-api/staff/${managerId}/personal-data/export`;
+    const enabled = await download(path, adminCookie);
+    expect(enabled["workforce-decisions.json"]).toBeDefined();
+    expect(new TextDecoder().decode(enabled["README.txt"])).toContain(
+      "- workforce-decisions.json:",
+    );
+    const disabled = await download(
+      path,
+      adminCookie,
+      ALL_MODULES.filter((module) => module.name !== "workforce"),
+    );
+    expect(disabled["workforce-decisions.json"]).toBeUndefined();
+    expect(new TextDecoder().decode(disabled["README.txt"])).not.toContain(
+      "- workforce-decisions.json:",
+    );
+  });
+
   it.each(["own", "administrator"] as const)(
     "detects planted colleague values in every file of the %s download",
     async (audience) => {
