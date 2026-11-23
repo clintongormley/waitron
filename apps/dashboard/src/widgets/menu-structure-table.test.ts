@@ -2712,10 +2712,14 @@ it("shows section photos in Structure and follows the included folder's image se
   await expect
     .poll(() => photoOf("included-wine")?.getAttribute("src"))
     .toBe(`/media/square/${menuImage}`);
-  expect(photoOf("m-drinks")!.alt).toBe("");
-  expect(photoOf("m-drinks")!.getBoundingClientRect().width).toBeGreaterThan(0);
+  const sectionPhoto = photoOf("m-drinks")!;
+  expect(sectionPhoto.alt).toBe("");
+  expect(sectionPhoto.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(sectionPhoto.closest("button")?.getAttribute("aria-label")).toBe("Edit Drinks");
+  const frame = sectionPhoto.closest('[part~="thumb-frame"]')!;
+  expect(getComputedStyle(frame).borderTopColor).toBe("rgb(170, 51, 0)");
   const edits = listen(el, "wt-member-edit");
-  await userEvent.click(photoOf("m-drinks")!);
+  await userEvent.click(sectionPhoto);
   expect(edits).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"], swatch: true }]);
   expect(photoOf("included-wine")!.closest("button")).toBeNull();
 
