@@ -2,7 +2,7 @@ export const handoverEn = {
   "handover.heading": "Hand over the venue",
   "handover.loading": "Reading handover progress…",
   "handover.copy":
-    "Preparing the final copy. Keep both boxes connected. Sales stay stopped until the new box is ready.",
+    "Getting the latest copy from the main box. Keep both boxes connected. Sales stay stopped until the new box is ready.",
   "handover.read_failed":
     "Could not read handover progress. Keep this page open while it reconnects.",
   "handover.wait":
@@ -200,7 +200,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.heading": "Traspasar el local",
   "handover.loading": "Consultando el progreso del traspaso…",
   "handover.copy":
-    "Preparando la copia final. Mantén los dos servidores conectados. Las ventas siguen detenidas hasta que el nuevo servidor esté listo.",
+    "Obteniendo la copia más reciente del servidor principal. Mantén los dos servidores conectados. Las ventas siguen detenidas hasta que el nuevo servidor esté listo.",
   "handover.read_failed":
     "No se pudo consultar el progreso. Mantén esta página abierta mientras se recupera la conexión.",
   "handover.wait":

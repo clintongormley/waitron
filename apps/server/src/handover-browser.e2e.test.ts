@@ -176,7 +176,7 @@ it("opens the built handover page and its relative assets, including after a rel
     await page.goto(`${origin}/handover/${OP}`, { waitUntil: "networkidle", timeout: 10_000 });
     expect(failures).toEqual([]);
     await page.getByRole("heading", { name: "Hand over the venue" }).waitFor();
-    await page.getByText("Preparing the final copy", { exact: false }).waitFor();
+    await page.getByText("Getting the latest copy from the main box", { exact: false }).waitFor();
     expect(failures).toEqual([]);
     await page.reload();
     await page.getByRole("heading", { name: "Hand over the venue" }).waitFor();
