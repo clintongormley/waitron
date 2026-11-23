@@ -494,7 +494,7 @@ describe.each(["light", "dark"] as const)("product editor with help on (%s)", (t
       ),
     ];
     await Promise.all(badges.map((badge) => badge.updateComplete));
-    expect(badges.filter((badge) => badge.checkVisibility())).toHaveLength(3);
+    expect(badges.filter((badge) => badge.checkVisibility())).toHaveLength(4);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

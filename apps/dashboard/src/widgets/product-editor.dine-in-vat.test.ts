@@ -1,11 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import { es } from "../i18n/strings.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { ProductEditor } from "./product-editor.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 
 afterEach(() => {
+  setHelpMode(false);
   setLocale("en");
   cleanupWidgets();
 });
@@ -125,4 +127,56 @@ it.each([
   const body = await saveBody(el);
   expect(body).not.toHaveProperty("vatClass");
   expect(body.takeawayVatRate).toBe(value === variant ? null : "10.00");
+});
+
+async function badgeOf(el: ProductEditor): Promise<WtHelpTooltip> {
+  const badge = el.shadowRoot!.querySelector<WtHelpTooltip>(".dine-in-vat > wt-help-tooltip")!;
+  expect(badge).not.toBeNull();
+  await badge.updateComplete;
+  return badge;
+}
+
+it.each([
+  [false, "help.products.dine_in_vat"],
+  [true, "help.products.dine_in_vat_takeaway"],
+] as const)(
+  "puts a help badge beside the rate, shown only while help is on (takeaway field %s)",
+  async (takeawayVat, key) => {
+    const el = await mount({ takeawayVat, vatRates: ["10.00"] });
+    const badge = await badgeOf(el);
+    expect(badge.getAttribute("mode")).toBe("help-mode");
+    expect(badge.checkVisibility()).toBe(false);
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expect
+      .element(badge.shadowRoot!.querySelector("button")!)
+      .toHaveAccessibleName("Help: VAT");
+    expect(badge.textContent!.trim()).toBe(t(key));
+    expect(badge.getAttribute("guide-href")).toBe("/help/en/products#vat");
+    expect(badge.getAttribute("guide-label")).toBe(t("help.guide_link"));
+    // The note itself reads the rate alone, not the bubble's text.
+    expect(note(el)).toBe("Eaten here: 10% (all food and drink)");
+  },
+);
+
+it("words the help as staff read it, saying the takeaway rate is chosen per product only beside that field", () => {
+  expect(t("help.products.dine_in_vat")).toBe(
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set.",
+  );
+  expect(t("help.products.dine_in_vat_takeaway")).toBe(
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set. Taken away, each product is charged the rate chosen for it below.",
+  );
+});
+
+it("reads the Spanish help and links the Spanish guide in Spanish", async () => {
+  setLocale("es");
+  const el = await mount({});
+  setHelpMode(true);
+  const badge = await badgeOf(el);
+  await expect
+    .element(badge.shadowRoot!.querySelector("button")!)
+    .toHaveAccessibleName(es["help.badge_label"].replace("{part}", es["product.vat"]));
+  expect(badge.textContent!.trim()).toBe(es["help.products.dine_in_vat"]);
+  expect(badge.getAttribute("guide-href")).toBe("/help/es/products#vat");
 });

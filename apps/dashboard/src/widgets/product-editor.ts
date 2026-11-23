@@ -286,6 +286,13 @@ export class ProductEditor extends LitElement {
         inline-size: var(--wt-form-max-width);
         max-inline-size: 100%;
       }
+      /* The help badge hangs over the corner of the nearest positioned box, here the line's own
+         text; the padding keeps the half of it inside the box clear of that text. */
+      .dine-in-vat {
+        position: relative;
+        inline-size: fit-content;
+        padding-inline-end: calc(var(--wt-help-badge-target) / 2);
+      }
       .notice {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -624,7 +631,6 @@ export class ProductEditor extends LitElement {
     const keys = [
       "name",
       "kitchen-name",
-      "takeaway-tax",
       "unit-price",
       "product-course",
       "allergens",
@@ -633,6 +639,7 @@ export class ProductEditor extends LitElement {
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
+    if (this.takeawayVat) keys.push("takeaway-tax");
     if (this.inherited === null)
       keys.push("primary", "product-color", "unit", "ordering", "modifier");
     return new Set(keys);
@@ -1442,8 +1449,20 @@ export class ProductEditor extends LitElement {
   private renderTax() {
     return html`${
       this.dineInVatRate
-        ? html`<p data-test="dine-in-vat">
-            ${fill("editor.dine_in_vat", { rate: vatRateNumber(this.dineInVatRate) })}
+        ? html`<p class="dine-in-vat">
+            <span data-test="dine-in-vat"
+              >${fill("editor.dine_in_vat", { rate: vatRateNumber(this.dineInVatRate) })}</span
+            ><wt-help-tooltip
+              mode="help-mode"
+              aria-label=${fill("help.badge_label", { part: t("product.vat") })}
+              guide-href=${guideHref("products.vat")}
+              guide-label=${t("help.guide_link")}
+              >${t(
+                this.takeawayVat
+                  ? "help.products.dine_in_vat_takeaway"
+                  : "help.products.dine_in_vat",
+              )}</wt-help-tooltip
+            >
           </p>`
         : nothing
     }${this.takeawayVat ? this.renderTakeawayTax() : nothing}`;

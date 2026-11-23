@@ -1232,6 +1232,10 @@ export const en = {
   "help.account.settings": "Change your personal details and how you sign in.",
   "help.products.keep_variant":
     "Cancels archiving this variant. Archiving happens only when you save the product.",
+  "help.products.dine_in_vat":
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set.",
+  "help.products.dine_in_vat_takeaway":
+    "Everything eaten or drunk here is charged this one rate, whatever the product. Waitron updates it when the law changes; there is nothing to set. Taken away, each product is charged the rate chosen for it below.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
   "help.products.course":
@@ -5978,6 +5982,10 @@ export const es: Record<StringKey, string> = {
   "help.account.settings": "Cambia tus datos personales y cómo inicias sesión.",
   "help.products.keep_variant":
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
+  "help.products.dine_in_vat":
+    "Todo lo que se come o se bebe aquí paga este único tipo, sea cual sea el producto. Waitron lo actualiza cuando cambia la ley; no hay nada que configurar.",
+  "help.products.dine_in_vat_takeaway":
+    "Todo lo que se come o se bebe aquí paga este único tipo, sea cual sea el producto. Waitron lo actualiza cuando cambia la ley; no hay nada que configurar. Para llevar, cada producto paga el tipo que se elige para él más abajo.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
   "help.products.course":

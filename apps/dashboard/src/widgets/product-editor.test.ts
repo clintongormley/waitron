@@ -2925,7 +2925,7 @@ it("associates a server refusal with its dropdown until the next save", async ()
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
-    fieldErrors: { "product-course": "Tax is no longer available" },
+    fieldErrors: { "product-course": "That course is gone" },
   });
   // The dropdown's own button carries the marking, and the sentence it names is inside it.
   const box = el.shadowRoot!.querySelector<
@@ -2936,12 +2936,12 @@ it("associates a server refusal with its dropdown until the next save", async ()
   expect(select.getAttribute("aria-invalid")).toBe("true");
   expect(
     box.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent,
-  ).toBe("Tax is no longer available");
-  expect(box.error).toBe("Tax is no longer available");
+  ).toBe("That course is gone");
+  expect(box.error).toBe("That course is gone");
   // Submitting again is past the refusal.
   await edit(el);
   await box.updateComplete;
-  expect(box.error).toBe("Tax is no longer available");
+  expect(box.error).toBe("That course is gone");
   save(el);
   await el.updateComplete;
   await box.updateComplete;
@@ -5643,6 +5643,22 @@ it.each(["unit-price", "takeaway-tax", "unit"])(
     await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
   },
 );
+
+it("shows a refused takeaway rate under its field, not again above Save", async () => {
+  const el = await mountPricing(saved, { takeawayVat: true, vatRates: pickableRates });
+  el.fieldErrors = { "takeaway-tax": "Refused" };
+  await el.updateComplete;
+  expect(errorOf(el, "takeaway-tax")).toBe("Refused");
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+});
+
+it("says a refused takeaway rate above Save where the area charges no takeaway VAT", async () => {
+  const el = await mountPricing(saved, { takeawayVat: false });
+  el.fieldErrors = { "takeaway-tax": "Refused rate" };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[name="takeaway-tax"]')).toBeNull();
+  expect(await bottomOf(el)).toBe("Refused rate");
+});
 
 it("opens the folded Pricing section when Save finds the base price invalid", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });

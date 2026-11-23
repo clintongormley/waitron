@@ -170,7 +170,7 @@ const value: ProductEditorValue = {
   courseId: null,
 };
 /** What Archive sends back: the editor's read without the `vatClass` the save refuses. */
-const archivedBody = withoutVatClass(value);
+const readBody = withoutVatClass(value);
 
 // Drinks is on both menus. A section's customer-facing name differs from its internal one, so the
 // Add to menus step reading the wrong one shows text the assertions refuse.
@@ -565,7 +565,7 @@ describe("menu-screen", () => {
     await flush(el);
     expect(api.getProductEditor).toHaveBeenCalledWith("p1");
     expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-      ...archivedBody,
+      ...readBody,
       active: false,
       available: true,
     });
@@ -769,7 +769,7 @@ describe("menu-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-        ...archivedBody,
+        ...readBody,
         active: false,
       });
     });
@@ -784,7 +784,7 @@ describe("menu-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-        ...archivedBody,
+        ...readBody,
         active: false,
       });
       expect(dialogOf(el).getAttribute("open")).toBeNull();
@@ -1058,7 +1058,7 @@ describe("menu-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
-    const body: ProductSaveBody = { ...archivedBody };
+    const body: ProductSaveBody = { ...readBody };
     delete body.available;
     emit(editor(el), "wt-submit", { value, body });
     await flush(el);
