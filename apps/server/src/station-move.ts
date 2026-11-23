@@ -36,7 +36,7 @@ import {
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
-import { bumpRevisionKeepingPayment, readOrderRevision } from "./working-order.js";
+import { bumpRevisionKeepingPayment, makersByLine, readOrderRevision } from "./working-order.js";
 import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
 
@@ -76,6 +76,7 @@ export async function rerouteHeldAtRelease(
       stationRetainedAtRelease: ticketItems.stationRetainedAtRelease,
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
+      latePeriodId: workingOrderLines.latePeriodId,
       makeAtStationId: workingOrderLines.makeAtStationId,
       groupId: workingOrderLines.groupId,
       quantity: firedQuantity,
@@ -139,9 +140,13 @@ export async function rerouteHeldAtRelease(
   }
   const resolver = await routing();
   const zoneId = (await VENUE_SERVICE.findOrderContext(tx, orderId))?.zoneId ?? null;
-  const routes = await resolver.makers(zoneId, [...new Set(dishes.map((row) => row.productId!))]);
+  const routes = await makersByLine(
+    resolver,
+    zoneId,
+    dishes.map(({ lineId, productId, latePeriodId }) => ({ id: lineId, productId, latePeriodId })),
+  );
   const moving = dishes.flatMap((row) => {
-    const outcome = routes.get(row.productId!);
+    const outcome = routes.get(row.lineId);
     if (
       outcome?.kind !== "made" ||
       outcome.route.kind !== "station" ||

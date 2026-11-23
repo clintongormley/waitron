@@ -4585,9 +4585,7 @@ describe("fireLines (routing resolver + snapshot)", () => {
     });
   });
 
-  it("resolves every fired product's venue-service route in ONE batched call", async () => {
-    // Two lines of coffee and one of water: one call carrying each distinct product once, never a call
-    // per line or per product on the shared transaction.
+  it("routes a round with repeated products from one venue-service snapshot", async () => {
     const { cfg, zoneId, menuId, premiumCoffeeOfferId, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`update departments set order_start = 'table'

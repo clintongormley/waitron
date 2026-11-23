@@ -2,7 +2,7 @@
 
 When the kitchen agrees to make a dish after its period ends, use that period's routing. A Lunch mojito confirmed at 14:05 goes to the Downstairs bar. A dish ordered from the current menu and a late dish sent without asking still use current-period routing. Station availability and fallbacks use the time of routing.
 
-The ask is [A1084 in the backlog](../../backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for) and the 23 November queue. Git log and blame trace the Upstairs assertion to `56202e3637` ([#2051](https://github.com/clintongormley/waitron/pull/2051)). D33 records the controller's decision to defer routing by the agreed period to A1084. The recorded owner answer to Q39 covers the confirmation and PIN. Record that reason and the reversed station assertions in the PR's changed-test section.
+The ask is [the original A1084 backlog entry](https://github.com/clintongormley/waitron/blob/ea2178d378813e1b680444e53137616cc4bd312b/docs/backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for) and the 23 November queue. Git log and blame trace the Upstairs assertion to `56202e3637` ([#2051](https://github.com/clintongormley/waitron/pull/2051)). D33 records the controller's decision to defer routing by the agreed period to A1084. The recorded owner answer to Q39 covers the confirmation and PIN. Record that reason and the reversed station assertions in the PR's changed-test section.
 
 ## Save the period at agreement
 

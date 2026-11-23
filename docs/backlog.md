@@ -568,10 +568,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
 
-- **A1084. A confirmed late dish routes by the period running when it is sent, not the period the
-  kitchen agreed for.** Use the stored period on the fire, hold and release paths.
-  [Detail](backlog/service-periods.md#a1084-a-confirmed-late-dish-routes-by-the-period-running-when-it-is-sent-not-the-period-the-kitchen-agreed-for)
-
 - **`isLocalDate` reads years 0 to 99 as 1900 to 1999**
   [Detail](backlog/service-periods.md#islocaldate-reads-years-0-to-99-as-1900-to-1999)
 

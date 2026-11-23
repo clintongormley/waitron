@@ -589,11 +589,11 @@ zone offer menu, then performed separate product-variant and menu-variant reads.
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
 before its in-memory line loop; the variants come from the offers it holds (`LiveOffer.variants`).
 `working-order.test.ts` spies on `listZoneOffers` and checks that a basket repeating one offer calls
-it once. Kitchen routing follows the same
-rule: `fireLines` calls `VENUE_SERVICE.resolveMakers` once with the distinct product IDs for the
-fire. The case "resolves every fired product's venue-service route in ONE batched call" in
-`apps/server/src/working-order.test.ts` checks both that call and the stations reached by its
-three fired lines. This checks batching at the service boundary, not a fixed database-read count.
+it once. `fireLines` opens one routing snapshot. It groups dishes that need a station decision
+by their agreed period, with a group for dishes without an agreement, and asks `makers` about
+the distinct products in each group. The case "routes a round with repeated products from one
+venue-service snapshot" in `apps/server/src/working-order.test.ts` checks the snapshot count and
+the stations reached by three fired lines.
 
 ## Opening hours store "no claim" as no row
 
@@ -775,6 +775,11 @@ read the stored `late_period_name` and whether there was a confirmer through `re
 A confirmed dish records `working_order_lines.late_period_id` when its period is known. This
 id survives period deletion and follows the dish if the bill is split. Sends without a confirmation
 and confirmations that identify only a menu leave the id empty. Plan D19–D28.
+
+Kitchen routing uses the saved period separately for each dish and its extras. If the period
+belongs to the routing department and the venue clock is readable, its matching line on the
+cell applies. A cell with no line for that period uses its base target. A missing or foreign
+period uses the running period. Station closures and replacements apply at the time of routing.
 
 Extras added later to a dish already sent (stamped sent or holding a ticket item, held or fired)
 whose period ended earlier that day, through either
