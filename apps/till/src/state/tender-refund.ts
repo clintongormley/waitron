@@ -257,7 +257,8 @@ export class TenderRefundSession {
         (code.startsWith("invoice_correction.") ||
           code === "tender.refund_needs_correction" ||
           code === "tender.refund_of_advance" ||
-          code === "advance.taken_off_final_invoice")
+          code === "advance.taken_off_final_invoice" ||
+          code === "sale.correction_not_admitted")
       )
         this.attempts.refused(this.scope, sent);
       // A later refusal cannot establish what an earlier unknown call returned.

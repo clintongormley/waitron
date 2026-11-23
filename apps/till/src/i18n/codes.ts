@@ -518,8 +518,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El desglose del IVA ha cambiado desde que se mostró. Revisa el nuevo desglose y vuelve a pulsar.",
   },
   "invoice_correction.refund_pending": {
-    en: "A refund of this bill is still waiting for its result. Check it under Refund a payment, then try again.",
-    es: "Una devolución de esta cuenta aún espera su resultado. Consúltala en Devolver un pago y vuelve a intentarlo.",
+    en: "A refund of this bill is still waiting for its result. Close this window, open Refund a payment and choose Check pending refund, then try again.",
+    es: "Una devolución de esta cuenta aún espera su resultado. Cierra esta ventana, abre Devolver un pago y elige Consultar devolución pendiente; después vuelve a intentarlo.",
   },
   "invoice_correction.money_short": {
     en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",

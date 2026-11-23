@@ -947,6 +947,27 @@ it("says a dish list that no longer matches the invoice is out of date, in Engli
 });
 
 it.each([
+  [
+    "en",
+    en,
+    "A refund of this bill is still waiting for its result. Close this window, open Refund a payment and choose Check pending refund, then try again.",
+  ],
+  [
+    "es",
+    es,
+    "Una devolución de esta cuenta aún espera su resultado. Cierra esta ventana, abre Devolver un pago y elige Consultar devolución pendiente; después vuelve a intentarlo.",
+  ],
+] as const)(
+  "in %s, sends staff to the pending refund's own check from Correct invoice and from Refund a payment",
+  (locale, words, sentence) => {
+    const message = codeMessage("invoice_correction.refund_pending", locale);
+    expect(message).toBe(sentence);
+    expect(message).toContain(words["tender_refund.title"]);
+    expect(message).toContain(words["tender_refund.pending_payment"]);
+  },
+);
+
+it.each([
   "invoice_correction.not_settled",
   "invoice_correction.already_open",
   "invoice_correction.refund_pending",
