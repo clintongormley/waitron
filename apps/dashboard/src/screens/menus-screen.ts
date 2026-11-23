@@ -919,7 +919,7 @@ export class MenusScreen extends LitElement {
     if (changed.has("menus") || changed.has("statuses") || changed.has("statusesError"))
       this.#rows = this.menus.map((menu) => ({
         ...menu,
-        status: this.statuses?.[menu.id] ?? (this.statusesError ? "failed" : "loading"),
+        status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
       }));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));

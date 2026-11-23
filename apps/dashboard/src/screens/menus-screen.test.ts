@@ -1970,6 +1970,44 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
+  it("says every menu could not be checked, with no links, when a live refresh of the states fails, and brings them back on Try again", async () => {
+    await at([1280, 900], "en-GB", async () => {
+      const live = new LiveData();
+      const read = {
+        ...statuses(),
+        "menu-lunch": { ...statuses()["menu-lunch"], clashes: 2 },
+        "menu-brunch": { state: "unpublished", clashes: 0 },
+      };
+      const client = mixed({
+        liveData: live,
+        getMenuStatuses: vi
+          .fn()
+          .mockResolvedValueOnce(read)
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue(read),
+      });
+      const el = await listed(client);
+      expect(text(link(el, "menu-lunch"))).toBe("Unpublished changes");
+      expect(text(clashLink(el, "menu-lunch"))).toBe("2 price clashes");
+      live.invalidate([{ type: "menu_versions" }]);
+      await vi.waitFor(() => expect(q(el, '[data-test="statuses-error"]')).not.toBeNull());
+      await table(el).updateComplete;
+      for (const id of ["menu-lunch", "menu-dinner", "menu-brunch"]) {
+        expect(statusOf(el, id), id).toBe("Could not be checked");
+        expect(row(el, id).querySelector("a"), id).toBeNull();
+      }
+      q<HTMLElement>(el, '[data-test="statuses-retry"]')!.click();
+      await vi.waitFor(() => expect(q(el, '[data-test="statuses-error"]')).toBeNull());
+      await vi.waitFor(async () => {
+        await table(el).updateComplete;
+        expect(statusOf(el, "menu-lunch")).toBe("Published · 1 hour ago");
+      });
+      expect(text(link(el, "menu-lunch"))).toBe("Unpublished changes");
+      expect(text(clashLink(el, "menu-lunch"))).toBe("2 price clashes");
+      expect(client.getMenuStatuses).toHaveBeenCalledTimes(3);
+    });
+  });
+
   it("opens the menu's Preview tab straight from the link, never its first tab or the row", async () => {
     await at([1280, 900], "en-GB", async () => {
       const opens = opened();
