@@ -824,9 +824,9 @@ describe("an advance once the rest's invoice has taken it off", () => {
     const path = `/api/transactions/${advanceId}/refundable-tenders`;
     const before = await send(venue().app, venue().cookie, "GET", path);
     expect(before.status, JSON.stringify(before.json)).toBe(200);
-    expect((before.json as unknown[])[0]).toMatchObject({ manual: true });
-    expect((before.json as unknown[])[0]).not.toHaveProperty("correctionOpen");
-    expect((before.json as unknown[])[0]).not.toHaveProperty("plainRefundLimit");
+    expect((before.json as unknown as unknown[])[0]).toMatchObject({ manual: true });
+    expect((before.json as unknown as unknown[])[0]).not.toHaveProperty("correctionOpen");
+    expect((before.json as unknown as unknown[])[0]).not.toHaveProperty("plainRefundLimit");
 
     const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
     expect(opened.status, JSON.stringify(opened.json)).toBe(200);
