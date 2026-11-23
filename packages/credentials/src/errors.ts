@@ -62,9 +62,10 @@ declare module "@waitron/shared" {
      * typed, never file CONTENT, and no underlying error message is carried. */
     "credentials.payload_unreadable": { source: "file" | "stdin"; path: string | null };
     /** Not a master key: text that does not read as its printed form, bytes that are not 24 long,
-     * or stored bytes that are not an X25519 public key. */
+     * or bytes that are not an X25519 public key a packet can be sealed to. */
     "master_key.invalid": { reason: "printed_form" | "length" | "public_key" };
-    /** A backup key number that is not a positive safe integer, or a box id that is not a UUID. */
+    /** A backup key number outside 1 to 0xffffffff (what an archive's four-byte field can name),
+     * or a box id that is not a UUID. */
     "master_key.derivation_input_invalid": { input: "backup_key_number" | "box_id" };
     /** Too short to be a sealed packet, or not one of this version. */
     "sealed_packet.malformed": Record<string, never>;

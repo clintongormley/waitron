@@ -1,10 +1,14 @@
 import { AppError } from "./errors.js";
 
-const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** The 32 symbols of every printed code: digits and capitals without I, L, O and U. */
+export const TYPED_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const alphabet = TYPED_CODE_ALPHABET;
 function refuse(): never {
   throw new AppError("shared.invalid_key_code", {});
 }
-function normaliseTyped(text: string): string {
+/** Reads typed text as code symbols: drops spaces, tabs, line breaks and hyphens, upper-cases, and
+ * reads O as 0 and I or L as 1. Refuses any other character. */
+export function normaliseTypedCode(text: string): string {
   if (typeof text !== "string" || /[^0-9A-Za-z \t\r\n-]/.test(text)) refuse();
   const value = text
     .replace(/[ \t\r\n-]/g, "")
@@ -43,7 +47,7 @@ export function encodeMasterKeyCode(secret: string): string {
 }
 /** Reads a printed code, in any case and spacing, back to its 24 bytes as base64url text. */
 export function decodeMasterKeyCode(printed: string): string {
-  const value = normaliseTyped(printed);
+  const value = normaliseTypedCode(printed);
   if (value.length !== 41 || residue(value) !== 0) refuse();
   let buffer = 0,
     bits = 0,

@@ -1,3 +1,4 @@
+import { normaliseTypedCode as normaliseSharedCode, TYPED_CODE_ALPHABET } from "@waitron/shared";
 import type {
   RegisterScope,
   RegisterPosition,
@@ -8,7 +9,7 @@ import type {
   PrintedNodeBlock,
 } from "./paper-register-protocol.js";
 
-const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const alphabet = TYPED_CODE_ALPHABET;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 function refuse(): never {
@@ -47,14 +48,11 @@ function checkedPosition(position: RegisterPosition): void {
     if (!Number.isInteger(value) || value < 0 || value > 999999) refuse();
 }
 export function normaliseTypedCode(text: string): string {
-  if (typeof text !== "string" || /[^0-9A-Za-z \t\r\n-]/.test(text)) refuse();
-  const value = text
-    .replace(/[ \t\r\n-]/g, "")
-    .toUpperCase()
-    .replaceAll("O", "0")
-    .replace(/[IL]/g, "1");
-  if (/[^0-9ABCDEFGHJKMNPQRSTVWXYZ]/.test(value)) refuse();
-  return value;
+  try {
+    return normaliseSharedCode(text);
+  } catch {
+    refuse();
+  }
 }
 function base32(bytes: Uint8Array): string {
   let buffer = 0,

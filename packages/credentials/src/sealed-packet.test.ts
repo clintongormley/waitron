@@ -8,7 +8,12 @@ import {
 } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { makeMasterKey, masterKeyId, sealingPublicKey } from "./master-key.js";
+import {
+  makeMasterKey,
+  masterKeyId,
+  sealingPublicKey,
+  type SealingPublicKey,
+} from "./master-key.js";
 import { openPacket, packetMasterKeyId, sealPacket } from "./sealed-packet.js";
 
 const masterKey = Buffer.from("000102030405060708090a0b0c0d0e0f1011121314151617", "hex");
@@ -141,6 +146,13 @@ describe("a WSP1 packet opens with the master key; another key and a changed hea
     expect(refusal(() => packetMasterKeyId(bytes)).code).toBe("sealed_packet.malformed");
   });
 
+  it("returns a key id that does not hold the packet's memory", () => {
+    const large = sealPacket(venuePublicKey, Buffer.alloc(1024 * 1024));
+    const id = packetMasterKeyId(large);
+    expect(id.equals(masterKeyId(venuePublicKey))).toBe(true);
+    expect(id.buffer.byteLength).toBeLessThan(64 * 1024);
+  });
+
   it("refuses a master key that is not 24 bytes", () => {
     const error = refusal(() => openPacket(Buffer.alloc(23), packet));
     expect(error.code).toBe("master_key.invalid");
@@ -154,5 +166,21 @@ describe("sealing takes only the public key", () => {
     expect(() => sealPacket(masterKey, plaintext)).toThrow();
     // @ts-expect-error Unchecked bytes are not a sealing public key until sealingPublicKeyFrom reads them.
     expect(() => sealPacket(Buffer.from(venuePublicKey), plaintext)).not.toThrow();
+  });
+
+  it("refuses to seal to bytes that are not a public key", () => {
+    const error = refusal(() => sealPacket(masterKey as SealingPublicKey, plaintext));
+    expect(error.code).toBe("master_key.invalid");
+    expect(error.params).toEqual({ reason: "public_key" });
+  });
+
+  it.each([
+    ["the all-zero point", "00".repeat(32)],
+    ["a point of order 8", "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"],
+  ])("refuses to seal to %s, which no key can open", (_label, u) => {
+    const unchecked = Buffer.from(`302a300506032b656e032100${u}`, "hex") as SealingPublicKey;
+    const error = refusal(() => sealPacket(unchecked, plaintext));
+    expect(error.code).toBe("master_key.invalid");
+    expect(error.params).toEqual({ reason: "public_key" });
   });
 });

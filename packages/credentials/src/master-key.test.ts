@@ -18,6 +18,13 @@ import {
 const fixedKey = Buffer.from("000102030405060708090a0b0c0d0e0f1011121314151617", "hex");
 const boxId = "0f8e2c1a-7b3d-4e5f-9a6b-1c2d3e4f5a6b";
 
+// Small-order X25519 points: every agreement with one is all zeros, so nothing can be sealed to it.
+const smallOrderKeys: [string, Buffer][] = [
+  ["the all-zero point", "00".repeat(32)],
+  ["the point u = 1", `01${"00".repeat(31)}`],
+  ["a point of order 8", "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800"],
+].map(([label, u]) => [label!, Buffer.from(`302a300506032b656e032100${u!}`, "hex")]);
+
 function refusal(run: () => unknown): AppError {
   try {
     run();
@@ -148,17 +155,28 @@ describe("derivation inputs", () => {
     expect(backupKey(fixedKey, 3).equals(backupKey(fixedKey, 4))).toBe(false);
   });
 
-  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
-    "refuses backup key number %s",
-    (n) => {
-      const error = refusal(() => backupKey(fixedKey, n));
-      expect(error.code).toBe("master_key.derivation_input_invalid");
-      expect(error.params).toEqual({ input: "backup_key_number" });
-    },
-  );
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    0x1_0000_0000,
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("refuses backup key number %s", (n) => {
+    const error = refusal(() => backupKey(fixedKey, n));
+    expect(error.code).toBe("master_key.derivation_input_invalid");
+    expect(error.params).toEqual({ input: "backup_key_number" });
+  });
 
-  it("takes the largest safe integer as a backup key number", () => {
-    expect(backupKey(fixedKey, Number.MAX_SAFE_INTEGER)).toHaveLength(32);
+  it("takes 0xffffffff, the largest number an archive's four-byte field can name", () => {
+    const salt = Buffer.from("waitron.master-key.v1", "ascii");
+    expect(
+      backupKey(fixedKey, 0xffff_ffff).equals(
+        Buffer.from(hkdfSync("sha256", fixedKey, salt, "backup-key.4294967295", 32)),
+      ),
+    ).toBe(true);
   });
 
   it.each(["", "box-1", `${boxId}0`, ` ${boxId}`])("refuses box id %j", (id) => {
@@ -180,6 +198,7 @@ describe("a stored sealing public key", () => {
     ["a key with a byte after it", Buffer.concat([sealingPublicKey(fixedKey), Buffer.from([0])])],
     ["an Ed25519 key", Buffer.from("302a300506032b6570032100" + "11".repeat(32), "hex")],
     ["the master key itself", fixedKey],
+    ...smallOrderKeys,
   ])("refuses %s", (_label, bytes) => {
     const error = refusal(() => sealingPublicKeyFrom(bytes));
     expect(error.code).toBe("master_key.invalid");

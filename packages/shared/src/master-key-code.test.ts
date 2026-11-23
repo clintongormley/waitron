@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "./master-key-code.js";
+import { normaliseTypedCode, TYPED_CODE_ALPHABET } from "./index.js";
 
 const secret = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
 const printed = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
@@ -63,4 +64,11 @@ it("refuses symbols outside the alphabet even when the check symbols balance", (
   expect(() => decodeMasterKeyCode("9FXXXES72K7VF3Q07H1UCB12GD0QRN3ETGZ5U6RHD")).toThrow(
     "shared.invalid_key_code",
   );
+});
+
+it("normalises typed text through the package's public name: separators out, aliases to digits", () => {
+  expect(normaliseTypedCode("o-i L\taz\r\n9")).toBe("011AZ9");
+  expect(TYPED_CODE_ALPHABET).toBe(alphabet);
+  for (const bad of [" ", "\v", "U", "=", "ı"])
+    expect(() => normaliseTypedCode(`0${bad}`)).toThrow("shared.invalid_key_code");
 });

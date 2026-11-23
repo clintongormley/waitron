@@ -4,7 +4,12 @@ export { isDashboardAssetPath, isDashboardPath } from "./app-surfaces.js";
 // did not reliably suppress them.
 export { AppError, hasCode, isAppError } from "./errors.js";
 export { shortNodeId } from "./short-node-id.js";
-export { decodeMasterKeyCode, encodeMasterKeyCode } from "./master-key-code.js";
+export {
+  decodeMasterKeyCode,
+  encodeMasterKeyCode,
+  normaliseTypedCode,
+  TYPED_CODE_ALPHABET,
+} from "./master-key-code.js";
 export type { ErrorCode, ErrorParams } from "./errors.js";
 export type {
   Branded,
