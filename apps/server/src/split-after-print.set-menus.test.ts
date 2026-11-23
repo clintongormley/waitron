@@ -196,3 +196,48 @@ it("a comped set-menu dish splits after print with its comp", async () => {
   expect(suggestion?.moves).toEqual([]);
   expect(suggestion?.place).toMatchObject({ setMenuLineId: third.lineId, place: 1 });
 });
+
+it("a comped set menu splits after print with its comp", async () => {
+  const tab = await specBill(spec, "fire");
+  const daily = (await specRows(spec, tab.tabId)).find(({ id }) => id === tab.daily[0])!;
+  expect(daily).toMatchObject({ setMenuRole: "set_menu", lineTotal: 1400 });
+  await comp(tab.tabId, daily.lineNo);
+  await serveSpecBill(spec, tab.partyId, tab.tabId);
+  await printSpecBill(spec, tab.partyId, tab.tabId);
+  const { billId } = await split(tab.tabId);
+
+  const copied = await specRows(spec, billId);
+  const copy = copied.find(({ lineNo }) => lineNo === daily.lineNo)!;
+  expect(copy).toMatchObject({
+    setMenuRole: "set_menu",
+    unitPriceGross: 0,
+    lineTotal: 0,
+    listUnitPriceGross: 1400,
+  });
+  const reductions = (lineId: string) =>
+    venue.db
+      .select({
+        adjustmentId: adjustmentLines.adjustmentId,
+        reduction: adjustmentLines.reduction,
+        quantity: adjustmentLines.quantity,
+      })
+      .from(adjustmentLines)
+      .where(inArray(adjustmentLines.lineId, [lineId]));
+  const original = await reductions(daily.id);
+  expect(original).toMatchObject([{ reduction: 1400 }]);
+  expect(await reductions(copy.id)).toEqual(original);
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(5900);
+  expect(
+    copied.filter(({ setMenuLineId }) => setMenuLineId === copy.id).map(({ name }) => name),
+  ).toEqual(
+    (await specRows(spec, tab.tabId))
+      .filter(({ setMenuLineId }) => setMenuLineId === daily.id)
+      .map(({ name }) => name),
+  );
+
+  const { saleId } = await printSpecBill(spec, tab.partyId, billId);
+  const refiled = (await specSaleLines(spec, billId, saleId!)).find(
+    ({ lineNo }) => lineNo === daily.lineNo,
+  )!;
+  expect(refiled).toMatchObject({ setMenuRole: "set_menu", lineGross: 0 });
+});
