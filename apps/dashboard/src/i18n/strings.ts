@@ -605,6 +605,8 @@ export const en = {
   "folders.count_one": "1 category",
   "folders.product_count": "{count} products",
   "folders.product_count_one": "1 product",
+  "folders.matching_products": "{matching} of {total} products",
+  "folders.matching_products_one": "{matching} of 1 product",
   "folders.routes_warning": "{count} station routing rules name these categories and are removed.",
   "folders.routes_warning_one": "1 station routing rule names these categories and is removed.",
   "folders.no_active_station": "No active station assigned",
@@ -5339,6 +5341,8 @@ export const es: Record<StringKey, string> = {
   "folders.count_one": "1 categoría",
   "folders.product_count": "{count} productos",
   "folders.product_count_one": "1 producto",
+  "folders.matching_products": "{matching} de {total} productos",
+  "folders.matching_products_one": "{matching} de 1 producto",
   "folders.routes_warning":
     "{count} reglas de envío a la estación nombran estas categorías y se eliminan.",
   "folders.routes_warning_one":

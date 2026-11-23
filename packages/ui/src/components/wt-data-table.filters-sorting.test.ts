@@ -273,6 +273,40 @@ async function treeTable(props: Partial<WtDataTable<TreeRow>>): Promise<WtDataTa
   return el;
 }
 
+test("an opted-in tree uses pruned filter candidates for both search roots and open branches", async () => {
+  const el = await treeTable({
+    rows: [
+      { id: "root", parent: null, name: "Coffee" },
+      { id: "empty", parent: "root", name: "Coffee supplies" },
+      { id: "served", parent: "root", name: "Espresso" },
+      { id: "archived", parent: "root", name: "Coffee retired" },
+    ],
+    columns: [
+      {
+        ...treeColumns[0]!,
+        cell: (row, { filterMatches }) => `${row.name} ${filterMatches?.length ?? "all"}`,
+        filter: {
+          label: "Status",
+          allLabel: "All",
+          value: (row) => (row.id === "archived" ? "archived" : "active"),
+          options: [{ value: "active", label: "Active" }],
+        },
+      },
+    ],
+    filterCandidates: (rows, hasFilters) =>
+      hasFilters ? rows.filter((row) => row.id !== "empty") : rows,
+    searchTerm: "coffee",
+  });
+  expect(el.shownKeys()).toEqual(["root", "archived", "empty"]);
+  el.chooseFilter("name", ["active"]);
+  await el.updateComplete;
+  expect(el.shownKeys()).toEqual(["root"]);
+  const cell = el.shadowRoot!.querySelector('tr[data-row-key="root"] td')!;
+  expect(cell.textContent).toContain("Coffee 3");
+  await el.revealRow("served");
+  expect(el.shownKeys()).toEqual(["root", "served"]);
+});
+
 test("a flat tree search puts equally close matches in their group order", async () => {
   const el = await treeTable({
     rows: [

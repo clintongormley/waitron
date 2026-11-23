@@ -5927,6 +5927,95 @@ describe("product-list filters (A463)", () => {
     expect(rowKeys(root)).toEqual(["a-plain"]);
   });
 
+  describe("matching category counts", () => {
+    beforeEach(() => setLocale("en"));
+
+    const withModifiers = [{ kind: "extras" as const, id: "ex-1" }];
+    const count = (root: ShadowRoot, id: string) =>
+      root.querySelector(`[data-test="count-${id}"]`)?.textContent?.trim();
+
+    it("keeps only categories with Modifiers matches, including matches in subcategories", async () => {
+      const { el, root } = await mountTree({
+        products: treeProducts().map((row) =>
+          row.id === "lager" ? { ...row, modifiers: withModifiers } : row,
+        ),
+      });
+      expect(count(root, "d")).toBe("1 category, 1 product");
+      await choose(el, "modifiers", "has");
+      expect(rowKeys(root)).toEqual(["folder:d"]);
+      expect(count(root, "root")).toBe("1 of 3 products");
+      expect(count(root, "d")).toBe("1 of 2 products");
+      await openRow(el, "folder:d");
+      expect(count(root, "b")).toBe("1 of 1 product");
+      await openRow(el, "folder:b");
+      expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager"]);
+      await choose(el, "modifiers", "");
+      expect(count(root, "d")).toBe("1 category, 1 product");
+      expect(count(root, "f")).toBe("0 products");
+    });
+
+    it("counts a product once when only its variants match Course, and adds archived matches when shown", async () => {
+      const { el, root } = await mountTree({
+        courses: [starters, mains],
+        products: [
+          product({ id: "cola", primaryCategoryId: "d", courseId: "mains" }),
+          product({ id: "ale", primaryCategoryId: "d", courseId: "starters", active: false }),
+          product({
+            id: "lager",
+            primaryCategoryId: "b",
+            courseId: "mains",
+            variants: [
+              { ...bunVariant, courseId: "starters" },
+              { ...bunVariant, id: "large", courseId: "starters" },
+            ],
+          }),
+        ],
+      });
+      await choose(el, "course", ["starters"]);
+      expect(count(root, "d")).toBe("1 of 2 products");
+      await showArchived(el);
+      expect(count(root, "d")).toBe("2 of 3 products");
+    });
+
+    it("drops a category when its products satisfy the two filters only separately", async () => {
+      const { el, root } = await mountTree({
+        courses: [starters, mains],
+        products: [
+          product({
+            id: "cola",
+            primaryCategoryId: "d",
+            courseId: "mains",
+            modifiers: withModifiers,
+          }),
+          product({ id: "lager", primaryCategoryId: "b", courseId: "starters" }),
+        ],
+      });
+      await choose(el, "modifiers", "has");
+      await choose(el, "course", ["starters"]);
+      expect(rowKeys(root)).toEqual([]);
+      expect(count(root, "root")).toBe("0 of 2 products");
+    });
+
+    it("searches empty categories by name until a column filter is applied", async () => {
+      const { el, table, root } = await mountTree({
+        products: treeProducts().map((row) =>
+          row.id === "cola" ? { ...row, modifiers: withModifiers } : row,
+        ),
+        search: "Food",
+      });
+      expect(rowKeys(root)).toEqual(["folder:f"]);
+      await choose(el, "modifiers", "has");
+      expect(rowKeys(root)).toEqual([]);
+      el.search = "Drinks";
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(rowKeys(root)).toEqual(["folder:d"]);
+      expect(count(root, "d")).toBe("1 of 2 products");
+      await openRow(el, "folder:d");
+      expect(rowKeys(root)).toEqual(["folder:d", "cola"]);
+    });
+  });
+
   it("keeps products by allergen state, a never-checked one apart from a checked allergen-free one", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {

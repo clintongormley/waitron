@@ -391,6 +391,7 @@ export class ProductList extends LitElement {
   #rowList: ListRow[] = [];
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
+  #branchCounts = new WeakMap<readonly ListRow[], ReadonlyMap<string, number>>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #dragged: string[] = [];
   #hover: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -897,7 +898,44 @@ export class ProductList extends LitElement {
     return counts;
   }
 
-  #contents(categoryId: string | null): string {
+  #productsByBranch(rows: readonly ListRow[]): ReadonlyMap<string, number> {
+    const cached = this.#branchCounts.get(rows);
+    if (cached) return cached;
+    const counts = new Map<string, number>();
+    const products = new Set<string>();
+    for (const row of rows) {
+      if (row.kind !== "product" || products.has(row.product.id)) continue;
+      products.add(row.product.id);
+      const visited = new Set<string>();
+      let branch = this.#rowByKey.get(row.product.id)?.parentKey;
+      while (branch && !visited.has(branch)) {
+        visited.add(branch);
+        counts.set(branch, (counts.get(branch) ?? 0) + 1);
+        branch = this.#rowByKey.get(branch)?.parentKey ?? undefined;
+      }
+    }
+    this.#branchCounts.set(rows, counts);
+    return counts;
+  }
+
+  readonly #filterCandidates = (rows: readonly ListRow[], hasFilters: boolean) => {
+    if (!hasFilters) return rows;
+    const counts = this.#productsByBranch(rows);
+    return rows.filter(
+      (row) => row.kind !== "folder" || counts.has(row.key) || this.#renaming(row.folder.id),
+    );
+  };
+
+  #contents(categoryId: string | null, filterMatches?: readonly ListRow[]): string {
+    if (filterMatches !== undefined) {
+      const key = categoryId === null ? ROOT_KEY : `folder:${categoryId}`;
+      const total = this.#productsByBranch(this.#rowList).get(key) ?? 0;
+      const matching = this.#productsByBranch(filterMatches).get(key) ?? 0;
+      return fill(total === 1 ? "folders.matching_products_one" : "folders.matching_products", {
+        matching: String(matching),
+        total: String(total),
+      });
+    }
     const { categories, products } = this.#counts.get(categoryId) ?? { categories: 0, products: 0 };
     const parts = categories > 0 ? [countOf("folders.count", categories)] : [];
     if (products > 0 || categories === 0) parts.push(countOf("folders.product_count", products));
@@ -1285,7 +1323,7 @@ export class ProductList extends LitElement {
       choosable: column.choosable,
       pinned: column.pinned,
       activatesRow: column.activatesRow,
-      cell: (row, context) => {
+      cell: (row, { filterMatches, ...context }) => {
         if (row.kind === "product") return column.cell(row, context);
         if (row.kind === "draft")
           return column.key === "name"
@@ -1305,7 +1343,9 @@ export class ProductList extends LitElement {
               )}<span part="folder-name"
                 ><span
                   ><strong>${t("folders.all_products")}</strong
-                  ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+                  ><span part="count" data-test="count-root"
+                    >${this.#contents(null, filterMatches)}</span
+                  ></span
                 ></span
               ></span
             >`;
@@ -1321,7 +1361,7 @@ export class ProductList extends LitElement {
         const { folder } = row;
         if (column.key === "name") {
           const after = html`<span part="count" data-test=${`count-${folder.id}`}
-              >${this.#contents(folder.id)}</span
+              >${this.#contents(folder.id, filterMatches)}</span
             >${
               this.unroutedFolderIds.includes(folder.id)
                 ? html`<span
@@ -1512,6 +1552,7 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch
+        .filterCandidates=${this.#filterCandidates}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}
