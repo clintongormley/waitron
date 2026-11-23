@@ -159,7 +159,7 @@ describe("fiscalUnreturned", () => {
     ).toEqual([]);
   });
 
-  it("lists the whole chain when the main box's record at that number is missing here", async () => {
+  it("lists a chain whole when the main box is ahead of this box on it, which this box cannot check", async () => {
     const node = await seedNode(suite.db, "Ahead");
     const first = await append(node, 1);
     const path = await copy();

@@ -15,7 +15,7 @@ export interface ReturnDiscrepancy {
   held: CanonicalValue;
 }
 
-/** One of another box's records this box holds and the main box's holdings do not cover. */
+/** A record this box holds, on any of its chains, that the main box's holdings do not cover. */
 export interface UnreturnedRecord {
   saleId: string;
   /** The record's position in its chain. */
@@ -28,7 +28,11 @@ export interface UnreturnedRecord {
 
 export interface UnreturnedChain {
   ids: Readonly<Record<string, string>>;
-  /** True when the main box's holdings do not match this chain, so every record is listed. */
+  /**
+   * True when the main box's summary does not show it holds this box's part of the chain (it lacks
+   * the chain, disagrees with it, or is ahead of this box on it, which this box cannot check), so
+   * every record is listed.
+   */
   whole: boolean;
   records: UnreturnedRecord[];
 }
@@ -64,8 +68,9 @@ export interface ModuleHandoverContribution {
    */
   lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;
   /**
-   * The records in this database that the main box's `holdings` do not cover, by chain; a chain
-   * the main box holds whole is left out. Holdings not in the module's shape throw
+   * The records in this database that the main box's `holdings` do not cover, by chain; a chain is
+   * left out only when those holdings show the main box holds this box's part of it. Holdings not in
+   * the module's shape throw
    * `MalformedHoldingsError`.
    */
   unreturned?(query: BackupQuery, mainHoldings: CanonicalValue): Promise<UnreturnedChain[]>;
