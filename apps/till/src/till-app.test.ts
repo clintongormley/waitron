@@ -27798,10 +27798,12 @@ describe("A737 post-invoice refund integration", () => {
     expect(refundKeys()).toEqual([]);
   });
   it("a completed refund keeps the Transactions query, filters, sorting and page while leaving the basket intact", async () => {
-    const listTransactions = vi.fn(async (query: { page: number }) => ({
-      ...listPage([transactionRow()], 101, query.page),
-      dates: resolvedDates,
-    }));
+    let searchRequested!: () => void;
+    const searchRequest = new Promise<void>((resolve) => (searchRequested = resolve));
+    const listTransactions = vi.fn(async (query: { page: number; q: string }) => {
+      if (query.q === "0091 ") searchRequested();
+      return { ...listPage([transactionRow()], 101, query.page), dates: resolvedDates };
+    });
     const { el, view, basket } = await open({ listTransactions });
     emit(ticket(el)!, "back-to-find-bill");
     await flush(el);
@@ -27831,9 +27833,8 @@ describe("A737 post-invoice refund integration", () => {
     await vi.waitFor(() => expect(grid.loading).toBe(false));
     const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
     await userEvent.fill(page.elementLocator(search), "0091 ");
-    await vi.waitFor(() =>
-      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " }),
-    );
+    await searchRequest;
+    expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " });
     await vi.waitFor(() => expect(grid.loading).toBe(false));
     await userEvent.click(
       page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
