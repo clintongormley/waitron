@@ -658,9 +658,12 @@ async function passwordSignIn(
   if (code !== undefined) await edit(el, "handover-code", code);
   q(el, "[data-test=sign-in-password]").click();
 }
+/** Signs in and waits for the copy before Switch, or for the progress list after it. */
 async function authenticate(el: SetupHandoverScreen) {
   await passwordSignIn(el, signIn.email, signIn.password, signIn.totp);
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=emergency-copy]") ?? q(el, "[data-test=step-switch]")).not.toBeNull(),
+  );
 }
 /** Proceeds from the prepared copy, then completes Ready to switch. */
 async function declarationFields(el: SetupHandoverScreen) {
@@ -1145,11 +1148,12 @@ it("clears saved reason and secret inputs on an account change, and clears secre
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
   await vi.waitFor(() => expect(q(el, "[data-test=change-email]")).not.toBeNull());
-  expect(el.shadowRoot!.textContent).toContain(saved.reason);
+  // After Switch the page no longer draws the reason, so the kept value is read directly.
+  expect(Reflect.get(el, "reason")).toBe(saved.reason);
   q(el, "[data-test=change-email]").click();
   await el.updateComplete;
   await edit(el, "handover-email", "another@example.com");
-  expect(el.shadowRoot!.textContent).not.toContain(saved.reason);
+  expect(Reflect.get(el, "reason")).toBe("");
   await toMethods(el, "another@example.com");
   expect(q(el, '[name="handover-password"]').shadowRoot!.querySelector("input")!.value).toBe("");
   await edit(el, "handover-password", signIn.password);
@@ -1526,7 +1530,8 @@ it.each(["en-GB", "es-ES"])(
 it("a saved declaration is resumed without taking a copy again", async () => {
   const { el, posts } = await mount({ saved: true, held: true, takes: ["restarting"] });
   await check(el);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(saved.reason));
+  await vi.waitFor(() => expect(q(el, "[data-test=step-switch]")).not.toBeNull());
+  expect(Reflect.get(el, "reason")).toBe(saved.reason);
   expect(followedTakes(posts)).toBe(0);
 });
 
@@ -1810,7 +1815,8 @@ it("after a refused take, a declaration saved elsewhere meanwhile is resumed ins
   await check(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.followed_failed")));
   await vi.advanceTimersByTimeAsync(6000);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(saved.reason));
+  await vi.waitFor(() => expect(q(el, "[data-test=step-switch]")).not.toBeNull());
+  expect(Reflect.get(el, "reason")).toBe(saved.reason);
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting"));
   expect(location.pathname).toBe(`/handover/${saved.operationId}`);
@@ -2681,7 +2687,7 @@ it("a click in the clock step that sends nothing lets no prompt open for an auto
   const sent = posts.length;
   await vi.advanceTimersByTimeAsync(15_000);
   await vi.waitFor(() => expect(posts).toHaveLength(sent + 1));
-  q(entry, "h3").click();
+  q(entry, "[data-test=clock-wait]").click();
   open();
   await vi.waitFor(() =>
     expect(
@@ -3551,15 +3557,18 @@ it("a successful Switch folds a sign-in a refusal opened on Ready to switch", as
   expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
 });
 
-it("a fresh declaration's Details show the time it was saved", async () => {
+it("after a fresh Switch the page shows only its progress, not the copy, its details or the saved sentence", async () => {
   const { el } = await mount({ secondClockMissing: 1 });
   await authenticate(el);
+  expect(q(el, "[data-test=emergency-copy]")).not.toBeNull();
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
   await startVenue(el);
-  expect(q(el, "[data-test=emergency-details]").textContent).toContain(
-    `${t("handover.emergency.declared_at")} ${new Date(saved.declaredAtMs).toLocaleString("en-GB")}`,
-  );
+  await vi.waitFor(() => expect(q(el, "[data-test=step-switch]")).not.toBeNull());
+  expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+  expect(q(el, "[data-test=emergency-details]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("h2")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("The switch is saved and cannot be undone.");
 });
 
 it.each(["en-GB", "es-ES"])(
@@ -3629,28 +3638,19 @@ it.each(["en-GB", "es-ES"])(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "after Declare, says the switch is saved and folds the copy's details, the reason and the time (%s)",
+  "a resumed switch shows only its progress after sign-in, not the copy, its details, the reason or the time (%s)",
   async (locale) => {
     setLocale(locale);
     const { el } = await mount({ saved: true });
     await authenticate(el);
-    const copy = q(el, "[data-test=emergency-copy]");
-    const saved_ = [...copy.querySelectorAll(":scope > p")].map((p) => p.textContent!.trim());
-    expect(saved_).toEqual([t("handover.emergency.saved")]);
-    const details = copy.querySelector<HTMLDetailsElement>(":scope > details")!;
-    expect(details.open).toBe(false);
-    expect(details.querySelector("summary")!.textContent!.trim()).toBe(
-      t("handover.emergency.details"),
-    );
-    expect(details.textContent).toContain(saved.reason);
-    expect(details.textContent).toContain(t("handover.emergency.declared_at"));
-    expect(details.textContent).toContain(t("handover.emergency.no_date"));
-    expect(details.querySelector<HTMLAnchorElement>("a")!.getAttribute("href")).toBe(
-      preview.sourceServersUrl,
-    );
+    expect(heading(el)).toBe(t("handover.emergency.switching_to"));
+    expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("details")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(saved.reason);
+    expect(el.shadowRoot!.querySelector(`a[href="${preview.sourceServersUrl}"]`)).toBeNull();
     q(el, "[data-test=authenticate]").click();
     await startVenue(el);
-    expect(details.contains(q(el, "vf-recovery-hour"))).toBe(false);
+    expect(q(el, "[data-test=emergency-copy]")).toBeNull();
   },
 );
 
@@ -3979,6 +3979,15 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(q(entry, "[data-test=clock-heading]").textContent!.trim()).toBe(
       locale === "en-GB" ? "Check the time" : "Comprueba la hora",
     );
+    // The page reads h1 Switching to this box, then h2 Check the time, with nothing between.
+    const headings = [
+      ...el.shadowRoot!.querySelectorAll("h1, h2, h3, h4"),
+      ...entry.shadowRoot!.querySelectorAll("h1, h2, h3, h4"),
+    ].map((h) => [h.tagName, h.textContent!.trim()]);
+    expect(headings).toEqual([
+      ["H1", words.heading],
+      ["H2", locale === "en-GB" ? "Check the time" : "Comprueba la hora"],
+    ]);
     q(entry, "[data-test=confirm-time]").click();
     await vi.waitFor(() => expect(rows(el)[1]).toEqual(["step-clock", "done", words.confirmed]));
     expect(rows(el)[2]).toEqual(["step-start", "working", words.starting]);

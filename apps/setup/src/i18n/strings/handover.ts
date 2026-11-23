@@ -51,8 +51,6 @@ export const handoverEn = {
     "Your passkey sign-in on the spare has expired. Choose Use your passkey to try again.",
   "handover.emergency.held_passkey_refused":
     "This spare's own copy did not accept your passkey. To use it, sign in with your password.",
-  "handover.emergency.saved": "The switch is saved and cannot be undone.",
-  "handover.emergency.details": "Details",
   "handover.emergency.copy": "Copy held on this spare",
   "handover.emergency.selected_backup": "Selected backup",
   "handover.emergency.followed": "Latest copy from the main box",
@@ -91,7 +89,6 @@ export const handoverEn = {
   "handover.emergency.copy_changed":
     "The copy changed while you were reading. Check its latest sale or order, then Proceed and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest sale or order in this copy",
-  "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "This copy holds no sale or order with a date.",
   "handover.emergency.servers": "Open the Servers page on the old main box",
   "handover.emergency.sourceSwitchedOff": "The old main box is switched off.",
@@ -273,13 +270,10 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Tu identificación con passkey en el servidor de reserva ha caducado. Elige Usar tu passkey para volver a intentarlo.",
   "handover.emergency.held_passkey_refused":
     "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, identifícate con tu contraseña.",
-  "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",
-  "handover.emergency.details": "Detalles",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
     "La copia cambió mientras la leías. Revisa su última venta o pedido, pulsa Seguir y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última venta o pedido en esta copia",
-  "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "Esta copia no tiene ninguna venta ni pedido con fecha.",
   "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
   "handover.emergency.sourceSwitchedOff": "El servidor principal anterior está apagado.",

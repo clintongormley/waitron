@@ -277,8 +277,6 @@ export class SetupHandoverScreen extends LitElement {
   @state() private refusalLink?: { href: string; label: StringKey };
   @state() private copyRefused = false;
   @state() private declarationSaved = false;
-  /** From the declaration this page saved; a resumed one carries its time in the preview. */
-  @state() private declaredAtMs?: number;
   /** The device's own check of the main server, before the switch is offered (4d plan, D5). */
   @state() private mainCheck: "checking" | { serversUrl: string } | "clear" = "clear";
   /** Pressed Start switching on the page that explains the switch, since the last check. */
@@ -509,7 +507,6 @@ export class SetupHandoverScreen extends LitElement {
     this.copyPreview = this.controlledOperationId = undefined;
     this.preparing = this.proceeded = this.backupOpen = false;
     this.declarationSaved = false;
-    this.declaredAtMs = undefined;
     this.reason = "";
     this.statements = {
       sourceSwitchedOff: false,
@@ -1335,14 +1332,13 @@ export class SetupHandoverScreen extends LitElement {
         },
       };
       const declaration = this.#pendingDeclaration;
-      const answer = await this.#step(
+      await this.#step(
         (signIn) => this.api.declareEmergencyHandover({ ...declaration, signIn }),
         "prompt",
       ).catch((cause: unknown) => {
         switchRefused = typeof (cause as { code?: unknown } | null)?.code === "string";
         throw cause;
       });
-      this.declaredAtMs = answer.declaration.body.declaredAtMs;
       this.signInOpen = false;
       await this.#resume(this.#pendingDeclaration.operationId);
       if (this.isConnected) this.#prepareClock();
@@ -1432,22 +1428,6 @@ export class SetupHandoverScreen extends LitElement {
         : "handover.emergency.copy";
   }
   /** After Switch: the switch is saved, and what was declared folds behind Details. */
-  #emergencyContent() {
-    const preview = this.copyPreview;
-    if (!preview) return nothing;
-    const declaredAt = this.declaredAtMs ?? preview.operation?.declaredAtMs;
-    return html`<section data-test="emergency-copy">
-      <h2>${t(this.#copyHeading(preview))}</h2>
-      <p>${t("handover.emergency.saved")}</p>
-      <details data-test="emergency-details">
-        <summary>${t("handover.emergency.details")}</summary>
-        ${this.#copyLines(preview)}
-        <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>
-        <p>${this.reason}</p>
-        ${declaredAt ? html`<p>${t("handover.emergency.declared_at")} ${new Date(declaredAt).toLocaleString(currentLocale())}</p>` : nothing}
-      </details>
-    </section>`;
-  }
   /**
    * The sign-in: on a controlled handover email, password and code together; on an emergency switch
    * the email first, then how to sign in. `inline` adds the step's own button where the sign-in
@@ -1494,7 +1474,6 @@ export class SetupHandoverScreen extends LitElement {
             this.heldOffered = this.following = this.heldWaiting = this.heldChosen = false;
             this.preparing = this.proceeded = false;
             this.declarationSaved = false;
-            this.declaredAtMs = undefined;
             this.reason = "";
             this.statements = {
               sourceSwitchedOff: false,
@@ -1928,7 +1907,7 @@ export class SetupHandoverScreen extends LitElement {
       ${
         restarting
           ? nothing
-          : html`${this.#emergencyContent()} ${entry ?? nothing}
+          : html`${entry ?? nothing}
               <wt-form-actions .error=${this.#formError}>${this.#startButton()}</wt-form-actions>`
       }
       <p class="note">${t("handover.emergency.keep_open_restart")}</p>

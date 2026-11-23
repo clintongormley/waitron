@@ -369,7 +369,11 @@ export class RecoveryHourEntry extends LitElement {
       fallen &&
       this.#focusInside
     ) {
-      const target = heading ?? compare ?? root.querySelector<HTMLElement>("h3");
+      // An emergency step has no title, so with neither heading nor button the sentence that the
+      // venue cannot start takes focus.
+      const sentence = root.querySelector<HTMLElement>("[data-test=minute-in-use]");
+      if (sentence) sentence.tabIndex = -1;
+      const target = heading ?? compare ?? sentence;
       // A button drawn by this update has no inner button to take focus until it has drawn too.
       if (target)
         void Promise.resolve((target as Partial<LitElement>).updateComplete).then(() => {
@@ -704,7 +708,7 @@ export class RecoveryHourEntry extends LitElement {
     if (emergency && (selectedHour || (this.busy && !sending && !problem && !this.#wait.counting)))
       return nothing;
     const title = promote ? words.promotionHeading : words.heading;
-    return html`<h3 tabindex=${emergency ? "-1" : nothing}>${title}</h3>
+    return html`${emergency ? nothing : html`<h3>${title}</h3>`}
       <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
         ${
           observations.length === 0
@@ -807,7 +811,7 @@ export class RecoveryHourEntry extends LitElement {
                   ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
                 </p>`
         }
-        ${clockHeading ? html`<h4 data-test="clock-heading" tabindex="-1">${clockHeading}</h4>` : nothing}
+        ${clockHeading ? html`<h2 data-test="clock-heading" tabindex="-1">${clockHeading}</h2>` : nothing}
         ${this.#wait.renderProblem(
           words,
           clock,

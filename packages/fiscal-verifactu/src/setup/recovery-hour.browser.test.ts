@@ -2096,7 +2096,9 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
       "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
     ),
   );
-  expect(el.shadowRoot!.querySelector("h3")!.textContent).toBe("Iniciar el local en este servidor");
+  // The emergency step has no title of its own: the page's progress names the start.
+  expect(el.shadowRoot!.querySelector("h3")).toBeNull();
+  expect(text(el)).not.toContain("Iniciar el local en este servidor");
   expect(text(el)).toContain(
     "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
   );
@@ -3164,7 +3166,7 @@ function confirmedThen(answer: "disagreement" | "later" | "in-use", hold?: Promi
 it.each([
   ["disagreement", "the Check the time heading", "[data-test=clock-heading]"],
   ["later", "Check again", "[data-test=compare]"],
-  ["in-use", "the step's heading", "h3"],
+  ["in-use", "the sentence saying the venue cannot start", "[data-test=minute-in-use]"],
 ] as const)(
   "on an emergency switch, Confirm the time answered %s moves focus from the button it removes to %s",
   async (answer, _target, selector) => {
@@ -3387,3 +3389,27 @@ it.each(["en", "es"] as const)(
     expect(shared.minuteTaken).toMatch(series);
   },
 );
+it("on an emergency switch the step draws no title of its own, and Check the time is a level-2 heading", async () => {
+  const el = await mountPromotion(answering(deviceOnly), "emergency");
+  await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("h3")).toBeNull();
+  expect(text(el)).not.toContain("Start the venue on this box");
+  const heading = el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-heading]")!;
+  expect(heading.tagName).toBe("H2");
+  expect(heading.getAttribute("tabindex")).toBe("-1");
+  expect([...el.shadowRoot!.querySelectorAll("h1, h2, h3, h4, h5, h6")]).toEqual([heading]);
+});
+it("on an emergency switch a refused check shows its refusal and Try again with no heading of its own", async () => {
+  const el = await mountPromotion(
+    vi.fn(async () => {
+      throw { code: "password.throttled" };
+    }),
+    "emergency",
+  );
+  await vi.waitFor(() => expect(action(el)).toBe("Try again"));
+  expect(el.shadowRoot!.querySelectorAll("h1, h2, h3, h4, h5, h6")).toHaveLength(0);
+  const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    error: string;
+  };
+  expect(actions.error).toBe(recoveryHourStrings.en.promotionThrottled);
+});
