@@ -414,9 +414,9 @@ The selected count includes hidden ticks; Move includes them too. A drag carries
 and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
-toolbar and returns focus to **Select**, and so does pressing **Select** again. A product-only
-drop saves on release. A drop that includes a category opens the Move dialog with its destination
-selected. A Delete you already
+toolbar and returns focus to **Select**, and so does pressing **Select** again. A valid drop opens
+the Move dialog with its destination selected. Choose **Move to…** to save or **Cancel** to close
+the dialog. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
 With only products selected, the toolbar's action reads **Archive**, and its dialog asks
@@ -504,7 +504,7 @@ A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
 cascades. The dialog counts the routing rules each answer removes. Before you confirm a move
-through **Move to…**, a drop that includes a category, or a category deletion, the routing preview
+or a category deletion, the routing preview
 lists the surviving products whose station changes, with their old and new destinations, zones and
 periods. Change your choice to refresh it. Choose **Retry preview** if it fails to load.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.

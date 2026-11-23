@@ -101,9 +101,10 @@ categoría superior. También puedes mover el producto a otra categoría en la p
 activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
 en qué estación de preparación recibe un plato, como se explica más abajo.
 
-Al soltar una categoría, revisa los cambios de estación de preparación y elige **Mover a…** para
-guardar. Revisa también esos cambios al usar **Mover a…** para un producto o una categoría, o al
-eliminar una categoría.
+Al soltar productos o categorías, se abre la ventana con el destino seleccionado. Revisa los
+cambios de estación de preparación, si los hay, y elige **Mover a…** para guardar. También puedes
+soltar los elementos en **Todos los productos** para sacarlos de su categoría. Revisa también los
+cambios de estación al eliminar una categoría.
 
 Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
 color, o el que hereda de la categoría superior más cercana que tenga color y, después, el
