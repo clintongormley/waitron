@@ -168,6 +168,7 @@ describe("setup provision email credential", () => {
         restarting: true,
         masterKey: expect.any(String),
         masterKeyName: expect.any(String),
+        recoveryPackPdf: expect.any(String),
         ...(mode === "prepare"
           ? {
               breakGlassSecret: expect.any(String),

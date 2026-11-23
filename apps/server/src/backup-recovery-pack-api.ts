@@ -1,5 +1,5 @@
 import { isSecure } from "./encrypted-connection.js";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
@@ -8,7 +8,6 @@ import {
   nextRecoveryPackNumber,
   readRecoveryPack,
   readRecoveryPacks,
-  readTaxpayer,
   readVenue,
   withNodeTransaction,
   withTransaction,
@@ -21,7 +20,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn, persons } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
-import { makeNewMasterKey, newBreakGlassKeyName } from "@waitron/provisioning";
+import { makeNewMasterKey, newBreakGlassKeyName, type MadeMasterKey } from "@waitron/provisioning";
 import type { PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
@@ -48,7 +47,11 @@ import {
   type PartsContext,
   type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
-import { drawRecoveryPack } from "./backup-recovery-pack-output.js";
+import {
+  currentMasterKeyElsewhere,
+  drawRecoveryPack,
+  shownMasterKey,
+} from "./backup-recovery-pack-output.js";
 import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
@@ -266,6 +269,8 @@ type MakeInput = {
   madeAt: string;
   newSecret: string | undefined;
   verifier: string | undefined;
+  /** Shown only if the pack also carries the new box key, the one case it is saved in. */
+  newMasterKey: MadeMasterKey | undefined;
 };
 
 /**
@@ -289,15 +294,7 @@ async function makePack(
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   await requireFreshManagementSignIn(tx, input.token);
-  const taxpayer = await readTaxpayer(tx);
   const venue = await readVenue(tx);
-  if (taxpayer === null) {
-    throw new Error("the box has no taxpayer to name on a recovery pack");
-  }
-  const [person] = await tx
-    .select({ name: persons.displayName })
-    .from(persons)
-    .where(eq(persons.id, input.personId));
   const number = await nextRecoveryPackNumber(tx, nodeId);
   const keyName = await readRecoveryKeyName(nodeTx, nodeId);
   const records = await readRecoveryPacks(tx, nodeId);
@@ -346,16 +343,17 @@ async function makePack(
       locale: request.locale,
       timeZone: venue.timeZone,
       loadFonts: deps.loadFonts,
-      cover: {
-        legalName: taxpayer.legalName,
-        taxId: taxpayer.taxId,
-        venueName: venue.name,
-        madeAt,
-        madeBy: person?.name ?? null,
-        number,
-      },
+      pack: { venueName: venue.name, madeAt, number },
     },
-    { nodeId, madeBy: input.personId, parts },
+    {
+      nodeId,
+      madeBy: input.personId,
+      parts,
+      masterKey:
+        carried && input.newMasterKey !== undefined
+          ? shownMasterKey(input.newMasterKey)
+          : await currentMasterKeyElsewhere(tx, nodeId),
+    },
   );
   await insertRecoveryPack(tx, record);
   const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
@@ -412,6 +410,7 @@ export function mountBackupRecoveryPackMakeApi(
                 madeAt,
                 newSecret: replacement?.secret,
                 verifier: replacement?.verifier,
+                newMasterKey: newMasterKey?.made,
               }),
             );
             // venue.db's pack record is saved first and the key in node.db follows. If this save

@@ -33,7 +33,7 @@ const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(30);
 function packFile(overrides: Partial<RecoveryPackFile> = {}): RecoveryPackFile {
   return {
     kind: "waitron-recovery-pack",
-    version: 1,
+    version: 2,
     number: 3,
     madeAt: "2026-10-17T12:40:00.000Z",
     bucketCode,
@@ -42,6 +42,9 @@ function packFile(overrides: Partial<RecoveryPackFile> = {}): RecoveryPackFile {
     serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(keyDocument))),
     serverKeyName: "Caja principal",
     serverKeyHeldBy: null,
+    masterKey: null,
+    masterKeyName: null,
+    masterKeyHeldBy: null,
     ...overrides,
   };
 }
@@ -69,14 +72,7 @@ async function pack(file: RecoveryPackFile): Promise<Uint8Array<ArrayBuffer>> {
       regular: await font(),
       mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
     }),
-    cover: {
-      legalName: keyDocument.taxpayerName,
-      taxId: keyDocument.scope.taxpayerNif,
-      venueName: keyDocument.venueName,
-      madeAt: file.madeAt,
-      madeBy: null,
-      number: file.number,
-    },
+    pack: { venueName: keyDocument.venueName, madeAt: file.madeAt, number: file.number },
     parts: [bucketPart],
     file,
   });

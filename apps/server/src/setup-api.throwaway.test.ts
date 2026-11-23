@@ -558,6 +558,31 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     },
   );
 
+  it.each<[string, Mode, Box]>([
+    ["Preparation", "prepare", PREPRODUCTION_BOX],
+    ["Demo", "demo", PREPRODUCTION_BOX],
+    ["Live on a development box", "live", DEV_BOX],
+  ])(
+    "%s answers a recorded pack whose first page shows the master key it made",
+    async (_, mode, box) => {
+      const response = await realApp(box)(body(mode));
+      expect(response.status, await response.clone().text()).toBe(200);
+      const { masterKey, masterKeyName: name, recoveryPackPdf } = await response.json();
+      const pdf = await readRecoveryPackPdf(Buffer.from(recoveryPackPdf, "base64"));
+      expect([pdf.masterKey, pdf.masterKeyName, pdf.masterKeyHeldBy]).toEqual([
+        masterKey,
+        name,
+        null,
+      ]);
+      const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+      const [pack] = await readRecoveryPacks(venueDb.db, id);
+      const [row] = await storedMasterKeys();
+      expect(pack).toMatchObject({ number: pdf.number, madeAt: new Date(pdf.madeAt) });
+      // The pack that shows a key is found later by this equal instant.
+      expect(row!.madeAt).toEqual(pack!.madeAt);
+    },
+  );
+
   it("a Preparation retried after a failure before publication ends with one master_keys row, the one it showed", async () => {
     const post = realApp(PREPRODUCTION_BOX, {
       persistTrading: vi
@@ -582,6 +607,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       restarting: true,
       masterKey: expect.any(String),
       masterKeyName: expect.any(String),
+      recoveryPackPdf: expect.any(String),
     });
     expectThrowawayVenue("preproduction");
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
@@ -888,6 +914,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       restarting: true,
       masterKey: expect.any(String),
       masterKeyName: expect.any(String),
+      recoveryPackPdf: expect.any(String),
     });
     expect(await storedMasterKeys()).toHaveLength(1);
     expect(facts()).toEqual(before);

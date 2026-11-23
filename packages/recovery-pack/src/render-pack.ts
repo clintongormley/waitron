@@ -17,15 +17,7 @@ export type RenderPackInput = {
   locale: PackLocale;
   timeZone: string;
   loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>;
-  cover: {
-    legalName: string;
-    taxId: string;
-    venueName: string;
-    madeAt: string;
-    /** `null` for the pack setup makes. */
-    madeBy: string | null;
-    number: number;
-  };
+  pack: { venueName: string; madeAt: string; number: number };
   /** In the order their pages are printed. */
   parts: PackPart[];
   file: RecoveryPackFile;
@@ -50,7 +42,7 @@ const SCALES = [1, 0.9, 0.8, 0.7];
 const TALLEST_CELL = 96;
 const ELLIPSIS = "\u2026";
 
-/** The page each printed part is on: the cover is page 1, then one page per included or failed part. */
+/** The page each printed part is on: the master key's page is page 1, then one page per included or failed part. */
 export function packPageNumbers(parts: readonly PackPart[]): Map<PackPart, number> {
   const pageOf = new Map<PackPart, number>();
   for (const part of parts)
@@ -105,11 +97,11 @@ async function digestOf(bytes: Uint8Array): Promise<string> {
 }
 
 /**
- * Draws the pack: a cover, then one A4 page for each part that is included or failed. The attached
+ * Draws the pack: the master key's page, then one A4 page for each part that is included or failed. The attached
  * file is the only embedded file, and the Info key `WaitronRecoveryDigest` is its SHA-256.
  */
 export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8Array<ArrayBuffer>> {
-  const { locale, cover, parts } = input;
+  const { locale, pack, parts } = input;
   if (locale !== "en" && locale !== "es") refuse("locale");
   const words = PACK_WORDS[locale];
   const when = packDates(locale, input.timeZone);
@@ -131,7 +123,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
 
   const pageOf = packPageNumbers(parts);
   const pageCount = pageOf.size + 1;
-  const serverKeyPage = [...pageOf].find(([part]) => part.kind === "server-key")?.[1];
 
   const layout = {
     size: "A4",
@@ -240,12 +231,12 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     const footerY = pdf.page.height - 44;
     pdf.fillColor("black").fontSize(9);
     const room = width() - pdf.widthOfString(safe(words.page(pageCount, pageCount))) - 12;
-    const day = when.shortAt(cover.madeAt);
+    const day = when.shortAt(pack.madeAt);
     header ??= cutToFit(
-      cover.venueName,
-      (venue) => pdf.widthOfString(safe(words.header(venue, cover.number, day))) <= room,
+      pack.venueName,
+      (venue) => pdf.widthOfString(safe(words.header(venue, pack.number, day))) <= room,
     );
-    const line = safe(words.header(header, cover.number, day));
+    const line = safe(words.header(header, pack.number, day));
     pdf.text(line, LEFT, 40, { lineBreak: false });
     pdf.text(safe(words.page(n, pageCount)), LEFT, 40, right);
     pdf
@@ -267,14 +258,14 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   };
   let drawn = 0;
   /** Draws a page at the largest size at which it fits one sheet with nothing cut; else smallest. */
-  const drawPage = (draw: () => void) => {
+  const drawPage = (draw: () => void, chromed = true) => {
     const fitting = SCALES.find((size, index) => {
       pdf = scratch;
       scale = size;
       cut = false;
       const before = scratchPages;
       scratch.addPage();
-      chrome(drawn + 1);
+      if (chromed) chrome(drawn + 1);
       draw();
       pdf = real;
       return scratchPages === before + 1 && (!cut || index === SCALES.length - 1);
@@ -282,7 +273,8 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     if (fitting === undefined) refuse("overflow");
     scale = fitting;
     pdf.addPage();
-    chrome(++drawn);
+    if (chromed) chrome(++drawn);
+    else ++drawn;
     draw();
   };
   const table = (
@@ -413,87 +405,48 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   };
 
   drawPage(() => {
-    write(words.title, 24, "black", 4, true);
-    pdf.fontSize(10 * scale);
-    write(
-      cover.madeBy === null
-        ? words.madeDuringSetup(when.longAt(cover.madeAt), when.timeAt(cover.madeAt))
-        : words.madeBy(
-            when.longAt(cover.madeAt),
-            when.timeAt(cover.madeAt),
-            tallest(cover.madeBy, width()),
-          ),
-      10,
-      GREY,
-      0,
-    );
-    write(
-      `${tallest(cover.legalName, width())} · NIF ${cover.taxId} · ${tallest(cover.venueName, width())}`,
-      10,
-      GREY,
-      18,
-    );
-    write(words.whichPage, 12, "black", 4, true);
-    table(
-      [width() - 80],
-      [
-        [words.whatHappened, words.pageColumn],
-        ...[...pageOf].map(([part, page]) => [words.situation[part.kind], String(page)]),
-      ],
-      { head: true },
-    );
-    write(words.whatIsIn, 12, "black", 4, true);
-    table(
-      [150, 110, width() - 150 - 110 - 80 - 48],
-      [
-        [words.partColumn, words.lastChangedColumn, words.checkColumn, words.pageColumn],
-        ...parts.map((part) => {
-          const page = pageOf.get(part);
-          if (part.state === "included")
-            return [
-              words.part[part.kind],
-              part.lastChanged ? when.shortDay(part.lastChanged) : "",
-              part.check ?? "",
-              String(page),
-            ];
-          if (part.state === "failed")
-            return [words.part[part.kind], words.couldNotBeDrawn, "", String(page)];
-          const reason =
-            part.absentReason ??
-            (part.state === "absent" ? words.absent : words.notSetUp)[part.kind];
-          return [words.part[part.kind], reason];
-        }),
-      ],
-      { head: true, mono: (row, column) => row > 0 && column === 2 },
-    );
-    boxed(() => {
-      write(words.lockedAway, 12, "black", 2, true);
-      const { bucketCode, archiveCode, backupKey, serverKey } = input.file;
-      const backups = bucketCode !== null || archiveCode !== null || backupKey !== null;
-      const opens = backups
-        ? serverKey !== null
-          ? words.anyoneHoldingBackupsAndServerKey
-          : words.anyoneHoldingBackups
-        : serverKey !== null
-          ? words.anyoneHoldingServerKey
-          : undefined;
+    const { masterKey, masterKeyName, masterKeyHeldBy } = input.file;
+    face();
+    pdf.fontSize(13 * scale);
+    write(words.heading(tallest(pack.venueName, width())), 13, "black", 12, true);
+    if (masterKey !== null) {
+      const top = pdf.y;
+      pdf
+        .fillColor(GREY)
+        .fontSize(9)
+        .text(safe(words.masterKeyLabel(masterKeyName!)), LEFT + 12, top + 12, {
+          width: width() - 24,
+        });
+      face(true);
+      pdf
+        .fillColor("black")
+        .fontSize(14)
+        .text(masterKey, LEFT + 12, pdf.y + 4, { width: width() - 24 });
+      face();
+      const bottom = pdf.y + 12;
+      pdf
+        .rect(LEFT, top, width(), bottom - top)
+        .lineWidth(1.2)
+        .stroke("black");
+      pdf.y = bottom + 16;
+      const qrTop = pdf.y;
+      qr(masterKey, LEFT, qrTop, QR_SIZE);
+      pdf
+        .fillColor("black")
+        .fontSize(10)
+        .text(safe(words.masterKeyQr), LEFT, qrTop + QR_SIZE + 6, {
+          width: QR_SIZE,
+          align: "center",
+        });
+    } else if (masterKeyName !== null) {
       write(
-        [
-          opens,
-          parts.some((part) => part.kind === "emergency" && part.state === "included")
-            ? words.emergencyWarning
-            : undefined,
-          words.whichToKeep,
-          serverKeyPage === undefined ? undefined : words.serverKeyPage(serverKeyPage),
-        ]
-          .filter((sentence) => sentence !== undefined)
-          .join(" "),
-        11,
-        "black",
-        0,
+        masterKeyHeldBy === null
+          ? words.masterKeyNamed(masterKeyName)
+          : words.masterKeyInPack(masterKeyName, masterKeyHeldBy),
+        12,
       );
-    });
-  });
+    }
+  }, false);
 
   for (const [part] of pageOf)
     drawPage(() => {

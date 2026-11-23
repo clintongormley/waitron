@@ -1072,6 +1072,8 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
     key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+    masterKeyName: "2026-11-23 · QZJV",
   });
   api.registerRecoveryDocument = async (value) => {
     deliveries.push(value);
@@ -1149,6 +1151,8 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
       key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      masterKeyName: "2026-11-23 · QZJV",
     });
     api.registerRecoveryDocument = async () => {};
     api.confirmRecoveryDocument = async () => {};
@@ -1204,6 +1208,8 @@ it.each([
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
       key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      masterKeyName: "2026-11-23 · QZJV",
     });
     api.reissueNodeKey = api.stageNodeKey;
     api.registerRecoveryDocument = async () => {};
@@ -1492,6 +1498,8 @@ it.each(["stage", "register", "input digest", "PDF ready"])(
     const staged = {
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
       key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      masterKeyName: "2026-11-23 · QZJV",
     };
     api.stageNodeKey = async () => {
       if (phase === "stage") {
@@ -1556,6 +1564,8 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
     key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+    masterKeyName: "2026-11-23 · QZJV",
   });
   api.registerRecoveryDocument = async () => {};
   let refuse = true;

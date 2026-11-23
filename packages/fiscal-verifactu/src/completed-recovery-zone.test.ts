@@ -61,18 +61,11 @@ for (const locale of ["en", "es"] as const)
         locale,
         timeZone: "UTC",
         loadFonts: loadRecoveryPackFonts,
-        cover: {
-          legalName: "Waitron SL",
-          taxId: "89890001K",
-          venueName: "Local principal",
-          madeAt: "2026-10-18T12:00:00.000Z",
-          madeBy: null,
-          number: 1,
-        },
+        pack: { venueName: "Local principal", madeAt: "2026-10-18T12:00:00.000Z", number: 1 },
         parts: [{ kind: "server-key", state: "included", page: part.page }],
         file: {
           kind: "waitron-recovery-pack",
-          version: 1,
+          version: 2,
           number: 1,
           madeAt: "2026-10-18T12:00:00.000Z",
           bucketCode: null,
@@ -81,6 +74,9 @@ for (const locale of ["en", "es"] as const)
           serverKey: part.keyFile!,
           serverKeyName: nodeKey.name,
           serverKeyHeldBy: null,
+          masterKey: null,
+          masterKeyName: null,
+          masterKeyHeldBy: null,
         },
       });
       const task = getDocument({
@@ -100,7 +96,7 @@ for (const locale of ["en", "es"] as const)
         expect(text).toContain(`${time} ${zone}`);
         expect(text).not.toContain("Not/A_Zone");
         const attachment = JSON.parse(
-          Buffer.from((await pdf.getAttachmentContent("waitron-recovery-pack-v1.json"))!).toString(
+          Buffer.from((await pdf.getAttachmentContent("waitron-recovery-pack-v2.json"))!).toString(
             "utf8",
           ),
         );

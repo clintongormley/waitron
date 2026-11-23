@@ -133,6 +133,8 @@ for (const theme of ["light", "dark"] as const)
                       name: "Caja principal",
                       secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
                     },
+                    masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+                    masterKeyName: "2026-11-23 · QZJV",
                   };
                 },
                 async registerRecoveryDocument() {},

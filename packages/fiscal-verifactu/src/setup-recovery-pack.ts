@@ -2,9 +2,13 @@ import { renderRecoveryPack } from "@waitron/recovery-pack";
 import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
 import { serverKeyPage } from "./server-key-page.js";
 
-/** Pack 1, drawn during setup: the staged server key, before any bucket copy or archive exists. */
+/**
+ * Pack 1, drawn during setup: the new master key and the staged server key, before any bucket copy
+ * or archive exists.
+ */
 export async function renderSetupRecoveryPack(
   input: RecoveryDocument,
+  made: { masterKey: string; masterKeyName: string },
   locale: "en" | "es",
   timeZone: string,
   loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>,
@@ -14,14 +18,7 @@ export async function renderSetupRecoveryPack(
     locale,
     timeZone,
     loadFonts,
-    cover: {
-      legalName: document.taxpayerName,
-      taxId: document.scope.taxpayerNif,
-      venueName: document.venueName,
-      madeAt: document.createdAt,
-      madeBy: null,
-      number: 1,
-    },
+    pack: { venueName: document.venueName, madeAt: document.createdAt, number: 1 },
     parts: [
       { kind: "bucket", state: "not-set-up" },
       { kind: "archives", state: "not-set-up" },
@@ -36,7 +33,7 @@ export async function renderSetupRecoveryPack(
     ],
     file: {
       kind: "waitron-recovery-pack",
-      version: 1,
+      version: 2,
       number: 1,
       madeAt: document.createdAt,
       bucketCode: null,
@@ -45,6 +42,9 @@ export async function renderSetupRecoveryPack(
       serverKey: document,
       serverKeyName: document.nodeKey.name,
       serverKeyHeldBy: null,
+      masterKey: made.masterKey,
+      masterKeyName: made.masterKeyName,
+      masterKeyHeldBy: null,
     },
   });
 }

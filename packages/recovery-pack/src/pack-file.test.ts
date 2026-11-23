@@ -19,9 +19,12 @@ const serverKey = {
   nodeKey: { nodeId: "node-1", name: "2026-10-12 · key", secret: "A".repeat(32) },
 };
 
+const masterKey = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+const masterKeyName = "2026-11-23 · QZJV";
+
 const full: RecoveryPackFile = {
   kind: "waitron-recovery-pack",
-  version: 1,
+  version: 2,
   number: 3,
   madeAt: "2026-10-29T17:00:00.000Z",
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
@@ -30,6 +33,9 @@ const full: RecoveryPackFile = {
   serverKey,
   serverKeyName: "2026-10-12 · key",
   serverKeyHeldBy: null,
+  masterKey,
+  masterKeyName,
+  masterKeyHeldBy: null,
 };
 
 const encoder = new TextEncoder();
@@ -69,6 +75,22 @@ describe("the recovery pack's attached file", () => {
     };
     expect(parseRecoveryPackFile(buildRecoveryPackFile(bare))).toEqual(bare);
     const none = { ...bare, serverKeyName: null, serverKeyHeldBy: null };
+    expect(parseRecoveryPackFile(buildRecoveryPackFile(none))).toEqual(none);
+  });
+
+  it("carries masterKey and masterKeyName, or, on a pack without the key, the pack that holds it", () => {
+    const read = parseRecoveryPackFile(buildRecoveryPackFile(full));
+    expect(read.version).toBe(2);
+    expect([read.masterKey, read.masterKeyName, read.masterKeyHeldBy]).toEqual([
+      masterKey,
+      masterKeyName,
+      null,
+    ]);
+    const elsewhere = { ...full, masterKey: null, masterKeyHeldBy: 1 };
+    expect(parseRecoveryPackFile(buildRecoveryPackFile(elsewhere))).toEqual(elsewhere);
+    const unknown = { ...full, masterKey: null, masterKeyHeldBy: null };
+    expect(parseRecoveryPackFile(buildRecoveryPackFile(unknown))).toEqual(unknown);
+    const none = { ...unknown, masterKeyName: null };
     expect(parseRecoveryPackFile(buildRecoveryPackFile(none))).toEqual(none);
   });
 
@@ -153,7 +175,20 @@ describe("the recovery pack's attached file", () => {
 
   it.each([
     ["kind", { kind: "waitron-recovery-document" }],
-    ["version", { version: 2 }],
+    ["version", { version: 1 }],
+    ["masterKey unspaced", { masterKey: masterKey.replaceAll(" ", "") }],
+    ["masterKey lower case", { masterKey: masterKey.toLowerCase() }],
+    ["masterKey a letter outside its alphabet", { masterKey: "I" + masterKey.slice(1) }],
+    ["masterKey a group short", { masterKey: masterKey.slice(0, -5) }],
+    ["masterKeyName not a key's name", { masterKeyName: "2026-11-23 · key" }],
+    ["masterKeyName an impossible day", { masterKeyName: "2026-02-30 · QZJV" }],
+    ["masterKey without its name", { masterKeyName: null }],
+    ["masterKey held by another pack too", { masterKeyHeldBy: 1 }],
+    ["masterKeyHeldBy zero", { masterKey: null, masterKeyHeldBy: 0 }],
+    [
+      "masterKeyHeldBy with no key named",
+      { masterKey: null, masterKeyName: null, masterKeyHeldBy: 1 },
+    ],
     ["number zero", { number: 0 }],
     ["number fraction", { number: 1.5 }],
     ["number as text", { number: "3" }],

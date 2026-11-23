@@ -30,13 +30,21 @@ import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
-// The fake database cannot tell writes apart, so the master key's save is recorded by name.
+// The fake database cannot tell writes apart, so the master key's save and its pack's drawing are
+// recorded by name.
 const masterKeySaves = vi.hoisted(() => ({ into: [] as string[] }));
 vi.mock("./master-key-record.js", async (original) => ({
   ...(await original<typeof import("./master-key-record.js")>()),
   saveNewMasterKey: async (_db: unknown, key: { made: unknown }) => {
     masterKeySaves.into.push("saveMasterKey");
     return key.made;
+  },
+}));
+vi.mock("./backup-recovery-pack-output.js", async (original) => ({
+  ...(await original<typeof import("./backup-recovery-pack-output.js")>()),
+  makeMasterKeyRecoveryPack: async () => {
+    masterKeySaves.into.push("drawRecoveryPack");
+    return "PDF";
   },
 }));
 vi.mock("./break-glass.js", async (original) => ({
@@ -844,6 +852,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       contactUrl,
       masterKey: expect.any(String),
       masterKeyName: expect.any(String),
+      recoveryPackPdf: "PDF",
     });
     await tick();
   });
@@ -863,6 +872,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         restarting: true,
         masterKey: expect.any(String),
         masterKeyName: expect.any(String),
+        recoveryPackPdf: "PDF",
       });
       await tick();
     },
@@ -889,6 +899,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       restarting: true,
       masterKey: expect.any(String),
       masterKeyName: expect.any(String),
+      recoveryPackPdf: "PDF",
     });
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
@@ -898,6 +909,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedDemo",
       "establishIdentity",
       "seedMembership",
+      "drawRecoveryPack",
       "persistTrading",
       "saveMasterKey",
     ]);
@@ -907,6 +919,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedDemo",
       "establishIdentity",
       "seedMembership",
+      "drawRecoveryPack",
       "persistTrading",
       "saveMasterKey",
       "requestRestart",
@@ -1582,6 +1595,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedMembership",
       "sealCredential",
       "sealCredential",
+      "drawRecoveryPack",
       "persistTrading",
       "saveMasterKey",
       "requestRestart",

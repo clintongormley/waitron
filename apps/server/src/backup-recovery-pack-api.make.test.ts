@@ -331,6 +331,20 @@ async function pdfText(bytes: ArrayBuffer): Promise<string> {
   }
 }
 
+async function firstPageText(bytes: ArrayBuffer): Promise<string> {
+  const loading = getDocument({ data: new Uint8Array(bytes.slice(0)), useSystemFonts: false });
+  try {
+    const content = await (await (await loading.promise).getPage(1)).getTextContent();
+    return content.items
+      .flatMap((item) => ("str" in item ? [item.str] : []))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } finally {
+    await loading.destroy();
+  }
+}
+
 const codeOf = async (response: Response) =>
   ((await response.json()) as { error: { code: string; params?: unknown } }).error;
 const packs = () => readRecoveryPacks(suite.db, node.nodeId);
@@ -640,6 +654,48 @@ describe("a made pack", () => {
     ]);
   });
 
+  it("Make a new master key also makes a new box key, and its pack holds both", async () => {
+    const response = await fixture().make(true);
+    const shown = shownMasterKey(response);
+    const bytes = await response.arrayBuffer();
+    const file = await readRecoveryPackPdf(new Uint8Array(bytes));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
+      shown.masterKey,
+      shown.masterKeyName,
+      null,
+    ]);
+    const carried = (file.serverKey as { nodeKey: { name: string } }).nodeKey;
+    expect(carried.name).toBe(await readRecoveryKeyName(suite.node, node.nodeId));
+    expect(await firstPageText(bytes)).toBe(
+      `Waitron recovery pack · Sala Master key · ${shown.masterKeyName} ${shown.masterKey} Master key`,
+    );
+  });
+
+  it("a pack made without a new master key names the pack that holds the current one", async () => {
+    const f = fixture();
+    const first = shownMasterKey(await f.make(true));
+    const plain = await f.make(false);
+    expect(plain.headers.get("x-waitron-recovery-pack")).toBe("2");
+    const bytes = await plain.arrayBuffer();
+    const file = await readRecoveryPackPdf(new Uint8Array(bytes));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
+      null,
+      first.masterKeyName,
+      1,
+    ]);
+    expect(await firstPageText(bytes)).toBe(
+      `Waitron recovery pack · Sala Master key ${first.masterKeyName}: in pack 1`,
+    );
+    expect(await pdfText(bytes)).not.toContain(first.masterKey!);
+  });
+
+  it("a ticked pack whose box key is not replaced shows no new master key", async () => {
+    const response = await fixture({ seats: 2 }).make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([null, null, null]);
+  });
+
   it("never gives a new key the name of the key in force or of a key an earlier pack carried", async () => {
     const f = fixture();
     const keyName = async (response: Response) =>
@@ -782,7 +838,7 @@ describe("a made pack", () => {
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
-    expect(await pdfText(await response.arrayBuffer())).toContain("This box has no box key yet.");
+    expect(await pdfText(await response.arrayBuffer())).toContain("Page 3 of 3");
     expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
     expect(record!.parts[3]).toEqual({ part: "server-key", state: "not-set-up" });
@@ -1547,7 +1603,8 @@ it.each([
   expect(text).not.toContain(EMERGENCY.code);
   expect(text).not.toContain("SECRET-error-message");
   expect(text).not.toContain("99 seconds");
-  expect(text).toContain("new pack");
+  if (closed) expect(text).toContain("Page 2 of 4");
+  else expect(text).toContain("new pack");
   const record = (await packs())[0]!;
   expect(record.parts[0]).toEqual({ part: "emergency", state: closed ? "absent" : "failed" });
   expect(record.parts.slice(1).map((p) => p.state)).toEqual(["included", "included", "included"]);
@@ -1565,13 +1622,8 @@ it.each(["disconnected", "secondary", "permission"] as const)(
     expect(response.status).toBe(200);
     const text = await pdfText(await response.arrayBuffer());
     expect(text).not.toContain(EMERGENCY.code);
-    expect(text).toContain(
-      reason === "permission"
-        ? "administrator"
-        : reason === "secondary"
-          ? "main box"
-          : "not connected",
-    );
+    expect(text).toContain("Page 2 of 4");
+    expect(text).not.toContain("Emergency start");
     expect(fetchCode).not.toHaveBeenCalled();
     expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
   },

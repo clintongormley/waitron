@@ -11,7 +11,7 @@ import fontUrl from "../../../packages/fiscal-verifactu/src/assets/register-noto
 export async function recoveryPackPdf(bucketCode: string | null): Promise<File> {
   const file: RecoveryPackFile = {
     kind: "waitron-recovery-pack",
-    version: 1,
+    version: 2,
     number: 2,
     madeAt: "2026-10-29T17:00:00.000Z",
     bucketCode,
@@ -20,6 +20,9 @@ export async function recoveryPackPdf(bucketCode: string | null): Promise<File> 
     serverKey: null,
     serverKeyName: null,
     serverKeyHeldBy: null,
+    masterKey: null,
+    masterKeyName: null,
+    masterKeyHeldBy: null,
   };
   buildRecoveryPackFile(file);
   const font = new Uint8Array(await (await fetch(fontUrl)).arrayBuffer());
@@ -30,14 +33,7 @@ export async function recoveryPackPdf(bucketCode: string | null): Promise<File> 
       regular: font,
       mono: new Uint8Array(await (await fetch(monoUrl)).arrayBuffer()),
     }),
-    cover: {
-      legalName: "Waitron SL",
-      taxId: "89890001K",
-      venueName: "Local",
-      madeAt: file.madeAt,
-      madeBy: null,
-      number: file.number,
-    },
+    pack: { venueName: "Local", madeAt: file.madeAt, number: file.number },
     parts: [],
     file,
   });

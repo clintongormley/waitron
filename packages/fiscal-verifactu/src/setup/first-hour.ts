@@ -411,6 +411,7 @@ export class FirstSetupHour extends LitElement {
           createdAt: new Date().toISOString(),
           nodeKey: staged.key,
         },
+        { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName },
         this.locale,
         async () => {
           await api.confirmRecoveryDocument!(this.#reference!);
