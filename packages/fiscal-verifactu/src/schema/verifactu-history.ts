@@ -23,6 +23,8 @@ export const verifactuHistory = table(
       sql`case when json_valid(${t.data}) then json_type(${t.data}) = 'object' else 0 end`,
     ),
     check("verifactu_history_kind_ck", sql`${t.kind} = 'clock.confirmed'`),
+    // The writer serializes an object with unique keys. In raw JSON, SQLite checks the first
+    // value for a repeated key.
     check(
       "verifactu_history_confirmed_source_ck",
       sql`${t.kind} <> 'clock.confirmed' or coalesce(json_extract(${t.data}, '$.source') in ('admin', 'staff'), 0)`,

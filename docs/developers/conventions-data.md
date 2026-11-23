@@ -5140,11 +5140,13 @@ limit, and a reading before 28-10-2024 keeps it open.
 Limits, stated, not fixed: a node promoted while running has no window until it restarts; while
 every read of the stop fails, the window stays as it was.
 
-**The `staff` source and its one migration** (Task 8-0). (2026-11-07, A1422: the two old
+**The `staff` source on the retired schema** (Task 8-0). (2026-11-07, A1422: the two old
 migration files named here were deleted with the frozen history; read one with
-`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.) A staff member's confirmation or step is
-`source = 'staff'` with their `person_id`, and the till is under `proof.device` (fiscal code never
-names a till, `scripts/no-till-as-issuer.test.ts`).
+`git show f519799de0:scripts/fixtures/a760-history/<set>/<file>`.)
+[Fi4](../superpowers/plans/2026-11-08-a1308-fi4a-history-table.md) replaces the table.
+In the current proof, a staff member's till is under `proof.staff`. An administrator on a till
+has `proof.device` beside `proof.admin`.
+
 `fiscal-verifactu/0012_clock_confirmations_staff.sql` adds `staff` to
 `clock_confirmations_source_ck` and makes `clock_confirmations_person_ck` read "a person exactly
 when the source is `admin` or `staff`". A CHECK change makes drizzle-kit rebuild the table (copy

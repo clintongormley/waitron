@@ -254,6 +254,11 @@ describe("a step of the box's clock", () => {
     expect((stored[0]!.proof as { devices: unknown }).devices).toEqual([
       { deviceId: "till-1", address: "10.0.0.1", boxAt: iso(R - S), witnessAt: iso(A - S) },
     ]);
+    expect(stored[0]!.proof).toHaveProperty("staff", {
+      deviceId: "till-1",
+      address: "10.0.0.1",
+      ...ANA_ON_A_DEVICE.reading,
+    });
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: stored[0]!.id },
     ]);
