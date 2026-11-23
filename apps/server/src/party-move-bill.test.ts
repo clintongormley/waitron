@@ -64,8 +64,7 @@ import { nameToday } from "./floor-today-name.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
-// Move a bill to another party, a table or the counter (table actions plan, Task 7; spec §7, §8,
-// §9, §15). `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
+// Move a bill to another party, a table or the counter. `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 let v: PartyVenue;
 /** A counter zone whose orders are invoiced when placed. */
 let ticketThenPayZone: string;

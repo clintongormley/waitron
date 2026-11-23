@@ -29,7 +29,7 @@ export type CasReport = {
   /**
    * Recorded, not required BY S1: plan Task 3's fence claims a per-term key create-only, so this
    * value gates nothing in the rig. The product's fence is a different shape — a version-conditional
-   * write of `current.json`, as the topology design in the benchmark README describes. That is
+   * write of `current.json` (2026-09-16-sqlite-litestream-topology-design.md §5.1), which is
    * compare-and-swap and so does need this.
    */
   ifMatch: IfMatchObservation;

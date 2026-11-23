@@ -2313,9 +2313,8 @@ describe("prepare & collect — zone payment timing", () => {
   });
 });
 
-// The ticket prep surface: the per-line advance state machine (`advanceTicketItem`), the
-
-// `ticket_items`. Bill payment (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
+// Ticket prep advances a fired line through `advanceTicketItem`. Bill payment fires the line in
+// Mode P. `placeOrder` fires it in Modes I and T.
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {

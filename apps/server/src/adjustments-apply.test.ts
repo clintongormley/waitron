@@ -98,7 +98,7 @@ import "./errors.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
-// Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
+// Cancellations, comps and discounts applied to an open bill (service design §7),
 // against a provisioned venue that files real Veri*Factu records.
 let venue: AdjustmentVenue;
 let approvalReasonId: string;

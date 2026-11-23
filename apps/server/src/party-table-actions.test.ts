@@ -91,7 +91,7 @@ import { mergeOf, needingMoving, plannedZone } from "./testing/floor-today-venue
 import { lastBillNumberOf, numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
-// Move guests, join tables and split a table (table actions plan, Task 8; spec §6, §8, §15).
+// Move guests, join tables and split a table.
 // `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 let v: PartyVenue;
 /** A second zone of dining tables. */

@@ -3,7 +3,7 @@ import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**
- * Wraps one boot's drain so the regime's restart reset runs before the first
+ * Wraps one boot's drain so the regime's restart reset (topology design §5.2) runs before the first
  * pass that drains, and is retried on later passes until it succeeds. Until the reset succeeds this
  * wrapper has run no drain, so no claim in flight is one of its own; after it, a claim may be.
  *

@@ -209,7 +209,7 @@ describe("extra list authoring contract", () => {
     );
   });
 
-  it("refuses a pick bound above the shared extras ceiling", () => {
+  it("refuses an oversized pick bound", () => {
     expect(() =>
       parseExtraListInput({ ...breadsBody, minPicks: 99999999999, maxPicks: null }),
     ).toThrowError(
@@ -220,7 +220,7 @@ describe("extra list authoring contract", () => {
     );
   });
 
-  it("refuses a maxQuantity above the shared extras ceiling, naming the item", () => {
+  it("refuses an oversized maxQuantity and names the item", () => {
     expect(() =>
       parseExtraListInput({
         ...breadsBody,

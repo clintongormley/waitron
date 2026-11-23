@@ -2911,7 +2911,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // The restart reset: a claim a previous run left `enviando` one second
+  // The restart reset (topology design §5.2): a claim a previous run left `enviando` one second
   // ago is not stale by the drain's five-minute rule, so only the boot's reset returns it to
   // `pendiente`. No `fiscal.aeat` credential is sealed, so the drain then skips and the reset is the
   // only write the row sees.

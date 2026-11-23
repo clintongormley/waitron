@@ -24,13 +24,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/` and
   `scripts/fake-bluez.py`, which is outside the checker.
 
-## Comments and test titles still cite sections of specs that were deleted
-
-The remaining dead section references in this bundle are in
-`packages/fiscal-verifactu/src/write-path.e2e.test.ts`. Leave them in place while the fiscal
-golden test must pass unedited. The watcher confirmed this in Lane K questions.md on
-2026-11-23 at 00:59.
-
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
 **OPEN.** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
@@ -951,7 +944,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-4 entries.
+3 entries, size M.
 
 - **Three configuration-transfer cases pin an insert order the importer's `pragma defer_foreign_keys`
   may make unnecessary for foreign keys** — OPEN (found by #603). Read only, not run: in
@@ -960,8 +953,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-- **Protected fiscal test still cites deleted specs.**
-  [Detail](architecture.md#comments-and-test-titles-still-cite-sections-of-specs-that-were-deleted)
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 

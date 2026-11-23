@@ -530,7 +530,8 @@ async function recoverStaleClaims(tx: Transaction, now: Date, environment: Entor
 }
 
 /**
- * The restart reset: every `enviando` row back to `pendiente`, due now, with
+ * The restart reset (docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md §5.2):
+ * every `enviando` row back to `pendiente`, due now, with
  * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
  * process's first drain pass and while no other process files from this database, so the host
  * calls it before that pass, and again only if that attempt failed. A resend of a record the

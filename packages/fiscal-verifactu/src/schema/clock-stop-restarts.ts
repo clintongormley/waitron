@@ -9,7 +9,7 @@ export const clockStopRestarts = table(
     nodeId: id("node_id")
       .notNull()
       .references(() => nodes.id),
-    // The identifier has no foreign key or writer-side person check.
+    // This legacy table has no product writer. The person id has no foreign key.
     personId: id("person_id").notNull(),
     restartedAt: ts("restarted_at").notNull(),
     // The reading the manager accepted.

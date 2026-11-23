@@ -286,7 +286,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   No till screen or server route calls `recordVoid` yet.
   [Detail](backlog/fiscal.md#owner-decision-2026-09-24-a-void-counts-on-the-day-it-is-made-not-the-day-of-the-sale)
 
-- **One authorised edit of a protected test, plus its neighbours** (bundle of 3, size S, needs the owner). [Detail](backlog/fiscal.md#bundle-one-authorised-edit-of-a-protected-test-plus-its-neighbours)
+- **One authorised edit of a protected test, plus its neighbours** (bundle of 4, size S, needs the owner). [Detail](backlog/fiscal.md#bundle-one-authorised-edit-of-a-protected-test-plus-its-neighbours)
 
 - **Adviser confirmation: supplier invoice numbers by issue year.**
   [Detail](backlog/fiscal.md#adviser-confirmation-supplier-invoice-numbers-by-issue-year).
@@ -1679,7 +1679,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   labels are read from its strings table, and the files that still need non-English text are held
   at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
-- **Correct every sentence known to be false, then finish comment pruning** (4 remaining entries). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
+- **Correct every sentence known to be false, then finish comment pruning** (bundle of 3, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
 
 - **Printer, reader and device delete wording** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 
