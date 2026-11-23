@@ -98,8 +98,10 @@ to another category on the Products screen, by turning on **Select** and draggin
 with **Move to…**. The main category also plays a part in choosing the prep station a dish goes
 to, as described below.
 
-When you drop a category, review the preparation station changes and choose **Move to…** to save.
-Check those changes too when you use **Move to…** for a product or category, or delete a category.
+When you drop products or categories, the Move window opens with the destination selected. Review
+any preparation station changes and choose **Move to…** to save. You can also drop onto
+**All products** to move items out of their category. Check the station changes too when you open
+the window with **Move to…** or delete a category.
 
 While you add or rename a category, the square beside its name shows its own colour, or the colour
 it inherits from the nearest coloured category above it, then the venue's default. A dashed border

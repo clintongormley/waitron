@@ -209,7 +209,7 @@ export class ProductBrowser extends LitElement {
   #revealed: string | null = null;
   #folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
 
-  async #drop(keys: string[], folderId: string | null): Promise<void> {
+  #drop(keys: string[], folderId: string | null): void {
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -217,20 +217,7 @@ export class ProductBrowser extends LitElement {
     )
       return;
     this.dropError = "";
-    const selection = this.#selection(keys);
-    if (selection.categoryIds.length) {
-      this.#openMove(keys, folderId ?? "top");
-      return;
-    }
-    this.operationBusy = true;
-    try {
-      await this.api.moveProductItems(this.#outermost(selection), folderId);
-      this.selected = this.selected.filter((key) => !keys.includes(key));
-    } catch (error) {
-      this.dropError = codeMessage(codeOf(error));
-    } finally {
-      this.operationBusy = false;
-    }
+    this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
     if (this.operation === null) this.#releaseOperation();
@@ -1021,7 +1008,7 @@ export class ProductBrowser extends LitElement {
     return html`<dashboard-product-list
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
-          void this.#drop(event.detail.keys, event.detail.folderId);
+          this.#drop(event.detail.keys, event.detail.folderId);
         }}
         .selecting=${this.selecting}
         .reordering=${this.selecting}

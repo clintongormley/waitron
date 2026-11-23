@@ -112,8 +112,6 @@ nothing at all is still deleted at once. Each dev venue needs `wa-wt reset demo
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
 older build before using the new published document. Status and remaining work:
 
-- **Dragging products without a folder still moves them on drop.** Add the changed-products
-  preview to that drag path before extending it during service.
 - **A future rebuild of `categories` can empty its routing rules.** `routing_cells_category_fk`
   uses `ON DELETE CASCADE`
   (`packages/db/src/schema/venue-service/routing.ts`); follow CLAUDE.md §3's rebuild rule and add
