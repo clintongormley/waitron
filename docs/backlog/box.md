@@ -1968,7 +1968,7 @@ pull request that left it:
 ## A1323. One master key for the venue
 
 - **Asked for (owner, 2026-11-04):** "ideally we'd just have one master key which unlocks everything".
-- **Designed with the owner on 2026-11-21 (13:58 to 14:40); not built.** It changes the fiscal authority check, so the owner lands it. Build it beside A1187 and A1188, which change the same restore steps.
+- **Designed with the owner on 2026-11-21 (13:58 to 14:40). Its key library is built (A1323 PR 1), and nothing uses it yet.** It changes the fiscal authority check, so the owner lands it. Build it beside A1187 and A1188, which change the same restore steps.
 - **What it replaces.** Today the owner's pack holds a backup key, which encrypts archives and sits readable on the box, and a server key, which unlocks nothing and authorises restore, promotion and an invoice identity conflict. The box keeps only a check value of the server key.
 - **Why the box's working keys stay.** The box restarts unattended and needs its vault key for every payment, email and filing, so a master key cannot be one of them: stealing the box would then give the thief the master key.
 - **How the key works.** The box makes the master key at setup and prints it in the pack, keeping only a check value. Backup key N is calculated one-way from the master key and N, and each backup records its N. Changing the backup key means typing the master key once and needs no new pack, and one master key opens every backup. Using the master key does not force a new one: "the master key just works until we issue a new master" (owner, 2026-11-21). A new master key is needed only if it is lost or exposed; older backups then need the older one.
