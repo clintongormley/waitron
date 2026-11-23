@@ -169,6 +169,8 @@ export interface BackupSupervisorDeps {
   /** DI for tests; defaults to `readDestinationStatus`'s own limit. */
   statusReadTimeoutMs?: number;
   now?: () => Date;
+  /** DI for tests; defaults to `steadyNow`. */
+  steadyNow?: () => number;
   onReloaded?: () => void;
   stagingTurn?: StagingTurn;
   /** Passed to each run as `installationStartedAt`; absent, a run deletes no old backup. */
@@ -340,6 +342,7 @@ export class BackupSupervisor {
         destinationTimeoutMs: cfg.destinationTimeoutMs,
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
+        steadyNow: this.#deps.steadyNow,
         outcomes: this.#deps.outcomes,
         onRunStoppedChanged: () => this.#publish(),
         onRunChanged: () => this.#publish(),

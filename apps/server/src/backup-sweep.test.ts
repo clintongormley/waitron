@@ -622,6 +622,7 @@ describe("runOnce (fan-out)", () => {
     const interval = 86_400_000;
     const due = new Date(storedAt + interval);
     let now = new Date(storedAt + 3_600_000);
+    let steady = 0;
     const local = new FakeBackend("local");
     const store = vi.fn(async () => ({ stored: true, errorCode: null }));
     const schedule = createBackupSchedule({
@@ -639,17 +640,65 @@ describe("runOnce (fan-out)", () => {
         readClock: async () => cloudClock,
       },
       now: () => now,
+      steadyNow: () => steady,
     });
     const signal = new AbortController().signal;
     expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: due });
     expect(local.objects.size).toBe(0);
     expect(store).not.toHaveBeenCalled();
+    steady += due.getTime() - now.getTime();
     now = due;
     expect(await schedule.pass(due, signal)).toEqual({
       nextDueAt: new Date(due.getTime() + interval),
     });
     expect(local.objects.size).toBe(1);
     expect(store).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes the resumed Cloud deadline after its remaining steady time when the clock steps back 400 days", async () => {
+    const storedAt = Date.parse(FIXED_MANIFEST.createdAt);
+    const interval = 86_400_000;
+    let now = new Date(storedAt + 3_600_000);
+    let steady = 0;
+    const local = new FakeBackend("local");
+    const store = vi.fn(async () => ({ stored: true, errorCode: null }));
+    const shown: Array<number | null> = [];
+    const schedule = createBackupSchedule({
+      ...deps([local]),
+      schedule: { kind: "interval", ms: interval },
+      jitterSeed: BACKUP_NODE_ID,
+      readClock: async () => cloudClock,
+      cloud: {
+        target: {
+          id: "cloud",
+          roomNeeded: async () => 0,
+          store,
+          readCaptureState: async () => ({ storedAt, pending: false }),
+        },
+        readClock: async () => cloudClock,
+      },
+      now: () => now,
+      steadyNow: () => steady,
+      onScheduled: (at) => shown.push(at),
+    });
+    const signal = new AbortController().signal;
+    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: new Date(storedAt + interval) });
+    steady += interval - 3_600_000 - 1;
+    now = new Date(storedAt + interval - 1 - 400 * interval);
+    expect(await schedule.pass(now, signal)).toEqual({ nextDueAt: new Date(now.getTime() + 1) });
+    expect(local.objects.size).toBe(0);
+    steady += 1;
+    now = new Date(now.getTime() + 1);
+    expect(await schedule.pass(now, signal)).toEqual({
+      nextDueAt: new Date(now.getTime() + interval),
+    });
+    expect(local.objects.size).toBe(1);
+    expect(shown).toEqual([
+      storedAt + interval,
+      storedAt + interval - 400 * interval,
+      null,
+      now.getTime() + interval,
+    ]);
   });
 
   it("stores a Cloud-only backup without encrypting under the box key", async () => {
@@ -747,29 +796,41 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
   });
 
   type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
-  const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
-    nodeId: BACKUP_NODE_ID,
-    backends: [backend],
-    db: NO_DB,
-    node: NODE_COPY,
-    modules: ALL_MODULES,
-    environment: "preproduction",
-    resolvers: {},
-    stateDir,
-    buildManifest: fixedManifest,
-    recoveryKey: "recovery-key-1",
-    stagingDir: staging,
-    schedule: { kind: "interval", ms: 10 },
-    retain: 7,
-    retainDays: 30,
-    destinationTimeoutMs: 60_000,
-    jitterSeed: "loop-node",
-    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
-    archive: async (outFile: string) => {
-      await writeFile(outFile, "DUMP-BYTES");
-    },
-    ...overrides,
-  });
+  // Unless a test brings its own steady clock, each fake sleep moves it on by the time slept.
+  const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => {
+    let steady = 0;
+    return {
+      nodeId: BACKUP_NODE_ID,
+      backends: [backend],
+      db: NO_DB,
+      node: NODE_COPY,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      resolvers: {},
+      stateDir,
+      buildManifest: fixedManifest,
+      recoveryKey: "recovery-key-1",
+      stagingDir: staging,
+      schedule: { kind: "interval", ms: 10 },
+      retain: 7,
+      retainDays: 30,
+      destinationTimeoutMs: 60_000,
+      jitterSeed: "loop-node",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      archive: async (outFile: string) => {
+        await writeFile(outFile, "DUMP-BYTES");
+      },
+      steadyNow: () => steady,
+      ...overrides,
+      sleep:
+        overrides.steadyNow === undefined
+          ? async (ms, signal) => {
+              steady += Math.max(0, ms);
+              await overrides.sleep(ms, signal);
+            }
+          : overrides.sleep,
+    };
+  };
 
   it("dumps once, fans to the backend, logs backup.destination_completed, then exits on abort", async () => {
     const controller = new AbortController();
@@ -1178,11 +1239,12 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
     const HOUR = 3600000;
     const DAY = 24 * HOUR;
 
-    // Steps the clock back by `stepMs` at the first wait, then moves it on by each wait; stops at the
-    // second archive, or after three days of waiting.
+    // Steps the clock back by `stepMs` at the first wait, which takes no time, then moves it on by
+    // each wait; stops at the second archive, or after three days of waiting.
     async function archivesAfterStep(schedule: BackupSchedule, start: string, stepMs: number) {
       const controller = new AbortController();
       let now = Date.parse(start);
+      let steady = 0;
       const archived: number[] = [];
       const deadlines: Array<number | null> = [];
       let waited = 0;
@@ -1198,6 +1260,7 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
             cutoverChanges: [],
           }),
           onScheduled: (at) => deadlines.push(at),
+          steadyNow: () => steady,
           archive: async (outFile) => {
             archived.push(now);
             await writeFile(outFile, "DUMP-BYTES");
@@ -1205,7 +1268,10 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
           },
           sleep: async (ms) => {
             if (waited === 0) now -= stepMs;
-            else now += ms;
+            else {
+              now += ms;
+              steady += ms;
+            }
             waited += ms;
             if (waited > 3 * DAY) controller.abort();
           },
@@ -1250,20 +1316,65 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
       expect(deadlines).toEqual([archived[0]! + DAY]);
     });
 
-    it("keeps its deadline through a step that leaves it a whole interval ahead, and not a millisecond more", async () => {
-      // The first wait sleeps no time here, so the step alone sets how far ahead the deadline lies.
-      for (const [stepMs, kept] of [
-        [0, true],
+    it("keeps its interval deadline through any step, showing it again only when the step moves it more than a second", async () => {
+      const start = Date.parse("2026-11-03T12:00:00Z");
+      for (const [stepMs, shownAgain] of [
+        [0, false],
         [1, false],
+        [1000, false],
+        [1001, true],
+        [400 * DAY, true],
       ] as const) {
-        const { deadlines } = await archivesAfterStep(
+        const { archived, deadlines, stepped } = await archivesAfterStep(
           { kind: "interval", ms: DAY },
           "2026-11-03T12:00:00Z",
           stepMs,
         );
-        expect(deadlines.length === 1).toBe(kept);
+        expect(archived).toEqual([start, stepped + DAY]);
+        expect(deadlines).toEqual(shownAgain ? [start + DAY, stepped + DAY] : [start + DAY]);
       }
     });
+
+    for (const [direction, stepMs] of [
+      ["back", -400 * DAY],
+      ["forward", 400 * DAY],
+    ] as const)
+      it(`takes the next interval archive one interval of steady time after the first when the clock steps ${direction} 400 days an hour into the wait`, async () => {
+        const controller = new AbortController();
+        const start = Date.parse("2026-11-03T12:00:00Z");
+        let now = start;
+        let steady = 0;
+        let waits = 0;
+        const archived: Array<{ wall: number; steady: number }> = [];
+        const deadlines: Array<number | null> = [];
+        await driveSchedule(
+          loopDeps(new FakeBackend("step"), {
+            signal: controller.signal,
+            now: () => new Date(now),
+            steadyNow: () => steady,
+            log: vi.fn(),
+            schedule: { kind: "interval", ms: DAY },
+            onScheduled: (at) => deadlines.push(at),
+            archive: async (outFile) => {
+              archived.push({ wall: now, steady });
+              await writeFile(outFile, "DUMP-BYTES");
+              if (archived.length === 2) controller.abort();
+            },
+            sleep: async (ms) => {
+              now += ms;
+              steady += ms;
+              waits += 1;
+              if (waits === 1) now += stepMs;
+              if (waits > 72) controller.abort();
+            },
+          }),
+        );
+        expect(archived).toEqual([
+          { wall: start, steady: 0 },
+          { wall: start + stepMs + DAY, steady: DAY },
+        ]);
+        expect(deadlines.filter((at) => at !== null)).toEqual([start + DAY, start + stepMs + DAY]);
+      });
 
     it("keeps a 03:00 deadline through a step back that leaves it exactly as far ahead as a daily fire can be, and not a millisecond more", async () => {
       // 12:00Z → 03:00 Madrid is 14 h ahead; a daily fire can lie 49 h ahead.

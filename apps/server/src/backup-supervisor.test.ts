@@ -2118,6 +2118,7 @@ describe("scheduled backup passes", () => {
       venueDir: await makeVenueDir(),
       logs: [],
     };
+    const now = overrides.now ?? (() => new Date("2026-11-17T12:00:00Z"));
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
@@ -2128,9 +2129,11 @@ describe("scheduled backup passes", () => {
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
-      now: () => new Date("2026-11-17T12:00:00Z"),
+      // These cases never step the clock, so the steady clock moves with it.
+      steadyNow: () => now().getTime(),
       log: () => {},
       ...overrides,
+      now,
     });
     return { sup, refs, dest };
   }

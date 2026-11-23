@@ -37,6 +37,7 @@ async function loopDeps(
   for (const rel of RECOVERY_FILES) await writeFile(join(stateDir, rel), `${rel}-contents`);
   const outcomes: BackupOutcomeHolder = { failed: new Map() };
   const backend = new LocalFsBackend("a", join(root, "a"));
+  let steady = 0;
   const deps: BackupSweepDeps = {
     nodeId: BACKUP_NODE_ID,
     backends: [backend],
@@ -65,6 +66,12 @@ async function loopDeps(
     }),
     archive: async (path: string) => writeFile(path, "D".repeat(1000)),
     ...overrides,
+    // Each fake sleep moves the steady clock on by the time slept.
+    steadyNow: () => steady,
+    sleep: async (ms, signal) => {
+      steady += Math.max(0, ms);
+      await overrides.sleep(ms, signal);
+    },
   };
   return { deps, outcomes, backend };
 }
