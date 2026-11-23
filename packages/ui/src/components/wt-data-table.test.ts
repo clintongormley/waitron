@@ -5707,7 +5707,7 @@ test.each([
   { label: "Acciones", buttonText: "⋮" },
   { label: "Actions", buttonText: "Longer action" },
 ])(
-  "a one-row table gives its pinned $label column only the width its heading or $buttonText button needs",
+  "the pinned $label heading names its icon-only column, sized to the icon or $buttonText button",
   async ({ label, buttonText }) => {
     const el = await table({
       rows: [rows[0]!],
@@ -5727,10 +5727,12 @@ test.each([
     const heading = el.shadowRoot!.querySelector<HTMLTableCellElement>("th[data-pinned=end]")!;
     const cell = el.shadowRoot!.querySelector<HTMLTableCellElement>("td[data-pinned=end]")!;
     const button = cell.querySelector("button")!;
-    const labelRange = document.createRange();
-    labelRange.selectNodeContents(heading);
+    await expect.element(page.elementLocator(heading)).toHaveAccessibleName(label);
+    const icon = heading.querySelector("wt-icon");
+    expect(icon?.shadowRoot?.querySelector("svg[aria-hidden=true]")).toBeTruthy();
+    expect(heading.querySelector("button")).toBeNull();
     const contentWidth = Math.max(
-      labelRange.getBoundingClientRect().width,
+      icon!.getBoundingClientRect().width,
       button.getBoundingClientRect().width,
     );
     const style = getComputedStyle(heading);

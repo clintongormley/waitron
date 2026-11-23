@@ -298,6 +298,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         text-align: end;
       }
 
+      th[data-actions][data-pinned="end"] {
+        text-align: center;
+      }
+
       tbody tr td[data-pinned="end"]:has(wt-row-actions[data-fallback-popover-open]) {
         z-index: 100;
       }
@@ -2704,7 +2708,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   this.#withHelp(
                     column,
                     column.sortValue === undefined
-                      ? column.label
+                      ? column.key === "actions" && column.pinned === "end"
+                        ? html`<wt-icon name="kebab"></wt-icon
+                            ><span class="visually-hidden">${column.label}</span>`
+                        : column.label
                       : html`<button
                           class="sort"
                           data-sort=${column.key}
