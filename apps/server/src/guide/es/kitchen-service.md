@@ -376,8 +376,8 @@ En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día d
 signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
 aparcas el pedido en el mostrador, el terminal muestra esos platos. Consulta con la estación que los
 prepara en el periodo indicado. **La estación acepta — enviar** los envía y **Quitarlos** los quita
-del pedido. Al aparcar, el botón dice **La estación acepta — guardar**. La misma ventana se abre cuando el servidor encuentra un
-plato así antes de que el terminal lo haya marcado.
+del pedido. Al aparcar, el botón dice **La estación acepta — guardar**. La misma ventana se abre
+cuando el servidor encuentra un plato así antes de que el terminal lo haya marcado.
 
 Un plato guardado antes de que acabara su periodo en un pedido aparcado del mostrador pregunta
 lo mismo cuando haces el pedido tras el periodo; **No enviarlos** lo deja sin enviar. Un extra añadido a un plato aparcado

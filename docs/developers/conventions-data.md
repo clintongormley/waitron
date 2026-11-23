@@ -589,11 +589,11 @@ zone offer menu, then performed separate product-variant and menu-variant reads.
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
 before its in-memory line loop; the variants come from the offers it holds (`LiveOffer.variants`).
 `working-order.test.ts` spies on `listZoneOffers` and checks that a basket repeating one offer calls
-it once. `fireLines` opens one routing snapshot. It groups dishes by their agreed period,
-with a group for dishes without an agreement, and asks `makers` about the distinct products in
-each group. The case "resolves every fired product's venue-service route in ONE batched call" in
-`apps/server/src/working-order.test.ts` checks one snapshot and the stations reached by three
-fired lines.
+it once. `fireLines` opens one routing snapshot. It groups dishes that need a station decision
+by their agreed period, with a group for dishes without an agreement, and asks `makers` about
+the distinct products in each group. The case "routes a round with repeated products from one
+venue-service snapshot" in `apps/server/src/working-order.test.ts` checks the snapshot count and
+the stations reached by three fired lines.
 
 ## Opening hours store "no claim" as no row
 
