@@ -64,6 +64,20 @@ interface CountryDemoMenuFields<L extends string = string> {
   listedSection?: { name: DemoText<L>; image?: string; productImages: string[] };
 }
 
+export type CountryDemoSetMenu<L extends string = string> = ReadonlyDemo<{
+  name: DemoPlainText<L>;
+  customerName: DemoText<L>;
+  price: string;
+  vatClass: "reduced";
+  lines: { count: number; courses: DemoCourseKey[] }[];
+  dishes: {
+    productImage: string;
+    surcharge: string | null;
+    excludedVariants?: string[];
+    course?: DemoCourseKey;
+  }[];
+}>;
+
 interface CountryDemoOptionLabelFields<L extends string = string> {
   name: DemoPlainText<L>;
   customerName: DemoText<L>;
@@ -125,6 +139,8 @@ interface CountryDemoDataFields<L extends string = string> {
     readonly restaurant: CountryDemoMenu<L>;
     readonly deli: CountryDemoMenu<L>;
     readonly lunch: CountryDemoMenu<L>;
+    readonly setMenus: readonly CountryDemoSetMenu<L>[];
+    readonly setMenuHolderName: DemoPlainText<L>;
     readonly drinksName: DemoPlainText<L>;
     readonly drinksCustomerName: DemoText<L>;
     readonly drinksImage?: string;

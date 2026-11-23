@@ -222,7 +222,7 @@ const sharedDrinks = (names: SharedDrinkNames): MadridSharedOffers => {
 const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
   en: sharedDrinks({
     department: "Deli",
-    menus: { drinks: "Drinks", casa: "Casa Delgado", lunch: "Set lunch", deli: "Deli takeaway" },
+    menus: { drinks: "Drinks", casa: "Casa Delgado", lunch: "Set menus", deli: "Deli takeaway" },
     categories: { soft: "Soft drinks", wineAndBeer: "Wine and beer" },
     deliSection: "Drinks",
     zone: "Deli counter",
@@ -235,7 +235,7 @@ const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
     menus: {
       drinks: "Bebidas",
       casa: "Casa Delgado",
-      lunch: "Menú del Día",
+      lunch: "Menús",
       deli: "Charcutería para llevar",
     },
     categories: { soft: "Refrescos", wineAndBeer: "Vino y cerveza" },
@@ -246,6 +246,127 @@ const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
     beer: { name: "Botellín", kitchenName: "BOTELLÍN · BARRA" },
   }),
 };
+function lunchSetMenuChanges(locale: "en" | "es", photos: Record<string, string>) {
+  const [holderName, drinksName, startersName, mainsName, dailyName, specialName] =
+    locale === "en"
+      ? (["Set menus", "Drinks", "Starters", "Mains", "Menu of the day", "Special menu"] as const)
+      : (["Menús", "Bebidas", "Primeros", "Segundos", "Menú del día", "Menú especial"] as const);
+  const menu = (name: string) => `@catalogues:${stable([name])}`;
+  const section = (name: string, role: string, label: string) =>
+    `@sections:${stable([menu(name), role, label])}`;
+  const root = (name: string) => section(name, "menu_root", name);
+  const member = (sectionId: string, position: number) =>
+    `@section_members:${stable([sectionId, position])}`;
+  const menuItem = (menuId: string, productId: string) =>
+    `@menu_items:${stable([menuId, productId])}`;
+  const lineId = (menuId: string, index: number) => `@set_menu_lines:${stable([menuId, index])}`;
+  const product = (image: string) => madridProduct(photos[image + ".png"]!);
+  const holder = menu(holderName);
+  const holderVersion = `@menu_versions:${stable([holder, 1])}`;
+  const holderRoot = root(holderName);
+  const starters = section(holderName, "section", startersName);
+  const mains = section(holderName, "section", mainsName);
+  const drinks = root(drinksName);
+  const negroni = madridProduct(NEGRONI_PHOTO);
+  const daily = menu(dailyName);
+  const special = menu(specialName);
+  const lunchDishes = ["ensalada-mixta", "gazpacho", "lentejas", "pollo-asado", "merluza-rebozada"];
+  const dailyDishes = [
+    ...lunchDishes,
+    "flan",
+    "arroz-con-leche",
+    "pan-de-la-casa",
+    "vino-tinto",
+    "agua-mineral",
+    "cana-cerveza",
+    "refresco-cola",
+    "solomillo",
+    "cafe-solo",
+  ];
+  const specialDishes = [
+    ...dailyDishes,
+    "bacalao",
+    "merluza",
+    "crema-catalana",
+    "tarta-de-santiago",
+    "patatas-bravas",
+  ];
+  const menus = [
+    { id: daily, name: dailyName, dishes: dailyDishes, mainsAcceptsStarters: false },
+    { id: special, name: specialName, dishes: specialDishes, mainsAcceptsStarters: true },
+  ];
+  const changed = (
+    [
+      [0, "child_section_id", starters, drinks],
+      [1, "child_section_id", mains, null],
+      [1, "product_id", null, negroni],
+      [2, "child_section_id", drinks, root(dailyName)],
+      [3, "child_section_id", null, root(specialName)],
+      [3, "product_id", negroni, null],
+    ] as const
+  ).map(([position, column, from, to]) => ({
+    table: "section_members",
+    row: member(holderRoot, position),
+    column,
+    from,
+    to,
+  }));
+  const courses = menus.flatMap(({ id, mainsAcceptsStarters }) =>
+    [
+      [STARTER_COURSE_NAMES.Starters.es],
+      [
+        STARTER_COURSE_NAMES.Mains.es,
+        ...(mainsAcceptsStarters ? [STARTER_COURSE_NAMES.Starters.es] : []),
+      ],
+      [STARTER_COURSE_NAMES.Desserts.es, NEW_COURSES[0]],
+      [NEW_COURSES[2]],
+      [NEW_COURSES[1]],
+    ].flatMap((names, index) => names.map((name) => [lineId(id, index), courseKey(name)])),
+  );
+  const coffee = product("cafe-solo");
+  return {
+    changed,
+    removed: {
+      sections: [starters, mains],
+      section_members: [
+        ...[0, 1, 2].map((position) => member(starters, position)),
+        ...[0, 1].map((position) => member(mains, position)),
+      ],
+      menu_items: lunchDishes.map((image) => menuItem(holder, product(image))),
+    },
+    setMenus: { [holderVersion]: [daily, special] },
+    added: {
+      catalogues: menus.map(({ id }) => [id]),
+      menu_details: menus.map(({ id }) => [id]),
+      sections: menus.flatMap(({ name }) => [[root(name)], [section(name, "home_layout", "Home")]]),
+      section_members: menus.flatMap(({ name, dishes }) =>
+        dishes.map((image) => [root(name), product(image), null]),
+      ),
+      menu_items: menus.flatMap(({ id, dishes }) => dishes.map((image) => [id, product(image)])),
+      menu_version_images: [
+        "merluza",
+        "solomillo",
+        "flan",
+        "arroz-con-leche",
+        "tarta-de-santiago",
+        "crema-catalana",
+        "bacalao",
+        "patatas-bravas",
+      ].map((image) => [holderVersion, photos[image + ".png"] + ".webp"]),
+      set_menu_lines: menus.flatMap(({ id }) =>
+        [0, 1, 2, 3, 4].map((index) => [lineId(id, index)]),
+      ),
+      set_menu_line_courses: courses,
+      set_menu_dish_courses: [
+        [menuItem(special, product("patatas-bravas")), courseKey(STARTER_COURSE_NAMES.Starters.es)],
+      ],
+      set_menu_variant_exclusions: [
+        [menuItem(daily, coffee), coffee, `@products:${stable([coffee, 1])}`],
+      ],
+    },
+  };
+}
+
 const SECTION_PHOTOS = [
   // The shared Drinks menu uploads the photo reused by the deli's Drinks section.
   ["Drinks", "Bebidas", "Drinks", "Bebidas", "drinks", "menu_root"],
@@ -257,8 +378,6 @@ const SECTION_PHOTOS = [
   ["Casa Delgado", "Casa Delgado", "Sharing plates", "Raciones", "sharing-plates"],
   ["Casa Delgado", "Casa Delgado", "Mains", "Platos principales", "mains"],
   ["Casa Delgado", "Casa Delgado", "Desserts", "Postres", "desserts"],
-  ["Set lunch", "Menú del Día", "Starters", "Primeros", "starters"],
-  ["Set lunch", "Menú del Día", "Mains", "Segundos", "lunch-mains"],
   ["Deli takeaway", "Charcutería para llevar", "Charcuterie", "Charcutería", "charcuterie"],
   ["Deli takeaway", "Charcutería para llevar", "Cheeses", "Quesos", "cheeses"],
   ["Deli takeaway", "Charcutería para llevar", "Conserves", "Conservas", "conserves"],
@@ -291,12 +410,12 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
   en: periodChange("Restaurant and bar", "Open", ["Bar", "Lunch", "Dinner"], {
     drinks: menu("Drinks"),
     casa: menu("Casa Delgado"),
-    lunch: menu("Set lunch"),
+    lunch: menu("Set menus"),
   }),
   es: periodChange("Restaurante y bar", "Abierto", ["Bar", "Comida", "Cena"], {
     drinks: menu("Bebidas"),
     casa: menu("Casa Delgado"),
-    lunch: menu("Menú del Día"),
+    lunch: menu("Menús"),
   }),
 };
 
@@ -348,6 +467,13 @@ const RENAMED_COLUMNS: MadridColumnRenames = {
   adjustment_refunds: { tender_refund_id: "refund_id" },
 };
 /** Tables added after the capture; the seed writes no row to them. */
+const SET_MENU_TABLES = [
+  "set_menu_lines",
+  "set_menu_line_courses",
+  "set_menu_variant_exclusions",
+  "set_menu_dish_courses",
+] as const;
+
 const ADDED_TABLES = [
   "verifactu_history",
   "sign_in_challenges",
@@ -370,10 +496,6 @@ const ADDED_TABLES = [
   "sale_line_dishes",
   "deferred_closures",
   "declaraciones_responsables",
-  "set_menu_lines",
-  "set_menu_line_courses",
-  "set_menu_variant_exclusions",
-  "set_menu_dish_courses",
   "bill_set_menu_copies",
   "bill_advances",
 ];
@@ -1113,6 +1235,14 @@ for (const locale of ["en", "es"] as const) {
         expect(Object.keys(added!.rows), `${phase}/${name} rows`).toEqual([]);
         expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeUndefined();
         expected[phase].tables[name] = structuredClone(added!);
+        phases[phase]![name] = 0;
+      }
+      for (const name of SET_MENU_TABLES) {
+        const table = canonical[phase].tables[name]!;
+        if (phase !== "seeded")
+          expect(Object.keys(table.rows), `${phase}/${name} rows`).toEqual([]);
+        expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeUndefined();
+        expected[phase].tables[name] = { ...structuredClone(table), rows: {} };
         phases[phase]![name] = 0;
       }
       // Added after the capture; its rows are filled once the products' final keys are known.
@@ -2812,6 +2942,7 @@ for (const locale of ["en", "es"] as const) {
           Object.entries(closureRows).sort(([a], [b]) => a.localeCompare(b)),
         );
         const shared = SHARED_DRINKS[locale];
+        const setMenus = lunchSetMenuChanges(locale, previousPhotoHashes);
         const departmentKeys = [
           locale === "en" ? "Restaurant and bar" : "Restaurante y bar",
           locale === "en" ? "Deli" : "Charcutería",
@@ -2820,6 +2951,7 @@ for (const locale of ["en", "es"] as const) {
           ...shared,
           changed: [
             ...shared.changed,
+            ...setMenus.changed,
             ...MADRID_COURSE_DISHES.flatMap(([course, dishes]) =>
               dishes.map((dish) => ({
                 table: "products",
@@ -2832,8 +2964,18 @@ for (const locale of ["en", "es"] as const) {
               })),
             ),
           ],
+          removed: setMenus.removed,
+          setMenus: setMenus.setMenus,
           added: {
             ...shared.added,
+            ...setMenus.added,
+            sections: [...shared.added.sections!, ...setMenus.added.sections],
+            section_members: [...shared.added.section_members!, ...setMenus.added.section_members],
+            menu_items: [...shared.added.menu_items!, ...setMenus.added.menu_items],
+            menu_version_images: [
+              ...shared.added.menu_version_images!,
+              ...setMenus.added.menu_version_images,
+            ],
             kitchen_courses: NEW_COURSES.map((name, index) => [courseKey(name), index + 4]),
             department_courses: departmentKeys.flatMap((department) =>
               [NEW_COURSES[1], NEW_COURSES[2]].map((course) => [
@@ -2845,18 +2987,18 @@ for (const locale of ["en", "es"] as const) {
             ),
           },
         };
-        const { semantics, added } = madridWithSharedOffers(
-          madridWithDroppedColumns(
-            madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
-            {
-              products: ["catalogue_id", "name_key", "manual_allergens", "diet"],
-            },
-          ),
+        const beforeOffers = madridWithDroppedColumns(
+          madridWithPhotos(madridWithFoldedTables(expected.seeded, [staffMenuFold])),
+          { products: ["catalogue_id", "name_key", "manual_allergens", "diet"] },
+        );
+        const { semantics, added, removed } = madridWithSharedOffers(
+          beforeOffers,
           historicalSeeded,
           declared,
         );
         expected.seeded = semantics;
         for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;
+        for (const [name, count] of Object.entries(removed)) phases.seeded![name]! -= count;
       }
       expected[phase] = madridWithRenamedTables(expected[phase], { catalogues: "menus" });
       expected[phase] = madridWithDroppedColumns(expected[phase], {

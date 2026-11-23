@@ -573,7 +573,7 @@ describe("seedDemoRestaurant", () => {
           department: "Restaurant and bar",
           name: "Lunch",
           menu: "Casa Delgado",
-          staff_menus: "Set lunch",
+          staff_menus: "Set menus",
         },
       ]);
 
@@ -757,9 +757,10 @@ describe("seedDemoRestaurant", () => {
       "Casa Delgado",
       "Deli takeaway",
       "Drinks",
-      "Set lunch",
+      "Menu of the day",
+      "Set menus",
+      "Special menu",
     ]);
-    // Every menu is published as seeded, so a till sells it (D17).
     expect(read.menuStates).toEqual(["current", "current", "current", "current"]);
     expect(read.departments).toEqual([
       {
@@ -786,28 +787,28 @@ describe("seedDemoRestaurant", () => {
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set menus"],
       },
       {
         zone_name: "Downstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: true,
-        menus: ["Casa Delgado", "Drinks", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set menus"],
       },
       {
         zone_name: "Terrace",
         department_name: "Restaurant and bar",
         order_start: "table",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set menus"],
       },
       {
         zone_name: "Upstairs bar",
         department_name: "Restaurant and bar",
         order_start: "counter",
         is_counter_default: false,
-        menus: ["Casa Delgado", "Drinks", "Set lunch"],
+        menus: ["Casa Delgado", "Drinks", "Set menus"],
       },
     ]);
     expect(read.hours).toEqual([
@@ -835,7 +836,7 @@ describe("seedDemoRestaurant", () => {
       },
       {
         product_id: expect.any(String),
-        menu_name: "Set lunch",
+        menu_name: "Set menus",
         gross_price: 900,
         unit_price: 1100,
       },
@@ -1098,6 +1099,12 @@ describe("seedDemoRestaurant", () => {
     expect(read.registros).toBe(0);
     // Spain's 4% and 21% are not offered here, so every product takes the area's 0%.
     expect(read.takeawayRates).toEqual([0]);
+    expect((await withTransaction(suite.db, venueMenus)).map(({ name }) => name).sort()).toEqual([
+      "Casa Delgado",
+      "Deli takeaway",
+      "Drinks",
+      "Set lunch",
+    ]);
     const afterCourses = await readCourseSetup();
     expect(afterCourses.courses).toEqual(beforeCourses.courses);
     expect(Object.values(afterCourses.settings)).toEqual(

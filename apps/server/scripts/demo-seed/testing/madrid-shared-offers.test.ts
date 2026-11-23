@@ -262,6 +262,46 @@ it("compares the declared course and its department firing policy", () => {
   );
 });
 
+it("compares a published holder after declaring its removed section and added set menu", () => {
+  const before = semantics(false);
+  const after = semantics(true);
+  const old = '@sections:["old-lunch"]';
+  before.tables.sections!.rows[old] = { id: old };
+  const captured = before.tables.menu_versions!.rows[deliVersion]!.document as {
+    root: { members: Row[] };
+  };
+  captured.root.members.push({ kind: "section", sectionId: old, members: [] });
+  const version = after.tables.menu_versions!.rows[deliVersion]!;
+  const document = version.document as { root: { members: Row[] }; setMenus?: Row };
+  const setId = '@catalogues:["Lunch set"]';
+  document.setMenus = { [setId]: { name: "Lunch set" } };
+  const member = { kind: "set_menu", menuId: setId, name: "Lunch set" };
+  document.root.members.push(member);
+  version.content_hash = digest(document);
+  const changes: MadridSharedOffers = {
+    ...declared,
+    removed: { sections: [old] },
+    setMenus: { [deliVersion]: [setId] },
+  };
+  const result = madridWithSharedOffers(before, after, changes);
+  expect(result.semantics).toEqual(after);
+  expect(result.removed).toEqual({ sections: 1 });
+
+  document.root.members.push(member);
+  expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
+    "Madrid set-menu members differ",
+  );
+  document.root.members.pop();
+  delete document.setMenus[setId];
+  expect(() => madridWithSharedOffers(before, after, changes)).toThrow(
+    "Madrid set-menu copies differ",
+  );
+  const wrong = { ...changes, removed: { sections: [old, softSection] } };
+  expect(() => madridWithSharedOffers(before, after, wrong)).toThrow(
+    "Madrid declared removal differs",
+  );
+});
+
 it("refuses an existing cell changed beyond the declaration", () => {
   const seeded = semantics(true, (rows) => {
     (rows.products as Record<string, Row>)[cola]!.category_id = '@categories:["Other"]';

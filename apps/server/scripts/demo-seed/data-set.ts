@@ -67,6 +67,8 @@ export type StrictCountryDemoData<L extends string = string> = Omit<
     readonly restaurant: SeedMenu<L>;
     readonly deli: SeedMenu<L>;
     readonly lunch: SeedMenu<L>;
+    readonly setMenus: CountryDemoData<L>["menus"]["setMenus"];
+    readonly setMenuHolderName: DemoPlainText<L>;
     readonly drinksName: StaffText;
     readonly drinksCustomerName: CountryDemoData<L>["menus"]["drinksCustomerName"];
     readonly drinksImage?: string;

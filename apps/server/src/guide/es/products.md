@@ -331,6 +331,10 @@ En **Qué incluye cada menú**, indica cuántos platos ofreces de cada curso. Po
 usa una línea para un entrante y otra para un principal. Pon dos cursos en la misma línea para
 que el cliente elija entre ambos.
 
+Si tu menú incluye bebidas, pan o café, [crea los cursos que necesites y asígnalos a los
+productos](products.md#course). En cada departamento, elige **Marchar ya** para Bebidas y Pan,
+así puedes enviarlos con el primer pedido.
+
 Abre la carta completa que ofrecerá el menú. En **Estructura**, abre las acciones
 de la carta o sección donde quieras incluirlo, elige **Menú…** y selecciónalo.
 En **Vista previa**, revisa dónde lo has puesto, los cambios y cualquier problema que debas
@@ -454,9 +458,10 @@ reimpresión siguen mostrando los datos guardados con ese pedido. Una línea aú
 nombre nuevo para el cliente o de estación de una lista de opciones o de una opción con el siguiente
 cambio del pedido.
 
-Cuando preparas una demostración de Madrid en español, los nombres del personal y de estación están en
-español. La caja muestra **Menú del Día**, mientras que su nombre para el cliente es **Menú del
-mediodía**. **Ensalada** usa el nombre de estación de preparación **ENSALADA · MENÚ** y una unidad propia,
+Cuando preparas una demostración de Madrid en español, los nombres del personal y de estación
+están en español. En una mesa a la hora de comer, abre **Menús** para elegir el **Menú del día**
+(14 €) o el **Menú especial** (20 €). Prueba el **Solomillo** con 5 € de suplemento en el Menú del día.
+**Ensalada** usa el nombre de estación de preparación **ENSALADA · MENÚ** y una unidad propia,
 **Ración**, abreviada **rac**. **Café de la casa** tiene dos variantes y el nombre de estación de preparación
 **CAFÉ · BAR DE ABAJO**. Los nombres para el cliente conservan los idiomas de contenido del
 local, por lo que cambiar los nombres internos no sustituye las palabras del ticket.
@@ -476,9 +481,9 @@ Valencia y Galicia salen en español por defecto.
 Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.
 Después de escribir un nombre, Waitron lo conserva al cambiar de región, también al revisar y volver.
 
-Casa Delgado y Menú del Día incluyen una carta **Bebidas** como carpeta. Bebidas pone la
+Casa Delgado y Menús incluyen una carta **Bebidas** como carpeta. Bebidas pone la
 **Caña** a 3,00 en lugar de su precio de producto de 2,80; las dos cartas que la incluyen
-heredan ese precio. Menú del Día fija su propio precio del **Negroni de la casa** en 9,00.
+heredan ese precio. Menús fija su propio precio del **Negroni de la casa** en 9,00.
 Las variantes del café conservan sus propios precios. El **Solomillo** lleva la lista de
 opciones **Punto**. En **Pollo asado** puedes elegir hasta tres **Guarniciones** opcionales:
 pimientos (2,00), ensalada (1,50) y pan (0,50). Estos precios se aplican a una ración añadida al

@@ -119,7 +119,7 @@ for (const [province, postalCode, invoiceLocale] of [
       expect(JSON.stringify(doc)).not.toContain(sausageNames.staffName![locale]);
       for (const name of [
         selection.dataSet.menus.restaurant.name[locale],
-        selection.dataSet.menus.lunch.name[locale],
+        selection.dataSet.menus.setMenuHolderName[locale],
       ]) {
         const menu = menus.find((row) => row.name === name)!;
         expect(menu, name).toBeDefined();
@@ -297,7 +297,7 @@ for (const locale of ["en", "es"] as const)
     for (const name of [
       selection.dataSet.menus.drinksName[locale],
       selection.dataSet.menus.restaurant.name[locale],
-      selection.dataSet.menus.lunch.name[locale],
+      selection.dataSet.menus.setMenuHolderName[locale],
     ]) {
       const menu = menus.find((m) => m.name === name)!;
       expect(menu, name).toBeDefined();
@@ -535,7 +535,7 @@ for (const locale of ["en", "es"] as const)
     for (const name of [
       selection.dataSet.menus.drinksName[locale],
       selection.dataSet.menus.restaurant.name[locale],
-      selection.dataSet.menus.lunch.name[locale],
+      selection.dataSet.menus.setMenuHolderName[locale],
     ]) {
       const menu = menus.find((m) => m.name === name)!;
       expect(menu, name).toBeDefined();

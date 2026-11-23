@@ -60,6 +60,25 @@ it("refuses unknown row identities and unresolved generated references", async (
     canonical({ tables: { categories: table([{ id, name: "Mains", parent_id: otherId }]) } }),
   ).rejects.toThrow("unresolved reference");
 });
+it("keys set-menu lines by menu and position and resolves their courses", async () => {
+  const course = "123e4567-e89b-42d3-a456-426614174002";
+  const actual = await canonical({
+    tables: {
+      menus: table([{ id, name: "Lunch" }]),
+      kitchen_courses: table([{ id: course, name: "Mains" }]),
+      set_menu_lines: table([{ id: otherId, menu_id: id, position: 1, count: 2 }]),
+      set_menu_line_courses: table([{ line_id: otherId, course_id: course }]),
+    },
+  });
+  const menuKey = '@menus:["Lunch"]';
+  const lineKey = `@set_menu_lines:${JSON.stringify([menuKey, 1])}`;
+  expect(actual.tables.set_menu_lines!.rows).toEqual({
+    [lineKey]: { id: lineKey, menu_id: menuKey, position: 1, count: 2 },
+  });
+  expect(Object.values(actual.tables.set_menu_line_courses!.rows)).toEqual([
+    { line_id: lineKey, course_id: '@kitchen_courses:["Mains"]' },
+  ]);
+});
 it("checks each published hash before replacing generated references", async () => {
   const document = {
     format: 3,

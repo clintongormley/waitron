@@ -24,6 +24,7 @@ import type { SeedLocale } from "./locale.js";
 import { demoPlainText, demoLanguagesFor, type DemoDataSet, type SeedMenu } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
 import { storeDemoImage } from "./seed-media.js";
+import { seedSetMenus } from "./seed-set-menus.js";
 
 import { setProductCourse } from "../../src/kitchen.js";
 
@@ -133,7 +134,11 @@ export async function seedMenus(
       )})
     limit 1`);
 
-  const seedOne = async (data: SeedMenu, existingMenuId?: string): Promise<string> => {
+  const seedOne = async (
+    data: SeedMenu,
+    existingMenuId?: string,
+    listProducts = true,
+  ): Promise<string> => {
     const menuPresentation = await presentation(data.customerName, data.image);
     const menu =
       existingMenuId === undefined
@@ -160,13 +165,15 @@ export async function seedMenus(
           ? { kind: "no_preparation" }
           : { kind: "station", stationId: stationIds[cat.station] },
       );
-      const section = await createSectionIn(
-        tx,
-        rootSectionId,
-        { internalName: plain(cat.name), ...(await presentation(cat.name, cat.sectionImage)) },
-        undefined,
-        locale,
-      );
+      const section = listProducts
+        ? await createSectionIn(
+            tx,
+            rootSectionId,
+            { internalName: plain(cat.name), ...(await presentation(cat.name, cat.sectionImage)) },
+            undefined,
+            locale,
+          )
+        : undefined;
       const productIds: string[] = [];
       for (const product of cat.products) {
         const unitId = product.unit
@@ -234,6 +241,7 @@ export async function seedMenus(
         productsByImage.set(product.image, created.id);
         categoryByImage.set(product.image, category.id);
       }
+      if (section === undefined) continue;
       await addProducts(tx, section.id, productIds);
       const rows = await tx
         .select({ id: menuItems.id, productId: menuItems.productId })
@@ -282,7 +290,12 @@ export async function seedMenus(
     },
     provisionedMenus[0]?.id,
   );
-  const diaId = await seedOne(lunch);
+  const useSetMenus = courseIds !== undefined && dataSet.menus.setMenus.length > 0;
+  const diaId = await seedOne(
+    useSetMenus ? { ...lunch, name: dataSet.menus.setMenuHolderName } : lunch,
+    undefined,
+    !useSetMenus,
+  );
   const deliId = await seedOne(deli);
 
   const drinksRoot = await requireMenuRoot(tx, drinksId);
@@ -304,6 +317,16 @@ export async function seedMenus(
     }
   }
 
+  if (useSetMenus) {
+    await seedSetMenus(tx, {
+      dataSet,
+      locale,
+      languages,
+      holderId: diaId,
+      productsByImage,
+      courseIds,
+    });
+  }
   await assignMenuToVenue(tx, casaId);
 
   return {
