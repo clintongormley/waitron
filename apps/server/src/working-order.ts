@@ -147,7 +147,7 @@ import {
   placeSetMenuRows,
   readBillSetMenus,
   readBillsSetMenus,
-  refuseSetMenuMoney,
+  refuseTakeawaySetMenuMoney,
   refuseDraftLosingSetMenuPlace,
   refuseUnlessSetMenuBill,
   SET_MENU_DRAFT_LINE,
@@ -1265,7 +1265,7 @@ async function readLockedLinesForIssuance(
     .leftJoin(parentProducts, parentJoin)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  if (refuseSetMenus) await refuseSetMenuMoney(tx, workingOrderId, rows, rows[0]?.dining);
+  if (refuseSetMenus) await refuseTakeawaySetMenuMoney(tx, workingOrderId, rows, rows[0]?.dining);
   const stored = toStoredLines(rows);
   const grouped = groupedByPortion(rows, stored);
   const rowRates = await readLineVatRates(

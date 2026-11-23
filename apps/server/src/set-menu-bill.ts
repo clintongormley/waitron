@@ -63,7 +63,7 @@ export async function hasDraftSetMenuLines(tx: Transaction, draftId: string): Pr
 
 // A takeaway set menu files at its own takeaway class beside lines at their products' takeaway
 // rates; VAT-RATES piece B's payment check replaces this refusal.
-export async function refuseSetMenuMoney(
+export async function refuseTakeawaySetMenuMoney(
   tx: Transaction,
   workingOrderId: string,
   lines?: readonly LineRole[],

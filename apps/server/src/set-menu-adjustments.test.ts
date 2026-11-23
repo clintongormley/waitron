@@ -305,7 +305,7 @@ it("an empty set menu is removed from a bill holding a contribution while the mo
   }
 });
 
-/** The plan's bill, and a second bill of its party holding one Daily with both places open. */
+/** The spec bill, and a second bill of its party holding one Daily with both places open. */
 async function twoBills() {
   const tab = await specBill(spec);
   const other = await inTx(venue, (tx) => insertPartyBill(tx, venue.cfg, tab.partyId));

@@ -569,7 +569,8 @@ al otro.
 Indica cuántos menús de cada tipo lleva la cuenta. Abre su carpeta desde la cuadrícula
 o escribe su nombre en **Buscar** y pulsa el resultado. Después, elige los platos. En la
 carpeta puedes ver qué platos están incluidos y cuáles tienen suplemento. Si la comida es
-para llevar, elige **Para llevar** en la cuenta antes de añadir un menú.
+para llevar, elige **Para llevar** en la cuenta antes de añadir un menú. Todavía no se puede cobrar una
+cuenta para llevar que tenga un menú.
 
 Abre el resumen en **Pedido** para ver dónde va cada plato y qué sitios quedan libres.
 Si un plato no tiene sitio, elige una de las opciones que aparecen o pulsa **Cancelar**
@@ -579,8 +580,7 @@ pulsa **Descuento…** en él dentro del resumen.
 
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus
 platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
-cuenta antes de confirmar. El ticket muestra los menús y lo que cuesta aparte, pero no
-los platos incluidos en el precio.
+cuenta antes de confirmar.
 
 En el **Mostrador**, elige **Para llevar**, indica cuántos menús quieres y abre la
 carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los

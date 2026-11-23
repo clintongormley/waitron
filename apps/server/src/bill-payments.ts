@@ -153,7 +153,7 @@ import {
 } from "./bill-advances.js";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { assertStillSignedIn } from "./till-session.js";
-import { refuseSetMenuMoney } from "./set-menu-bill.js";
+import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import {
   enqueueRequestedPaymentSlip,
@@ -1640,7 +1640,7 @@ async function requireReadyForPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
-  await refuseSetMenuMoney(tx, workingOrderId);
+  await refuseTakeawaySetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
 }
 

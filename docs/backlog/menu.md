@@ -905,7 +905,7 @@ or not. A comped or discounted set-menu dish moves to another bill only with its
 (`set_menu.move_adjusted`). The ticket and the full invoice list set menus and supplements, not the
 dishes a set menu covers; the till's pay-by-items list leaves those out too, and category sales
 show set menus as a group of their own. The table-service guide covers this in both languages.
-The owner's answers it rests on are recorded in the plan. A takeaway bill holding a set menu still refuses money
+A takeaway bill holding a set menu still refuses new payments, comps and discounts
 (`set_menu.payment_not_ready`) until VAT-RATES piece B replaces that check.
 Selecting copy-only dishes in the live correction dialog remains open. Piece 5, the demo and
 courses, remains. Release set menus to venues only once all five pieces are in. This rollout has no feature switch (watcher, 2026-11-19).

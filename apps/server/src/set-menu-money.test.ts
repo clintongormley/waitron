@@ -142,7 +142,7 @@ function applyArgs(args: Awaited<ReturnType<typeof adjustmentArgs>>) {
   );
 }
 
-it("builds the plan's bill: the places piece 2 gives, 73.00 in all", async () => {
+it("builds the spec bill: 2 Daily and 2 Special with their dishes placed, 73.00 in all", async () => {
   const tab = await specBill(spec);
   const rows = await specRows(spec, tab.tabId);
   const dishes = rows.filter(({ setMenuRole }) => setMenuRole === "dish");

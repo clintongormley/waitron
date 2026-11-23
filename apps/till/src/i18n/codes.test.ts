@@ -1317,7 +1317,7 @@ it.each([
   expect(codeMessage(code, "es-ES", params)).toContain(spanish);
 });
 
-it("each new code is worded in English and Spanish", () => {
+it("words set_menu.move_adjusted with every dish named, in English and Spanish", () => {
   const params = { dishNames: ["Sirloin", "Soup"] };
   expect(codeMessage("set_menu.move_adjusted", "en-GB", params)).toBe(
     "Because of a comp or discount, Sirloin and Soup can only move with the set menu. Move the set menu as well, or leave Sirloin and Soup on this bill.",

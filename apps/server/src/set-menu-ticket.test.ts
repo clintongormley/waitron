@@ -156,14 +156,14 @@ function previewCorrection(saleId: ReturnType<typeof brandSaleId>, gross: string
   );
 }
 
-// Regression case: a set menu's own line is a priced line, which a partial correction may name.
+// A set menu's own line is a priced line, which a partial correction may name.
 it("a correction of one set menu's ticket is usable", async () => {
   const { saleId, lines } = await paidSpecSale();
   const daily = lines.find(({ name }) => name === "Daily menu")!;
   expect(await previewCorrection(saleId, "14.00", daily.id)).toMatchObject({ gross: "14.00" });
 });
 
-// Regression case: a covered dish is a 0.00 line, which no partial correction may name alone.
+// A covered dish is a 0.00 line, which no partial correction may name alone.
 it("a covered dish cannot be corrected on its own", async () => {
   const { saleId, lines } = await paidSpecSale();
   const soup = lines.find(({ name }) => name === "Soup")!;

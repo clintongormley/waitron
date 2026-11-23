@@ -37,7 +37,7 @@ useVenueDb({
   },
 });
 
-/** The plan's bill, served and printed: answers the bill and the sale its ticket filed. */
+/** The spec bill, served and printed: answers the bill and the sale its ticket filed. */
 async function printedBill() {
   const tab = await specBill(spec, "fire");
   await serveSpecBill(spec, tab.partyId, tab.tabId);
@@ -146,9 +146,8 @@ it("a printed set-menu bill splits after print", async () => {
   expect(ticket(await specSaleLines(spec, billId, saleId!))).toEqual(ticket(firstTicket));
 });
 
-it("a comped set menu splits after print with its comp", async () => {
+it("a comped set-menu dish splits after print with its comp", async () => {
   const tab = await specBill(spec, "fire");
-  // Comping the set-menu line itself is refused until Task 2b; Daily 2's surcharged Sirloin stands in.
   const sirloin = (await specRows(spec, tab.tabId)).find(
     ({ name, setMenuLineId }) => name === "Sirloin" && setMenuLineId === tab.daily[1],
   )!;

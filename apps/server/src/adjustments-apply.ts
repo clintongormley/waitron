@@ -84,7 +84,7 @@ import {
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
 import { readPortionBindings, readWholePortionLines } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
-import { refuseSetMenuMoney } from "./set-menu-bill.js";
+import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 
 /** What an adjustment asks, as a preview and an apply share it. */
@@ -819,7 +819,7 @@ export async function planAdjustment(
   await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   const rows = await readRows(tx, orderId);
-  if (ask.action !== "cancel") await refuseSetMenuMoney(tx, orderId, rows);
+  if (ask.action !== "cancel") await refuseTakeawaySetMenuMoney(tx, orderId, rows);
 
   let line: Row | null = null;
   let covered: number | null = null;

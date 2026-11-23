@@ -917,8 +917,8 @@ at the one dine-in rate, and no product screen offers an eat-in VAT class (piece
 [plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Left, with no plan yet:
 
 - **Piece B:** set menus with no VAT of their own, and none taken away when their products'
-  takeaway rates differ. Until then a takeaway bill holding a set menu refuses money
-  (`set_menu.payment_not_ready`, A1515); piece B lifts that refusal. Its last pull request (the plan's "PR L") removes the old VAT class labels: the
+  takeaway rates differ. Until then a takeaway bill holding a set menu refuses new
+  payments, comps and discounts (`set_menu.payment_not_ready`, A1515); piece B lifts that refusal. Its last pull request (the plan's "PR L") removes the old VAT class labels: the
   `vat_class` and `takeaway_vat_class` columns on products and order lines, their checks, the
   hidden `defaultProductVatClass` setting and the shared class table's last readers.
 - **Piece C:** scheduled and bulk rate changes. Today an edit to a product's takeaway rate

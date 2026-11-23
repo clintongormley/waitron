@@ -23,7 +23,7 @@ const line = (name: string, setMenuRole: "set_menu" | "dish", lineTotal = "0.00"
 
 describe("computeTopSellers with set menus", () => {
   it("top sellers show each set menu as an item", async () => {
-    // The plan's bill as filed; a line's total is its net, so 14.00 gross is 12.73.
+    // The spec bill as filed; a line's total is its net, so 14.00 gross is 12.73.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: new Date("2026-08-04T10:00:00Z").toISOString(),

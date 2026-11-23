@@ -71,7 +71,7 @@ const DISHES: { name: SpecDish; course: "Starter" | "Main"; price: string }[] = 
 ];
 
 /**
- * The plan's fixture venue: Daily menu (€14.00, Sirloin +€5.00) and Special menu (€20.00, Sirloin
+ * The fixture venue: Daily menu (€14.00, Sirloin +€5.00) and Special menu (€20.00, Sirloin
  * and Sea bass included), each listing Soup and Hake, with one "1 × Starter" and one "1 × Main"
  * line. Soup offers a paid extra, Bread at €1.50, which `specBill` does not order. The till has a
  * receipt printer, so Print the bill runs.
@@ -242,7 +242,7 @@ export async function sendSpecDishes(
 }
 
 /**
- * The plan's bill: a seated bill eaten here with 2 Daily and 2 Special, added in that order, then
+ * The spec bill: a seated bill eaten here with 2 Daily and 2 Special, added in that order, then
  * 4 Soup, 1 Hake, 1 Sea bass and 2 Sirloin, sent in that order, held unless told. Total 73.00.
  */
 export async function specBill(spec: SpecVenue, release: "hold" | "fire" = "hold") {
