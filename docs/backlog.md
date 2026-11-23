@@ -733,8 +733,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Add a device: loose ends from A268** (bundle of 1, size S). [Detail](backlog/till.md#bundle-add-a-device-loose-ends-from-a268)
 
-- **Loose ends left by the table actions plan (Tasks 8, 10 and 11, #869, #875, #881; C77/C86;
-  C84).**
+- **Loose ends left by the table actions plan (Task 8, #869; C77/C86; C84).**
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when this
