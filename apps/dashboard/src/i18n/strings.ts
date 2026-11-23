@@ -3936,7 +3936,6 @@ export const en = {
   "menus.patch_live_help":
     "A patch corrects wording, prices or pictures in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
   "menus.patch_live_help_guide": "More about patching the live menu",
-  "menus.changes": "Changes",
   "menus.changes_link": "Unpublished changes",
   "menu_status.unpublished": "Unpublished",
   "menu_status.current": "Published",
@@ -8738,7 +8737,6 @@ export const es: Record<StringKey, string> = {
   "menus.patch_live_help":
     "Una corrección cambia textos, precios o imágenes en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
   "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
-  "menus.changes": "Cambios",
   "menus.changes_link": "Cambios sin publicar",
   "menu_status.unpublished": "Sin publicar",
   "menu_status.current": "Publicada",

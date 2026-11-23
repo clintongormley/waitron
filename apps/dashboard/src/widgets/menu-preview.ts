@@ -1,5 +1,5 @@
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
@@ -21,7 +21,7 @@ import type {
   ProductChangeField,
   SectionChangeField,
 } from "../api/client.js";
-import { formatIsoMinute } from "../date-utils.js";
+import { relativeTime } from "./relative-time.js";
 import { codeMessage } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
@@ -131,14 +131,17 @@ const SOURCES: Record<MenuChange["source"], StringKey> = {
 };
 
 /** A menu's publication state in words, for the menus list and the editor: what it is, and the live
- * version and its publication time beside it. */
-export function statusWords(status: MenuStatus): {
+ * version and how long ago it was published beside it, read against `now`. */
+export function statusWords(
+  status: MenuStatus,
+  now: () => Date,
+): {
   label: string;
-  live: { version: string; time: string } | null;
+  live: { version: string; time: TemplateResult } | null;
 } {
   if (status.state === "unpublished") return { label: t("menu_status.unpublished"), live: null };
   const number = { number: String(status.version) };
-  const time = formatIsoMinute(status.publishedAt);
+  const time = relativeTime("{time}", status.publishedAt, { calendar: true, now });
   return status.state === "current"
     ? {
         label: t("menu_status.current"),
