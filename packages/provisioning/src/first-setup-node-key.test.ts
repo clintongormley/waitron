@@ -203,7 +203,7 @@ it("refuses to recreate a delivered secret after its process-local copy is lost"
   const before = await readFile(f.path);
   const restarted = createFirstSetupNodeKeys({ ...f.options, owner: f.owner });
   await expect(restarted.stageInitialNodeKey(f.access, await f.grant())).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
+    code: "setup.node_key_lost",
   });
   expect(await readFile(f.path)).toEqual(before);
 });

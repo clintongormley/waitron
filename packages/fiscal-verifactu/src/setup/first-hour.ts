@@ -214,8 +214,8 @@ export class FirstSetupHour extends LitElement {
   @state() private copied = false;
   @state() private copyFailed = false;
   /**
-   * Staging was refused because the box no longer holds the keys it made, as after a restart. Only
-   * then may the step make new ones: new keys would orphan a master key the person already copied.
+   * The box answered that it no longer holds the keys it made, as after a restart. Only then may
+   * the step make new ones: new keys would orphan a master key the person already copied.
    */
   @state() private keyLost = false;
   @state() private masterKey?: { masterKey: string; masterKeyName: string };
@@ -523,8 +523,7 @@ export class FirstSetupHour extends LitElement {
     } catch (error) {
       if (!current()) return;
       this.error = true;
-      if (!replace && (error as { code?: unknown } | null)?.code === "setup.attempt_conflict")
-        this.keyLost = true;
+      if ((error as { code?: unknown } | null)?.code === "setup.node_key_lost") this.keyLost = true;
     } finally {
       delivery?.dispose();
       if (current()) this.busy = false;

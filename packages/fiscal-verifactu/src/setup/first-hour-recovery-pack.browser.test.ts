@@ -236,18 +236,21 @@ it("offers no new keys while the box holds the key it made", async () => {
   expect(reissues).toEqual([]);
 });
 
-it("offers no new keys when showing the key fails for another reason", async () => {
-  const { el } = await mount("en", async () => {
-    throw { code: "password.invalid" };
-  });
-  await userEvent.click(control(el, "prepare-pdf")!);
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
-    .not.toBeNull();
-  expect(control(el, "replace-key")).toBeNull();
-  expect(control(el, "key-lost")).toBeNull();
-  expect(control(el, "prepare-pdf")).not.toBeNull();
-});
+it.each(["password.invalid", "setup.attempt_conflict"])(
+  "offers no new keys when showing the key is refused with %s, which is not the box saying it lost the key",
+  async (code) => {
+    const { el } = await mount("en", async () => {
+      throw { code };
+    });
+    await userEvent.click(control(el, "prepare-pdf")!);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
+      .not.toBeNull();
+    expect(control(el, "replace-key")).toBeNull();
+    expect(control(el, "key-lost")).toBeNull();
+    expect(control(el, "prepare-pdf")).not.toBeNull();
+  },
+);
 
 it.each([
   [
@@ -265,7 +268,7 @@ it.each([
   async (locale, lost, replace) => {
     captureHandovers();
     const { el, host, reissues } = await mount(locale, async () => {
-      throw { code: "setup.attempt_conflict" };
+      throw { code: "setup.node_key_lost" };
     });
     await userEvent.click(control(el, "prepare-pdf")!);
     await expect.poll(() => text(el, "key-lost")).toBe(lost);

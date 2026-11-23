@@ -166,8 +166,8 @@ export function createFirstSetupNodeKeys(options: Options) {
           throw new AppError("setup.attempt_conflict", {});
         const prior = await read(state);
         if (prior !== null) {
+          if (transient === undefined) throw new AppError("setup.node_key_lost", {});
           if (
-            transient === undefined ||
             transient.ownerGeneration !== state.ownerGeneration ||
             !isDeepStrictEqual(prior, transient.stage)
           )

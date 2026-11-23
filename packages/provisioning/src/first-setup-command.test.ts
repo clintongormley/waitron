@@ -715,7 +715,7 @@ it("a restarted command runtime reads the staged verifier but has no delivery gr
       f.owner,
       await runtime.owner.reconfirm(f.owner, PASSWORD, "block-use"),
     ),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  ).rejects.toMatchObject({ code: "setup.node_key_lost" });
   expect(await readFile(join(f.root, "state/flows/setup/record.json"), "utf8")).not.toContain(
     f.staged.key.secret,
   );

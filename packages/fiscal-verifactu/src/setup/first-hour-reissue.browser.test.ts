@@ -137,7 +137,7 @@ async function mount(stage = async () => old, reissue = async () => replacement)
   return { el, parent, calls, api };
 }
 const lost = async (): Promise<InitialSetupNodeKey> => {
-  throw { code: "setup.attempt_conflict" };
+  throw { code: "setup.node_key_lost" };
 };
 /** Asks for the key the box has lost, which is what offers the replacement. */
 async function loseKey(el: LitElement) {

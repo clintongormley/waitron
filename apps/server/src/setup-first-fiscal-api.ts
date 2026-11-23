@@ -49,6 +49,7 @@ const boundary = createErrorBoundary(
     "setup.connection_insecure": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
+    "setup.node_key_lost": 409,
     "cloud.request_unavailable": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
