@@ -2,7 +2,7 @@ import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
 import { VENUE_SERVICE } from "./modules.js";
-import { listGrossOf } from "./receipt-lines.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
 import type { GrossOrder } from "./working-order.js";
 
 /**
@@ -52,12 +52,10 @@ export async function issuancePass(
 
   return {
     ...gross,
-    lines: gross.lines.map((line, i) => {
-      const { id, productId, classification, listUnitGross } = identities[i]!;
-      const list = listGrossOf(line, listUnitGross);
+    lines: withReceiptListPrices(gross.lines, identities).map((line, i) => {
+      const { id, productId, classification } = identities[i]!;
       return {
         ...line,
-        ...(list.listGross === undefined ? {} : { ...list, listUnitPriceGross: listUnitGross! }),
         productId,
         parentProductId: productId === null ? null : (parentOf.get(productId) ?? null),
         menuId: contextByLine.get(id)?.menuId ?? null,
