@@ -10,7 +10,8 @@ import { invoiceLineCells, paymentOnAccount, readAccountantInvoices } from "./ac
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import type { HeardHoldings } from "./old-box-holdings.js";
-import { renderWorkbook, type Cell } from "./xlsx-workbook.js";
+import { readActivitySince, type SinceRule } from "./old-box-data-since.js";
+import { renderWorkbook, type Cell, type WorkbookSheet } from "./xlsx-workbook.js";
 
 export interface OldBoxWorkbookInput {
   /** This (old) box's venue database; only read, never inside a write transaction. */
@@ -24,6 +25,25 @@ export interface OldBoxWorkbookInput {
   mainHoldings: HeardHoldings | null;
   madeAt: Date;
   language: "en" | "es";
+  /** When present, the "since" tabs follow Invoices, listing rows from the rule's start. */
+  since?: SinceRule;
+}
+
+/** The workbook's bytes and how many rows each tab lists, for the download's log line. */
+export interface OldBoxWorkbook {
+  bytes: Uint8Array<ArrayBuffer>;
+  counts: { invoiceRows: number; activityRows?: number };
+}
+
+const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
+function sinceIntro(rule: SinceRule, words: (typeof OLD_BOX_DATA_WORDS)["en" | "es"]): string {
+  if (rule.kind === "all") return words.sinceAllIntro;
+  const time = minute(new Date(rule.fromMs));
+  return (rule.kind === "copy" ? words.sinceCopyIntro : words.sinceOwnIntro).replace(
+    "{time}",
+    () => time,
+  );
 }
 
 type Seat = { name: string; unreturned: NonNullable<ModuleHandoverContribution["unreturned"]> };
@@ -66,6 +86,11 @@ async function wholeChains(db: Database, seats: readonly Seat[]): Promise<Unretu
 export async function buildOldBoxWorkbook(
   input: OldBoxWorkbookInput,
 ): Promise<Uint8Array<ArrayBuffer>> {
+  return (await makeOldBoxWorkbook(input)).bytes;
+}
+
+/** {@link buildOldBoxWorkbook}, with each tab's row count. */
+export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<OldBoxWorkbook> {
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
   const seats = input.modules.flatMap((module) => {
@@ -119,11 +144,10 @@ export async function buildOldBoxWorkbook(
         ]);
     }
   }
-  const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
   const time = minute(
     (compared !== null ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt,
   );
-  return renderWorkbook([
+  const sheets: WorkbookSheet[] = [
     {
       name: words.invoiceSheet,
       rows: [
@@ -137,5 +161,26 @@ export async function buildOldBoxWorkbook(
         ...rows,
       ],
     },
-  ]);
+  ];
+  const counts: OldBoxWorkbook["counts"] = { invoiceRows: rows.length };
+  if (input.since !== undefined) {
+    const intro = sinceIntro(input.since, words);
+    const activity = await readActivitySince(input.db, input.since);
+    counts.activityRows = activity.length;
+    sheets.push({
+      name: words.activitySheet,
+      rows: [
+        [intro],
+        words.activityColumns,
+        ...activity.map((entry) => [
+          entry.at,
+          entry.kind,
+          entry.personName,
+          entry.subjectKind,
+          entry.subjectId,
+        ]),
+      ],
+    });
+  }
+  return { bytes: await renderWorkbook(sheets), counts };
 }

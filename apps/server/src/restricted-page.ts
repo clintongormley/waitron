@@ -190,11 +190,9 @@ async function progressPage(
   return await handoverPageOf({ db: deps.venue }, operation);
 }
 
-async function readView(
-  deps: RestrictedPageDeps,
-  requestId: string,
-  download?: OldBoxDownloadState,
-): Promise<RestrictedView> {
+async function readRestriction(
+  deps: Pick<RestrictedPageDeps, "node" | "nodeId">,
+): Promise<{ restriction: HandoverRestriction; operation: HandoverOperation | null }> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
@@ -202,6 +200,24 @@ async function readView(
     restriction.operationId === null
       ? null
       : await readHandoverOperation(deps.node, deps.nodeId, restriction.operationId);
+  return { restriction, operation };
+}
+
+const isPlanned = (operation: HandoverOperation | null) => operation?.scenario === "controlled";
+
+/** Whether this box was replaced by a planned handover rather than an emergency switch. */
+export async function readPlannedHandover(
+  deps: Pick<RestrictedPageDeps, "node" | "nodeId">,
+): Promise<boolean> {
+  return isPlanned((await readRestriction(deps)).operation);
+}
+
+async function readView(
+  deps: RestrictedPageDeps,
+  requestId: string,
+  download?: OldBoxDownloadState,
+): Promise<RestrictedView> {
+  const { restriction, operation } = await readRestriction(deps);
   // The rule the return sender uses to choose the box it sends to (`return-records.ts`).
   const read = await readOrWarn(
     deps,
@@ -222,7 +238,7 @@ async function readView(
             progressPage(deps, operation, restriction, read?.chart, returnState),
           ),
     returnState,
-    planned: operation?.scenario === "controlled",
+    planned: isPlanned(operation),
     reset: await resetLine(deps, requestId),
     ...(download === undefined ? {} : { download }),
   };

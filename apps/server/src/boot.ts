@@ -2077,6 +2077,7 @@ async function bootServer(
           modules: enabledAtStart,
           totpKeyRing: ring,
           mainHoldings: () => resetOrder.mainHoldings(),
+          mainCopy: () => resetOrder.mainCopy(),
         }),
         (restrictedApp) =>
           mountPeerStatusApi(

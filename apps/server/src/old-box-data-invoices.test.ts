@@ -295,6 +295,13 @@ describe("the old box's Invoices tab", () => {
     expect(lock).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
   });
+
+  it("has no since tabs without a rule", async () => {
+    const files = unzipSync(await build(suite.db, [fiscal]));
+    expect(files["xl/worksheets/sheet1.xml"]).toBeDefined();
+    expect(files["xl/worksheets/sheet2.xml"]).toBeUndefined();
+  });
+
   it("lists the fiscal module's chains whole under the no-comparison first line when there is no main-box summary, and nothing when the summary holds them", async () => {
     const sale = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

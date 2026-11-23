@@ -32,6 +32,13 @@ export const OLD_BOX_DATA_WORDS = {
     notFiled: "No filing state",
     yes: "Yes",
     no: "No",
+    sinceCopyIntro:
+      "Everything this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from. Some rows may also be on the new main box, and changes made to older rows are not listed.",
+    sinceOwnIntro:
+      "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told when the copy the new main box started from was taken, and anything earlier is not listed. Some rows may also be on the new main box, and changes made to older rows are not listed.",
+    sinceAllIntro: "Everything this box recorded. Some rows may also be on the new main box.",
+    activitySheet: "Activity",
+    activityColumns: ["At (UTC)", "Kind", "Person", "Subject kind", "Subject"],
   },
   es: {
     invoiceSheet: "Facturas",
@@ -66,5 +73,13 @@ export const OLD_BOX_DATA_WORDS = {
     notFiled: "Sin estado de envío",
     yes: "Sí",
     no: "No",
+    sinceCopyIntro:
+      "Todo lo que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal, y no se listan los cambios hechos en filas anteriores.",
+    sinceOwnIntro:
+      "Todo lo que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido. A este servidor no se le ha indicado cuándo se hizo la copia con la que empezó el nuevo servidor principal, y no se lista nada anterior. Algunas filas pueden estar también en el nuevo servidor principal, y no se listan los cambios hechos en filas anteriores.",
+    sinceAllIntro:
+      "Todo lo que este servidor registró. Algunas filas pueden estar también en el nuevo servidor principal.",
+    activitySheet: "Actividad",
+    activityColumns: ["Fecha (UTC)", "Tipo", "Persona", "Tipo de elemento", "Elemento"],
   },
 } as const;
