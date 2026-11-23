@@ -36,8 +36,8 @@ Left open:
 
 Left open:
 
-- A printed HOLD ticket goes stale when held groups are reordered or a party is merged into
-  another (both renumber `GROUP n`). Only a FIRE ticket or a Reprint can be relied on.
+- After joining parties with matching group numbers, both group labels can name the joined table.
+- Check whether the MOVED slip identifies the printed HOLD group when staff merge its bill after joining parties.
 - A group's HOLD paper is recorded per station, not per printer
   (`order_group_hold_stations`), so a correction after replacing the station's printer goes to
   the new printer. Reproduced on 2026-11-16 from `8d65e53f22`: HOLD on Grill/pass, then replace
