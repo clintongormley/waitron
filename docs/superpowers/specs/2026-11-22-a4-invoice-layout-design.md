@@ -194,8 +194,9 @@ legal name (`taxpayerFieldRoute` in `apps/server/src/venue-settings-api.ts`: `ve
 fresh sign-in), is written to the activity log, and sends an email to the venue's administrators
 naming who changed it and the old and new account with the middle digits hidden (first four and
 last four characters shown). The email is a box notice (`box_alert`, one per `system.manage` holder
-with an email, `readManagerEmailRecipients`), sent through the venue's own mail server like every
-other notice today; the owner's 2026-11-21 decision that a paid Cloud plan sends every email the box
+with an email, `readManagerEmailRecipients`), sent through the venue's own mail server only: Waitron
+Cloud relays five other box notices but not this one yet, so a box that sends email only through
+Cloud does not send it; the owner's 2026-11-21 decision that a paid Cloud plan sends every email the box
 would send covers it once Cloud does that. It survives a restart, as the upgrade-rolled-back notice
 does (`transientBoxAlertMail` in `apps/server/src/box-alert-email.ts`). The activity entry carries no
 account number (`data: {}`, like `taxpayer.domicile_changed`).

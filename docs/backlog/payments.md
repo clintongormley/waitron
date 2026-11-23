@@ -328,7 +328,7 @@ Remaining Stripe qualification and maintenance.
   receipt print the IBAN and bank from the Business card's bank account, only when the bill, or the
   sale it replaces, was closed as a deferred payment, never on a paid invoice or one that merely
   shows an amount owed. Changing or clearing the account needs a fresh sign-in and emails the venue's
-  administrators. [Design](../superpowers/specs/2026-11-22-a4-invoice-layout-design.md#bank-transfer-instructions).
+  administrators through the venue's own mail server (Waitron Cloud does not relay it yet). [Design](../superpowers/specs/2026-11-22-a4-invoice-layout-design.md#bank-transfer-instructions).
 
 - **Silent-provider qualification, 2026-11-16:** two real Chromium Payments tabs over loopback
   HTTP/1.1 retained two live streams and two silent-provider reads; an unrelated authenticated
