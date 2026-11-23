@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -201,7 +202,7 @@ async function emptyVenue() {
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
 }
 async function allocatedVenue() {
   expect((await suite.db.select().from(nodes)).map((row) => row.id)).toEqual([NODE]);
@@ -212,7 +213,7 @@ async function allocatedVenue() {
       .from(verifactuIdentities),
   ).toEqual([{ identity: "S000042" }]);
   expect(
-    (await suite.db.select().from(invoiceSeries))
+    (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
       .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))
       .sort((a, b) => a.code.localeCompare(b.code)),
   ).toEqual([
@@ -236,8 +237,8 @@ it("carries the supplied setup identities and signed input through the historica
 });
 it("returns committed allocated references after an interrupted setup without another outside consultation", async () => {
   const result = await establish();
-  await suite.db.update(invoiceSeries).set({ nextNumber: 37 });
-  const before = await suite.db.select().from(invoiceSeries);
+  await advanceSeriesTo(suite.db, NODE, 37);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await suite.db.select().from(fiscalAllocations);
   await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
   const repeated = await recoverProvisionedVenue(suite.db, {
@@ -247,7 +248,7 @@ it("returns committed allocated references after an interrupted setup without an
   });
   expect(repeated.nodeId).toBe(NODE);
   expect(repeated.seriesIds).toEqual(result.seriesIds);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
 });
 it("rolls back initial activation if the host's final write refuses", async () => {
@@ -415,13 +416,13 @@ it("resumes the actual persisted setup request after a committed venue lost its 
     });
   expect((await send()).status).toBe(500);
   await allocatedVenue();
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await suite.db.select().from(fiscalAllocations);
   await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
   const recovered = await send();
   expect(recovered.status).toBe(200);
   expect(await recovered.json()).toEqual({ provisioned: true, restarting: true });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
   expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
 });

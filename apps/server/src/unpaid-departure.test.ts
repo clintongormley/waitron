@@ -235,7 +235,7 @@ function creditTwoEuros(billId: string): Promise<void> {
 
 function nextInvoiceNumbers(): { id: string; next: number }[] {
   return venue.db.all<{ id: string; next: number }>(
-    sql`select id, next_number as next from invoice_series order by id`,
+    sql`select id, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as next from invoice_series order by id`,
   );
 }
 

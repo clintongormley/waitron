@@ -369,7 +369,9 @@ const correctionOf = async (correctionId: string) =>
   (await v.db.select().from(invoiceCorrections).where(eq(invoiceCorrections.id, correctionId)))[0]!;
 const salesCount = () => v.db.all<{ n: number }>(sql`select count(*) as n from sales`)[0]!.n;
 const nextNumbers = () =>
-  v.db.all<{ n: number }>(sql`select sum(next_number) as n from invoice_series`)[0]!.n;
+  v.db.all<{ n: number }>(
+    sql`select sum((select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id)) as n from invoice_series`,
+  )[0]!.n;
 const FILING_REFUSED = "invoice_correction.filing_refused";
 
 describe("automatic filing of a correction whose money is all back", () => {

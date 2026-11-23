@@ -16,6 +16,7 @@ import {
   saleVoids,
   sales,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -231,14 +232,14 @@ describe("recordVoid — numbering", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const [before] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
 
     await voidSale(backend, saleId);
 
     const [after] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(after?.n).toBe(before?.n);

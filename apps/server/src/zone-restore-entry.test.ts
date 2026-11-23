@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import {
@@ -43,7 +44,7 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
       module: "fiscal-verifactu",
     });
     const before = await recordedRecoveryRows(suite.db);
-    const originalSeries = await suite.db.select().from(invoiceSeries);
+    const originalSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await restoreFromArtifact({
       ...f.restore,
       modules: f.service.modules,
@@ -56,7 +57,7 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
       ]);
       expect(venueDoc!.timeZone).toBe(timeZone);
       expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
-      const after = await placed.venue.select().from(invoiceSeries);
+      const after = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
       for (const row of originalSeries)
         expect(after.find((entry) => entry.id === row.id)).toEqual({
           ...row,
@@ -99,7 +100,7 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
     expect(venueDoc!.timeZone).toBe("Not/A_Zone");
     expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
     expect(
-      (await placed.venue.select().from(invoiceSeries))
+      (await placed.venue.select(seriesWithNextNumber).from(invoiceSeries))
         .filter((row) => row.retiredAt === null)
         .map(({ code, nextNumber }) => ({ code, nextNumber })),
     ).toEqual([

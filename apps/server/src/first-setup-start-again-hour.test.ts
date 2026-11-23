@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Hono } from "hono";
 import { Agent } from "undici";
@@ -243,7 +244,7 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
 });
 
 const facts = async () => ({
-  series: await suite.db.select().from(invoiceSeries),
+  series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
   records: await suite.db.select().from(verifactuRecords),
   filing: await suite.db.select().from(verifactuSubmissions),
 });
@@ -316,7 +317,7 @@ it.each([
   ],
   [
     "invoice counter",
-    "insert into invoice_series(id, node_id, code, next_number) values ('series', 'node', 'A', 2)",
+    "insert into invoice_series(id, node_id, code) values ('series', 'node', 'A')",
   ],
   [
     "sale",

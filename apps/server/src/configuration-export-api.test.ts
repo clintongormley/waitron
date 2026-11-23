@@ -1,3 +1,4 @@
+import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
@@ -195,8 +196,10 @@ describe("configuration export API", () => {
         error: { code: "configuration_export.source_invalid", params: { field: "venue" } },
       });
     } finally {
-      await suite.db.execute(
-        sql`update invoice_series set retired_at = null where purpose = 'full' and retired_at = '2026-09-01T00:00:00.000Z'`,
+      await withInvoiceSeriesGuardDropped(suite.db, () =>
+        suite.db.execute(
+          sql`update invoice_series set retired_at = null where purpose = 'full' and retired_at = '2026-09-01T00:00:00.000Z'`,
+        ),
       );
     }
   });

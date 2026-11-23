@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "579d15e0-2d8c-4686-8643-a88d845d87b1",
+  "id": "da7bf0c7-6f85-4db5-b24d-08f3ecfee6d1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -393,14 +393,6 @@
           "autoincrement": false,
           "default": "'standard'"
         },
-        "next_number": {
-          "name": "next_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
         "retired_at": {
           "name": "retired_at",
           "type": "text",
@@ -440,10 +432,6 @@
         "invoice_series_purpose_ck": {
           "name": "invoice_series_purpose_ck",
           "value": "\"invoice_series\".\"purpose\" in ('standard', 'full', 'corrective')"
-        },
-        "invoice_series_next_number_ck": {
-          "name": "invoice_series_next_number_ck",
-          "value": "\"invoice_series\".\"next_number\" >= 1"
         },
         "invoice_series_code_ck": {
           "name": "invoice_series_code_ck",

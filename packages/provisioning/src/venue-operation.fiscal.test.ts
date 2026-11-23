@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isNull, sql } from "drizzle-orm";
@@ -236,7 +237,7 @@ it("hands setup the signed allocation's active references with no unsuffixed sca
   const [ledger] = await suite.db.select().from(fiscalAllocations);
   expect(result.seriesIds).toEqual(ledger!.result.series.map((series) => series.id));
   expect(
-    (await suite.db.select().from(invoiceSeries))
+    (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
       .map(({ id, code, purpose, retiredAt, nextNumber }) => ({
         id,
         code,
@@ -246,17 +247,17 @@ it("hands setup the signed allocation's active references with no unsuffixed sca
       }))
       .sort((a, b) => a.code.localeCompare(b.code)),
   ).toEqual(ledger!.result.series.map((row) => ({ ...row, retiredAt: null, nextNumber: 1 })));
-  expect(await suite.db.select().from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
 });
 
 it("reapplies allocated setup without creating another SIF, allocation or series", async () => {
   const first = await establish(undefined, true);
-  await suite.db.update(invoiceSeries).set({ nextNumber: 15 });
-  const before = await suite.db.select().from(invoiceSeries);
+  await advanceSeriesTo(suite.db, NODE, 15);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const retry = await establish(undefined, true);
   expect(retry.seriesIds).toEqual(first.seriesIds);
   expect(retry.seeded).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   expect(
     (await suite.db.execute(sql`select numero_instalacion, revocado_en from verifactu_identities`))

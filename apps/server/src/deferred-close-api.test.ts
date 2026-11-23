@@ -103,7 +103,9 @@ function written(billId: string) {
   const db = t.venue.db;
   return {
     sales: db.all(sql`select id from sales where working_order_id = ${billId}`),
-    series: db.all(sql`select id, next_number from invoice_series order by id`),
+    series: db.all(
+      sql`select id, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by id`,
+    ),
     ...fiscalWrites(db),
     closures: db.all(sql`select id from deferred_closures where working_order_id = ${billId}`),
     tenders: db.all(

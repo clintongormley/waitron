@@ -97,7 +97,7 @@ async function addNode(
 
   const [seriesRow] = await tx
     .insert(invoiceSeries)
-    .values({ nodeId: node, code: "G" + label, purpose: "standard", nextNumber: 1 })
+    .values({ nodeId: node, code: "G" + label, purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   if (seriesRow === undefined) throw new Error("seedNode: series insert returned no row");
 

@@ -22,6 +22,7 @@ import {
   taxpayer,
   withTransaction,
   type Database,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import {
   FISCAL_RESTORE,
@@ -87,7 +88,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(nodes).values({ id: F.nodeId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
-    .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });
+    .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard" });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "corrective" });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "FF", purpose: "full" });
   await stampDeployment(db, "preproduction");
@@ -211,7 +212,7 @@ async function seriesOfNode(
     .select({
       code: invoiceSeries.code,
       retiredAt: invoiceSeries.retiredAt,
-      next: invoiceSeries.nextNumber,
+      next: nextInvoiceNumberOf(invoiceSeries.id),
     })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.nodeId, F.nodeId))
@@ -246,6 +247,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     // The journal table is left alone: this database is at the head of the SHIPPED chain and one
     // behind `olderMigrationsRoot`, which is what the artifact's manifest then records.
     if (older) {
+      store.venue.run(sql`drop trigger invoice_series_guard_update`);
       store.venue.run(sql.raw(`alter table invoice_series drop column retired_at`));
     }
     const manifest = await buildManifest({

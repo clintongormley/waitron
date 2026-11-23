@@ -166,7 +166,7 @@ describe("department invoice settings", () => {
       select (select count(*) from sales) as sales,
         (select count(*) from verifactu_records) as records,
         (select count(*) from print_jobs) as jobs,
-        (select group_concat(next_number) from invoice_series) as numbers`)
+        (select group_concat((select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id)) from invoice_series) as numbers`)
         ).rows;
       const before = await snapshot();
       try {

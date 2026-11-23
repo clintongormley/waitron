@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
 import { isNull } from "drizzle-orm";
@@ -208,7 +209,10 @@ it("joins initial outside collection with the new account and exactly the alloca
   sourceRead = 0;
   const module = owner();
   const result = await establish(module);
-  const series = await suite.db.select().from(invoiceSeries).where(isNull(invoiceSeries.retiredAt));
+  const series = await suite.db
+    .select(seriesWithNextNumber)
+    .from(invoiceSeries)
+    .where(isNull(invoiceSeries.retiredAt));
   expect(
     series
       .map(({ code, purpose }) => ({ code, purpose }))
@@ -231,7 +235,7 @@ it("joins initial outside collection with the new account and exactly the alloca
   expect(repeated.seriesIds).toEqual(result.seriesIds);
   expect(sourceRead).toBe(1);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
-  expect(await suite.db.select().from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
   expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
 });
 
@@ -242,7 +246,7 @@ it("rolls back the signed allocation and initial account on a final host refusal
     }),
   ).rejects.toThrow("last-host-refusal");
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(nodes)).toEqual([]);
   expect(await suite.db.select().from(taxpayer)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
@@ -252,7 +256,7 @@ it("runs the fiscal seed and its series resolver through initial provisioning an
   sourceRead = 0;
   const module = { ...owner(), provisioning: { seed: ALLOCATED_FISCAL_SEED } };
   const result = await establish(module);
-  const allSeries = await suite.db.select().from(invoiceSeries);
+  const allSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   expect(
     allSeries
       .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))
@@ -270,12 +274,12 @@ it("runs the fiscal seed and its series resolver through initial provisioning an
   expect(result.seeded).toEqual([
     { module: "fiscal-verifactu", report: expect.stringContaining("installation S000042") },
   ]);
-  await suite.db.update(invoiceSeries).set({ nextNumber: 47 });
-  const before = await suite.db.select().from(invoiceSeries);
+  await advanceSeriesTo(suite.db, NODE, 47);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await suite.db.select().from(fiscalAllocations);
   const repeated = await establish(module);
   expect(repeated.seriesIds).toEqual(result.seriesIds);
   expect(sourceRead).toBe(1);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
 });

@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { readStreamId } from "@waitron/db";
 import { ensureStreamId } from "@waitron/db";
@@ -237,7 +238,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
 
 it("with the box ticked, the real fiscal module draws a new server key that the pack carries, changing no series counter and no evidence file, and logging neither key nor the session", async () => {
   await seedVenueWithBackupSettings();
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
   const oldKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const { token } = await openManagementSession(suite.db, "admin");
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
@@ -322,7 +323,9 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
     expect(await verifySecretAsync(carried, verifier)).toBe(true);
     expect(await verifySecretAsync(oldKey, verifier)).toBe(false);
     expect(
-      (await suite.db.select().from(invoiceSeries).orderBy(invoiceSeries.code)).map((s) => ({
+      (
+        await suite.db.select(seriesWithNextNumber).from(invoiceSeries).orderBy(invoiceSeries.code)
+      ).map((s) => ({
         code: s.code,
         nextNumber: s.nextNumber,
       })),

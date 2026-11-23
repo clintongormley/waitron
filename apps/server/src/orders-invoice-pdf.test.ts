@@ -1,3 +1,4 @@
+import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -252,8 +253,7 @@ describe("dashboard invoice PDF download", () => {
   });
 
   it("keeps a quote, a line break and a non-ASCII letter in a stored series code out of the header", async () => {
-    // The column takes any non-empty text; the sale is recorded under a valid code first, because
-    // the fiscal record refuses these characters, and the code is then changed underneath it.
+    // Corrupt the stored code after issuance to exercise PDF download with damaged data.
     const [series] = await inTx(venue, (tx) =>
       tx
         .insert(invoiceSeries)
@@ -262,10 +262,12 @@ describe("dashboard invoice PDF download", () => {
     );
     const { billId } = await fullInvoice(series!.id);
     await inTx(venue, (tx) =>
-      tx
-        .update(invoiceSeries)
-        .set({ code: 'Q"x\r\nSet-Cookie: a=ñ' })
-        .where(eq(invoiceSeries.id, series!.id)),
+      withInvoiceSeriesGuardDropped(tx, () =>
+        tx
+          .update(invoiceSeries)
+          .set({ code: 'Q"x\r\nSet-Cookie: a=ñ' })
+          .where(eq(invoiceSeries.id, series!.id)),
+      ),
     );
     const answer = await download(managerDashboard, billId);
     expect(answer.status).toBe(200);

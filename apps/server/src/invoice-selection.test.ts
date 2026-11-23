@@ -1,9 +1,20 @@
-import { seedVenueSettings, seedBusinessDay, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedVenueSettings,
+  seedBusinessDay,
+  seedWorkingOrder,
+  seedInvoiceNumber,
+} from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, nodes, withTransaction, workingOrders } from "@waitron/db";
+import {
+  invoiceSeries,
+  nodes,
+  withTransaction,
+  workingOrders,
+  nextInvoiceNumberOf,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, nodeId, seriesId } from "@waitron/shared";
@@ -21,7 +32,7 @@ const recipient = {
   countryCode: "ES",
 };
 
-async function bill(full = false) {
+async function bill(full = false, withHistory = false) {
   return withTransaction(suite.db, async (tx) => {
     await seedVenueSettings(tx, {
       name: "Selector",
@@ -29,14 +40,23 @@ async function bill(full = false) {
     });
     await seedBusinessDay(tx, {});
     const [node] = await tx.insert(nodes).values({ name: "Selector" }).returning();
-    const [standard, fullSeries] = await tx
+    const [standard, fullSeries, corrective] = await tx
       .insert(invoiceSeries)
       .values([
-        { nodeId: node!.id, code: "FS", purpose: "standard", nextNumber: 7 },
-        { nodeId: node!.id, code: "FF", purpose: "full", nextNumber: 11 },
-        { nodeId: node!.id, code: "FR", purpose: "corrective", nextNumber: 19 },
+        { nodeId: node!.id, code: "FS", purpose: "standard" },
+        { nodeId: node!.id, code: "FF", purpose: "full" },
+        { nodeId: node!.id, code: "FR", purpose: "corrective" },
       ])
       .returning();
+    if (withHistory) {
+      for (const [series, number] of [
+        [standard!, 6],
+        [fullSeries!, 10],
+        [corrective!, 18],
+      ] as const) {
+        await seedInvoiceNumber(tx, { nodeId: node!.id, seriesId: series.id }, number);
+      }
+    }
     const order = await seedWorkingOrder(tx, {
       source: "operator_script",
       nodeId: node!.id,
@@ -138,7 +158,7 @@ describe("stored bill invoice selection", () => {
   it.each(["0.00", "3.00", "3000.01", "3500.00"])(
     "uses the saved F1 recipient and full series at %s",
     async (total) => {
-      const order = await bill(true);
+      const order = await bill(true, true);
       const selected = await withTransaction(suite.db, (tx) =>
         selectOrderInvoice(tx, policy, order.cfg, order.id, decimal(total)),
       );
@@ -152,7 +172,7 @@ describe("stored bill invoice selection", () => {
         },
       });
       const counters = await suite.db
-        .select({ code: invoiceSeries.code, next: invoiceSeries.nextNumber })
+        .select({ code: invoiceSeries.code, next: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.nodeId, order.cfg.nodeId))
         .orderBy(invoiceSeries.code);
@@ -205,10 +225,13 @@ describe("stored bill invoice selection", () => {
             .set({ retiredAt: new Date() })
             .where(eq(invoiceSeries.id, order.fullSeriesId));
         else {
-          await tx
-            .update(invoiceSeries)
-            .set({ nodeId: other!.cfg.nodeId, code: "other-full" })
-            .where(eq(invoiceSeries.id, order.fullSeriesId));
+          await tx.delete(invoiceSeries).where(eq(invoiceSeries.id, order.fullSeriesId));
+          await tx.insert(invoiceSeries).values({
+            id: order.fullSeriesId,
+            nodeId: other!.cfg.nodeId,
+            code: "other-full",
+            purpose: "full",
+          });
         }
       });
       await expect(

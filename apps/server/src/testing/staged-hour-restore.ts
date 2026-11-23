@@ -1,3 +1,4 @@
+import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedModuleSettings } from "../../test/module-settings.js";
 import { sealFixtureArtifact } from "../../test/fixture-salt.js";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
@@ -166,7 +167,7 @@ export async function stagedHourRestore(
         withTransaction(db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
       );
     });
-    await db.update(invoiceSeries).set({ nextNumber: 123 });
+    await advanceSeriesTo(db, node.nodeId, 123);
     clock.set(Date.parse("2026-10-16T12:40:00Z"));
     follow();
     const encryptionKey = "synthetic archive encryption key";
@@ -272,7 +273,7 @@ export async function stagedHourRestore(
         return {
           allocations: await copy.venue.select().from(fiscalAllocations),
           registrations: await copy.venue.select().from(verifactuIdentities),
-          series: await copy.venue.select().from(invoiceSeries),
+          series: await copy.venue.select(seriesWithNextNumber).from(invoiceSeries),
         };
       } finally {
         await copy.close();
@@ -283,7 +284,7 @@ export async function stagedHourRestore(
       await nodeDb.archiveTo(join(roots.venueDir, "node.db"));
       const copy = await openVenueDatabase(roots.venueDir);
       try {
-        await copy.venue.update(invoiceSeries).set({ nextNumber: 777 });
+        await advanceSeriesTo(copy.venue, node.nodeId, 777);
       } finally {
         await copy.close();
       }
@@ -296,7 +297,7 @@ export async function stagedHourRestore(
     const advanceCounters = async () => {
       const copy = await openVenueDatabase(roots.venueDir);
       try {
-        await copy.venue.update(invoiceSeries).set({ nextNumber: 917 });
+        await advanceSeriesTo(copy.venue, node.nodeId, 917);
       } finally {
         await copy.close();
       }

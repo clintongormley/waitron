@@ -24,6 +24,7 @@ import {
   workingOrders,
   withTransaction,
   type Transaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { loginWithPin, persons, registerModulePermissions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1621,7 +1622,7 @@ describe("a dish whose period ended earlier today", () => {
       sales: (await suite.db.select().from(sales)).length,
       payments: (await suite.db.select().from(payments)).length,
       nextInvoiceNumbers: await suite.db
-        .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+        .select({ id: invoiceSeries.id, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .orderBy(invoiceSeries.id),
       records: await filingRows(),

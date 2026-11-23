@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -349,5 +350,7 @@ it("configuration export carries settings without fiscal, payment, venue history
   ])
     expect(exported.tables).not.toHaveProperty(name);
   expect(facts()).toEqual(before);
-  expect((await v.db.select().from(invoiceSeries)).some((row) => row.nextNumber > 1)).toBe(true);
+  expect(
+    (await v.db.select(seriesWithNextNumber).from(invoiceSeries)).some((row) => row.nextNumber > 1),
+  ).toBe(true);
 });

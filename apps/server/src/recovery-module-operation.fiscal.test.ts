@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -217,13 +218,13 @@ it("restores through the real key runner, public paper selection and the complet
 
 it("rejects a replacement key before the real restore hook can activate anything", async () => {
   await withFiles(async (paths) => {
-    const before = await suite.db.select().from(invoiceSeries);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await expect(restore(paths, true)).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   });
 });
 
@@ -235,9 +236,9 @@ it("uses the fiscal restore hook with node-key authentication without recreating
       idSistemaInformatico: "W1",
     }),
   );
-  await suite.db.update(invoiceSeries).set({ nextNumber: 23 });
+  await advanceSeriesTo(suite.db, node.nodeId, 23);
   const oldSifs = await suite.db.select().from(verifactuIdentities);
-  const oldSeries = await suite.db.select().from(invoiceSeries);
+  const oldSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   await withFiles(async (paths) => {
     const module = {
       ...fakeModule(binding.module, {
@@ -269,7 +270,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
     expect(result.reports).toEqual([
       `fiscal-verifactu: SIF ${expected.sifId} (installation P000042); series A-P000042, FF-P000042, R-P000042`,
     ]);
-    const series = await suite.db.select().from(invoiceSeries);
+    const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     expect(series).toHaveLength(6);
     for (const old of oldSeries)
       expect(series.find((row) => row.id === old.id)).toEqual({

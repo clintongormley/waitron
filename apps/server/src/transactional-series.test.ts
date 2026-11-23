@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { billPayments, invoiceSeries, printJobs, sales, withTransaction } from "@waitron/db";
 import { payments } from "@waitron/payments";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -29,7 +29,6 @@ async function venueWithOtherNode() {
       nodeId: other,
       code: "OTHER-P999999",
       purpose: "standard",
-      nextNumber: 99,
     });
   });
   return v;
@@ -130,7 +129,7 @@ function records(v: BillVenue) {
 
 async function snapshot(v: BillVenue) {
   return {
-    series: await v.db.select().from(invoiceSeries),
+    series: await v.db.select(seriesWithNextNumber).from(invoiceSeries),
     sales: await v.db.select().from(sales),
     payments: await v.db.select().from(payments),
     billPayments: await v.db.select().from(billPayments),
@@ -257,7 +256,7 @@ describe("transactional active series qualification", () => {
         const v = await venueWithOtherNode();
         const active = await activate(v, emergency);
         await issue(v, "walk-up", await prepare(v, "walk-up"));
-        const before = await v.db.select().from(invoiceSeries);
+        const before = await v.db.select(seriesWithNextNumber).from(invoiceSeries);
         const aeat = createFakeAeat({ serverNow: new Date() });
         let connected = false;
         const drainDeps = {
@@ -277,7 +276,7 @@ describe("transactional active series qualification", () => {
         aeat.setServerNow(reconnectedAt);
         const online = await drain(drainDeps, reconnectedAt);
         expect(online.recordsAccepted).toBe(1);
-        expect(await v.db.select().from(invoiceSeries)).toEqual(before);
+        expect(await v.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
         await issue(v, "walk-up", await prepare(v, "walk-up"));
         const rows = await v.db.select().from(sales);
         expect(rows.map((sale) => sale.seriesId)).toEqual([active.id, active.id]);

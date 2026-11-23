@@ -44,7 +44,7 @@ beforeEach(async () => {
   // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: node.nodeId, code: "F3", purpose: "full", nextNumber: 1 })
+    .values({ nodeId: node.nodeId, code: "F3", purpose: "full" })
     .returning({ id: invoiceSeries.id });
   substitutionSeriesId = series!.id;
   backend = new VerifactuBackend({

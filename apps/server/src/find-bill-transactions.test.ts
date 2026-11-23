@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
+  allocateInvoiceNumber,
   billPayments,
   invoiceSeries,
   persons,
@@ -35,10 +36,8 @@ import {
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
-let number: number;
 beforeEach(async () => {
   venue = await provisionOrderVenue(store.db);
-  number = 900000;
 });
 const query = (values: Record<string, string> = {}) =>
   parseTransactionsQuery(new URLSearchParams({ preset: "any", ...values }));
@@ -49,13 +48,14 @@ const AT = "2026-10-15T12:00:00.000Z";
 async function invoice(values: Partial<typeof sales.$inferInsert> = {}, settled = true) {
   const id = randomUUID();
   await inTx(venue, async (tx) => {
+    const seriesId = values.seriesId ?? venue.seriesId;
+    const invoiceNumber =
+      values.invoiceNumber ?? Math.max(900_001, await allocateInvoiceNumber(tx, seriesId));
     await tx.insert(sales).values({
       id,
       source: "device",
       deviceId: venue.deviceId,
-      seriesId: venue.seriesId,
       nodeId: venue.cfg.nodeId,
-      invoiceNumber: ++number,
       issuedAt: AT,
       issuedOffsetMinutes: 120,
       total: 1210,
@@ -66,6 +66,8 @@ async function invoice(values: Partial<typeof sales.$inferInsert> = {}, settled 
       fiscalState: "not_applicable",
       operatorId: venue.operatorId,
       ...values,
+      seriesId,
+      invoiceNumber,
     });
     if (settled && values.correctsSaleId == null) {
       if ((values.total ?? 1210) > 0)

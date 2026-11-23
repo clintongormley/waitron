@@ -1,7 +1,7 @@
 import { setTipsForTest } from "./testing/payment-settings.js";
 import { readBillTenderLines } from "./receipt-payments.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedPerson, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -38,6 +38,7 @@ import {
   workingOrderLines,
   workingOrders,
   settings,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
@@ -440,7 +441,7 @@ describe("invoice selection before reserving new bill money", () => {
         .from(billPayments)
         .where(eq(billPayments.workingOrderId, billId)),
       providerPayments: await tx.select().from(payments).where(eq(payments.workingOrderId, billId)),
-      series: await tx.select().from(invoiceSeries),
+      series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
       jobs: await tx.select().from(printJobs),
     }));
   }
@@ -992,7 +993,7 @@ describe("the invoice at full payment", () => {
     );
     const [correctiveBefore] = await inTx((tx) =>
       tx
-        .select({ nextNumber: invoiceSeries.nextNumber })
+        .select({ nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "corrective")),
     );
@@ -1024,7 +1025,7 @@ describe("the invoice at full payment", () => {
     ).toEqual(settledBefore);
     const [correctiveAfter] = await inTx((tx) =>
       tx
-        .select({ nextNumber: invoiceSeries.nextNumber })
+        .select({ nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "corrective")),
     );
@@ -1107,7 +1108,7 @@ describe("the invoice at full payment", () => {
         payments: await tx.select().from(payments),
         portions: await tx.select().from(billPayments),
         tenders: await tx.select().from(tenders),
-        series: await tx.select().from(invoiceSeries),
+        series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
         jobs: await tx.select().from(printJobs),
       }));
     const before = await snapshot();
@@ -1404,7 +1405,7 @@ describe("the invoice at full payment", () => {
           payments: await tx.select().from(payments),
           portions: await tx.select().from(billPayments),
           tenders: await tx.select().from(tenders),
-          series: await tx.select().from(invoiceSeries),
+          series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
           jobs: await tx.select().from(printJobs),
         }));
       const before = await snapshot();
@@ -2301,7 +2302,7 @@ describe("the invoice at full payment", () => {
           .select()
           .from(billPayments)
           .where(eq(billPayments.workingOrderId, billId)),
-        series: await tx.select().from(invoiceSeries),
+        series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
       }));
 
       await expect(
@@ -2322,7 +2323,7 @@ describe("the invoice at full payment", () => {
           .select()
           .from(billPayments)
           .where(eq(billPayments.workingOrderId, billId)),
-        series: await tx.select().from(invoiceSeries),
+        series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
       }));
       expect(after).toEqual(before);
       expect(
@@ -2872,7 +2873,7 @@ describe("the invoice at full payment", () => {
         const paymentId = await insertPayment(billId, { applied: 300 });
         const before = await inTx(async (tx) => ({
           sales: await tx.select().from(sales),
-          series: await tx.select().from(invoiceSeries),
+          series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
           deliveries: await tx.select().from(invoiceDeliveries),
           jobs: await tx.select().from(printJobs),
           payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
@@ -2916,7 +2917,7 @@ describe("the invoice at full payment", () => {
         expect(
           await inTx(async (tx) => ({
             sales: await tx.select().from(sales),
-            series: await tx.select().from(invoiceSeries),
+            series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
             deliveries: await tx.select().from(invoiceDeliveries),
             jobs: await tx.select().from(printJobs),
             payment: await tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),

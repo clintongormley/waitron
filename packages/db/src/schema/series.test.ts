@@ -49,8 +49,8 @@ describe("invoice_series schema", () => {
 
   it("holds several series on one node", async () => {
     await db.insert(invoiceSeries).values([
-      { nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
-      { nodeId: nodeA1, code: "RA", purpose: "corrective", nextNumber: 1 },
+      { nodeId: nodeA1, code: "FA", purpose: "standard" },
+      { nodeId: nodeA1, code: "RA", purpose: "corrective" },
     ]);
     const found = await db
       .select({ code: invoiceSeries.code })
@@ -107,7 +107,6 @@ describe("invoice_series schema", () => {
     expect(cols.map((c) => c.name).sort()).toEqual([
       "code",
       "id",
-      "next_number",
       "node_id",
       "purpose",
       "retired_at",

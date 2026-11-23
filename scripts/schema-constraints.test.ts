@@ -590,7 +590,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "invoice_deliveries_person_ck",
   "invoice_deliveries_status_ck",
   "invoice_series_code_ck",
-  "invoice_series_next_number_ck",
   "invoice_series_purpose_ck",
   "kitchen_notices_cancelled_extra_kind_ck",
   "kitchen_notices_direction_ck",

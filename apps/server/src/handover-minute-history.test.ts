@@ -1,6 +1,6 @@
 import { seedModuleRecord } from "../test/module-records.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
 // module-records/fiscal-verifactu.json? The cases asking this put the spare's clock on the minute of
@@ -11,7 +11,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { invoiceSeries, nodes, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
+import { nodes, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
 import { setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -189,7 +189,7 @@ beforeEach(async () => {
     passwordHash: hashPassword(PASSWORD),
   });
   m1Revisions = [(await selectOnM1("first", true)).revision];
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
   key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);

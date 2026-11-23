@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { readModuleConfig } from "./module-config.js";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -203,7 +204,9 @@ it("activates the frozen assignment once and completes only after host publicati
   expect(state.frozen.nodeId).toBe(f.claim.state.nodeId);
   expect((await f.db.select().from(nodes)).map((n) => n.id)).toEqual([f.claim.state.nodeId]);
   expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
-  expect((await f.db.select().from(invoiceSeries)).map((s) => s.nextNumber)).toEqual([1, 1, 1]);
+  expect(
+    (await f.db.select(seriesWithNextNumber).from(invoiceSeries)).map((s) => s.nextNumber),
+  ).toEqual([1, 1, 1]);
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
   const disk = await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8");
   expect(disk).not.toContain('"password":"test"');
@@ -381,7 +384,7 @@ it("an uncertain attempt with a retained fiscal commit publishes nothing even wi
   vi.spyOn(f.host.evidence, "read").mockResolvedValue({
     current: { priorActivation: "committed" },
   } as never);
-  const before = await f.db.select().from(invoiceSeries);
+  const before = await f.db.select(seriesWithNextNumber).from(invoiceSeries);
   const response = await f.activate();
   expect({ status: response.status, body: await response.json() }).toMatchObject({
     status: 409,
@@ -389,7 +392,7 @@ it("an uncertain attempt with a retained fiscal commit publishes nothing even wi
   });
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
   expect((await f.host.store.read())?.status).toBe("uncertain");
-  expect(await f.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await f.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 

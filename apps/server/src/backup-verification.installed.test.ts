@@ -213,7 +213,10 @@ it("complete read-only barrier refuses UPDATE inside a genuine owner callback", 
           async verifyRestoredData(context) {
             const expected = await querySnapshot(context.after);
             try {
-              await consume(context.after, "update invoice_series set next_number=next_number+1");
+              await consume(
+                context.after,
+                "update invoice_series set retired_at='2026-11-01T00:00:00.000Z' where retired_at is null",
+              );
             } catch {
               denied = true;
             }

@@ -32,9 +32,15 @@ import {
   taxpayer,
   triggerRaised,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seedPerson,
+  seedWorkingOrder,
+  withInvoiceNumberCollision,
+} from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
@@ -278,12 +284,17 @@ describe("recordSale — the happy path", () => {
     expect(row?.fiscal_backend).toBe(backend.id);
   });
 
-  it("advances the series counter so the second sale gets the next number", async () => {
+  it("records consecutive invoice numbers for two sales in one transaction", async () => {
     const backend = new FakeFiscalBackend(suite.db);
-    await run(backend);
-    const second = await run(backend);
-    const [row] = await suite.db.select().from(sales).where(eq(sales.id, second.saleId));
-    expect(row?.invoiceNumber).toBe(2);
+    const [first, second] = await withTransaction(suite.db, async (tx) => {
+      await backend.registerNode(tx, nodeId);
+      const first = await recordSale(tx, backend, input());
+      const second = await recordSale(tx, backend, input());
+      return [first, second];
+    });
+    const [firstRow] = await suite.db.select().from(sales).where(eq(sales.id, first.saleId));
+    const [secondRow] = await suite.db.select().from(sales).where(eq(sales.id, second.saleId));
+    expect([firstRow?.invoiceNumber, secondRow?.invoiceNumber]).toEqual([1, 2]);
   });
 
   it("inserts exactly one sale, its two lines and its one tender", async () => {
@@ -516,7 +527,7 @@ describe("recordSale — the order of operations", () => {
       async checkIntegrity(tx, node) {
         // Read from inside verification: 1 means allocation has not run yet.
         const [row] = await tx
-          .select({ n: invoiceSeries.nextNumber })
+          .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, seriesId));
         observed.push(row?.n ?? -1);
@@ -864,25 +875,26 @@ describe("recordSale — numbering", () => {
     expect(row?.invoiceNumber).toBe(1);
   });
 
-  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
-    // The series' counter still stands at 1, so the sale draws the planted row's number.
+  it("refuses with sale.number_reused when insertion encounters a duplicate number", async () => {
     await seedBareSale(suite.db, { deviceId, nodeId, seriesId }, { invoiceNumber: 1 });
 
-    const error = await captureError(() => run(new FakeFiscalBackend(suite.db)));
+    const error = await withInvoiceNumberCollision(suite.db, () =>
+      captureError(() => run(new FakeFiscalBackend(suite.db))),
+    );
 
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({
       code: "sale.number_reused",
-      params: { seriesId, invoiceNumber: 1 },
+      params: { seriesId, invoiceNumber: 2 },
     });
     expect(await countRows("sales")).toBe(1);
     expect(await countRows("sale_lines")).toBe(0);
     expect(await countRows("fake_fiscal_records")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
-    expect(series?.next).toBe(1);
+    expect(series?.next).toBe(2);
   });
 
   it("passes another unique refusal on the sale's insert through untranslated", async () => {
@@ -934,17 +946,10 @@ describe("recordSale — series validation", () => {
     // must fail loudly, never issue a number the tax agency saw.
     const retiredAt = new Date("2026-09-06T10:00:00.000Z");
     await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
-    try {
-      await expect(run(new FakeFiscalBackend(suite.db))).rejects.toMatchObject({
-        code: "sale.series_retired",
-        params: { seriesId, retiredAt: retiredAt.toISOString() },
-      });
-    } finally {
-      await suite.db
-        .update(invoiceSeries)
-        .set({ retiredAt: null })
-        .where(eq(invoiceSeries.id, seriesId));
-    }
+    await expect(run(new FakeFiscalBackend(suite.db))).rejects.toMatchObject({
+      code: "sale.series_retired",
+      params: { seriesId, retiredAt: retiredAt.toISOString() },
+    });
   });
 });
 
@@ -1144,7 +1149,7 @@ describe("recordSale — the amounts filed are the cent amounts the rows store",
 
   async function seriesNext(): Promise<number | undefined> {
     const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     return series?.n;
@@ -1757,7 +1762,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(await countRows("sales")).toBe(0);
     expect(await countRows("sale_lines")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(series!.next).toBe(1);
@@ -1894,7 +1899,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "address" } });
     expect(await countRows("sales")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, fullSeries!.id));
     expect(series!.next).toBe(1);
@@ -1927,7 +1932,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(blankError).toMatchObject({ code: "fiscal.taxpayer_domicile_missing" });
     expect(await countRows("sales")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, fullSeries!.id));
     expect(series!.next).toBe(1);
@@ -1948,7 +1953,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "legalName" } });
     expect(await countRows("sales")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, fullSeries!.id));
     expect(series!.next).toBe(1);
@@ -1971,7 +1976,7 @@ describe("recordSale — a regime's simplified-invoice limit", () => {
     });
     expect(await countRows("sales")).toBe(0);
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(series!.next).toBe(1);

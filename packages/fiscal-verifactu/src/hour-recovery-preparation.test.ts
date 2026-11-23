@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -109,7 +110,7 @@ beforeEach(async () => {
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
   });
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
   vi.setSystemTime(new Date("2026-10-16T12:40:00.000Z"));
 });
 afterEach(() => vi.useRealTimers());
@@ -159,7 +160,7 @@ async function settled(
 }
 async function snapshot() {
   return {
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
     activations: await suite.db.select().from(fiscalAllocations),
   };

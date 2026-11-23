@@ -277,7 +277,7 @@ describe("core backup source binding", () => {
         sql`insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
       );
       db.run(
-        sql`insert into invoice_series (id, node_id, code, next_number, retired_at) values ('old', 'source', 'HISTORY', 91, '2026-10-19T00:00:00Z'), ('live', 'source', 'CURRENT', 4, null)`,
+        sql`insert into invoice_series (id, node_id, code, retired_at) values ('old', 'source', 'HISTORY', '2026-10-19T00:00:00Z'), ('live', 'source', 'CURRENT', null)`,
       );
     }
   }
@@ -455,33 +455,35 @@ describe("core backup source binding", () => {
     },
   );
 
-  it.each(["old", "live"])("preserves every historical and live series counter: %s", async (id) => {
+  it.each(["old", "live"])("keeps recorded numbers in each series: %s", async (id) => {
     seed();
+    for (const db of [before.db, after.db]) {
+      db.run(sql`insert into sales
+        (id, source, series_id, node_id, invoice_number, issued_at, issued_offset_minutes, total,
+         vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state)
+        values ('series-sale', 'operator_script', ${id}, 'source', 90, '2026-10-20T00:00:00.000Z',
+          0, 100, '[]', 'en', '["en"]', 'fixture', 'not_applicable')`);
+    }
     expect(await verify()).toBe(true);
-    after.db.run(sql`update invoice_series set next_number = next_number + 1 where id = ${id}`);
-    expect(await verify()).toBe(false);
-  });
-
-  it("rejects a sale beyond its retained series counter", async () => {
-    seed();
-    for (const db of [before.db, after.db])
-      db.run(
-        sql`insert into sales (id, source, device_id, series_id, node_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values ('sale', 'operator_script', null, 'live', 'source', 4, '2026-10-20T00:00:00.000Z', 0, 100, '[]', 'en', '["en"]', 'fixture', 'not_applicable')`,
-      );
-    expect(await verify()).toBe(false);
-    for (const db of [before.db, after.db])
-      db.run(sql`update invoice_series set next_number = 5 where id = 'live'`);
-    expect(await verify()).toBe(true);
+    const restore = dropTriggers(after.db, "sales");
+    try {
+      after.db.run(sql`update sales set invoice_number = 91 where id = 'series-sale'`);
+      expect(await verify()).toBe(false);
+    } finally {
+      restore();
+    }
   });
 
   it("rejects captured dangling references even when both copies match", async () => {
     seed();
     for (const db of [before.db, after.db]) {
+      const restore = dropTriggers(db, "invoice_series");
       db.run(sql`pragma foreign_keys = off`);
       try {
         db.run(sql`update invoice_series set node_id = 'missing' where id = 'old'`);
       } finally {
         db.run(sql`pragma foreign_keys = on`);
+        restore();
       }
     }
     expect(await verify()).toBe(false);

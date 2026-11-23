@@ -1,3 +1,4 @@
+import { withInvoiceNumberCollision } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -25,6 +26,7 @@ import {
   sales,
   triggerRaised,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -340,7 +342,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     ) {
       await expect(substitute(backend, [substituted])).rejects.toMatchObject(refusal);
       const [full] = await suite.db
-        .select({ n: invoiceSeries.nextNumber })
+        .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.id, fullSeriesId));
       expect(full?.n).toBe(1);
@@ -407,7 +409,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
       params: { seriesId, expected: "full", actual: "standard" },
     });
     const [series] = await suite.db
-      .select({ nextNumber: invoiceSeries.nextNumber })
+      .select({ nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(series?.nextNumber).toBe(2);
@@ -457,17 +459,10 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
       .update(invoiceSeries)
       .set({ retiredAt })
       .where(eq(invoiceSeries.id, fullSeriesId));
-    try {
-      await expect(substitute(backend, [saleId])).rejects.toMatchObject({
-        code: "sale.series_retired",
-        params: { seriesId: fullSeriesId, retiredAt: retiredAt.toISOString() },
-      });
-    } finally {
-      await suite.db
-        .update(invoiceSeries)
-        .set({ retiredAt: null })
-        .where(eq(invoiceSeries.id, fullSeriesId));
-    }
+    await expect(substitute(backend, [saleId])).rejects.toMatchObject({
+      code: "sale.series_retired",
+      params: { seriesId: fullSeriesId, retiredAt: retiredAt.toISOString() },
+    });
   });
 });
 
@@ -511,12 +506,12 @@ describe("recordSubstitution — the F3 sale", () => {
     expect(row?.seriesId).toBe(fullSeriesId);
     expect(row?.invoiceNumber).toBe(1);
     const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, fullSeriesId));
     expect(series?.n).toBe(2);
     const [ticketSeries] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(ticketSeries?.n).toBe(2);
@@ -645,7 +640,7 @@ describe("recordSubstitution — the amounts filed are the cent amounts the rows
     expect(await countRows("sale_substitutions")).toBe(0);
     expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
     const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     expect(series?.n).toBe(2); // the ticket's number only
@@ -687,6 +682,15 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 
+    const fullSeriesNumber = async () => {
+      const [series] = await suite.db
+        .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, fullSeriesId));
+      return series?.n;
+    };
+    expect(await fullSeriesNumber()).toBe(1);
+
     await expect(substitute(backend, [recorded, unrecorded])).rejects.toMatchObject({
       code: "fiscal.sale_not_recorded",
       params: { saleId: unrecorded },
@@ -696,41 +700,38 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's own sale record, no F3
-    const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
-      .from(invoiceSeries)
-      .where(eq(invoiceSeries.id, seriesId));
-    expect(series?.n).toBe(2); // the F3's allocation rolled back — no permanent hole
+    expect(await fullSeriesNumber()).toBe(1);
   });
 });
 
 describe("recordSubstitution — numbering", () => {
-  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
+  it("refuses with sale.number_reused when insertion encounters a duplicate number", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
-    // The full series' counter still stands at 1, so the F3 draws this number.
     await seedBareSale(
       suite.db,
       { deviceId, nodeId, seriesId: fullSeriesId },
       { invoiceNumber: 1 },
     );
 
-    const error = await captureError(() => substitute(backend, [ticket]));
+    const error = await withInvoiceNumberCollision(suite.db, () =>
+      captureError(() => substitute(backend, [ticket])),
+    );
 
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({
       code: "sale.number_reused",
-      params: { seriesId: fullSeriesId, invoiceNumber: 1 },
+      params: { seriesId: fullSeriesId, invoiceNumber: 2 },
     });
     expect(await countRows("sales")).toBe(2);
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]);
     const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, fullSeriesId));
-    expect(series?.n).toBe(1);
+    expect(series?.n).toBe(2);
   });
 });
 
@@ -864,7 +865,7 @@ describe("recordSubstitution — the customer is checked where it enters", () =>
   /** Rows an F3 writes or spends; a refusal must leave every one where the ticket left it. */
   async function state() {
     const [series] = await suite.db
-      .select({ next: invoiceSeries.nextNumber })
+      .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
     return {

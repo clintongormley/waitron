@@ -123,7 +123,11 @@ function inspect(directory: string) {
       deployment: db.prepare("select environment from deployment").all(),
       records: db.prepare("select entorno from verifactu_records").all(),
       credentials: db.prepare("select purpose from venue_credentials").all(),
-      series: db.prepare("select purpose, next_number from invoice_series order by purpose").all(),
+      series: db
+        .prepare(
+          "select purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose",
+        )
+        .all(),
     };
   } finally {
     db.close();
@@ -144,9 +148,9 @@ it("owned development Live readiness runs the real certificate-free preproductio
   expect(first.records).toEqual([{ entorno: "preproduction" }]);
   expect(first.credentials).toEqual([]);
   expect(first.series).toEqual([
-    { purpose: "corrective", next_number: 1 },
-    { purpose: "full", next_number: 1 },
-    { purpose: "standard", next_number: 2 },
+    { purpose: "corrective", nextNumber: 1 },
+    { purpose: "full", nextNumber: 1 },
+    { purpose: "standard", nextNumber: 2 },
   ]);
   const second = await f.post();
   expect({ status: second.status, body: await second.json() }).toEqual({

@@ -14,6 +14,7 @@ import {
   sales,
   taxpayer,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -158,7 +159,7 @@ async function sellFull(backend: FiscalBackend, counterparty: Counterparty) {
 
 async function rectSeriesNext(): Promise<number | undefined> {
   const [series] = await suite.db
-    .select({ n: invoiceSeries.nextNumber })
+    .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.id, rectSeriesId));
   return series?.n;

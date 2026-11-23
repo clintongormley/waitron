@@ -92,3 +92,9 @@ export const PARTY_ALLERGY_GUEST_ANSWER_REFUSAL =
   "an allergic guest needs the party's answer first";
 
 export const BILL_NUMBER_DECREASE_REFUSAL = "a party's last bill number never goes down";
+
+/**
+ * Reprints need the original series code. An update cannot reopen a retired series.
+ * Foreign keys from sales and fiscal series conflicts protect referenced series from deletion.
+ */
+export const INVOICE_SERIES_CHANGE_REFUSAL = "invoice_series: only retired_at may be set, once";

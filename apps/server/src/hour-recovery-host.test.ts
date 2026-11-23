@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import {
   external,
@@ -62,7 +63,7 @@ it("persists a recovery hour before the real configured restore runner activates
   expect(
     await readFile(join(f.roots.stateDir, "module-records/fiscal-verifactu.json"), "utf8"),
   ).not.toContain(key.secret);
-  const old = await suite.db.select().from(invoiceSeries);
+  const old = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   await runRestoreHooks({
     db: suite.db,
     nodeDb: suite.node,
@@ -71,7 +72,7 @@ it("persists a recovery hour before the real configured restore runner activates
     log: () => {},
     withModuleOperations: f.service.runner(selected.input),
   });
-  const after = await suite.db.select().from(invoiceSeries);
+  const after = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   for (const row of old)
     expect(after.find((entry) => entry.id === row.id)).toEqual({
       ...row,
@@ -148,7 +149,7 @@ it("replays the exact restore after reading the now-committed database history",
     log: () => {},
     withModuleOperations: runner,
   });
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   f.facts.priorActivation = "committed";
   f.facts.history = [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))];
   await runRestoreHooks({
@@ -159,7 +160,7 @@ it("replays the exact restore after reading the now-committed database history",
     log: () => {},
     withModuleOperations: runner,
   });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
 });
@@ -321,7 +322,7 @@ it("requires a real committed result when the host reports that replay is possib
   const f = await host();
   const selected = (await f.selectPastWaits()) as { input: unknown };
   f.facts.priorActivation = "committed";
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   await expect(
     runRestoreHooks({
       db: suite.db,
@@ -335,7 +336,7 @@ it("requires a real committed result when the host reports that replay is possib
     code: "restore.hook_failed",
     params: { module: "fiscal-verifactu", code: "sif.allocation_invalid" },
   });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
 });
 
 it.each(["country", "taxId", "environment"] as const)(
@@ -469,7 +470,7 @@ it("admits recovery from the real validated archive preview with its public spen
     withModuleOperations: service.runner(outcome.input),
   });
   expect(
-    (await suite.db.select().from(invoiceSeries))
+    (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
       .filter((row) => row.retiredAt === null)
       .map((row) => row.code),
   ).toEqual(["A-0CNVJ", "FF-0CNVJ", "R-0CNVJ"]);
@@ -486,7 +487,7 @@ it("finishes an already committed restore after restart without selecting or com
     log: () => {},
     withModuleOperations: first.service.runner(selected.input),
   });
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const next = await host();
   next.facts.priorActivation = "committed";
   external.internet.mockClear();
@@ -498,7 +499,7 @@ it("finishes an already committed restore after restart without selecting or com
     log: () => {},
     withModuleOperations: next.service.runner(selected.input),
   });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
   expect(await readModulePreparationHistory(next.roots, binding.module)).toHaveLength(2);
   expect(external.internet).not.toHaveBeenCalled();
@@ -525,7 +526,7 @@ describe("the database supplied by the placement runner", () => {
         withModuleOperations: f.service.runner(selected.input),
       }),
     ).rejects.toMatchObject({ code: "module.operation_invalid" });
-    expect(await placed.db.select().from(invoiceSeries)).toEqual([]);
+    expect(await placed.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
     expect(await placed.db.select().from(fiscalAllocations)).toEqual([]);
   });
 });
@@ -667,13 +668,13 @@ describe("module-owned recovery facts from the actual database", () => {
 
   it("selects from retained full-purpose bases and history without a supplied fiscal facts callback", async () => {
     const f = await databaseHost();
-    const before = await suite.db.select().from(invoiceSeries);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const selected = (await f.selectPastWaits()) as {
       identity: string;
       input: unknown;
     };
     expect(selected.identity).toBe("0CNQT");
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     await runRestoreHooks({
       db: suite.db,
       nodeDb: suite.node,
@@ -682,7 +683,7 @@ describe("module-owned recovery facts from the actual database", () => {
       log: () => {},
       withModuleOperations: f.service.runner(selected.input),
     });
-    const after = await suite.db.select().from(invoiceSeries);
+    const after = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     expect(
       after
         .filter((row) => row.retiredAt === null)
@@ -716,7 +717,7 @@ describe("module-owned recovery facts from the actual database", () => {
       log: () => {},
       withModuleOperations: first.service.runner(selected.input),
     });
-    const before = await suite.db.select().from(invoiceSeries);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const next = await databaseHost();
     external.internet.mockClear();
     await runRestoreHooks({
@@ -727,7 +728,7 @@ describe("module-owned recovery facts from the actual database", () => {
       log: () => {},
       withModuleOperations: next.service.runner(selected.input),
     });
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
     expect(await readModulePreparationHistory(next.roots, binding.module)).toHaveLength(2);
     expect(external.internet).not.toHaveBeenCalled();
@@ -772,7 +773,7 @@ describe("module-owned recovery facts from the actual database", () => {
 it("refuses a selection that still carries an installation code, writing nothing", async () => {
   const f = await host();
   const compared = await f.compare();
-  const beforeSeries = await suite.db.select().from(invoiceSeries);
+  const beforeSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const beforeAllocations = await suite.db.select().from(fiscalAllocations);
   await expect(
     f.prepare({ action: "select", comparisonId: compared.id, installationCodes: ["0CNQX"] }),
@@ -781,7 +782,7 @@ it("refuses a selection that still carries an installation code, writing nothing
     params: { reason: "event_mismatch" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(beforeSeries);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(beforeSeries);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(beforeAllocations);
 });
 
@@ -796,7 +797,7 @@ async function sellAt(instant: string) {
     db: suite.db,
   });
   const [standard] = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(eq(invoiceSeries.code, "A-0CNNY"));
   await withTransaction(suite.db, (tx) =>
@@ -852,7 +853,7 @@ describe("a restore whose clock is before or past the backup's newest record", (
       now: () => ({ ...steadyClock.now(), instant: new Date(clock.wall()) }),
     };
     const [standard] = await suite.db
-      .select()
+      .select(seriesWithNextNumber)
       .from(invoiceSeries)
       .where(eq(invoiceSeries.code, `A-${selected.identity}`));
     const backend = new VerifactuBackend({

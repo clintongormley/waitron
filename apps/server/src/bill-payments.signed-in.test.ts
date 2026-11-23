@@ -14,6 +14,7 @@ import {
   printJobs,
   sales,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
@@ -246,7 +247,7 @@ async function writes(billId: string, till: Till) {
     sales: await tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
     nextNumber: (
       await tx
-        .select({ nextNumber: invoiceSeries.nextNumber })
+        .select({ nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries)
         .where(eq(invoiceSeries.id, till.seriesId))
     )[0]!.nextNumber,

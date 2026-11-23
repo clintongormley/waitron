@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
@@ -32,7 +33,7 @@ async function seed() {
   await seedTaxpayers(suite.db);
   await stampDeployment(suite.db, "preproduction");
   await activate(binding, "0CNNW", "2026-10-16T11:40:00.000Z");
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
 }
 async function activate(
   initial: OperationBinding,
@@ -111,7 +112,7 @@ it("retains the higher retired hour of another node without changing rows or cou
     .set({ revocadoEn: new Date() })
     .where(eq(verifactuIdentities.nodeId, other.nodeId));
   const before = {
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
     allocations: await suite.db.select().from(fiscalAllocations),
   };
@@ -126,7 +127,7 @@ it("retains the higher retired hour of another node without changing rows or cou
   expect(
     projectHourHistory({ scope: { ...scope, taxpayerNif: "92470001W" }, sources }),
   ).toMatchObject({ greatestSpentMinute: null, contradictions: [] });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before.series);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before.series);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual(before.sifs);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
 });

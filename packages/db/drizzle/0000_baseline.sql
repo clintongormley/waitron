@@ -61,11 +61,9 @@ CREATE TABLE `invoice_series` (
 	`node_id` text NOT NULL,
 	`code` text NOT NULL,
 	`purpose` text DEFAULT 'standard' NOT NULL,
-	`next_number` integer DEFAULT 1 NOT NULL,
 	`retired_at` text,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "invoice_series_purpose_ck" CHECK("invoice_series"."purpose" in ('standard', 'full', 'corrective')),
-	CONSTRAINT "invoice_series_next_number_ck" CHECK("invoice_series"."next_number" >= 1),
 	CONSTRAINT "invoice_series_code_ck" CHECK("invoice_series"."code" <> '')
 );
 --> statement-breakpoint
@@ -4006,3 +4004,10 @@ FOR EACH ROW WHEN new.last_bill_number < old.last_bill_number
 BEGIN
   SELECT raise(abort, 'a party''s last bill number never goes down');
 END;
+
+--> statement-breakpoint
+CREATE TRIGGER invoice_series_guard_update BEFORE UPDATE ON invoice_series
+WHEN new.id IS NOT old.id OR new.node_id IS NOT old.node_id OR new.code IS NOT old.code
+  OR new.purpose IS NOT old.purpose
+  OR (old.retired_at IS NOT NULL AND new.retired_at IS NOT old.retired_at)
+BEGIN SELECT RAISE(ABORT, 'invoice_series: only retired_at may be set, once'); END;

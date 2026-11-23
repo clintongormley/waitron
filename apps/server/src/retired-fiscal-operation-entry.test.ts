@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -37,7 +38,8 @@ beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
   await suite.db
     .insert(invoiceSeries)
-    .values(bases.map((base) => ({ ...base, nodeId: node.nodeId, nextNumber: 37 })));
+    .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
+  await advanceSeriesTo(suite.db, node.nodeId, 37);
   await withTransaction(suite.db, (tx) =>
     seedFixtureSif(tx, {
       ...node,
@@ -54,7 +56,7 @@ afterEach(async () => {
 });
 async function rows(db = suite.db) {
   return {
-    series: await db.select().from(invoiceSeries),
+    series: await db.select(seriesWithNextNumber).from(invoiceSeries),
     registrations: await db.select().from(verifactuIdentities),
     allocations: await db.select().from(fiscalAllocations),
   };

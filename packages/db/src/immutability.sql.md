@@ -50,6 +50,5 @@ What that costs, measured one statement at a time, is recorded at the top of
 **Keep mutable delivery state in a separate table.** Correcting a delivery attempt must not require
 editing the immutable fact it describes.
 
-**A mutable counter is not declared append-only.** `invoice_series` is classified `state`
-(`packages/db/src/classification.ts:46`), because `allocateInvoiceNumber` has to UPDATE
-`next_number` in place — the operation the table exists to support.
+**A series can be retired.** The update trigger allows setting `retired_at` once. Sales supply
+the next invoice number and keep referenced series from being deleted.

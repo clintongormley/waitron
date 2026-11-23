@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -131,7 +132,7 @@ it.each([false, true])(
       body: { error: { code: "setup.owner_required", params: {} } },
     });
     expect(await venue.db.select().from(taxpayer)).toEqual([]);
-    expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+    expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   },
 );
 
@@ -156,11 +157,13 @@ it.each(["demo", "prepare"])(
       "50000000R",
     ]);
     expect(
-      (await venue.db.select().from(invoiceSeries)).map(({ code, purpose, nextNumber }) => ({
-        code,
-        purpose,
-        nextNumber,
-      })),
+      (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
+        ({ code, purpose, nextNumber }) => ({
+          code,
+          purpose,
+          nextNumber,
+        }),
+      ),
     ).toEqual([
       { code: "A-0CNNW", purpose: "standard", nextNumber: 1 },
       { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
@@ -235,10 +238,12 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
     body: { provisioned: true, restarting: true },
   });
   expect(
-    (await venue.db.select().from(invoiceSeries)).map(({ code, nextNumber }) => ({
-      code,
-      nextNumber,
-    })),
+    (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
+      ({ code, nextNumber }) => ({
+        code,
+        nextNumber,
+      }),
+    ),
   ).toEqual([
     { code: "A-0CNNY", nextNumber: 1 },
     { code: "FF-0CNNY", nextNumber: 1 },

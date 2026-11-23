@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
@@ -125,7 +126,7 @@ beforeEach(async () => {
     });
     const [series] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective" })
       .returning();
     input = {
       managementSessionId: token,
@@ -188,7 +189,7 @@ async function snapshot() {
     tenders: await suite.db.select().from(tenders),
     refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
     deliveries: await suite.db.select().from(verifactuSubmissions),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
@@ -627,7 +628,7 @@ async function takeOverWithCorrectiveSeries(): Promise<SeededNode> {
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: successor.nodeId, code: "RB", purpose: "corrective", nextNumber: 1 })
+    .values({ nodeId: successor.nodeId, code: "RB", purpose: "corrective" })
     .returning();
   input.request.correction.seriesId = brandSeriesId(series!.id);
   return successor;

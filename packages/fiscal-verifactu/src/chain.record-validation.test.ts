@@ -1,3 +1,4 @@
+import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -35,7 +36,9 @@ beforeEach(async () => {
 /** Point the seeded series at a code AEAT's character set forbids. A space is the shape an
  * operator actually types ("Serie A"). */
 async function useSeriesCode(code: string): Promise<void> {
-  await suite.db.execute(sql`update invoice_series set code = ${code} where id = ${seriesId}`);
+  await withInvoiceSeriesGuardDropped(suite.db, () =>
+    suite.db.execute(sql`update invoice_series set code = ${code} where id = ${seriesId}`),
+  );
 }
 
 function sell() {

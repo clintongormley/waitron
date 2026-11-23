@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
@@ -98,7 +99,7 @@ async function activate(
 async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
     records: await suite.db.select().from(verifactuRecords),
@@ -111,7 +112,7 @@ beforeEach(async () => {
   await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   await activate(fixture("setup", "0CNNW", "original"));
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, primary.nodeId, 123);
 });
 afterEach(() => vi.useRealTimers());
 
@@ -149,10 +150,7 @@ it("activates all next-hour bases without an advance reservation and preserves o
 
 it("replays the exact committed promotion without changing counters or fiscal rows", async () => {
   const first = await activate();
-  await suite.db
-    .update(invoiceSeries)
-    .set({ nextNumber: 321 })
-    .where(eq(invoiceSeries.nodeId, standby.nodeId));
+  await advanceSeriesTo(suite.db, standby.nodeId, 321);
   const before = await snapshot();
   expect(await activate(fixture(), "committed")).toEqual(first);
   expect(await snapshot()).toEqual(before);

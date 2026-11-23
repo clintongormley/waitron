@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -255,10 +256,12 @@ it("writes and reads back the configured hour through the real provisioning and 
   expect(stored).toHaveLength(1);
   expect(stored[0]!.numeroInstalacion).toBe("0CNNY");
   expect(
-    (await venue.db.select().from(invoiceSeries)).map(({ code, nextNumber }) => ({
-      code,
-      nextNumber,
-    })),
+    (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
+      ({ code, nextNumber }) => ({
+        code,
+        nextNumber,
+      }),
+    ),
   ).toEqual([
     { code: "A-0CNNY", nextNumber: 1 },
     { code: "FF-0CNNY", nextNumber: 1 },

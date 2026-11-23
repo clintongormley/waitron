@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import * as certificateOpening from "@waitron/fiscal-verifactu/src/certificate-open.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -16,6 +17,7 @@ import {
   invoiceSeries,
   sales,
   type VenueDatabase,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { applyVenue, type VenueResult } from "./venue-apply.js";
@@ -383,7 +385,7 @@ it.each([
       venue: await folderSnapshot(join(f.root, "venue")),
       taxpayer: await readTaxpayerIdentities(venue.db),
       environment: await readDeploymentEnvironment(venue.db),
-      series: await venue.db.select().from(invoiceSeries),
+      series: await venue.db.select(seriesWithNextNumber).from(invoiceSeries),
     };
     const restarted = createFirstSetupRuntime({
       stateDir: join(f.root, "state"),
@@ -412,7 +414,7 @@ it.each([
       venue: await folderSnapshot(join(f.root, "venue")),
       taxpayer: await readTaxpayerIdentities(venue.db),
       environment: await readDeploymentEnvironment(venue.db),
-      series: await venue.db.select().from(invoiceSeries),
+      series: await venue.db.select(seriesWithNextNumber).from(invoiceSeries),
     }).toEqual(before);
   },
 );
@@ -653,7 +655,7 @@ it("the venue command activates its kept hour and completes checked publication"
     "trading",
   ]);
   const series = await venue.db
-    .select({ code: invoiceSeries.code, nextNumber: invoiceSeries.nextNumber })
+    .select({ code: invoiceSeries.code, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
     .from(invoiceSeries);
   expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
@@ -924,7 +926,7 @@ it("a refusal before activation starts leaves no environment stamp and no venue"
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
-  expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
 
@@ -1026,7 +1028,7 @@ it("the production venue command checks accepted readiness and seals its exact p
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("complete");
   expect(await readDeploymentEnvironment(venue.db)).toBe("production");
-  const series = await venue.db.select().from(invoiceSeries);
+  const series = await venue.db.select(seriesWithNextNumber).from(invoiceSeries);
   expect(series.map((row) => row.code).sort()).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
   expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
@@ -1064,7 +1066,7 @@ it("the production venue command refuses missing readiness before stamping or ac
   expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
-  expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
 
@@ -1158,7 +1160,7 @@ it.each(["taxpayer", "schema", "target"] as const)(
     expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-    expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+    expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   },
 );
 
@@ -1183,7 +1185,7 @@ it.each([
     expect(f.output).toContain(message);
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
     expect(await readTaxpayerIdentities(venue.db)).toEqual([]);
-    expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+    expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
     expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
     expect(f.output.join("\n")).not.toContain(productionCertificate.passphrase);
     expect(f.output.join("\n")).not.toContain(productionEmail.password);
@@ -1223,9 +1225,11 @@ it("the owned production command runs an explicitly confirmed isolated readiness
     expect(
       (await venue.db.execute<{ n: number }>(sql`select count(*) as n from sales`)).rows,
     ).toEqual([{ n: 0 }]);
-    expect((await venue.db.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual([
-      1, 1, 1,
-    ]);
+    expect(
+      (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
+        (row) => row.nextNumber,
+      ),
+    ).toEqual([1, 1, 1]);
     const { createFiscalReadinessStore, fiscalReadinessBinding } =
       await import("./fiscal-readiness.js");
     await expect(
@@ -1383,7 +1387,7 @@ it("command deployment refuses to provision over its already completed venue", a
   const f = await realActivationFixture();
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const state = (await f.runtime.store.read())!;
-  const before = await venue.db.select().from(invoiceSeries);
+  const before = await venue.db.select(seriesWithNextNumber).from(invoiceSeries);
   const taxpayer = await readTaxpayerIdentities(venue.db);
   const deployment = f.deps.firstSetupDeployment!({
     runtime: f.runtime,
@@ -1398,7 +1402,7 @@ it("command deployment refuses to provision over its already completed venue", a
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect(await readTaxpayerIdentities(venue.db)).toEqual(taxpayer);
-  expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await f.runtime.store.read()).toEqual(state);
 });
 
@@ -1499,7 +1503,10 @@ it("stops production setup with an explicit Start again choice when its post-pro
   const opening = vi
     .spyOn(certificateOpening, "openCertificate")
     .mockImplementation(async (...args) => {
-      if (!refused && (await venue.db.select().from(invoiceSeries)).length > 0) {
+      if (
+        !refused &&
+        (await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).length > 0
+      ) {
         refused = true;
         return { ok: false, reason: "unavailable" };
       }
@@ -1508,7 +1515,7 @@ it("stops production setup with an explicit Start again choice when its post-pro
   try {
     expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(refused).toBe(true);
-    const before = await venue.db.select().from(invoiceSeries);
+    const before = await venue.db.select(seriesWithNextNumber).from(invoiceSeries);
     expect(before).toHaveLength(3);
     expect(before.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
     expect(f.output).toContain(
@@ -1517,7 +1524,7 @@ it("stops production setup with an explicit Start again choice when its post-pro
     expect(await venue.db.select().from(sales)).toEqual([]);
     expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
     expect(f.output.at(-1)).toBe("setup.attempt_conflict {}");
-    expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await venue.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   } finally {
     opening.mockRestore();
   }

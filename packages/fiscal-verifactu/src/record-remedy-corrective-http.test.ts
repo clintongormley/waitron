@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -144,7 +145,7 @@ beforeEach(async () => {
     });
     const [series] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective" })
       .returning();
     correction = {
       seriesId: series!.id,
@@ -192,7 +193,7 @@ async function snapshot() {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
     deliveries: await suite.db.select().from(verifactuSubmissions),
     tenders: await suite.db.select().from(tenders),

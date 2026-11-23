@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
 import { invoiceSeries, stampDeployment, withTransaction, type Transaction } from "@waitron/db";
@@ -106,7 +107,7 @@ function liveScope(
 async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     records: await suite.db.select().from(verifactuRecords),
     cases: await suite.db.select().from(filingCases),
@@ -152,7 +153,7 @@ beforeEach(async () => {
     );
   });
   const [series] = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(isNull(invoiceSeries.retiredAt));
   const backend = new VerifactuBackend({
@@ -539,7 +540,7 @@ it.each(["pendiente", "aceptado", "aceptado_con_errores"] as const)(
 
 it("recovers and replays an unheld invoice observation without fabricating a filing record", async () => {
   const [series] = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(isNull(invoiceSeries.retiredAt));
   const [lookup] = await suite.db

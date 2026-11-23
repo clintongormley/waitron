@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, incidents, invoiceSeries, withTransaction } from "@waitron/db";
@@ -23,16 +24,16 @@ function refusal(origin: Origin = deviceOrigin(seed.deviceId), time = detectedAt
 }
 
 describe("issuance refusal boundary", () => {
-  it("rolls back the counter before committing a separate incident and preserves the refusal", async () => {
-    const before = await suite.db.select().from(invoiceSeries);
+  it("rolls back the numbered sale before committing a separate incident and preserves the refusal", async () => {
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const error = refusal();
     await expect(
       withIssuanceTransaction(suite.db, async (tx) => {
-        await tx.update(invoiceSeries).set({ nextNumber: 8 });
+        await seedInvoiceNumber(tx, seed, 7);
         throw error;
       }),
     ).rejects.toBe(error);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     const rows = await suite.db.select().from(incidents);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -51,8 +52,10 @@ describe("issuance refusal boundary", () => {
       params: {},
     });
     expect({ ...error }).not.toHaveProperty("incident");
-    await withTransaction(suite.db, (tx) => tx.update(invoiceSeries).set({ nextNumber: 2 }));
-    expect((await suite.db.select().from(invoiceSeries))[0]?.nextNumber).toBe(2);
+    await withTransaction(suite.db, (tx) => seedInvoiceNumber(tx, seed, 1));
+    expect((await suite.db.select(seriesWithNextNumber).from(invoiceSeries))[0]?.nextNumber).toBe(
+      2,
+    );
   });
 
   it("deduplicates an open refusal by origin, keeps its first detection, and raises again after handling", async () => {
@@ -86,11 +89,13 @@ describe("issuance refusal boundary", () => {
     const ordinary = new AppError("fiscal.taxpayer_domicile_missing", {});
     await expect(
       withIssuanceTransaction(suite.db, async (tx) => {
-        await tx.update(invoiceSeries).set({ nextNumber: 9 });
+        await seedInvoiceNumber(tx, seed, 8);
         throw ordinary;
       }),
     ).rejects.toBe(ordinary);
-    expect((await suite.db.select().from(invoiceSeries))[0]?.nextNumber).toBe(1);
+    expect((await suite.db.select(seriesWithNextNumber).from(invoiceSeries))[0]?.nextNumber).toBe(
+      1,
+    );
     expect(await suite.db.select().from(incidents)).toEqual([]);
   });
 

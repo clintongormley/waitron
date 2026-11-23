@@ -132,7 +132,9 @@ function effects(id: string) {
     tenders: suite.db.all(
       sql`select * from tenders where sale_id in (select id from sales where working_order_id = ${id})`,
     ),
-    series: suite.db.all(sql`select id, next_number from invoice_series order by id`),
+    series: suite.db.all(
+      sql`select id, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by id`,
+    ),
     settlements: suite.db.all(
       sql`select * from sale_settlements where sale_id in (select id from sales where working_order_id = ${id})`,
     ),

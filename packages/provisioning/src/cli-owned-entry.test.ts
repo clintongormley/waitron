@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { modulesSettings } from "@waitron/module";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
@@ -301,7 +302,7 @@ it("the built preproduction command completes checked publication in one run", a
     });
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
     const { invoiceSeries } = await import("@waitron/db");
-    const series = await stored.venue.select().from(invoiceSeries);
+    const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
     expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
     const identity = await stored.venue.execute<{ public_key: string }>(
@@ -492,7 +493,7 @@ it("the built production command checks readiness and seals settings without sen
     expect(await readDeploymentEnvironment(stored.venue)).toBe("production");
     const { invoiceSeries, sales, withTransaction } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
-    const series = await stored.venue.select().from(invoiceSeries);
+    const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
     expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFY", "FF-0CRFY", "R-0CRFY"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
     const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
@@ -683,7 +684,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
     expect(await readTaxpayerIdentities(stored.venue)).toEqual([]);
     const { invoiceSeries, sales } = await import("@waitron/db");
     expect(await stored.venue.select().from(sales)).toEqual([]);
-    expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
+    expect(await stored.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   } finally {
     await stored.close();
   }

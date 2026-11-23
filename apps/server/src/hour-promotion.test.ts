@@ -1,6 +1,11 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedVenueSettings,
+  seedBusinessDay,
+  seriesWithNextNumber,
+  advanceSeriesTo,
+} from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -183,7 +188,7 @@ beforeEach(async () => {
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, primary, ready)),
     );
   });
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
   key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
@@ -266,7 +271,7 @@ async function compare(
 }
 async function rows() {
   return {
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
     sif: await suite.db.select().from(verifactuIdentities),
@@ -1010,10 +1015,7 @@ it.each(["key", "manager"])(
       agent = undefined;
       await server.close();
       server = undefined;
-      await suite.db
-        .update(invoiceSeries)
-        .set({ nextNumber: 47 })
-        .where(eq(invoiceSeries.nodeId, standby.nodeId));
+      await advanceSeriesTo(suite.db, standby.nodeId, 47);
       const before = await rows();
       expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(3);
       expect(before.allocations).toHaveLength(2);
@@ -1113,11 +1115,11 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
       ...base,
       nodeId: primary.nodeId,
       code: `${base.code}-0CNNW`,
-      nextNumber: 123,
     })),
   );
+  await advanceSeriesTo(spare.db, primary.nodeId, 123);
   const baseline = {
-    series: await spare.db.select().from(invoiceSeries),
+    series: await spare.db.select(seriesWithNextNumber).from(invoiceSeries),
     sif: await spare.db.select().from(verifactuIdentities),
   };
   const s = createNodeOperationPreparation({ ...options, db: spare.db, nodeDb: spare.node });
@@ -1147,7 +1149,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   expect(await spare.db.select().from(nodes).where(eq(nodes.id, target.nodeId))).toEqual([
     expect.objectContaining({ id: target.nodeId, publicKey: identity.publicKey, endorsement }),
   ]);
-  expect(await spare.db.select().from(invoiceSeries)).toEqual(baseline.series);
+  expect(await spare.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(baseline.series);
   expect(await spare.db.select().from(verifactuIdentities)).toEqual(baseline.sif);
   expect(await spare.db.select().from(fiscalReservations)).toEqual([]);
   expect(await spare.db.select().from(fiscalAllocations)).toEqual([]);
@@ -1155,7 +1157,7 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   expect(saved).toEqual([{ version: 1, entries: [], dormant: [state] }]);
   await establish();
   expect(await readModulePreparationHistory(options, binding.module)).toEqual(saved);
-  expect(await spare.db.select().from(invoiceSeries)).toEqual(baseline.series);
+  expect(await spare.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(baseline.series);
 });
 
 it("refuses promotion preparation without retained dormant admission", async () => {

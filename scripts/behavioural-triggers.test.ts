@@ -25,6 +25,7 @@ import {
   DINING_FIXED_REFUSAL,
   DEVICE_PRINTER_KIND_REFUSAL,
   FORM_FACTOR_REFUSAL,
+  INVOICE_SERIES_CHANGE_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
   DISH_IDENTITY_FIXED_REFUSAL,
@@ -136,6 +137,7 @@ const EXPECTED_TRIGGERS = [
   "working_orders_recipient_identity_insert",
   "working_orders_recipient_identity_update",
   "sales_recipient_identity_insert",
+  "invoice_series_guard_update",
   "refunds_guard_update",
   "adjustment_refunds_require_sale_refund",
   "invoice_correction_refunds_require_sale_refund",
@@ -483,6 +485,59 @@ describe("the behavioural triggers a migrated venue file carries", () => {
         (name) => !name.endsWith("_append_only_update") && !name.endsWith("_append_only_delete"),
       );
     expect(created).toEqual([...EXPECTED_TRIGGERS, ...IMAGE_REFERENCE_TRIGGERS].sort());
+  });
+});
+
+describe("invoice_series_guard_update", () => {
+  it("fixes the series identity and only lets its retirement be set once", () => {
+    connection.exec(`insert into invoice_series (id, node_id, code)
+      values ('series-guard', 'node', 'GUARD')`);
+    for (const set of [
+      "id = 'different-series'",
+      "node_id = 'different-node'",
+      "code = 'DIFFERENT'",
+      "purpose = 'corrective'",
+    ]) {
+      expect(
+        refusalFor(connection, `update invoice_series set ${set} where id = 'series-guard'`),
+      ).toBe(INVOICE_SERIES_CHANGE_REFUSAL);
+    }
+    expect(
+      refusalFor(
+        connection,
+        `update invoice_series set retired_at = '${STAMP}' where id = 'series-guard'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      connection
+        .prepare("select retired_at as at from invoice_series where id = ?")
+        .get("series-guard").at,
+    ).toBe(STAMP);
+    for (const retiredAt of ["null", "'2026-09-23T10:00:00.000Z'"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update invoice_series set retired_at = ${retiredAt} where id = 'series-guard'`,
+        ),
+      ).toBe(INVOICE_SERIES_CHANGE_REFUSAL);
+    }
+  });
+
+  it("allows deleting an unused series and keeps one a sale references", () => {
+    connection.exec(
+      "insert into invoice_series (id, node_id, code) values ('unused-series', 'node', 'UNUSED'), ('series', 'node', 'USED')",
+    );
+    connection.exec("pragma foreign_keys = on");
+    try {
+      expect(
+        refusalFor(connection, "delete from invoice_series where id = 'unused-series'"),
+      ).toBeUndefined();
+      expect(refusalFor(connection, "delete from invoice_series where id = 'series'")).toBe(
+        "FOREIGN KEY constraint failed",
+      );
+    } finally {
+      connection.exec("pragma foreign_keys = off");
+    }
   });
 });
 

@@ -1,3 +1,4 @@
+import { advanceSeriesTo, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { receiveSetupArchive } from "../src/setup-archive-upload.js";
 import { seedModuleSettings } from "./module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -215,7 +216,7 @@ beforeEach(async () => {
       withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),
     );
   });
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
   clock.set(Date.parse("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -690,7 +691,7 @@ export async function recoveryInvoices() {
     environment: "preproduction",
   });
   const [standard] = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(eq(invoiceSeries.code, "A-0CNNY"));
   const sell = () =>

@@ -154,15 +154,12 @@ it.each(["archive", "bucket"] as const)(
         deploymentEnvironment: "preproduction",
         environment: "preproduction",
       });
-      for (const sale of before.sales) {
+      for (const record of before.records) {
         const filed = await withTransaction(db, (tx) =>
-          oldBackend.filedReceiptFor(tx, saleId(String(sale.id))),
+          oldBackend.filedReceiptFor(tx, saleId(String(record.sale_id))),
         );
         expect(new URL(filed!.verificationUrl!).searchParams.get("fecha")).toBe(
-          before.records.find((row) => row.sale_id === sale.id)!.fecha_expedicion_factura ===
-            "2026-10-15"
-            ? "15-10-2026"
-            : "16-10-2026",
+          record.fecha_expedicion_factura === "2026-10-15" ? "15-10-2026" : "16-10-2026",
         );
       }
       await db.run(

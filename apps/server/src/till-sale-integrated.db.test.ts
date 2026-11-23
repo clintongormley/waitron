@@ -75,7 +75,14 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { ensureFixtureJobRole, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
+import {
+  ensureFixtureJobRole,
+  seedNode,
+  seedDepartmentReceipt,
+  seriesWithNextNumber,
+  advanceSeriesTo,
+  seedInvoiceNumber,
+} from "@waitron/db/testing/seed.js";
 import {
   counterFixtureOperator,
   seedSessionDevice,
@@ -240,7 +247,8 @@ async function anotherNodeSeries(): Promise<void> {
     const other = await seedNode(tx);
     await tx
       .insert(invoiceSeries)
-      .values({ nodeId: other, code: "OTHER-P999999", purpose: "standard", nextNumber: 99 });
+      .values({ nodeId: other, code: "OTHER-P999999", purpose: "standard" });
+    await advanceSeriesTo(tx, other, 99);
   });
 }
 
@@ -468,7 +476,7 @@ describe("active fiscal conflict stops new money", () => {
         const { cfg, coffee } = await setupVenue();
         await originalSale(cfg, coffee);
         await seedConflict(cfg, cause);
-        const series = await suite.db.select().from(invoiceSeries);
+        const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
         const records = await suite.db.execute(sql`select * from verifactu_records`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
@@ -501,7 +509,7 @@ describe("active fiscal conflict stops new money", () => {
         expect(provider.refundCalls).toEqual([]);
         expect(await paymentCount(id)).toBe(0);
         expect(await saleCount(id)).toBe(0);
-        expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+        expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
         expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(records);
         expect(await suite.db.select().from(printJobs)).toEqual(jobs);
       },
@@ -521,7 +529,7 @@ describe("active fiscal conflict stops new money", () => {
           lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
         });
         await seedConflict(cfg, cause);
-        const series = await suite.db.select().from(invoiceSeries);
+        const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
         const records = await suite.db.execute(sql`select * from verifactu_records`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
@@ -554,7 +562,7 @@ describe("active fiscal conflict stops new money", () => {
         });
         expect(await saleCount(id)).toBe(0);
         expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-        expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+        expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
         expect(await suite.db.execute(sql`select * from verifactu_records`)).toEqual(records);
         expect(await suite.db.select().from(printJobs)).toEqual(jobs);
         expect(provider.refundCalls).toEqual([]);
@@ -640,7 +648,7 @@ describe("active fiscal conflict stops new money", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await seedConflict(cfg, "fiscal.huella_divergente");
-    const before = await suite.db.select().from(invoiceSeries);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await expect(
       issueOrderInvoice(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
@@ -654,7 +662,7 @@ describe("active fiscal conflict stops new money", () => {
     });
     expect(await saleCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   });
 });
 
@@ -830,18 +838,20 @@ describe("walk-up invoice preparation", () => {
       const { cfg, coffee } = await setupVenue();
       const other = condition === "other-node" ? { id: await seedNode(suite.db) } : undefined;
       const full = and(eq(invoiceSeries.nodeId, cfg.nodeId), eq(invoiceSeries.purpose, "full"));
-      if (condition === "missing") await suite.db.delete(invoiceSeries).where(full);
-      else
-        await suite.db
-          .update(invoiceSeries)
-          .set(
-            condition === "retired"
-              ? { retiredAt: new Date() }
-              : { nodeId: other!.id, code: "other-full" },
-          )
-          .where(full);
+      if (condition === "retired") {
+        await suite.db.update(invoiceSeries).set({ retiredAt: new Date() }).where(full);
+      } else {
+        await suite.db.delete(invoiceSeries).where(full);
+        if (other) {
+          await suite.db.insert(invoiceSeries).values({
+            nodeId: other.id,
+            code: "other-full",
+            purpose: "full",
+          });
+        }
+      }
       const before = await suite.db
-        .select()
+        .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .where(eq(invoiceSeries.nodeId, cfg.nodeId));
       const id = randomUUID();
@@ -867,7 +877,10 @@ describe("walk-up invoice preparation", () => {
           .where(eq(workingOrderLines.workingOrderId, id)),
       ).toEqual([]);
       expect(
-        await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, cfg.nodeId)),
+        await suite.db
+          .select(seriesWithNextNumber)
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.nodeId, cfg.nodeId)),
       ).toEqual(before);
       expect(await saleCount(id)).toBe(0);
     },
@@ -1002,15 +1015,16 @@ describe("invoice series during reader payment", () => {
             .update(invoiceSeries)
             .set({ retiredAt: new Date() })
             .where(eq(invoiceSeries.id, seriesId));
-          return tx
+          const rows = await tx
             .insert(invoiceSeries)
             .values({
               nodeId: cfg.nodeId,
               code: "A-P000099",
               purpose: "standard",
-              nextNumber: 11,
             })
             .returning();
+          await seedInvoiceNumber(tx, { nodeId: cfg.nodeId, seriesId: rows[0]!.id }, 10);
+          return rows;
         });
         activeId = fresh!.id;
         return captured;
@@ -1043,15 +1057,16 @@ describe("invoice series during reader payment", () => {
         .update(invoiceSeries)
         .set({ retiredAt: new Date() })
         .where(eq(invoiceSeries.id, seriesId));
-      return tx
+      const rows = await tx
         .insert(invoiceSeries)
         .values({
           nodeId: cfg.nodeId,
           code: "A-P000042",
           purpose: "standard",
-          nextNumber: 7,
         })
         .returning();
+      await seedInvoiceNumber(tx, { nodeId: cfg.nodeId, seriesId: rows[0]!.id }, 6);
+      return rows;
     });
     const { deps } = integratedDeps(suite.db);
     const input = {

@@ -1,3 +1,4 @@
+import { nextInvoiceNumberOf } from "../allocate-number.js";
 import { withFoldedPersonKeys } from "../schema/identity/fold.js";
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { mediaImages, mediaBlobs } from "../schema/media/images.js";
@@ -5,7 +6,7 @@ import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
 import { persons } from "../schema/identity/persons.js";
-import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -382,6 +383,45 @@ export async function seedPerson(
   return id;
 }
 
+export const seriesWithNextNumber = {
+  ...getTableColumns(invoiceSeries),
+  nextNumber: nextInvoiceNumberOf(invoiceSeries.id),
+};
+
+export async function seedInvoiceNumber(
+  db: Database | Transaction,
+  { nodeId, seriesId }: { nodeId: string; seriesId: string },
+  invoiceNumber: number,
+) {
+  await db.insert(sales).values({
+    nodeId,
+    seriesId,
+    source: "operator_script",
+    invoiceNumber,
+    issuedAt: "2026-10-16T09:00:00.000Z",
+    issuedOffsetMinutes: 0,
+    total: 1000,
+    vatBreakdown: [],
+    locale: "en",
+    invoiceLocales: ["en"],
+    fiscalBackend: "none",
+    fiscalState: "not_applicable",
+  });
+}
+
+/** Gives each live series of the selected node a final numbered sale for a history fixture. */
+export async function advanceSeriesTo(
+  db: Database | Transaction,
+  nodeId: string,
+  nextNumber: number,
+) {
+  const live = await db
+    .select({ nodeId: invoiceSeries.nodeId, seriesId: invoiceSeries.id })
+    .from(invoiceSeries)
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
+  for (const series of live) await seedInvoiceNumber(db, series, nextNumber - 1);
+}
+
 export async function seedCashSale(db: Database | Transaction) {
   const nodeId = await seedNode(db);
   const [series] = await db
@@ -542,4 +582,43 @@ export function readPrinterHoldsForTest(db: Database | Transaction) {
     .from(printers)
     .where(isNotNull(printers.heldByDeviceId))
     .orderBy(asc(printers.id));
+}
+
+/** Occupy the selected number during insertion so SQLite itself refuses the duplicate. */
+export async function withInvoiceNumberCollision<T>(db: Database, issue: () => Promise<T>) {
+  await db.execute(sql`
+    create trigger invoice_number_collision before insert on sales
+    when new.id <> 'invoice-number-collision-decoy'
+    begin
+      insert into sales (
+        id, source, series_id, node_id, invoice_number, issued_at, issued_offset_minutes,
+        total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
+      ) values (
+        'invoice-number-collision-decoy', 'operator_script', new.series_id, new.node_id,
+        new.invoice_number, new.issued_at, new.issued_offset_minutes, 100,
+        new.vat_breakdown, new.locale, new.invoice_locales, 'none', 'not_applicable'
+      );
+    end
+  `);
+  try {
+    return await issue();
+  } finally {
+    await db.execute(sql`drop trigger invoice_number_collision`);
+  }
+}
+
+/** Lets a corruption fixture supply a series state the write path would refuse. */
+export async function withInvoiceSeriesGuardDropped(
+  db: Database | Transaction,
+  change: () => unknown,
+): Promise<void> {
+  const [trigger] = db.all<{ sql: string }>(sql`
+    select sql from sqlite_schema where type = 'trigger' and name = 'invoice_series_guard_update'
+  `);
+  await db.run(sql`drop trigger invoice_series_guard_update`);
+  try {
+    await change();
+  } finally {
+    await db.run(sql.raw(trigger!.sql));
+  }
 }

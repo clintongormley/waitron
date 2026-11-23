@@ -1,4 +1,9 @@
 import {
+  seriesWithNextNumber,
+  advanceSeriesTo,
+  seedInvoiceNumber,
+} from "@waitron/db/testing/seed.js";
+import {
   external,
   suite,
   node,
@@ -98,7 +103,7 @@ describe("selected-hour admission before archive placement", () => {
     "allows a lower surviving %s history while retaining the recovered counters",
     async (kind) => {
       const f = await archiveHost(kind);
-      await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+      await advanceSeriesTo(suite.db, node.nodeId, 456);
       await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
       if (kind === "archive")
         await restoreFromArtifact({
@@ -116,7 +121,7 @@ describe("selected-hour admission before archive placement", () => {
         });
       const result = await openVenueDatabase(f.roots.venueDir);
       try {
-        const rows = await result.venue.select().from(invoiceSeries);
+        const rows = await result.venue.select(seriesWithNextNumber).from(invoiceSeries);
         expect(
           rows
             .filter((row) => row.retiredAt !== null)
@@ -144,7 +149,7 @@ describe("selected-hour admission before archive placement", () => {
 
   it("places an admitted archive and retires recovered series without changing their counters", async () => {
     const f = await archiveHost();
-    const original = await suite.db.select().from(invoiceSeries);
+    const original = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await restoreFromArtifact({
       ...f.restore,
       modules: f.service.modules,
@@ -152,7 +157,7 @@ describe("selected-hour admission before archive placement", () => {
     });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
-      const after = await placed.venue.select().from(invoiceSeries);
+      const after = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
       for (const row of original)
         expect(after.find((entry) => entry.id === row.id)).toEqual({
           ...row,
@@ -208,7 +213,7 @@ describe("selected-hour admission before archive placement", () => {
           ),
         );
       const [standard] = await suite.db
-        .select()
+        .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .where(eq(invoiceSeries.code, "A-0CNNY"));
       const first = await sell(suite.db, standard!.id);
@@ -234,9 +239,9 @@ describe("selected-hour admission before archive placement", () => {
         ).rows,
       });
       const before = await snapshot(suite.db);
-      expect(before.records.map((row) => row.num_serie_factura)).toEqual([
-        "A-0CNNY/123",
-        "A-0CNNY/124",
+      expect(before.records.map((row) => [row.sale_id, row.num_serie_factura])).toEqual([
+        [first.saleId, "A-0CNNY/123"],
+        [second.saleId, "A-0CNNY/124"],
       ]);
       expect(before.records[1]?.anterior_huella).toBe(before.records[0]?.huella);
       expect(
@@ -260,7 +265,7 @@ describe("selected-hour admission before archive placement", () => {
         assertValid(record);
         expect(computeHuella(record)).toBe(row.huella);
       }
-      const originalSeries = await suite.db.select().from(invoiceSeries);
+      const originalSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
       const aeatBefore = {
         clients: aeatClients.mock.calls.length,
         built: vi.mocked(createClient).mock.calls.length,
@@ -358,7 +363,7 @@ describe("selected-hour admission before archive placement", () => {
       const placed = await openVenueDatabase(f.roots.venueDir);
       try {
         expect(await snapshot(placed.venue)).toEqual(before);
-        const series = await placed.venue.select().from(invoiceSeries);
+        const series = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
         for (const row of originalSeries)
           expect(series.find((entry) => entry.id === row.id)).toEqual({
             ...row,
@@ -406,7 +411,7 @@ describe("selected-hour admission before archive placement", () => {
           anterior_huella: null,
         });
         expect(afterSale.sales.map((row) => row.id).sort()).toEqual(
-          [first.saleId, second.saleId, resumed.saleId].sort(),
+          [...before.sales.map((row) => row.id), resumed.saleId].sort(),
         );
         expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
       } finally {
@@ -436,7 +441,7 @@ describe("selected-hour admission before archive placement", () => {
     const restored = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(
-        (await restored.venue.select().from(invoiceSeries))
+        (await restored.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map(({ code, nextNumber }) => ({ code, nextNumber })),
       ).toEqual([
@@ -473,7 +478,7 @@ describe("selected-hour admission before archive placement", () => {
     expect(result).toBe(0);
     const restored = await openVenueDatabase(f.roots.venueDir);
     try {
-      const rows = await restored.venue.select().from(invoiceSeries);
+      const rows = await restored.venue.select(seriesWithNextNumber).from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
         "A-0CNQT",
         "FF-0CNQT",
@@ -495,7 +500,7 @@ describe("selected-hour admission before archive placement", () => {
     const f = await archiveHost();
     const command = await archiveCommand(f);
     agreeInternet();
-    await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+    await advanceSeriesTo(suite.db, node.nodeId, 456);
     await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
     await suite.node.archiveTo(join(f.roots.venueDir, "node.db"));
     const oldIdentity = `# the box being replaced\nWAITRON_NODE_ID=${node.nodeId}\n`;
@@ -532,10 +537,12 @@ describe("selected-hour admission before archive placement", () => {
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(
-        (await placed.venue.select().from(invoiceSeries)).map(({ nextNumber, retiredAt }) => ({
-          nextNumber,
-          retired: retiredAt !== null,
-        })),
+        (await placed.venue.select(seriesWithNextNumber).from(invoiceSeries)).map(
+          ({ nextNumber, retiredAt }) => ({
+            nextNumber,
+            retired: retiredAt !== null,
+          }),
+        ),
       ).toEqual([
         { nextNumber: 123, retired: false },
         { nextNumber: 123, retired: false },
@@ -558,7 +565,7 @@ describe("selected-hour admission before archive placement", () => {
     const restored = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(
-        (await restored.venue.select().from(invoiceSeries))
+        (await restored.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
       ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
@@ -587,7 +594,7 @@ describe("selected-hour admission before archive placement", () => {
     expect(result).toBe(0);
     const restored = await openVenueDatabase(f.roots.venueDir);
     try {
-      const rows = await restored.venue.select().from(invoiceSeries);
+      const rows = await restored.venue.select(seriesWithNextNumber).from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
         "A-0CNSP",
         "FF-0CNSP",
@@ -647,13 +654,13 @@ describe("selected-hour admission before archive placement", () => {
       await writeFile(kitPath, encodeRecoveryKit({ ...kit, recoveryKey: "wrong bucket password" }));
     if (reason === "unconfirmed venue")
       deps.argv[deps.argv.indexOf("--confirm-venue") + 1] = "another taxpayer";
+    await advanceSeriesTo(suite.db, node.nodeId, 456);
+    await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+    const previous = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     if (reason === "changed point") {
-      await suite.db.update(invoiceSeries).set({ nextNumber: 789 });
+      await advanceSeriesTo(suite.db, node.nodeId, 789);
       await suite.db.archiveTo(f.database);
     }
-    await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
-    await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
-    const previous = await suite.db.select().from(invoiceSeries);
     const allocations = await suite.db.select().from(fiscalAllocations);
     await writeFile(join(f.roots.stateDir, "trading.env"), "untouched bucket destination");
     const journal = await readModulePreparationHistory(f.roots, binding.module);
@@ -663,7 +670,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(failures[0]).toMatchObject({ code });
     const retained = await openVenueDatabase(f.roots.venueDir);
     try {
-      expect(await retained.venue.select().from(invoiceSeries)).toEqual(previous);
+      expect(await retained.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(
+        previous,
+      );
       expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
     } finally {
       await retained.close();
@@ -707,7 +716,7 @@ describe("selected-hour admission before archive placement", () => {
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
-      const rows = await placed.venue.select().from(invoiceSeries);
+      const rows = await placed.venue.select(seriesWithNextNumber).from(invoiceSeries);
       expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
         "A-0CNQT",
         "FF-0CNQT",
@@ -779,11 +788,12 @@ describe("selected-hour admission before archive placement", () => {
       let rows;
       let allocations;
       try {
-        await placed.venue
-          .update(invoiceSeries)
-          .set({ nextNumber: 917 })
+        const [freshSeries] = await placed.venue
+          .select({ seriesId: invoiceSeries.id, nodeId: invoiceSeries.nodeId })
+          .from(invoiceSeries)
           .where(eq(invoiceSeries.code, "A-0CNQT"));
-        rows = (await placed.venue.select().from(invoiceSeries)).map(
+        await seedInvoiceNumber(placed.venue, freshSeries!, 916);
+        rows = (await placed.venue.select(seriesWithNextNumber).from(invoiceSeries)).map(
           ({ code, nextNumber, retiredAt }) => ({
             code,
             nextNumber: retiredAt === null ? 1 : nextNumber,
@@ -826,7 +836,7 @@ describe("selected-hour admission before archive placement", () => {
       const replay = await openVenueDatabase(f.roots.venueDir);
       try {
         expect(
-          (await replay.venue.select().from(invoiceSeries)).map(
+          (await replay.venue.select(seriesWithNextNumber).from(invoiceSeries)).map(
             ({ code, nextNumber, retiredAt }) => ({
               code,
               nextNumber,
@@ -916,7 +926,7 @@ describe("selected-hour admission before archive placement", () => {
       let rows;
       let allocations;
       try {
-        rows = await destination.venue.select().from(invoiceSeries);
+        rows = await destination.venue.select(seriesWithNextNumber).from(invoiceSeries);
         allocations = await destination.venue.select().from(fiscalAllocations);
         expect(
           rows
@@ -944,7 +954,7 @@ describe("selected-hour admission before archive placement", () => {
       expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(node.nodeId);
       const retained = await openVenueDatabase(f.roots.venueDir);
       try {
-        const series = await retained.venue.select().from(invoiceSeries);
+        const series = await retained.venue.select(seriesWithNextNumber).from(invoiceSeries);
         expect(
           series
             .filter((row) => row.retiredAt !== null)

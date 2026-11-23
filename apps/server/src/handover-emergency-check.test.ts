@@ -126,7 +126,7 @@ it("includes a sale's issue time in the latest dated activity", async () => {
   const nodeId = await seedNode(venue.db);
   const [series] = await venue.db
     .insert(invoiceSeries)
-    .values({ nodeId, code: "A", purpose: "standard", nextNumber: 1 })
+    .values({ nodeId, code: "A", purpose: "standard" })
     .returning();
   await venue.db.insert(sales).values({
     source: "operator_script",
