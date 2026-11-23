@@ -92,6 +92,7 @@ export class BackupAudit extends LitElement {
       {
         key: "bill",
         label: t("orders.col.bill"),
+        choosable: "shown",
         cell: ({ tableName, billNumber, orderNumber }) => {
           const label = fill(
             billNumber === null ? "payments.stuck.order" : "payments.paired.bill_number",
@@ -102,7 +103,12 @@ export class BackupAudit extends LitElement {
           return tableName ? `${tableName} · ${label}` : label;
         },
       },
-      { key: "reader", label: t("payments.paired.reader"), cell: (row) => row.readerName },
+      {
+        key: "reader",
+        label: t("payments.paired.reader"),
+        choosable: "shown",
+        cell: (row) => row.readerName,
+      },
       {
         key: "amount",
         label: t("payments.stuck.amount"),
@@ -142,6 +148,17 @@ export class BackupAudit extends LitElement {
       <wt-data-table
         wrap-to-fit
         aria-label=${t("payments.paired.title")}
+        viewKey="waitron.payments.paired-audit.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
         .rows=${rows}
         .columns=${columns}
         .emptyMessage=${t("payments.paired.empty")}

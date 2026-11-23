@@ -82,6 +82,7 @@ the final check, due at 01:00 UTC after the day ends.
 
 In **Paired readers**, start with **To check**. Use the reader and bill or table to identify which
 payment to check in SumUp. Choose **All statuses** to see every payment.
+Use **Customise columns** to hide or show **Bill** and **Reader**.
 
 The refund groups compare the saved SumUp check with your current refund records. Refresh after
 recording an outcome. A confirmed match has the same refund ID and amount; an amount agreement is

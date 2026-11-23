@@ -10,6 +10,7 @@ import "../screens/payments-screen.js";
 
 afterEach(() => {
   cleanupWidgets();
+  localStorage.removeItem("waitron.payments.paired-audit.table:columns");
   setLocale("en");
   vi.restoreAllMocks();
 });
@@ -150,6 +151,15 @@ it("shows standalone matches and exceptions, filters paired readers and reads a 
   await expect.poll(() => pairedRows()[0]?.textContent).toContain("Resolved");
   await chooseOption(status, "all");
   await expect.poll(() => pairedRows().length).toBe(5);
+  await page.getByRole("button", { name: "Customise columns" }).click();
+  const choices = pairedTable()!;
+  const eyes = [...choices.querySelectorAll<HTMLInputElement>("input[data-column]")];
+  expect(eyes.map((eye) => [eye.dataset.column, eye.checked])).toEqual([
+    ["bill", true],
+    ["reader", true],
+  ]);
+  await userEvent.click(eyes[1]!.closest("label")!);
+  await userEvent.keyboard("{Escape}");
   const day = el.shadowRoot!.querySelector<WtInput>("wt-input")!;
   day.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -166,6 +176,11 @@ it("shows standalone matches and exceptions, filters paired readers and reads a 
   expect(new Headers(fetch.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
   expect(new Headers(fetch.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(activity).not.toHaveBeenCalled();
+
+  el.remove();
+  await mountWidget<LitElement>("dashboard-backup-audit", { api } as never);
+  await expect.element(page.getByRole("columnheader", { name: "Bill" })).toBeVisible();
+  await expect.element(page.getByRole("columnheader", { name: "Reader" })).not.toBeInTheDocument();
 });
 
 it("keeps a failed read visible and lets the manager retry", async () => {
