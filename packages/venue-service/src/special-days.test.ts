@@ -878,6 +878,36 @@ describe("saveSpecialDay", () => {
       ]);
     });
 
+    it("refuses two zone kinds meeting at a skipped 02:30", async () => {
+      const v = await venue();
+      expect(
+        await refusal(
+          save(
+            null,
+            {
+              name: "Clock change",
+              repeatsYearly: false,
+              dates: dates(["2026-03-28"]),
+              zonePaint: [
+                {
+                  zoneId: v.sala,
+                  date: "2026-03-28",
+                  ranges: [
+                    { kind: "open", startsAt: "22:00", endsAt: "02:30" },
+                    { kind: "closed", startsAt: "02:30", endsAt: "05:00" },
+                  ],
+                },
+              ],
+            },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "zonePaint.0.ranges.0.endsAt", reason: "clock_skips", date: "2026-03-28" },
+      });
+    });
+
     it("checks a repeating date at its next occurrence from `at`", async () => {
       const v = await venue();
       // Stored 2025-03-28 is fine (2025's change was on 30 March); its 2026 occurrence is not.
@@ -952,6 +982,156 @@ describe("saveSpecialDay", () => {
         params: { field: "zonePaint", zoneId: v.sala, reason: "clock_skips", date: "2026-03-28" },
       });
       expect(await read(saved.id)).toEqual(saved);
+    });
+
+    // A save joins touching ranges before storing them, so stored halves are seeded directly.
+    const storedInHalves = async (
+      halves: (specialDayDateId: string) => (typeof openingHours.$inferInsert)[],
+    ) => {
+      const saved = await save(
+        null,
+        { name: "Clock change", repeatsYearly: false, dates: dates(["2025-03-28"]) },
+        new Date("2025-01-10"),
+      );
+      const [date] = await db
+        .select({ id: specialDayDates.id })
+        .from(specialDayDates)
+        .where(eq(specialDayDates.specialDayId, saved.id));
+      await db.insert(openingHours).values(halves(date!.id));
+      return read(saved.id);
+    };
+
+    it("turning a day repeating rechecks stored department halves as stored, not joined", async () => {
+      const v = await venue();
+      const saved = await storedInHalves((specialDayDateId) =>
+        [
+          ["22:00:00", "02:30:00"],
+          ["02:30:00", "05:00:00"],
+        ].map(([startsAt, endsAt]) => ({
+          departmentId: v.restaurant,
+          specialDayDateId,
+          kind: "period" as const,
+          periodId: v.dinner,
+          startsAt: startsAt!,
+          endsAt: endsAt!,
+        })),
+      );
+      expect(saved.paint[0]!.ranges).toHaveLength(2);
+      expect(
+        await refusal(
+          save(
+            saved.id,
+            { name: saved.name, repeatsYearly: true, dates: saved.dates },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: {
+          field: "paint",
+          departmentId: v.restaurant,
+          reason: "clock_skips",
+          date: "2026-03-28",
+        },
+      });
+      expect(await read(saved.id)).toEqual(saved);
+    });
+
+    it("turning a day repeating rechecks stored zone halves as stored, not joined", async () => {
+      const v = await venue();
+      const saved = await storedInHalves((specialDayDateId) =>
+        [
+          ["22:00:00", "02:30:00"],
+          ["02:30:00", "05:00:00"],
+        ].map(([startsAt, endsAt]) => ({
+          zoneId: v.sala,
+          specialDayDateId,
+          kind: "open" as const,
+          startsAt: startsAt!,
+          endsAt: endsAt!,
+        })),
+      );
+      expect(saved.zonePaint[0]!.ranges).toHaveLength(2);
+      expect(
+        await refusal(
+          save(
+            saved.id,
+            { name: saved.name, repeatsYearly: true, dates: saved.dates },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "zonePaint", zoneId: v.sala, reason: "clock_skips", date: "2026-03-28" },
+      });
+      expect(await read(saved.id)).toEqual(saved);
+    });
+
+    it("names submitted zone paint before the department paint the request leaves out", async () => {
+      const v = await venue();
+      const saved = await save(null, skipping("2025-03-28", false, v), new Date("2025-01-10"));
+      expect(
+        await refusal(
+          save(
+            saved.id,
+            {
+              name: saved.name,
+              repeatsYearly: true,
+              dates: saved.dates,
+              zonePaint: [
+                {
+                  zoneId: v.sala,
+                  date: "2025-03-28",
+                  ranges: [{ kind: "open", startsAt: "02:15", endsAt: "04:00" }],
+                },
+              ],
+            },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: {
+          field: "zonePaint.0.ranges.0.startsAt",
+          reason: "clock_skips",
+          date: "2026-03-28",
+        },
+      });
+    });
+
+    it("names department paint the request leaves out before its zone paint", async () => {
+      const v = await venue();
+      const saved = await save(
+        null,
+        {
+          ...skipping("2025-03-28", false, v),
+          zonePaint: [
+            {
+              zoneId: v.sala,
+              date: "2025-03-28",
+              ranges: [{ kind: "open", startsAt: "02:15", endsAt: "04:00" }],
+            },
+          ],
+        },
+        new Date("2025-01-10"),
+      );
+      expect(
+        await refusal(
+          save(
+            saved.id,
+            { name: saved.name, repeatsYearly: true, dates: saved.dates },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: {
+          field: "paint",
+          departmentId: v.restaurant,
+          reason: "clock_skips",
+          date: "2026-03-28",
+        },
+      });
     });
 
     it("renaming a yearly day a year later keeps paint the request leaves out unchecked", async () => {
