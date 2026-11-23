@@ -977,6 +977,82 @@ test("the cancelled close a reopen replaces does not cut the reopening short", a
   expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
 });
 
+/** Toggles a section part-way through its first movement, paused where the body's height is a
+ * whole number of pixels, so no leftover sub-pixel transition is running when the cancel arrives. */
+async function toggleAtExactHeight(startOpen: boolean) {
+  const el = (await mount(
+    `<wt-disclosure heading="Kitchen" summary="BAR" ${startOpen ? "open" : ""}><div style="height: 400px">body</div></wt-disclosure>`,
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = !startOpen;
+  await el.updateComplete;
+  const first = await pauseHeightTransition(body);
+  first.effect!.updateTiming({ easing: "linear" });
+  first.currentTime = Number(first.effect!.getTiming().duration) / 2;
+  expect(body.getBoundingClientRect().height).toBe(200);
+  const cancelled = new Promise((resolve) =>
+    body.addEventListener("transitioncancel", resolve, { once: true }),
+  );
+  el.open = startOpen;
+  await el.updateComplete;
+  await cancelled;
+  await frames(2);
+  return { el, body };
+}
+
+test("reopening a close at a whole-pixel height still animates the reopening", async () => {
+  const { body } = await toggleAtExactHeight(true);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.getBoundingClientRect().height).toBeLessThan(400);
+});
+
+test("closing an opening at a whole-pixel height still animates the close and withholds the summary", async () => {
+  const { el, body } = await toggleAtExactHeight(false);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
+test("a reopen whose parent is hidden before its new height is set settles open", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  const closing = await pauseHeightTransition(body);
+  closing.effect!.updateTiming({ easing: "linear" });
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  el.open = true;
+  await el.updateComplete;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(200);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
+test("a section moved before its new height is set still settles a later close cut short", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  el.remove();
+  wrapper.append(el);
+  await frames(2);
+  el.open = true;
+  await el.whenSettled();
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
 test("under reduced motion the summary shows as soon as the section closes", async () => {
   await commands.emulateReducedMotion("reduce");
   try {

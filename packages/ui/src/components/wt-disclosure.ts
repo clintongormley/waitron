@@ -220,6 +220,7 @@ export class WtDisclosure extends LitElement {
 
   private finishAnimation(body?: HTMLElement): void {
     cancelAnimationFrame(this.animationFrame);
+    this.animationFrame = 0;
     this.contentObserver?.disconnect();
     this.contentObserver = undefined;
     if (body) {
@@ -298,6 +299,7 @@ export class WtDisclosure extends LitElement {
     body.style.height = `${height}px`;
     void body.offsetHeight;
     this.animationFrame = requestAnimationFrame(() => {
+      this.animationFrame = 0;
       if (generation !== this.animationGeneration) return;
       body.style.height = `${targetHeight}px`;
       // A body that stopped being drawn starts no transition, so no event would ever settle it.
@@ -332,13 +334,14 @@ export class WtDisclosure extends LitElement {
       );
   }
 
-  /** A transition is cancelled when a parent stops being drawn, and also when a newer toggle or a
-   * content resize retargets it; only the first leaves no height transition running. */
+  /** A parent that stops being drawn cancels the transition and starts none. A toggle's cancel can
+   * arrive before the frame that sets its new height, so that frame decides instead; a content
+   * resize's arrives with its new transition already running. */
   private onBodyTransitionCancel(event: TransitionEvent): void {
     if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
     const body = event.currentTarget as HTMLElement;
     if (!body.classList.contains("animating")) return;
-    if (this.heightTransitionRunning(body)) return;
+    if (this.animationFrame !== 0 || this.heightTransitionRunning(body)) return;
     this.finishAnimation(body);
   }
 
