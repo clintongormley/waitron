@@ -2673,6 +2673,68 @@ it.each([390, 1280])(
   },
 );
 
+it("shows section photos in Structure and follows the included folder's image setting", async () => {
+  const sectionImage = "a".repeat(64) + ".webp";
+  const menuImage = "b".repeat(64) + ".webp";
+  const folderImage = "c".repeat(64) + ".webp";
+  const nativeFetch = window.fetch.bind(window);
+  const fetch = vi.spyOn(window, "fetch").mockImplementation(async (input, options) => {
+    const url = new URL(String(input), location.origin);
+    if (url.pathname !== "/media/presentations") return nativeFetch(input, options);
+    const references = url.searchParams.get("references")!.split(",");
+    return Response.json({
+      images: Object.fromEntries(
+        references.map((image) => [
+          image,
+          {
+            id: image,
+            revision: 1,
+            source: `/media/${image}`,
+            square: `/media/square/${image}`,
+            till: `/media/till/${image}`,
+            display: `/media/display/${image}`,
+          },
+        ]),
+      ),
+    });
+  });
+  onTestFinished(() => {
+    fetch.mockRestore();
+  });
+  const section = { ...drinksNode("m-drinks"), image: sectionImage, color: "#aa3300" };
+  const included = { ...wines(), image: menuImage, color: "#7a1f3d" };
+  const el = await mount({ nodes: [section, included] });
+  const photoOf = (key: string) => row(el, key)!.querySelector<HTMLImageElement>("img");
+
+  await expect
+    .poll(() => photoOf("m-drinks")?.getAttribute("src"))
+    .toBe(`/media/square/${sectionImage}`);
+  await expect
+    .poll(() => photoOf("included-wine")?.getAttribute("src"))
+    .toBe(`/media/square/${menuImage}`);
+  expect(photoOf("m-drinks")!.alt).toBe("");
+  expect(photoOf("m-drinks")!.getBoundingClientRect().width).toBeGreaterThan(0);
+  const edits = listen(el, "wt-member-edit");
+  await userEvent.click(photoOf("m-drinks")!);
+  expect(edits).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"], swatch: true }]);
+  expect(photoOf("included-wine")!.closest("button")).toBeNull();
+
+  el.nodes = [
+    section,
+    { ...included, folder: { showAsFolder: true, overrides: { image: folderImage } } },
+  ];
+  await settle(el);
+  await expect
+    .poll(() => photoOf("included-wine")?.getAttribute("src"))
+    .toBe(`/media/square/${folderImage}`);
+
+  el.nodes = [section, { ...included, folder: { showAsFolder: true, overrides: { image: null } } }];
+  await settle(el);
+  expect(photoOf("included-wine")).toBeNull();
+  const swatch = row(el, "included-wine")!.querySelector('[part~="color-swatch"]')!;
+  expect(getComputedStyle(swatch).backgroundColor).toBe("rgb(122, 31, 61)");
+});
+
 describe("Structure product media", () => {
   it("uses a leading inherited photo ring and links to the product editor's photo field", async () => {
     const el = await mount({
