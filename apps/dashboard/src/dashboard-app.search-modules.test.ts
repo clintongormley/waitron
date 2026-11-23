@@ -685,7 +685,7 @@ it("opens the exact period from Menus and follows changes passively while the li
   expect(reads()).toBe(inEditor);
 });
 
-it("shows read-only period names and drops the watch and an old answer when read access ends", async () => {
+it("keeps period names after edit access ends and stops the watch when read access ends", async () => {
   let finish!: (value: unknown) => void;
   const pending = new Promise((resolve) => {
     finish = resolve;
@@ -694,13 +694,17 @@ it("shows read-only period names and drops the watch and an old answer when read
   const { el, session, liveData } = await mount({
     path: "/menus",
     request: read as DashboardRequest,
-    permissions: ["menu.manage", "venue.view"],
+    permissions: usagePermissions,
   });
+  await expect.poll(() => periodLink(el)).toBeTruthy();
+  session.permissions = ["menu.manage", "venue.view"];
+  document.dispatchEvent(new Event("visibilitychange"));
+  await expect.poll(() => periodLink(el)).toBeNull();
   const row = () => menusTable(el)?.shadowRoot?.querySelector('tr[data-row-key="menu"]');
   await expect
     .poll(() => [...(row()?.querySelectorAll("td") ?? [])][2]?.textContent)
     .toContain("Lunch");
-  expect(periodLink(el)).toBeNull();
+  const reads = () => read.mock.calls.filter(([path]) => path === openingHours).length;
   read.mockImplementationOnce(() => pending);
   liveData.invalidate([{ type: "menu_periods" }]);
   await expect.poll(() => read.mock.results.at(-1)?.value === pending).toBe(true);
@@ -720,6 +724,10 @@ it("shows read-only period names and drops the watch and an old answer when read
   expect(row()?.textContent).not.toContain("Stale period");
   expect(menusTable(el)?.shadowRoot?.querySelectorAll("th")).toHaveLength(3);
   expect(periodLink(el)).toBeNull();
+  const afterAccessEnded = reads();
+  liveData.invalidate([{ type: "menu_periods" }]);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(reads()).toBe(afterAccessEnded);
 });
 
 it("does not read periods when the venue-service module is disabled", async () => {
