@@ -2964,11 +2964,12 @@ it("a passkey prompt the person cancels says the passkey did not sign in, and se
     .mockRejectedValue(new DOMException("The operation was cancelled.", "NotAllowedError"));
   const { el, posts } = await mount({ proof: newProof() });
   await choosePasskey(el);
-  q(el, "[data-test=emergency-preview]").click();
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
   expect(get).toHaveBeenCalledTimes(1);
   expect(q(el, "[data-test=emergency-copy]")).toBeNull();
-  expect(q(el, '[name="handover-sign-in-method"]')).not.toBeNull();
+  const again = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
+  expect(again).not.toBeNull();
+  await vi.waitFor(() => expect(again.disabled).toBe(false));
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
   expect(posts.every(({ body }) => body.signIn === undefined)).toBe(true);
 });
