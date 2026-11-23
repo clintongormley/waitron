@@ -338,7 +338,15 @@ interface TableRow {
 
 type Line = { text: string; bold?: boolean };
 
-function tableColumns({ labels, simplified }: ReceiptFacts): TableColumn[] {
+const QUANTITY_WIDTH = 40;
+
+function tableColumns({ labels, simplified }: ReceiptFacts, rows: TableRow[]): TableColumn[] {
+  // A weighed quantity ("0,350 kg") wraps in the narrow column, so the column grows to its widest
+  // quantity and Description gives up the room.
+  const quantity = Math.max(
+    QUANTITY_WIDTH,
+    ...rows.map((row) => invoiceTextWidth(row.cells[1]!, BODY_SIZE, "regular") + 2 * CELL_PADDING),
+  );
   const right = (heading: string, width: number): TableColumn => ({
     heading,
     width,
@@ -346,12 +354,12 @@ function tableColumns({ labels, simplified }: ReceiptFacts): TableColumn[] {
   });
   const figures = simplified
     ? [
-        right(labels.quantityColumn, 40),
+        right(labels.quantityColumn, quantity),
         right(labels.priceColumn, 80),
         right(labels.amountColumn, 80),
       ]
     : [
-        right(labels.quantityColumn, 40),
+        right(labels.quantityColumn, quantity),
         right(labels.unitPriceExVatColumn, 72),
         right(labels.totalExVatColumn, 72),
         right(labels.vatColumn, 44),
@@ -651,7 +659,8 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
     page.push({ kind: "text", text: value, x, y: top, size, weight, tone });
   };
 
-  const columns = tableColumns(facts);
+  const rows = tableRows(facts);
+  const columns = tableColumns(facts, rows);
   const lefts = columns.map((_, index) =>
     columns.slice(0, index).reduce((sum, column) => sum + column.width, MARGIN),
   );
@@ -699,7 +708,7 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
   );
   const headingHeight = cellsHeight(headingLines, LABEL_SIZE);
   let headed = false;
-  for (const row of tableRows(facts)) {
+  for (const row of rows) {
     const indent = row.indent * INDENT_UNIT;
     const lines = wrapCells(row.cells, BODY_SIZE, "regular", indent);
     const height = cellsHeight(lines, BODY_SIZE) + ROW_RULE;

@@ -829,7 +829,7 @@ describe("A4 invoice of a sale filed in a chosen receipt language", () => {
     expect(text).not.toContain("Comanda");
     expect(text).not.toContain("Data");
     const dish = lines.indexOf("CA Torrada");
-    expect(lines.slice(dish, dish + 3)).toEqual(["CA Torrada", "2", "CA-rac"]);
+    expect(lines.slice(dish, dish + 2)).toEqual(["CA Torrada", "2 CA-rac"]);
     expect(text).toContain("CA Tipus de pa: CA Sègol");
     for (const other of ["ES Tostada", "ES-rac", "ES Tipo de pan", "ES Centeno"]) {
       expect(text, other).not.toContain(other);

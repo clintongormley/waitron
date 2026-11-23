@@ -1113,7 +1113,7 @@ describe("a sale prints its goods in the default content language its lines stor
     expect(text).toContain(labels.customer);
     const words = GOODS.es;
     const dish = text.indexOf(words.name);
-    expect(text.slice(dish, dish + 3)).toEqual([words.name, "2", words.unit]);
+    expect(text.slice(dish, dish + 2)).toEqual([words.name, `2 ${words.unit}`]);
     expect(text).toContain(`${words.list}: ${words.label}`);
     for (const other of otherWords("es"))
       expect(

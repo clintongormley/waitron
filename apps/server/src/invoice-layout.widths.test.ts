@@ -78,3 +78,34 @@ describe("the A4 VAT summary's heading row", () => {
     expect(summary.length).toBeGreaterThan(8);
   });
 });
+
+describe("the A4 table's quantity column", () => {
+  const weighed = (locale: string, quantity: string, unit: string): ReceiptDocumentInput => {
+    const input = fixture(locale);
+    input.result.lines[1] = {
+      ...input.result.lines[1]!,
+      quantity,
+      unitName: { "es-ES": unit, "en-GB": unit, "ca-ES": unit, "gl-ES": unit, "eu-ES": unit },
+    };
+    return input;
+  };
+
+  it.each(
+    ["es-ES", "en-GB", "ca-ES", "gl-ES", "eu-ES"].flatMap((locale) => [
+      [locale, "99.999", "kg", /^99[.,]999 kg$/],
+      [locale, "99999", "ml", /^99999 ml$/],
+      [locale, "99999", "mg", /^99999 mg$/],
+    ]) as [string, string, string, RegExp][],
+  )("keeps a weighed quantity on one line in %s (%s %s)", (locale, quantity, unit, shape) => {
+    const elements = layoutA4Invoice(weighed(locale, quantity, unit)).flatMap(
+      (page) => page.elements,
+    );
+    const texts = elements.filter((element): element is Text => element.kind === "text");
+    const drawn = texts.filter((text) => shape.test(text.text));
+    expect(drawn, texts.map((text) => text.text).join(" | ")).toHaveLength(1);
+    const cell = drawn[0]!;
+    const sameRow = texts.filter((text) => text.y === cell.y && text.x > cell.x);
+    const right = cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
+    for (const next of sameRow) expect(right).toBeLessThan(next.x);
+  });
+});
