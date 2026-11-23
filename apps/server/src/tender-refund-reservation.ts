@@ -16,6 +16,7 @@ import {
   centsToDecimal,
   decimal,
   decimalToCents,
+  rawCentsToDecimal,
   isUuid,
   type Decimal,
 } from "@waitron/shared";
@@ -345,7 +346,7 @@ export async function reserveTenderRefund(
       )
         throw new AppError("tender.refund_exceeds_cancelled", {
           tenderId,
-          cancelled: centsToDecimal(allocation.canStillTake),
+          cancelled: rawCentsToDecimal(String(allocation.canStillTake)),
         });
       throw error;
     }
@@ -380,6 +381,6 @@ export async function reserveTenderRefund(
     replayed: false,
     ...(allocation === undefined
       ? {}
-      : { cancelsCanStillTake: centsToDecimal(allocation.canStillTake) }),
+      : { cancelsCanStillTake: rawCentsToDecimal(String(allocation.canStillTake)) }),
   };
 }

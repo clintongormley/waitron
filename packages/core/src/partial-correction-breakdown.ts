@@ -7,6 +7,7 @@ import {
   decimalToBasisPoints,
   decimalToCents,
   decimalToThousandths,
+  rawCentsToDecimal,
   toScale,
   type Decimal,
 } from "@waitron/shared";
@@ -184,8 +185,14 @@ export function checkPartialCorrectionHistory(
     const gross = -(cents(group.base) + cents(group.tax));
     const expected = correctionBaseAtRate(
       basisPointsToDecimal(rate),
-      { base: centsToDecimal(original.base), tax: centsToDecimal(original.tax) },
-      { gross: centsToDecimal(before.gross), base: centsToDecimal(before.base) },
+      {
+        base: rawCentsToDecimal(String(original.base)),
+        tax: rawCentsToDecimal(String(original.tax)),
+      },
+      {
+        gross: rawCentsToDecimal(String(before.gross)),
+        base: rawCentsToDecimal(String(before.base)),
+      },
       centsToDecimal(gross),
     );
     if (

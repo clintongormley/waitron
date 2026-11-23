@@ -2,7 +2,13 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { billPayments, tenders, type Transaction } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
-import { centsToDecimal, compareDecimal, type Decimal, type SaleId } from "@waitron/shared";
+import {
+  centsToDecimal,
+  compareDecimal,
+  rawCentsToDecimal,
+  type Decimal,
+  type SaleId,
+} from "@waitron/shared";
 import { cashChange, money, ZERO } from "./bill-allocation.js";
 import { completedRefundsOf, netOfRefunds, owedOf } from "./bill-payment-money.js";
 import { cardOf, type StoredCard } from "./card-details.js";
@@ -73,8 +79,11 @@ interface BillTenderRow extends StoredCard {
 
 type CompletedRefund = Awaited<ReturnType<typeof completedRefundsOf>>[number];
 
-function billTenderLineOf(row: BillTenderRow, refunds: readonly CompletedRefund[]): BillTenderLine {
-  const amount = centsToDecimal(row.amount);
+function billTenderLineOf(
+  row: BillTenderRow,
+  amount: Decimal,
+  refunds: readonly CompletedRefund[],
+): BillTenderLine {
   const tip = centsToDecimal(row.tip);
   const given = refunds.map((refund) => ({
     amount: centsToDecimal(refund.appliedAmount),
@@ -128,6 +137,7 @@ export async function readBillTenderLines(
   return rows.map((row) =>
     billTenderLineOf(
       row,
+      centsToDecimal(row.amount),
       refunds.filter((refund) => refund.billPaymentId === row.billPaymentId),
     ),
   );
@@ -167,7 +177,9 @@ async function readUnsettledBill(
   return {
     lines: nets.flatMap(({ row, net }) => {
       const amount = net.applied + net.tip;
-      return amount > 0 ? [billTenderLineOf({ ...row, amount, tip: net.tip }, net.own)] : [];
+      return amount > 0
+        ? [billTenderLineOf({ ...row, tip: net.tip }, rawCentsToDecimal(String(amount)), net.own)]
+        : [];
     }),
     keptApplied: nets.map(({ net }) => centsToDecimal(net.applied)),
   };

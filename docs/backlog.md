@@ -1693,7 +1693,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   labels are read from its strings table, and the files that still need non-English text are held
   at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
-- **Correct every sentence known to be false, then finish comment pruning** (bundle of 13, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
+- **Correct every sentence known to be false, then finish comment pruning** (bundle of 12, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
 
 - **Printer, reader and device delete wording** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 

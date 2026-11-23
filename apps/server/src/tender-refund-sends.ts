@@ -19,8 +19,12 @@ import {
   type RefundRefusalReason,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { AppError, centsToDecimal, jobOrigin } from "@waitron/shared";
-import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
+import { AppError, jobOrigin } from "@waitron/shared";
+import {
+  raiseRefundOutcomeConflict,
+  raiseTenderRefundConflict,
+  refundAmountOf,
+} from "./bill-refund-alerts.js";
 import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import { attestationColumns, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
@@ -221,7 +225,6 @@ async function capture(tx: Transaction, refund: RefundRow) {
     );
   return row!;
 }
-const amount = (row: RefundRow) => centsToDecimal(row.appliedAmount + row.tipAmount);
 async function excludedRefs(tx: Transaction, refund: RefundRow): Promise<string[]> {
   const payment = await capture(tx, refund);
   const others = await tx
@@ -310,7 +313,7 @@ async function recordOutcomeIn(
     await recordRefund(tx, {
       provider: refund.provider!,
       paymentRef: refund.providerPaymentRef!,
-      amount: amount(refund),
+      amount: refundAmountOf(refund),
       authorizedBy:
         refund.billPaymentId === null
           ? (attestation?.attestedBy ?? refund.authorizedBy)
@@ -445,7 +448,7 @@ async function lookup(
       provider.lookupRefund!({
         processorRef: payment.externalRef ?? payment.paymentRef,
         refundId: refund.id,
-        amount: amount(refund),
+        amount: refundAmountOf(refund),
         sentAt: new Date(refund.sentAt!),
         excludeRefs,
         ...(refund.refsBeforeSend === null ? {} : { refsBeforeSend: refund.refsBeforeSend }),
@@ -503,7 +506,7 @@ async function send(
     answer = await providerResult(signal, () =>
       provider.sendRefund!({
         processorRef: payment.externalRef ?? payment.paymentRef,
-        amount: amount(stamped),
+        amount: refundAmountOf(stamped),
         refundId: stamped.id,
         idempotencyKey: `tr_${stamped.id}`,
       }),

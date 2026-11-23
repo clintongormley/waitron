@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { appendDrawerEntry, refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
-import { centsToDecimal, readSaleOrigin, type NodeId } from "@waitron/shared";
+import { readSaleOrigin, type NodeId } from "@waitron/shared";
+import { refundAmountOf } from "./bill-refund-alerts.js";
 import { recordManualRefund } from "@waitron/payments";
 import { printerLookup, resolveDrawerAssignment, type PrinterLookup } from "./receipt-print.js";
 import type { BillRefundDeps } from "./bill-refunds.js";
@@ -52,7 +53,7 @@ export async function completeRefundReservation(
   if (refund.manual) {
     await recordManualRefund(tx, {
       paymentRef: await steps.manualPaymentRef!(refund),
-      amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
+      amount: refundAmountOf(refund),
       authorizedBy: refund.authorizedBy,
     });
   }
