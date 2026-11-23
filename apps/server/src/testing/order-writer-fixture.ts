@@ -321,6 +321,7 @@ export async function clearSavedOffer(db: Database | Transaction, billId: string
         offer_department_id = null, department_name = null, unit_id = null, sold_in_each = null,
         offer_unit_name = null, offer_unit_precision = null, offer_vat_class = null,
         offer_category_name = null, hardware_unit = null, allergens = null, diet = null,
-        diet_override = null, late_period_name = null, late_confirmed_by = null, sent_nutrition = null
+        diet_override = null, late_period_name = null, late_period_id = null,
+        late_confirmed_by = null, sent_nutrition = null
     where working_order_id = ${billId} ${lineNo === undefined ? sql`` : sql`and line_no = ${lineNo}`}`);
 }

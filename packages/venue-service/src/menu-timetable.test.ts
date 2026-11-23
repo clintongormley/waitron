@@ -2482,7 +2482,7 @@ describe("department service periods", () => {
     }
     expect(await read(v, "2026-10-25", "03:00")).toMatchObject({ orderableMenuIds: [] });
     expect((await read(v, "2026-10-25", "03:00")).endedMenus).toEqual([
-      { menuId: v.menus.Dinner, periodName: "Night" },
+      { menuId: v.menus.Dinner, periodId: v.night, periodName: "Night" },
     ]);
   });
 
@@ -2496,9 +2496,9 @@ describe("department service periods", () => {
   it("names each ended menu's period, the one that ended last when two share a menu", async () => {
     const v = await serviceVenue();
     expect((await read(v, FRIDAY, "20:00")).endedMenus).toEqual([
-      { menuId: v.menus.Lunch, periodName: "Lunch" },
-      { menuId: v.menus.Drinks, periodName: "Lunch" },
-      { menuId: v.menus.Coffee, periodName: "Afternoon" },
+      { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
+      { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
+      { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
     ]);
   });
 
@@ -2535,8 +2535,8 @@ describe("department service periods", () => {
       customerMenuId: v.menus.Coffee,
       orderableMenuIds: [v.menus.Coffee],
       endedMenus: [
-        { menuId: v.menus.Lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodName: "Lunch" },
+        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
       ],
     });
   });
@@ -2558,9 +2558,9 @@ describe("department service periods", () => {
       customerMenuId: v.menus.Dinner,
       orderableMenuIds: [v.menus.Dinner],
       endedMenus: [
-        { menuId: v.menus.Lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodName: "Afternoon" },
+        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
       ],
     });
     expect(await read(v, SATURDAY, "03:00")).toEqual({
@@ -2578,10 +2578,10 @@ describe("department service periods", () => {
       customerMenuId: null,
       orderableMenuIds: [],
       endedMenus: [
-        { menuId: v.menus.Lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodName: "Afternoon" },
-        { menuId: v.menus.Dinner, periodName: "Night" },
+        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
+        { menuId: v.menus.Dinner, periodId: v.night, periodName: "Night" },
       ],
     });
     expect(await read(v, SATURDAY, "06:10")).toEqual({
@@ -2614,9 +2614,9 @@ describe("department service periods", () => {
       customerMenuId: null,
       orderableMenuIds: [],
       endedMenus: [
-        { menuId: v.menus.Lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodName: "Afternoon" },
+        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
+        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
       ],
     });
     expect(await read(v, "2026-10-18", "06:10")).toEqual({

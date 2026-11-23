@@ -81,8 +81,9 @@ release paths: the router resolves one period per department per resolver (`rout
 (`packages/module/src/module.ts`), so one fire holding a tortilla confirmed late and one picked
 now could not be routed apart; the resolver is asked for extras made at their own station, by
 `fireLines` and by `heldNoRouteLines`, and held dishes are routed again when released
-(`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
-its id. Left open by A789 slice 3, #2051 (plan D33).
+(`apps/server/src/working-order.ts`). The line's context now stores the ended period's id when the
+confirmation identified it. The fire, hold and release routes still need to use that id. Left
+open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Business-day start checks after A760
 

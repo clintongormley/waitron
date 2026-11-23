@@ -7,7 +7,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   invoiceSeries,
@@ -565,6 +565,23 @@ const marksOf = (workingOrderId: string) =>
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
 
+const latePeriodIdsOf = (workingOrderId: string) =>
+  suite.db
+    .select({
+      latePeriodId: workingOrderLines.latePeriodId,
+      parentLineId: workingOrderLines.parentLineId,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+
+async function lunchId(v: Venue) {
+  const [period] = await suite.db
+    .select({ id: menuPeriods.id })
+    .from(menuPeriods)
+    .where(and(eq(menuPeriods.departmentId, v.restaurant), eq(menuPeriods.name, "Lunch")));
+  return period!.id;
+}
+
 /** A Spreads list offering Butter at 0.50 on the Midday Toast, published as `versionId`. */
 async function butterOnMiddayToast(v: Venue) {
   const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
@@ -707,6 +724,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     expect(await marksOf(tabId)).toEqual([
       { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
     ]);
+    expect(await latePeriodIdsOf(tabId)).toMatchObject([{ latePeriodId: await lunchId(v) }]);
   });
 
   it("a confirmed table draft submission replays its answer when retried without the confirmation", async () => {
@@ -1738,6 +1756,11 @@ describe("a dish whose period ended earlier today", () => {
           ]),
         );
         expect(await marksOf(id)).toHaveLength(2);
+        expect(
+          (await latePeriodIdsOf(id)).find((line) => line.parentLineId !== null),
+        ).toMatchObject({
+          latePeriodId: await lunchId(v),
+        });
       },
     );
 
@@ -2087,6 +2110,7 @@ describe("a dish whose period ended earlier today", () => {
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
       ]);
+      expect(await latePeriodIdsOf(id)).toMatchObject([{ latePeriodId: await lunchId(v) }]);
       expect(await printed(printerId)).toEqual([expect.stringContaining(`\n${lunchMark}\n`)]);
     });
 
@@ -2129,6 +2153,7 @@ describe("a dish whose period ended earlier today", () => {
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
       ]);
+      expect(await latePeriodIdsOf(id)).toMatchObject([{ latePeriodId: null }]);
       expect(unaskedLunchMark).toBe("** TRAS LUNCH **");
       expect(await printed(printerId)).toEqual([
         expect.stringContaining(`\n${unaskedLunchMark}\n`),
@@ -2213,6 +2238,7 @@ describe("a dish whose period ended earlier today", () => {
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: v.personId },
       ]);
+      expect(await latePeriodIdsOf(id)).toMatchObject([{ latePeriodId: null }]);
     });
 
     it("is marked with no confirmer when paid at 14:05 after Lunch's menu was replaced", async () => {

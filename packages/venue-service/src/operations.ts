@@ -1317,12 +1317,16 @@ export async function readLateSendMarks(
  */
 export async function recordLateSendMarks(
   tx: Transaction,
-  marks: readonly { lineId: string; periodName: string; confirmedBy: string | null }[],
+  marks: readonly (NonNullable<LineContextInput["late"]> & { lineId: string })[],
 ): Promise<void> {
   for (const mark of marks) {
     await tx
       .update(workingOrderLines)
-      .set({ latePeriodName: mark.periodName, lateConfirmedBy: mark.confirmedBy })
+      .set({
+        latePeriodId: mark.periodId,
+        latePeriodName: mark.periodName,
+        lateConfirmedBy: mark.confirmedBy,
+      })
       .where(and(eq(workingOrderLines.id, mark.lineId), isNotNull(workingOrderLines.menuItemId)));
   }
 }
@@ -1432,6 +1436,7 @@ export async function lineContextColumns(
           allergens: sold.allergens,
           diet: sold.diet,
           dietOverride: sold.dietOverride,
+          latePeriodId: line.late?.periodId ?? null,
           latePeriodName: line.late?.periodName ?? null,
           lateConfirmedBy: line.late?.confirmedBy ?? null,
         },

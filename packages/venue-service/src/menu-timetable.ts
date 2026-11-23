@@ -288,10 +288,11 @@ export async function resolveDepartmentService(
       }),
     ),
   ];
-  const endedPeriod = new Map<string, string>();
+  const endedPeriod = new Map<string, { periodId: string; periodName: string }>();
   for (const range of runs.filter((run) => rangeSpanInDay(run, context).end <= moment.minute)) {
-    const name = periods.find((entry) => entry.id === range.periodId)!.name;
-    for (const menuId of menusOf(range.periodId)) endedPeriod.set(menuId, name);
+    const periodName = periods.find((entry) => entry.id === range.periodId)!.name;
+    for (const menuId of menusOf(range.periodId))
+      endedPeriod.set(menuId, { periodId: range.periodId, periodName });
   }
   return {
     departmentId,
@@ -307,7 +308,7 @@ export async function resolveDepartmentService(
     keepOpen: keepOpenSubject(ranges, day, moment, context.dayCutover, context),
     endedMenus: [...endedPeriod]
       .filter(([menuId]) => !orderableMenuIds.includes(menuId))
-      .map(([menuId, periodName]) => ({ menuId, periodName })),
+      .map(([menuId, ended]) => ({ menuId, ...ended })),
   };
 }
 

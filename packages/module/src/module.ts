@@ -746,7 +746,7 @@ export interface LineContextInput {
     hardwareUnit: "kg" | "g" | "mg" | null;
   };
   /** The period of a late dish, and who confirmed it when confirmation was required. */
-  late?: { periodName: string; confirmedBy: string | null };
+  late?: { periodId: string | null; periodName: string; confirmedBy: string | null };
 }
 
 export type LineContextColumns = Pick<
@@ -763,6 +763,7 @@ export type LineContextColumns = Pick<
   | "allergens"
   | "diet"
   | "dietOverride"
+  | "latePeriodId"
   | "latePeriodName"
   | "lateConfirmedBy"
   | "sentNutrition"
@@ -867,7 +868,7 @@ export interface VenueServiceContribution {
   ): Promise<{
     departmentId: string;
     orderableMenuIds: readonly string[];
-    endedMenus: readonly { menuId: string; periodName: string }[];
+    endedMenus: readonly { menuId: string; periodId: string; periodName: string }[];
   }>;
   /**
    * `${productId}:${variantId ?? ""}` for each item that the live version of some listed menu of
@@ -1239,7 +1240,7 @@ export interface VenueServiceContribution {
   /** Marks each line as sent after `periodName`; `confirmedBy` is null where the send asked nobody. */
   recordLateSendMarks(
     tx: Transaction,
-    marks: readonly { lineId: string; periodName: string; confirmedBy: string | null }[],
+    marks: readonly (NonNullable<LineContextInput["late"]> & { lineId: string })[],
   ): Promise<void>;
   /** Records one kitchen notice per item, copying each line's kitchen name, unit, note and whether
    *  it was sold in Each as they stand now, so a caller removing a line records its notices first.

@@ -741,8 +741,8 @@ export async function priceOrderLines(
   };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
   // New dishes, and extras added to sent ones, whose menu is not orderable but ended earlier today,
-  // each with its period's name.
-  const ended = new Map<(typeof requestedLines)[number], string>();
+  // each with its most recently ended period.
+  const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
   let alsoSold: ReadonlySet<string> = new Set();
   const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
   const checked = (line: (typeof requestedLines)[number]) =>
@@ -755,7 +755,7 @@ export async function priceOrderLines(
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
       await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
-    const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+    const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
     const items: { productId: string; variantId: string | null }[] = [];
     for (const line of requestedLines) {
       const selected = selectedSetMenu(line);
@@ -763,16 +763,17 @@ export async function priceOrderLines(
       const offer =
         selected?.offer ??
         (line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : undefined);
-      const periodName = offer === undefined ? undefined : periodOf.get(offer.menuId);
+      if (offer === undefined) continue;
+      const period = periodOf.get(offer.menuId);
       if (
-        periodName === undefined ||
+        period === undefined ||
         !checked(line) ||
         line[STORED_RISE] === true ||
-        service.orderableMenuIds.includes(offer!.menuId)
+        service.orderableMenuIds.includes(offer.menuId)
       )
         continue;
-      ended.set(line, periodName);
-      items.push({ productId: offer!.productId, variantId: line.variantId ?? null });
+      ended.set(line, period);
+      items.push({ productId: offer.productId, variantId: line.variantId ?? null });
     }
     if (items.length > 0) {
       alsoSold = await VENUE_SERVICE.productsOfferedIn(
@@ -783,7 +784,7 @@ export async function priceOrderLines(
       );
     }
   }
-  const late: { index: number; menuItemId: string; menuId: string; periodName: string }[] = [];
+  const late: (EndedMenu & { index: number; menuItemId: string })[] = [];
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line, index) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry, or the
@@ -806,7 +807,7 @@ export async function priceOrderLines(
         menuItemId: line.menuItemId,
       });
     }
-    const periodName = ended.get(line);
+    const period = ended.get(line);
     if (
       selected?.fromRecordedCopy === true &&
       service !== null &&
@@ -815,11 +816,11 @@ export async function priceOrderLines(
       // A held dish carries the mark so Fire recognises the already permitted send.
       if (setMenu?.held === true) {
         const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
-        marks.set(index, { periodName: name ?? offer.menuName, confirmedBy: null });
+        marks.set(index, { periodId: null, periodName: name ?? offer.menuName, confirmedBy: null });
       }
-    } else if (periodName !== undefined) {
+    } else if (period !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
-        late.push({ index, menuItemId: offer.id, menuId: offer.menuId, periodName });
+        late.push({ index, menuItemId: offer.id, ...period });
       }
     } else if (
       service !== null &&
@@ -856,7 +857,8 @@ export async function priceOrderLines(
   });
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
-    for (const { index, periodName } of late) marks.set(index, { periodName, confirmedBy });
+    for (const { index, periodId, periodName } of late)
+      marks.set(index, { periodId, periodName, confirmedBy });
   }
   const invoiceLocales = await readInvoiceLocales(tx);
   const savedLanguages = await readSavedContentLanguages(tx);
@@ -2148,7 +2150,12 @@ export async function lateUnsentDishesOf(
           ]);
     await VENUE_SERVICE.recordLateSendMarks(
       tx,
-      late.map(({ lineId, periodName }) => ({ lineId, periodName, confirmedBy })),
+      late.map(({ lineId, periodId, periodName }) => ({
+        lineId,
+        periodId: confirmedBy === null ? null : periodId,
+        periodName,
+        confirmedBy,
+      })),
     );
   }
 }
@@ -2161,6 +2168,7 @@ interface LateUnsentDish {
   dishId: string;
   menuId: string;
   menuItemId: string;
+  periodId: string | null;
   periodName: string;
 }
 
@@ -2205,7 +2213,7 @@ async function judgeLateUnsent(
   const now = new Date();
   const zone = await VENUE_SERVICE.resolveZoneContext(tx, order.zoneId);
   const service = await VENUE_SERVICE.resolveDepartmentService(tx, zone.departmentId, now);
-  const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
+  const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
   const contexts = await VENUE_SERVICE.listLineContexts(tx, orderId);
   const contextOf = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
   const ended: LateUnsentDish[] = [];
@@ -2213,10 +2221,9 @@ async function judgeLateUnsent(
   for (const line of pending) {
     const context = contextOf.get(line.lineId);
     if (context === undefined || service.orderableMenuIds.includes(context.menuId)) continue;
-    const periodName = periodOf.get(context.menuId);
-    if (periodName === undefined) unplaced.push({ line, context });
-    else
-      ended.push({ ...line, menuId: context.menuId, menuItemId: context.menuItemId, periodName });
+    const period = periodOf.get(context.menuId);
+    if (period === undefined) unplaced.push({ line, context });
+    else ended.push({ ...line, ...period, menuItemId: context.menuItemId });
   }
   ended.push(...(await unplacedLateDishes(tx, orderId, service, unplaced, now)));
   if (ended.length === 0) return null;
@@ -2269,7 +2276,7 @@ async function unplacedLateDishes(
   orderId: string,
   orderService: DepartmentServiceOf,
   unplaced: readonly {
-    line: Omit<LateUnsentDish, "menuId" | "menuItemId" | "periodName">;
+    line: Omit<LateUnsentDish, "menuId" | "menuItemId" | "periodId" | "periodName">;
     context: LineContext;
   }[],
   now: Date,
@@ -2287,19 +2294,21 @@ async function unplacedLateDishes(
       );
     const own = services.get(context.departmentId)!;
     if (own?.orderableMenuIds.includes(context.menuId) === true) continue;
-    const ownPeriod = own?.endedMenus.find((menu) => menu.menuId === context.menuId)?.periodName;
+    const ownPeriod = own?.endedMenus.find((menu) => menu.menuId === context.menuId);
     if (ownPeriod === undefined && !(storedToday ??= await openedToday(tx, orderId, now))) continue;
     late.push({
       ...line,
       menuId: context.menuId,
       menuItemId: context.menuItemId,
-      periodName: ownPeriod ?? context.menuName,
+      periodId: ownPeriod?.periodId ?? null,
+      periodName: ownPeriod?.periodName ?? context.menuName,
     });
   }
   return late;
 }
 
 type DepartmentServiceOf = Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>>;
+type EndedMenu = DepartmentServiceOf["endedMenus"][number];
 
 /** The department's service now, or null when it has been removed. */
 async function activeDepartmentService(
@@ -4969,6 +4978,7 @@ async function carveLines(
         allergens: workingOrderLines.allergens,
         diet: workingOrderLines.diet,
         dietOverride: workingOrderLines.dietOverride,
+        latePeriodId: workingOrderLines.latePeriodId,
         latePeriodName: workingOrderLines.latePeriodName,
         lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         sentNutrition: workingOrderLines.sentNutrition,

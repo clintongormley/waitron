@@ -2474,10 +2474,22 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 116"));
     await burgerAndHeldPaella(v, partyId, tabId);
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ latePeriodName: "Lunch", latePeriodId: "lunch-period", lateConfirmedBy: OPERATOR })
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2))),
+    );
     const before = (await printedBy(grill)).length;
 
     const second = await split(v, partyId, tabId, [2]);
 
+    expect(
+      await v.db
+        .select({ latePeriodId: workingOrderLines.latePeriodId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, second)),
+    ).toEqual([{ latePeriodId: "lunch-period" }]);
     expect(await slipsSince(grill, before)).toEqual([]);
     expect(await noticesOf([tabId, second])).toEqual([]);
   });
