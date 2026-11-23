@@ -33,6 +33,7 @@ registerIcons({
 });
 
 export interface DataTableColumn<Row> {
+  /** The `actions` key is reserved for a pinned row-menu column. */
   key: string;
   label: string;
   group?: string;

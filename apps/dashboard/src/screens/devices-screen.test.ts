@@ -3954,6 +3954,7 @@ describe("add a device", () => {
       await table.updateComplete;
       const heading = table.shadowRoot!.querySelector('thead th[data-pinned="end"]')!;
       expect(heading.querySelector("wt-icon")).toBeNull();
+      expect(heading.textContent?.trim()).toBe(t("devices.actions"));
       expect(d(el, "[data-test=returning-hint-r1]")).not.toBeNull();
       for (const node of [table, ...table.shadowRoot!.querySelectorAll<HTMLElement>("*")])
         expect(node.scrollWidth, node.className || node.tagName).toBeLessThanOrEqual(

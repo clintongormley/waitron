@@ -1705,8 +1705,9 @@ fitting it. It is set per column, and every row-menu column keyed `actions` sets
 `scripts/pinned-actions-column.test.ts`, weaker than its name: it knows a row-menu column only by
 a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`, and never checks that the column is
 the table's last; its header lists the rest). A pinned `actions` column shows the same three-dot
-icon as the row menus. Screen readers get the supplied column label. The column takes only the
-width its icon or widest cell needs, including when another column follows it. Any pinned last column gets
+icon as the row menus. Screen readers get the supplied column label. A column of direct buttons
+uses a different key, so its heading keeps its text. The row-menu column takes only the width its
+icon or widest cell needs, including when another column follows it. Any pinned last column gets
 the same width rule regardless of its key; other columns take spare width. The pinned header and cells paint the row's own
 background (`--wt-color-surface`, `--wt-color-surface-raised` while a row that opens nothing is
 hovered, and `--wt-color-surface-lifted` while a clickable row is hovered or anything in it has
