@@ -67,6 +67,8 @@ it("reissues through the authenticated setup route while retaining the same froz
   expect(result).toEqual({
     stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
     key: { nodeId: stage.nodeId, name: stage.name, secret: expect.any(String) },
+    masterKey: expect.stringMatching(/^(?:\S{4} ){6}\S{4}$/),
+    masterKeyName: stage.masterKeyName,
   });
   expect(stage.stageId).not.toBe(f.staged.stage.stageId);
   expect(await verifySecretAsync(result.key.secret, stage.verifier)).toBe(true);
