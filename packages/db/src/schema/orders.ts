@@ -233,7 +233,7 @@ export const workingOrderLines = table(
     unitPriceGross: money("unit_price_gross").notNull(),
     // No rate reads this label: an eaten-in line files at the dine-in rate.
     vatClass: label("vat_class").notNull(),
-    // Rates a set-menu line taken away, and groups portions; a product line taken away files at its
+    // Rates a set-menu line taken away; a product line taken away files at its
     // product's takeaway rate (`product_takeaway_vat_rates`), not this label.
     takeawayVatClass: label("takeaway_vat_class").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list

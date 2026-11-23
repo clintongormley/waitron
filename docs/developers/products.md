@@ -176,8 +176,8 @@ eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuD
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
 product's current ones. A line added to a held order or a tab stores that class
 (`working_order_lines.vat_class`) with its gross price, which is the same either way; its
-`takeaway_vat_class` sets the rate only of a set-menu line; on other lines it is part of what
-groups portions (`readLockedLines`), never their rate. The order's `working_orders.dining` picks
+`takeaway_vat_class` sets the rate only of a set-menu line. Neither label decides an eaten-in
+line's rate. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
