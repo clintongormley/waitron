@@ -49,7 +49,12 @@ import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
-import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, type ResourceIdentity } from "@waitron/shared";
+import {
+  AppError,
+  decodeMasterKeyCode,
+  encodeMasterKeyCode,
+  type ResourceIdentity,
+} from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";

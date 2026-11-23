@@ -597,10 +597,12 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       breakGlassSecret,
       breakGlassKeyName,
       recoveryPackPdf,
-      masterKey: _masterKey,
-      masterKeyName: _masterKeyName,
+      masterKey,
+      masterKeyName: shownMasterKeyName,
       ...result
     } = await res.json();
+    expect(await storedMasterKeys()).toMatchObject([{ name: shownMasterKeyName }]);
+    expect(masterKey).toEqual(expect.any(String));
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(typeof breakGlassKeyName).toBe("string");
     const secret = FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret);
