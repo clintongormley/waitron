@@ -213,18 +213,18 @@ describe("the old box's Activity tab", () => {
         words.activitySheet,
       )!;
       expect(row(xml, 1)).toEqual([
-        words.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+        words.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
       ]);
       expect(row(xml, 2)).toEqual([...words.activityColumns]);
       expect(row(xml, 3)).toEqual([
-        "2026-11-20T10:00:00.000Z",
+        "2026-11-20 11:00:00.000",
         "dashboard.signed_in",
         "",
         "person",
         "00000000-0000-4000-8000-000000000001",
       ]);
       expect(row(xml, 4)).toEqual([
-        "2026-11-20T11:00:00.000Z",
+        "2026-11-20 12:00:00.000",
         "dashboard.signed_in",
         "Marta Ruiz",
         "person",
@@ -242,10 +242,10 @@ describe("the old box's Activity tab", () => {
     const bytes = await build({ kind: "own", fromMs: CUTOFF });
     const en = OLD_BOX_DATA_WORDS.en;
     expect(row(sheet(bytes, en.activitySheet)!, 1)).toEqual([
-      en.sinceOwnIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+      en.sinceOwnIntro.replace("{time}", "2026-11-20 11:00:00.000"),
     ]);
     expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
-      en.paymentsOwnIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+      en.paymentsOwnIntro.replace("{time}", "2026-11-20 11:00:00.000"),
     ]);
   });
 
@@ -257,13 +257,13 @@ describe("the old box's Activity tab", () => {
     const en = OLD_BOX_DATA_WORDS.en;
     for (const name of [en.ordersSheet, en.hoursSheet, en.activitySheet])
       expect(row(sheet(bytes, name)!, 1), name).toEqual([
-        en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:42.123 UTC"),
+        en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:42.123"),
       ]);
     expect(row(sheet(bytes, en.paymentsSheet)!, 1)).toEqual([
-      en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00:42.123 UTC"),
+      en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:42.123"),
     ]);
     const activity = sheet(bytes, en.activitySheet)!;
-    expect(row(activity, 3)[0]).toBe("2026-11-20T10:00:42.123Z");
+    expect(row(activity, 3)[0]).toBe("2026-11-20 11:00:42.123");
     expect(row(activity, 4)).toEqual([]);
   });
 
@@ -282,11 +282,14 @@ describe("the old box's Activity tab", () => {
   it("lists every entry under the rule that lists everything", async () => {
     await signedIn(null, CUTOFF - 365 * DAY);
     const xml = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.activitySheet)!;
-    expect(row(xml, 3)[0]).toBe(new Date(CUTOFF - 365 * DAY).toISOString());
+    expect(row(xml, 3)[0]).toBe("2025-11-20 11:00:00.000");
   });
 });
 
 const iso = (ms: number) => new Date(ms).toISOString();
+/** A November instant as the test venue's Europe/Madrid wall clock shows it, an hour ahead of UTC. */
+const shown = (ms: number) =>
+  new Date(ms + 60 * MINUTE).toISOString().slice(0, 23).replace("T", " ");
 
 async function order(
   number: number,
@@ -366,15 +369,15 @@ describe("the old box's Orders tab", () => {
 
     const xml = await orders({ kind: "copy", fromMs: CUTOFF });
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
     ]);
     expect(row(xml, 2)).toEqual([...OLD_BOX_DATA_WORDS.en.orderColumns]);
     // prettier-ignore
     expect([3, 4, 5, 6, 7].map((n) => row(xml, n))).toEqual([
-      ["2", "Table 4", "Open", iso(CUTOFF), "", "", "1", "Dish 1", "1.000", "2.50", "2.50", iso(CUTOFF + MINUTE), ""],
-      ["2", "Table 4", "Open", iso(CUTOFF), "", "", "2", "Dish 2", "1.000", "2.50", "2.50", "", ""],
-      ["3", "", "Settled", iso(CUTOFF - 90 * MINUTE), iso(CUTOFF + 5 * MINUTE), "", "1", "Dish 1", "1.000", "2.50", "2.50", iso(CUTOFF - 80 * MINUTE), ""],
-      ["4", "", "Open", iso(CUTOFF - 90 * MINUTE), "", iso(CUTOFF + 10 * MINUTE), "", "", "", "", "", "", ""],
+      ["2", "Table 4", "Open", shown(CUTOFF), "", "", "1", "Dish 1", "1.000", "2.50", "2.50", shown(CUTOFF + MINUTE), ""],
+      ["2", "Table 4", "Open", shown(CUTOFF), "", "", "2", "Dish 2", "1.000", "2.50", "2.50", "", ""],
+      ["3", "", "Settled", shown(CUTOFF - 90 * MINUTE), shown(CUTOFF + 5 * MINUTE), "", "1", "Dish 1", "1.000", "2.50", "2.50", shown(CUTOFF - 80 * MINUTE), ""],
+      ["4", "", "Open", shown(CUTOFF - 90 * MINUTE), "", shown(CUTOFF + 10 * MINUTE), "", "", "", "", "", "", ""],
       [],
     ]);
     expect(row(await orders({ kind: "all" }), 3)[0]).toBe("1");
@@ -391,9 +394,9 @@ describe("the old box's Orders tab", () => {
 
     const xml = await orders({ kind: "own", fromMs: CUTOFF });
     expect([3, 4, 5, 6].map((n) => row(xml, n).slice(0, 7))).toEqual([
-      ["7", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "1"],
-      ["7", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "2"],
-      ["8", "", "Open", iso(CUTOFF - 60 * MINUTE), "", "", "1"],
+      ["7", "", "Open", shown(CUTOFF - 60 * MINUTE), "", "", "1"],
+      ["7", "", "Open", shown(CUTOFF - 60 * MINUTE), "", "", "2"],
+      ["8", "", "Open", shown(CUTOFF - 60 * MINUTE), "", "", "1"],
       [],
     ]);
   });
@@ -518,7 +521,7 @@ describe("the old box's Payments and cash tab", () => {
       OLD_BOX_DATA_WORDS.en.paymentsSheet,
     )!;
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
+      OLD_BOX_DATA_WORDS.en.paymentsCopyIntro.replace("{time}", "2026-11-20 11:00:00.000"),
     ]);
     // `row` returns cell text as written, so the apostrophe is still escaped.
     expect(row(xml, 2)).toEqual(
@@ -526,11 +529,11 @@ describe("the old box's Payments and cash tab", () => {
     );
     // prettier-ignore
     expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n))).toEqual([
-      ["Payment", iso(CUTOFF), iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "", "", "Marta Ruiz", part],
-      ["Card payment", iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", "", "", alone],
-      ["Payment", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", cardPart],
-      ["Card payment", iso(CUTOFF + 3 * MINUTE), iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", "", cardPart, "", "", named],
-      ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "", "5.00", "", "", "Cash payment", "12", "", "", "", part, "", "Marta Ruiz", drawer],
+      ["Payment", shown(CUTOFF), shown(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "", "", "Marta Ruiz", part],
+      ["Card payment", shown(CUTOFF + MINUTE), shown(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", "", "", alone],
+      ["Payment", shown(CUTOFF + 2 * MINUTE), shown(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", cardPart],
+      ["Card payment", shown(CUTOFF + 3 * MINUTE), shown(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", "", cardPart, "", "", named],
+      ["Cash drawer", shown(CUTOFF + 4 * MINUTE), "", "5.00", "", "", "Cash payment", "12", "", "", "", part, "", "Marta Ruiz", drawer],
       [],
     ]);
   });
@@ -578,8 +581,8 @@ describe("the old box's Payments and cash tab", () => {
       const xml = await paymentsTab();
       // prettier-ignore
       expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
-        ["Card payment", iso(CUTOFF + 5 * MINUTE), iso(CUTOFF + 5 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-after", "", "", "", "", after],
-        ["Card payment", iso(CUTOFF - MINUTE), iso(LATER), "7.00", "", "", "Captured", "12", "simulator", "late-capture", "", "", "", "", started!.id],
+        ["Card payment", shown(CUTOFF + 5 * MINUTE), shown(CUTOFF + 5 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-after", "", "", "", "", after],
+        ["Card payment", shown(CUTOFF - MINUTE), shown(LATER), "7.00", "", "", "Captured", "12", "simulator", "late-capture", "", "", "", "", started!.id],
         [],
       ]);
       expect(settled?.paymentRef).toBe("late-capture");
@@ -609,9 +612,9 @@ describe("the old box's Payments and cash tab", () => {
       expect(refunds.map((r) => r.state)).toEqual(["succeeded", "failed"]);
       // prettier-ignore
       expect([3, 4, 5, 6].map((n) => row(xml, n))).toEqual([
-        ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
-        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
-        ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", "", refunds[1]!.id],
+        ["Card refund", shown(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
+        ["Card payment", shown(CUTOFF - 30 * MINUTE), shown(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
+        ["Card refund", shown(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", "", refunds[1]!.id],
         [],
       ]);
       // Under the rule that lists everything, the capture comes first, at the time it was recorded.
@@ -730,12 +733,12 @@ describe("the old box's Payments and cash tab", () => {
       const xml = await paymentsTab();
       // prettier-ignore
       expect([3, 4, 5, 6, 7, 8, 9].map((n) => row(xml, n))).toEqual([
-        ["Refund", iso(CUTOFF + 2 * MINUTE), iso(CUTOFF + 2 * MINUTE), "-2.00", "-0.50", "Cash", "Completed", "12", "", "", "", paid, "", "Marta Ruiz", cash.id],
-        ["Cash drawer", iso(CUTOFF + 2 * MINUTE), "", "-2.50", "", "", "Cash refund", "", "", "", "", "", cash.id, "Marta Ruiz", drawer.id],
-        ["Refund", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 6 * MINUTE), "-3.00", "0.00", "Card", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Marta Ruiz", late.id],
-        ["Refund", iso(CUTOFF + 8 * MINUTE), iso(CUTOFF + 9 * MINUTE), "-1.00", "0.00", "Card", "Failed", "12", "simulator", "ref-card", "", "", "", "Marta Ruiz", failed.id],
-        ["Card payment", iso(CUTOFF - 40 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
-        ["Card refund", iso(LATER), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
+        ["Refund", shown(CUTOFF + 2 * MINUTE), shown(CUTOFF + 2 * MINUTE), "-2.00", "-0.50", "Cash", "Completed", "12", "", "", "", paid, "", "Marta Ruiz", cash.id],
+        ["Cash drawer", shown(CUTOFF + 2 * MINUTE), "", "-2.50", "", "", "Cash refund", "", "", "", "", "", cash.id, "Marta Ruiz", drawer.id],
+        ["Refund", shown(CUTOFF - 5 * MINUTE), shown(CUTOFF + 6 * MINUTE), "-3.00", "0.00", "Card", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Marta Ruiz", late.id],
+        ["Refund", shown(CUTOFF + 8 * MINUTE), shown(CUTOFF + 9 * MINUTE), "-1.00", "0.00", "Card", "Failed", "12", "simulator", "ref-card", "", "", "", "Marta Ruiz", failed.id],
+        ["Card payment", shown(CUTOFF - 40 * MINUTE), shown(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
+        ["Card refund", shown(LATER), "", "-3.00", "", "", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
         [],
       ]);
       expect(xml).not.toContain(settledBefore.id);
@@ -756,8 +759,8 @@ describe("the old box's Payments and cash tab", () => {
 
       const xml = await paymentsTab();
       expect([3, 4, 5].map((n) => [row(xml, n)[2], row(xml, n)[6], row(xml, n).at(-1)])).toEqual([
-        [iso(CUTOFF + 3 * MINUTE), "Captured", held],
-        [iso(LATER), "Voided", voided],
+        [shown(CUTOFF + 3 * MINUTE), "Captured", held],
+        [shown(LATER), "Voided", voided],
         [undefined, undefined, undefined],
       ]);
     });
@@ -798,8 +801,8 @@ describe("the old box's Payments and cash tab", () => {
       const xml = await paymentsTab();
       // prettier-ignore
       expect([3, 4, 5].map((n) => row(xml, n))).toEqual([
-        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + MINUTE), "5.00", "0.00", "Card", "Failed", "12", "", "", "", "", "", "Marta Ruiz", failed],
-        ["Payment", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", received],
+        ["Payment", shown(CUTOFF - 5 * MINUTE), shown(CUTOFF + MINUTE), "5.00", "0.00", "Card", "Failed", "12", "", "", "", "", "", "Marta Ruiz", failed],
+        ["Payment", shown(CUTOFF - 5 * MINUTE), shown(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "", "", "Marta Ruiz", received],
         [],
       ]);
       expect(xml).not.toContain(settledBefore);
@@ -834,9 +837,9 @@ describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
     expect(row(cash, 2)).toEqual([...es.paymentColumns]);
     // prettier-ignore
     expect([3, 4, 5].map((n) => row(cash, n).slice(0, 7))).toEqual([
-      [es.paymentKinds.part, iso(CUTOFF), iso(CUTOFF), "5.00", "0.00", ACCOUNTANT_EXPORT_WORDS.es.paymentMethods.cash, es.partPaymentStates.received],
-      [es.paymentKinds.card, iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", ACCOUNTANT_EXPORT_WORDS.es.paymentStates.captured],
-      [es.paymentKinds.drawer, iso(CUTOFF + 2 * MINUTE), "", "5.00", "", "", es.drawerKinds.cash_payment],
+      [es.paymentKinds.part, shown(CUTOFF), shown(CUTOFF), "5.00", "0.00", ACCOUNTANT_EXPORT_WORDS.es.paymentMethods.cash, es.partPaymentStates.received],
+      [es.paymentKinds.card, shown(CUTOFF + MINUTE), shown(CUTOFF + MINUTE), "7.00", "", "", ACCOUNTANT_EXPORT_WORDS.es.paymentStates.captured],
+      [es.paymentKinds.drawer, shown(CUTOFF + 2 * MINUTE), "", "5.00", "", "", es.drawerKinds.cash_payment],
     ]);
     // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
     expect(es.ordersSheet).not.toBe(OLD_BOX_DATA_WORDS.en.ordersSheet);
@@ -899,15 +902,13 @@ describe("the old box's Working hours tab", () => {
     const atCutoff = await clocked(marta, CUTOFF, { entryKind: "out" });
     const later = await clocked(marta, CUTOFF + 60 * MINUTE, { entryKind: "break_start" });
     const xml = sheet(await build({ kind: "copy", fromMs: CUTOFF }), en.hoursSheet)!;
-    expect(row(xml, 1)).toEqual([
-      en.sinceCopyIntro.replace("{time}", "2026-11-20 10:00:00.000 UTC"),
-    ]);
+    expect(row(xml, 1)).toEqual([en.sinceCopyIntro.replace("{time}", "2026-11-20 11:00:00.000")]);
     expect(row(xml, 2)).toEqual([...en.hoursColumns]);
     expect(row(xml, 3)).toEqual([
       "Marta Ruiz",
       en.entryKinds.out,
-      iso(CUTOFF - MINUTE),
-      iso(CUTOFF),
+      shown(CUTOFF - MINUTE),
+      shown(CUTOFF),
       "",
       "",
       "",
@@ -916,8 +917,8 @@ describe("the old box's Working hours tab", () => {
     expect(row(xml, 4)).toEqual([
       "Marta Ruiz",
       en.entryKinds.break_start,
-      iso(CUTOFF + 59 * MINUTE),
-      iso(CUTOFF + 60 * MINUTE),
+      shown(CUTOFF + 59 * MINUTE),
+      shown(CUTOFF + 60 * MINUTE),
       "",
       "",
       "",
@@ -956,8 +957,8 @@ describe("the old box's Working hours tab", () => {
     expect(row(xml, 4)).toEqual([
       "Marta Ruiz",
       en.entryKinds.correction,
-      iso(CUTOFF),
-      iso(CUTOFF + MINUTE),
+      shown(CUTOFF),
+      shown(CUTOFF + MINUTE),
       first,
       en.correctionStatuses.approved,
       "Forgot to clock in",
@@ -966,8 +967,8 @@ describe("the old box's Working hours tab", () => {
     expect(row(xml, 5)).toEqual([
       "Marta Ruiz",
       en.entryKinds.correction,
-      iso(CUTOFF + MINUTE),
-      iso(CUTOFF + 2 * MINUTE),
+      shown(CUTOFF + MINUTE),
+      shown(CUTOFF + 2 * MINUTE),
       first,
       en.correctionStatuses.disputed,
       "Started later",

@@ -147,6 +147,7 @@ describe("POST /old-box-data on the old box", () => {
 
   it("compares with the main box's summary the reset-order duty last heard, naming when it arrived", async () => {
     await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
     const heardAt = new Date("2026-11-23T08:15:00.000Z");
     const response = await post(
       appWith({ mainHoldings: () => ({ holdings: { fiscal: [] }, heardAt }) }),
@@ -157,7 +158,7 @@ describe("POST /old-box-data on the old box", () => {
       unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
     );
     expect(sheet).toContain(
-      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 08:15 UTC"),
+      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 09:15"),
     );
   });
 
@@ -337,12 +338,13 @@ describe("the since tabs of POST /old-box-data", () => {
 
   it("after an emergency switch, adds the since tabs with the copy time the duty heard", async () => {
     await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
     const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
     expect(response.status).toBe(200);
     const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
     expect(activity).toBeDefined();
     expect(row(activity!, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 09:50:00.000 UTC"),
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:50:00.000"),
     ]);
   });
 

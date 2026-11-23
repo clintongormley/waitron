@@ -123,6 +123,26 @@ const RING: KeyRing = loadKeyRing({
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EMERGENCY_OP = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
+/** `ms` as the test venue's Europe/Madrid wall clock, `YYYY-MM-DD HH:MM:SS.mmm`. */
+function madridWallClock(ms: number): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Madrid",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(ms))
+      .map(({ type, value }) => [type, value]),
+  );
+  const millis = String(ms % 1000).padStart(3, "0");
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${millis}`;
+}
+
 const migrations = migrationOptionsFor(manifestSets(), null);
 const mainBox = useVenueDb({ migrations, timeoutMs: 60_000 });
 const spareBox = useVenueDb({ migrations, timeoutMs: 60_000 });
@@ -1497,7 +1517,7 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       const invoices = dataRows(tab(words.invoiceSheet));
       expect(invoices).toHaveLength(1);
       expect(invoices[0]![0]).toBe(afterCopy.record.sale_id);
-      const cutoffTime = `${new Date(copyAt - 10 * 60_000).toISOString().slice(0, 23).replace("T", " ")} UTC`;
+      const cutoffTime = madridWallClock(copyAt - 10 * 60_000);
       for (const name of [words.ordersSheet, words.hoursSheet, words.activitySheet])
         expect(row(tab(name), 1), name).toEqual([
           words.sinceCopyIntro.replace("{time}", cutoffTime),
@@ -1505,7 +1525,9 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       expect(row(tab(words.paymentsSheet), 1)).toEqual([
         words.paymentsCopyIntro.replace("{time}", cutoffTime),
       ]);
-      expect(dataRows(tab(words.ordersSheet))).toEqual([expect.arrayContaining(["4242", sentAt])]);
+      expect(dataRows(tab(words.ordersSheet))).toEqual([
+        expect.arrayContaining(["4242", madridWallClock(copyAt + 2 * 60_000)]),
+      ]);
       const activity = dataRows(tab(words.activitySheet)).flat();
       expect(activity).toContain(LATE_SUBJECT);
       expect(activity).not.toContain(EARLY_SUBJECT);

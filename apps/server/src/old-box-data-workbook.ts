@@ -18,7 +18,8 @@ import {
   type PaymentRow,
   type SinceRule,
 } from "./old-box-data-since.js";
-import type { Decimal } from "@waitron/shared";
+import { timeZoneOffsetMinutes, type Decimal } from "@waitron/shared";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 import { renderWorkbook, type Cell, type WorkbookSheet } from "./xlsx-workbook.js";
 
 export interface OldBoxWorkbookInput {
@@ -49,9 +50,21 @@ export interface OldBoxWorkbook {
   };
 }
 
-const minute = (at: Date) => `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+/** `at` on the venue's wall clock, as `YYYY-MM-DD HH:MM:SS.mmm`. */
+const wallClock = (at: Date, zone: string) =>
+  new Date(at.getTime() + timeZoneOffsetMinutes(zone, at) * 60_000)
+    .toISOString()
+    .slice(0, 23)
+    .replace("T", " ");
+const minute = (at: Date, zone: string) => wallClock(at, zone).slice(0, 16);
 /** The since tabs' cutoff, exact to the millisecond their reads compare. */
-const exact = (at: Date) => `${at.toISOString().slice(0, 23).replace("T", " ")} UTC`;
+const exact = (at: Date, zone: string) => wallClock(at, zone);
+/** A stored time as the venue's wall clock; text that is not a time is shown as stored. */
+function localTime(stored: string | null, zone: string): Cell {
+  if (stored === null) return null;
+  const at = new Date(stored);
+  return Number.isNaN(at.getTime()) ? stored : wallClock(at, zone);
+}
 
 type Words = (typeof OLD_BOX_DATA_WORDS)["en" | "es"];
 
@@ -79,11 +92,12 @@ function paymentCells(
   fact: PaymentRow,
   words: Words,
   accountant: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+  zone: string,
 ): Cell[] {
   const cells: Partial<Record<(typeof PAYMENT_KEYS)[number], Cell>> = {
     kind: words.paymentKinds[fact.kind],
-    recordedAt: fact.recordedAt,
-    changedAt: fact.changedAt,
+    recordedAt: localTime(fact.recordedAt, zone),
+    changedAt: localTime(fact.changedAt, zone),
     amount: amount(fact.amount),
     order: fact.orderNumber === null ? null : String(fact.orderNumber),
     id: fact.id,
@@ -138,9 +152,14 @@ function paymentCells(
   return PAYMENT_KEYS.map((key) => cells[key] ?? null);
 }
 
-function sinceIntro(rule: SinceRule, words: Words, tab: "payments" | "other"): string {
+function sinceIntro(
+  rule: SinceRule,
+  words: Words,
+  tab: "payments" | "other",
+  zone: string,
+): string {
   if (rule.kind === "all") return words.sinceAllIntro;
-  const time = exact(new Date(rule.fromMs));
+  const time = exact(new Date(rule.fromMs), zone);
   const intros =
     tab === "payments"
       ? { copy: words.paymentsCopyIntro, own: words.paymentsOwnIntro }
@@ -188,6 +207,7 @@ async function wholeChains(db: Database, seats: readonly Seat[]): Promise<Unretu
 export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<OldBoxWorkbook> {
   const words = OLD_BOX_DATA_WORDS[input.language];
   const accountant = ACCOUNTANT_EXPORT_WORDS[input.language];
+  const zone = await venueTimeZoneIn(input.db);
   const seats = input.modules.flatMap((module) => {
     const unreturned = module.handover?.unreturned;
     return unreturned === undefined ? [] : [{ name: module.name, unreturned }];
@@ -199,8 +219,10 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
     (await readAccountantInvoices(input.db, { saleIds })).map((invoice) => [invoice.id, invoice]),
   );
   const headings: Cell[] = [
-    // The accountant's last column notes that export's own omissions, F3 among them; this tab omits none.
-    ...accountant.invoiceColumns.slice(0, -1),
+    // The accountant's last column notes that export's own omissions, F3 among them; this tab omits
+    // none. Its voided time is the venue's wall clock here, so that heading is this tab's own.
+    ...accountant.invoiceColumns.slice(0, -2),
+    words.voidedAtColumn,
     accountant.saleDateColumn,
     accountant.paymentOnAccountColumn,
     ...words.recordColumns,
@@ -215,7 +237,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
         chainName,
         String(record.number),
         words.recordTypes[record.type],
-        record.createdAt,
+        localTime(record.createdAt, zone),
         record.filingState === null
           ? words.notFiled
           : (words.filingStates[record.filingState] ?? record.filingState),
@@ -232,7 +254,8 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
       }
       for (const cells of invoiceLineCells(invoice, accountant))
         rows.push([
-          ...cells,
+          ...cells.slice(0, -1),
+          localTime(invoice.voidedAt, zone),
           invoice.saleDate ?? null,
           paymentOnAccount(invoice, accountant),
           ...recordCells,
@@ -241,6 +264,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
   }
   const time = minute(
     (compared !== null ? input.mainHoldings?.heardAt : undefined) ?? input.madeAt,
+    zone,
   );
   const sheets: WorkbookSheet[] = [
     {
@@ -259,7 +283,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
   ];
   const counts: OldBoxWorkbook["counts"] = { invoiceRows: rows.length };
   if (input.since !== undefined) {
-    const intro = sinceIntro(input.since, words, "other");
+    const intro = sinceIntro(input.since, words, "other", zone);
     const orders = await readOrdersSince(input.db, input.since);
     const facts = await readPaymentsSince(input.db, input.since);
     const hours = await readTimeEntriesSince(input.db, input.since);
@@ -278,25 +302,25 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
             String(order.orderNumber),
             order.label,
             words.orderStatuses[order.status],
-            order.openedAt,
-            order.settledAt,
-            order.collectedAt,
+            localTime(order.openedAt, zone),
+            localTime(order.settledAt, zone),
+            localTime(order.collectedAt, zone),
             order.lineNo === null ? null : String(order.lineNo),
             order.item,
             order.quantity === null ? null : { number: order.quantity, places: 3 },
             amount(order.unitPrice),
             amount(order.lineTotal),
-            order.sentAt,
-            order.servedAt,
+            localTime(order.sentAt, zone),
+            localTime(order.servedAt, zone),
           ]),
         ],
       },
       {
         name: words.paymentsSheet,
         rows: [
-          [sinceIntro(input.since, words, "payments")],
+          [sinceIntro(input.since, words, "payments", zone)],
           words.paymentColumns,
-          ...facts.map((fact) => paymentCells(fact, words, accountant)),
+          ...facts.map((fact) => paymentCells(fact, words, accountant, zone)),
         ],
       },
       {
@@ -307,8 +331,8 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           ...hours.map((entry): Cell[] => [
             entry.personName,
             words.entryKinds[entry.entryKind],
-            entry.eventAt,
-            entry.recordedAt,
+            localTime(entry.eventAt, zone),
+            localTime(entry.recordedAt, zone),
             entry.correctsEntryId,
             entry.correctionStatus === null
               ? null
@@ -324,7 +348,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           [intro],
           words.activityColumns,
           ...activity.map((entry) => [
-            entry.at,
+            localTime(entry.at, zone),
             entry.kind,
             entry.personName,
             entry.subjectKind,
