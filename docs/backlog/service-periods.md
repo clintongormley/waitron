@@ -65,8 +65,6 @@ code, not run again here.
 
 ## Loose ends left by A506-4 (#1597).
 
-- The clock-skip check runs before touching ranges are joined: two halves of one period meeting
-  at a skipped 02:30 are refused, while the joined range is accepted.
 - [The special-day-then-season rule is written out in several places](#the-special-day-then-season-rule-is-written-out-in-several-places).
 
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for

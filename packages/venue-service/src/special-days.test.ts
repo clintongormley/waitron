@@ -783,6 +783,101 @@ describe("saveSpecialDay", () => {
       expect(saved.paint).toHaveLength(1);
     });
 
+    const painted = (v: Venue, ranges: unknown[]) => ({
+      name: "Clock change",
+      repeatsYearly: false,
+      dates: dates(["2026-03-28"]),
+      paint: [{ departmentId: v.restaurant, date: "2026-03-28", ranges }],
+    });
+
+    it("saves one period painted in two halves meeting at a skipped 02:30, as the one range it stores", async () => {
+      const v = await venue();
+      const joined = [{ periodId: v.dinner, startsAt: "22:00", endsAt: "05:00" }];
+      const whole = await save(null, painted(v, joined), new Date("2026-01-10"));
+      expect(whole.paint).toEqual([
+        { departmentId: v.restaurant, date: "2026-03-28", ranges: joined },
+      ]);
+      const halves = await save(
+        whole.id,
+        painted(v, [
+          { periodId: v.dinner, startsAt: "02:30", endsAt: "05:00" },
+          { periodId: v.dinner, startsAt: "22:00", endsAt: "02:30" },
+        ]),
+        new Date("2026-01-10"),
+      );
+      expect(halves.paint).toEqual([
+        { departmentId: v.restaurant, date: "2026-03-28", ranges: joined },
+      ]);
+    });
+
+    it("refuses two periods meeting at a skipped 02:30", async () => {
+      const v = await venue();
+      expect(
+        await refusal(
+          save(
+            null,
+            painted(v, [
+              { periodId: v.lunch, startsAt: "22:00", endsAt: "02:30" },
+              { periodId: v.dinner, startsAt: "02:30", endsAt: "05:00" },
+            ]),
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "paint.0.ranges.0.endsAt", reason: "clock_skips", date: "2026-03-28" },
+      });
+    });
+
+    it("names the last half's end when a joined range ends at a skipped time", async () => {
+      const v = await venue();
+      expect(
+        await refusal(
+          save(
+            null,
+            painted(v, [
+              { periodId: v.dinner, startsAt: "02:15", endsAt: "02:45" },
+              { periodId: v.dinner, startsAt: "00:00", endsAt: "02:15" },
+            ]),
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "paint.0.ranges.0.endsAt", reason: "clock_skips", date: "2026-03-28" },
+      });
+    });
+
+    it("saves one zone kind painted in two halves meeting at a skipped 02:30", async () => {
+      const v = await venue();
+      const saved = await save(
+        null,
+        {
+          name: "Clock change",
+          repeatsYearly: false,
+          dates: dates(["2026-03-28"]),
+          zonePaint: [
+            {
+              zoneId: v.sala,
+              date: "2026-03-28",
+              ranges: [
+                { kind: "open", startsAt: "22:00", endsAt: "02:30" },
+                { kind: "open", startsAt: "02:30", endsAt: "05:00" },
+              ],
+            },
+          ],
+        },
+        new Date("2026-01-10"),
+      );
+      expect(saved.zonePaint).toEqual([
+        {
+          zoneId: v.sala,
+          date: "2026-03-28",
+          ranges: [{ kind: "open", startsAt: "22:00", endsAt: "05:00" }],
+        },
+      ]);
+    });
+
     it("checks a repeating date at its next occurrence from `at`", async () => {
       const v = await venue();
       // Stored 2025-03-28 is fine (2025's change was on 30 March); its 2026 occurrence is not.

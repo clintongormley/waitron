@@ -651,14 +651,16 @@ async function assertOwnPeriods(
     });
 }
 
-/** Refuses a painted time the clocks skip on the date's business day; a repeating date is checked
- *  at its next occurrence from the venue's today. */
-function assertNoSkippedTimes(
+/** Refuses a painted time the clocks skip on the date's business day, checking the ranges as stored:
+ *  touching ranges that `same` joins are one range. A repeating date is checked at its next
+ *  occurrence from the venue's today. */
+function assertNoSkippedTimes<T extends ClosedRange>(
   clock: BusinessDayClock,
   today: LocalDate | null,
   ruleOf: (date: LocalDate) => SpecialDayDateRule,
   holidays: HolidayDates,
-  entries: readonly ParsedEntry<ClosedRange>[],
+  entries: readonly ParsedEntry<T>[],
+  same: (a: T, b: T) => boolean,
 ): void {
   if (!isReadableClock(clock)) return;
   for (const entry of entries) {
@@ -666,14 +668,19 @@ function assertNoSkippedTimes(
       clock,
       ruleOf(entry.date),
       today ?? entry.date,
-      entry.ranges,
+      joinTouching(entry.ranges, same),
       holidays,
     );
-    if (skipped !== null)
-      entry.refuse(`ranges.${skipped.range.position}.${skipped.end}`, {
-        reason: "clock_skips",
-        date: skipped.date,
-      });
+    if (skipped === null) continue;
+    // One owner's ranges on a date never overlap, so an end time names one range of the request.
+    const { position } =
+      skipped.end === "endsAt"
+        ? entry.ranges.find((range) => range.endsAt === skipped.range.endsAt)!
+        : skipped.range;
+    entry.refuse(`ranges.${position}.${skipped.end}`, {
+      reason: "clock_skips",
+      date: skipped.date,
+    });
   }
 }
 
@@ -916,12 +923,23 @@ export async function saveSpecialDay(
   });
   const ruleOf = new Map(rules.map((rule) => [rule.date, rule]));
   const today = venueLocalMoment(at, clock)?.civilDate ?? null;
-  assertNoSkippedTimes(clock, today, (date) => ruleOf.get(date)!, holidays, [
-    ...parsed.paint,
-    ...parsed.zonePaint,
-    ...retainedPaint,
-    ...retainedZonePaint,
-  ]);
+  const ruleOn = (date: LocalDate) => ruleOf.get(date)!;
+  assertNoSkippedTimes(
+    clock,
+    today,
+    ruleOn,
+    holidays,
+    [...parsed.paint, ...retainedPaint],
+    (a, b) => a.periodId === b.periodId,
+  );
+  assertNoSkippedTimes(
+    clock,
+    today,
+    ruleOn,
+    holidays,
+    [...parsed.zonePaint, ...retainedZonePaint],
+    (a, b) => a.kind === b.kind,
+  );
   await assertDatesFree(tx, id, rules, holidays);
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
