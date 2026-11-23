@@ -1642,8 +1642,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor no puede comprobar su propia lista de servidores, así que no puede añadir otro. No se ha cambiado nada.",
   },
   "mirror.join_not_found": {
-    en: "This box is no longer asking to join: it ran out of time, or someone chose Start again on it.",
-    es: "Este servidor ya no está pidiendo unirse: se agotó el tiempo o alguien eligió Empezar de nuevo en él.",
+    en: "This box is no longer asking to join: it ran out of time, or someone chose No or Start again on it.",
+    es: "Este servidor ya no está pidiendo unirse: se agotó el tiempo o alguien eligió No o Empezar de nuevo en él.",
   },
   "mirror.join_not_confirmed": {
     en: "The new box has not chosen Join yet. Choose Join on the new box, then Add as spare here.",

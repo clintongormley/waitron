@@ -366,6 +366,7 @@ export class ServersScreen extends LitElement {
   override disconnectedCallback(): void {
     this.#closeHandover();
     this.#syncJoinPoll(false);
+    this.#dropPendingAdd();
     super.disconnectedCallback();
   }
 
@@ -377,14 +378,40 @@ export class ServersScreen extends LitElement {
     this.joinRequests = listing.joinRequests ?? [];
     this.loadErrorKey = null;
     this.#syncJoinPoll(this.joinRequests.length > 0);
+    const gone = this.#goneJoin();
+    if (gone !== null) {
+      this.#addWhenConfirmed = null;
+      this.join = {
+        ...gone,
+        code: null,
+        waiting: false,
+        ended: true,
+        error: codeMessage("mirror.join_not_found"),
+      };
+      return;
+    }
     const join = this.join;
     if (join !== null && !join.newConfirmed && this.#listedConfirmed(join.request.id))
       this.join = { ...join, newConfirmed: true };
     const pending = this.#addWhenConfirmed;
-    if (pending !== null && this.joinBusy === null && this.#listedConfirmed(pending.request.id)) {
+    if (
+      pending !== null &&
+      this.isConnected &&
+      pending.opening === this.#joinOpening &&
+      this.joinBusy === null &&
+      this.#listedConfirmed(pending.request.id)
+    ) {
       this.#addWhenConfirmed = null;
       void this.#approveJoin(pending.request, pending.opening, false);
     }
+  }
+
+  /** The open dialog, when it shows a code for a request the list no longer holds. An Add as spare
+   * being sent is left to its own answer. */
+  #goneJoin(): NonNullable<ServersScreen["join"]> | null {
+    const join = this.join;
+    if (join === null || join.code === null || this.joinBusy === "approve") return null;
+    return this.joinRequests.some((row) => row.id === join.request.id) ? null : join;
   }
 
   #listedConfirmed(requestId: string): boolean {
@@ -467,6 +494,11 @@ export class ServersScreen extends LitElement {
     this.#addWhenConfirmed = { request: join.request, opening: this.#joinOpening };
   }
 
+  #dropPendingAdd(): void {
+    this.#addWhenConfirmed = null;
+    if (this.join?.waiting) this.join = { ...this.join, waiting: false };
+  }
+
   /** The automatic send opens no sign-in prompt: one appearing unasked would surprise the person. */
   async #approveJoin(
     request: BoxJoinRequestRow,
@@ -502,6 +534,7 @@ export class ServersScreen extends LitElement {
     if (this.joinBusy !== null) return;
     this.joinBusy = "dismiss";
     this.joinListError = "";
+    if (this.join?.request.id === request.id) this.#dropPendingAdd();
     try {
       await this.api.dismissBoxJoin(request.id);
     } catch (error) {

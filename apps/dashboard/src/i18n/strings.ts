@@ -2384,7 +2384,7 @@ export const en = {
   "servers.join_no": "No",
   "servers.join_add": "Add as spare",
   "servers.join_waiting": "Now choose Join on the new box.",
-  "servers.join_approved": "Added. The new box finishes joining by itself.",
+  "servers.join_approved": "Added. The new box finishes joining while its join page is open.",
   "servers.join_recovery_key_missing":
     "This box has no backup encryption key, which a spare needs. Choose Turn on backups under Backups, then choose Check again.",
   "servers.join_module_config_invalid":
@@ -7152,7 +7152,8 @@ export const es: Record<StringKey, string> = {
   "servers.join_no": "No",
   "servers.join_add": "Añadir como reserva",
   "servers.join_waiting": "Ahora elige Unirse en el servidor nuevo.",
-  "servers.join_approved": "Añadido. El servidor nuevo termina de unirse por sí solo.",
+  "servers.join_approved":
+    "Añadido. El servidor nuevo termina de unirse mientras su página de unión está abierta.",
   "servers.join_recovery_key_missing":
     "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar las copias en Copias de seguridad y vuelve a elegir Comprobar.",
   "servers.join_module_config_invalid":
