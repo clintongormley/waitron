@@ -58,6 +58,7 @@ import {
   mayTakeOver,
   tillProviderForReader,
   readOrigin,
+  shareByWeight,
   readSaleOrigin,
   resolveActiveLocale,
   QUANTITY_SCALE,
@@ -140,6 +141,10 @@ describe("package public surface (./index.js)", () => {
     expect(compareDecimal(a, b)).toBe(-1);
     expect(sumDecimals([a, b])).toBe("3.30");
     expect(grossOf("1.50", "2.000")).toBe("3.00");
+    expect(shareByWeight(decimal("10.00"), [decimal("10.00"), decimal("2.00")])).toEqual([
+      "8.33",
+      "1.67",
+    ]);
     expect(toScale(a, 3)).toBe("1.100");
     expect(MONEY_SCALE).toBe(2);
     expect(MAX_MONEY_INTEGER_DIGITS).toBe(12);

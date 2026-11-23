@@ -4,7 +4,7 @@ import {
   compareDecimal,
   decimal,
   divideDecimal,
-  multiplyDecimal,
+  shareByWeight,
   subtractDecimal,
   sumDecimals,
   toScale,
@@ -14,7 +14,6 @@ import type { VatBreakdownLine } from "@waitron/fiscal";
 import "./errors.js";
 
 const ZERO = decimal("0.00");
-const CENT = decimal("0.01");
 const MAX_MONEY = decimal("999999999999.99");
 
 export interface CorrectionAmountLine {
@@ -72,7 +71,7 @@ export function allocateCorrectionAmounts(
   if (compareDecimal(amount, sumDecimals(lines.map((line) => line.gross))) > 0) {
     throw new AppError("sale.correction_amount_invalid", {});
   }
-  const grossByLine = apportionCorrectionCents(
+  const grossByLine = shareByWeight(
     amount,
     lines.map((line) => line.gross),
   );
@@ -106,7 +105,7 @@ export function allocateCorrectionAmounts(
     );
     const tax = subtractDecimal(gross, base);
     if (!isMoney(base) || !isMoney(tax)) unusable();
-    const bases = apportionCorrectionCents(
+    const bases = shareByWeight(
       base,
       atRate.map((allocation) => allocation.gross),
     );
@@ -234,24 +233,4 @@ export function remainingLines(history: CorrectionAmountHistory): CorrectionAmou
 
 function compareLines(left: CorrectionAmountLine, right: CorrectionAmountLine): number {
   return left.lineNo - right.lineNo || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-}
-
-function apportionCorrectionCents(total: Decimal, weights: readonly Decimal[]): Decimal[] {
-  const sum = sumDecimals(weights);
-  const shares = weights.map((weight, index) => {
-    const numerator = multiplyDecimal(total, weight);
-    let amount = divideDecimal(numerator, sum, 2);
-    if (compareDecimal(multiplyDecimal(amount, sum), numerator) > 0)
-      amount = subtractDecimal(amount, CENT);
-    return { index, amount, remainder: subtractDecimal(numerator, multiplyDecimal(amount, sum)) };
-  });
-  let left = subtractDecimal(total, sumDecimals(shares.map((share) => share.amount)));
-  for (const share of [...shares].sort(
-    (a, b) => compareDecimal(b.remainder, a.remainder) || a.index - b.index,
-  )) {
-    if (compareDecimal(left, ZERO) <= 0) break;
-    share.amount = addDecimal(share.amount, CENT);
-    left = subtractDecimal(left, CENT);
-  }
-  return shares.map((share) => toScale(share.amount, 2));
 }
