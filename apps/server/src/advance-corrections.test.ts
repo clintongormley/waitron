@@ -788,8 +788,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
     await nothingGivenBack(advanceId, correctionId);
   });
 
-  it("refuses a card leg of a correction opened on the advance before the rest's invoice took it off, gives nothing back, and the correction can be closed", async () => {
-    const billId = await seated("Tasting menu");
+  /** A €30 part payment of `billId` on a hand-keyed card, with its own ticket; its sale and tender. */
+  async function manualAdvance(billId: string) {
     const paid = await send(
       venue().app,
       venue().cookie,
@@ -815,24 +815,41 @@ describe("an advance once the rest's invoice has taken it off", () => {
         .innerJoin(tenders, eq(tenders.saleId, billAdvances.advanceSaleId))
         .where(eq(billAdvances.workingOrderId, billId)),
     );
-    const { correctionId, refusal } = await openedBeforeTheRest(billId, row!.advanceId);
-    expect(
-      await send(
-        venue().app,
-        venue().cookie,
-        "GET",
-        `/api/transactions/${row!.advanceId}/refundable-tenders`,
-      ),
-    ).toMatchObject({ status: 200, json: [{ manual: true, correctionOpen: true }] });
+    return row!;
+  }
+
+  it("marks a hand-keyed part payment's refund while a correction of it is open, and not before", async () => {
+    const billId = await seated("Tasting menu");
+    const { advanceId } = await manualAdvance(billId);
+    const path = `/api/transactions/${advanceId}/refundable-tenders`;
+    const before = await send(venue().app, venue().cookie, "GET", path);
+    expect(before.status, JSON.stringify(before.json)).toBe(200);
+    expect((before.json as unknown[])[0]).toMatchObject({ manual: true });
+    expect((before.json as unknown[])[0]).not.toHaveProperty("correctionOpen");
+    expect((before.json as unknown[])[0]).not.toHaveProperty("plainRefundLimit");
+
+    const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+
+    expect(await send(venue().app, venue().cookie, "GET", path)).toMatchObject({
+      status: 200,
+      json: [{ manual: true, plainRefundLimit: "0.00", correctionOpen: true }],
+    });
+  });
+
+  it("refuses a card leg of a correction opened on the advance before the rest's invoice took it off, gives nothing back, and the correction can be closed", async () => {
+    const billId = await seated("Tasting menu");
+    const row = await manualAdvance(billId);
+    const { correctionId, refusal } = await openedBeforeTheRest(billId, row.advanceId);
 
     const refused = await send(
       venue().app,
       venue().cookie,
       "POST",
-      `/api/transactions/${row!.advanceId}/refunds`,
+      `/api/transactions/${row.advanceId}/refunds`,
       {
         submissionId: randomUUID(),
-        tenderId: row!.tenderId,
+        tenderId: row.tenderId,
         appliedAmount: "30.00",
         tipAmount: "0.00",
         reason: "Sent back",
@@ -844,7 +861,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
 
     expect(refused.status, JSON.stringify(refused.json)).toBe(409);
     expect(refused.json).toEqual(refusal);
-    await nothingGivenBack(row!.advanceId, correctionId);
+    await nothingGivenBack(row.advanceId, correctionId);
   });
 });
 
