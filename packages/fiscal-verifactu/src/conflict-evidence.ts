@@ -22,6 +22,7 @@ import type {
 
 const observed = alias(verifactuHistory, "observed");
 const lookup = alias(verifactuHistory, "lookup");
+const observedCause = sql<ConflictCause | null>`json_extract(${observed.data}, '$.cause')`;
 
 export async function assertNoActiveConflict(tx: Transaction, nodeId: string): Promise<void> {
   if ((await readActiveConflicts(tx, nodeId)).length !== 0) {
@@ -48,6 +49,7 @@ export async function readActiveConflicts(
       caseCause: filingCases.cause,
       openedAt: filingCases.openedAt,
       observation: { id: observed.id, at: observed.at, data: observed.data },
+      observedCause,
       lookup: { id: lookup.id, at: lookup.at, data: lookup.data },
     })
     .from(verifactuRecords)
@@ -82,15 +84,14 @@ export async function readActiveConflicts(
       asc(verifactuRecords.secuencia),
       asc(sql`json_extract(${observed.data}, '$.attempt')`),
       // When both causes share an attempt, show the annulled observation first.
-      asc(sql`json_extract(${observed.data}, '$.cause')`),
+      asc(observedCause),
     );
   const found = new Set<string>();
   const active: ActiveConflict[] = [];
   for (const row of rows) {
     if (found.has(row.registroId)) continue;
     const cause =
-      row.observation?.data.cause ??
-      (row.lookup === null ? row.caseCause : "fiscal.huella_divergente");
+      row.observedCause ?? (row.lookup === null ? row.caseCause : "fiscal.huella_divergente");
     if (cause !== "fiscal.huella_divergente" && cause !== "fiscal.duplicado_anulado") continue;
     found.add(row.registroId);
     active.push({

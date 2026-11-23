@@ -224,6 +224,31 @@ describe("durable conflict observations", () => {
     ]);
   });
 
+  it("uses the stored cause that the database checked", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const registroId = seeded.registroIds[0]!;
+    await withTransaction(suite.db, async (tx) => {
+      await openFilingCase(tx, {
+        registroId,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: null, mensaje: null, csv: null },
+        now: FIRST,
+      });
+      const data =
+        '{"attempt":1,"cause":"fiscal.duplicado_anulado","cause":"fiscal.huella_divergente","evidence":{}}';
+      await tx.execute(sql`insert into verifactu_history (id, seq, kind, node_id, at, data, event_key, registro_id)
+        values ('observation', 1, 'conflict.observed', ${seeded.nodeId}, ${SECOND.toISOString()},
+          ${data}, ${`conflict:${registroId}:1:fiscal.duplicado_anulado`}, ${registroId})`);
+    });
+    expect(await active(seeded.nodeId)).toEqual([
+      expect.objectContaining({
+        registroId,
+        cause: "fiscal.duplicado_anulado",
+        evidenceId: "observation",
+      }),
+    ]);
+  });
+
   it("retains a mismatching fingerprint when the stored software identity is absent", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const aeat = fake();
