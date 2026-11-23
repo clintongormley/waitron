@@ -32,6 +32,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
+import { makeNewMasterKey, saveNewMasterKey } from "./master-key-record.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
   buildEmergencyPart,
@@ -396,7 +397,10 @@ export function mountBackupRecoveryPackMakeApi(
           const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
           const replacement = request.newServerKey ? await makeBreakGlassSecret() : undefined;
-          return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
+          const newMasterKey = request.newServerKey
+            ? makeNewMasterKey(madeAt.slice(0, 10))
+            : undefined;
+          const pack = await withNodeTransaction(deps.nodeDb, async (nodeTx) => {
             const made = await withTransaction(deps.db, (tx) =>
               makePack(tx, nodeTx, deps, {
                 emergency,
@@ -424,6 +428,13 @@ export function mountBackupRecoveryPackMakeApi(
             }
             return made;
           });
+          // The request's last database write, so a failure before it leaves the old key current.
+          // It follows node.db's key save: the stated exception to venue.db first, ending in PR 2b.
+          const masterKey =
+            pack.replacement === undefined || newMasterKey === undefined
+              ? undefined
+              : await saveNewMasterKey(deps.db, newMasterKey, new Date(madeAt), personId);
+          return { ...pack, masterKey };
         }),
       );
       log("info", "recovery.pack_made", {
@@ -441,6 +452,12 @@ export function mountBackupRecoveryPackMakeApi(
         "X-Waitron-Recovery-Pack": String(made.number),
         "X-Waitron-Recovery-Pack-Key": made.key,
         "X-Waitron-Recovery-Pack-Made-At": made.madeAt,
+        ...(made.masterKey === undefined
+          ? {}
+          : {
+              "X-Waitron-Master-Key": made.masterKey.masterKey,
+              "X-Waitron-Master-Key-Name": encodeURIComponent(made.masterKey.masterKeyName),
+            }),
       });
     });
   });

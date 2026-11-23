@@ -14,11 +14,18 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { loadKeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  masterKeyCheckValue,
+  masterKeyName,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import {
   CORE_CHANGE_SOURCES,
   insertRecoveryPack,
   installChangeFeed,
+  insertMasterKey,
+  masterKeys,
   readRecoveryPacks,
   removeChangeFeed,
   setNodePublicKey,
@@ -42,7 +49,7 @@ import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
-import { AppError, type ResourceIdentity } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, type ResourceIdentity } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
@@ -530,6 +537,84 @@ describe("a made pack", () => {
         detail: { keyName: carried.name, personId: admin.personId },
         envelope: null,
       },
+    ]);
+  });
+
+  const storedMasterKeys = () => suite.db.select().from(masterKeys).orderBy(masterKeys.number);
+  const shownMasterKey = (response: Response) => ({
+    masterKey: response.headers.get("x-waitron-master-key"),
+    masterKeyName: decodeURIComponent(response.headers.get("x-waitron-master-key-name") ?? ""),
+  });
+
+  it("Make a new master key also makes a new box key, and answers the master key it saved", async () => {
+    const f = fixture();
+    const response = await f.make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("replaced");
+    const { masterKey, masterKeyName: name } = shownMasterKey(response);
+    const bytes = decodeMasterKeyCode(masterKey!);
+    expect(masterKey).toBe(encodeMasterKeyCode(bytes));
+    const publicKey = sealingPublicKey(bytes);
+    expect(name).toBe(masterKeyName(publicKey, "2026-10-30"));
+    expect(await storedMasterKeys()).toEqual([
+      {
+        number: 1,
+        name,
+        checkValue: masterKeyCheckValue(bytes),
+        publicKey: new Uint8Array(publicKey),
+        madeAt: new Date("2026-10-30T09:00:00.000Z"),
+        madeBy: admin.personId,
+      },
+    ]);
+    expect(JSON.stringify(logs)).not.toContain(masterKey!.slice(0, 9));
+    const again = shownMasterKey(await f.make(true));
+    const rows = await storedMasterKeys();
+    expect(rows.map((row) => [row.number, row.name])).toEqual([
+      [1, name],
+      [2, again.masterKeyName],
+    ]);
+  });
+
+  it("a pack without a new box key makes no master key", async () => {
+    const response = await fixture().make(false);
+    expect(response.status).toBe(200);
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toEqual([]);
+  });
+
+  it("a ticked pack whose box key is not replaced makes no master key", async () => {
+    const response = await fixture({ seats: 2 }).make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toEqual([]);
+  });
+
+  it("a failed node.db save after Make a new master key leaves the old key current", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    const f = fixture();
+    suite.node.run(
+      sql`create trigger refuse_box_key before update on box begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await f.make(true);
+    } finally {
+      suite.node.run(sql`drop trigger refuse_box_key`);
+    }
+    expect(refused.status).toBe(500);
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: old.name }]);
+    const retried = await f.make(true);
+    expect(retried.status).toBe(200);
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: old.name },
+      { number: 2, name: shownMasterKey(retried).masterKeyName },
     ]);
   });
 
