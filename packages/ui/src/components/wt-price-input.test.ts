@@ -50,14 +50,18 @@ test("unit-haspopup tells assistive technology what the unit button opens; witho
   expect(button().hasAttribute("aria-haspopup")).toBe(false);
 });
 
-test("the unit button paints its border and text from tokens", async () => {
+test("the unit button is a link-style control: text from the primary-text token, chevron from the text token, no border or fill", async () => {
   const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
-  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
-  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
   const button = el.shadowRoot!.querySelector("button.unit")!;
   const styles = getComputedStyle(button);
-  expect(styles.borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(styles.borderTopStyle).toBe("none");
+  expect(styles.backgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(styles.color).toBe("rgb(4, 5, 6)");
+  const icon = button.querySelector('wt-icon[name="chevron-down"]')!;
+  expect(icon).not.toBeNull();
+  expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
 });
 
 test("reflects the initial value into the native input", async () => {
@@ -874,17 +878,18 @@ test("hide-label makes the field box compact, the tap-target height", async () =
   expect(field(labelled).field.hasAttribute("data-compact")).toBe(false);
 });
 
-test("the unit button sits inside the field box at its trailing end, centred on it", async () => {
+test("the unit button sits inside the field box at its trailing end, its label on the amount's line", async () => {
   const el = await mount(
-    '<wt-price-input label="Price" unit="kg" style="width: 300px"></wt-price-input>',
+    '<wt-price-input label="Price" unit="kg" value="9.00" style="width: 300px"></wt-price-input>',
   );
   host.style.setProperty("--wt-space-1", "5px");
   const box = field(el).field.getBoundingClientRect();
-  const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+  const unit = button.getBoundingClientRect();
   expect(box.right - unit.right).toBe(5);
-  expect(unit.top).toBeGreaterThan(box.top);
-  expect(unit.bottom).toBeLessThan(box.bottom);
-  expect(Math.abs(unit.top + unit.height / 2 - (box.top + box.height / 2))).toBeLessThanOrEqual(1);
+  expect(unit.top).toBeGreaterThanOrEqual(box.top);
+  expect(unit.bottom).toBeLessThanOrEqual(box.bottom);
+  expect(Math.abs(baselineIn(button) - amountBaseline(field(el).input))).toBeLessThanOrEqual(1);
 });
 
 test("a long label never runs under the unit button", async () => {
@@ -1009,16 +1014,19 @@ test("a fixed unit is drawn as text with no box of its own", async () => {
   expect(unit.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
-test("the unit button is its own rounded box inside the field, with the tap-target size", async () => {
-  const el = await mount('<wt-price-input unit="kg"></wt-price-input>');
-  host.style.setProperty("--wt-radius-md", "7px");
-  host.style.setProperty("--wt-tap-min", "47px");
-  const unit = el.shadowRoot!.querySelector("button.unit")!;
-  const style = getComputedStyle(unit);
-  expect([style.borderStartStartRadius, style.borderEndStartRadius]).toEqual(["7px", "7px"]);
-  expect(style.borderInlineStartWidth).toBe("1px");
-  expect(unit.getBoundingClientRect().height).toBe(47);
-});
+test.each(["", "hide-label"])(
+  "the unit button's hit area is at least the tap-target size and clear of the amount (%s)",
+  async (hide) => {
+    const el = await mount(
+      `<wt-price-input label="Price" unit="kg" value="9.00" ${hide}></wt-price-input>`,
+    );
+    host.style.setProperty("--wt-tap-min", "47px");
+    const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
+    expect(unit.height).toBeGreaterThanOrEqual(47);
+    expect(unit.width).toBeGreaterThanOrEqual(47);
+    expect(unit.left).toBeGreaterThanOrEqual(field(el).input.getBoundingClientRect().right);
+  },
+);
 
 test("a disabled field's fixed unit is muted, as its value is", async () => {
   const el = await mount(

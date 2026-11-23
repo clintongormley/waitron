@@ -5,6 +5,7 @@ import { WtInput, type InputFieldDecoration } from "@waitron/ui-core/components/
 import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import { disabledStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import "./wt-icon.js";
 
 const initialCurrencyMeasurements = new Map<Element, (width: number) => void>();
 
@@ -131,13 +132,20 @@ export class WtPriceInput extends WtInput {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-1);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
+        padding: var(--wt-space-2);
+        border: 0;
         border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
+        background: none;
+        color: var(--wt-color-primary-text);
         font: inherit;
+        font-weight: var(--wt-font-weight-bold);
+        text-wrap: nowrap;
         cursor: pointer;
+      }
+
+      button.unit wt-icon {
+        margin-inline-start: var(--wt-space-2);
+        vertical-align: middle;
       }
 
       /* The amount's text sits below the field's middle by half the difference of its block
@@ -259,7 +267,7 @@ export class WtPriceInput extends WtInput {
         ?disabled=${this.disabled}
         @click=${this.onUnitClick}
       >
-        ${this.unit}
+        ${this.unit}${this.unit ? html`<wt-icon name="chevron-down"></wt-icon>` : nothing}
       </button>`;
     return this.unit
       ? html`<span id=${this.unitId} class="unit" part="unit">${this.unit}</span>`
