@@ -2075,7 +2075,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     expect(withoutRules(printed.slice(start))).toEqual([
       "TOTAL 60,00 €",
       "Tipo Base IVA Total",
-      "21% 49,58 10,42 60,00",
+      "10% 54,54 5,46 60,00",
       "Tarjeta 30,00 €",
       "Devolución -10,00 €",
       "Efectivo 20,00 €",

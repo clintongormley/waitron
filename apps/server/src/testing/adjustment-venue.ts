@@ -545,7 +545,12 @@ function roundLines(venue: AdjustmentVenue, lines: RoundLine[]): TabRoundLine[] 
 export async function billWith(
   venue: AdjustmentVenue,
   lines: RoundLine[],
-  opts: { release?: "fire" | "hold"; operatorId?: string; shape?: "grouped" } = {},
+  opts: {
+    release?: "fire" | "hold";
+    operatorId?: string;
+    shape?: "grouped";
+    dining?: "takeaway";
+  } = {},
 ): Promise<{ partyId: string; billId: string; revision: number }> {
   const operatorId = opts.operatorId ?? venue.staffId;
   const release = opts.release ?? "fire";
@@ -560,6 +565,12 @@ export async function billWith(
       operatorId,
     });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, operatorId);
+    if (opts.dining !== undefined) {
+      await tx
+        .update(workingOrders)
+        .set({ dining: opts.dining })
+        .where(eq(workingOrders.id, seated.tabId));
+    }
     if (lines.length > 0 && opts.shape === "grouped") {
       await placeGrouped(tx, venue.cfg, seated, roundLines(venue, lines), release, operatorId);
     } else if (lines.length > 0) {

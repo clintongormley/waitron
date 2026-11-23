@@ -96,8 +96,8 @@ describe("listDeferredPaymentInvoices", () => {
         closedOn: days.closedLater,
         recipientName: null,
         recipientTaxId: null,
-        base: "14.88",
-        vat: "3.12",
+        base: "16.36",
+        vat: "1.64",
         total: "18.00",
         correctedBy: [],
         correctionsTotal: "0.00",
@@ -133,8 +133,8 @@ describe("listDeferredPaymentInvoices", () => {
     expect(await list(days.closedLater!, days.closedLater!)).toEqual([
       expect.objectContaining({
         invoiceNumber: "A/1",
-        base: "14.88",
-        vat: "3.12",
+        base: "16.36",
+        vat: "1.64",
         total: "18.00",
         correctedBy: ["R/1"],
         correctionsTotal: "-1.21",
