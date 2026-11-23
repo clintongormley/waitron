@@ -150,9 +150,9 @@ Si la copia cambia antes de hacer el cambio, la página vuelve a **Preparando el
 supera su comprobación al elegir **Cambiar a este servidor**, la página también vuelve allí: elige
 **Volver a intentarlo** o **Subir un archivo de copia de seguridad en su lugar**.
 
-Al recargar o abrir la dirección en otro dispositivo se encuentra el cambio
-empezado; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
-ofrece su página de progreso. Si no se puede verificar la copia con la declaración, para y
+Una vez elegido **Cambiar a este servidor**, al recargar o abrir la dirección en otro
+dispositivo se encuentra el cambio; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
+ofrece su página de progreso. Si no se puede verificar la copia con el cambio guardado, para y
 conserva los datos de ambos servidores.
 
 Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.

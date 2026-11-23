@@ -1851,8 +1851,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "No se ha podido verificar que la descripción de la copia final venga del servidor antiguo. Revisa la lista de servidores en el servidor principal actual antes de volver a intentarlo.",
   },
   "handover.copy_mismatch": {
-    en: "This copy has not been confirmed for this handover. A controlled handover fetches it again. After an emergency restart, repeat the declaration to check it again; a changed copy cannot activate a saved declaration.",
-    es: "Esta copia no está confirmada para este traspaso. Un traspaso controlado vuelve a pedirla. Tras reiniciar durante una emergencia, repite la declaración para comprobarla; una copia que haya cambiado no puede activar una declaración guardada.",
+    en: "This copy has not been confirmed for this handover. A controlled handover fetches it again. After an emergency restart, the switch page checks the copy again; a changed copy cannot start a saved switch.",
+    es: "Esta copia no está confirmada para este traspaso. Un traspaso controlado vuelve a pedirla. Tras reiniciar durante una emergencia, la página de cambio vuelve a comprobar la copia; una copia que haya cambiado no puede iniciar un cambio guardado.",
   },
   "handover.copy_damaged": {
     en: "This copy failed its database check. A controlled handover requests another copy, but that cannot repair invalid data on the old box. If the checks keep failing, use the emergency procedure with a working backup.",
@@ -1927,16 +1927,16 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor no ha podido terminar de comprobar la copia, así que no ha tomado el relevo. Un traspaso controlado lo reintenta solo. En una emergencia, elige Volver a intentarlo en la página de cambio o usa una copia de seguridad válida.",
   },
   "handover.source_still_answering": {
-    en: "The old box still answers. Switch it off before declaring an emergency handover, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",
-    es: "El servidor antiguo sigue respondiendo. Apágalo antes de declarar un traspaso de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este servidor lo sustituye.",
+    en: "The old box still answers. Switch it off before an emergency switch, or use a controlled handover. Before activation, it must be off or confirm that this box replaces it.",
+    es: "El servidor antiguo sigue respondiendo. Apágalo antes de un cambio de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este servidor lo sustituye.",
   },
   "handover.source_not_established": {
     en: "The old box's status could not be established. Switch it off at the plug, check its address and connection, then try again.",
     es: "No se ha podido determinar el estado del servidor antiguo. Desenchúfalo, comprueba su dirección y conexión y vuelve a intentarlo.",
   },
   "handover.controlled_unresolved": {
-    en: "This box has an unfinished handover that an emergency declaration cannot replace. Resume that handover before starting another.",
-    es: "Este servidor tiene un traspaso sin terminar que una declaración de emergencia no puede sustituir. Reanuda ese traspaso antes de iniciar otro.",
+    en: "This box has an unfinished handover that an emergency switch cannot replace. Resume that handover before starting another.",
+    es: "Este servidor tiene un traspaso sin terminar que un cambio de emergencia no puede sustituir. Reanuda ese traspaso antes de iniciar otro.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

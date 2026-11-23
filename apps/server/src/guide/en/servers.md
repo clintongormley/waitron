@@ -140,10 +140,10 @@ latest sale or order, choose **Proceed** and tick the three statements again. If
 check when you choose **Switch to this box**, the page goes back there too: choose **Try again** or
 **Upload a backup file instead**.
 
-Reloading or
-opening the address on another device finds the switch you started; sign in and continue with the
+Once you have chosen **Switch to this box**, reloading or
+opening the address on another device finds the switch; sign in and continue with the
 clock check. An unfinished controlled handover offers its own progress page. If the copy cannot
-be verified against the declaration, stop and keep both boxes’ data intact.
+be verified against the saved switch, stop and keep both boxes’ data intact.
 
 If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 

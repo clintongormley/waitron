@@ -296,7 +296,6 @@ export class SetupHandoverScreen extends LitElement {
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
   }
-  /** Whether another copy (a backup) can be chosen instead of this one. */
   get #offersOtherCopy(): boolean {
     return this.#isEmergency && !this.#declared && this.controlledOperationId === undefined;
   }
