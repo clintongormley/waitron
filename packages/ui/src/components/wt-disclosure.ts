@@ -300,6 +300,8 @@ export class WtDisclosure extends LitElement {
     this.animationFrame = requestAnimationFrame(() => {
       if (generation !== this.animationGeneration) return;
       body.style.height = `${targetHeight}px`;
+      // A body that stopped being drawn starts no transition, so no event would ever settle it.
+      if (!this.heightTransitionRunning(body)) this.finishAnimation(body);
     });
     if (this.open) {
       this.contentObserver = new ResizeObserver(() => {
@@ -319,6 +321,25 @@ export class WtDisclosure extends LitElement {
   private onBodyTransitionEnd(event: TransitionEvent): void {
     if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
     this.finishAnimation(event.currentTarget as HTMLElement);
+  }
+
+  private heightTransitionRunning(body: HTMLElement): boolean {
+    return body
+      .getAnimations()
+      .some(
+        (animation) =>
+          animation instanceof CSSTransition && animation.transitionProperty === "height",
+      );
+  }
+
+  /** A transition is cancelled when a parent stops being drawn, and also when a newer toggle or a
+   * content resize retargets it; only the first leaves no height transition running. */
+  private onBodyTransitionCancel(event: TransitionEvent): void {
+    if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
+    const body = event.currentTarget as HTMLElement;
+    if (!body.classList.contains("animating")) return;
+    if (this.heightTransitionRunning(body)) return;
+    this.finishAnimation(body);
   }
 
   private onToggle(event: Event): void {
@@ -372,6 +393,7 @@ export class WtDisclosure extends LitElement {
           ?inert=${!this.open}
           aria-hidden=${this.open ? "false" : "true"}
           @transitionend=${this.onBodyTransitionEnd}
+          @transitioncancel=${this.onBodyTransitionCancel}
         >
           <slot></slot>
         </div>

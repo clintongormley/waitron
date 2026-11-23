@@ -906,6 +906,77 @@ test("closing waits for the body to finish before showing the summary", async ()
   expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
 });
 
+function frames(count: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const step = () => (--count === 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  });
+}
+
+async function mountClosingInWrapper() {
+  await mount(
+    '<div class="wrapper"><wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure></div>',
+  );
+  const wrapper = host.querySelector<HTMLElement>(".wrapper")!;
+  const el = wrapper.querySelector("wt-disclosure")!;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  return { wrapper, el, body };
+}
+
+test("a close cut short by its parent being hidden still shows the summary when the parent returns", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  wrapper.style.display = "none";
+  await frames(2);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("a close whose parent is hidden before its height starts to move still shows the summary when the parent returns", async () => {
+  const { wrapper, el, body } = await mountClosingInWrapper();
+  wrapper.style.display = "none";
+  await frames(3);
+  wrapper.style.display = "";
+  await frames(2);
+  await el.updateComplete;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.hidden).toBe(true);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).not.toBeNull();
+});
+
+test("the cancelled close a reopen replaces does not cut the reopening short", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" summary="BAR" open><div style="height: 200px">body</div></wt-disclosure>',
+  )) as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  const cancelled = new Promise((resolve) =>
+    body.addEventListener("transitioncancel", resolve, { once: true }),
+  );
+  el.open = true;
+  await el.updateComplete;
+  const reopening = await pauseHeightTransition(body, closing);
+  reopening.currentTime = Number(reopening.effect!.getTiming().duration) / 2;
+  await cancelled;
+  await frames(2);
+  expect(body.classList.contains("animating")).toBe(true);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  await finishHeightTransition(body, reopening);
+  expect(body.getBoundingClientRect().height).toBe(200);
+  expect(el.shadowRoot!.querySelector("[part=summary]")).toBeNull();
+});
+
 test("under reduced motion the summary shows as soon as the section closes", async () => {
   await commands.emulateReducedMotion("reduce");
   try {
