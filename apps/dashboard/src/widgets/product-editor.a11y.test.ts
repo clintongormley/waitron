@@ -484,7 +484,7 @@ describe.each(["light", "dark"] as const)("product editor with help on (%s)", (t
       },
       theme,
     );
-    for (const section of ["price", "details"]) {
+    for (const section of ["details"]) {
       const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
         `wt-disclosure[data-section="${section}"]`,
       )!;

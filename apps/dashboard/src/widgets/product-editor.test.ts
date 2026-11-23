@@ -198,42 +198,130 @@ const categories: CategorySummary[] = [
   { id: "plates", name: "Plates", parentId: null, color: null },
 ];
 
-it.each([false, true])("A647 starts consistent sections with variants=%s", async (hasVariants) => {
-  const el = await mountPricing({ ...saved, variants: hasVariants ? [small] : [] });
-  const folds = [
-    ...el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-disclosure"]>(
-      ".form > wt-disclosure",
-    ),
-  ];
-  expect(folds.map((fold) => fold.dataset.section)).toEqual([
-    "details",
-    "price",
-    "variants",
-    "modifiers",
-  ]);
-  expect(folds.map((fold) => fold.open)).toEqual([false, !hasVariants, hasVariants, false]);
-  expect(folds.every((fold) => fold.ruled)).toBe(true);
-  for (const fold of folds) {
-    await fold.updateComplete;
-    const title = fold.shadowRoot!.querySelector(".title")!;
-    expect(getComputedStyle(title).borderBottomWidth).toBe("1px");
-  }
-  await input(el, "name", "Draft coffee");
-  expect(folded(el, "details").open).toBe(false);
-  expect(folded(el, "price").open).toBe(!hasVariants);
-});
+it.each([false, true])(
+  "A647 starts Details folded and keeps price, variants and extras open with variants=%s",
+  async (hasVariants) => {
+    const el = await mountPricing({ ...saved, variants: hasVariants ? [small] : [] });
+    const folds = [...el.shadowRoot!.querySelectorAll(".form wt-disclosure")];
+    expect(folds.map((fold) => (fold as HTMLElement).dataset.section)).toEqual(["details"]);
+    expect(folded(el, "details").open).toBe(false);
+    await input(el, "name", "Draft coffee");
+    expect(folded(el, "details").open).toBe(false);
+    expect(group(el, "price").querySelector("[name=unit-price]")).not.toBeNull();
+  },
+);
 
-it("A647 keeps attached modifiers open and summarises their names when closed", async () => {
+it("A647 shows attached modifiers with no click", async () => {
   const el = await mountPricing(
     { ...saved, modifiers: [{ kind: "extras", id: "sauces" }] },
     {
       extraLists: [{ id: "sauces", name: "Sauces" }],
     },
   );
-  const fold = folded(el, "modifiers");
-  expect(fold).not.toBeNull();
-  expect(fold.open).toBe(true);
-  expect(fold.summary).toContain("Sauces");
+  const modifiers = group(el, "modifiers");
+  expect(modifiers.closest("wt-disclosure")).toBeNull();
+  expect(modifiers.querySelector("[data-test=modifier-name]")!.textContent).toContain("Sauces");
+});
+
+it("orders the form as three cards: identity, Details, then price with variants and extras", async () => {
+  const el = await mountPricing(saved);
+  const form = el.shadowRoot!.querySelector(".form")!;
+  expect([...form.children].map((child) => (child as HTMLElement).dataset.section)).toEqual([
+    "identity",
+    "details",
+    "price",
+  ]);
+  const identity = form.querySelector('[data-section="identity"]')!;
+  expect([...identity.children].map((child) => (child as HTMLElement).dataset.section)).toEqual([
+    "categories",
+    "name",
+    "available",
+  ]);
+  const price = form.querySelector('[data-section="price"]')!;
+  expect([...price.children].map((child) => (child as HTMLElement).dataset.group)).toEqual([
+    "price",
+    "variants",
+    "modifiers",
+  ]);
+  expect(ownText(group(el, "variants").querySelector("legend")!)).toBe(t("editor.variants"));
+  expect(group(el, "modifiers").querySelector("legend")!.textContent!.trim()).toBe(
+    t("editor.modifiers"),
+  );
+  expect(
+    [...form.querySelectorAll("wt-disclosure")].map(
+      (fold) => (fold as HTMLElement).dataset.section,
+    ),
+  ).toEqual(["details"]);
+  cleanupWidgets();
+  const variant = await mountVariant();
+  const variantPrice = variant.shadowRoot!.querySelector('.form > [data-section="price"]')!;
+  expect([...variantPrice.children].map((child) => (child as HTMLElement).dataset.group)).toEqual([
+    "price",
+  ]);
+});
+
+it("the editor draws three cards on a grey dialog", async () => {
+  const el = await mountPricing(saved);
+  el.style.setProperty("--wt-color-bg", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-space-4", "16px");
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector(".form")!;
+  const cards = [...form.children] as HTMLElement[];
+  expect(cards[0]!.matches('wt-card[raised][data-section="identity"]')).toBe(true);
+  expect(cards[1]!.matches('wt-disclosure[card][data-section="details"]')).toBe(true);
+  expect(cards[1]!.hasAttribute("ruled")).toBe(false);
+  expect(cards[2]!.matches('wt-card[raised][data-section="price"]')).toBe(true);
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  expect(getComputedStyle(modal).getPropertyValue("--wt-dialog-surface").trim()).toBe(
+    "rgb(1, 2, 3)",
+  );
+  for (let index = 1; index < cards.length; index++)
+    expect(
+      cards[index]!.getBoundingClientRect().top - cards[index - 1]!.getBoundingClientRect().bottom,
+    ).toBe(16);
+});
+
+it.each([
+  { label: "active variants", variants: [small] },
+  { label: "neither variants nor extras", variants: [] },
+])("price, variants and extras are always on screen ($label)", async ({ variants }) => {
+  const el = await mountPricing({ ...saved, variants });
+  for (const field of [
+    "[name=unit-price]",
+    "[data-test=add-variant]",
+    "wt-combobox[name=modifier]",
+  ]) {
+    const control = el.shadowRoot!.querySelector<HTMLElement>(field)!;
+    expect(control, field).not.toBeNull();
+    expect(control.closest("wt-disclosure"), field).toBeNull();
+    expect(control.getBoundingClientRect().height, field).toBeGreaterThan(0);
+  }
+  if (variants.length)
+    expect(el.shadowRoot!.querySelector("dashboard-variant-table")).not.toBeNull();
+});
+
+it("Details shows one summary row per group that has something set", async () => {
+  const el = await mountPricing(
+    {
+      ...saved,
+      kitchenName: "BAR",
+      customerName: { en: "House coffee" },
+      description: { en: "Freshly roasted" },
+      allergens: null,
+      takeawayVatRate: "4.00",
+      ordering: "public",
+    },
+    { takeawayVat: true, vatRates: pickableRates },
+  );
+  const rows = folded(el, "details").summaryRows;
+  expect(rows.map(({ fields }) => fields.map(({ label }) => label))).toEqual([
+    [t("editor.kitchen_name")],
+    [t("editor.customer_name"), t("editor.description")],
+    [t("modifiers.allergens")],
+    [t("editor.takeaway_vat")],
+  ]);
+  expect(rows[2]!.fields[0]!.warning).toBe(true);
+  expect(rows.every(({ lines }) => lines === 2)).toBe(true);
 });
 
 it("A647 offers three visible ordering choices and only the selected explanation inside Details", async () => {
@@ -314,9 +402,21 @@ function folded(el: ProductEditor, name: string) {
     `wt-disclosure[data-section="${name}"]`,
   )!;
 }
-/** The named values a section's closed line shows. */
+/** The named values a section's closed line shows, every row's in order. */
 function summaryOf(el: ProductEditor, name: string) {
-  return folded(el, name).summaryFields;
+  return folded(el, name).summaryRows.flatMap(({ fields }) => fields);
+}
+/** An element's own text, leaving out what a help badge inside it says. */
+function ownText(element: Element): string {
+  return [...element.childNodes]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join("")
+    .trim();
+}
+/** A group inside a card: the price card's price, variants and modifiers. */
+function group(el: ProductEditor, name: string) {
+  return el.shadowRoot!.querySelector<HTMLElement>(`[data-group="${name}"]`)!;
 }
 /** The labels each group inside Details contributes to its closed line. */
 const DETAILS_PART_LABELS = {
@@ -754,10 +854,9 @@ it("shuts only the chooser on Escape, leaving the unit and the editor as they we
   expect(reachedScreen).not.toHaveBeenCalled();
 });
 
-it("opens the chooser over a saved product's shut Pricing section from the variant table's heading, and returns focus there", async () => {
+it("opens the chooser from a saved product's variant table heading, and returns focus there", async () => {
   await atDesktopWidth(async () => {
     const el = await mountPricing({ ...saved, variants: [small, large] }, { units: [unit, kg] });
-    expect(pricing(el).open).toBe(false);
     const table = variantTable(el)!;
     await table.updateComplete;
     table.shadowRoot!.querySelector<HTMLElement>('[data-test="pricing-unit"]')!.click();
@@ -958,12 +1057,18 @@ it("renders the sections in the designed order, with VAT in Details", async () =
     units: [unit],
     dineInVatRate: "10.00",
   });
-  el.style.setProperty("--wt-space-5", "24px");
+  el.style.setProperty("--wt-space-4", "16px");
   expect(
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".form > [data-section]")].map(
       (node) => node.dataset.section,
     ),
-  ).toEqual(["categories", "name", "available", "details", "price", "variants", "modifiers"]);
+  ).toEqual(["identity", "details", "price"]);
+  expect(
+    [...section(el, "identity").children].map((node) => (node as HTMLElement).dataset.section),
+  ).toEqual(["categories", "name", "available"]);
+  expect(
+    [...section(el, "price").children].map((node) => (node as HTMLElement).dataset.group),
+  ).toEqual(["price", "variants", "modifiers"]);
   const groups = [
     ...section(el, "details").querySelectorAll<HTMLFieldSetElement>("fieldset[data-group]"),
   ];
@@ -985,12 +1090,11 @@ it("renders the sections in the designed order, with VAT in Details", async () =
   ]);
   const vat = groups.find((group) => group.dataset.group === "vat")!;
   expect(vat.querySelector("[data-test=dine-in-vat]")).not.toBeNull();
-  const pricing = section(el, "price");
+  const pricing = group(el, "price");
   expect(pricing.querySelector("[name=unit-price]")).not.toBeNull();
   expect(pricing.querySelector("wt-combobox")).toBeNull();
-  expect(pricing.getAttribute("heading")).toBe(t("editor.pricing"));
-  expect(parseFloat(getComputedStyle(pricing).borderTopWidth)).toBe(0);
-  expect(getComputedStyle(el.shadowRoot!.querySelector(".form")!).rowGap).toBe("24px");
+  expect(pricing.querySelector(".group-label, legend")).toBeNull();
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".form")!).rowGap).toBe("16px");
 });
 
 it("Details starts closed on an existing product and open on a new one", async () => {
@@ -1084,7 +1188,10 @@ it("a variant's page has no Ordering group and keeps Available under Name", asyn
   const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".form > [data-section]")].map(
     (node) => node.dataset.section,
   );
-  expect(sections).toEqual(["categories", "name", "available", "details", "price"]);
+  expect(sections).toEqual(["identity", "details", "price"]);
+  expect(
+    [...section(el, "identity").children].map((node) => (node as HTMLElement).dataset.section),
+  ).toEqual(["categories", "name", "available"]);
   expect(section(el, "available").querySelector("[name=available]")).not.toBeNull();
   expect(section(el, "details").querySelector('fieldset[data-group="ordering"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("[name=ordering]")).toBeNull();
@@ -1098,15 +1205,14 @@ it("with neither a dine-in rate nor takeaway VAT, Details has no VAT group", asy
   );
 });
 
-it("the takeaway VAT appears in Details' line, not Pricing's", async () => {
+it("the takeaway VAT appears in Details' line, not in the price card", async () => {
   const el = await mountPricing(
     { ...saved, takeawayVatRate: "10.00" },
     { takeawayVat: true, vatRates: ["10.00", "21.00"] },
   );
   const takeaway = { label: t("editor.takeaway_vat"), value: vatRateText("10.00") };
   expect(summaryOf(el, "details")).toContainEqual(takeaway);
-  expect(summaryOf(el, "price")).not.toContainEqual(takeaway);
-  expect(summaryOf(el, "price").map(({ label }) => label)).toEqual([t("editor.base_price")]);
+  expect(section(el, "price").textContent).not.toContain(t("editor.takeaway_vat"));
 });
 
 it("keeps the staff name, customer name, description and kitchen name independent", async () => {
@@ -2085,6 +2191,9 @@ it("keeps an attached row's click from reaching the row around its button", asyn
 
 it("reorders attached rows when the handle is dragged with the pointer, asking for no editor", async () => {
   const { el, edits } = await mountTwoAttached();
+  // The rows sit below the price and variants; brought to the middle, the drop is not under the
+  // dialog's footer.
+  openModifier(el, "options:cooked").scrollIntoView({ block: "center" });
   await userEvent.dragAndDrop(
     attachedRow(el, "extras:sauces").querySelector<HTMLElement>(
       '[data-test="drag-extras:sauces"]',
@@ -2307,7 +2416,6 @@ const addModifier = (el: ProductEditor) =>
  * `wt-change` dispatched AT the control never moves the control's own `value`, so a test that
  * dispatches one cannot see what the control reads afterwards. */
 async function chooseModifier(el: ProductEditor, label: string) {
-  await openSection(el, "modifiers");
   const combobox = addModifier(el);
   await combobox.updateComplete;
   combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
@@ -2406,7 +2514,6 @@ it.each([1280, 390])(
         extraLists,
         optionLists,
       });
-      await openSection(el, "modifiers");
       const combobox = addModifier(el);
       await combobox.updateComplete;
       combobox.scrollIntoView({ block: "center" });
@@ -2459,7 +2566,6 @@ it("returns focus to the Modifiers control after every nested form it can open",
     extraLists,
     optionLists,
   });
-  await openSection(el, "modifiers");
   const combobox = addModifier(el);
   // Both kinds of modifier list are added from the ONE combobox, so both return focus to it.
   for (const kind of ["extras", "options"] as const) {
@@ -2808,7 +2914,9 @@ it("shows a product's category as its path, first in the window, with Change and
   expect(link.label).toBe(t("editor.classification"));
   expect(linkPath(link)).toBe(cocktailsPath);
   const form = el.shadowRoot!.querySelector(".form")!;
-  expect(form.firstElementChild!.getAttribute("data-section")).toBe("categories");
+  expect(form.firstElementChild!.firstElementChild!.getAttribute("data-section")).toBe(
+    "categories",
+  );
   expect(form.firstElementChild!.contains(link)).toBe(true);
   expect(el.shadowRoot!.querySelectorAll('wt-combobox[name="primary"]')).toHaveLength(1);
   expect(el.shadowRoot!.querySelector("[data-test=add-category]")).toBeNull();
@@ -2943,7 +3051,9 @@ it("shows a variant's product's path as plain text, with no Change, and saves no
   expect(el.shadowRoot!.querySelector('wt-combobox[name="primary"]')).toBeNull();
   expect(variantPath(el)).toBe(`${t("editor.classification")}: ${cocktailsPath}`);
   const form = el.shadowRoot!.querySelector(".form")!;
-  expect(form.firstElementChild!.getAttribute("data-section")).toBe("categories");
+  expect(form.firstElementChild!.firstElementChild!.getAttribute("data-section")).toBe(
+    "categories",
+  );
   await edit(el);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -4123,7 +4233,6 @@ it("puts focus on Add variant when Remove drops the only variant and the table g
     locales: ["en"],
     units: [unit],
   });
-  await openSection(el, "variants");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
   await el.updateComplete;
   const fresh: EditorVariant = { ...small, name: "Fresh" };
@@ -4287,7 +4396,7 @@ it("titles a variant's page as a variant, with no Modifiers and no Variants sect
   expect(el.shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).toBe(
     t("editor.edit_variant_of").replace("{name}", "Coffee"),
   );
-  expect(section(el, "modifiers")).toBeNull();
+  expect(group(el, "modifiers")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-variant]")).toBeNull();
   expect(variantTable(el)).toBeNull();
 });
@@ -4929,7 +5038,6 @@ it.each(
       // the table opens the same chooser.
       const unitSelect = table.shadowRoot!.querySelector('[data-test="pricing-unit"]')!;
       expect(unitSelect.getClientRects()).toHaveLength(0);
-      await openSection(el, "price");
       const unitButton = el
         .shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!
         .shadowRoot!.querySelector("button.unit")!
@@ -5472,13 +5580,11 @@ async function mountPricing(value: ProductEditorDraft, props: Partial<ProductEdi
     })
   ).el;
 }
-type Fold = HTMLElement & {
-  open: boolean;
-  hasError: boolean;
-  summaryFields: { label: string; value: string }[];
-  updateComplete: Promise<unknown>;
-};
-const pricing = (el: ProductEditor) => section(el, "price") as unknown as Fold;
+const priceField = (el: ProductEditor) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>("[name=unit-price]")!;
+/** Whether a control takes up room on screen, so a person sees it without opening anything. */
+const onScreen = (element: Element) =>
+  element.closest("wt-disclosure") === null && element.getBoundingClientRect().height > 0;
 const takeawayOnDetails = (el: ProductEditor) =>
   summaryOf(el, "details").filter(({ label }) => label === t("editor.takeaway_vat"));
 const showInactiveLink = (el: ProductEditor) =>
@@ -5486,39 +5592,45 @@ const showInactiveLink = (el: ProductEditor) =>
 const followsInDocument = (first: Element, second: Element) =>
   Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-it("keeps consecutive closed Product editor sections close enough to read as one form", async () => {
+it("keeps the closed Details card one card gap above the price card", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
-  const assertGap = (before: string, after: string) => {
-    const first = folded(el, before);
-    const next = folded(el, after);
-    const summary = first.shadowRoot!.querySelector('[part="summary"]')!;
-    const heading = next.shadowRoot!.querySelector(".heading")!;
-    const textGap = heading.getBoundingClientRect().top - summary.getBoundingClientRect().bottom;
-    expect(next.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      first.getBoundingClientRect().bottom,
-    );
-    expect(textGap).toBeGreaterThanOrEqual(24);
-    expect(textGap).toBeLessThanOrEqual(42);
-  };
-  assertGap("details", "price");
+  el.style.setProperty("--wt-space-4", "16px");
+  const details = folded(el, "details").getBoundingClientRect();
+  const price = section(el, "price").getBoundingClientRect();
+  expect(price.top - details.bottom).toBe(16);
 });
 
-it("keeps normal section spacing when Details opens", async () => {
+it("keeps the card gap when Details opens", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
-  el.style.setProperty("--wt-space-5", "24px");
+  el.style.setProperty("--wt-space-4", "16px");
   await openSection(el, "details");
   const details = folded(el, "details").getBoundingClientRect();
-  const price = folded(el, "price").getBoundingClientRect();
-  expect(price.top - details.bottom).toBe(24);
+  const price = section(el, "price").getBoundingClientRect();
+  expect(price.top - details.bottom).toBe(16);
 });
 
-it("separates Add variant from the Modifiers heading", async () => {
+it("separates the price, Variants and Modifiers groups by the gap between groups", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
-  const add = section(el, "variants").querySelector("[data-test=add-variant]")!;
-  const heading = section(el, "modifiers").shadowRoot!.querySelector(".heading")!;
-  const gap = heading.getBoundingClientRect().top - add.getBoundingClientRect().bottom;
-  expect(gap).toBeGreaterThanOrEqual(20);
-  expect(gap).toBeLessThanOrEqual(40);
+  el.style.setProperty("--wt-space-6", "32px");
+  el.style.setProperty("--wt-space-2", "8px");
+  const price = group(el, "price").getBoundingClientRect();
+  const variants = group(el, "variants").getBoundingClientRect();
+  const modifiers = group(el, "modifiers").getBoundingClientRect();
+  expect(variants.top - price.bottom).toBe(40);
+  expect(modifiers.top - variants.bottom).toBe(40);
+});
+
+it("puts Details' groups the gap between groups apart", async () => {
+  const el = await mountPricing(saved);
+  el.style.setProperty("--wt-space-6", "32px");
+  el.style.setProperty("--wt-space-2", "8px");
+  await openSection(el, "details");
+  const groups = [
+    ...folded(el, "details").querySelectorAll<HTMLElement>("fieldset[data-group]"),
+  ].map((node) => node.getBoundingClientRect());
+  expect(groups.length).toBeGreaterThan(1);
+  for (let index = 1; index < groups.length; index++)
+    expect(groups[index]!.top - groups[index - 1]!.bottom).toBe(40);
 });
 
 it("names the offered lists and menus before saving a product unit change", async () => {
@@ -5586,41 +5698,34 @@ it("drops a unit-usage reply after the editor is reseeded for another product", 
   expect(el.shadowRoot!.querySelector("[data-test=unit-usage-warning]")).toBeNull();
 });
 
-it("draws Pricing with no box, headed like the editor's other open sections, VAT in Details", async () => {
+it("draws the price field with no group label in the price card, VAT in Details", async () => {
   const el = await mountPricing(saved);
-  const section = pricing(el);
-  expect(section.tagName).toBe("WT-DISCLOSURE");
-  expect(section.open).toBe(true);
-  const style = getComputedStyle(section);
-  expect([style.borderTopWidth, style.borderInlineStartWidth]).toEqual(["0px", "0px"]);
-  const heading = section.shadowRoot!.querySelector(".heading")!;
-  expect(heading.textContent!.trim()).toBe(t("editor.pricing"));
-  const modifiers = section
-    .parentElement!.querySelector('[data-section="modifiers"]')!
-    .shadowRoot!.querySelector(".heading")!;
-  for (const property of ["fontSize", "fontWeight", "textTransform", "color"] as const)
-    expect(getComputedStyle(heading)[property], property).toBe(
+  const price = group(el, "price");
+  expect(price.closest('[data-section="price"]')!.tagName).toBe("WT-CARD");
+  expect(price.querySelector(".group-label, legend")).toBeNull();
+  const variants = group(el, "variants").querySelector("legend")!;
+  const modifiers = group(el, "modifiers").querySelector("legend")!;
+  const kitchen = folded(el, "details").querySelector('[data-group="kitchen"] > legend')!;
+  for (const property of ["fontSize", "fontWeight", "textTransform", "color"] as const) {
+    expect(getComputedStyle(variants)[property], property).toBe(
       getComputedStyle(modifiers)[property],
     );
-  expect(section.querySelector("[name=unit-price]")).not.toBeNull();
-  expect(section.querySelector("[data-test=dine-in-vat]")).toBeNull();
+    expect(getComputedStyle(variants)[property], property).toBe(
+      getComputedStyle(kitchen)[property],
+    );
+  }
+  expect(price.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(price.querySelector("[data-test=dine-in-vat]")).toBeNull();
   expect(folded(el, "details").querySelector("[data-test=dine-in-vat]")).not.toBeNull();
 });
 
-it("folds Pricing once the product has an active variant, its closed line the base price", async () => {
+it("keeps the base price on screen once the product has an active variant", async () => {
   const el = await mountPricing({ ...saved, variants: [small, large] });
-  const fold = pricing(el);
-  expect(fold.tagName).toBe("WT-DISCLOSURE");
-  expect(fold.getAttribute("heading")).toBe(t("editor.pricing"));
-  expect(fold.open).toBe(false);
-  expect(fold.summaryFields).toEqual([
-    {
-      label: t("editor.base_price"),
-      value: `${formatMoney("9.00", currentLocale())} ${t("editor.per_unit").replace("{unit}", "ea")}`,
-    },
-  ]);
-  expect(fold.querySelector("[name=unit-price]")).not.toBeNull();
-  expect(fold.querySelector("[data-test=dine-in-vat]")).toBeNull();
+  const field = priceField(el);
+  expect(onScreen(field)).toBe(true);
+  expect(field.getAttribute("label")).toBe(fill("editor.base_price_unit", { unit: "ea" }));
+  expect(field.value).toBe("9.00");
+  expect(group(el, "price").querySelector("[data-test=dine-in-vat]")).toBeNull();
 });
 
 it("adds a takeaway VAT rate of its own to the closed Details line, and leaves an empty one out", async () => {
@@ -5647,51 +5752,48 @@ it("leaves a takeaway VAT rate the form does not offer off the closed Details li
   expect(takeawayOnDetails(el)).toEqual([]);
 });
 
-it.each([
-  { locale: "en-GB", line: "Base price: €9.00 each" },
-  { locale: "es-ES", line: "Precio base: 9,00 € la unidad" },
-])("writes the folded Pricing line in $locale, with no unit as each", async ({ locale, line }) => {
-  setLocale(locale as "en-GB" | "es-ES");
-  try {
-    const el = await mountPricing({ ...saved, unitId: null, variants: [small] });
-    const fold = pricing(el);
-    await fold.updateComplete;
-    expect(
-      fold.shadowRoot!.querySelector(".summary")!.textContent!.replace(/\s+/g, " ").trim(),
-    ).toBe(line.replace(/\s+/g, " "));
-  } finally {
-    setLocale("es-ES");
-  }
-});
+it.each(["en-GB", "es-ES"] as const)(
+  "labels the base price in %s, with no unit as each",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      const el = await mountPricing({ ...saved, unitId: null, variants: [small] });
+      const field = priceField(el);
+      expect(onScreen(field)).toBe(true);
+      expect(field.getAttribute("label")).toBe(t("editor.base_price"));
+      expect(field.getAttribute("unit")).toBe(t("editor.unit_each"));
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
 
-it("writes a typed price holding a replacement pattern into the folded Pricing line as written", async () => {
+it("keeps a typed price holding a replacement pattern as written", async () => {
   const el = await mountPricing({ ...saved, unitId: null, variants: [small] });
   await input(el, "unit-price", "1$&");
-  expect(pricing(el).summaryFields[0]).toEqual({
-    label: t("editor.base_price"),
-    value: t("editor.price_each").split("{price}").join("1$&"),
-  });
+  expect(el.currentValue.unitPrice).toBe("1$&");
+  expect(onScreen(priceField(el))).toBe(true);
 });
 
-it("leaves a blank base price off the folded line", async () => {
+it("shows a blank base price as an empty field on screen", async () => {
   const el = await mountPricing({
     ...saved,
     unitPrice: "",
     variants: [small],
   });
-  expect(pricing(el).summaryFields).toEqual([]);
+  expect(priceField(el).value).toBe("");
+  expect(onScreen(priceField(el))).toBe(true);
 });
 
-it("keeps Pricing open while every variant is Inactive, since the price is then the product's own", async () => {
+it("labels the price as the product's own while every variant is Inactive", async () => {
   const el = await mountPricing({ ...saved, variants: [{ ...small, active: false }] });
-  expect(pricing(el).tagName).toBe("WT-DISCLOSURE");
-  expect(pricing(el).open).toBe(true);
+  expect(onScreen(priceField(el))).toBe(true);
   expect(el.shadowRoot!.querySelector("[name=unit-price]")!.getAttribute("label")).toBe(
     t("editor.price_unit").replace("{unit}", "ea"),
   );
 });
 
-it("folds Pricing when a variant is added to a saved product, and opens it when the variant goes", async () => {
+it("keeps the price on screen when a variant is added to a saved product, and when it goes", async () => {
   const el = await mountPricing(saved);
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
   await el.updateComplete;
@@ -5701,39 +5803,30 @@ it("folds Pricing when a variant is added to a saved product, and opens it when 
     new CustomEvent("wt-submit", { detail: { value: fresh }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  expect(pricing(el).tagName).toBe("WT-DISCLOSURE");
-  expect(pricing(el).open).toBe(false);
+  expect(onScreen(priceField(el))).toBe(true);
+  expect(priceField(el).getAttribute("label")).toBe(fill("editor.base_price_unit", { unit: "ea" }));
   await tableEvent(el, "wt-remove", { index: 0 });
-  expect(pricing(el).tagName).toBe("WT-DISCLOSURE");
-  expect(pricing(el).open).toBe(true);
+  expect(onScreen(priceField(el))).toBe(true);
+  expect(priceField(el).getAttribute("label")).toBe(fill("editor.price_unit", { unit: "ea" }));
 });
 
-it("starts Pricing closed on an unsaved product with variants and honours a later opening", async () => {
+it("shows the price on an unsaved product with variants, and keeps it there through edits", async () => {
   const el = await mountPricing({ ...product, variants: [small] });
-  const fold = pricing(el);
-  expect(fold.tagName).toBe("WT-DISCLOSURE");
-  expect(fold.open).toBe(false);
-  // A manual opening survives edits to another field.
-  fold.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
-  await fold.updateComplete;
+  expect(onScreen(priceField(el))).toBe(true);
   await input(el, "name", "Coffee to go");
-  expect(pricing(el).open).toBe(true);
+  expect(onScreen(priceField(el))).toBe(true);
 });
 
 it.each(["unit-price", "unit"])(
-  "opens the folded Pricing section when the server refuses %s",
+  "puts focus in the price field when the server refuses %s",
   async (name) => {
     const el = await mountPricing(
       { ...saved, variants: [small] },
       { takeawayVat: true, vatRates: pickableRates },
     );
-    expect(pricing(el).open).toBe(false);
     el.fieldErrors = { [name]: "Refused" };
     await el.updateComplete;
-    const fold = pricing(el);
-    await fold.updateComplete;
-    expect(fold.hasError).toBe(true);
-    expect(fold.open).toBe(true);
+    expect(priceField(el).error).toContain("Refused");
     await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
   },
 );
@@ -5754,35 +5847,32 @@ it("says a refused takeaway rate above Save where the area charges no takeaway V
   expect(await bottomOf(el)).toBe("Refused rate");
 });
 
-it("opens the folded Pricing section when Save finds the base price invalid", async () => {
+it("shows the base price's error on screen when Save finds it invalid", async () => {
   const el = await mountPricing({ ...saved, variants: [small] });
   await input(el, "unit-price", "abc");
   save(el);
   await el.updateComplete;
-  const fold = pricing(el);
-  await fold.updateComplete;
-  expect(fold.open).toBe(true);
+  expect(onScreen(priceField(el))).toBe(true);
   expect(errorOf(el, "unit-price")).toBe(t("editor.price_invalid"));
 });
 
-it("draws the variants in their own section under Pricing, always open, ending with Add variant", async () => {
+it("draws the variants in their own group after the price, ending with Add variant", async () => {
   const el = await mountPricing({ ...saved, variants: [small, large] });
-  const variants = section(el, "variants");
-  expect(variants.tagName).toBe("WT-DISCLOSURE");
-  expect(variants.open).toBe(true);
-  expect(variants.getAttribute("heading")).toBe(t("editor.variants"));
+  const variants = group(el, "variants");
+  expect(variants.tagName).toBe("FIELDSET");
+  expect(ownText(variants.querySelector("legend")!)).toBe(t("editor.variants"));
   expect(variants.querySelector("dashboard-variant-table")).not.toBeNull();
-  expect(pricing(el).querySelector("dashboard-variant-table")).toBeNull();
-  expect(followsInDocument(pricing(el), variants)).toBe(true);
+  expect(group(el, "price").querySelector("dashboard-variant-table")).toBeNull();
+  expect(followsInDocument(group(el, "price"), variants)).toBe(true);
   const table = variants.querySelector("dashboard-variant-table")!;
   const add = variants.querySelector("[data-test=add-variant]")!;
   expect(followsInDocument(table, add)).toBe(true);
 });
 
-it("makes the Variants section the Add variant button alone while there are no variants", async () => {
+it("makes the Variants group its heading and the Add variant button alone while there are no variants", async () => {
   const el = await mountPricing(saved);
-  const variants = section(el, "variants");
-  expect(variants.querySelector(".group-label")).toBeNull();
+  const variants = group(el, "variants");
+  expect(variants.querySelectorAll(":scope > :not(legend, .row)")).toHaveLength(0);
   expect(variants.querySelector("dashboard-variant-table")).toBeNull();
   expect(variants.querySelector("[data-test=add-variant]")).not.toBeNull();
   expect(showInactiveLink(el)).toBeNull();
@@ -5802,7 +5892,7 @@ it.each(["en-GB", "es-ES"])(
         ),
       ).toEqual(["row-0"]);
       expect(showInactiveLink(el)).toBeNull();
-      expect(section(el, "variants").querySelector("[data-test=add-variant]")).not.toBeNull();
+      expect(group(el, "variants").querySelector("[data-test=add-variant]")).not.toBeNull();
       await tableEvent(el, "wt-remove", { index: 0 });
       await table.updateComplete;
       expect(table.shadowRoot!.querySelector("[data-test=inactive-0]")).not.toBeNull();
@@ -5848,15 +5938,13 @@ it("keeps focus on the only saved row after Archive so Keep remains reachable", 
   expect(table.shadowRoot!.querySelector("[data-test=restore-0]")).not.toBeNull();
 });
 
-it("draws a variant's page with Pricing open, VAT in Details, and no Variants section", async () => {
+it("draws a variant's page with the price on screen, VAT in Details, and no Variants group", async () => {
   const el = await mountVariant();
-  const section = pricing(el);
-  expect(section.tagName).toBe("WT-DISCLOSURE");
-  expect(section.open).toBe(true);
-  expect(section.getAttribute("heading")).toBe(t("editor.pricing"));
-  expect(section.querySelector("[name=unit-price]")).not.toBeNull();
+  const price = group(el, "price");
+  expect(price.querySelector("[name=unit-price]")).not.toBeNull();
+  expect(onScreen(priceField(el))).toBe(true);
   expect(folded(el, "details").querySelector("[data-test=dine-in-vat]")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-section="variants"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-group="variants"]')).toBeNull();
 });
 
 // --- The photo, beside Name ---
@@ -6134,7 +6222,8 @@ it.each([
       details.open = false;
       await details.updateComplete;
       const summary = details.shadowRoot!.querySelector(".summary")!;
-      expect(summary.textContent!.replace(/\s+/g, " ").trim().startsWith(`${line} · `)).toBe(true);
+      const first = summary.querySelector(".summary-row")!;
+      expect(first.textContent!.replace(/\s+/g, " ").trim()).toBe(line);
       expect(summary.querySelectorAll(".summary-label")).toHaveLength(
         summaryOf(el, "details").length,
       );
@@ -6185,11 +6274,12 @@ it("draws the Descriptors line as named values, only the field names marked as n
   const descriptors = folded(el, "details");
   descriptors.open = false;
   await descriptors.updateComplete;
-  expect(descriptors.shadowRoot!.querySelectorAll(".summary-row")).toHaveLength(0);
-  const summary = descriptors.shadowRoot!.querySelector<HTMLElement>(".summary")!;
-  expect(
-    [...summary.querySelectorAll(".summary-label")].map((label) => label.textContent).slice(1, 3),
-  ).toEqual([`${t("editor.customer_name")}:`, `${t("editor.description")}:`]);
+  const rows = descriptors.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row");
+  expect(rows.length).toBeGreaterThan(1);
+  const summary = rows[1]!;
+  expect([...summary.querySelectorAll(".summary-label")].map((label) => label.textContent)).toEqual(
+    [`${t("editor.customer_name")}:`, `${t("editor.description")}:`],
+  );
   // The language codes are plain text: only the field names are marked.
   expect(summary.textContent).toContain("EN: ");
 });
@@ -6224,10 +6314,14 @@ async function foldedLine(el: ProductEditor): Promise<string> {
   const fold = folded(el, "details");
   fold.open = false;
   await fold.updateComplete;
-  const summary = fold.shadowRoot!.querySelector(".summary")!.cloneNode(true) as HTMLElement;
-  for (const value of summary.querySelectorAll(".summary-placeholder"))
-    value.textContent = `[${value.textContent}]`;
-  return summary.textContent!.replace(/\s+/g, " ").trim();
+  return [...fold.shadowRoot!.querySelectorAll(".summary-row")]
+    .map((row) => {
+      const copy = row.cloneNode(true) as HTMLElement;
+      for (const value of copy.querySelectorAll(".summary-placeholder"))
+        value.textContent = `[${value.textContent}]`;
+      return copy.textContent!.replace(/\s+/g, " ").trim();
+    })
+    .join(" · ");
 }
 
 it.each([
@@ -6287,14 +6381,11 @@ it("Ordering appears only when it is not Anyone", async () => {
   });
 });
 
-it("Variants and Modifiers show no summary line when empty", async () => {
+it("Variants and Modifiers never fold, so they have no summary line", async () => {
   const el = await mountPricing({ ...saved, variants: [], modifiers: [] });
   for (const name of ["variants", "modifiers"]) {
-    const fold = folded(el, name);
-    expect(fold.summary, name).toBe("");
-    fold.open = false;
-    await fold.updateComplete;
-    expect(fold.shadowRoot!.querySelector(".summary"), name).toBeNull();
+    expect(group(el, name).tagName, name).toBe("FIELDSET");
+    expect(group(el, name).closest("wt-disclosure"), name).toBeNull();
   }
 });
 
@@ -6322,7 +6413,7 @@ it("a variant's Details line shows inherited values in italic", async () => {
   for (const value of drawn) expect(getComputedStyle(value).fontStyle).toBe("italic");
 });
 
-it("a long Details line is cut after two lines at phone width", async () => {
+it("each Details row is cut after two lines at phone width", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   const long = (word: string) => Array.from({ length: 40 }, () => word).join(" ");
@@ -6333,6 +6424,7 @@ it("a long Details line is cut after two lines at phone width", async () => {
       open: true,
       value: {
         ...saved,
+        kitchenName: long("grill"),
         customerName: { en: long("tenderloin"), es: long("solomillo") },
         description: { en: long("seared") },
       },
@@ -6344,11 +6436,12 @@ it("a long Details line is cut after two lines at phone width", async () => {
     details.open = false;
     await details.updateComplete;
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    // The cut is drawn by the summary part; the inline line inside it still measures every line.
-    const summary = details.shadowRoot!.querySelector<HTMLElement>('[part="summary"]')!;
-    expect(summary.querySelector(".summary")!.getBoundingClientRect().height).toBeGreaterThan(41);
-    expect(summary.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(summary.getBoundingClientRect().height).toBeLessThanOrEqual(41);
+    const rows = [...details.shadowRoot!.querySelectorAll<HTMLElement>(".summary-row")];
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) {
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(0);
+      expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(41);
+    }
     const dialog = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
   } finally {
@@ -6605,27 +6698,22 @@ it("ignores a previous product's image-picker return after reseeding", async () 
   expect(next.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });
 
-it("reopens manually closed Variants for a refused row and focuses its action", async () => {
+it("focuses a refused variant row's action", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small] },
     locales: ["en"],
     units: [unit],
   });
-  const fold = section(el, "variants");
-  fold.open = false;
-  await fold.updateComplete;
   el.fieldErrors = { [productEditorField("variants.0.unitPrice", "en")!]: "Refused price" };
   await el.updateComplete;
-  await fold.updateComplete;
-  expect(fold.open).toBe(true);
   const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
   await expect
     .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
     .toBe("actions-0");
 });
 
-it("reopens manually closed Modifiers for a refused attachment and focuses its control", async () => {
+it("focuses the Modifiers control for a refused attachment", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
@@ -6634,13 +6722,8 @@ it("reopens manually closed Modifiers for a refused attachment and focuses its c
     extraLists,
     optionLists,
   });
-  const fold = section(el, "modifiers");
-  fold.open = false;
-  await fold.updateComplete;
   el.fieldErrors = { modifier: "Refused list" };
   await el.updateComplete;
-  await fold.updateComplete;
-  expect(fold.open).toBe(true);
   await expect.poll(() => el.shadowRoot!.activeElement).toBe(addModifier(el));
   expect(addModifier(el).error).toBe("Refused list");
 });
@@ -6780,9 +6863,11 @@ describe("help mode", () => {
   function field(el: ProductEditor, name: string) {
     return el.shadowRoot!.querySelector<HTMLElement & { label: string }>(`[name="${name}"]`)!;
   }
+  function variantsLegend(el: ProductEditor) {
+    return group(el, "variants").querySelector("legend")!;
+  }
   async function mountOpen(value: ProductEditorDraft = saved) {
     const el = await mountPricing(value, { courses: [{ id: "course-1", name: "Starters" }] });
-    await openSection(el, "price");
     await openSection(el, "details");
     return el;
   }
@@ -6800,14 +6885,14 @@ describe("help mode", () => {
         expect(field(el, "unit-price").label.startsWith(label)).toBe(true);
         const hosts = [
           ...HELPED.map(({ name, key }) => ({ host: field(el, name), key })),
-          { host: folded(el, "variants"), key: "help.products.variants" as const },
+          { host: variantsLegend(el), key: "help.products.variants" as const },
         ];
         for (const { host } of hosts) expect((await badgeOf(host)).checkVisibility()).toBe(false);
         setHelpMode(true);
         for (const { host, key } of hosts) {
           const badge = await badgeOf(host);
           const part =
-            host.localName === "wt-disclosure"
+            host.localName === "legend"
               ? t("editor.variants")
               : (host as HTMLElement & { label: string }).label;
           expect(badge.checkVisibility()).toBe(true);
@@ -6847,7 +6932,7 @@ describe("help mode", () => {
       const linked = [
         { host: field(el, "unit-price"), href: "/help/en/products#selling-unit" },
         { host: field(el, "product-course"), href: "/help/en/products#course" },
-        { host: folded(el, "variants"), href: "/help/en/products#variants" },
+        { host: variantsLegend(el), href: "/help/en/products#variants" },
       ];
       for (const { host, href } of linked) {
         const badge = await badgeOf(host);
@@ -6878,12 +6963,12 @@ describe("help mode", () => {
       ...HELPED.map(({ name }) =>
         field(el, name).shadowRoot!.querySelector("[part=field]")!.getBoundingClientRect().toJSON(),
       ),
-      folded(el, "variants").shadowRoot!.querySelector(".head")!.getBoundingClientRect().toJSON(),
+      variantsLegend(el).getBoundingClientRect().toJSON(),
     ];
     const off = boxes();
     setHelpMode(true);
     for (const { name } of HELPED) await badgeOf(field(el, name));
-    await badgeOf(folded(el, "variants"));
+    await badgeOf(variantsLegend(el));
     await new Promise(requestAnimationFrame);
     expect(boxes()).toEqual(off);
   });
@@ -6953,8 +7038,7 @@ it.each([
       { ...saved, modifiers: [{ kind: "extras", id: "sauces" }] },
       { units: [{ ...unit, ...facts }], extraLists },
     );
-    await openSection(el, "modifiers");
-    expect(section(el, "modifiers").textContent).toContain(
+    expect(group(el, "modifiers").textContent).toContain(
       "The till will not offer extras for this dish because of its unit.",
     );
     await edit(el);
@@ -6975,9 +7059,8 @@ it("updates the extras notice as units change, including Each and a missing choi
       ],
       extraLists,
     });
-    await openSection(el, "modifiers");
     const note = () =>
-      section(el, "modifiers").textContent!.includes(
+      group(el, "modifiers").textContent!.includes(
         "El TPV no ofrecerá extras para este plato por su unidad.",
       );
     expect(note()).toBe(false);

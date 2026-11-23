@@ -15,7 +15,8 @@ function nutritionSummary(el: ProductEditor) {
     .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
       'wt-disclosure[data-section="details"]',
     )!
-    .summaryFields.filter(({ label }) => labels.includes(label));
+    .summaryRows.flatMap(({ fields }) => fields)
+    .filter(({ label }) => labels.includes(label));
 }
 
 registerIcons(DASHBOARD_ICONS);
