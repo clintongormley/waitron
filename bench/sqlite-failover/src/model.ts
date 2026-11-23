@@ -31,7 +31,7 @@ BEGIN SELECT RAISE(ABORT, 'records is append-only'); END;
 CREATE TABLE IF NOT EXISTS chain_head (
   node_id TEXT PRIMARY KEY, last_secuencia INTEGER NOT NULL, last_huella TEXT NOT NULL
 );
--- MODEL of verifactu_submissions (+ acks folded to \`acked\`). Submission state; child of records.
+-- MODEL of verifactu_submissions. The acked flag marks a recorded filing reply.
 CREATE TABLE IF NOT EXISTS envios (
   node_id TEXT NOT NULL, secuencia INTEGER NOT NULL,
   estado TEXT NOT NULL CHECK (estado IN ('pendiente','enviando','enviado')),
@@ -740,9 +740,8 @@ export function fence(db: NodeDb): void {
 /**
  * MODEL of A1018's fiscal-only return batch (plan, Formats → "Return batch"): what a returning box
  * sends the box that replaced it. There is no field for sales, sale lines or supplier invoices, so
- * the batch cannot carry a business row. `acks` are folded into `envios.acked`, as everywhere in
- * this model. `returnedFromEnviando` names the rows the builder carried as `pendiente` that the
- * sender held `enviando`.
+ * the batch cannot carry a business row. `returnedFromEnviando` names the rows the builder carried
+ * as `pendiente` that the sender held `enviando`.
  */
 export type ReturnBatch = {
   records: RecordRow[];

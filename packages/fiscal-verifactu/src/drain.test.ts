@@ -808,6 +808,17 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(rows.rows[0]?.estado).toBe("aceptado"); // despite the outer Incorrecto on the 3000 line
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
+    expect(
+      (
+        await suite.db.execute(sql`
+        select registro_id, json_extract(data, '$.by') as writer,
+          json_extract(data, '$.csv') as previous_csv
+        from verifactu_history where kind = 'aeat.answer_cleared'
+      `)
+      ).rows,
+    ).toEqual([
+      { registro_id: seeded.registroIds[0], writer: "drain", previous_csv: "CSV-00000001" },
+    ]);
 
     const inc = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string }>(sql`select code from incidents`),
