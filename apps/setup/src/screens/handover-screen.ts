@@ -181,7 +181,7 @@ export class SetupHandoverScreen extends LitElement {
         margin-block: var(--wt-space-4);
         padding: var(--wt-space-3) var(--wt-space-4);
         border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
+        background: var(--wt-color-surface-lifted);
       }
       .fact h2 {
         margin: 0 0 var(--wt-space-2);
@@ -195,13 +195,9 @@ export class SetupHandoverScreen extends LitElement {
       .note {
         color: var(--wt-color-text-muted);
       }
-      /* Full-width buttons in the card, without the held row's strip. */
-      .stack {
+      /* The message stays above the full-width buttons below it, without the held row's strip. */
+      .in-place {
         --wt-form-actions-in-place: true;
-      }
-      .stack wt-form-actions > wt-button,
-      .stack wt-form-actions > a.button {
-        flex: 1 1 100%;
       }
       a,
       summary {
@@ -1347,54 +1343,53 @@ export class SetupHandoverScreen extends LitElement {
       }
       ${preview && this.signInOpen ? this.#signInFields() : nothing}
       ${this.backupOpen ? this.#backupFields() : nothing}
-      <div class="stack">
-        <wt-form-actions .error=${this.#formError}>
-          ${
-            this.backup
+      <div class="in-place"><wt-form-actions .error=${this.#formError}></wt-form-actions></div>
+      <div class="choices">
+        ${
+          this.backup
+            ? html`<wt-button
+                data-test="emergency-backup"
+                .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)}
+                variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"}
+                @click=${() => void this.#selectBackup()}
+                >${t("handover.emergency.use_backup")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          held
+            ? html`<wt-button
+                data-test="emergency-held"
+                .disabled=${this.busy || !this.#valid()}
+                variant=${this.#valid() && !this.backup ? "primary" : "secondary"}
+                @click=${() => void this.#useHeldCopy()}
+                >${t("handover.emergency.use_held")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          preview
+            ? html`<wt-button
+                data-test="proceed"
+                .disabled=${this.busy || this.copyRefused}
+                variant=${this.backup || this.copyRefused ? "secondary" : "primary"}
+                @click=${() => {
+                  this.proceeded = true;
+                  this.actionError = "";
+                  void this.#focusHeading();
+                }}
+                >${t("handover.emergency.proceed")}</wt-button
+              >`
+            : refused
               ? html`<wt-button
-                  data-test="emergency-backup"
-                  .disabled=${this.busy || !this.#valid() || (this.needsBackupKey && !this.backupKey)}
-                  variant=${this.#valid() && (!this.needsBackupKey || this.backupKey) ? "primary" : "secondary"}
-                  @click=${() => void this.#selectBackup()}
-                  >${t("handover.emergency.use_backup")}</wt-button
+                  data-test="emergency-preview"
+                  .disabled=${!this.#valid()}
+                  variant=${this.#valid() && !this.backup && !held ? "primary" : "secondary"}
+                  @click=${() => void this.#previewCopy()}
+                  >${t("handover.try_again")}</wt-button
                 >`
               : nothing
-          }
-          ${
-            held
-              ? html`<wt-button
-                  data-test="emergency-held"
-                  .disabled=${this.busy || !this.#valid()}
-                  variant=${this.#valid() && !this.backup ? "primary" : "secondary"}
-                  @click=${() => void this.#useHeldCopy()}
-                  >${t("handover.emergency.use_held")}</wt-button
-                >`
-              : nothing
-          }
-          ${
-            preview
-              ? html`<wt-button
-                  data-test="proceed"
-                  .disabled=${this.busy || this.copyRefused}
-                  variant=${this.backup || this.copyRefused ? "secondary" : "primary"}
-                  @click=${() => {
-                    this.proceeded = true;
-                    this.actionError = "";
-                    void this.#focusHeading();
-                  }}
-                  >${t("handover.emergency.proceed")}</wt-button
-                >`
-              : refused
-                ? html`<wt-button
-                    data-test="emergency-preview"
-                    .disabled=${!this.#valid()}
-                    variant=${this.#valid() && !this.backup && !held ? "primary" : "secondary"}
-                    @click=${() => void this.#previewCopy()}
-                    >${t("handover.try_again")}</wt-button
-                  >`
-                : nothing
-          }
-        </wt-form-actions>
+        }
       </div>
       ${
         backupOffered
@@ -1487,17 +1482,16 @@ export class SetupHandoverScreen extends LitElement {
           }}
         ></wt-textarea>
       </section>
-      <div class="stack">
-        <wt-form-actions .error=${this.#formError}>
-          <wt-button
-            data-test="emergency-declare"
-            .disabled=${this.busy || !this.#validDeclaration() || this.copyRefused}
-            variant=${this.#validDeclaration() && !this.copyRefused ? "danger" : "secondary"}
-            @click=${() => void this.#declareEmergency()}
-            >${t("handover.emergency.declare")}</wt-button
-          >
-          <a class="button" data-test="go-back" href=${this.#leaveHref}>${t(this.#leaveLabel)}</a>
-        </wt-form-actions>
+      <div class="in-place"><wt-form-actions .error=${this.#formError}></wt-form-actions></div>
+      <div class="choices">
+        <wt-button
+          data-test="emergency-declare"
+          .disabled=${this.busy || !this.#validDeclaration() || this.copyRefused}
+          variant=${this.#validDeclaration() && !this.copyRefused ? "danger" : "secondary"}
+          @click=${() => void this.#declareEmergency()}
+          >${t("handover.emergency.declare")}</wt-button
+        >
+        <a class="button" data-test="go-back" href=${this.#leaveHref}>${t(this.#leaveLabel)}</a>
       </div>
       ${this.refusalLink ? html`<p><a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a></p>` : nothing}`;
   }
