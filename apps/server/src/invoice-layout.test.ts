@@ -1103,6 +1103,141 @@ describe("layoutA4Invoice", () => {
     expectNoOverlapOrOverflow("three pages", pages);
   });
 
+  /** Checks a closing block too tall for any one page: the summary and TOTAL share a page, every
+   *  later page opens with the numbered continued heading, and the footer message on the last
+   *  page sits below everything else. */
+  const expectContinuedClosing = (name: string, pages: readonly InvoicePage[]): void => {
+    expectNoOverlapOrOverflow(name, pages);
+    const pageOf = (value: string): number =>
+      pages.findIndex((page) => texts(page.elements).some((text) => text.text === value));
+    expect(pageOf(labels.total), name).toBe(pageOf(labels.taxRateColumn));
+    expect(pageOf(labels.total), name).toBeLessThan(pages.length - 1);
+    for (const [index, page] of pages.entries()) {
+      if (index === 0) continue;
+      const opening = [...texts(page.elements)].sort((one, other) => one.y - other.y)[0]!;
+      expect(opening.text, name).toBe(
+        labels.continuedPage
+          .replace("{title}", `${labels.invoiceHeading} FF/1`)
+          .replace("{page}", String(index + 1))
+          .replace("{pages}", String(pages.length)),
+      );
+    }
+    const last = lastPage(pages);
+    const message = named(last, FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage!);
+    for (const element of last) {
+      if (element !== message) expect(area(element).bottom, name).toBeLessThan(message.y);
+    }
+  };
+
+  /** The PDF's text, page by page, with runs of white space made single spaces. */
+  const pdfTexts = async (input: ReceiptDocumentInput): Promise<string[]> => {
+    const bytes = await renderInvoicePdf(input);
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    const pdf = await loading.promise;
+    try {
+      const pages: string[] = [];
+      for (let number = 1; number <= pdf.numPages; number++) {
+        const content = await (await pdf.getPage(number)).getTextContent();
+        pages.push(
+          content.items
+            .flatMap((item) => ("str" in item ? [item.str] : []))
+            .join(" ")
+            .replace(/\s+/g, " "),
+        );
+      }
+      return pages;
+    } finally {
+      await loading.destroy();
+    }
+  };
+  const occurrences = (text: string, value: string): number => text.split(value).length - 1;
+
+  it("continues a payment list too long for a fresh page onto further numbered pages, drawing every payment", async () => {
+    const amounts = [...Array.from({ length: 74 }, () => "0.25"), "1.19"];
+    const expected = amounts.map((amount, index) =>
+      index === 0
+        ? `${labels.paid} · ${labels.cash} ${money(amount)}`
+        : `${labels.cash} ${money(amount)}`,
+    );
+    for (const practice of [false, true]) {
+      const name = practice ? "practice" : "real";
+      const input = fixture();
+      input.simulated = practice;
+      input.simulatedCardPayment = practice;
+      input.result.payments = amounts.map((amount) => ({
+        method: "cash" as const,
+        amount,
+        tip: "0.00",
+        tendered: amount,
+        change: "0.00",
+        refunds: [],
+      }));
+      const pages = layoutA4Invoice(input);
+      expectContinuedClosing(name, pages);
+      const drawn = pages.flatMap((page) =>
+        texts(page.elements)
+          .filter((text) => text.text.includes(labels.cash))
+          .map((text) => text.text),
+      );
+      expect(drawn, name).toEqual(expected);
+      if (practice) {
+        const last = lastPage(pages);
+        const notice = texts(last)
+          .filter((text) => text.text === labels.practice)
+          .at(-1)!;
+        expect(notice.y).toBeGreaterThan(named(last, expected.at(-1)!).y);
+        named(last, labels.noRealCharge);
+      }
+
+      const printed = await pdfTexts(input);
+      expect(printed, name).toHaveLength(pages.length);
+      const all = printed.join(" ");
+      expect(occurrences(all, labels.cash), name).toBe(amounts.length);
+      expect(printed.at(-1), name).toContain(money("1.19").replace(/\s+/g, " "));
+    }
+  });
+
+  it("continues 64 card payments onto further pages, every reference drawn and printed", async () => {
+    const reference = (index: number): string => `REF-${String(index + 1).padStart(2, "0")}`;
+    const input = fixture();
+    input.result.payments = Array.from({ length: 64 }, (_, index) => ({
+      method: "card" as const,
+      amount: "0.30",
+      tip: "0.00",
+      reference: reference(index),
+      card: { scheme: "visa", last4: "4034", entryMode: "chip" as const, authCode: "123456" },
+      refunds: [],
+    }));
+    const pages = layoutA4Invoice(input);
+    expectContinuedClosing("cards", pages);
+    const all = allElements(pages);
+    for (let index = 0; index < 64; index++) {
+      expect(
+        anyText(all, (text) => text.includes(`${labels.reference} ${reference(index)}`)),
+        reference(index),
+      ).toBe(true);
+    }
+    const printed = await pdfTexts(input);
+    expect(printed).toHaveLength(pages.length);
+    expect(printed.at(-1)).toContain(reference(63));
+    for (let index = 0; index < 64; index++) {
+      expect(occurrences(printed.join(" "), reference(index)), reference(index)).toBe(1);
+    }
+  });
+
+  it("continues a deferred bill's transfer details onto further pages when the bank name is too long for one", async () => {
+    const bankName = [...Array.from({ length: 1000 }, () => "Banco"), "FIN"].join(" ");
+    const input = deferredInput({ iban: ACCOUNT.iban, bankName });
+    const pages = layoutA4Invoice(input);
+    expectContinuedClosing("long bank name", pages);
+    const last = texts(lastPage(pages)).filter((text) => text.text.endsWith(" FIN"));
+    expect(last).toHaveLength(1);
+    expect(anyText(allElements(pages), (text) => text.includes(GROUPED))).toBe(true);
+    const printed = await pdfTexts(input);
+    expect(printed).toHaveLength(pages.length);
+    expect(printed.at(-1)).toContain("Banco FIN");
+  });
+
   it("keeps every element inside the right margin and no text over another, on every page", () => {
     const owed = fixture();
     owed.result.owed = "1.00";

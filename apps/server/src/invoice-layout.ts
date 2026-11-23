@@ -529,10 +529,25 @@ function paymentLines(facts: ReceiptFacts): Line[] {
   return [{ text: `${labels.paid}${CONTACT_SEPARATOR}${first!.text}` }, ...rest];
 }
 
-/** The VAT summary, TOTAL, guests and payment footer, laid out from y = 0. */
-function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; height: number } {
+/** Part of the closing block that is never split across pages, spanning `top` to `bottom`. */
+interface ClosingPiece {
+  elements: InvoicePageElement[];
+  top: number;
+  bottom: number;
+}
+
+/** The VAT summary, TOTAL, guests and payment footer, laid out from y = 0, in the pieces a page
+ *  may break between: the summary with TOTAL, the payment heading with its first line, each
+ *  further line, and the notice box. */
+function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
   const { labels, locale, total, simplified } = facts;
-  const elements: InvoicePageElement[] = [];
+  let elements: InvoicePageElement[] = [];
+  const pieces: ClosingPiece[] = [{ elements, top: 0, bottom: 0 }];
+  const piece = (top: number): void => {
+    pieces.at(-1)!.bottom = top;
+    elements = [];
+    pieces.push({ elements, top, bottom: top });
+  };
   const text = (
     value: string,
     x: number,
@@ -613,17 +628,22 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
     rightAt(`${people}${CONTACT_SEPARATOR}${labels.perPerson} ${money(each)}`, RIGHT, y, BODY_SIZE);
     y += lineHeight(BODY_SIZE);
   }
+  pieces[0]!.bottom = y;
 
   const lines = paymentLines(facts);
   if (lines.length > 0) {
     y += GAP;
+    piece(y);
     elements.push({ kind: "rule", x: MARGIN, y, width: TEXT_WIDTH, thickness: LIGHT_RULE });
     y += LIGHT_RULE + GAP;
     text(labels.paymentMethodHeading, MARGIN, y, BODY_SIZE, "bold");
     y += lineHeight(BODY_SIZE);
+    let headed = true;
     for (const line of lines) {
       const weight = line.bold === true ? "bold" : "regular";
       for (const part of wrapInvoiceParts(line.text, TEXT_WIDTH, BODY_SIZE, weight)) {
+        if (!headed) piece(y);
+        headed = false;
         text(part, MARGIN, y, BODY_SIZE, weight);
         y += lineHeight(BODY_SIZE);
       }
@@ -634,15 +654,18 @@ function layoutClosing(facts: ReceiptFacts): { elements: InvoicePageElement[]; h
     ...(facts.testPage === undefined ? [] : [labels.paymentNotice, facts.testPage.printer]),
   ];
   if (notices.length > 0) {
+    piece(y + GAP);
     const box = layoutNoticeBox(notices, y + GAP);
     elements.push(...box.elements);
     y = box.bottom;
   }
-  return { elements, height: y };
+  pieces.at(-1)!.bottom = y;
+  return pieces;
 }
 
 /** A whole A4 invoice: page 1's header, the item table over as many pages as it takes, then the
- *  closing block, kept whole on one page, and the footer message at the foot of the last page. */
+ *  closing block, kept whole on one page when it fits on one, and the footer message at the foot
+ *  of the last page. */
 export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
   const facts = receiptFacts(input);
   const header = layoutInvoiceHeader(facts, input.logo);
@@ -747,11 +770,29 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
       ? []
       : wrapInvoiceText(facts.footerMessage, TEXT_WIDTH, LABEL_SIZE);
   const messageHeight = message.length * lineHeight(LABEL_SIZE);
-  const closing = layoutClosing(facts);
+  const pieces = layoutClosing(facts);
+  const height = pieces.at(-1)!.bottom;
+  const foot = PAGE_FOOT - messageHeight - (message.length > 0 ? GAP : 0);
+  const place = (piece: ClosingPiece, offset: number): void => {
+    page.push(...piece.elements.map((element) => ({ ...element, y: element.y + offset })));
+  };
   y += 2 * GAP;
-  if (y + closing.height > PAGE_FOOT - messageHeight - (message.length > 0 ? GAP : 0)) newPage();
-  const offset = y;
-  page.push(...closing.elements.map((element) => ({ ...element, y: element.y + offset })));
+  if (y + height > foot && continuedTop + height <= foot) newPage();
+  if (y + height <= foot) {
+    const offset = y;
+    for (const piece of pieces) place(piece, offset);
+  } else {
+    // Too tall for any one page: every page keeps room for the footer message, since the last
+    // page is not known until the pieces are placed.
+    let offset = y;
+    for (const piece of pieces) {
+      if (piece.bottom + offset > foot) {
+        newPage();
+        offset = y - piece.top;
+      }
+      place(piece, offset);
+    }
+  }
   message.forEach((line, at) => {
     const top = PAGE_FOOT - (message.length - at) * lineHeight(LABEL_SIZE);
     const x = MARGIN + (TEXT_WIDTH - invoiceTextWidth(line, LABEL_SIZE)) / 2;
