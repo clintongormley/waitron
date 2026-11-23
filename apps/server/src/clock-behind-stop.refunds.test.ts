@@ -8,6 +8,7 @@ import { sales, refunds, tenders } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
+import { refundableCancel } from "./testing/cancel-line.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -75,7 +76,8 @@ function pay(app: Hono, billId: string, body: Record<string, unknown>) {
   return send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, body);
 }
 
-/** A Paella bill paid whole at `ms`, which files its invoice; answers the sale and its one tender. */
+/** A Paella bill paid whole at `ms`, which files its invoice, then its Paella cancelled for a
+ * refund; answers the sale, its one tender and the cancel. */
 async function soldAt(ms: number, method: "cash" | "card") {
   const billId = await tabWith(venue, "Paella");
   const paid = await pay(at(ms), billId, method === "cash" ? cashPart() : readerPart());
@@ -87,12 +89,16 @@ async function soldAt(ms: number, method: "cash" | "card") {
       .innerJoin(sales, eq(sales.id, tenders.saleId))
       .where(eq(sales.workingOrderId, billId)),
   );
-  return tender!;
+  return { ...tender!, cancellationId: await refundableCancel(venue.db, venue.cfg, billId, 1) };
 }
 
-const refundBody = (tenderId: string, submissionId: string = randomUUID()) => ({
+const refundBody = (
+  { tenderId, cancellationId }: { tenderId: string; cancellationId: string },
+  submissionId: string = randomUUID(),
+) => ({
   submissionId,
   tenderId,
+  cancellationIds: [cancellationId],
   appliedAmount: "5.00",
   tipAmount: "0.00",
   reason: "Overcharged",
@@ -124,8 +130,9 @@ function drawerJobs(): number {
 
 it("answers a finished refund's retry with its row", async () => {
   const now = nowMs();
-  const { saleId, tenderId } = await soldAt(now, "card");
-  const done = await tenderRefund(at(now), saleId, refundBody(tenderId));
+  const sold = await soldAt(now, "card");
+  const { saleId } = sold;
+  const done = await tenderRefund(at(now), saleId, refundBody(sold));
   expect(done.json).toMatchObject({ state: "completed" });
   const [row] = await tenderRefundRows(saleId);
   const sends = refundSends();
@@ -140,8 +147,9 @@ it("answers a finished refund's retry with its row", async () => {
 
 it("answers a finished refund's replay", async () => {
   const now = nowMs();
-  const { saleId, tenderId } = await soldAt(now, "cash");
-  const body = refundBody(tenderId);
+  const sold = await soldAt(now, "cash");
+  const { saleId } = sold;
+  const body = refundBody(sold);
   const done = await tenderRefund(at(now), saleId, body);
   expect(done.status).toBe(200);
   expect(done.json).toMatchObject({ state: "completed" });

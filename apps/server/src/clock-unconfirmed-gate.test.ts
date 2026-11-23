@@ -59,6 +59,7 @@ import {
   cancelReasonId,
   GIVE_AWAY_REASON,
   reasonIdOf,
+  refundableCancel,
   seedGivenAwayLine,
 } from "./testing/cancel-line.js";
 import { heldRow } from "./testing/held-row.js";
@@ -349,7 +350,7 @@ function billRefund(billId: string, paymentId: string) {
     as(app, "POST", `/api/working-orders/${billId}/payments/${paymentId}/refunds`, body);
 }
 
-/** A Paella bill paid whole, which files its sale; answers the sale and its one tender. */
+/** A Paella bill paid whole, which files its sale; answers the sale, its one tender and the bill. */
 async function soldWhole(method: "cash" | "card") {
   const { billId } = await billPaid(method === "cash" ? cashPart("35.00") : readerPart("35.00"));
   const [tender] = await inTx(venue, (tx) =>
@@ -359,7 +360,13 @@ async function soldWhole(method: "cash" | "card") {
       .innerJoin(sales, eq(sales.id, tenders.saleId))
       .where(eq(sales.workingOrderId, billId)),
   );
-  return tender!;
+  return { ...tender!, billId };
+}
+
+/** A Paella bill paid whole, then its Paella cancelled for a refund to name. */
+async function soldForRefund(method: "cash" | "card") {
+  const sold = await soldWhole(method);
+  return { ...sold, cancellationId: await refundableCancel(venue.db, venue.cfg, sold.billId, 1) };
 }
 
 /** The id of a correction of `gross`, opened on a new whole-cash sale with the split it previewed. */
@@ -382,10 +389,11 @@ async function openedCorrection(gross: string): Promise<string> {
   return (opened.json.correction as { id: string }).id;
 }
 
-function tenderRefund(saleId: string, tenderId: string) {
+function tenderRefund(saleId: string, tenderId: string, cancellationId: string) {
   const body = {
     submissionId: randomUUID(),
     tenderId,
+    cancellationIds: [cancellationId],
     appliedAmount: "5.00",
     tipAmount: "0.00",
     reason: "Overcharged",
@@ -603,12 +611,18 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     return { send: resend, grows: ["lookups"] };
   },
   "a new connected card tender refund": async () => {
-    const { saleId, tenderId } = await soldWhole("card");
-    return { send: tenderRefund(saleId, tenderId), grows: ["refunds", "refundSends"] };
+    const { saleId, tenderId, cancellationId } = await soldForRefund("card");
+    return {
+      send: tenderRefund(saleId, tenderId, cancellationId),
+      grows: ["refunds", "refundSends"],
+    };
   },
   "a new cash tender refund": async () => {
-    const { saleId, tenderId } = await soldWhole("cash");
-    return { send: tenderRefund(saleId, tenderId), grows: ["refunds", "drawerJobs"] };
+    const { saleId, tenderId, cancellationId } = await soldForRefund("cash");
+    return {
+      send: tenderRefund(saleId, tenderId, cancellationId),
+      grows: ["refunds", "drawerJobs"],
+    };
   },
   "a correction's cash leg": async () => {
     const correctionId = await openedCorrection("5.00");
@@ -634,16 +648,16 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     };
   },
   "a pending connected card tender refund sent again": async () => {
-    const { saleId, tenderId } = await soldWhole("card");
-    const resend = tenderRefund(saleId, tenderId);
+    const { saleId, tenderId, cancellationId } = await soldForRefund("card");
+    const resend = tenderRefund(saleId, tenderId, cancellationId);
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     expect((await resend(venue.app)).json).toMatchObject({ state: "pending" });
     return { send: resend, grows: ["lookups"] };
   },
   "the retry of a pending tender refund": async () => {
-    const { saleId, tenderId } = await soldWhole("card");
+    const { saleId, tenderId, cancellationId } = await soldForRefund("card");
     venue.card.scriptNextRefund({ made: false, answer: LOST });
-    const asked = await tenderRefund(saleId, tenderId)(venue.app);
+    const asked = await tenderRefund(saleId, tenderId, cancellationId)(venue.app);
     expect(asked.json).toMatchObject({ state: "pending" });
     const refundId = asked.json.id as string;
     return {
@@ -934,8 +948,8 @@ async function pendingRefund(kind: "bill" | "tender"): Promise<string> {
     expect(row!.state).toBe("pending");
     return row!.id;
   }
-  const { saleId, tenderId } = await soldWhole("card");
-  await tenderRefund(saleId, tenderId)(venue.app);
+  const { saleId, tenderId, cancellationId } = await soldForRefund("card");
+  await tenderRefund(saleId, tenderId, cancellationId)(venue.app);
   const [row] = await inTx(venue, (tx) =>
     tx
       .select({ id: refunds.id, state: refunds.state })
@@ -1160,8 +1174,8 @@ async function unmadeRefund(kind: "bill" | "tender"): Promise<RefundWait> {
     expect((await resend(venue.app)).json).toMatchObject({ refund: { state: "pending" } });
     return { run: ({ app }) => resend(app) };
   }
-  const { saleId, tenderId } = await soldWhole("card");
-  const asked = await tenderRefund(saleId, tenderId)(venue.app);
+  const { saleId, tenderId, cancellationId } = await soldForRefund("card");
+  const asked = await tenderRefund(saleId, tenderId, cancellationId)(venue.app);
   expect(asked.json).toMatchObject({ state: "pending" });
   const path = `/api/tender-refunds/${asked.json.id as string}/retry`;
   return { run: ({ app }) => as(app, "POST", path, { override: OVERRIDE() }) };
@@ -1188,8 +1202,8 @@ const refundWaits: Record<string, () => Promise<RefundWait>> = {
     return { run: ({ loop }) => recoverTenderRefunds(loop) };
   },
   "a new tender refund on the till": async () => {
-    const { saleId, tenderId } = await soldWhole("card");
-    const ask = tenderRefund(saleId, tenderId);
+    const { saleId, tenderId, cancellationId } = await soldForRefund("card");
+    const ask = tenderRefund(saleId, tenderId, cancellationId);
     return {
       during: "sendRefund",
       run: ({ app }) => ask(app),

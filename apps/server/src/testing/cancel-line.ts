@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   adjustmentReasons,
+  adjustments,
   createAdjustmentReason,
   type AdjustmentReasonInput,
 } from "@waitron/adjustments";
@@ -287,4 +288,42 @@ export async function cancelItemHttp(
 ) {
   const { path, body } = await cancelItemRequest(db, orderId, lineNo, quantity, overrides);
   return send(app, cookie, "POST", path, body);
+}
+
+/**
+ * Cancels all of line `lineNo` of a settled bill keeping its charge, with the Refund tick, through
+ * {@link cancelItem}, as Cancel and refund does; answers the cancel's id for a refund to name. A
+ * plain refund of a correctable ticket must name such a cancel and stay within what it owes.
+ */
+export async function refundableCancel(
+  db: Database,
+  cfg: TradingContext,
+  orderId: string,
+  lineNo: number,
+  operatorId?: string,
+): Promise<string> {
+  return withTransaction(db, async (tx) => {
+    const { target, lineId, body } = await observedCancelItem(tx, orderId, lineNo);
+    const answer = await cancelItem(
+      tx,
+      cfg,
+      target,
+      lineId,
+      {
+        ...body,
+        outcome: "keep_charge",
+        refundHandoff: true,
+        reasonId: await cancelReasonId(tx),
+        admission: testTradingAdmission(),
+      },
+      await ensureOperator(tx, operatorId ?? OPERATOR),
+    );
+    const linked = answer.refundLinks?.[0]?.adjustmentId;
+    if (linked !== undefined) return linked;
+    const [cancel] = await tx
+      .select({ id: adjustments.id })
+      .from(adjustments)
+      .where(and(eq(adjustments.lineId, lineId), eq(adjustments.action, "cancel")));
+    return cancel!.id;
+  });
 }
