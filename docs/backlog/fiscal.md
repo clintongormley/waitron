@@ -80,14 +80,13 @@ the adviser is still to confirm the details:
 Built: on a part payment that leaves something owed on a bill with no invoice yet, set for a
 ticket, the till asks "Does this payer want their own receipt for this amount?"
 (`#ownReceiptAsked` in `apps/till/src/widgets/bill-pay-dialog.ts`). **Yes** issues the payer a ticket of one line,
-«Pago a cuenta — consumo en mesa 7», at Waitron's shipped reduced rate, 10% today
-(`issueAdvance` in `apps/server/src/bill-advances.ts`, `ADVANCE_VAT_CLASS` in
-`packages/shared/src/menu-document/vat-rates.ts:9`). The bill's own invoice, however it is issued,
+«Pago a cuenta — consumo en mesa 7», at the dine-in rate of the day it was paid
+(`issueAdvance` in `apps/server/src/bill-advances.ts`). The bill's own invoice, however it is issued,
 takes each advance off (`apps/server/src/advance-deduction.ts`). Its printed ticket lists the
 dishes, then «Pago a cuenta n.º A/12, 19/11/2026 −30,00» for each advance, then the total less the
 advances, with no base or VAT printed under the advance line (`apps/server/src/receipt-advances.test.ts`,
 "no base or VAT, and no price each, is printed under an advance line"), though the ticket's VAT
-table takes the advance off its rate's row: with dishes of €20 at 10% and €80 at 21% and a €50
+table takes the advance off its rate's row: with dishes taken away of €20 at 10% and €80 at 21% and a €50
 advance, that row reads `10% −27,27 −2,73` (the same file, "example 2: … the VAT table's 10% row
 is negative"); whether that is enough is
 asked in question 12 of the 19 November sheet (the advances plan's Q4). Its record takes off the advance's own filed base and VAT

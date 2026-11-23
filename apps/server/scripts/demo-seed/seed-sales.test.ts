@@ -38,7 +38,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One product per Spanish VAT class. Prices are GROSS (VAT-inclusive).
+// Prices are GROSS (VAT-inclusive).
 const PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-general",

@@ -119,9 +119,9 @@ Rescheduling records the old and new activation times and the acting person in
 
 ## What a sold line freezes
 
-A line freezes its names, its gross price and its eat-in VAT class when it is added and never reads
-them from the menu again, so editing a product does not rewrite yesterday's receipt; the class comes
-from the published menu and its rate from the day the invoice is issued, below. A line taken away,
+A line freezes its names and its gross price when it is added and never reads them from the menu
+again, so editing a product does not rewrite yesterday's receipt. A line eaten here files at the
+dine-in rate on the day the invoice is issued, below. A line taken away,
 other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
 invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
 
@@ -169,8 +169,8 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
 line. Neither table has a `variant_id` column.
 
-**Eaten here, a line files at the class its published menu froze, fixed when its price is, at the
-rate in force on the day the invoice is issued. Taken away, a line files at its product's own
+**Eaten here, every line files at the dine-in rate in force on the day the invoice is issued.
+Taken away, a line files at its product's own
 takeaway rate on that day, read when the line is rated.** Each published menu version records the
 eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
@@ -184,7 +184,8 @@ walk-up sale is priced at payment, from the version live then (`priceOrderLines`
 `apps/server/src/working-order.ts`), which leaves a line without rates, and is filed from the
 lines it stored. Reading stored lines for a bill, payment or filing takes each line's rate list
 from `readLineVatRates`
-(`apps/server/src/line-vat-rates.ts`): eaten here, its class's list in `VAT_RATE_TABLE`; taken
+(`apps/server/src/line-vat-rates.ts`): eaten here, the venue area's dine-in list
+(`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts`); taken
 away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
 `product_takeaway_vat_rates`, or its parent's when a variant has none
 (`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A variant with no class

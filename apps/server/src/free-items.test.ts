@@ -190,7 +190,6 @@ function reprice(billId: string, lineNo: number, price: number, vatClass: string
   );
 }
 
-/** Gives each named product this takeaway rate until the case ends, then the venue's default 10%. */
 function row(overrides: Partial<FreeItem>): Omit<FreeItem, "adjustmentId"> {
   return {
     date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) as unknown as string,

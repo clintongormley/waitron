@@ -249,7 +249,7 @@ describe("a takeaway line files its product's rate as it stands at issue", () =>
 });
 
 describe("an order switched between eaten here and taken away after its lines were added", () => {
-  it("switched to eaten here, it files the eat-in labels", async () => {
+  it("switched to eaten here, it files the dine-in rate, not the product's takeaway rate", async () => {
     const { venue, tea, counter } = await counterVenue();
     const id = await park(venue, counter, "takeaway", [
       { menuItemId: counter.offerFor(tea), quantity: "1" },

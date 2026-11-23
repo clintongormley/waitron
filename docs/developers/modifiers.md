@@ -7,8 +7,8 @@ screen:
   rare, medium, well done). It is a kitchen instruction. It owns no price, no VAT class and no
   allergens, and it never becomes a line of its own: the answer freezes onto the dish's own line.
 - an **extras** list — a reusable, named list of PRODUCTS the diner may add ("Sides": chips, salad).
-  Each pick becomes its own child line at its own price and its own VAT class, so an extra is sold,
-  reported and filed as the product it is.
+  Each pick becomes its own child line at its own price, so an extra is sold, reported and filed as
+  the product it is.
 
 There is no third kind, and nothing chooses between them at run time: which table a list lives in
 is what it is.
@@ -129,7 +129,7 @@ column underneath holds a count of whole cents and the row converts (`stringToCe
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
 VAT is never resolved that way: an extra is sold as the picked PRODUCT, never the dish. Eaten
-here, it carries that product's VAT class as the published menu version froze it. Taken away, it
+here, it files at the dine-in rate, as every line does. Taken away, it
 files at that product's takeaway rate, or its parent's when a variant has none
 (`readLineVatRates`, `apps/server/src/line-vat-rates.ts`).
 
@@ -209,8 +209,7 @@ the basket resolved, and decides what is stored:
   list's three and the chosen label's three — and no ids at all, so renaming or deleting a list
   afterwards cannot rewrite a saved order.
 - Each extras pick becomes its own CHILD line (`parent_line_id` set) carrying the picked PRODUCT,
-  that product's three frozen names, the price the offer resolved and the PRODUCT's VAT class as
-  the published menu version froze it, never the dish's. Taken away, the line files at the picked
+  that product's three frozen names and the price the offer resolved. Taken away, the line files at the picked
   product's takeaway rate, or its parent's when a variant has none (`readLineVatRates`).
   The child's stored quantity is dish quantity × pick quantity × the item's frozen portion. Its
   `price_quantity` stores that portion, so its price remains per portion when the physical amount

@@ -354,9 +354,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Fiscal: the owner lands it.
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
-- **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** The owner's
-  answer (owner, 2026-11-18, question 5 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)) keeps the plan of two
-  dated rates per product, taken on the day the meal ends; the adviser is still to confirm the details. Piece A of the
+- **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** Piece A of the
   [design](superpowers/specs/2026-11-21-vat-rates-design.md) is planned as four pull requests; the first two give each
   product its own dated takeaway rate, the third files everything eaten here at the one dine-in
   rate, and the screens and guides for that rate are next
