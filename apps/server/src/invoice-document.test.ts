@@ -1291,7 +1291,7 @@ describe("what is still owed on the A4 page", () => {
       ({ text, y }, index) => index > caption && y === texts[caption]!.y && text === "9,69 €",
     );
     expect(amount).toBeDefined();
-    expect([texts[caption]!.bold, amount!.bold]).toEqual([true, true]);
+    expect([texts[caption]!.weight, amount!.weight]).toEqual(["bold", "bold"]);
   });
 });
 
@@ -1320,7 +1320,7 @@ describe("the simplified receipt's A4 tax table", () => {
       "IVA",
       "Total",
     ]);
-    expect(texts.slice(start, start + 4).every(({ bold }) => bold)).toBe(true);
+    expect(texts.slice(start, start + 4).every(({ weight }) => weight === "bold")).toBe(true);
     const rows = [
       ["A 21%", "9,00", "1,89", "10,89"],
       ["B 10%", "8,00", "0,80", "8,80"],
@@ -1334,8 +1334,8 @@ describe("the simplified receipt's A4 tax table", () => {
       for (const [index, cell] of cells.entries()) {
         if (index === 0) continue;
         const head = texts[start + index]!;
-        expect(cell.x + invoiceTextWidth(cell.text, cell.size)).toBeCloseTo(
-          head.x + invoiceTextWidth(head.text, head.size),
+        expect(cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight)).toBeCloseTo(
+          head.x + invoiceTextWidth(head.text, head.size, head.weight),
         );
       }
     }
@@ -1380,7 +1380,7 @@ describe("the simplified receipt's A4 tax table", () => {
         expect(new Set(cells.map(({ y }) => y)).size).toBe(1);
         expect(cells[0]!.x).toBeGreaterThanOrEqual(36);
         const right = (cell: (typeof cells)[number]): number =>
-          cell.x + invoiceTextWidth(cell.text, cell.size);
+          cell.x + invoiceTextWidth(cell.text, cell.size, cell.weight);
         for (let at = 1; at < 4; at++) expect(cells[at]!.x).toBeGreaterThan(right(cells[at - 1]!));
         expect(right(cells[3]!)).toBeLessThanOrEqual(INVOICE_PAGE_WIDTH - 36 + 0.01);
       }

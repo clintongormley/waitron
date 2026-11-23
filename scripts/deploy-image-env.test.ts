@@ -1520,6 +1520,17 @@ describe("the print-agent image carries the copyright files of python3-minimal a
   });
 });
 
+describe("the invoice renderer's bundled bold font", () => {
+  it("ships beside the regular face under the same licence, with its source hash recorded", () => {
+    const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans-bold.ttf`);
+    const hash = createHash("sha256").update(font).digest("hex");
+    expect(read("deploy/third-party/noto-sans/README.md")).toContain(hash);
+    expect(noticeSection("Noto Sans")).toContain(hash);
+    expect(noticeSection("Noto Sans")).toContain("/app/assets/invoice-noto-sans-bold.ttf");
+    expect(IMAGE_SMOKE).toContain("test -s /app/assets/invoice-noto-sans-bold.ttf");
+  });
+});
+
 describe("the invoice renderer's bundled font", () => {
   it("ships the same font beside the bundle and records its licence and source hash", () => {
     const font = readFileSync(`${ROOT}apps/server/src/assets/invoice-noto-sans.ttf`);

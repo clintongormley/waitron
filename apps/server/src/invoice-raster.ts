@@ -1,6 +1,10 @@
-import { invoiceFont } from "./invoice-font.js";
+import { invoiceBoldFont, invoiceFont } from "./invoice-font.js";
 import { INVOICE_PAGE_WIDTH, INVOICE_PAGE_HEIGHT, layoutInvoicePages } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
+
+const INK = "#000000";
+const MUTED = "#6b6b6b";
+const BOX_FILLS = { heading: "#e4e4e8", panel: "#f2f2f4" } as const;
 
 export interface InvoiceRasterPage {
   width: number;
@@ -22,20 +26,25 @@ export async function renderInvoiceRaster(
     const paths: string[] = [];
     for (const element of page.elements) {
       if (element.kind === "text") {
-        const run = invoiceFont.layout(element.text);
-        const size = element.size / invoiceFont.unitsPerEm;
-        const stroke = element.bold ? ` stroke="black" stroke-width="${0.35 / size}"` : "";
+        const font = element.weight === "bold" ? invoiceBoldFont : invoiceFont;
+        const run = font.layout(element.text);
+        const size = element.size / font.unitsPerEm;
+        const fill = element.tone === "muted" ? MUTED : INK;
         let x = element.x;
-        let y = element.y + invoiceFont.ascent * size;
+        let y = element.y + font.ascent * size;
         for (let index = 0; index < run.glyphs.length; index++) {
           const position = run.positions[index]!;
           const path = run.glyphs[index]!.path.toSVG();
           paths.push(
-            `<path transform="translate(${x + position.xOffset * size} ${y - position.yOffset * size}) scale(${size} ${-size})" d="${path}"${stroke}/>`,
+            `<path transform="translate(${x + position.xOffset * size} ${y - position.yOffset * size}) scale(${size} ${-size})" d="${path}" fill="${fill}"/>`,
           );
           x += position.xAdvance * size;
           y -= position.yAdvance * size;
         }
+      } else if (element.kind === "box") {
+        paths.push(
+          `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.height}" fill="${BOX_FILLS[element.fill]}"/>`,
+        );
       } else if (element.kind === "logo") {
         const { raster } = element;
         const pitch = element.width / raster.widthDots;
@@ -44,14 +53,14 @@ export async function renderInvoiceRaster(
           for (let col = 0; col < raster.widthDots; col++) {
             if (raster.bits[row * stride + (col >> 3)]! & (0x80 >> (col & 7))) {
               paths.push(
-                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}"/>`,
+                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}" fill="${INK}"/>`,
               );
             }
           }
         }
       } else if (element.kind === "rule") {
         paths.push(
-          `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.thickness}"/>`,
+          `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.thickness}" fill="${INK}"/>`,
         );
       } else if (element.kind === "qr") {
         const pitch = element.moduleSize;
@@ -59,14 +68,14 @@ export async function renderInvoiceRaster(
           for (let col = 0; col < element.modules.length; col++) {
             if (element.modules[row]![col]) {
               paths.push(
-                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}"/>`,
+                `<rect shape-rendering="crispEdges" x="${element.x + col * pitch}" y="${element.y + row * pitch}" width="${pitch}" height="${pitch}" fill="${INK}"/>`,
               );
             }
           }
         }
       }
     }
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${INVOICE_PAGE_WIDTH} ${INVOICE_PAGE_HEIGHT}"><rect width="${INVOICE_PAGE_WIDTH}" height="${INVOICE_PAGE_HEIGHT}" fill="white"/><g fill="black">${paths.join("")}</g></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${INVOICE_PAGE_WIDTH} ${INVOICE_PAGE_HEIGHT}"><rect width="${INVOICE_PAGE_WIDTH}" height="${INVOICE_PAGE_HEIGHT}" fill="white"/>${paths.join("")}</svg>`;
     const pixels = await sharp(Buffer.from(svg)).greyscale().removeAlpha().raw().toBuffer();
     pages.push({ width, height, resolution, pixels });
   }

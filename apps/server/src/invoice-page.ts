@@ -1,5 +1,5 @@
 import type { ReceiptLogoRaster } from "@waitron/shared";
-import { invoiceFont } from "./invoice-font.js";
+import { invoiceBoldFont, invoiceFont } from "./invoice-font.js";
 import {
   buildReceiptDocument,
   CONTACT_SEPARATOR,
@@ -26,7 +26,8 @@ type PageText = {
   x: number;
   y: number;
   size: number;
-  bold: boolean;
+  weight: InvoiceTextWeight;
+  tone: "ink" | "muted";
 };
 type PageQr = {
   kind: "qr";
@@ -44,39 +45,59 @@ type PageLogo = {
   height: number;
 };
 type PageRule = { kind: "rule"; x: number; y: number; width: number; thickness: number };
-export type InvoicePageElement = PageText | PageQr | PageLogo | PageRule;
+type PageBox = {
+  kind: "box";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill: "heading" | "panel";
+};
+export type InvoiceTextWeight = "regular" | "bold";
+export type InvoicePageElement = PageText | PageQr | PageLogo | PageRule | PageBox;
 export interface InvoicePage {
   elements: InvoicePageElement[];
 }
 
 export const INVOICE_TEXT_WIDTH_MEMO_LIMIT = 5000;
 // Bounded because the server runs for months and every invoice brings new names.
-const advanceWidths = new Map<string, number>();
+const faces = {
+  regular: { font: invoiceFont, advanceWidths: new Map<string, number>() },
+  bold: { font: invoiceBoldFont, advanceWidths: new Map<string, number>() },
+};
 
-function width(text: string, size: number): number {
+function width(text: string, size: number, weight: InvoiceTextWeight = "regular"): number {
+  const { font, advanceWidths } = faces[weight];
   let advance = advanceWidths.get(text);
   if (advance === undefined) {
     if (advanceWidths.size >= INVOICE_TEXT_WIDTH_MEMO_LIMIT) advanceWidths.clear();
-    advance = invoiceFont.layout(text).advanceWidth;
+    advance = font.layout(text).advanceWidth;
     advanceWidths.set(text, advance);
   }
-  return (advance * size) / invoiceFont.unitsPerEm;
+  return (advance * size) / font.unitsPerEm;
 }
 export { width as invoiceTextWidth };
 
-function wrap(text: string, available: number, size: number): string[] {
+const weightOf = (bold: boolean): InvoiceTextWeight => (bold ? "bold" : "regular");
+
+function wrap(
+  text: string,
+  available: number,
+  size: number,
+  weight: InvoiceTextWeight = "regular",
+): string[] {
   const lines: string[] = [];
   let line = "";
   for (const word of text.trim().split(/\s+/u)) {
     const combined = line === "" ? word : `${line} ${word}`;
-    if (width(combined, size) <= available) {
+    if (width(combined, size, weight) <= available) {
       line = combined;
       continue;
     }
     if (line !== "") lines.push(line);
     line = "";
     for (const character of word) {
-      if (line !== "" && width(line + character, size) > available) {
+      if (line !== "" && width(line + character, size, weight) > available) {
         lines.push(line);
         line = "";
       }
@@ -88,17 +109,22 @@ function wrap(text: string, available: number, size: number): string[] {
 }
 
 /** Whole parts packed onto each line; only a part too long for a line by itself is word-wrapped. */
-function wrapParts(text: string, available: number, size: number): string[] {
+function wrapParts(
+  text: string,
+  available: number,
+  size: number,
+  weight: InvoiceTextWeight,
+): string[] {
   const lines: string[] = [];
   let line = "";
   for (const part of text.split(CONTACT_SEPARATOR)) {
     const combined = line === "" ? part : `${line}${CONTACT_SEPARATOR}${part}`;
-    if (width(combined, size) <= available) {
+    if (width(combined, size, weight) <= available) {
       line = combined;
       continue;
     }
     if (line !== "") lines.push(line);
-    const wrapped = wrap(part, available, size);
+    const wrapped = wrap(part, available, size, weight);
     line = wrapped.pop() ?? "";
     lines.push(...wrapped);
   }
@@ -121,16 +147,19 @@ interface Columns {
 
 /** Measured over every table in the document, so a table continuing after a line lines up with the first. */
 function columnsFor(tables: readonly ReceiptTable[]): Columns {
-  const rows = tables.flatMap((table) => (table.header ? [table.header] : []).concat(table.rows));
+  const rows = tables.flatMap((table) => [
+    ...(table.header ? [{ row: table.header, weight: "bold" as const }] : []),
+    ...table.rows.map((row) => ({ row, weight: "regular" as const })),
+  ]);
   const widest = (cell: (row: ReceiptTableRow) => string): number =>
-    Math.max(0, ...rows.map((row) => width(cell(row), BODY_SIZE)));
+    Math.max(0, ...rows.map(({ row, weight }) => width(cell(row), BODY_SIZE, weight)));
   const contentRight = INVOICE_PAGE_WIDTH - MARGIN;
   const rateWidth = tables.some((table) => table.withRate) ? widest((row) => row.rate ?? "") : 0;
   const amountRight = rateWidth > 0 ? contentRight - rateWidth - COLUMN_GAP : contentRight;
   const priceRight = amountRight - widest((row) => row.amount) - COLUMN_GAP;
   const itemRight = priceRight - widest((row) => row.price) - COLUMN_GAP;
   const unitsRoom = Math.max(0, itemRight - MIN_ITEM_WIDTH - COLUMN_GAP - MARGIN);
-  const unitsWidths = rows.map((row) => width(row.units, BODY_SIZE));
+  const unitsWidths = rows.map(({ row, weight }) => width(row.units, BODY_SIZE, weight));
   const unitsRight = MARGIN + Math.max(0, ...unitsWidths.filter((units) => units <= unitsRoom));
   const itemLeft = unitsRight + COLUMN_GAP;
   return {
@@ -184,20 +213,29 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     size: number,
     bold: boolean,
   ): void => {
-    if (value !== "") page.elements.push({ kind: "text", text: value, x, y: at, size, bold });
+    if (value !== "")
+      page.elements.push({
+        kind: "text",
+        text: value,
+        x,
+        y: at,
+        size,
+        weight: weightOf(bold),
+        tone: "ink",
+      });
   };
   const textLines = (lines: readonly string[], x: number, style: TextStyle): void => {
     const { size, bold, centered } = style;
     const height = (LINE_HEIGHT * size) / BODY_SIZE;
     for (const line of lines) {
       room(height);
-      const left = centered ? (INVOICE_PAGE_WIDTH - width(line, size)) / 2 : x;
+      const left = centered ? (INVOICE_PAGE_WIDTH - width(line, size, weightOf(bold))) / 2 : x;
       place(pages.at(-1)!, y, line, left, size, bold);
       y += height;
     }
   };
   const text = (value: string, x: number, available: number, style: TextStyle): void =>
-    textLines(wrap(value, available, style.size), x, style);
+    textLines(wrap(value, available, style.size, weightOf(style.bold)), x, style);
   const placeRight = (
     page: InvoicePage,
     at: number,
@@ -205,16 +243,16 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     right: number,
     size: number,
     bold: boolean,
-  ): void => place(page, at, value, right - width(value, size), size, bold);
+  ): void => place(page, at, value, right - width(value, size, weightOf(bold)), size, bold);
   const linesPerPage = Math.floor((INVOICE_PAGE_HEIGHT - 2 * MARGIN) / LINE_HEIGHT);
   type RowLines = { units: string[]; item: string[]; count: number };
-  const rowLines = (row: ReceiptTableRow): RowLines => {
+  const rowLines = (row: ReceiptTableRow, weight: InvoiceTextWeight): RowLines => {
     const units =
-      width(row.units, BODY_SIZE) > columns.unitsRoom
-        ? wrap(row.units, INVOICE_PAGE_WIDTH - 2 * MARGIN, BODY_SIZE)
+      width(row.units, BODY_SIZE, weight) > columns.unitsRoom
+        ? wrap(row.units, INVOICE_PAGE_WIDTH - 2 * MARGIN, BODY_SIZE, weight)
         : [];
     const indent = (row.itemIndent ?? 0) * INDENT_WIDTH;
-    const item = wrap(row.item, columns.itemWidth - indent, BODY_SIZE);
+    const item = wrap(row.item, columns.itemWidth - indent, BODY_SIZE, weight);
     if (item.length === 0) item.push("");
     return { units, item, count: units.length + item.length };
   };
@@ -311,9 +349,9 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
       }
       case "table": {
         const { header, rows, withRate } = element.table;
-        if (header) itemHeader = { row: header, lines: rowLines(header) };
+        if (header) itemHeader = { row: header, lines: rowLines(header, "bold") };
         for (const [index, row] of rows.entries()) {
-          const lines = rowLines(row);
+          const lines = rowLines(row, "regular");
           if (index === 0 && itemHeader && headedPage !== pages.at(-1)) {
             const headerLines = itemHeader.lines.count;
             room((headerLines + rowStart(lines.count, headerLines)) * LINE_HEIGHT);
@@ -327,7 +365,10 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         const { header, rows } = element;
         const amounts = (row: TaxTableRow): string[] => [row.base, row.tax, row.total];
         const widths = amounts(header).map((_, at) =>
-          Math.max(...[header, ...rows].map((row) => width(amounts(row)[at]!, BODY_SIZE))),
+          Math.max(
+            width(amounts(header)[at]!, BODY_SIZE, "bold"),
+            ...rows.map((row) => width(amounts(row)[at]!, BODY_SIZE)),
+          ),
         );
         const rights: number[] = [];
         let right = INVOICE_PAGE_WIDTH - MARGIN;
@@ -359,14 +400,16 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         if (element.kind === "text") {
           const style = { size, bold, centered: alignment === "center" };
           if (index === document.contactLine)
-            textLines(wrapParts(element.text, available, size), x, style);
+            textLines(wrapParts(element.text, available, size, weightOf(bold)), x, style);
           else text(element.text, x, available, style);
           break;
         }
-        const captionLines = wrap(element.caption, available, size);
+        const weight = weightOf(bold);
+        const captionLines = wrap(element.caption, available, size, weight);
         const besideLast =
           captionLines.length > 0 &&
-          width(captionLines.at(-1)!, size) + size + width(element.amount, size) <= available;
+          width(captionLines.at(-1)!, size, weight) + size + width(element.amount, size, weight) <=
+            available;
         const height = (LINE_HEIGHT * size) / BODY_SIZE;
         const block = (captionLines.length + (besideLast ? 0 : 1)) * height;
         if (block <= INVOICE_PAGE_HEIGHT - 2 * MARGIN) room(block);

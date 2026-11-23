@@ -425,6 +425,7 @@ jobs:
           set -euo pipefail
           app=$(docker compose ps -q app)
           docker exec "$app" sh -c 'test -s /app/assets/invoice-noto-sans.ttf \
+            && test -s /app/assets/invoice-noto-sans-bold.ttf \
             && test -s /app/assets/invoice-noto-sans-mono.ttf \
             && test -s /app/third-party/noto-sans-mono/OFL.txt \
             && test -s /app/third-party/noto-sans/OFL.txt \

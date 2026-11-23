@@ -33,6 +33,7 @@ describe("useBuiltServer", () => {
     expect(statSync(builtServer()).size).toBeGreaterThan(0);
     for (const file of [
       "assets/invoice-noto-sans.ttf",
+      "assets/invoice-noto-sans-bold.ttf",
       "assets/invoice-noto-sans-mono.ttf",
       "node_modules/@waitron/ui-core/package.json",
       "node_modules/@waitron/ui-core/src/tokens/colors.css",

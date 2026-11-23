@@ -106,6 +106,8 @@ for grey A4 pages. `cups-raster/NOTICES.txt` names the upstream source and its c
 The server embeds Noto Sans in invoice PDFs and draws its glyph outlines for invoice raster pages.
 The browser register renderer also embeds this font in its recovery PDF, from a local web asset.
 The font is shipped at `/app/assets/invoice-noto-sans.ttf` under the SIL Open Font License, Version 1.1.
+Bold invoice text uses the static Noto Sans Bold, shipped at `/app/assets/invoice-noto-sans-bold.ttf`
+under the same licence (SHA-256 `87cb2d84472a7d66da659ee47b6cdb9552326e8c128245231f191b6ac72529d9`).
 `noto-sans/OFL.txt` is its unmodified upstream copyright and licence notice.
 `noto-sans/README.md` records the pinned font source, checksums and build paths.
 

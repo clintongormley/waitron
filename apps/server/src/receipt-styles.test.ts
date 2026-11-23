@@ -58,23 +58,27 @@ describe("styled elements on the A4 page", () => {
     ];
     const texts = layoutInvoicePages(FULL_INVOICE_DOCUMENT_FIXTURE)[0]!.elements;
     expect(texts).toEqual([
-      expect.objectContaining({ text: "Gracias", size: 10, bold: true, y: 36 }),
-      expect.objectContaining({ text: "Grande", size: 20, bold: false, y: 50 }),
-      expect.objectContaining({ text: "Base", size: 10, bold: true, y: 78 }),
-      expect.objectContaining({ text: "1,00 €", size: 10, bold: true, y: 78 }),
-      expect.objectContaining({ text: "Gracias", size: 10, bold: false, y: 92 }),
+      expect.objectContaining({ text: "Gracias", size: 10, weight: "bold", tone: "ink", y: 36 }),
+      expect.objectContaining({ text: "Grande", size: 20, weight: "regular", tone: "ink", y: 50 }),
+      expect.objectContaining({ text: "Base", size: 10, weight: "bold", tone: "ink", y: 78 }),
+      expect.objectContaining({ text: "1,00 €", size: 10, weight: "bold", tone: "ink", y: 78 }),
+      expect.objectContaining({ text: "Gracias", size: 10, weight: "regular", tone: "ink", y: 92 }),
     ]);
   });
 
-  it("fills and outlines bold text in the PDF, and only fills plain text", async () => {
+  it("draws bold text in the bold face and plain text in the regular one, neither outlined", async () => {
     injected.elements = [BOLD];
-    const bold = pdfContent(await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE));
-    expect(bold).toMatch(/\b0\.35 w\b/);
-    expect(bold).toMatch(/\b2 Tr\b/);
+    const boldBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
+    expect(boldBytes.toString("latin1")).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSans-Bold\b/u);
+    const bold = pdfContent(boldBytes);
+    expect(bold).toContain("BT");
+    expect(bold).not.toMatch(/\b[12] Tr\b/);
     injected.elements = [PLAIN];
-    const plain = pdfContent(await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE));
+    const plainBytes = await renderInvoicePdf(FULL_INVOICE_DOCUMENT_FIXTURE);
+    expect(plainBytes.toString("latin1")).not.toContain("NotoSans-Bold");
+    const plain = pdfContent(plainBytes);
     expect(plain).toContain("BT");
-    expect(plain).not.toMatch(/\b2 Tr\b/);
+    expect(plain).not.toMatch(/\b[12] Tr\b/);
   });
 
   it("draws bold text with more ink than the same text plain in the raster", async () => {
