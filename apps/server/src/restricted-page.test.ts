@@ -480,6 +480,35 @@ describe("the restricted box's own page", () => {
     ]);
   });
 
+  it("reads the chart again for Progress when the first read failed", async () => {
+    const successor = await seedSuccessor("Bar counter box");
+    await handOver(successor);
+    await holdChart(successor, "https://bar-counter.example", "serving-primary");
+    logged.length = 0;
+    let failed = false;
+    const venue = new Proxy(suite.db, {
+      get: (target, key) => {
+        if (key === "select" && !failed) {
+          failed = true;
+          return () => {
+            throw new Error("disk I/O error");
+          };
+        }
+        const value: unknown = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const html = await (await request("en-GB", venue)).text();
+    expect(paragraphs(html)).toEqual([`<p>${escapeHtml(WORDS["en-GB"].waiting)}</p>`]);
+    expect(logged).toEqual([
+      {
+        level: "warn",
+        event: "restricted_page.successor_link_failed",
+        fields: { errorCode: "unknown", requestId: "request-1" },
+      },
+    ]);
+  });
+
   it("links no Progress for a supersession learnt from a newer list of machines alone", async () => {
     const successor = await seedSuccessor("Bar counter box");
     await holdChart(successor, "https://bar-counter.example");

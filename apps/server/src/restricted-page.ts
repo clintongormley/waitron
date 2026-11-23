@@ -144,6 +144,7 @@ async function progressPage(
   deps: RestrictedPageDeps,
   operation: HandoverOperation,
   restriction: HandoverRestriction,
+  chart: Awaited<ReturnType<typeof readNodeMembership>> | undefined,
   returnState: ReturnState,
 ): Promise<string | undefined> {
   if (operation.scenario !== "controlled" || !isOpen(operation.state)) return undefined;
@@ -155,8 +156,8 @@ async function progressPage(
     "return_confirmed",
   );
   if (confirmed.length > 0) return undefined;
-  const chart = await readNodeMembership(deps.venue);
-  if (!mainBoxToAsk(deps.nodeId, chart, restriction).fromRestriction) return undefined;
+  const current = chart === undefined ? await readNodeMembership(deps.venue) : chart;
+  if (!mainBoxToAsk(deps.nodeId, current, restriction).fromRestriction) return undefined;
   return await handoverPageOf({ db: deps.venue }, operation);
 }
 
@@ -169,20 +170,23 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
       ? null
       : await readHandoverOperation(deps.node, deps.nodeId, restriction.operationId);
   // The rule the return sender uses to choose the box it sends to (`return-records.ts`).
-  const mainBox = await readOrWarn(
+  const read = await readOrWarn(
     deps,
     requestId,
     "restricted_page.successor_link_failed",
-    async () => mainBoxToAsk(deps.nodeId, await readNodeMembership(deps.venue), restriction),
+    async () => {
+      const chart = await readNodeMembership(deps.venue);
+      return { chart, mainBox: mainBoxToAsk(deps.nodeId, chart, restriction) };
+    },
   );
   const returnState = deps.returnState?.() ?? "waiting";
   return {
-    successorUrl: mainBox?.target?.contactUrl,
+    successorUrl: read?.mainBox.target?.contactUrl,
     handoverPage:
       operation === null
         ? undefined
         : await readOrWarn(deps, requestId, "restricted_page.progress_link_failed", () =>
-            progressPage(deps, operation, restriction, returnState),
+            progressPage(deps, operation, restriction, read?.chart, returnState),
           ),
     returnState,
     reset: await resetLine(deps, requestId),
