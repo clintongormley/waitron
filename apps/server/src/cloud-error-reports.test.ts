@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, incidents } from "@waitron/db";
@@ -301,11 +301,25 @@ it("sends one report at a time and runs as a job that comes back sooner after a 
   const passing = job.pass({ now: new Date(), signal: signal() });
   await vi.waitFor(() => expect(f.sendErrorReport).toHaveBeenCalledOnce());
   expect(await sender.run(signal())).toBe(false);
+  finish();
+  const { nextDueAt } = await passing;
+  const after = Date.now();
+  expect(nextDueAt!.getTime()).toBeGreaterThanOrEqual(before + 10_000);
+  expect(nextDueAt!.getTime()).toBeLessThanOrEqual(after + 10_000);
+  expect(f.sendErrorReport).toHaveBeenCalledOnce();
+});
+
+it("sends nothing and prepares no report when the pass is already cancelled", async () => {
+  const f = await fixture();
+  const sender = f.reports();
+  await sender.setEnabled(true);
+  await incident(1);
   const aborted = new AbortController();
   aborted.abort();
   expect(await sender.run(aborted.signal)).toBe(false);
-  finish();
-  const { nextDueAt } = await passing;
-  expect(nextDueAt!.getTime()).toBeGreaterThanOrEqual(before + 10_000);
+  expect(f.sendErrorReport).not.toHaveBeenCalled();
+  const saved = JSON.parse(await readFile(join(f.dir, CLOUD_ERROR_REPORTS_FILE), "utf8"));
+  expect(saved.pending).toBeUndefined();
+  expect(await sender.run(signal())).toBe(true);
   expect(f.sendErrorReport).toHaveBeenCalledOnce();
 });

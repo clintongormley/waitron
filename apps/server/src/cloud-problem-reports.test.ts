@@ -254,7 +254,7 @@ it("queues an administrator's text behind its diagnostics without a separate app
   expect(await reports.descriptions()).toEqual([]);
 });
 
-/** The main-box answers a test scripts: each queued answer is used once, then `steady`. */
+/** Scripts whether this box is the main box: each queued answer is used once, then `steady`. */
 function primaryScript(steady = true) {
   const answers: boolean[] = [];
   const isPrimary = () => answers.shift() ?? steady;
@@ -313,7 +313,7 @@ it("passes on a saved queue it cannot open as a file", async () => {
   await expect(f.reports().descriptions()).rejects.toMatchObject({ code: "EISDIR" });
 });
 
-it("refuses each step once this box stops being the main box partway through", async () => {
+it("refuses each step, and lists no descriptions, once this box stops being the main box partway through", async () => {
   const f = await fixture();
   const primary = primaryScript();
   const reports = f.reports("1.2.3", primary.isPrimary);
@@ -446,39 +446,53 @@ it("refuses a report the Cloud refuses outright", async () => {
   expect(f.log.mock.calls).toEqual([["warn", "cloud.request_invalid"]]);
 });
 
-it.each([false, true])(
-  "says the queue is busy once sixteen are waiting (with a description: %s)",
-  async (withText) => {
-    const f = await fixture();
-    const reports = f.reports();
-    f.delivered.mockResolvedValue("retry");
-    for (let index = 0; index < 16; index += 1) {
-      const preview = await reports.preview("till", `s${index}`);
-      if (!preview.available) throw new Error("Preview unavailable");
-      const description = withText ? { text: `Note ${index}`, admin: false } : undefined;
-      expect(await reports.send("till", `s${index}`, preview.id, description)).toBe("queued");
-    }
-    const extra = await reports.preview("till", "extra");
-    if (!extra.available) throw new Error("Preview unavailable");
-    const description = withText ? { text: "One too many", admin: false } : undefined;
-    await expect(reports.send("till", "extra", extra.id, description)).rejects.toMatchObject({
-      code: "cloud.busy",
-    });
-    expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain(extra.id);
-  },
-);
+it("says the queue is busy once sixteen reports are waiting to be sent", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  f.delivered.mockResolvedValue("retry");
+  for (let index = 0; index < 16; index += 1) {
+    const preview = await reports.preview("till", `s${index}`);
+    if (!preview.available) throw new Error("Preview unavailable");
+    expect(await reports.send("till", `s${index}`, preview.id)).toBe("queued");
+  }
+  const extra = await reports.preview("till", "extra");
+  if (!extra.available) throw new Error("Preview unavailable");
+  await expect(reports.send("till", "extra", extra.id)).rejects.toMatchObject({
+    code: "cloud.busy",
+  });
+  expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain(extra.id);
+});
 
-it("forgets the oldest preview once 256 are held", async () => {
+it("refuses a seventeenth description awaiting review once the reports themselves were sent", async () => {
+  const f = await fixture();
+  const reports = f.reports();
+  for (let index = 0; index < 16; index += 1) {
+    const preview = await reports.preview("till", `s${index}`);
+    if (!preview.available) throw new Error("Preview unavailable");
+    const description = { text: `Note ${index}`, admin: false };
+    expect(await reports.send("till", `s${index}`, preview.id, description)).toBe("sent");
+  }
+  expect(await reports.descriptions()).toHaveLength(16);
+  const extra = await reports.preview("till", "extra");
+  if (!extra.available) throw new Error("Preview unavailable");
+  await expect(
+    reports.send("till", "extra", extra.id, { text: "One too many", admin: false }),
+  ).rejects.toMatchObject({ code: "cloud.busy" });
+  expect(await readFile(queueFile(f.stateDir), "utf8")).not.toContain("One too many");
+  expect(await reports.send("till", "extra", extra.id)).toBe("sent");
+});
+
+it("drops the oldest preview when a 257th is made, keeping the next oldest", async () => {
   const f = await fixture();
   const reports = f.reports();
   const oldest = await reports.preview("till", "s0");
-  if (!oldest.available) throw new Error("Preview unavailable");
-  for (let index = 1; index <= 256; index += 1) await reports.preview("till", `s${index}`);
+  const nextOldest = await reports.preview("till", "s1");
+  if (!oldest.available || !nextOldest.available) throw new Error("Preview unavailable");
+  for (let index = 2; index <= 256; index += 1) await reports.preview("till", `s${index}`);
   await expect(reports.send("till", "s0", oldest.id)).rejects.toMatchObject({
     code: "cloud.request_invalid",
   });
-  const kept = await reports.preview("till", "s1");
-  expect(kept.available).toBe(true);
+  expect(await reports.send("till", "s1", nextOldest.id)).toBe("sent");
 });
 
 it("runs the queue as a job that comes back sooner only while a report is waiting", async () => {
@@ -502,6 +516,13 @@ it("runs the queue as a job that comes back sooner only while a report is waitin
   expect(await reports.run(signal())).toBeUndefined();
   release();
   const { nextDueAt } = await passing;
+  const after = Date.now();
   expect(nextDueAt!.getTime()).toBeGreaterThanOrEqual(before + 30_000);
+  expect(nextDueAt!.getTime()).toBeLessThanOrEqual(after + 30_000);
   expect(f.delivered).toHaveBeenCalledTimes(2);
+
+  expect((await job.pass({ now: new Date(), signal: signal() })).nextDueAt).not.toBeNull();
+  expect(f.delivered).toHaveBeenCalledTimes(3);
+  expect(await job.pass({ now: new Date(), signal: signal() })).toEqual({ nextDueAt: null });
+  expect(f.delivered).toHaveBeenCalledTimes(3);
 });
