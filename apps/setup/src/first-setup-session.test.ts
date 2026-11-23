@@ -585,6 +585,37 @@ describe("first setup tab ownership", () => {
     expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe('{"version":2,"tabLockId":"bad"}');
   });
 
+  it.each([
+    [
+      "an error-report choice other than yes",
+      (saved: Record<string, unknown>) => ({ ...saved, errorReportsEnabled: false }),
+    ],
+    [
+      "an error-report choice with no claimed attempt",
+      (saved: Record<string, unknown>) => {
+        const withoutOwner: Record<string, unknown> = { ...saved, errorReportsEnabled: true };
+        delete withoutOwner.owner;
+        return withoutOwner;
+      },
+    ],
+  ])("rejects retained session data holding %s, calling no server", async (_, corrupt) => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    await first.session.dispose();
+    const saved = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!) as Record<
+      string,
+      unknown
+    >;
+    expect(saved.owner).toBeDefined();
+    const stored = JSON.stringify(corrupt(saved));
+    sessionStorage.setItem(FIRST_SETUP_SESSION_KEY, stored);
+    const { session, requests } = create(claim);
+    await expect(session.open()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(requests).toEqual([]);
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe(stored);
+  });
+
   it("never calls the server if durable tab storage is unavailable", async () => {
     const { session, requests } = create(claim);
     const storage = Object.create(sessionStorage) as Storage;

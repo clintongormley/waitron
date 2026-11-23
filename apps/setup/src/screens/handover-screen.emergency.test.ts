@@ -2294,6 +2294,21 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   expect(get).toHaveBeenCalledTimes(3);
 });
 
+it("a passkey prompt the person cancels says the passkey did not sign in, and sends no answer", async () => {
+  const get = vi
+    .spyOn(navigator.credentials, "get")
+    .mockRejectedValue(new DOMException("The operation was cancelled.", "NotAllowedError"));
+  const { el, posts } = await mount({ proof: newProof() });
+  await choosePasskey(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(q(el, "[data-test=emergency-copy]")).toBeNull();
+  expect(q(el, '[name="handover-sign-in-method"]')).not.toBeNull();
+  expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
+  expect(posts.every(({ body }) => body.signIn === undefined)).toBe(true);
+});
+
 it("with no internet time, a passkey switch confirms the time, and a proof lapsed by the select asks for the passkey again", async () => {
   const get = stubPasskey();
   const { el, posts } = await mount({
