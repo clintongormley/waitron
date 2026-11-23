@@ -249,6 +249,31 @@ it("moves each price under its name on a narrow table, and back to its own colum
   expect(cells(el, 2)).toEqual([euros("9,00"), euros("12,00"), euros("20,00")]);
 });
 
+it("leaves a gap of the smallest space token between a name and the price under it on a narrow table", async () => {
+  const el = await mountTable();
+  el.variants = [
+    { ...threeVariants()[0]!, name: "Half portion of the long-cured house ham" },
+    ...threeVariants().slice(1),
+  ];
+  el.style.setProperty("--wt-space-1", "4px");
+  el.style.width = "20rem";
+  await el.updateComplete;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (const [index, row] of rows(el).entries()) {
+    const cell = row.children[1]!;
+    const name = [...cell.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+    )!;
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    const lines = [...range.getClientRects()];
+    if (index === 0) expect(new Set(lines.map((line) => line.top)).size).toBeGreaterThan(1);
+    const nameBottom = Math.max(...lines.map((line) => line.bottom));
+    const price = cell.querySelector(".stacked-price")!.getBoundingClientRect();
+    expect(price.top - nameBottom).toBeGreaterThanOrEqual(4);
+  }
+});
+
 it("caps the name cell with the shared sizing token, not a literal width", async () => {
   const el = await mountTable();
   // Read the token off the element rather than restating its number here: if the token layer did not
