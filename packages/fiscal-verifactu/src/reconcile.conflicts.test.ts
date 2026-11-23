@@ -48,7 +48,6 @@ async function immutableSnapshot() {
     "verifactu_identities",
     "invoice_series",
     "fiscal_allocations",
-    "fiscal_reservations",
   ];
   const result: Record<string, unknown> = {
     verifactu_submissions: (

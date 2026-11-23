@@ -35,12 +35,9 @@ import {
   paperCustodianFingerprint,
   signPaperBlock,
   signPaperConsumptionForBlock,
-  signPaperReservationForBlock,
 } from "./paper-evidence.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { fiscalReservations } from "./schema/reservations.js";
-import { establishDormantAllocation } from "./standby-allocation.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -400,88 +397,3 @@ it.each(["setup", "restore"])(
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   },
 );
-
-it("promotes a retained dormant reservation once, without resetting counters on retry", async () => {
-  await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
-  const target = { ...node, nodeId: TAXPAYER_A.nodeId2 };
-  const held = request("promote", "P000042", target);
-  const proof = held.input.allocation.reservationEvidence.block;
-  const join = {
-    eventId: "standby-join",
-    sourceId: node.nodeId,
-    targetNodeId: target.nodeId,
-    operatorId: "join-administrator",
-    incidentEvidence: "master/standby-join",
-    reservedAt: "2026-10-13T09:30:00.000Z",
-  };
-  await withTransaction(suite.db, (tx) =>
-    establishDormantAllocation(
-      tx,
-      node,
-      target,
-      {
-        block: proof,
-        reservation: signPaperReservationForBlock(
-          proof,
-          held.input.allocation.allocationId,
-          join,
-          privateKey,
-        ),
-      },
-      trust,
-      {
-        ...join,
-        allocationId: held.input.allocation.allocationId,
-        taxpayerNif: "89890001K",
-        softwareId: "W1",
-        environment: "preproduction",
-        recipientVenueId: "lifecycle-venue",
-        generationId: "lifecycle-generation",
-        blockId: proof.payload.blockId,
-        currentRegisterConfirmed: true,
-        reservationConfirmed: true,
-        currentEntryState: "reserved",
-        requiredBases: bases,
-      },
-    ),
-  );
-  const reservation = await suite.db.select().from(fiscalReservations);
-  expect(
-    await suite.db
-      .select()
-      .from(verifactuIdentities)
-      .where(eq(verifactuIdentities.nodeId, target.nodeId)),
-  ).toEqual([]);
-  expect(
-    await suite.db
-      .select(seriesWithNextNumber)
-      .from(invoiceSeries)
-      .where(eq(invoiceSeries.nodeId, target.nodeId)),
-  ).toEqual([]);
-  const run = (tx: Transaction, operation: ModuleOperationInput) => promote(tx, target, operation);
-  await attempt("promote", run, { target });
-  const targetSifs = await suite.db
-    .select()
-    .from(verifactuIdentities)
-    .where(eq(verifactuIdentities.nodeId, target.nodeId));
-  expect(targetSifs).toHaveLength(1);
-  expect(targetSifs[0]).toMatchObject({ numeroInstalacion: "P000042", revocadoEn: null });
-  const active = await suite.db
-    .select(seriesWithNextNumber)
-    .from(invoiceSeries)
-    .where(eq(invoiceSeries.nodeId, target.nodeId))
-    .orderBy(invoiceSeries.code);
-  expect(active.map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))).toEqual([
-    { code: "A-P000042", purpose: "standard", nextNumber: 1 },
-    { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-    { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
-    { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
-  ]);
-  await advanceSeriesTo(suite.db, target.nodeId, 41);
-  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-  const ledger = await suite.db.select().from(fiscalAllocations);
-  await attempt("promote", run, { target, priorActivation: "committed" });
-  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
-  expect(await suite.db.select().from(fiscalReservations)).toEqual(reservation);
-});

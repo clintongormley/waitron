@@ -53,7 +53,6 @@ async function storedSource(
   const sifs = await rows(query, "verifactu_identities");
   const series = await rows(query, "invoice_series");
   const allocations = await rows(query, "fiscal_allocations");
-  const reservations = await rows(query, "fiscal_reservations");
   let complete = true;
   const records: unknown[] = [];
   for (const row of sifs)
@@ -107,17 +106,6 @@ async function storedSource(
       ),
     });
   }
-  for (const row of reservations)
-    records.push({
-      reference: `fiscal_reservations/${row.event_key}`,
-      kind: "reservation",
-      taxpayerNif: row.taxpayer_nif,
-      environment: row.environment,
-      softwareId: row.software_id,
-      nodeId: row.node_id,
-      identity: row.installation_identity,
-      recordedAtMs: time(row.established_at),
-    });
   return { reference: "venue", complete, records };
 }
 function projected(sources: readonly HourHistorySource[]): BackupModuleStatus {

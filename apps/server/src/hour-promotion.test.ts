@@ -30,7 +30,6 @@ import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identit
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
@@ -273,7 +272,6 @@ async function rows() {
   return {
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
     sif: await suite.db.select().from(verifactuIdentities),
   };
 }
@@ -330,7 +328,6 @@ it.each(["key", "manager"])(
     expect(await rows()).toEqual(before);
     expect(await promote(s, selected.input, auth)).toMatchObject({ alreadyPrimary: false });
     const after = await rows();
-    expect(after.reservations).toEqual([]);
     expect(after.allocations).toHaveLength(2);
     expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
     expect(
@@ -1151,7 +1148,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   ]);
   expect(await spare.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(baseline.series);
   expect(await spare.db.select().from(verifactuIdentities)).toEqual(baseline.sif);
-  expect(await spare.db.select().from(fiscalReservations)).toEqual([]);
   expect(await spare.db.select().from(fiscalAllocations)).toEqual([]);
   const saved = await readModulePreparationHistory(options, binding.module);
   expect(saved).toEqual([{ version: 1, entries: [], dormant: [state] }]);

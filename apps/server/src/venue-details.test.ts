@@ -830,7 +830,6 @@ describe("venue details preserve committed history", () => {
     "verifactu_records",
     "verifactu_identities",
     "fiscal_allocations",
-    "fiscal_reservations",
     "working_orders",
     "working_order_lines",
     "ticket_items",

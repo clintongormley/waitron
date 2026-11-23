@@ -17,7 +17,6 @@ import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { fiscalAllocations } from "./schema/allocations.js";
-import { fiscalReservations } from "./schema/reservations.js";
 import {
   createHourDormantPreparation,
   readRetainedHourDormant,
@@ -82,7 +81,6 @@ async function rows() {
     series: await suite.db.select().from(invoiceSeries),
     records: await suite.db.select().from(verifactuRecords),
     allocations: await suite.db.select().from(fiscalAllocations),
-    reservations: await suite.db.select().from(fiscalReservations),
   };
 }
 async function reserve(source = primary, target = standby) {

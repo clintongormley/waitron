@@ -14,7 +14,6 @@ import {
   createCloudAllocationPreparation,
   createCloudAllocationFilePreparation,
 } from "./cloud-preparation.js";
-import { createDeclaredPaperStandbyPreparation } from "./declared-paper-standby.js";
 import { createDeclaredPaperPreparation } from "./declared-paper-preparation.js";
 
 function declared(value: unknown): boolean {
@@ -82,16 +81,6 @@ function configuredOperations(
       }
       if (host !== undefined) {
         const evidence = await host.readPublicEvidence(operation.binding);
-        if (
-          typeof evidence?.current === "object" &&
-          evidence.current !== null &&
-          "kind" in evidence.current &&
-          evidence.current.kind === "paper-declared-standby-confirmation"
-        )
-          return createDeclaredPaperStandbyPreparation(async () => evidence!.current).prepare(
-            operation,
-            run,
-          );
         if (declared(evidence?.current)) {
           return createDeclaredPaperPreparation(async () => evidence!.current).prepare(
             operation,

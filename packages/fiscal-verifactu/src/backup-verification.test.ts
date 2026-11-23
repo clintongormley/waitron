@@ -403,28 +403,6 @@ it("admits absent predecessor tables only with an empty migrated target", async 
   });
   expect(await verify(null)).toEqual(passed);
 });
-it("includes dormant reservation timestamps without executing the reservation", async () => {
-  await capture();
-  both((db) =>
-    db
-      .prepare("insert into fiscal_reservations values (?,?,?,?,?,?,?,?,?,?,?)")
-      .run(
-        "retained-spare",
-        "spare",
-        TAXPAYER_A.nodeId2,
-        TAXPAYER_A.nodeId,
-        "89890001K",
-        "old-software",
-        "preproduction",
-        "0CNPG",
-        "{}",
-        JSON.stringify(bases),
-        "invalid-time",
-      ),
-  );
-  expectCheck(await verify(), "entries", "invalid");
-});
-
 it("cannot omit the full-chain result from the aggregate", async () => {
   await capture();
   both((db) => db.exec("update verifactu_identities set node_id='missing-node'"));

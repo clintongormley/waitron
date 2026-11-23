@@ -23,9 +23,6 @@ import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { currentSif } from "./registro-sif.js";
-import { fiscalReservations } from "./schema/reservations.js";
-import { verifyDeclaredDormantReservation } from "./declared-paper-evidence.js";
-import { verifyRetainedPaperReservation } from "./paper-evidence.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 
 export type ActivationRefusal =
@@ -90,12 +87,6 @@ async function validateForActivation(
     requiredBases: storedBases.length > 0 ? storedBases : context.requiredBases,
   });
   if (!validated.ok) return validated;
-  const [reserved] = await tx
-    .select({ eventKey: fiscalReservations.eventKey })
-    .from(fiscalReservations)
-    .where(eq(fiscalReservations.allocationKey, validated.allocation.allocationId));
-  if (reserved !== undefined && dormantBases === undefined)
-    return { ok: false, reason: "reservation_mismatch" };
   const [usedAllocation] = await tx
     .select({ eventKey: fiscalAllocations.eventKey })
     .from(fiscalAllocations)
@@ -220,131 +211,6 @@ export async function activateAuthenticatedHourStandbyAllocation(
     authorised.context.requiredBases,
     authorised.check,
   );
-}
-
-export async function activateAuthenticatedDormantAllocation(
-  tx: Transaction,
-  node: Pick<ProvisionedNode, "nodeId">,
-  reservationEventId: string,
-  allocation: unknown,
-  approval: unknown,
-  context: AllocationContext,
-  authority: unknown,
-): Promise<ActivationResult> {
-  const authorised = authenticatedContext(context, authority, "promote");
-  return activateDormant(
-    tx,
-    node,
-    reservationEventId,
-    allocation,
-    approval,
-    authorised.context,
-    authorised.check,
-  );
-}
-
-export async function activateDormantAllocation(
-  tx: Transaction,
-  node: Pick<ProvisionedNode, "nodeId">,
-  reservationEventId: string,
-  allocation: unknown,
-  approval: unknown,
-  context: AllocationContext,
-): Promise<ActivationResult> {
-  return activateDormant(tx, node, reservationEventId, allocation, approval, context);
-}
-
-async function activateDormant(
-  tx: Transaction,
-  node: Pick<ProvisionedNode, "nodeId">,
-  reservationEventId: string,
-  allocation: unknown,
-  approval: unknown,
-  context: AllocationContext,
-  authorise?: () => void,
-): Promise<ActivationResult> {
-  const refuse = (reason: string): never => {
-    throw new AppError("sif.allocation_invalid", { reason });
-  };
-  try {
-    allocation = structuredClone(allocation);
-    approval = structuredClone(approval);
-  } catch {
-    return refuse("reservation_mismatch");
-  }
-  const [retained] = await tx
-    .select()
-    .from(fiscalReservations)
-    .where(eq(fiscalReservations.eventKey, reservationEventId));
-  if (retained === undefined) return refuse("reservation_missing");
-  if (
-    retained.nodeId !== node.nodeId ||
-    retained.nodeId !== context.targetNodeId ||
-    retained.sourceNodeId !== context.sourceId ||
-    retained.eventKey === context.eventId ||
-    context.mode !== "recovery" ||
-    (context.authority.kind !== "paper" && context.authority.kind !== "paper-declared")
-  )
-    return refuse("reservation_mismatch");
-  if (context.authority.kind === "paper-declared") {
-    if (!verifyDeclaredDormantReservation(retained, context))
-      return refuse("reservation_untrusted");
-  } else {
-    const proof = retained.evidence as {
-      block?: unknown;
-      reservation?: { payload?: { operatorId?: unknown; incidentEvidence?: unknown } };
-    } | null;
-    const historical = verifyRetainedPaperReservation(retained.evidence, context.authority.trust, {
-      allocationId: retained.allocationKey,
-      taxpayerNif: retained.taxpayerNif,
-      softwareId: retained.softwareId,
-      environment: retained.environment,
-      recipientVenueId: context.authority.recipientVenueId,
-      generationId: context.authority.generationId,
-      blockId: context.authority.blockId,
-      eventId: retained.eventKey,
-      operatorId:
-        typeof proof?.reservation?.payload?.operatorId === "string"
-          ? proof.reservation.payload.operatorId
-          : "",
-      sourceId: retained.sourceNodeId,
-      targetNodeId: retained.nodeId,
-      incidentEvidence:
-        typeof proof?.reservation?.payload?.incidentEvidence === "string"
-          ? proof.reservation.payload.incidentEvidence
-          : "",
-      requiredBases: retained.bases,
-    });
-    if (!historical.ok) return refuse("reservation_untrusted");
-    const supplied = allocation as { reservationEvidence?: { block?: unknown } } | null;
-    if (
-      historical.allocation.installationIdentity !== retained.installationIdentity ||
-      !isDeepStrictEqual(allocation, {
-        ...historical.allocation,
-        reservationEvidence: supplied?.reservationEvidence,
-      }) ||
-      !isDeepStrictEqual(supplied?.reservationEvidence?.block, proof?.block)
-    )
-      return refuse("reservation_mismatch");
-  }
-  if (context.priorActivation !== "committed") {
-    const [activeSif] = await tx
-      .select({ id: verifactuIdentities.id })
-      .from(verifactuIdentities)
-      .where(
-        and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
-      )
-      .limit(1);
-    const [activeSeries] = await tx
-      .select({ id: invoiceSeries.id })
-      .from(invoiceSeries)
-      .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
-      .limit(1);
-    if (activeSif !== undefined || activeSeries !== undefined)
-      return refuse("standby_already_active");
-  }
-  // Historical join signatures do not establish current outside consumption.
-  return activate(tx, node, allocation, approval, context, retained.bases, authorise);
 }
 
 async function activate(

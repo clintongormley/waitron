@@ -1,45 +1,39 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { readVenueSettings } from "@waitron/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { isDeepStrictEqual } from "node:util";
 import {
-  menus,
-  deployment,
-  invoiceSeries,
-  nodes,
-  readTaxpayer,
-  taxpayer,
-  type Database,
-} from "@waitron/db";
-import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu";
-import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
-import type { ProvisionedNode, WaitronModule } from "@waitron/module";
-import { nodeId } from "@waitron/shared";
+  readOperationAuthority,
+  withOperationAuthority,
+  type ModuleOperationInput,
+  type WaitronModule,
+} from "@waitron/module";
+import { AppError } from "@waitron/shared";
 
-export async function standbyContract(
-  db: Database,
-  primary: ProvisionedNode,
+export function standbyContract(
+  sourceId: string,
   targetNodeId: string,
-  bases: readonly { code: string; purpose: string }[],
-  operatorId?: string,
+  operatorId = "contract-administrator",
 ) {
-  const taxpayer = (await readTaxpayer(db))!;
-  return allocationFixture({
-    node: { ...primary, nodeId: nodeId(targetNodeId) },
-    primary,
-    bases,
-    identity: "P000042",
-    taxpayerNif: taxpayer.taxId,
-    operatorId,
-  });
+  const state = { targetNodeId };
+  function request(action: "reserve" | "establish") {
+    return {
+      binding: { module: "fiscal-verifactu", action, eventId: "test-join", sourceId, targetNodeId },
+      input: state,
+    };
+  }
+  return {
+    state,
+    request,
+    authorised<T>(
+      action: "reserve" | "establish",
+      run: (operation: ModuleOperationInput) => Promise<T>,
+    ) {
+      const { binding, input } = request(action);
+      return withOperationAuthority(binding, operatorId, (authority) =>
+        run({ binding, input, authority }),
+      );
+    },
+  };
 }
 
-export type StandbyContract = Awaited<ReturnType<typeof standbyContract>>;
-
-/**
- * The modules with every standby reservation's `on-activation` mark dropped: a stand-in for a module
- * that reserves at a join, which a marked module never does.
- */
 export function withoutActivationMark(modules: readonly WaitronModule[]): WaitronModule[] {
   return modules.map((module) => {
     const standby = module.provisioning?.standby;
@@ -52,68 +46,31 @@ export function withoutActivationMark(modules: readonly WaitronModule[]): Waitro
 
 export function allocatedStandbyModules(
   modules: readonly WaitronModule[],
-  fixture: StandbyContract,
-) {
+  fixture: ReturnType<typeof standbyContract>,
+): WaitronModule[] {
   return modules.map((module) =>
     module.name === "fiscal-verifactu"
       ? ({
           ...module,
-          provisioning: { ...module.provisioning, standby: ALLOCATED_FISCAL_STANDBY },
-          operations: {
-            prepare(operation, run) {
-              return fixture.request(operation.binding.action).preparation.prepare(operation, run);
+          provisioning: {
+            ...module.provisioning,
+            standby: {
+              series: "on-activation",
+              async reserve(_tx, _source, _target, operation) {
+                if (!operation || !readOperationAuthority(operation.authority, operation.binding))
+                  throw new AppError("sif.allocation_invalid", {
+                    reason: "reauthentication_required",
+                  });
+                return { state: fixture.state };
+              },
+              async establish(_tx, _target, state) {
+                if (!isDeepStrictEqual(state, fixture.state))
+                  throw new AppError("sif.allocation_invalid", { reason: "reservation_mismatch" });
+              },
             },
           },
+          operations: { prepare: (operation, run) => run(operation) },
         } satisfies WaitronModule)
       : module,
   );
-}
-
-export async function prepareStandbyDatabase(
-  source: Database,
-  target: Database,
-  primary: ProvisionedNode,
-) {
-  const taxpayerRow = (await source.select().from(taxpayer))[0]!;
-  const node = (await source.select().from(nodes).where(eq(nodes.id, primary.nodeId)))[0]!;
-  const sif = await source
-    .select()
-    .from(verifactuIdentities)
-    .where(
-      and(eq(verifactuIdentities.nodeId, primary.nodeId), isNull(verifactuIdentities.revocadoEn)),
-    );
-  const series = await source
-    .select()
-    .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, primary.nodeId), isNull(invoiceSeries.retiredAt)));
-  await target.insert(taxpayer).values(taxpayerRow);
-  const menu = await source.select().from(menus).where(eq(menus.isDefault, true));
-  if (menu.length > 0) await target.insert(menus).values(menu);
-
-  await seedVenueSettings(target, (await readVenueSettings(source)).doc);
-  await target.insert(nodes).values(node);
-  await target.insert(deployment).values({ id: 1, environment: "preproduction" });
-  await target.insert(verifactuIdentities).values(sif);
-  await target.insert(invoiceSeries).values(series);
-}
-
-export async function takenOverSeries(
-  db: Database,
-  targetNodeId: string,
-  fixture: StandbyContract,
-  state: unknown,
-) {
-  const target = { nodeId: nodeId(targetNodeId) };
-  await db.insert(nodes).values({ id: target.nodeId, name: "Standby" });
-  await fixture.transaction(db, "establish", (tx, operation) =>
-    ALLOCATED_FISCAL_STANDBY.establish(tx, target, state, operation),
-  );
-  await fixture.transaction(db, "promote", (tx, operation) =>
-    ALLOCATED_FISCAL_STANDBY.activate!(tx, target, operation),
-  );
-  return db
-    .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
-    .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.nodeId, target.nodeId), isNull(invoiceSeries.retiredAt)))
-    .orderBy(invoiceSeries.code);
 }

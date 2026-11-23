@@ -14,7 +14,6 @@ import type {
   FiscalAllocation,
   RecoveryApproval,
 } from "./allocation-envelope.js";
-import { readDeclaredStandbyInput } from "./declared-paper-standby.js";
 import { isAllocatedSeries } from "./allocation-identity.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import {
@@ -340,49 +339,6 @@ function promotionInput(value: unknown, facts: DeclaredPaperConfirmation) {
   )
     refuse("event_mismatch");
   return { allocation: value.allocation, approval: value.approval };
-}
-
-export function verifyDeclaredDormantReservation(
-  retained: {
-    readonly eventKey: string;
-    readonly allocationKey: string;
-    readonly taxpayerNif: string;
-    readonly softwareId: string;
-    readonly environment: string;
-    readonly installationIdentity: string;
-    readonly evidence: unknown;
-    readonly bases: AllocationContext["requiredBases"];
-  },
-  context: AllocationContext,
-): boolean {
-  if (context.authority.kind !== "paper-declared") return false;
-  const held = issued.get(context.authority.token);
-  if (
-    held === undefined ||
-    readOperationAuthority(held.operation.authority, held.operation.binding) === undefined ||
-    held.operation.binding.action !== "promote"
-  )
-    return false;
-  try {
-    const proof = readDeclaredStandbyInput(retained.evidence);
-    const current = held.facts.input.allocation;
-    const consumed = current.reservationEvidence as DeclaredPaperEvidence;
-    return (
-      held.facts.known.history !== undefined &&
-      digest(held.facts.known.history) === proof.historyDigest &&
-      proof.reservationDigest === consumed.reservationDigest &&
-      equal(proof.reservation, consumed.reservation) &&
-      retained.eventKey === proof.reservation.binding.eventId &&
-      retained.allocationKey === current.allocationId &&
-      retained.taxpayerNif === current.taxpayerNif &&
-      retained.softwareId === current.softwareId &&
-      retained.environment === current.environment &&
-      retained.installationIdentity === current.installationIdentity &&
-      isAllocatedSeries(current.series, current.installationIdentity, retained.bases)
-    );
-  } catch {
-    return false;
-  }
 }
 
 export async function withDeclaredPaperAdmission<T>(

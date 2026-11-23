@@ -13,15 +13,13 @@ import { encodeMinuteIdentity, isMinuteAllocatedSeries } from "./hour-identity.j
 import { isAllocatedSeries, matchesInstallationChecksum } from "./allocation-identity.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
 import { readDeclaredPaperInput } from "./declared-paper-evidence.js";
-import { readDeclaredStandbyInput } from "./declared-paper-standby.js";
 import {
-  parsePaperAllocation,
   parsePaperBlock,
   parsePaperConsumption,
   paperBlockBytes,
   paperConsumptionBytes,
 } from "./paper-protocol.js";
-import { verifyRetainedPaperReservation, type PaperCustodianTrust } from "./paper-evidence.js";
+import type { PaperCustodianTrust } from "./paper-evidence.js";
 import { FISCAL_BACKUP_PUBLIC_TRUST } from "./backup-verification-trust.js";
 
 const TABLES = FISCAL_CLASSIFICATION.map((row) => row.table).filter(
@@ -356,76 +354,6 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
   return evidence(a, p);
 }
 
-async function reservationRow(query: BackupQuery, row: BackupRow): Promise<BackupModuleStatus> {
-  const proof = json(row.evidence),
-    b = json(row.bases);
-  if (
-    !object(proof) ||
-    !bases(b) ||
-    !timestamp(row.established_at) ||
-    row.node_id === row.source_node_id
-  )
-    return "invalid";
-  const source = await first(query, "select id from nodes where id=?", [row.source_node_id!]);
-  const target = await first(query, "select id from nodes where id=?", [row.node_id!]);
-  if (source === undefined || target === undefined) return "invalid";
-  if (proof.kind === "paper-declared-reservation") {
-    try {
-      const held = readDeclaredStandbyInput(proof);
-      const r: unknown = held.reservation;
-      if (!exact(r, ["kind", "allocation", "recipientVenueId", "binding", "reservedAt"]))
-        return "invalid";
-      const a = parsePaperAllocation(r.allocation);
-      return a !== null &&
-        SCOPE.every(([column, key]) => row[column] === a[key]) &&
-        exact(r.binding, ["module", "action", "eventId", "sourceId", "targetNodeId"]) &&
-        r.kind === "reserve" &&
-        text(r.recipientVenueId) &&
-        timestamp(r.reservedAt) &&
-        r.binding.module === "fiscal-verifactu" &&
-        r.binding.action === "reserve" &&
-        r.binding.eventId === row.event_key &&
-        r.binding.sourceId === row.source_node_id &&
-        r.binding.targetNodeId === row.node_id &&
-        a.source === "paper" &&
-        isAllocatedSeries(a.series, a.installationIdentity, b)
-        ? "passed"
-        : "invalid";
-    } catch (error) {
-      if (isAppError(error) && error.code === "sif.allocation_invalid") return "invalid";
-      throw error;
-    }
-  }
-  if (!object(proof.block) || !object(proof.reservation) || !object(proof.reservation.payload))
-    return "invalid";
-  const block = parsePaperBlock(proof.block.payload);
-  if (block === null) return "invalid";
-  const trust = FISCAL_BACKUP_PUBLIC_TRUST.paper.find(
-    (root) => root.custodianId === block.custodianId,
-  );
-  if (trust === undefined || trustedKey(trust) === null) return "unsupported";
-  const validation = verifyRetainedPaperReservation(proof, trust, {
-    allocationId: String(row.allocation_key),
-    taxpayerNif: String(row.taxpayer_nif),
-    softwareId: String(row.software_id),
-    environment: String(row.environment),
-    recipientVenueId: block.recipientVenueId,
-    generationId: block.generationId,
-    blockId: block.blockId,
-    eventId: String(row.event_key),
-    operatorId:
-      typeof proof.reservation.payload.operatorId === "string"
-        ? proof.reservation.payload.operatorId
-        : "",
-    sourceId: String(row.source_node_id),
-    targetNodeId: String(row.node_id),
-    incidentEvidence: String(proof.reservation.payload.incidentEvidence),
-    requiredBases: b,
-  });
-  return validation.ok && validation.allocation.installationIdentity === row.installation_identity
-    ? "passed"
-    : "invalid";
-}
 const LINKS = [
   ["returned_invoice_records", "record_id", "verifactu_records", "id"],
   ["verifactu_identities", "node_id", "nodes", "id"],
@@ -466,18 +394,13 @@ async function walk(
       )
         return "invalid";
     }
-  for (const table of ["fiscal_allocations", "fiscal_reservations"]) {
-    if (!(await exists(query, table))) continue;
-    for await (const row of query.rows(`select * from ${ident(table)}`)) {
+  if (await exists(query, "fiscal_allocations"))
+    for await (const row of query.rows("select * from fiscal_allocations")) {
       if (row.environment !== context.source.environment) return "invalid";
-      const checked =
-        table === "fiscal_allocations"
-          ? await allocationRow(query, row)
-          : await reservationRow(query, row);
+      const checked = await allocationRow(query, row);
       if (checked === "invalid") return "invalid";
       if (checked === "unsupported") status = "unsupported";
     }
-  }
   return status;
 }
 export async function verifyBackupFiscalHistory(

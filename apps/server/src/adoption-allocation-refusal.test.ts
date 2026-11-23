@@ -141,7 +141,6 @@ async function state(db: Pick<typeof suite.db, "execute"> = suite.db) {
 const FISCAL_TABLES = [
   "verifactu_identities",
   "invoice_series",
-  "fiscal_reservations",
   "fiscal_allocations",
   "verifactu_records",
 ];

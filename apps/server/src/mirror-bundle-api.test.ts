@@ -44,15 +44,12 @@ import {
 import { readPairLink } from "@waitron/node-db";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
-import { AppError, nodeId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   standbyContract,
   allocatedStandbyModules,
-  prepareStandbyDatabase,
-  takenOverSeries,
   withoutActivationMark,
 } from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
@@ -138,11 +135,6 @@ const STANDBY_KEYS = generateNodeKeyPair();
 const STANDBY_PUB = STANDBY_KEYS.publicKey;
 
 const suite = useVenueDb({
-  migrations: migrationOptionsFor(manifestSets(), null),
-  timeoutMs: 60_000,
-});
-
-const spare = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
@@ -271,7 +263,6 @@ let outsideReservations: unknown[] = [];
 async function allocationSnapshot() {
   return {
     allocations: await db.select().from(fiscalAllocations),
-    reservations: await db.select().from(fiscalReservations),
     identities: await db.select().from(verifactuIdentities),
     series: await db.select().from(invoiceSeries),
     outsideReservations: structuredClone(outsideReservations),
@@ -321,16 +312,9 @@ async function withFixtureOperation(
   )
     return send(request.moduleOperation);
   const primary = (await db.select().from(nodes))[0]!;
-  const fixture = await standbyContract(
-    db,
-    { nodeId: nodeId(primary.id) },
+  const fixture = standbyContract(
+    primary.id,
     request.standbyNodeId,
-    [
-      { code: "FA", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "RF", purpose: "corrective" },
-      { code: "RFF", purpose: "full_corrective" },
-    ],
     await personIdForLoginEmail(db, request.email),
   );
   const held = fixture.request("reserve");
@@ -1169,7 +1153,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     });
   });
 
-  it("returns a signed dormant allocation and a valid endorsement, activating every purpose at takeover", async () => {
+  it("returns the reserving module state with a valid endorsement", async () => {
     const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
     const app = mountApp(designated);
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
@@ -1192,32 +1176,8 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     };
     const r = bundle.reservedIdentity;
     const fiscal = r.modules["fiscal-verifactu"];
-    const allocation = fiscal.evidence.block.payload.allocations[0]!;
-    expect(allocation.installationIdentity).toBe("P000042");
-    expect(typeof allocation.taxpayerNif).toBe("string");
-    expect(allocation.softwareId).toBe("W1");
     expect(fiscal).toEqual(fixture.state);
     expect(r.series).toEqual([]);
-    expect(allocation.series).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "corrective" },
-      { code: "RFF-P000042", purpose: "full_corrective" },
-    ]);
-    const byCode = new Map(allocation.series.map((s) => [s.code, s.purpose]));
-    expect(byCode.get("FA-P000042")).toBe("standard");
-    expect(byCode.get("FF-P000042")).toBe("full");
-    expect(byCode.get("RF-P000042")).toBe("corrective");
-    const primary = {
-      nodeId: nodeId(designated.nodeId),
-    };
-    await prepareStandbyDatabase(db, spare.db, primary);
-    expect(await takenOverSeries(spare.db, standby.nodeId, fixture, fiscal)).toEqual([
-      { code: "FA-P000042", purpose: "standard" },
-      { code: "FF-P000042", purpose: "full" },
-      { code: "RF-P000042", purpose: "corrective" },
-      { code: "RFF-P000042", purpose: "full_corrective" },
-    ]);
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
@@ -2388,21 +2348,7 @@ async function allocatedReply(
   adminPersonId: string,
   body: { standbyNodeId: string; [key: string]: unknown },
 ) {
-  const primary = {
-    nodeId: nodeId(designated.nodeId),
-  };
-  const fixture = await standbyContract(
-    db,
-    primary,
-    body.standbyNodeId,
-    [
-      { code: "FA", purpose: "standard" },
-      { code: "FF", purpose: "full" },
-      { code: "RF", purpose: "corrective" },
-      { code: "RFF", purpose: "full_corrective" },
-    ],
-    adminPersonId,
-  );
+  const fixture = standbyContract(designated.nodeId, body.standbyNodeId, adminPersonId);
   const held = fixture.request("reserve");
   const original = [...ALL_MODULES];
   (ALL_MODULES as WaitronModule[]).splice(
