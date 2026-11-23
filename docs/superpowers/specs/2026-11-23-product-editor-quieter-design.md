@@ -82,3 +82,29 @@ line?" To the proposal below, they answered "y":
    in. Under reduced motion, it appears at once. This is in `wt-disclosure`, for every screen.
 10. **Details' closed summary has one row per group that has something set,** each row cut to one
     line. This replaces the single line cut at two lines.
+
+After seeing the cards mock-ups, the owner wrote "i think i like it, but i see why i decided
+against it the first time: too many boxes. i wonder if we should merge pricing, variants, and
+modifiers". To the merged mock-up and its notes, they answered "yes". On whether wrapped summary
+lines should be indented, the controller proposed a two-line cut with a hanging indent, for the
+owner to check in the screenshots. Then the owner wrote: "for sure we will want to use this style
+elsewhere in the site".
+
+11. **The dialog is grey (`--wt-color-bg`) and holds three raised cards:**
+    1. Category, Name and Available.
+    2. Details, the only part that folds.
+    3. Price, Variants and Modifiers, always open. The price field has no group label above it,
+       because the field names itself.
+
+    Pricing no longer folds when a variant is active, and Variants and Modifiers are always open.
+    This supersedes decision 4 for those three, and the 2026-10-02 Pricing fold (A219, #1065).
+12. **Each Details row is cut after two lines,** and a wrapped line is indented under its first
+    line. This supersedes decision 10's one-line cut.
+13. **The card style is shared:**
+    - `wt-card raised` for a fixed card
+    - a new `card` attribute on `wt-disclosure` for a card that folds, drawn with `wt-card`'s own
+      styles
+    - a new `--wt-dialog-surface` setting on `wt-dialog`
+
+    The design-system doc records the pattern so other screens can adopt it. This branch changes
+    no other screen.

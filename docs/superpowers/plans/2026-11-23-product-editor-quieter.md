@@ -352,103 +352,179 @@ green before the regroup.
   set". The body adds that `summaryRows` is removed from `wt-disclosure` because nothing uses it
   now.
 
-### Task 5: The owner's review of the built editor: space between groups, a smoother close, one summary row per group
+### Task 5a: Shared pieces for the owner's review: summary rows of fields, a smoother close, a folding card, a dialog surface setting
 
-Owner, 2026-11-23, looking at the branch's editor:
-- "i think it needs more spacing between the sections"
-- "when you collapse the section, the summary appears, which pushes the form down, then the form
-  rolls up. the change could be smoother"
-- "should the details have different sections on a new line, rather than a single line?"
-
-The controller proposed the following and the owner answered "y".
+These come from the owner's review of the built editor, 2026-11-23 (spec decisions 8-13). This
+task changes the shared components only. Task 5b uses them in the editor.
 
 **Files:**
-- Modify: `packages/ui/src/components/wt-disclosure.ts` (the `summaryRows` shape, the summary's
-  timing on close, and a fade).
-- Modify: `apps/dashboard/src/widgets/product-editor.ts`:
-  - the Details groups' gap
-  - `detailsSummary` becomes rows
-  - drop Task 3's two-line `::part(summary)` cut
+- Modify: `packages/ui/src/components/wt-disclosure.ts` and `packages/ui/src/components/wt-dialog.ts`
+- Modify: `packages/ui/demo/main.ts`, if it passes `summaryRows`
 - Test: `packages/ui/src/components/wt-disclosure.test.ts`, `wt-disclosure.a11y.test.ts`,
-  `apps/dashboard/src/widgets/product-editor.test.ts` (and any other file whose tests read the
-  Details summary).
+  `packages/ui/src/components/wt-dialog.test.ts`
 
 **Interfaces:**
-- `summaryRows` changes shape to `readonly { fields: readonly SummaryField[]; lines: number }[]`.
-  - Each row draws its fields like `summaryFields` does (name, value, `placeholder` italic,
-    `warning` colour, fields joined with " · ").
-  - Each row is cut after its `lines` lines, as rows are today.
-  - Grep first. After Task 2a nothing outside `wt-disclosure`'s own tests and the demo
-    (`packages/ui/demo/main.ts`) passes `summaryRows`; update those.
-- `ProductEditor`'s Details passes `.summaryRows=${this.detailsSummaryRows()}`, and no longer
-  `summaryFields`.
-  - There is one row per group, in group order: kitchen, menu, nutrition, VAT, ordering.
-  - Each row's fields are that group's existing summary method's output (`kitchenSummary()`,
-    `descriptorsSummary()`, `nutritionSummary()`, `takeawayVatSummary()`, `orderingSummary()`).
-  - Each row has `lines: 1`. A group whose method returns no fields gives no row.
-  - Keep `detailsSummary()` only if something still needs the flat list; otherwise delete it.
+- **`summaryRows` changes shape** to `readonly { fields: readonly SummaryField[]; lines: number }[]`.
+  - Each row draws its fields like `summaryFields` does: name, value, `placeholder` italic,
+    `warning` colour, fields joined with " · ".
+  - Each row is cut after its `lines` lines.
+  - A row that wraps indents every line after its first by `var(--wt-space-4)` (a hanging indent).
+  - Grep the whole repository first. Only `wt-disclosure`'s own tests and possibly the demo pass
+    `summaryRows` today.
+- **The summary waits for a close to finish.** While a close animation runs, the summary is not
+  rendered. Once `finishAnimation` runs, it is rendered and fades in over
+  `var(--wt-duration-disclosure)`. Under reduced motion it appears at once and does not fade.
+  Every path that skips the animation (reduced motion, `has-error`, equal heights, the first
+  render) shows it at once.
+- **`wt-disclosure` gains a `card` boolean attribute (reflected).** It draws the section as a raised
+  card, using `cardFrameStyles` from `@waitron/ui-core/components/wt-card` plus the raised look,
+  exactly as `<wt-card raised>` does (raised surface, `--wt-shadow-1`). With `card`:
+  - there is no line under the heading, whatever `ruled` says
+  - the card's own padding holds the heading, summary and body
+
+  The owner wants this style reused across the dashboard, so it lives in the component, not in
+  one screen.
+- **`wt-dialog` gains `--wt-dialog-surface`.** It defaults to `var(--wt-color-surface-raised)` and
+  replaces the dialog's own background (`wt-dialog.ts:45`), `--wt-tabs-sticky-surface` and
+  `--wt-form-actions-surface` (37-38). So a screen that sets it on its `wt-modal` greys the whole
+  dialog, footer included.
 
 - [ ] **Step 1: Write the failing tests.**
-  - **wt-disclosure, summary rows.** "summary rows draw each row's fields joined with a middot,
-    one row per entry". Two rows, `[{fields:[{label:"A",value:"1"},{label:"B",value:"2",warning:true}],lines:1},{fields:[{label:"C",value:"3",placeholder:true}],lines:1}]`,
-    give two `.summary-row` elements:
-    - the first's text is "A: 1 · B: 2", with "2" inside `.summary-warning`
-    - the second has "3" inside `.summary-placeholder`
-
-    Convert the existing `summaryRows` tests to the new shape, keeping their assertions.
-  - **wt-disclosure, closing.** "closing waits for the body to finish before showing the summary".
-    Open, then set `open = false`:
-    - while `.body` still has `animating`, the `[part=summary]` element is absent
-    - once the animation is finished (use the test file's existing helper that finishes the body
-      animation), it is present
-  - **wt-disclosure, reduced motion.** "under reduced motion the summary shows as soon as the
-    section closes".
-  - **wt-disclosure, error.** "a section forced open by an error and then closed shows its summary
-    at once" (no animation runs there).
-  - **wt-disclosure, fade.** "the summary fades in", and "under reduced motion it does not fade".
-    Assert the `[part=summary]` element's computed `animationName` is not `"none"` normally and is
-    `"none"` under reduced motion. Use the file's existing reduced-motion emulation.
-  - **product-editor.** "Details shows one summary row per group that has something set":
-    - a product with a prep station name, both customer names, unreviewed allergens and the
-      takeaway VAT gives four rows, in order kitchen, menu, nutrition, VAT
-    - the nutrition row's allergen field carries `warning: true`
-    - each row has `lines: 1`
-
-    Update the `summaryOf(el, "details")` helper to return the rows' fields flattened, so
-    existing value assertions keep passing.
-  - **product-editor, spacing.** Replace Task 3's two-line test with "each Details row is cut to
-    one line at phone width". At 400px, with long names in two languages and a long description,
-    and `line-height: 20px` set on the host:
-    - every `.summary-row` is ≤ 21px tall
-    - the dialog's `scrollWidth` is ≤ its `clientWidth`
-  - **product-editor, gaps.** "Details' groups are spaced apart more than a group's label is from
-    its fields". With `--wt-space-6: 32px` and `--wt-space-2: 8px` set on the host, the computed
-    `rowGap` of the Details body's group container is `"40px"`.
+  - **Rows.** "summary rows draw each row's fields joined with a middot". Rows
+    `[{fields:[{label:"A",value:"1"},{label:"B",value:"2",warning:true}],lines:2},{fields:[{label:"C",value:"3",placeholder:true}],lines:2}]`
+    give two `.summary-row` elements: "A: 1 · B: 2" with "2" in `.summary-warning`, and "3" in
+    `.summary-placeholder`. Convert the existing `summaryRows` tests to the new shape, keeping
+    their assertions.
+  - **Hanging indent.** "a wrapped summary row indents its later lines". With
+    `--wt-space-4: 16px` and a host 200px wide, a row long enough to wrap has
+    `getComputedStyle(row).textIndent === "-16px"` and `paddingInlineStart === "16px"`, and its
+    second line box starts 16px right of its first. Measure with a `Range` over the text, as the
+    existing line-cut tests do.
+  - **Closing.** "closing waits for the body to finish before showing the summary": while `.body`
+    has `animating`, `[part=summary]` is absent; after the animation finishes (the file's existing
+    helper), it is present.
+  - **Reduced motion.** "under reduced motion the summary shows as soon as the section closes".
+  - **Error.** "a section forced open by an error and then closed shows its summary at once".
+  - **Fade.** "the summary fades in, and under reduced motion it does not". `[part=summary]`'s
+    computed `animationName` is not `"none"` normally, and is `"none"` under reduced motion.
+  - **Card.** "a card section looks like a raised wt-card". Mount `<wt-disclosure card>` and
+    `<wt-card raised>` side by side with distinct token values on the host. Their computed
+    background, border, border radius, box shadow and padding are equal, and the heading's
+    `.title` has no bottom border. Add the card state, open and closed, to the a11y scans in both
+    themes.
+  - **wt-dialog.** "a screen can set the dialog's surface". With `--wt-dialog-surface` set to
+    `rgb(1, 2, 3)` on the host, the dialog's computed background is `rgb(1, 2, 3)`, and the form
+    actions' surface variable resolves to the same value. Without it, the existing
+    raised-surface tests (256, 856, 3115) still pass.
+  - **Accessibility.** In `wt-disclosure.a11y.test.ts`, the closed-state scans include a two-row
+    summary with a warning field, in both themes.
 - [ ] **Step 2: Run them and watch them fail.**
-  `pnpm --filter @waitron/ui exec vitest run src/components/wt-disclosure.test.ts src/components/wt-disclosure.a11y.test.ts`
-  and `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts`.
-- [ ] **Step 3: Implement.**
-  - **The summary's timing.** In `wt-disclosure`, the summary is rendered while closed and not
-    closing. "Closing" is true from the moment a close starts an animation (in `updated`, when
-    `open` turned false and the height animation starts) until `finishAnimation` runs, which then
-    calls `requestUpdate()`. Every path that skips the animation (reduced motion, `has-error`,
-    equal heights, the first render) shows the summary at once.
-  - **The fade.** `[part=summary]` fades in with a keyframe animation lasting
-    `var(--wt-duration-disclosure)`, and has `animation: none` under
-    `prefers-reduced-motion: reduce`.
-  - **Rows.** As in Interfaces. Remove Task 3's
-    `wt-disclosure[data-section="details"]::part(summary)` two-line cut. Rows cut themselves.
-  - **Gaps.** The Details groups' gap is `calc(var(--wt-space-6) + var(--wt-space-2))`. The gap
-    between a group's legend and its first field is unchanged.
-- [ ] **Step 4: Run them and watch them pass.** The same commands, plus every suite that renders a
-  `wt-disclosure`:
-  - `src/widgets/extra-list-form.test.ts` and `src/widgets/theme-advanced.test.ts` in
-    `@waitron/dashboard`
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-disclosure.test.ts src/components/wt-disclosure.a11y.test.ts src/components/wt-dialog.test.ts`.
+- [ ] **Step 3: Implement**, as in Interfaces. The fade is a keyframe animation on
+  `[part=summary]`, with `animation: none` under `prefers-reduced-motion: reduce`.
+- [ ] **Step 4: Run them and watch them pass.** The same command, then every suite that renders a
+  `wt-disclosure` or `wt-modal`:
+  - `src/widgets/extra-list-form.test.ts`, `src/widgets/theme-advanced.test.ts` and
+    `src/widgets/product-editor.test.ts` in `@waitron/dashboard`
   - `src/dashboard/prep-stations-screen.test.ts` in `@waitron/venue-service`
   - `src/dashboard/export-guides-view.test.ts` and `src/dashboard/fiscal-filing-screen.test.ts`
     in `@waitron/fiscal-verifactu`
-- [ ] **Step 5: Commit.** Message: "Product editor: one summary row per Details group, more room
-  between groups, and a section's summary appears only once it has finished closing".
+- [ ] **Step 5: Commit.** Message: "Section summaries: rows of fields with a hanging indent, shown
+  only once a section has finished closing; dialogs take a surface colour from the screen".
+
+### Task 5b: The product editor as three cards
+
+**Files:**
+- Modify: `apps/dashboard/src/widgets/product-editor.ts`:
+  - `render`
+  - `renderDetails`
+  - `renderPrice`, `renderVariants`, `renderModifiers`
+  - the starting-state fields at 409-412 and 489-492, and the Pricing re-open at 760-764
+  - `SECTION_FIELDS`
+  - styles
+- Modify: `apps/dashboard/src/i18n/strings.ts`, if a key becomes unused.
+- Test: `product-editor.test.ts`, `product-editor.a11y.test.ts`,
+  `product-editor.variant-focus.test.ts`, `product-editor.save-state.test.ts`,
+  `product-editor.dine-in-vat.test.ts`, `product-editor.nutrition.test.ts`,
+  `apps/dashboard/src/screens/products-screen.test.ts`
+
+**Interfaces:**
+- Consumes: Task 5a's `summaryRows` shape and `--wt-dialog-surface`.
+- **`.form` holds three cards, in order:**
+  1. `<wt-card raised data-section="identity">` holds the existing `categories`, `name` and
+     `available` groups.
+  2. `<wt-disclosure card data-section="details">` (Task 5a's card attribute, no `ruled`).
+  3. `<wt-card raised data-section="price">` holds:
+     - `<div class="group" data-group="price">`: the price field and its unit-usage notes, with no
+       label above it (the field names itself)
+     - `<fieldset class="group" data-group="variants"><legend class="group-label">` with
+       `t("editor.variants")`, its help bubble beside the legend
+     - the same for `data-group="modifiers"` with `t("editor.modifiers")`
+
+     On a variant's page it holds the price only.
+- **The cards' look comes from `wt-card raised` and `wt-disclosure card`.** The editor adds no card
+  styling of its own.
+  - The cards sit `var(--wt-space-4)` apart.
+  - The editor sets `--wt-dialog-surface: var(--wt-color-bg)` on its `wt-modal`.
+  - The identity card's category row is a tap target tall, so the card would show a gap above
+    it. Close the gap from the editor's side: the category row's own spacing, or a `::part`
+    added to `wt-card` if it needs one. Check by eye that the top edge looks like the others.
+- **The groups inside a card** (Details' and the price card's) sit
+  `calc(var(--wt-space-6) + var(--wt-space-2))` apart.
+- **Details' summary** is `.summaryRows=${this.detailsSummaryRows()}`:
+  - one row per group with something set, in group order kitchen, menu, nutrition, VAT, ordering
+  - each row's `fields` is that group's summary method's output
+  - each row has `lines: 2`
+
+  Delete `detailsSummary()` if nothing else uses it. Delete Task 3's
+  `wt-disclosure[data-section="details"]::part(summary)` two-line cut.
+- **Delete:**
+  - `#pricingStartsOpen`, `#variantsStartOpen`, `#modifiersStartOpen`
+  - the Pricing re-open at 760-764
+  - `pricingSummary`, the Variants and Modifiers `summary` strings, and the `price` and
+    `modifiers` entries in `SECTION_FIELDS`
+
+  Only Details folds now. `#detailsStartOpen` is unchanged: open when creating, closed when
+  editing.
+
+- [ ] **Step 1: Write the failing tests** in `product-editor.test.ts`:
+  - **The order test.** `.form > *` is `identity`, `details`, `price` (by `data-section`). The
+    identity card holds `categories`, `name` and `available`. The price card's groups are
+    `price`, `variants`, `modifiers` on a product, and `price` only on a variant. The variants and
+    modifiers legends read `t("editor.variants")` and `t("editor.modifiers")`. No `wt-disclosure`
+    other than Details is in the form.
+  - **The card test.** "the editor draws three cards on a grey dialog":
+    - the identity and price cards are `wt-card[raised]`
+    - Details is `wt-disclosure[card]`
+    - with `--wt-color-bg` set to a distinct value, the `wt-modal` resolves `--wt-dialog-surface`
+      to it
+    - with `--wt-space-4: 16px`, consecutive cards are 16px apart
+  - **The price test.** "price, variants and extras are always on screen". A product with active
+    variants shows the base price field, the variants table and the modifiers control with no
+    click. So does one with neither.
+  - **The rows test.** "Details shows one summary row per group that has something set". A
+    product with a prep station name, both customer names, unreviewed allergens and the takeaway
+    VAT gives four rows, in order kitchen, menu, nutrition, VAT; the allergen field carries
+    `warning: true`; each row has `lines: 2`. Update `summaryOf(el, "details")` to flatten the
+    rows' fields, so existing value assertions keep passing.
+  - **The phone-width test**, replacing Task 3's two-line test: "each Details row is cut after two
+    lines at phone width". At 400px, with `line-height: 20px` set on the host and long names and
+    description, every `.summary-row` is ≤ 41px tall, and the dialog's `scrollWidth` is ≤ its
+    `clientWidth`.
+  - **Tests that relied on folding Pricing, Variants or Modifiers** (opening them, or expecting
+    them closed or open by product) change to expect the fields visible. A refusal on
+    `unit-price`, `unit` or a modifier still puts focus in its field. Name every changed test in
+    the commit body. The decisions reversed are: Pricing folding once a variant is active
+    (A219, #1065), and "open Variants and Modifiers only when they hold something" (spec
+    decision 4).
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts`.
+- [ ] **Step 3: Implement**, as in Interfaces. Remove any style or string the change leaves unused,
+  after grepping.
+- [ ] **Step 4: Run and watch them pass.** The same command, then every test file listed under
+  Files.
+- [ ] **Step 5: Commit.** Message: "Product editor: three cards on a grey dialog, with price,
+  variants and extras always open in one, and Details' summary one row per group".
 
 ### Task 4: Guides and developer docs
 
@@ -460,8 +536,13 @@ The controller proposed the following and the owner answered "y".
   Keep every `{#id}`, and don't add or remove headings.
 - Modify: `docs/developers/design-system.md`:
   - "Fold a long form into collapsible sections with summaries" (4069-4100): the new section
-    list, the summary rule from spec decision 5, and Details' one row per group (Task 5)
-  - the `wt-disclosure` row near 910: plain-weight names, `warning`, `summaryRows` as rows of fields, and the summary appearing only once a close has finished
+    list, the summary rule from spec decision 5, Details' one row per group, the three cards and the merged price card (Task 5b)
+  - a new pattern under "Fold a long form…": a long form in a dialog sets
+    `--wt-dialog-surface: var(--wt-color-bg)` and puts its parts in `wt-card raised`, using
+    `wt-disclosure card` for a part that folds. The product editor is the first screen to use it;
+    the owner wants it reused across the dashboard.
+  - the `wt-card` row near 909, if Task 5b added a part
+  - the `wt-disclosure` row near 910: the `card` attribute, plain-weight names, `warning`, `summaryRows` as rows of fields with a hanging indent, the summary appearing only once a close has finished, and `wt-dialog`'s `--wt-dialog-surface`
   - 4106-4108: language codes are no longer bold
   - 4124-4128: an empty Variants line shows nothing
   - the type table's Group label row (4824): `.group-label` is now really used, as a `legend`
