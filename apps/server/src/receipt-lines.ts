@@ -148,7 +148,7 @@ export function isCoveredDish(line: TillSaleLine): boolean {
   return line.setMenuRole === "dish" && !isPriced(line);
 }
 
-/** A dish placed in a set menu that costs more than the set menu covers prints its amount with a plus. */
+/** A dish placed in a set menu that costs more than the set menu covers; the simplified ticket prints its amount with a plus. */
 export function isSurcharge(line: TillSaleLine, amount: Decimal): boolean {
   return line.setMenuRole === "dish" && compareDecimal(amount, decimal("0")) > 0;
 }
@@ -161,7 +161,7 @@ function isPriced(line: TillSaleLine): boolean {
   );
 }
 
-/** The simplified ticket leaves out a covered dish whose extras all came free, with its answers. */
+/** A ticket or full invoice leaves out a covered dish whose extras all came free, with its answers. */
 export function printsOnTicket({ dish, options }: LineGroup): boolean {
   return !isCoveredDish(dish) || options.some(isPriced);
 }

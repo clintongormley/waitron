@@ -129,7 +129,7 @@ it.each([
     ["Daily menu", "12,73", "12,73"],
     ["Special menu", "18,18", "18,18"],
     ["Special menu", "18,18", "18,18"],
-    ["Sirloin", "+4,55", "+4,55"],
+    ["Sirloin", "4,55", "4,55"],
   ]);
   const pdf =
     surface === "the PDF"
@@ -137,7 +137,8 @@ it.each([
       : (await composeInvoiceEmail({ document })).attachments![0]!.content;
   const text = await pdfText(pdf as Uint8Array);
   expect(text).toContain("Daily menu");
-  expect(text).toContain("+4,55");
+  expect(text).toContain("4,55");
+  expect(text).not.toContain("+4,55");
   for (const covered of COVERED) expect(text).not.toContain(covered);
   expect(text.match(/Sirloin/g)).toHaveLength(1);
   expect(text).toContain("73,00");
@@ -171,7 +172,7 @@ it("a covered soup with bread keeps its bread's figures on the full invoice", as
 
 // An invoice naming a customer is never credited (`sale.correction_unsupported`); the corrective
 // printed as a full invoice is a replacement (R4), made once AEAT has refused the original.
-it("a credit note of a set-menu invoice follows the same rule", async () => {
+it("a replacement (R4) of a set-menu invoice follows the same rule", async () => {
   const { tabId } = await specBill(spec, "fire");
   await asFullInvoice(tabId);
   await payWhole(tabId, "73.00");
@@ -195,7 +196,7 @@ it("a credit note of a set-menu invoice follows the same rule", async () => {
     ["Daily menu", "12,73", "12,73"],
     ["Special menu", "18,18", "18,18"],
     ["Special menu", "18,18", "18,18"],
-    ["Sirloin", "+4,55", "+4,55"],
+    ["Sirloin", "4,55", "4,55"],
   ]);
   const text = await pdfText(await renderInvoicePdf(document));
   for (const covered of COVERED) expect(text).not.toContain(covered);
@@ -267,7 +268,7 @@ it("a full invoice without filed figures follows the same rule", () => {
     ["1  Daily menu (IVA incluido)", "14,00 €"],
     ["1  Soup (IVA incluido)", ""],
     ["Bread 1", "1,50 €"],
-    ["1  Sirloin (IVA incluido)", "+5,00 €"],
+    ["1  Sirloin (IVA incluido)", "5,00 €"],
   ]);
   expect(JSON.stringify(elements)).not.toContain("Hake");
 });

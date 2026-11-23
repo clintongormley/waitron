@@ -389,13 +389,12 @@ export function buildReceiptDocument({
     indent: number,
   ): ReceiptTableRow => {
     const covered = isCoveredDish(line);
-    const plus = isSurcharge(line, amount) ? "+" : "";
     return {
       units: quantityText(line, namesLocale, locale),
       item: itemName(line),
       ...(indent > 0 ? { itemIndent: indent } : {}),
-      price: covered ? "" : `${plus}${formatAmount(price, locale)}`,
-      amount: covered ? "" : `${plus}${formatAmount(amount, locale)}`,
+      price: covered ? "" : formatAmount(price, locale),
+      amount: covered ? "" : formatAmount(amount, locale),
       ...rateCell(line.net.rate),
     };
   };
@@ -446,7 +445,7 @@ export function buildReceiptDocument({
     const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const amount = decimal(dish.listGross ?? dish.gross);
-    const surcharge = isSurcharge(dish, amount);
+    const surcharge = simplified && isSurcharge(dish, amount);
     const printedAmount = isCoveredDish(dish)
       ? ""
       : `${surcharge ? "+" : ""}${itemAmount(amount)}${letter(dish)}`;

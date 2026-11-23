@@ -142,7 +142,7 @@ A set menu has one price. The dishes it covers go to the kitchen at €0.00. A d
 
 Open: drinks served without food, which the adviser will come back on.
 
-Whether covered dishes may also be left off a full invoice: "it can, confirmed" (the owner, 21 November 2026 15:25, lane L `questions.md`, "OWNER 2026-11-21 15:25", relayed by the watcher).
+Whether covered dishes may also be left off a full invoice: "it can, confirmed" (the owner, 21 November 2026 15:25, lane L `questions.md`, "OWNER 2026-11-21 15:25").
 
 **5. VAT rates per product, and a wrong rate found later** (following your answers 1.4 and 1.13)
 
