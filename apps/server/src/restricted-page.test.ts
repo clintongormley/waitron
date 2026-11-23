@@ -679,7 +679,7 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
   );
 
   it.each(["/api/something-unknown", "/management-api/alerts", "/favicon.ico", "/help/x"])(
-    "leaves %s a 404",
+    "leaves %s a 404 from the page route mounted alone",
     async (path) => {
       await handOver(await seedSuccessor("Counter box"));
       expect((await request("en-GB", suite.db, undefined, path)).status).toBe(404);

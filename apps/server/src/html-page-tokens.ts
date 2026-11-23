@@ -42,7 +42,13 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-text-control-font-size": "max(1rem, 1em, var(--wt-font-size-md))",
 };
 
+/** `value` with each rem length as the pixels it draws at the normal 16px root, so a standalone page
+ * keeps its sizes whatever the browser's default text size. */
 export const fixedFontValue = (name: string, value: string): string =>
   name.startsWith("--wt-font-size-")
     ? `${ownSize(name.slice("--wt-font-size-".length) as TextSizeKey, { structure: { [name]: value } })}px`
-    : value;
+    : value.replace(/(?<![\w.-])(\d*\.?\d+)rem\b/g, (_, rems: string) => {
+        const pixels = Number(rems) * 16;
+        if (!Number.isInteger(pixels)) throw new RangeError(`not a whole-pixel rem size: ${name}`);
+        return `${pixels}px`;
+      });

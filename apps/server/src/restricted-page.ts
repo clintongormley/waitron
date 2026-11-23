@@ -15,7 +15,7 @@ import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml, httpsLinkLine } from "./html-page.js";
-import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
+import { BOX_FORM_STYLE, boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import { codeInput, emailInput } from "./carry-on.js";
 import { isSecure } from "./encrypted-connection.js";
 import { passwordInput } from "./recovery-start-again.js";
@@ -335,6 +335,7 @@ ${httpsLinkLine(view.successorUrl, text.openDashboard)}
 ${line === undefined ? "" : `<p>${escapeHtml(line)}</p>`}
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${downloadSection(view, locale, secure)}`,
+    BOX_FORM_STYLE,
   );
 }
 

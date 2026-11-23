@@ -11,7 +11,7 @@ import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
-import { boxFormHead } from "./guide-pages.js";
+import { BOX_FORM_HEAD } from "./guide-pages.js";
 
 /** A failure's log fields: an app error's log-only `reason` when it carries one, else its errno. */
 export function failureFields(error: unknown): Record<string, string | null> {
@@ -78,7 +78,7 @@ export function renderWaitingPage(
     `${text.title[0]}${other}${text.title[1]}`,
     `<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
 ${section}${leaveWhenDone(pageReturnPath(destination))}`,
-    boxFormHead(),
+    BOX_FORM_HEAD,
   );
 }
 

@@ -313,7 +313,7 @@ describe("a box holding a handover restriction starts restricted", () => {
     expect([403, 404]).toContain(response.status);
   }, 60_000);
 
-  it("mounts no dashboard, till, print or device route", async () => {
+  it("answers dashboard routes as stepping down and mounts no till, print or device route", async () => {
     const { port, venue } = start();
     const probes: [string, string][] = [
       ["GET", "/management-api/alerts"],
