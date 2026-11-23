@@ -75,7 +75,11 @@ const PAYMENT_KEYS = [
   "id",
 ] as const;
 
-function paymentCells(fact: PaymentRow, words: Words): Cell[] {
+function paymentCells(
+  fact: PaymentRow,
+  words: Words,
+  accountant: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+): Cell[] {
   const cells: Partial<Record<(typeof PAYMENT_KEYS)[number], Cell>> = {
     kind: words.paymentKinds[fact.kind],
     recordedAt: fact.recordedAt,
@@ -88,14 +92,14 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
     case "part":
       Object.assign(cells, {
         tip: amount(fact.tip),
-        method: words.methods[fact.method] ?? fact.method,
-        state: words.partPaymentStates[fact.state] ?? fact.state,
+        method: accountant.paymentMethods[fact.method],
+        state: words.partPaymentStates[fact.state],
         person: fact.personName,
       });
       break;
     case "card":
       Object.assign(cells, {
-        state: words.cardPaymentStates[fact.state] ?? fact.state,
+        state: accountant.paymentStates[fact.state],
         provider: fact.provider,
         reference: fact.reference,
         partPaymentId: fact.partPaymentId,
@@ -104,8 +108,8 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
     case "refund":
       Object.assign(cells, {
         tip: amount(fact.tip),
-        method: words.methods[fact.method] ?? fact.method,
-        state: words.refundStates[fact.state] ?? fact.state,
+        method: accountant.paymentMethods[fact.method],
+        state: words.refundStates[fact.state],
         provider: fact.provider,
         reference: fact.reference,
         refundReference: fact.refundReference,
@@ -115,7 +119,7 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
       break;
     case "cardRefund":
       Object.assign(cells, {
-        state: words.cardRefundStates[fact.state] ?? fact.state,
+        state: words.cardRefundStates[fact.state],
         provider: fact.provider,
         reference: fact.reference,
         refundReference: fact.refundReference,
@@ -124,7 +128,7 @@ function paymentCells(fact: PaymentRow, words: Words): Cell[] {
       break;
     case "drawer":
       Object.assign(cells, {
-        state: words.drawerKinds[fact.drawerKind] ?? fact.drawerKind,
+        state: words.drawerKinds[fact.drawerKind],
         partPaymentId: fact.partPaymentId,
         refundId: fact.refundId,
         person: fact.personName,
@@ -280,7 +284,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           ...orders.map((order): Cell[] => [
             String(order.orderNumber),
             order.label,
-            words.orderStatuses[order.status] ?? order.status,
+            words.orderStatuses[order.status],
             order.openedAt,
             order.settledAt,
             order.collectedAt,
@@ -299,7 +303,7 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
         rows: [
           [sinceIntro(input.since, words, "payments")],
           words.paymentColumns,
-          ...facts.map((fact) => paymentCells(fact, words)),
+          ...facts.map((fact) => paymentCells(fact, words, accountant)),
         ],
       },
       {
@@ -309,13 +313,13 @@ export async function makeOldBoxWorkbook(input: OldBoxWorkbookInput): Promise<Ol
           words.hoursColumns,
           ...hours.map((entry): Cell[] => [
             entry.personName,
-            words.entryKinds[entry.entryKind] ?? entry.entryKind,
+            words.entryKinds[entry.entryKind],
             entry.eventAt,
             entry.recordedAt,
             entry.correctsEntryId,
             entry.correctionStatus === null
               ? null
-              : (words.correctionStatuses[entry.correctionStatus] ?? entry.correctionStatus),
+              : words.correctionStatuses[entry.correctionStatus],
             entry.correctionReason,
             entry.id,
           ]),

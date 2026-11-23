@@ -27,6 +27,11 @@ import type { HeardCopy } from "./old-box-holdings.js";
 
 // Text order is time order here only while every writer of these columns stores `toISOString()`'s spelling.
 
+type Of<
+  T extends { $inferSelect: object },
+  K extends keyof T["$inferSelect"],
+> = T["$inferSelect"][K];
+
 /** Where the old box's "since" tabs start listing rows, and which rule chose it. */
 export type SinceRule =
   { kind: "copy"; fromMs: number } | { kind: "own"; fromMs: number } | { kind: "all" };
@@ -86,11 +91,11 @@ export async function readActivitySince(db: Database, rule: SinceRule): Promise<
 
 export interface TimeEntryRow {
   personName: string | null;
-  entryKind: string;
+  entryKind: Of<typeof timeEntries, "entryKind">;
   eventAt: string;
   recordedAt: string;
   correctsEntryId: string | null;
-  correctionStatus: string | null;
+  correctionStatus: Of<typeof timeEntries, "correctionStatus">;
   correctionReason: string | null;
   id: string;
 }
@@ -121,7 +126,7 @@ export async function readTimeEntriesSince(db: Database, rule: SinceRule): Promi
 export interface OrderRow {
   orderNumber: number;
   label: string | null;
-  status: string;
+  status: Of<typeof workingOrders, "status">;
   openedAt: string;
   settledAt: string | null;
   collectedAt: string | null;
@@ -200,13 +205,13 @@ export type PaymentRow = {
   | {
       kind: "part";
       tip: Decimal;
-      method: string;
-      state: string;
+      method: Of<typeof billPayments, "method">;
+      state: Of<typeof billPayments, "state">;
       personName: string | null;
     }
   | {
       kind: "card";
-      state: string;
+      state: Of<typeof payments, "state">;
       provider: string;
       reference: string;
       partPaymentId: string | null;
@@ -215,8 +220,8 @@ export type PaymentRow = {
       /** Money given back from a bill payment or a sale's tender, by cash or card. */
       kind: "refund";
       tip: Decimal;
-      method: string;
-      state: string;
+      method: Of<typeof refunds, "method">;
+      state: Of<typeof refunds, "state">;
       provider: string | null;
       /** The refunded card payment's reference. */
       reference: string | null;
@@ -227,7 +232,7 @@ export type PaymentRow = {
   | {
       /** The card payments ledger's own line for a card payment's refund. */
       kind: "cardRefund";
-      state: string;
+      state: Of<typeof paymentRefunds, "state">;
       provider: string;
       /** The refunded card payment's reference. */
       reference: string;
@@ -236,7 +241,7 @@ export type PaymentRow = {
     }
   | {
       kind: "drawer";
-      drawerKind: string;
+      drawerKind: Of<typeof drawerEntries, "kind">;
       partPaymentId: string | null;
       refundId: string | null;
       personName: string | null;

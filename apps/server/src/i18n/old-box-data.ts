@@ -1,3 +1,15 @@
+import type { billPayments, drawerEntries, refunds, workingOrders } from "@waitron/db";
+import type { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
+import type { timeEntries } from "@waitron/workforce";
+
+type OrderStatus = (typeof workingOrders.$inferSelect)["status"];
+type PartPaymentState = (typeof billPayments.$inferSelect)["state"];
+type RefundState = (typeof refunds.$inferSelect)["state"];
+type CardRefundState = (typeof paymentRefunds.$inferSelect)["state"];
+type DrawerKind = (typeof drawerEntries.$inferSelect)["kind"];
+type EntryKind = (typeof timeEntries.$inferSelect)["entryKind"];
+type CorrectionStatus = NonNullable<(typeof timeEntries.$inferSelect)["correctionStatus"]>;
+
 export const OLD_BOX_DATA_WORDS = {
   en: {
     invoiceSheet: "Invoices",
@@ -62,7 +74,7 @@ export const OLD_BOX_DATA_WORDS = {
       placed: "Placed",
       settled: "Settled",
       abandoned: "Abandoned",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<OrderStatus, string>,
     paymentsSheet: "Payments and cash",
     paymentColumns: [
       "Kind",
@@ -88,28 +100,20 @@ export const OLD_BOX_DATA_WORDS = {
       cardRefund: "Card refund",
       drawer: "Cash drawer",
     },
-    refundStates: { pending: "Pending", completed: "Completed", failed: "Failed" } as Readonly<
-      Record<string, string>
+    refundStates: { pending: "Pending", completed: "Completed", failed: "Failed" } satisfies Record<
+      RefundState,
+      string
     >,
-    cardRefundStates: { succeeded: "Refunded", failed: "Failed" } as Readonly<
-      Record<string, string>
+    cardRefundStates: { succeeded: "Refunded", failed: "Failed" } satisfies Record<
+      CardRefundState,
+      string
     >,
-    methods: { cash: "Cash", card: "Card" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pending",
       received: "Received",
       failed: "Failed",
       declined: "Declined",
-    } as Readonly<Record<string, string>>,
-    cardPaymentStates: {
-      attempting: "Attempting",
-      captured: "Captured",
-      voided: "Voided",
-      refunded: "Refunded",
-      partially_refunded: "Partly refunded",
-      failed: "Failed",
-      initiated: "Started",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<PartPaymentState, string>,
     drawerKinds: {
       cash_payment: "Cash payment",
       card_payment: "Card payment",
@@ -119,7 +123,7 @@ export const OLD_BOX_DATA_WORDS = {
       count: "Count",
       recount: "Recount",
       finish: "Finish",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<DrawerKind, string>,
     hoursSheet: "Working hours",
     hoursColumns: [
       "Person",
@@ -138,13 +142,13 @@ export const OLD_BOX_DATA_WORDS = {
       break_end: "Break end",
       correction: "Correction",
       confirmation: "Confirmation",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<EntryKind, string>,
     correctionStatuses: {
       requested: "Requested",
       approved: "Approved",
       declined: "Declined",
       disputed: "Disputed",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<CorrectionStatus, string>,
     activitySheet: "Activity",
     activityColumns: ["At (UTC)", "Kind", "Person", "Subject kind", "Subject"],
   },
@@ -212,7 +216,7 @@ export const OLD_BOX_DATA_WORDS = {
       placed: "Realizado",
       settled: "Cobrado",
       abandoned: "Abandonado",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<OrderStatus, string>,
     paymentsSheet: "Pagos y caja",
     paymentColumns: [
       "Tipo",
@@ -238,28 +242,21 @@ export const OLD_BOX_DATA_WORDS = {
       cardRefund: "Devolución con tarjeta",
       drawer: "Cajón",
     },
-    refundStates: { pending: "Pendiente", completed: "Completada", failed: "Fallida" } as Readonly<
-      Record<string, string>
+    refundStates: {
+      pending: "Pendiente",
+      completed: "Completada",
+      failed: "Fallida",
+    } satisfies Record<RefundState, string>,
+    cardRefundStates: { succeeded: "Devuelta", failed: "Fallida" } satisfies Record<
+      CardRefundState,
+      string
     >,
-    cardRefundStates: { succeeded: "Devuelta", failed: "Fallida" } as Readonly<
-      Record<string, string>
-    >,
-    methods: { cash: "Efectivo", card: "Tarjeta" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pendiente",
       received: "Recibido",
       failed: "Fallido",
       declined: "Rechazado",
-    } as Readonly<Record<string, string>>,
-    cardPaymentStates: {
-      attempting: "En curso",
-      captured: "Cobrado",
-      voided: "Anulado",
-      refunded: "Devuelto",
-      partially_refunded: "Devuelto en parte",
-      failed: "Fallido",
-      initiated: "Iniciado",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<PartPaymentState, string>,
     drawerKinds: {
       cash_payment: "Pago en efectivo",
       card_payment: "Pago con tarjeta",
@@ -269,7 +266,7 @@ export const OLD_BOX_DATA_WORDS = {
       count: "Recuento",
       recount: "Nuevo recuento",
       finish: "Cierre",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<DrawerKind, string>,
     hoursSheet: "Horas de trabajo",
     hoursColumns: [
       "Persona",
@@ -288,13 +285,13 @@ export const OLD_BOX_DATA_WORDS = {
       break_end: "Fin de pausa",
       correction: "Corrección",
       confirmation: "Confirmación",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<EntryKind, string>,
     correctionStatuses: {
       requested: "Solicitado",
       approved: "Aprobado",
       declined: "Rechazado",
       disputed: "En desacuerdo",
-    } as Readonly<Record<string, string>>,
+    } satisfies Record<CorrectionStatus, string>,
     activitySheet: "Actividad",
     activityColumns: ["Fecha (UTC)", "Tipo", "Persona", "Tipo de elemento", "Elemento"],
   },

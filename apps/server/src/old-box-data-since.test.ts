@@ -33,6 +33,7 @@ import {
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
 import { latestChangeAtMs, latestChangeAtMsFromMaxima } from "./handover-emergency-check.js";
+import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
 import { sinceRule, type SinceRule } from "./old-box-data-since.js";
 import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
@@ -607,7 +608,7 @@ describe("the old box's Payments and cash tab", () => {
       // prettier-ignore
       expect([3, 4, 5, 6].map((n) => row(xml, n))).toEqual([
         ["Card refund", iso(CUTOFF + 10 * MINUTE), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-refunded", "re-1", "", "", "Marta Ruiz", refunds[0]!.id],
-        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
+        ["Card payment", iso(CUTOFF - 30 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-refunded", "", "", "", "", captured],
         ["Card refund", iso(LATER), "", "-4.00", "", "", "Failed", "12", "simulator", "ref-refunded", "", "", "", "", refunds[1]!.id],
         [],
       ]);
@@ -731,7 +732,7 @@ describe("the old box's Payments and cash tab", () => {
         ["Cash drawer", iso(CUTOFF + 2 * MINUTE), "", "-2.50", "", "", "Cash refund", "", "", "", "", "", cash.id, "Marta Ruiz", drawer.id],
         ["Refund", iso(CUTOFF - 5 * MINUTE), iso(CUTOFF + 6 * MINUTE), "-3.00", "0.00", "Card", "Completed", "12", "simulator", "ref-card", "re-9", "", "", "Marta Ruiz", late.id],
         ["Refund", iso(CUTOFF + 8 * MINUTE), iso(CUTOFF + 9 * MINUTE), "-1.00", "0.00", "Card", "Failed", "12", "simulator", "ref-card", "", "", "", "Marta Ruiz", failed.id],
-        ["Card payment", iso(CUTOFF - 40 * MINUTE), iso(LATER), "7.00", "", "", "Partly refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
+        ["Card payment", iso(CUTOFF - 40 * MINUTE), iso(LATER), "7.00", "", "", "Partially refunded", "12", "simulator", "ref-card", "", "", "", "", captured],
         ["Card refund", iso(LATER), "", "-3.00", "", "", "Refunded", "12", "simulator", "ref-card", "re-9", "", "", "Ana Gil", cardRefund!.id],
         [],
       ]);
@@ -831,8 +832,8 @@ describe("the old box's Orders and Payments and cash tabs in Spanish", () => {
     expect(row(cash, 2)).toEqual([...es.paymentColumns]);
     // prettier-ignore
     expect([3, 4, 5].map((n) => row(cash, n).slice(0, 7))).toEqual([
-      [es.paymentKinds.part, iso(CUTOFF), iso(CUTOFF), "5.00", "0.00", es.methods.cash, es.partPaymentStates.received],
-      [es.paymentKinds.card, iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", es.cardPaymentStates.captured],
+      [es.paymentKinds.part, iso(CUTOFF), iso(CUTOFF), "5.00", "0.00", ACCOUNTANT_EXPORT_WORDS.es.paymentMethods.cash, es.partPaymentStates.received],
+      [es.paymentKinds.card, iso(CUTOFF + MINUTE), iso(CUTOFF + MINUTE), "7.00", "", "", ACCOUNTANT_EXPORT_WORDS.es.paymentStates.captured],
       [es.paymentKinds.drawer, iso(CUTOFF + 2 * MINUTE), "", "5.00", "", "", es.drawerKinds.cash_payment],
     ]);
     // The Spanish words differ from the English ones, so the tab cannot have fallen back to them.
