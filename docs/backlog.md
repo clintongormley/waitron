@@ -1472,10 +1472,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Give the failover bench an endpoint that stays refused for its lifetime**, preserving its bounded actual-ECONNREFUSED probe and SDK/Litestream consumers.
   [Detail](backlog/ci.md#give-the-failover-bench-an-endpoint-that-stays-refused).
 
-
-- **A throwaway script found six comments that described code that was no longer there, and it is not a guard yet**
-  [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet).
-
 - **`packages/db`'s static mutants are not in its mutation score** (needs the owner). [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it.**

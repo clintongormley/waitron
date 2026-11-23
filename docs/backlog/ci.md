@@ -202,14 +202,6 @@ seconds, and the one re-run of the failed job passed. The log is kept at
 `~/waitron-campaign-l/ci-logs/pr3898-run44838869956-test-server-12.log`; it does not show what the
 hooks were waiting on.
 
-## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
-
-Written 2026-09-14 during the tenant-column removal. It flags a comment whose
-subject has gone from the lines beneath it. It is not usable as it stands: 13 of its 19 hits
-were the legitimate shape where a block comment heads a group of members rather than describing
-the one line below it. **Next action:** rewrite it as a real root guard with an allowlist for that
-header-then-member shape, and its own tests, rather than re-running a scratch script.
-
 ## `--no-verify`: the docs say "Claude never", the hook says "agents never"
 
 `CLAUDE.md` §2 and `docs/developers/ci-and-gates.md` say "Claude
@@ -364,6 +356,8 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 
 
 ## Decisions and deliberate limits
+
+The watcher chose a one-off sweep for stale comments, run on 2026-11-23, because a permanent guard would need an allow-list for its most common match.
 
 ### Remaining fixed-secret setup: measured below the conversion threshold
 

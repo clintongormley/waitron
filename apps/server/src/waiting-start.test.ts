@@ -1194,7 +1194,6 @@ describe("the waiting start", () => {
       expect(refusedPage).not.toContain("Bar Pepe");
     });
 
-    /** Replaces the case's waiting start with one whose first re-ask is held until `answer`. */
     /**
      * Replaces the case's waiting start with one whose first re-ask is held open, and answered
      * with `outcome` at the moment a carry-on, already signed in, takes its turn.
