@@ -642,6 +642,7 @@ describe("the estimated cost", () => {
 
   it("takes each dish's own rate, and for a whole bill the sum over its lines", async () => {
     await setMargin(departmentId, 3000);
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
     await takeawayRates({ Bread: "10.00", Salad: "21.00" });
     const dish = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
     await reprice(dish.billId, 1, 1100, "reduced");
@@ -672,6 +673,7 @@ describe("the estimated cost", () => {
 
   it("takes a dish's extra at the extra's own rate", async () => {
     await setMargin(departmentId, 3000);
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
     await takeawayRates({ Pizza: "10.00", Olives: "21.00" });
     const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }], {
       dining: "takeaway",
@@ -728,40 +730,6 @@ describe("the estimated cost", () => {
     expect(await freeOn(billId)).toEqual([
       row({
         item: "Bread",
-        menuPrice: decimal("11.00"),
-        amountTakenOff: decimal("11.00"),
-        estimatedCost: decimal("7.00"),
-      }),
-    ]);
-  });
-
-  it("takes the dish's takeaway class on a takeaway bill", async () => {
-    await setMargin(departmentId, 3000);
-    const { partyId, billId } = await bill([]);
-    await inTx(venue, async (tx) => {
-      await tx
-        .update(workingOrders)
-        .set({ dining: "takeaway" })
-        .where(eq(workingOrders.id, billId));
-      await placeGroups(tx, venue.cfg, partyId, {
-        groups: [{ lines: [{ menuItemId: venue.item("Salad"), quantity: "1" }], release: "fire" }],
-        operatorId: venue.staffId,
-        billId,
-      });
-      await tx
-        .update(workingOrderLines)
-        .set({
-          unitPriceGross: 1100,
-          lineTotal: 1100,
-          vatClass: "general",
-          takeawayVatClass: "reduced",
-        })
-        .where(eq(workingOrderLines.workingOrderId, billId));
-    });
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
-    expect(await freeOn(billId)).toEqual([
-      row({
-        item: "Salad",
         menuPrice: decimal("11.00"),
         amountTakenOff: decimal("11.00"),
         estimatedCost: decimal("7.00"),

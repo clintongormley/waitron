@@ -7,7 +7,8 @@ process.env.TZ = "Europe/Madrid";
 import { createHash } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { saleLines, sales, workingOrders, type Database } from "@waitron/db";
+import { products, saleLines, sales, workingOrders, type Database } from "@waitron/db";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
@@ -154,8 +155,8 @@ async function adjust(venue: AdjustmentVenue, billId: string, lineNo: number, as
   });
 }
 
-/** One bill: Burger comped, Bottle's whole list price taken off, Bread 50% then €1.25 off, Water
- * paid. */
+/** One takeaway bill: Burger comped, Bottle's whole list price taken off, Bread 50% then €1.25 off,
+ * Water paid. Bread is at 10% and the rest at 21%, so the bill files two rates. */
 async function fileFullComps(db: Database) {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
@@ -163,12 +164,20 @@ async function fileFullComps(db: Database) {
       vi.setSystemTime(new Date(ISSUED_AT.getTime() - minutesBefore * MINUTE));
     at(10);
     const venue = await provisionAdjustmentVenue(db, { clock: fixedClock });
-    const { billId } = await billWith(venue, [
-      { name: "Burger" },
-      { name: "Bottle" },
-      { name: "Bread" },
-      { name: "Water" },
-    ]);
+    await inTx(venue, async (tx) => {
+      for (const name of ["Burger", "Bottle", "Water"]) {
+        const [product] = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(eq(products.name, name));
+        await setTakeawayVatRate(tx, product!.id, "21.00");
+      }
+    });
+    const { billId } = await billWith(
+      venue,
+      [{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }, { name: "Water" }],
+      { dining: "takeaway" },
+    );
     at(8);
     await adjust(venue, billId, 1, { action: "comp" });
     at(6);
@@ -291,22 +300,30 @@ describe("a full comp's filed record and the receipt's words", () => {
       tipo_factura: "F2",
       num_serie_factura: "A/1",
       importe_total: "2.00",
-      cuota_total: "0.18",
+      cuota_total: "0.35",
       desglose: [
         {
           ClaveRegimen: "01",
           CalificacionOperacion: "S1",
-          BaseImponibleOimporteNoSujeto: "1.82",
+          BaseImponibleOimporteNoSujeto: "1.65",
+          TipoImpositivo: "21.00",
+          CuotaRepercutida: "0.35",
+        },
+        // Bread: a zero row at 10%, kept because rateLines does not drop empty groups.
+        {
+          ClaveRegimen: "01",
+          CalificacionOperacion: "S1",
+          BaseImponibleOimporteNoSujeto: "0.00",
           TipoImpositivo: "10.00",
-          CuotaRepercutida: "0.18",
+          CuotaRepercutida: "0.00",
         },
       ],
       descripcion_operacion: "Restaurante",
       fecha_hora_huso_gen_registro: "2026-09-25T11:30:00.000Z",
-      huella: "49DB821FC2EA4FA31E0F4952B614DCFACD75B316B72DD8B8D852478B7C3A9C90",
+      huella: "60A40E8701DAB1526AC551BEF1FF522BCD88CE3471DCECBBFB10828374748E94",
     });
     expect(createHash("sha256").update(shipped.xml).digest("hex")).toBe(
-      "58fa0349506c49d46dc7fcd8523022a341295f5a8dd0e938a1a751552d18505f",
+      "b2e296be90f1d3eb959eaf2d988078ac920e60fb6c90a2f6138a13464a983e17",
     );
   });
 
