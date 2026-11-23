@@ -98,6 +98,24 @@ async function emptyRealFolder(path: string): Promise<boolean> {
 }
 
 /**
+ * On a box that joined another, removes `tls/`'s contents and then `tls/joined.json`, so a re-run
+ * cut short still finds the box joined; then `tls/` itself when it is an empty real folder, which a
+ * start would take for a lost certificate. A linked `tls/` is only emptied.
+ */
+export async function removeJoinedTls(stateDir: string): Promise<void> {
+  const tlsDir = join(stateDir, TLS_DIR);
+  if (await joinedAnotherBox(stateDir)) {
+    for (const name of await readdir(tlsDir)) {
+      if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {
+        await rm(join(tlsDir, name), { recursive: true, force: true });
+      }
+    }
+    await rm(join(stateDir, TLS_JOINED_FILE), { force: true });
+  }
+  if (await emptyRealFolder(tlsDir)) await rmdir(tlsDir);
+}
+
+/**
  * Whether a staged reset passes `refusal`'s marker, `trading.env` and operation-record checks and
  * will empty `tls/` because this box joined another, or will remove the empty real `tls/` that
  * reset leaves when cut short after its joined record and `secrets.env` went; `runStagedReset`
@@ -145,23 +163,13 @@ export async function runStagedReset(
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
     // The other venue's authority and key ring may be here, so the box's own go with them and the
     // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key.
-    // Before the operation record, whose removal makes a re-run discard; the joined record goes
-    // last of them, so a re-run still finds this box joined. An empty folder goes too, a link
-    // excepted, also on a re-run after a stop that removed the joined record but not the folder:
-    // a start finding `tls/` takes it for a lost certificate and asks for repair.
-    const tlsDir = join(deps.stateDir, TLS_DIR);
+    // Before the operation record, whose removal makes a re-run discard.
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
       await rm(join(deps.stateDir, BACKUP_ENV_FILE), { force: true });
-      for (const name of await readdir(tlsDir)) {
-        if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {
-          await rm(join(tlsDir, name), { recursive: true, force: true });
-        }
-      }
-      await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
     }
-    if (await emptyRealFolder(tlsDir)) await rmdir(tlsDir);
+    await removeJoinedTls(deps.stateDir);
     for (const file of [PENDING_ADOPTION_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });
     }

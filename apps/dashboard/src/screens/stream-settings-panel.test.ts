@@ -437,11 +437,11 @@ describe("stream-settings-panel: the bucket form", () => {
   it.each([
     [
       "en-GB",
-      "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove on its row on the Servers page, then save again.",
+      "This venue has a standby box, listed on the Servers page, that receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. To save the bucket here, choose Remove from venue on its row on the Servers page, then save again.",
     ],
     [
       "es-ES",
-      "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar en su fila de Servidores y vuelve a guardar.",
+      "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o la recibirá pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Para guardar aquí el bucket, elige Retirar del local en su fila de Servidores y vuelve a guardar.",
     ],
   ] as const)(
     "explains in %s a Save refused because the venue copies to its standby, and leaves Save working",

@@ -2366,8 +2366,7 @@ export const en = {
   "servers.handover_stop": "Stop",
   "servers.handover_sent":
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
-  "servers.intro":
-    "Every machine on this venue's list of boxes. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
+  "servers.intro": "The boxes that run this venue.",
   "servers.server": "Box",
   "servers.actions": "Actions",
   "servers.loading": "Loading boxes…",
@@ -2390,7 +2389,6 @@ export const en = {
   "servers.join_module_config_invalid":
     "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
-  "servers.machine": "Machine",
   "servers.not_primary":
     "Only the primary box can remove machines or clear them from the list. Open this screen on the primary.",
   "servers.this_server": "This box",
@@ -2399,26 +2397,37 @@ export const en = {
   "servers.standing.sell_only": "Replaced; not selling",
   "servers.replaced_note": "Keep it switched on while it returns its invoice records.",
   "servers.standing.removed": "Removed",
-  "servers.remove": "Remove",
-  "servers.remove_title": "Remove this spare?",
-  "servers.remove_explanation":
-    "This marks it removed on the list of boxes, so tills stop trying to reach it. This cannot be undone. To use that machine again, reset it and add it as a new spare.",
+  "servers.remove": "Remove from venue",
+  "servers.remove_title": "Remove this box from the venue?",
+  "servers.remove_explanation": "Take this box off the venue. Nothing on the box itself changes.",
   "servers.declare_explanation":
     "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now.",
   "servers.declare_switched_off": "This spare is switched off",
   "servers.declare_no_recovery":
     "Nobody is restoring this venue from a backup or switching it to another box right now",
-  "servers.remove_former_title": "Remove this former main box?",
+  "servers.remove_former_title": "Remove this box from the venue?",
   "servers.reset_warning":
-    "The former main box has not returned its invoice records. Switched on again with its data, it could sell beside this main box. If it does come back, reset it, and never choose “Carry on as the main box” on it.",
-  "servers.reset_statement":
-    "The former main box has been reset, or will never be switched on again",
-  "servers.return_waiting": "Waiting for the former main box to return its invoice records",
+    "The old main box has not returned its invoice records. Switched on again with its data, it could sell beside this main box. If it does come back, wipe it, and never choose “Carry on as the main box” on it.",
+  "servers.reset_statement": "The old main box has been wiped, or will never be switched on again",
+  "servers.return_waiting": "Waiting for the old main box to return its invoice records",
   "servers.abandon": "Will not return",
-  "servers.abandon_title": "Stop waiting for the former main box's invoice records?",
+  "servers.abandon_title": "Stop waiting for the old main box's invoice records?",
   "servers.abandon_explanation":
-    "Choose this only if the former main box will not be switched on again with its data, for example because it has been reset. The last handover stops waiting for its invoice records. Any it made after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
+    "Choose this only if the old main box will not be switched on again with its data, for example because it has been wiped. The last handover stops waiting for its invoice records. Any it made after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
   "servers.abandon_confirm": "Stop waiting for its invoice records",
+  "servers.reset_spare": "Wipe and remove",
+  "servers.reset_asked":
+    "Wipe asked. The old main box wipes itself and leaves the venue the next time it is on and can reach this box; you can then re-add it as a spare. If it was already wiped by hand, choose Remove from venue.",
+  "servers.reset_spare_title": "Wipe the old main box and remove it?",
+  "servers.reset_spare_explanation":
+    "Wiping this box removes it from the venue, after which you can re-add it as a spare.",
+  "servers.reset_download":
+    "The old main box may hold data that this box does not have. You should download that data from {address} before wiping and reusing it.",
+  "servers.reset_caution_label": "CAUTION:",
+  "servers.reset_caution_awaiting":
+    "The records recovered from the old main box will exist only on the new main box until the next backup is made.",
+  "servers.reset_caution_no_backups":
+    "Backups are not set up, so the records recovered from the old main box will exist only on the new main box.",
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
@@ -7133,8 +7142,7 @@ export const es: Record<StringKey, string> = {
   "servers.handover_stop": "Parar",
   "servers.handover_sent":
     "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
-  "servers.intro":
-    "Todas las máquinas de la lista de servidores del local. Un servidor en espera se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
+  "servers.intro": "Los servidores que hacen funcionar este local.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
@@ -7159,7 +7167,6 @@ export const es: Record<StringKey, string> = {
   "servers.join_module_config_invalid":
     "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
-  "servers.machine": "Máquina",
   "servers.not_primary":
     "Solo el servidor principal puede retirar máquinas o quitarlas de la lista. Abre esta pantalla en el principal.",
   "servers.this_server": "Este servidor",
@@ -7168,28 +7175,41 @@ export const es: Record<StringKey, string> = {
   "servers.standing.sell_only": "Sustituido; no vende",
   "servers.replaced_note": "Mantenlo encendido mientras devuelve sus registros de facturación.",
   "servers.standing.removed": "Retirado",
-  "servers.remove": "Retirar",
-  "servers.remove_title": "¿Retirar este servidor en espera?",
+  "servers.remove": "Retirar del local",
+  "servers.remove_title": "¿Retirar este servidor del local?",
   "servers.remove_explanation":
-    "Esto lo marca como retirado en la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera.",
+    "Retira este servidor del local. No cambia nada en el propio servidor.",
   "servers.declare_explanation":
     "Confirma que este servidor en espera está apagado y que nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento.",
   "servers.declare_switched_off": "Este servidor en espera está apagado",
   "servers.declare_no_recovery":
     "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
-  "servers.remove_former_title": "¿Retirar este antiguo servidor principal?",
+  "servers.remove_former_title": "¿Retirar este servidor del local?",
   "servers.reset_warning":
-    "El antiguo servidor principal no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, restablécelo y no elijas nunca «Seguir como servidor principal» en él.",
+    "El servidor principal anterior no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, bórralo y no elijas nunca «Seguir como servidor principal» en él.",
   "servers.reset_statement":
-    "El antiguo servidor principal se ha restablecido o no se volverá a encender nunca",
+    "El servidor principal anterior se ha borrado o no se volverá a encender nunca",
   "servers.return_waiting":
-    "Esperando a que el antiguo servidor principal devuelva sus registros de facturación",
+    "Esperando a que el servidor principal anterior devuelva sus registros de facturación",
   "servers.abandon": "No volverá",
   "servers.abandon_title":
-    "¿Dejar de esperar los registros de facturación del antiguo servidor principal?",
+    "¿Dejar de esperar los registros de facturación del servidor principal anterior?",
   "servers.abandon_explanation":
-    "Elige esto solo si el antiguo servidor principal no se va a volver a encender con sus datos, por ejemplo porque se ha restablecido. El último traspaso deja de esperar sus registros de facturación. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
+    "Elige esto solo si el servidor principal anterior no se va a volver a encender con sus datos, por ejemplo porque se ha borrado. El último traspaso deja de esperar sus registros de facturación. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
   "servers.abandon_confirm": "Dejar de esperar sus registros de facturación",
+  "servers.reset_spare": "Borrar y retirar",
+  "servers.reset_asked":
+    "Borrado solicitado. El servidor principal anterior se borrará y saldrá del local la próxima vez que esté encendido y pueda conectar con este servidor; después puedes volver a añadirlo como servidor de reserva. Si ya se borró a mano, elige Retirar del local.",
+  "servers.reset_spare_title": "¿Borrar el servidor principal anterior y retirarlo?",
+  "servers.reset_spare_explanation":
+    "Al borrar este servidor, se retira del local; después puedes volver a añadirlo como servidor de reserva.",
+  "servers.reset_download":
+    "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde {address} antes de borrarlo y volver a usarlo.",
+  "servers.reset_caution_label": "ATENCIÓN:",
+  "servers.reset_caution_awaiting":
+    "Los registros recuperados del servidor principal anterior solo existirán en el nuevo servidor principal hasta que se haga la próxima copia de seguridad.",
+  "servers.reset_caution_no_backups":
+    "No hay copias de seguridad configuradas, así que los registros recuperados del servidor principal anterior solo existirán en el nuevo servidor principal.",
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":

@@ -97,7 +97,7 @@ export const startEn = {
   "connect.no": "No",
   "connect.try_again": "Try again",
   "connect.finish.bundle_fetch_failed":
-    "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here for a new code.",
+    "This box could not get a copy from the main box that checks out, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here for a new code.",
   "connect.confirm.bundle_fetch_failed":
     "This box got no usable answer from the main box to its Join. Check that the main box is switched on, then choose Join again.",
   "connect.reading": "Checking this box's join…",
@@ -117,7 +117,7 @@ export const startEn = {
   "connect.ended.cancelled":
     "This request was cancelled, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.ended.stopped":
-    "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+    "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here.",
   "connect.ended.unknown":
     "The main box ended this request, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.ended.code_taken": "The main box needs this box to ask again. Choose Start again.",
@@ -128,7 +128,7 @@ export const startEn = {
   "connect.failed.not_found":
     "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
   "connect.failed.copy_invalid":
-    "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+    "The main box approved this box, but the copy it sent did not check out, so nothing was installed. On the main box's Servers page, choose Remove from venue in this box's row, then Clear from list. Then choose Start again here.",
   "connect.refusal.join_invalid":
     "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
   "connect.refusal.join_not_found":
@@ -338,7 +338,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.no": "No",
   "connect.try_again": "Volver a intentar",
   "connect.finish.bundle_fetch_failed":
-    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
+    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar del local en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí para obtener un código nuevo.",
   "connect.confirm.bundle_fetch_failed":
     "Este servidor no ha recibido una respuesta útil del servidor principal a su Unirse. Comprueba que el servidor principal está encendido y vuelve a elegir Unirse.",
   "connect.reading": "Comprobando la unión de este servidor…",
@@ -358,7 +358,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.ended.cancelled":
     "Esta solicitud se canceló, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.stopped":
-    "El servidor principal se detuvo a medias al aprobar este servidor, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
+    "El servidor principal se detuvo a medias al aprobar este servidor, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar del local en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
   "connect.ended.unknown":
     "El servidor principal terminó esta solicitud, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.code_taken":
@@ -370,7 +370,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.failed.not_found":
     "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Elige Empezar de nuevo.",
   "connect.failed.copy_invalid":
-    "El servidor principal aprobó este servidor, pero la copia que envió no ha superado la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
+    "El servidor principal aprobó este servidor, pero la copia que envió no ha superado la comprobación, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar del local en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
   "connect.refusal.join_invalid":
     "El servidor principal no ha podido leer la solicitud de este servidor. Vuelve a elegir Unirse. Si pasa otra vez, comprueba que los dos servidores tienen la misma versión de Waitron.",
   "connect.refusal.join_not_found":

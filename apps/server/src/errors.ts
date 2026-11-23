@@ -43,6 +43,16 @@ declare module "@waitron/shared" {
     "handover.return_clash_not_found": { clashId: string };
     "handover.return_outstanding": { operationId: string; sourceNodeId: string };
     "handover.return_not_outstanding": { sourceNodeId: string };
+    /** A reset was ordered without accepting the loss, and this venue holds no completed return from that box. */
+    "handover.reset_loss_unaccepted": Record<string, never>;
+    "handover.reset_query_refused": { reason: string };
+    /**
+     * A reset was ordered for a former main box other than the one whose key this box pinned when
+     * it joined: the peer route answers no other old box's questions, so it would never collect it.
+     */
+    "handover.reset_not_previous_main": Record<string, never>;
+    /** A replaced old main box set aside, on its reset, invoice-record chains this box lacks. */
+    "chain.set_aside_on_reset": { nodeId: string; orderId: string };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };
@@ -1537,6 +1547,11 @@ declare module "@waitron/shared" {
     /** The machine asked to be removed or cleared is the serving primary, this node. */
     "membership.node_is_primary": Record<string, never>;
     /**
+     * A reset was ordered for a machine the chart does not list as a former main box
+     * (`sell-only`), or for one no takeover here or activation in this venue replaced.
+     */
+    "membership.node_not_replaced": Record<string, never>;
+    /**
      * The machine asked to be removed is a former main box (`sell-only`), this venue holds no
      * completed return of its invoice records, and the request did not state, as exact `true`, that
      * it has been reset or will never be switched on again.
@@ -1604,7 +1619,8 @@ declare module "@waitron/shared" {
      * The new box's cancel arrived while the main box was approving the request, had approved it,
      * or had stopped approving it after listing the new box. A new box still waiting keeps
      * following the request; one already holding an answer forgets its join, and a person removes
-     * the main box's listing of it by choosing Remove, then Clear from list, on its Servers page.
+     * the main box's listing of it by choosing Remove from venue, then Clear from list, on its
+     * Servers page.
      */
     "mirror.join_approving": Record<string, never>;
     /**

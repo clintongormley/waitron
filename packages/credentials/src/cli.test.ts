@@ -416,7 +416,7 @@ describe("waitron-credentials rotate", () => {
 
         "This box has a standby server, which holds this key ring too. Rotating here would leave " +
           "the standby unable to open the venue's keys. Nothing was changed. Remove the standby in " +
-          "the dashboard (Servers, then Remove on its row; a standby that finished joining asks " +
+          "the dashboard (Servers, then Remove from venue on its row; a standby that finished joining asks " +
           "you to confirm it is switched off and that nobody is restoring the venue from a backup or " +
           "switching it to another server) and rotate again.",
       ]);

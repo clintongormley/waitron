@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,7 +14,9 @@ import {
   readNodeMembership,
   readTaxpayer,
   openVenueDatabase,
+  readDeploymentEnvironment,
   withTransaction,
+  type DeploymentEnvironment,
   writeNodeMembership,
 } from "@waitron/db";
 import { seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
@@ -26,7 +28,7 @@ import { enabledModules, type WaitronModule } from "@waitron/module";
 import { readHandoverOperation, readHandoverRestriction, readNodeMode } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { nodeId as asNodeId } from "@waitron/shared";
-import { MODULE_RECORDS_DIR } from "@waitron/store";
+import { MODULE_RECORDS_DIR, REPLACED_RESET_FILE } from "@waitron/store";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import {
@@ -44,17 +46,25 @@ import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { stepDown } from "./handover-stepdown.js";
 import { advanceHandover } from "./handover-store.js";
+import { loadBoxEnv } from "./box-env.js";
+import { BOX_LEAF_HOSTNAMES } from "./box-name.js";
+import { ensureBoxSecrets, ensureLeaf, reissueBoxLeaf } from "./box-secrets.js";
+import { loadConfig } from "./config.js";
 import { readModuleConfig } from "./module-config.js";
+import { runEntry } from "./node-entry.js";
+import { FRESH, type RecoveryState } from "./recovery-state.js";
+import { mountResetOrderApi } from "./reset-order-api.js";
+import { ASK_AFTER_REFUSAL_MS, startResetOrderDuty } from "./reset-order-duty.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
-import { removeStandby } from "./membership-removal.js";
+import { listServers, removeStandby } from "./membership-removal.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { runReturnRecordsPass } from "./return-records.js";
-import { knownHandoverSuccessor } from "./start-peer-check.js";
+import { knownHandoverSuccessor, recordSupersededAtStart } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fiscalRows } from "./testing/fiscal-rows.js";
@@ -129,11 +139,11 @@ afterEach(async () => {
  * `adoptFromPrimary`, with Veri*Factu switched on. It does not copy the venue, so the spare is given
  * by hand the taxpayer and the chart its first copy will bring (A947 3b's Task 6.3).
  */
-async function joined() {
+async function joined(environment: DeploymentEnvironment = "preproduction") {
   const boxes = { mainBox, spareBox, mainState, spareState, ring: RING };
-  const main = await veriFactuMainBox(boxes);
+  const main = await veriFactuMainBox(boxes, environment);
   const { modules, mainId, mainKey, session } = main;
-  const { standby, spareId } = await joinSpare(boxes, main);
+  const { standby, spareId } = await joinSpare(boxes, main, { environment });
   expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");
 
   await seedVenue(spareBox.db);
@@ -421,7 +431,7 @@ async function emergencyTakeover(
     emergency,
     waitUntil,
   }).takeOver();
-  return { b, bVenue };
+  return { b, bVenue, modules };
 }
 
 /** The new main box's real receive route. */
@@ -443,6 +453,17 @@ function returnReceiver(store: OpenStore, nodeId: string, modules: readonly Wait
   return receiver;
 }
 
+/** A sale on the main box of `boxes`, then an emergency switch to its spare while the main box is off. */
+async function emergencySwitch(
+  boxes: Awaited<ReturnType<typeof joined>>,
+  waitUntil: (targetMs: number) => void,
+  opened: Array<{ close(): Promise<void> }>,
+) {
+  await saleOn(mainBox.db, boxes.mainId);
+  await boxes.writeSpareRow();
+  return emergencyTakeover(boxes, waitUntil, opened);
+}
+
 /** The old box's real return pass, its posts answered by `receiver`. */
 function oldBoxReturnPass(
   boxes: Awaited<ReturnType<typeof joined>>,
@@ -461,6 +482,136 @@ function oldBoxReturnPass(
     }) as typeof fetch,
     stopped: () => false,
   });
+}
+
+/**
+ * After `emergencySwitch`, the old box comes back on: its start check finds itself superseded,
+ * saves the newer chart and records the restriction its restricted start reads. Returns the new
+ * main box's real return and reset-order routes (`newMain`) and a signed-in request to its real
+ * Servers routes.
+ */
+async function oldBoxBackRestricted(
+  boxes: Awaited<ReturnType<typeof joined>>,
+  b: OpenStore,
+  modules: readonly WaitronModule[],
+) {
+  const { mainId, spareId } = boxes;
+  const oldBox = new Hono();
+  mountNodeMembershipApi(
+    oldBox,
+    { db: mainBox.db, node: mainBox.node, nodeId: mainId },
+    () => undefined,
+  );
+  const posted = await oldBox.request("/api/node/membership", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ document: await readNodeMembership(b.venue) }),
+  });
+  expect(await posted.json()).toEqual({ accepted: true });
+  await recordSupersededAtStart(
+    { node: mainBox.node, nodeId: mainId },
+    spareId,
+    (await readNodeMembership(mainBox.db))!.body.term,
+  );
+
+  const newMain = returnReceiver(b, spareId, modules);
+  mountResetOrderApi(
+    newMain,
+    {
+      db: b.venue,
+      node: b.node,
+      ring: RING,
+      nodeId: spareId,
+      modules,
+      reloadStream: async () => {},
+    },
+    () => undefined,
+  );
+  const servers = new Hono();
+  mountMembershipRemovalApi(
+    servers,
+    { db: b.venue, node: b.node, ring: RING, nodeId: spareId, reloadStream: async () => {} },
+    () => undefined,
+  );
+  const serversRequest = async (path: string, body: unknown) => {
+    const response = await servers.request(path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${MANAGEMENT_COOKIE}=${boxes.main.session.token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: (await response.json()) as unknown };
+  };
+  return { newMain, serversRequest };
+}
+
+/**
+ * The old box set up as a production box, serving its own leaf under its authority, then its
+ * restricted start's real reset-order duty, asking `newMain`. Waits until `end` settles or 20
+ * seconds pass, then stops the duty.
+ */
+async function runOldBoxDuty(
+  boxes: Awaited<ReturnType<typeof joined>>,
+  newMain: Hono,
+  options: {
+    end: Promise<void>;
+    restart: () => void;
+    fetch?: typeof fetch;
+    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+    endName: string;
+  },
+) {
+  const leaf = { stateDir: mainState, hostnames: BOX_LEAF_HOSTNAMES, now: () => new Date() };
+  await reissueBoxLeaf({ ...leaf, listIpv4: () => [] });
+  await ensureLeaf({ ...leaf, listIpv4: () => [] });
+  await ensureBoxSecrets(leaf);
+  await writeFile(
+    join(mainState, "trading.env"),
+    `WAITRON_ENV=production\nWAITRON_NODE_ID=${boxes.mainId}\n`,
+  );
+  const logged: string[] = [];
+  const duty = startResetOrderDuty({
+    db: mainBox.db,
+    node: mainBox.node,
+    ring: RING,
+    nodeId: boxes.mainId,
+    modules: boxes.main.modules,
+    stateDir: mainState,
+    venueDir: dirname(mainBox.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file),
+    returnPass: () => oldBoxReturnPass(boxes, newMain),
+    fetch:
+      options.fetch ??
+      (((url: string, init: RequestInit) =>
+        newMain.request(new URL(url).pathname, init)) as typeof fetch),
+    log: (...line) => logged.push(JSON.stringify(line)),
+    restart: options.restart,
+    // The duty's waits move the test's clock.
+    sleep:
+      options.sleep ??
+      (async (ms) => {
+        vi.advanceTimersByTime(ms);
+        await new Promise((resolve) => setImmediate(resolve));
+      }),
+  });
+  let deadline: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      options.end,
+      new Promise((_, reject) => {
+        deadline = setTimeout(
+          () =>
+            reject(new Error(`the duty never ${options.endName}; it logged ${logged.join(" ")}`)),
+          20_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(deadline);
+    await duty.stop();
+  }
+  return { logged, answer: duty.answer() };
 }
 
 /**
@@ -1063,6 +1214,232 @@ describe("the owner's case: an emergency switch while the old main box stays off
       opened.push(reopened);
       expect(await me(reopened.venue, cookie)).toMatchObject(signedIn);
       expect(await me(reopened.venue, wrongToken)).toMatchObject(refused);
+    } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+});
+
+describe("a confirmed return after an emergency switch, then Wipe and remove", () => {
+  it("the old main box resets itself, starts on setup's first page and joins the production venue again by code", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    try {
+      const boxes = await joined("production");
+      const { mainId, spareId } = boxes;
+      const { b, modules } = await emergencySwitch(boxes, waitUntil, opened);
+
+      const { newMain, serversRequest } = await oldBoxBackRestricted(boxes, b, modules);
+      const listed = async () =>
+        (await listServers(b.venue, b.node, spareId)).nodes.find((n) => n.nodeId === mainId);
+      expect(await listed()).toMatchObject({
+        returnOutstanding: true,
+        returnScenario: "emergency",
+        reset: null,
+        canReset: false,
+      });
+
+      expect(await oldBoxReturnPass(boxes, newMain)).toBe("confirmed");
+      expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
+        "return_complete",
+      );
+      expect(await listed()).toMatchObject({ canReset: true, returnScenario: "emergency" });
+      // The return's real `return_complete` step is what a backup starting after it is compared with.
+      const backupStarted = (at: number) => async () => ({
+        configured: true as const,
+        destinations: [
+          {
+            id: "local",
+            lastBackupAt: new Date(at + 20_000).toISOString(),
+            lastBackupStartedAt: new Date(at).toISOString(),
+            ageSeconds: 0,
+            stale: false,
+            readErrorCode: null,
+          },
+        ],
+      });
+      const backupOf = async (at: number) =>
+        (await listServers(b.venue, b.node, spareId, backupStarted(at))).nodes.find(
+          (n) => n.nodeId === mainId,
+        )?.recoveredRecordsBackup;
+      expect(await backupOf(Date.now() - 60_000)).toBe("awaiting-backup");
+      expect(await backupOf(Date.now() + 1000)).toBe("backed-up");
+
+      // Wipe and remove.
+      const ordered = await serversRequest(`/management-api/servers/${mainId}/reset`, {
+        acceptLoss: false,
+      });
+      expect(ordered.status, JSON.stringify(ordered.body)).toBe(200);
+      expect(await listed()).toMatchObject({ reset: "ordered" });
+
+      // The old box's restricted start runs the real duty until it asks for a restart.
+      let restartAsked!: () => void;
+      const restarted = new Promise<void>((resolve) => (restartAsked = resolve));
+      await runOldBoxDuty(boxes, newMain, {
+        end: restarted,
+        restart: () => restartAsked(),
+        endName: "asked for a restart",
+      });
+      expect(JSON.parse(await readFile(join(mainState, REPLACED_RESET_FILE), "utf8"))).toEqual({
+        phase: "wiping",
+        setAside: false,
+      });
+      // The acknowledgement: the new main box removed the old one and cleared it from the list.
+      const chart = (await readNodeMembership(b.venue))!.body;
+      expect(chart.nodes.some((n) => n.nodeId === mainId)).toBe(false);
+      expect(chart.revoked).toContain(mainId);
+
+      // The restart: the real start of the box, on the files the stopped box left.
+      const oldVenue = join(mainState, "venue");
+      await mkdir(oldVenue);
+      mainBox.db.run(sql`vacuum into ${join(oldVenue, "venue.db")}`);
+      mainBox.node.run(sql`vacuum into ${join(oldVenue, "node.db")}`);
+      const backups = join(scratch, "backups");
+      await mkdir(backups);
+      await writeFile(join(backups, "one.backup.enc"), "archive");
+      let started: NodeJS.ProcessEnv | undefined;
+      let state = FRESH;
+      const serveRecovery = vi.fn(() => Promise.resolve());
+      await runEntry({
+        args: [],
+        baseEnv: { WAITRON_LOCAL_BACKUPS_DIR: backups },
+        stateDir: mainState,
+        venueDir: oldVenue,
+        logDir: join(scratch, "logs"),
+        assertNotAhead: () => Promise.resolve(),
+        clearReplacedDatabases: () => Promise.resolve(),
+        loadBoxEnv,
+        readRecoveryState: () => Promise.resolve(state),
+        writeRecoveryState: (_dir: string, next: RecoveryState) => {
+          state = next;
+          return Promise.resolve();
+        },
+        withRecoveryLock: <T>(_dir: string, body: () => Promise<T>) => body(),
+        startServer: (env: NodeJS.ProcessEnv) => {
+          started = env;
+          return Promise.resolve({ close: () => Promise.resolve() });
+        },
+        serveStartClockWaiting: () => Promise.reject(new Error("no restore waits here")),
+        serveRecovery,
+        installShutdownHandlers: () => {},
+        scheduleStayedUp: () => {},
+        log: () => {},
+        exit: () => {},
+      });
+      expect(serveRecovery).not.toHaveBeenCalled();
+      expect(started).toBeDefined();
+      // Setup mode: no venue is named, so the box serves setup's first page.
+      expect(started!.WAITRON_NODE_ID).toBeUndefined();
+      expect(started!.WAITRON_ENV).toBeUndefined();
+      expect(loadConfig(started!, join(scratch, "migrations"), mainState).node).toBeUndefined();
+      for (const name of await readdir(oldVenue)) expect(name).not.toMatch(/^(venue|node)\.db/);
+      expect(await readdir(mainState)).not.toContain("trading.env");
+      expect(await readdir(mainState)).not.toContain(REPLACED_RESET_FILE);
+      expect(await readdir(backups)).toEqual([]);
+
+      // It joins the production venue again by code, with no WAITRON_ENV of its own.
+      const rejoined = await joinSpare(
+        { spareBox: resetBox, spareState: mainState, ring: RING },
+        {
+          bundleApp: mirrorBundleApp(
+            { db: b.venue, node: b.node, stateDir: spareState, ring: RING },
+            spareId,
+            SPARE_URL,
+          ),
+          email: boxes.main.email,
+        },
+        { spareUrl: "https://reset.test", environment: null },
+      );
+      expect(rejoined.spareId).not.toBe(mainId);
+      expect(rejoined.spareId).not.toBe(spareId);
+      expect((await readNodeMode(resetBox.node, rejoined.spareId)).mode).toBe("mirror");
+      expect(await readDeploymentEnvironment(resetBox.db)).toBe("production");
+    } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+});
+
+describe("a confirmed return after an emergency switch, an order to reset, then Remove", () => {
+  it("the old main box's next question is refused, and it saves no marker, sends no acknowledgement and does not restart", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    try {
+      const boxes = await joined("production");
+      const { mainId } = boxes;
+      const { b, modules } = await emergencySwitch(boxes, waitUntil, opened);
+
+      const { newMain, serversRequest } = await oldBoxBackRestricted(boxes, b, modules);
+      expect(await oldBoxReturnPass(boxes, newMain)).toBe("confirmed");
+
+      const ordered = await serversRequest(`/management-api/servers/${mainId}/reset`, {
+        acceptLoss: false,
+      });
+      expect(ordered.status, JSON.stringify(ordered.body)).toBe(200);
+
+      // Remove, with the reset statement, before the old box has asked.
+      const removed = await serversRequest(`/management-api/servers/${mainId}/remove`, {
+        resetStatement: true,
+      });
+      expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+      expect(
+        (await readNodeMembership(b.venue))!.body.nodes.find((n) => n.nodeId === mainId)?.standing,
+      ).toBe("evicted");
+
+      // Every question the old box sends, and the main box's answer to it.
+      const questions: Array<{ body: Record<string, unknown>; status: number; answer: string }> =
+        [];
+      // The duty's end point: its wait after a refused answer, which starts once that ask has
+      // returned and lasts until the duty is stopped; or, had it been ordered, its restart.
+      let ended!: () => void;
+      const dutyEnded = new Promise<void>((resolve) => (ended = resolve));
+      const restart = vi.fn(() => ended());
+      const { logged, answer } = await runOldBoxDuty(boxes, newMain, {
+        end: dutyEnded,
+        restart,
+        endName: "waited after a refusal nor restarted",
+        fetch: (async (url: string, init: RequestInit) => {
+          const response = await newMain.request(new URL(url).pathname, init);
+          questions.push({
+            body: (JSON.parse(init.body as string) as { body: Record<string, unknown> }).body,
+            status: response.status,
+            answer: await response.clone().text(),
+          });
+          return response;
+        }) as typeof fetch,
+        sleep: async (ms, signal) => {
+          if (ms === ASK_AFTER_REFUSAL_MS) {
+            ended();
+            await new Promise((resolve) => signal.addEventListener("abort", resolve));
+            return;
+          }
+          vi.advanceTimersByTime(ms);
+          await new Promise((resolve) => setImmediate(resolve));
+        },
+      });
+
+      // The old box asked the main box, which refused the question: a removed box has no
+      // endorsed key, so its signature does not verify.
+      expect(questions.length).toBeGreaterThan(0);
+      for (const question of questions) {
+        expect(question.body.sourceNodeId).toBe(mainId);
+        expect(question.status, question.answer).toBe(409);
+        expect(JSON.parse(question.answer)).toMatchObject({
+          error: { code: "handover.reset_query_refused", params: { reason: "signature" } },
+        });
+      }
+      expect(logged.some((line) => line.includes("reset-order.refused"))).toBe(true);
+      // So the old box saved no marker, sent no acknowledgement and asked for no restart.
+      expect(await readdir(mainState)).not.toContain(REPLACED_RESET_FILE);
+      expect(questions.filter((question) => "ack" in question.body)).toEqual([]);
+      expect(restart).not.toHaveBeenCalled();
+      expect(answer).toBeNull();
     } finally {
       for (const store of opened) await store.close();
     }

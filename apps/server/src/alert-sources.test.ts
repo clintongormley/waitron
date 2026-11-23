@@ -265,6 +265,7 @@ describe("backupAlertSource", () => {
         {
           id: "local",
           lastBackupAt: "2026-09-10T00:00:00Z",
+          lastBackupStartedAt: "2026-09-10T00:00:00Z",
           ageSeconds: 999999,
           stale: true,
           readErrorCode: null,
@@ -291,6 +292,7 @@ describe("backupAlertSource", () => {
         {
           id: "bucket",
           lastBackupAt: null,
+          lastBackupStartedAt: null,
           ageSeconds: null,
           stale: true,
           readErrorCode: "backup.destination_timed_out",
@@ -298,6 +300,7 @@ describe("backupAlertSource", () => {
         {
           id: "local",
           lastBackupAt: NOW.toISOString(),
+          lastBackupStartedAt: NOW.toISOString(),
           ageSeconds: 5,
           stale: false,
           readErrorCode: null,
@@ -318,6 +321,7 @@ describe("backupAlertSource", () => {
         {
           id: "local",
           lastBackupAt: NOW.toISOString(),
+          lastBackupStartedAt: NOW.toISOString(),
           ageSeconds: 5,
           stale: false,
           readErrorCode: null,
@@ -336,6 +340,7 @@ describe("backupAlertSource", () => {
         {
           id: "local",
           lastBackupAt: NOW.toISOString(),
+          lastBackupStartedAt: NOW.toISOString(),
           ageSeconds: 5,
           stale: false,
           readErrorCode: null,
@@ -364,6 +369,7 @@ describe("backupAlertSource and a run that stopped before any destination", () =
       {
         id: "local",
         lastBackupAt: NOW.toISOString(),
+        lastBackupStartedAt: NOW.toISOString(),
         ageSeconds: 5,
         stale: false,
         readErrorCode: null,
@@ -666,6 +672,7 @@ describe("backupAlertSource and the bucket copy", () => {
         {
           id: "local",
           lastBackupAt: "2026-09-10T00:00:00Z",
+          lastBackupStartedAt: "2026-09-10T00:00:00Z",
           ageSeconds: 999999,
           stale: true,
           readErrorCode: null,

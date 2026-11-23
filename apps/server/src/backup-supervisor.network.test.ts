@@ -216,6 +216,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       expect(byId(ds, "remote")).toEqual({
         id: "remote",
         lastBackupAt: null,
+        lastBackupStartedAt: null,
         ageSeconds: null,
         stale: true,
         readErrorCode: "backup.destination_timed_out",
@@ -557,6 +558,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
         usb: {
           id: "usb",
           lastBackupAt: null,
+          lastBackupStartedAt: null,
           ageSeconds: null,
           stale: true,
           readErrorCode: null,
@@ -823,6 +825,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     expect(byId(s.backupStatus.destinations, "remote")).toEqual(
       expect.objectContaining({
         lastBackupAt: null,
+        lastBackupStartedAt: null,
         ageSeconds: null,
         stale: true,
         readErrorCode: "backup.destination_key_invalid",

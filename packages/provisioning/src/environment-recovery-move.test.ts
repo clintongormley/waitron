@@ -40,6 +40,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "records",
     "venue",
     "environment-recovery-move.json",
+    "replaced-reset.json",
   ];
   const stateNames = [
     ...new Set([...STATE_LAYOUT.map((entry) => entry.name), ...FIRST_SETUP_HOST_FILES]),
@@ -69,6 +70,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "unknown.txt",
     "spare-space",
     "spare-space.released",
+    "replaced-reset.json",
   ])
     await put(join(roots.stateDir, name));
   await put(join(roots.stateDir, "backup-room-note.json"));
@@ -91,6 +93,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "unknown.txt",
     "spare-space",
     "spare-space.released",
+    "replaced-reset.json",
   ])
     expect(await fs.readFile(join(roots.stateDir, name), "utf8")).toBe(join(roots.stateDir, name));
   expect(await fs.readFile(join(roots.venueDir, "venue.lock"))).toEqual(lockBytes);

@@ -115,6 +115,7 @@ describe("collectBoxStatus", () => {
           {
             id: "primary",
             lastBackupAt: "2026-08-29T09:00:00.000Z",
+            lastBackupStartedAt: "2026-08-29T08:59:40.000Z",
             ageSeconds: 3600,
             stale: false,
             readErrorCode: null,
@@ -122,6 +123,7 @@ describe("collectBoxStatus", () => {
           {
             id: "offsite",
             lastBackupAt: null,
+            lastBackupStartedAt: null,
             ageSeconds: null,
             stale: true,
             readErrorCode: "backup.destination_timed_out",
@@ -135,6 +137,7 @@ describe("collectBoxStatus", () => {
         {
           id: "primary",
           lastBackupAt: "2026-08-29T09:00:00.000Z",
+          lastBackupStartedAt: "2026-08-29T08:59:40.000Z",
           ageSeconds: 3600,
           stale: false,
           readErrorCode: null,
@@ -142,6 +145,7 @@ describe("collectBoxStatus", () => {
         {
           id: "offsite",
           lastBackupAt: null,
+          lastBackupStartedAt: null,
           ageSeconds: null,
           stale: true,
           readErrorCode: "backup.destination_timed_out",

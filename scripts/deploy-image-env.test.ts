@@ -189,6 +189,11 @@ describe("the container image's environment", () => {
       "/var/lib/waitron/tunnel",
     );
   });
+  it("names the backups volume's mount as the folder a replaced box's reset empties", () => {
+    const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
+    const folder = only(app, /^\s+WAITRON_LOCAL_BACKUPS_DIR:\s*(\S+)/m, "local backups folder");
+    expect(app).toContain(`- backups:${folder}\n`);
+  });
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
     expect(IMAGE_ENV.WAITRON_STATE_DIR).toBe("/var/lib/waitron/state");

@@ -209,6 +209,12 @@ export function resolveConfigDir(raw: string | undefined, fallback: string): str
   return isUnset(raw) ? fallback : resolve(raw);
 }
 
+/** The mounted local backups folder a replaced box's reset empties, absolute; unset or `""` names none. */
+export function localBackupsDir(env: Env): string | null {
+  const raw = readVariable(env, "WAITRON_LOCAL_BACKUPS_DIR");
+  return isUnset(raw) ? null : resolve(raw);
+}
+
 /**
  * Optional outside production, falling back to the loopback `devDefault`; required in production,
  * where a passkey RP ID or origin left at `localhost` would fail every login with an opaque 401

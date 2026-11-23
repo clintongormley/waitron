@@ -2025,6 +2025,18 @@ export interface ServerRow {
   returnOutstanding: boolean;
   /** Remove of this former main box is refused unless it sends `resetStatement`. */
   needsResetStatement: boolean;
+  /** This server has ordered the old main box to reset. */
+  reset: null | "ordered";
+  /** Wipe and remove is offered for this old main box. */
+  canReset: boolean;
+  /** How this box was replaced: the takeover whose return completed, else the latest; null if none. */
+  returnScenario: "controlled" | "emergency" | null;
+  /**
+   * Null unless this venue holds a completed return from the box. `backed-up`: a backup started
+   * after the records came back; `awaiting-backup`: none has, or that is unknown; `no-backups`:
+   * backups are not set up.
+   */
+  recoveredRecordsBackup: "backed-up" | "awaiting-backup" | "no-backups" | null;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
@@ -5398,6 +5410,13 @@ export class DashboardApi {
       "POST",
       { confirmed: true },
     );
+  }
+
+  /** Orders the replaced old main box to reset; pressing again answers the standing order. */
+  orderServerReset(nodeId: string): Promise<{ orderId: string; acceptLoss: boolean }> {
+    return this.#request(`/management-api/servers/${encodeURIComponent(nodeId)}/reset`, "POST", {
+      acceptLoss: false,
+    });
   }
 
   /** Needs a fresh sign-in; writes nothing. */

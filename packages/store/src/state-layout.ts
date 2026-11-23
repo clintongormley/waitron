@@ -41,6 +41,7 @@ export const SPARE_SPACE_RELEASED_FILE = "spare-space.released";
 export const BACKUP_ROOM_NOTE_FILE = "backup-room-note.json";
 export const BACKUP_ROOM_START_DELETED_FILE = "backup-room-start-deleted.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
+export const REPLACED_RESET_FILE = "replaced-reset.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
 export const FLOWS_DIR = "flows";
@@ -155,6 +156,13 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Hands a reset to the next start.",
+  },
+  {
+    name: REPLACED_RESET_FILE,
+    backup: { exclude: "Local reset in progress." },
+    kind: "file",
+    reset: "deleted",
+    why: "A replaced main box's reset, finished by the next start.",
   },
   {
     name: PENDING_ADOPTION_FILE,

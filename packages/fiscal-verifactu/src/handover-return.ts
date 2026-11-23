@@ -4,13 +4,13 @@ import { sql } from "drizzle-orm";
 import {
   COVERAGE_REFUSAL,
   foldForUniqueness,
+  liveBackupQuery,
   POST_SETTLEMENT_REFUSAL,
   refusalOn,
   triggerRaised,
   UNIQUE_VIOLATION,
   type Transaction,
 } from "@waitron/db";
-import type { BackupQuery } from "@waitron/store";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
@@ -512,7 +512,7 @@ export async function receiveReturnedOriginals(
       actualizado_en = ${returned.heads[0]?.actualizado_en ?? now.toISOString()}
       where node_id = ${sourceNodeId}`);
   }
-  if (inserted && (await checkFiscalChains(transactionQuery(tx))) !== "ok")
+  if (inserted && (await checkFiscalChains(liveBackupQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
   for (const [table, rows] of [
     ["verifactu_records", returned.records],
@@ -564,26 +564,6 @@ function orderedSales(sales: ReturnRow[]): ReturnRow[] {
     if (remaining.has(sale.id)) visit(sale);
   }
   return ordered;
-}
-
-function transactionQuery(tx: Transaction): BackupQuery {
-  return {
-    async *rows(statement, values = []) {
-      const parts = statement.split("?");
-      const query = sql.empty();
-      for (let i = 0; i < parts.length; i++) {
-        if (i > 0) query.append(sql`${values[i - 1]}`);
-        query.append(sql.raw(parts[i]!));
-      }
-      for (const row of tx.all<ReturnRow>(query))
-        yield Object.fromEntries(
-          Object.entries(row).map(([key, value]) => [
-            key,
-            typeof value === "number" && Number.isInteger(value) ? BigInt(value) : value,
-          ]),
-        );
-    },
-  };
 }
 
 function normalized(table: string, row: ReturnRow, pendingRefund = false): ReturnRow {

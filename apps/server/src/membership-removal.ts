@@ -22,11 +22,17 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { deletePairLinkTx, type KeyRing } from "@waitron/credentials";
-import { readOpenHandoverOperation, readPairLink, type HandoverOperation } from "@waitron/node-db";
+import { readOpenHandoverOperation, readPairLink, readPinnedPrimaryKey } from "@waitron/node-db";
 import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
-import { awaitsReturn, refuseReturnOutstanding } from "./return-abandoned.js";
-import { holdsCompletedReturnFrom, sourcesWithCompletedReturn } from "./return-completion.js";
+import { openFacts, refuseReturnOutstanding } from "./return-abandoned.js";
+import {
+  activationsBySource,
+  holdsCompletedReturnFrom,
+  returnsCompletedAt,
+} from "./return-completion.js";
+import type { BackupStatus } from "./backup-status.js";
+import { readResetOrders, resetRefusal } from "./reset-order.js";
 
 type ChartRefusal =
   | "membership.node_not_found"
@@ -163,21 +169,47 @@ export interface ServerListing {
     readonly returnOutstanding: boolean;
     /** A former main box whose removal needs the reset statement: no return from it is held. */
     readonly needsResetStatement: boolean;
+    /** This box has ordered the box to reset. */
+    readonly reset: null | "ordered";
+    /**
+     * This box would accept Wipe and remove for the box, the order that does not accept the
+     * loss: an order already stands, or this venue holds the box's completed return.
+     */
+    readonly canReset: boolean;
+    /** The scenario of the takeover from the box: the one whose return completed, else the latest. */
+    readonly returnScenario: "controlled" | "emergency" | null;
+    /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
+    readonly recoveredRecordsBackup: RecoveredRecordsBackup | null;
   }[];
 }
 
-function openFacts(open: HandoverOperation | null, nodeId: string) {
-  return {
-    returnOutstanding: awaitsReturn(open) && open.sourceNodeId === nodeId,
-    inOpenOperation:
-      open !== null && (open.sourceNodeId === nodeId || open.destinationNodeId === nodeId),
-  };
+/**
+ * `backed-up`: a destination's last backup started after this box recorded the latest return from
+ * the box complete, so its copy holds the returned records.
+ * `no-backups`: backups are not set up, or their settings could not be used.
+ * `awaiting-backup` otherwise, including when either time is unknown here or the status could
+ * not be read.
+ */
+export type RecoveredRecordsBackup = "backed-up" | "awaiting-backup" | "no-backups";
+
+function recoveredRecordsBackup(
+  completedAt: Date | null | undefined,
+  backup: BackupStatus | null,
+): RecoveredRecordsBackup {
+  if (backup?.configured === false) return "no-backups";
+  if (completedAt == null || backup === null) return "awaiting-backup";
+  const after = backup.destinations.some(
+    (d) =>
+      d.lastBackupStartedAt !== null && Date.parse(d.lastBackupStartedAt) > completedAt.getTime(),
+  );
+  return after ? "backed-up" : "awaiting-backup";
 }
 
 export async function listServers(
   db: Database,
   node: NodeDatabase,
   selfNodeId: string,
+  readBackup?: () => Promise<BackupStatus>,
 ): Promise<ServerListing> {
   const held = await readNodeMembership(db);
   if (held === null) return { term: null, nodes: [] };
@@ -186,11 +218,31 @@ export async function listServers(
     held.body.nodes.map((n) => n.nodeId),
   );
   const open = await readOpenHandoverOperation(node, selfNodeId);
-  const completed = await sourcesWithCompletedReturn(db);
+  const activations = await activationsBySource(db);
+  const orders = await readResetOrders(node, selfNodeId);
+  const pinned = (await readPinnedPrimaryKey(node, selfNodeId))?.primaryNodeId ?? null;
+  const completedAt = await returnsCompletedAt(db, node, selfNodeId);
+  // Read only when a listed box has a completed return; an unreadable status counts as unknown.
+  let backup: BackupStatus | null = null;
+  if (
+    readBackup !== undefined &&
+    held.body.nodes.some((n) => activations.get(n.nodeId)?.returnCompleted === true)
+  ) {
+    try {
+      backup = await readBackup();
+    } catch {
+      backup = null;
+    }
+  }
   return {
     term: held.body.term,
     nodes: held.body.nodes.map((n) => {
-      const facts = { ...openFacts(open, n.nodeId), returnCompleted: completed.has(n.nodeId) };
+      const activation = activations.get(n.nodeId);
+      const order = orders.get(n.nodeId) ?? null;
+      const facts = {
+        ...openFacts(open, n.nodeId),
+        returnCompleted: activation?.returnCompleted === true,
+      };
       const judge = (resetStatement: boolean) =>
         judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId), true, {
           ...facts,
@@ -207,6 +259,16 @@ export async function listServers(
           n.standing === "serving-secondary" && withRows.has(n.nodeId) && n.nodeId !== selfNodeId,
         returnOutstanding: facts.returnOutstanding,
         needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
+        reset: order === null ? null : "ordered",
+        // orderReset's test without the loss: a standing order is answered as it stands, else
+        // holdsCompletedReturnFrom, which reads this same activationsBySource field.
+        canReset:
+          resetRefusal(held, selfNodeId, n.nodeId, open, pinned) === null &&
+          (order !== null || facts.returnCompleted),
+        returnScenario: activation?.scenario ?? null,
+        recoveredRecordsBackup: facts.returnCompleted
+          ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)
+          : null,
       };
     }),
   };
@@ -298,11 +360,20 @@ export async function removeStandby(
     readonly declared?: boolean;
     /** The person stated the box is reset or will never be switched on again. */
     readonly resetStatement?: boolean;
+    /** Also clear the box from the list in the same chart, as Clear from list does. */
+    readonly clear?: boolean;
   },
 ): Promise<RemovalResult> {
   const declared = args.declared === true;
   return withNodeTransaction(deps.node, async (nodeTx) => {
-    const result = await writeRemoval(deps, nodeTx, args, declared, args.resetStatement === true);
+    const result = await writeRemoval(
+      deps,
+      nodeTx,
+      args,
+      declared,
+      args.resetStatement === true,
+      args.clear === true,
+    );
     await unlinkTx(nodeTx, deps, args.targetNodeId);
     return result;
   });
@@ -314,6 +385,7 @@ function writeRemoval(
   args: { readonly targetNodeId: string; readonly personId: string },
   declared: boolean,
   resetStatement: boolean,
+  clear: boolean,
 ): Promise<RemovalResult> {
   return writeChartInRounds<RemovalResult>(deps, async (held) => {
     const withRows = await nodeIdsWithRows(deps.db, [args.targetNodeId]);
@@ -343,7 +415,12 @@ function writeRemoval(
     }
     return {
       write: true,
-      nodes: evictNode(held!.body.nodes, args.targetNodeId),
+      ...(clear
+        ? {
+            nodes: held!.body.nodes.filter((n) => n.nodeId !== args.targetNodeId),
+            revoked: [...(held!.body.revoked ?? []), args.targetNodeId],
+          }
+        : { nodes: evictNode(held!.body.nodes, args.targetNodeId) }),
       record: async (tx, term) => {
         // Checked again under the write lock: the check above ran outside this transaction.
         if (
@@ -359,13 +436,19 @@ function writeRemoval(
           personId: args.personId,
           data: { contactUrl: verdict.node.contactUrl, term },
         });
+        if (clear) {
+          await recordActivity(tx, {
+            kind: "membership.node_cleared",
+            subjectId: args.targetNodeId,
+            personId: args.personId,
+            data: { term },
+          });
+        }
       },
       committed: (term) => {
-        deps.log("info", "membership.node_removed", {
-          nodeId: args.targetNodeId,
-          term,
-          personId: args.personId,
-        });
+        const fields = { nodeId: args.targetNodeId, term, personId: args.personId };
+        deps.log("info", "membership.node_removed", fields);
+        if (clear) deps.log("info", "membership.node_cleared", fields);
         return { removed: true, term };
       },
     };

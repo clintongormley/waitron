@@ -30,6 +30,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq, sql } from "drizzle-orm";
 import {
   invoiceSeries,
+  lockVenueDatabase,
   nodes,
   settings,
   stampDeployment,
@@ -49,7 +50,9 @@ import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
+import { REPLACED_RESET_FILE } from "@waitron/store";
 import { ALL_MODULES } from "./modules.js";
+import { finishReplacedReset } from "./replaced-reset.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -1482,6 +1485,45 @@ describe("restore hooks (identity phase)", () => {
     await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("removes a replaced box's reset marker before the placement's first write", async () => {
+    await writeFile(
+      join(stateDir, REPLACED_RESET_FILE),
+      JSON.stringify({ phase: "wiping", setAside: false }),
+    );
+    // Something at the note's path that no unlink removes, so the placement's first write fails.
+    await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+    await expect(restoreFromArtifact(makeRestoreDeps())).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+    await expect(stat(join(stateDir, REPLACED_RESET_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expectVenueUntouched();
+  });
+
+  it("a restore placed while a replaced reset waits for the venue lock is left alone", async () => {
+    await writeFile(
+      join(stateDir, REPLACED_RESET_FILE),
+      JSON.stringify({ phase: "wiping", setAside: false }),
+    );
+    let restored = false;
+    // The restore takes the lock, places its database and lets go, between the reset's first read
+    // of the marker and the reset's own hold.
+    const restoreThenLock = async (directory: string) => {
+      await restoreFromArtifact(makeRestoreDeps());
+      restored = true;
+      return lockVenueDatabase(directory);
+    };
+
+    await expect(
+      finishReplacedReset({ stateDir, venueDir, backupsDir: null, log: noopLog }, restoreThenLock),
+    ).resolves.toBe(false);
+
+    expect(restored).toBe(true);
+    await expectVenueRestored();
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
   });
 
   it("a failed hook leaves NO trading.env, neither the target's nor the artifact's", async () => {

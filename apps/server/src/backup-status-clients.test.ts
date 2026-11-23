@@ -192,6 +192,7 @@ describe("StatusClients", () => {
     expect(status).toEqual({
       id: "usb",
       lastBackupAt: null,
+      lastBackupStartedAt: null,
       ageSeconds: null,
       stale: true,
       readErrorCode: "backup.destination_key_invalid",

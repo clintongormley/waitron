@@ -71,7 +71,13 @@ function webAddress(contactUrl: string): boolean {
   return /^https?:\/\//i.test(contactUrl) && URL.canParse(contactUrl);
 }
 
-type Action = "remove" | "clear" | "abandon";
+type Action = "remove" | "clear" | "abandon" | "reset";
+
+const CAUTION_KEY: Record<NonNullable<ServerRow["recoveredRecordsBackup"]>, StringKey | null> = {
+  "awaiting-backup": "servers.reset_caution_awaiting",
+  "no-backups": "servers.reset_caution_no_backups",
+  "backed-up": null,
+};
 
 const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanation: StringKey }> = {
   remove: {
@@ -88,6 +94,11 @@ const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanati
     verb: "servers.abandon",
     title: "servers.abandon_title",
     explanation: "servers.abandon_explanation",
+  },
+  reset: {
+    verb: "servers.reset_spare",
+    title: "servers.reset_spare_title",
+    explanation: "servers.reset_spare_explanation",
   },
 };
 
@@ -173,24 +184,11 @@ export class ServersScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
-      wt-data-table::part(server-machine) {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        white-space: nowrap;
-      }
-      wt-data-table::part(server-machine-id),
-      .machine-id {
-        font-family: var(--wt-font-family-mono);
-      }
       .target {
         margin: 0 0 var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
-      }
-      .machine {
-        margin: 0 0 var(--wt-space-3);
-        color: var(--wt-color-text-muted);
       }
       .note {
         max-width: 70ch;
@@ -203,6 +201,9 @@ export class ServersScreen extends LitElement {
       .explanation {
         margin: 0;
         color: var(--wt-color-text);
+      }
+      .explanation.follows {
+        margin-top: var(--wt-space-3);
       }
       .joins {
         list-style: none;
@@ -935,6 +936,7 @@ export class ServersScreen extends LitElement {
     try {
       if (target.action === "clear") await this.api.clearServer(target.row.nodeId);
       else if (target.action === "abandon") await this.api.abandonServerReturn(target.row.nodeId);
+      else if (target.action === "reset") await this.api.orderServerReset(target.row.nodeId);
       else if (this.#statingReset(target.action, target.row))
         await this.api.removeServer(target.row.nodeId, { resetStatement: true });
       else if (this.#declaring(target.action, target.row))
@@ -961,15 +963,6 @@ export class ServersScreen extends LitElement {
 
   #address(row: ServerRow): string {
     return row.contactUrl === "" ? t("servers.no_address") : row.contactUrl;
-  }
-
-  /** Distinguishes two machines that gave no address. */
-  #shortId(row: ServerRow): string {
-    return row.nodeId.slice(0, 8);
-  }
-
-  #rowName(row: ServerRow): string {
-    return row.contactUrl === "" ? `${t("servers.machine")} ${this.#shortId(row)}` : row.contactUrl;
   }
 
   /** The dashboard does not know the venue's network name, so any https address is offered. */
@@ -1024,12 +1017,7 @@ export class ServersScreen extends LitElement {
                       >${t("servers.this_server")}</span
                     >`
                   : nothing
-              }<span part="server-machine" data-test=${`machine-${row.nodeId}`}
-                >${t("servers.machine")}
-                <span part="server-machine-id" data-test=${`machine-id-${row.nodeId}`}
-                  >${this.#shortId(row)}</span
-                ></span
-              >
+              }
             </div>
             <span part="server-role" data-test=${`role-${row.nodeId}`}
               >${t(STANDING_KEY[row.standing])}</span
@@ -1059,6 +1047,13 @@ export class ServersScreen extends LitElement {
                 : nothing
             }
             ${
+              row.reset === "ordered" && row.standing !== "evicted"
+                ? html`<div part="server-progress" data-test=${`reset-asked-${row.nodeId}`}>
+                    ${t("servers.reset_asked")}
+                  </div>`
+                : nothing
+            }
+            ${
               this.spare?.peerNodeId === row.nodeId
                 ? html`<div
                     part="server-progress"
@@ -1080,12 +1075,14 @@ export class ServersScreen extends LitElement {
         label: t("servers.actions"),
         pinned: "end",
         cell: (row) => {
-          const actions = (["abandon", "remove", "clear"] as const).filter((action) =>
+          const actions = (["abandon", "reset", "remove", "clear"] as const).filter((action) =>
             action === "abandon"
               ? row.returnOutstanding
-              : action === "remove"
-                ? row.removable
-                : row.canClear,
+              : action === "reset"
+                ? row.canReset
+                : action === "remove"
+                  ? row.removable
+                  : row.canClear,
           );
           const handover =
             this.canPromote &&
@@ -1096,7 +1093,7 @@ export class ServersScreen extends LitElement {
           const switchLabel = this.#hasSwitchPage(row);
           return actions.length === 0 && !handover && !switchLabel
             ? nothing
-            : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
+            : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#address(row)}`}
                 >${handover ? html`<wt-button data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${actions.map(
                   (action) =>
                     html`<wt-button
@@ -1109,6 +1106,28 @@ export class ServersScreen extends LitElement {
         },
       },
     ];
+  }
+
+  #renderDownload(target: ServerRow): TemplateResult {
+    const [before, after] = t("servers.reset_download").split("{address}");
+    return html`<p class="explanation follows" data-test="reset-download">
+      ${before}${
+        webAddress(target.contactUrl)
+          ? html`<a href=${target.contactUrl} target="_blank" rel="noopener noreferrer"
+              >${target.contactUrl}</a
+            >`
+          : this.#address(target)
+      }${after}
+    </p>`;
+  }
+
+  #renderCaution(target: ServerRow): TemplateResult | typeof nothing {
+    const words = CAUTION_KEY[target.recoveredRecordsBackup ?? "backed-up"];
+    return words === null
+      ? nothing
+      : html`<p class="explanation follows" data-test="reset-caution">
+          <strong>${t("servers.reset_caution_label")}</strong> ${t(words)}
+        </p>`;
   }
 
   #renderDialog(action: Action): TemplateResult {
@@ -1134,10 +1153,13 @@ export class ServersScreen extends LitElement {
         target === null
           ? nothing
           : html`<p class="target" data-test=${`${action}-address`}>${this.#address(target)}</p>
-              <p class="machine" data-test=${`${action}-machine`}>
-                ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
-              </p>
               <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
+              ${
+                action === "reset" && target.returnScenario === "emergency"
+                  ? this.#renderDownload(target)
+                  : nothing
+              }
+              ${action === "reset" ? this.#renderCaution(target) : nothing}
               ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}
               ${
                 action === "abandon"
@@ -1251,7 +1273,8 @@ export class ServersScreen extends LitElement {
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
       ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
-      ${this.#renderDialog("abandon")} ${this.#renderHandover()} ${this.#renderJoinDialog()}
+      ${this.#renderDialog("abandon")} ${this.#renderDialog("reset")} ${this.#renderHandover()}
+      ${this.#renderJoinDialog()}
       ${
         this.switchLabel === null
           ? nothing

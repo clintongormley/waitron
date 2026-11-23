@@ -4,6 +4,7 @@ import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
 import {
+  localBackupsDir,
   deploymentEnvironment,
   isDevMode,
   loadConfig,
@@ -625,6 +626,20 @@ describe("loadConfig", () => {
 
   it("leaves boxAddresses undefined when the variable is unset", () => {
     expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT).boxAddresses).toBeUndefined();
+  });
+});
+
+describe("localBackupsDir", () => {
+  it("makes a set folder absolute, as the other folder settings are", () => {
+    expect(localBackupsDir({ WAITRON_LOCAL_BACKUPS_DIR: "backups/./local/" })).toBe(
+      resolve("backups/local"),
+    );
+    expect(localBackupsDir({ WAITRON_LOCAL_BACKUPS_DIR: "/var/backups" })).toBe("/var/backups");
+  });
+
+  it("names no folder when unset or empty, never the working directory", () => {
+    expect(localBackupsDir({})).toBeNull();
+    expect(localBackupsDir({ WAITRON_LOCAL_BACKUPS_DIR: "" })).toBeNull();
   });
 });
 

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   STATE_LAYOUT,
   ENVIRONMENT_RECOVERY_MOVE_FILE,
+  REPLACED_RESET_FILE,
   BACKUP_ROOM_NOTE_FILE,
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
@@ -44,7 +45,8 @@ import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import "./errors.js";
 
 type Roots = { stateDir: string; venueDir: string };
-type Piece = { root: "state" | "venue"; path: string };
+export type EnvironmentMovePiece = { root: "state" | "venue"; path: string };
+type Piece = EnvironmentMovePiece;
 interface Move {
   version: 1;
   roots: Roots;
@@ -62,6 +64,7 @@ const KEEP = new Set([
   VENUE_DIR_NAME,
   BACKUP_ROOM_NOTE_FILE,
   ENVIRONMENT_RECOVERY_MOVE_FILE,
+  REPLACED_RESET_FILE,
 ]);
 const VENUE = [
   VENUE_WAL_FILE,
@@ -105,10 +108,11 @@ const unit = (piece: Piece): StartAgainUnit => ({
   pieces: [piece.path],
   entries: [],
 });
-const at = (roots: Roots, piece: Piece) =>
+export const environmentMovePiecePath = (roots: Roots, piece: Piece) =>
   join(piece.root === "state" ? roots.stateDir : roots.venueDir, piece.path);
 
-async function inventory(roots: Roots): Promise<Piece[]> {
+/** What the Move sets aside, in its order: each present piece of the venue's and the state's lists. */
+export async function environmentMoveInventory(roots: Roots): Promise<Piece[]> {
   const state = [...STATE, ...(await fs.readdir(roots.stateDir)).filter(staging)];
   if (await present(join(roots.stateDir, TLS_JOINED_FILE), realIo)) state.push(TLS_DIR);
   const pieces: Piece[] = [];
@@ -118,7 +122,7 @@ async function inventory(roots: Roots): Promise<Piece[]> {
   ] as const)
     for (const path of names) {
       const piece = { root, path };
-      if (await present(at(roots, piece), realIo)) pieces.push(piece);
+      if (await present(environmentMovePiecePath(roots, piece), realIo)) pieces.push(piece);
     }
   return pieces;
 }
@@ -132,7 +136,7 @@ async function move(record: Move, io: SetAsideIo) {
     );
     await deleteBackupRoomNote(record.roots.stateDir);
     for (const piece of record.pieces) {
-      const source = await present(at(record.roots, piece), io);
+      const source = await present(environmentMovePiecePath(record.roots, piece), io);
       const destination = await present(join(folders[piece.root], piece.path), io);
       if (source && destination) throw unfinished();
       if (source) await movePiece(record.roots, folders, unit(piece), piece.path, io);
@@ -157,7 +161,7 @@ export async function beginEnvironmentMove(given: Roots, io: SetAsideIo = realIo
   const roots = await canonicalFirstSetupRoots(given);
   if (await present(join(roots.stateDir, ENVIRONMENT_RECOVERY_MOVE_FILE), realIo))
     throw unfinished();
-  const pieces = await inventory(roots);
+  const pieces = await environmentMoveInventory(roots);
   const setAside = setAsideDestinations(`${Date.now()}-${randomUUID()}`);
   await prepareSetAside(roots, pieces.map(unit), setAside, io);
   const record: Move = { version: 1, roots, pieces, setAside };
@@ -167,6 +171,17 @@ export async function beginEnvironmentMove(given: Roots, io: SetAsideIo = realIo
     0o600,
   );
   return move(record, io);
+}
+
+/**
+ * The Move's rename test from each root, on a throwaway set-aside name; throws as the Move would
+ * refuse, and removes the folders it made either way.
+ */
+export async function probeEnvironmentMove(given: Roots, io: SetAsideIo = realIo): Promise<void> {
+  const roots = await canonicalFirstSetupRoots(given);
+  const units = (["state", "venue"] as const).map((root) => unit({ root, path: "probe" }));
+  const setAside = setAsideDestinations(`${Date.now()}-${randomUUID()}`);
+  for (const folder of await prepareSetAside(roots, units, setAside, io)) await io.rmdir(folder);
 }
 
 function parse(value: unknown): Move {
@@ -223,7 +238,6 @@ export async function resumeEnvironmentMove(given: Roots, io: SetAsideIo = realI
   }
 }
 
-/** Called only after the recovery stop has been cleared through its own writer. */
 export async function finishEnvironmentMove(stateDir: string): Promise<void> {
   await removeAndSync(join(stateDir, ENVIRONMENT_RECOVERY_MOVE_FILE), "file");
 }

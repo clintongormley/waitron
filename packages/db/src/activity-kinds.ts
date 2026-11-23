@@ -104,6 +104,19 @@ export interface ActivityKindData {
     readonly operationId: string;
     readonly sourceNodeId: string;
   };
+  /** The subject is the former main box ordered to reset; ids only. */
+  readonly "handover.reset_ordered": {
+    readonly orderId: string;
+    readonly operationId: string;
+    readonly acceptLoss: boolean;
+  };
+  /** The subject is the former main box that acknowledged its order; `lacking` names, per module,
+   * the other boxes' chains it set aside. */
+  readonly "handover.reset_acknowledged": {
+    readonly orderId: string;
+    readonly setAside: boolean;
+    readonly lacking: Readonly<Record<string, readonly unknown[]>>;
+  };
 
   /** Who saved which document and its new revision; never a document value. */
   readonly "settings.saved": { readonly revision: number };
@@ -165,6 +178,8 @@ export const ACTIVITY_KINDS = {
   "station.reopened": { subject: "station" },
   "handover.return_clash_accepted": { subject: "node" },
   "handover.return_abandoned": { subject: "node" },
+  "handover.reset_ordered": { subject: "node" },
+  "handover.reset_acknowledged": { subject: "node" },
   "settings.saved": { subject: "settings" },
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },

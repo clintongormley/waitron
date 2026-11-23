@@ -19,6 +19,7 @@ import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { mountResetOrderApi } from "./reset-order-api.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import type { Logger } from "./logger.js";
@@ -58,6 +59,7 @@ function mounted() {
   mount(mountSpareSettingsApi);
   mount(mountPrintAgentEnrolApi);
   mount(mountReturnRecordsApi);
+  mount(mountResetOrderApi);
   mount(mountPromoteApi);
   mount(mountBoxJoinApi);
   mount(mountBoxJoinPersonApi);

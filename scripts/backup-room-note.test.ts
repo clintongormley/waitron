@@ -26,6 +26,7 @@ const DELETES_NOTE = /\bdeleteBackupRoomNote\(/;
 const REPLACES: readonly string[] = [
   "apps/server/src/db-wipe.ts",
   "apps/server/src/handover-place-copy.ts",
+  "apps/server/src/replaced-reset.ts",
   "apps/server/src/restore.ts",
   "apps/server/src/restore-request.ts",
   "apps/server/src/spare-copy-placement.ts",

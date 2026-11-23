@@ -1,5 +1,11 @@
-import { and, asc, eq } from "drizzle-orm";
-import { handoverActivations, handoverReturnBatches, type Transaction } from "@waitron/db";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import {
+  handoverActivations,
+  handoverReturnBatches,
+  type NodeDatabase,
+  type Transaction,
+} from "@waitron/db";
+import { nodeHandoverEvents } from "@waitron/node-db";
 import { returnDigest } from "./return-records.js";
 
 export async function recordReturnBatchTx(
@@ -41,11 +47,21 @@ export async function recordReturnBatchTx(
     });
 }
 
-export async function readCompletedReturns(tx: Transaction): Promise<Set<string>> {
+/** The operations whose return is complete, among `operationIds` when given, else all. */
+export async function readCompletedReturns(
+  tx: Transaction,
+  operationIds?: readonly string[],
+): Promise<Set<string>> {
+  if (operationIds?.length === 0) return new Set();
   return completedIn(
     await tx
       .select()
       .from(handoverReturnBatches)
+      .where(
+        operationIds === undefined
+          ? undefined
+          : inArray(handoverReturnBatches.operationId, [...operationIds]),
+      )
       .orderBy(
         asc(handoverReturnBatches.operationId),
         asc(handoverReturnBatches.inventory),
@@ -54,33 +70,95 @@ export async function readCompletedReturns(tx: Transaction): Promise<Set<string>
   );
 }
 
-/** The boxes this venue holds a completed return from, whichever box received it. */
-export async function sourcesWithCompletedReturn(tx: Transaction): Promise<Set<string>> {
+export interface SourceActivations {
+  /** This venue holds a completed return from the box, whichever box received it. */
+  readonly returnCompleted: boolean;
+  /** The scenario of the latest activation whose return completed, else of the latest activation. */
+  readonly scenario: "controlled" | "emergency";
+}
+
+/**
+ * For each box some box here took over from, what its activations say; only `sourceNodeId`'s
+ * when given.
+ */
+export async function activationsBySource(
+  tx: Transaction,
+  sourceNodeId?: string,
+): Promise<Map<string, SourceActivations>> {
+  const activations = await tx
+    .select({
+      operationId: handoverActivations.operationId,
+      sourceNodeId: handoverActivations.sourceNodeId,
+      scenario: handoverActivations.scenario,
+    })
+    .from(handoverActivations)
+    .where(
+      sourceNodeId === undefined ? undefined : eq(handoverActivations.sourceNodeId, sourceNodeId),
+    )
+    .orderBy(asc(handoverActivations.activatedAt), asc(handoverActivations.operationId));
+  const completed = await readCompletedReturns(
+    tx,
+    sourceNodeId === undefined ? undefined : activations.map((a) => a.operationId),
+  );
+  const bySource = new Map<string, SourceActivations>();
+  for (const a of activations) {
+    const done = completed.has(a.operationId);
+    if (bySource.get(a.sourceNodeId)?.returnCompleted && !done) continue;
+    bySource.set(a.sourceNodeId, { returnCompleted: done, scenario: a.scenario });
+  }
+  return bySource;
+}
+
+/**
+ * Whether this venue holds a completed return from `sourceNodeId`, whichever box received it: the
+ * `returnCompleted` that `activationsBySource` lists, so the Servers listing and the actions it
+ * offers answer alike.
+ */
+export async function holdsCompletedReturnFrom(
+  tx: Transaction,
+  sourceNodeId: string,
+): Promise<boolean> {
+  return (await activationsBySource(tx, sourceNodeId)).get(sourceNodeId)?.returnCompleted === true;
+}
+
+/**
+ * Per box this venue holds a completed return from, when this box recorded the latest of them
+ * complete: its `return_complete` step, by this box's clock. Null when any of them has no such
+ * step here, as for a return completed with no open takeover, or received by another box.
+ */
+export async function returnsCompletedAt(
+  tx: Transaction,
+  node: NodeDatabase,
+  selfNodeId: string,
+): Promise<Map<string, Date | null>> {
   const completed = await readCompletedReturns(tx);
+  const bySource = new Map<string, Date | null>();
+  if (completed.size === 0) return bySource;
   const activations = await tx
     .select({
       operationId: handoverActivations.operationId,
       sourceNodeId: handoverActivations.sourceNodeId,
     })
-    .from(handoverActivations);
-  return new Set(
-    activations.filter((a) => completed.has(a.operationId)).map((a) => a.sourceNodeId),
-  );
-}
-
-/** Whether this venue holds a completed return from `sourceNodeId`, whichever box received it. */
-export async function holdsCompletedReturnFrom(
-  tx: Transaction,
-  sourceNodeId: string,
-): Promise<boolean> {
-  const activations = await tx
-    .select({ operationId: handoverActivations.operationId })
     .from(handoverActivations)
-    .where(eq(handoverActivations.sourceNodeId, sourceNodeId));
-  for (const { operationId } of activations) {
-    if (await returnCompletedFor(tx, operationId)) return true;
+    .where(inArray(handoverActivations.operationId, [...completed]));
+  const steps = await node
+    .select({ operationId: nodeHandoverEvents.operationId, at: nodeHandoverEvents.recordedAt })
+    .from(nodeHandoverEvents)
+    .where(
+      and(
+        eq(nodeHandoverEvents.nodeId, selfNodeId),
+        eq(nodeHandoverEvents.kind, "return_complete"),
+        inArray(nodeHandoverEvents.operationId, [...completed]),
+      ),
+    );
+  const stepAt = new Map(steps.map((s) => [s.operationId, s.at]));
+  for (const { operationId, sourceNodeId } of activations) {
+    const at = stepAt.get(operationId) ?? null;
+    const latest = bySource.get(sourceNodeId);
+    if (latest === null) continue;
+    bySource.set(sourceNodeId, at === null || latest === undefined || at > latest ? at : latest);
   }
-  return false;
+  return bySource;
 }
 
 /** Whether every batch of one inventory recorded for `operationId` is accounted. */

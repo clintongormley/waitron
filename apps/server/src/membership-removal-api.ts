@@ -14,6 +14,7 @@ import {
 } from "./membership-removal.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { abandonReturn } from "./return-abandoned.js";
+import { orderReset } from "./reset-order.js";
 import type { Logger } from "./logger.js";
 import { isRemoteStaffRequest } from "./request-from-box.js";
 import type { ListedJoinRequest } from "./box-join-requests.js";
@@ -25,11 +26,13 @@ export interface MembershipRemovalApiDeps {
   ring: KeyRing;
   nodeId: string;
   reloadStream: () => Promise<void>;
+  /** Backup freshness, for whether a replaced box's returned records are on a backup. */
+  readBackup?: () => Promise<import("./backup-status.js").BackupStatus>;
   /** The boxes asking to join that the Servers page lists. */
   listJoinRequests?: () => ListedJoinRequest[];
 }
 
-const STATUS: Record<string, ContentfulStatusCode> = {
+export const MEMBERSHIP_API_STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -43,6 +46,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "handover.operation_in_progress": 409,
   "handover.return_outstanding": 409,
   "handover.return_not_outstanding": 409,
+  "handover.reset_loss_unaccepted": 409,
+  "handover.reset_not_previous_main": 409,
+  "membership.node_not_replaced": 409,
   "management.request_invalid": 400,
   ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
@@ -53,9 +59,10 @@ export function mountMembershipRemovalApi(
   deps: MembershipRemovalApiDeps,
   log: Logger,
 ): void {
-  const run = createErrorBoundary(STATUS, "membership.removal_failed");
-  const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
-  const runAbandon = createErrorBoundary(STATUS, "handover.return_abandon_failed");
+  const run = createErrorBoundary(MEMBERSHIP_API_STATUS, "membership.removal_failed");
+  const runClear = createErrorBoundary(MEMBERSHIP_API_STATUS, "membership.clearance_failed");
+  const runAbandon = createErrorBoundary(MEMBERSHIP_API_STATUS, "handover.return_abandon_failed");
+  const runReset = createErrorBoundary(MEMBERSHIP_API_STATUS, "handover.reset_order_failed");
 
   // Admin-only, the same permission that hands a standby its bundle.
   const authorize = (sessionId: string, fresh = false): Promise<string> =>
@@ -71,7 +78,7 @@ export function mountMembershipRemovalApi(
   app.get("/management-api/servers", (c) =>
     run(c, log, async () => {
       await authorize(requireManagementSession(c));
-      const listing = await listServers(deps.db, deps.node, deps.nodeId);
+      const listing = await listServers(deps.db, deps.node, deps.nodeId, deps.readBackup);
       return c.json({
         term: listing.term,
         nodes: listing.nodes,
@@ -120,6 +127,27 @@ export function mountMembershipRemovalApi(
         throw new AppError("management.request_invalid", { field: "confirmed" });
       }
       return c.json(await abandonReturn(deps, { sourceNodeId: c.req.param("nodeId"), personId }));
+    }),
+  );
+
+  app.post("/management-api/servers/:nodeId/reset", (c) =>
+    runReset(c, log, async () => {
+      const personId = await authorize(requireManagementSession(c), true);
+      const body = await readJsonBody<{ acceptLoss?: unknown }>(c);
+      if (typeof body.acceptLoss !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "acceptLoss" });
+      }
+      // A loss order ships with its download of unreturned records (A1558 PR 10b).
+      if (body.acceptLoss) {
+        throw new AppError("management.request_invalid", { field: "acceptLoss" });
+      }
+      return c.json(
+        await orderReset(deps, {
+          targetNodeId: c.req.param("nodeId"),
+          personId,
+          acceptLoss: body.acceptLoss,
+        }),
+      );
     }),
   );
 

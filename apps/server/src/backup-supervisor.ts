@@ -571,6 +571,8 @@ export class BackupSupervisor {
       return {
         id: "cloud",
         lastBackupAt: new Date(storedAt).toISOString(),
+        // The cloud records the capture's `capturedAt`, the run's start, as its stored time.
+        lastBackupStartedAt: new Date(storedAt).toISOString(),
         ageSeconds: Math.max(0, Math.floor(ageMs / 1000)),
         stale: ageMs > staleAfterMs || ageMs < -staleAfterMs,
         readErrorCode: null,

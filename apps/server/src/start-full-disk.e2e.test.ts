@@ -7,9 +7,11 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // full-disk start tests run on a small filesystem").
 import { randomBytes, randomUUID } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
@@ -66,7 +68,7 @@ import {
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
 import { PERSON_HEADER, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
-import { openVenueStore } from "@waitron/store";
+import { REPLACED_RESET_FILE, openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { FULL_DISK_BYTES, venueDiskFullMiddleware } from "./boot-failure.js";
@@ -104,6 +106,7 @@ import {
   type RecoveryServeOptions,
 } from "./node-entry.js";
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
+import { writeReplacedResetMarker } from "./replaced-reset.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
@@ -1037,6 +1040,29 @@ describe("a start on a real full disk", () => {
     expect(() => statSync(spare)).toThrow();
     expect(statSync(join(stateDir, SPARE_SPACE_RELEASED_FILE)).isFile()).toBe(true);
     expect(d.startServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a replaced box's set-aside reset finishes its Move at the first start on a full disk, after the spare is given back", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "replaced-reset");
+    const venueDb = readFileSync(join(stateDir, "venue", "venue.db"));
+    expect(statSync(join(stateDir, SPARE_SPACE_FILE)).size).toBe(1024 * 1024);
+    await writeReplacedResetMarker(stateDir, { phase: "wiping", setAside: true });
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+
+    const events = vi.mocked(d.log).mock.calls.map(([, event]) => event);
+    expect(events).toContain("storage.spare_released");
+    expect(events).not.toContain("replaced-reset.set_aside_unavailable");
+    expect(existsSync(join(stateDir, REPLACED_RESET_FILE))).toBe(false);
+    const setAside = readdirSync(join(stateDir, START_AGAIN_SET_ASIDE_DIR));
+    expect(setAside).toHaveLength(1);
+    expect(
+      readFileSync(join(stateDir, START_AGAIN_SET_ASIDE_DIR, setAside[0]!, "venue", "venue.db")),
+    ).toEqual(venueDb);
   });
 
   it("a start with 12 MiB free keeps the box's spare file, and one with 6 MiB free deletes it, writes the marker and boots", async (ctx) => {

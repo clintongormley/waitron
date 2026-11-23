@@ -230,6 +230,7 @@ describe("GET /api/box/status", () => {
         {
           id: "primary",
           lastBackupAt: mtime.toISOString(),
+          lastBackupStartedAt: "2026-08-29T09:59:00.000Z",
           ageSeconds: 30,
           stale: false,
           readErrorCode: null,

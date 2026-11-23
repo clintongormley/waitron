@@ -22,6 +22,10 @@ const primaryRow = {
   requiresRetirementConfirmation: false,
   returnOutstanding: false,
   needsResetStatement: false,
+  reset: null,
+  canReset: false,
+  returnScenario: null,
+  recoveredRecordsBackup: null,
 } as const;
 
 const asking = {
@@ -765,7 +769,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "approve",
     { code: "mirror.join_stopped_after_listing" },
-    "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
+    "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove from venue in its row, then Clear from list, then choose Start again on the new box.",
   ],
   [
     "approve",

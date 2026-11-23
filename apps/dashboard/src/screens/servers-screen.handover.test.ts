@@ -20,6 +20,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
     {
       nodeId: "new",
@@ -31,6 +35,10 @@ const listing: ServerListing = {
       requiresRetirementConfirmation: false,
       returnOutstanding: false,
       needsResetStatement: false,
+      reset: null,
+      canReset: false,
+      returnScenario: null,
+      recoveredRecordsBackup: null,
     },
   ],
 };

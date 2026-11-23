@@ -47,7 +47,7 @@ describe("setup-reset-screen", () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain(
-      "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove, then open the row menu again and choose Clear from list.",
+      "To take it off that list, open the primary's dashboard, then System, then Servers, open this box's row menu and choose Remove from venue, then open the row menu again and choose Clear from list.",
     );
     expect(text).toContain("If its row already says Removed, only Clear from list is needed.");
     expect(text).toContain(
@@ -58,12 +58,12 @@ describe("setup-reset-screen", () => {
   it.each([
     [
       "en-GB",
-      "To take it off that list, open the primary's Servers page and, in this box's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+      "To take it off that list, open the primary's Servers page and, in this box's row menu, choose Remove from venue, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this box again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
       "Servers page",
     ],
     [
       "es-ES",
-      "Para quitarlo de esa lista, abre la página Servidores del principal y, en el menú de la fila de este servidor, elige Retirar y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+      "Para quitarlo de esa lista, abre la página Servidores del principal y, en el menú de la fila de este servidor, elige Retirar del local y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
       "página Servidores",
     ],
   ] as const)(

@@ -94,6 +94,7 @@ import {
 } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { type StagedSecrets, stageSecrets, moduleRecordEntries } from "./restore-secrets.js";
 import "./errors.js";
@@ -413,6 +414,7 @@ async function validateEntryMetadata(
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   // Before the identity is set aside, so a refusal here leaves it where it was.
+  await removeReplacedResetMarker(deps.stateDir);
   await deleteBackupRoomNote(deps.stateDir);
   let staged: StagedSecrets | undefined;
   if (!deps.skipSecrets)
