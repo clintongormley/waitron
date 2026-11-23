@@ -41,7 +41,7 @@ import type { BillTenderLine } from "./receipt-payments.js";
 import type { ReceiptAdjustment, TenderBlock, TillSaleLine } from "./till-sale.js";
 
 /** A row of a full invoice's table, before VAT. Amounts are what the row adds: a discount's are
- *  negative. A set menu's covered dish has no figures. */
+ *  negative. A set menu's covered dish has no money figures. */
 export interface FiledFigureRow {
   kind: "line" | "option" | "answer" | "discount" | "advance";
   units: string;

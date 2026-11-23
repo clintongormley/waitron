@@ -2,7 +2,11 @@ import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it, vi } from "vitest";
-import { getCountryPack, receiptLabelsFor, recipientIdentifierLabel } from "@waitron/country-packs";
+import {
+  getCountryPack,
+  RECIPIENT_IDENTIFIER_LABELS,
+  receiptLabelsFor,
+} from "@waitron/country-packs";
 import type { ReceiptLogoRaster } from "@waitron/shared";
 import { CUSTOMER_PANEL_FRACTION, layoutA4Invoice, layoutInvoiceHeader } from "./invoice-layout.js";
 import {
@@ -46,6 +50,12 @@ const named = (elements: readonly InvoicePageElement[], value: string): Text => 
   expect(found, value).toBeDefined();
   return found!;
 };
+
+/** Every shared receipt case, built; an export that is not a case builder is skipped. */
+const receiptCaseInputs = (): [string, ReceiptDocumentInput][] =>
+  Object.entries(receiptCases).flatMap(([name, build]): [string, ReceiptDocumentInput][] =>
+    typeof build === "function" ? [[name, build()]] : [],
+  );
 
 /** The area an element covers: a text line takes its line height. */
 const area = (element: InvoicePageElement) => {
@@ -434,10 +444,9 @@ describe("layoutInvoiceHeader", () => {
   it("titles a simplified invoice with the simplified-invoice heading", () => {
     const input = fixture();
     input.result.invoiceType = "F2";
-    named(header(input).elements, `${labels.simplifiedInvoice} FF/1`);
-    expect(texts(header(input).elements).map((text) => text.text)).not.toContain(
-      `${labels.invoiceHeading} FF/1`,
-    );
+    const { elements } = header(input);
+    named(elements, `${labels.simplifiedInvoice} FF/1`);
+    expect(texts(elements).map((text) => text.text)).not.toContain(`${labels.invoiceHeading} FF/1`);
   });
 
   it("puts the duplicate tag first after the title, before the date", () => {
@@ -479,10 +488,7 @@ describe("layoutInvoiceHeader", () => {
             corrective(number, locale, number.length % 2 === 0),
           ]),
       ),
-      ...Object.entries(receiptCases).map(([name, build]): [string, ReceiptDocumentInput] => [
-        name,
-        build(),
-      ]),
+      ...receiptCaseInputs(),
     ];
     for (const [name, input] of inputs) {
       const drawn = texts(header(input).elements).map((text) => ({ text, at: area(text) }));
@@ -954,6 +960,46 @@ describe("layoutA4Invoice", () => {
     expect(frame.length).toBe(2);
   });
 
+  it("keeps a practice invoice's foot notice on the page of TOTAL on either side of the page break", () => {
+    const practice = (count: number): InvoicePage[] => {
+      const input = longInvoice(count);
+      input.simulated = true;
+      input.simulatedCardPayment = true;
+      return layoutA4Invoice(input);
+    };
+    const lastPageOf = (pages: InvoicePage[], value: string): number =>
+      pages.reduce(
+        (found, page, index) =>
+          texts(page.elements).some((text) => text.text === value) ? index : found,
+        -1,
+      );
+    const rowsOn = (page: InvoicePage): boolean =>
+      page.elements.some((element) => element.kind === "box" && element.fill === "heading");
+    let count = 1;
+    while (count < 200 && practice(count).length === 1) count++;
+    const moved = practice(count);
+    expect(moved.map(rowsOn)).toEqual([true, false]);
+    for (const [shape, pages, page] of [
+      ["one row before the break", practice(count - 1), 0],
+      ["the first row that moves the closing block", moved, 1],
+      ["one row after the break", practice(count + 1), 1],
+    ] as const) {
+      expect(pages, shape).toHaveLength(page + 1);
+      expect(lastPageOf(pages, labels.total), shape).toBe(page);
+      expect(lastPageOf(pages, labels.paymentMethodHeading), shape).toBe(page);
+      expect(lastPageOf(pages, labels.noRealCharge), shape).toBe(page);
+      const elements = pages[page]!.elements;
+      const notices = texts(elements).filter((text) => text.text === labels.practice);
+      expect(notices, shape).toHaveLength(page === 0 ? 2 : 1);
+      const foot = notices.at(-1)!;
+      expect(foot.y, shape).toBeGreaterThan(named(elements, labels.total).y);
+      expect(area(foot).bottom, shape).toBeLessThan(
+        named(elements, FULL_INVOICE_DOCUMENT_FIXTURE.receipt.footerMessage!).y,
+      );
+      expectNoOverlapOrOverflow(shape, pages);
+    }
+  });
+
   it("ends a test page with its notice and the printer's name", () => {
     const input = fixture();
     input.testPage = { printer: "Office printer" };
@@ -1047,10 +1093,7 @@ describe("layoutA4Invoice", () => {
       ["owed", owed],
       ["deferred", deferredInput(ACCOUNT)],
       ["long", longInvoice(60)],
-      ...Object.entries(receiptCases).map(([name, build]): [string, ReceiptDocumentInput] => [
-        name,
-        build(),
-      ]),
+      ...receiptCaseInputs(),
     ];
     for (const [name, input] of inputs) expectNoOverlapOrOverflow(name, layoutA4Invoice(input));
   });
@@ -1520,24 +1563,33 @@ describe("layoutA4Invoice, printed", () => {
     expect(input).toEqual(before);
   });
 
-  it.each(["en-GB", "es-ES"])(
-    "labels a foreign identity document by its kind in %s",
-    async (locale) => {
+  it.each([
+    ["en-GB", "en"],
+    ["es-ES", "es"],
+  ] as const)("labels a foreign identity document by its kind in %s", async (locale, language) => {
+    const words = RECIPIENT_IDENTIFIER_LABELS[language];
+    for (const kind of [
+      "vat-number",
+      "passport",
+      "residence-country-id",
+      "residence-certificate",
+      "other-document",
+    ] as const) {
       const input = fixture();
       input.invoiceLocale = locale;
       input.result.recipient = {
         taxId: "Ab-09/xy",
-        identifierType: "passport",
+        identifierType: kind,
         identifierCountryCode: "FR",
         legalName: "Guest",
         countryCode: "ES",
         address: "2 Main Street, Madrid",
       };
       const { pages } = await renderedPdf(input);
-      expect(pages[0]!.text).toContain(`${recipientIdentifierLabel("passport", locale)}: Ab-09/xy`);
-      expect(pages[0]!.text).not.toContain(`${receiptLabelsFor(locale).nif}: Ab-09/xy`);
-    },
-  );
+      expect(pages[0]!.text, kind).toContain(`${words[kind]}: Ab-09/xy`);
+      expect(pages[0]!.text, kind).not.toContain(`${receiptLabelsFor(locale).nif}: Ab-09/xy`);
+    }
+  });
 
   it("draws a stored logo where the layout puts it, its proportions kept", async () => {
     const input = fixture();

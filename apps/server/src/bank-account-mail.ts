@@ -3,14 +3,14 @@ import { maskIban } from "@waitron/shared";
 import { BANK_ACCOUNT_CHANGED_EMAIL_CODE } from "./box-alert-email.js";
 import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
-/** Holds only masked accounts: the full IBAN never reaches the mail queue. The editor's name is
- * read when the mail is claimed. */
 function accountLine(account: BankAccount | null): string | null {
   if (account === null) return null;
   const masked = maskIban(account.iban);
   return account.bankName === null ? masked : `${masked} (${account.bankName})`;
 }
 
+/** Holds only masked accounts: the full IBAN never reaches the mail queue. The editor's name is
+ * read when the mail is claimed. */
 export async function queueBankAccountChangedMail(
   tx: Transaction,
   input: {

@@ -1770,8 +1770,10 @@ describe("the corrective invoice (R5)", () => {
     });
     const texts = page!.elements.flatMap((element) => (element.kind === "text" ? [element] : []));
     const label = texts.find(({ text }) => text === receiptLabelsFor("en-GB").saleDate)!;
-    const day = texts.find(({ text }) => text === receiptDay(SALE_DAY, "en-GB"))!;
-    expect([day.x, day.y > label.y]).toEqual([label.x, true]);
+    const below = texts
+      .filter(({ x, y }) => x === label.x && y > label.y)
+      .sort((one, other) => one.y - other.y);
+    expect(below[0]?.text).toBe(receiptDay(SALE_DAY, "en-GB"));
   });
 
   // A replacement of a full invoice: the original's customer and lines, typed R4.

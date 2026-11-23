@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { InvoicePageElement } from "./invoice-page.js";
+import { invoiceBoldFont } from "./invoice-font.js";
+import {
+  INVOICE_PAGE_HEIGHT,
+  INVOICE_PAGE_WIDTH,
+  type InvoicePageElement,
+} from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
 describe("A4 office raster weights, tones and shaded boxes", () => {
@@ -56,6 +61,25 @@ describe("A4 office raster weights, tones and shaded boxes", () => {
     const bold = await rasterOf([text("Total", 36, 36, { weight: "bold" })]);
     expect(regular.ink).toBeGreaterThan(0);
     expect(bold.ink).toBeGreaterThan(regular.ink * 1.1);
+  });
+
+  it("draws bold text as the bold face's outlines filled, with no stroke around them", async () => {
+    const { default: sharp } = await import("sharp");
+    const size = 40 / invoiceBoldFont.unitsPerEm;
+    const run = invoiceBoldFont.layout("Total");
+    let x = 36;
+    const paths = run.glyphs.map((glyph, index) => {
+      const drawn = `<path transform="translate(${x} ${36 + invoiceBoldFont.ascent * size}) scale(${size} ${-size})" d="${glyph.path.toSVG()}" fill="#000000"/>`;
+      x += run.positions[index]!.xAdvance * size;
+      return drawn;
+    });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="2480" height="3508" viewBox="0 0 ${INVOICE_PAGE_WIDTH} ${INVOICE_PAGE_HEIGHT}"><rect width="${INVOICE_PAGE_WIDTH}" height="${INVOICE_PAGE_HEIGHT}" fill="white"/>${paths.join("")}</svg>`;
+    const outlines = await sharp(Buffer.from(svg)).greyscale().removeAlpha().raw().toBuffer();
+    let expected = 0;
+    for (const value of outlines) if (value < 128) expected++;
+    const bold = await rasterOf([text("Total", 36, 36, { weight: "bold" })]);
+    expect(expected).toBeGreaterThan(0);
+    expect(Math.abs(bold.ink - expected)).toBeLessThanOrEqual(expected * 0.01);
   });
 
   it("draws muted text in the grey of #6b6b6b and ink text black", async () => {

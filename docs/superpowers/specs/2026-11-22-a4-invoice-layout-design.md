@@ -18,7 +18,7 @@ as a deferred payment ("Pago aplazado", A275), on the A4 page and on the till re
 
 ## Goals
 
-- A4 invoices (the emailed PDF and the office-printer page; both come from `layoutInvoicePages`)
+- A4 invoices (the emailed PDF and the office-printer page; both come from `layoutA4Invoice`)
   follow the layout the owner chose from mock-ups on 2026-11-22: B's header, A's table (below).
 - Every fact today's A4 invoice can carry is still carried, in a place of its own in the new layout.
 - A bill closed as a deferred payment shows how to pay by bank transfer, on A4 and on the thermal
@@ -172,8 +172,7 @@ TOTAL and payment footer move to the next page whole rather than split. Later pa
 - Owed: the payments listed, then the amount owed in bold; no "Pagado".
 - Deferred (directly or through the sale it replaces): the instructions below.
 - No payment of its own and not deferred (a corrective or refund invoice, a fully comped bill, a
-  cancellation credit): no "Pagado"; the footer lists only refunds, if any, and is left out when it
-  would be empty.
+  cancellation credit): no payment footer at all.
 
 ## Bank-transfer instructions
 
