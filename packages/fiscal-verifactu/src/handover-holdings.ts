@@ -98,7 +98,7 @@ function isPositiveWhole(value: CanonicalValue | undefined): boolean {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function readHoldings(holdings: CanonicalValue): ChainHolding[] {
+export function readHoldings(holdings: CanonicalValue): ChainHolding[] {
   if (!Array.isArray(holdings)) throw new MalformedHoldingsError("malformed fiscal holdings");
   return holdings.map((entry: CanonicalValue) => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry))
