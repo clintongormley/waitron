@@ -143,6 +143,9 @@ That rule is why compose has to repeat the passkey domain and origin today (`com
 The print agent keeps its own short list in its own `config.ts`, because the print-agent package
 imports nothing else from this repository (root `CLAUDE.md` §3). One guard reads both lists.
 
+**2026-11-23.** ENV8 adds the source `command or start input`. See the decision under
+[Measure 1](#5-measure-or-test-before-building).
+
 Result: the product side goes from 111 `WAITRON_*` names to **51**, or **55 until A951 lands**, because
 the four `WAITRON_TUNNEL_*` names stay until then. Counted from §2: 32 before the database opens, 9
 in the box's files, 8 one-off command inputs and 2 internal hand-offs. Of the 51, 13 are build or
@@ -263,6 +266,9 @@ left to A947 slice 3b and is not counted; it would add one if 3b keeps it.
 `WAITRON_ADMIN_PIN`, `WAITRON_ADMIN_PASSWORD`, `WAITRON_INITIAL_VENUE_INPUT`,
 `WAITRON_SETUP_SETTINGS_FILE`, and `WAITRON_BACKUP_RECOVERY_KEY` for `restore`.
 
+**2026-11-23.** The node recovery key and recovery operation file also remain startup inputs.
+See the ENV8 decision under [Measure 1](#5-measure-or-test-before-building).
+
 **Internal hand-off, not an operator setting:** `WAITRON_STREAM_ACCESS_KEY_ID`, and
 `WAITRON_STREAM_SECRET_ACCESS_KEY`, which go into Litestream's own environment only.
 
@@ -362,8 +368,8 @@ adding the runbook's two folder names, gives this table's 151 `WAITRON_*` names.
 | `WAITRON_BREAKGLASS_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_BREAKGLASS_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_RECOVERY_PASSPHRASE` | delete | (none) | Owner, 2026-11-04: it goes with the recovery bundle, read only by the `unpack` command (recovery-unpack-command.ts:58). What the bundle's removal reaches: §1. |
-| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
-| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
+| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only in the original proposal | ENV8 kept the startup fallback on 2026-11-23. See [Measure 1](#5-measure-or-test-before-building). |
+| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only in the original proposal | ENV8 kept the startup fallback on 2026-11-23. See [Measure 1](#5-measure-or-test-before-building). |
 | `WAITRON_ADMIN_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_ADMIN_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_INITIAL_VENUE_INPUT` | keep | one-off command input | Read only by a command an operator runs by hand. |
