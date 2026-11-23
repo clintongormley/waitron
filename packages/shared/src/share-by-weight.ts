@@ -15,8 +15,9 @@ const CENT = decimal("0.01");
 
 /**
  * `total` shared in proportion to `weights`: each share rounded down to the cent, then the cents
- * left over one at a time to the largest remainders, a tie to the earlier weight. The shares sum to
- * `total`. Weights adding up to zero refuse `shared.invalid_decimal` unless `total` is zero.
+ * left over one at a time to the largest remainders, a tie to the earlier weight. With `total` in
+ * whole cents and no weight below zero, the shares sum to `total`. Weights adding up to zero refuse
+ * `shared.invalid_decimal` unless `total` is zero.
  */
 export function shareByWeight(total: Decimal, weights: readonly Decimal[]): Decimal[] {
   if (compareDecimal(total, ZERO) === 0) return weights.map(() => ZERO);

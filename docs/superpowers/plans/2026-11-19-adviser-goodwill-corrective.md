@@ -320,17 +320,18 @@ to ticked dishes changed no existing assertion in either run.
 
 ### 4.2 D2: A445 — which tickets, and what is shared
 
-**Default: free items only, and only when the meal's lines carry two or more VAT rates on the issue
-day.** That is what answer 1.10 covers ("A free item given with a paid sale … When the items carry
-different VAT rates"). A partial discount on one dish, with no free item on the ticket, stays on
+**Default: free items only, and only when the meal's lines with a menu price or a gross above zero
+carry two or more VAT rates on the issue day.** That is what answer 1.10 covers ("A free item given
+with a paid sale … When the items carry different VAT rates"). A partial discount on one dish, with no free item on the ticket, stays on
 that dish's own rate, as today; the adviser's line (section 4.7) says so and asks.
 
 `shareFreeItems(gross: GrossLines, on: string): GrossLines`, new in `packages/menu/src/pricing.ts`:
 
 1. If any line has an empty rate list, return `gross` unchanged (`rateLines` then refuses it as
    today, `pricing.ts:223`).
-2. Take each line's rate on `on` with `rateOn`, as `rateLines` does (`:224`). If fewer than two
-   rates, or no line is free (gross 0, `listGross` above 0), return `gross` unchanged.
+2. Take the rate on `on` of each line with a menu price or gross above 0 with `rateOn`, as
+   `rateLines` does (`:224`). If fewer than two rates, or no line is free (gross 0, `listGross`
+   above 0), return `gross` unchanged.
 3. Weights: `listGross` where set, else `lineGross`. Shares: `shareByWeight(gross.total, weights)`.
 4. Each line whose share differs from its gross gets `lineGross` = its share and, where it had none,
    `listGross` = its old gross and `listUnitPriceGross` = its old `grossUnitPrice`, so the filed line

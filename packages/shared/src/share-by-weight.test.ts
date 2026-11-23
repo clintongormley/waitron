@@ -34,7 +34,7 @@ describe("shareByWeight", () => {
     );
   });
 
-  it("always sums to the total", () => {
+  it("sums to the total", () => {
     const result = shares("7.00", ["3.33", "3.33", "3.34"]);
     expect(result).toEqual(["2.33", "2.33", "2.34"]);
   });

@@ -1115,6 +1115,46 @@ describe("shareFreeItems — a free item takes its share of the price paid", () 
     ]);
   });
 
+  it("gives a shared line sold in a quantity its old unit price as its list unit price", () => {
+    const salads = {
+      ...line(1, "Salad", "30.00", AT_4),
+      quantity: "3",
+      grossUnitPrice: decimal("10.00"),
+    };
+    const gross = lines(salads, line(2, "Water", "0.00", AT_21, "2.00"));
+    const shared = shareFreeItems(gross, ON);
+    expect(shared.lines[0]).toEqual({
+      ...salads,
+      lineGross: "28.13",
+      listGross: "30.00",
+      listUnitPriceGross: "10.00",
+    });
+    expect(shared.lines[1]!.lineGross).toBe("1.87");
+  });
+
+  it("shares the adviser's wine and free bread as the adviser does", () => {
+    const gross = lines(line(1, "Wine", "12.00", AT_21), line(2, "Bread", "0.00", AT_4, "2.00"));
+    const shared = shareFreeItems(gross, ON);
+    expect(shared.lines.map((l) => [l.name, l.lineGross])).toEqual([
+      ["Wine", "10.29"],
+      ["Bread", "1.71"],
+    ]);
+    expect(rateLines(shared, ON).vatBreakdown).toEqual([
+      { rate: "21.00", base: "8.50", tax: "1.79" },
+      { rate: "4.00", base: "1.64", tax: "0.07" },
+    ]);
+  });
+
+  it("counts no rate for a €0 line with no menu price", () => {
+    const gross = lines(
+      line(1, "Salad", "7.77", AT_4),
+      line(2, "Soup", "3.33", AT_4),
+      line(3, "Bread", "0.00", AT_4, "1.99"),
+      line(4, "Sauce", "0.00", AT_21),
+    );
+    expect(shareFreeItems(gross, ON)).toBe(gross);
+  });
+
   it("returns a ticket at one rate unchanged, so eaten here the free water keeps its €0", () => {
     const gross = waterComped(AT_10, AT_10);
     expect(shareFreeItems(gross, ON)).toBe(gross);

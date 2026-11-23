@@ -266,20 +266,22 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
 }
 
 /**
- * On a ticket whose lines carry two or more rates on `on` and hold a free item (gross 0 with a list
- * price), the price paid shared over every line by its menu price: its list gross where it has one,
- * else its gross. A line whose share differs from its gross keeps the price it was sold at as its
- * list price. Any other ticket, or one with a line whose rate list is empty, comes back unchanged.
- * This is the tax adviser's answer 1.10 (a free item given with a paid sale at different VAT rates).
+ * The price paid shared over every line by menu price (its list gross, else its gross) when a free
+ * line (gross 0, list price above 0) is on a ticket whose lines with a menu price or gross above 0
+ * carry two or more rates on `on`; any other ticket comes back as it is.
+ * The tax adviser's answer 1.10.
  */
 export function shareFreeItems(gross: GrossLines, on: string): GrossLines {
   if (gross.lines.some((line) => line.vatRates.length === 0)) return gross;
-  const rates = new Set(gross.lines.map((line) => rateOn(line.vatRates, on)));
   const listed = (line: GrossLine) => line.listGross !== undefined && line.listGross !== null;
   const menuPrice = (line: GrossLine) => (listed(line) ? decimal(line.listGross!) : line.lineGross);
-  const free = gross.lines.some(
-    (line) => isZeroDecimal(line.lineGross) && compareDecimal(menuPrice(line), decimal("0")) > 0,
+  const above = (amount: Decimal) => compareDecimal(amount, ZERO) > 0;
+  const rates = new Set(
+    gross.lines
+      .filter((line) => above(menuPrice(line)) || above(line.lineGross))
+      .map((line) => rateOn(line.vatRates, on)),
   );
+  const free = gross.lines.some((line) => isZeroDecimal(line.lineGross) && above(menuPrice(line)));
   if (rates.size < 2 || !free) return gross;
   const shares = shareByWeight(gross.total, gross.lines.map(menuPrice));
   const lines = gross.lines.map((line, index) => {
