@@ -19,12 +19,12 @@ const suite = useVenueDb({
 });
 
 it.each([
-  ["es", "en", ["Café", "Bebidas", "Pan"]],
-  ["es", "es", ["Café", "Bebidas", "Pan"]],
-  ["en", "es", ["Coffee", "Drinks", "Bread"]],
+  ["es", "en"],
+  ["es", "es"],
+  ["en", "es"],
 ] as const)(
   "uses the %s setup course names for a demo seeded in %s",
-  async (staffLanguage, locale, [coffee, drinks, bread]) => {
+  async (staffLanguage, locale) => {
     const venue = await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 90_000_900,
       nifFormat: "calculated",
@@ -34,6 +34,9 @@ it.each([
     const starter = (name: keyof typeof STARTER_COURSE_NAMES) =>
       staffLanguage === "en" ? name : STARTER_COURSE_NAMES[name].es;
     const dataSet = CASA_DELGADO_ES;
+    const [coffee, drinks, bread] = dataSet.courses.flatMap((course) =>
+      "name" in course ? [course.name[staffLanguage]] : [],
+    );
     await seedDemoRestaurant(suite.db, {
       venue,
       locale,
@@ -70,11 +73,11 @@ it.each([
         ).toEqual([
           ids.get(starter("Sharing plates")),
           ids.get(starter("Starters")),
-          ids.get(drinks),
-          ids.get(bread),
+          ids.get(drinks!),
+          ids.get(bread!),
         ]);
         expect(
-          settings[id]!.some(({ courseId }) => courseId === ids.get(coffee)),
+          settings[id]!.some(({ courseId }) => courseId === ids.get(coffee!)),
           name,
         ).toBe(false);
       }
@@ -86,7 +89,7 @@ it.each([
       );
       for (const [image, courseId] of [
         ["solomillo.png", ids.get(starter("Mains"))],
-        ["pan-de-la-casa.png", ids.get(bread)],
+        ["pan-de-la-casa.png", ids.get(bread!)],
         ["manchego-curado.png", null],
       ] as const) {
         const product = demoProducts.find((product) => product.image === image)!;
