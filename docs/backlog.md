@@ -955,9 +955,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 
-- **The new key and passkey icons draw lines at width 2** while the change-account icon beside them
-  uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing
-  keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
+- **The sign-in card copies the setup wizard's card styles** rather than sharing `wt-card`, and
+  nothing keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
 
 ### Interface languages
 

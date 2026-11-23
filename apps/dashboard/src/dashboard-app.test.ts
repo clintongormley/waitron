@@ -10767,6 +10767,20 @@ describe("dashboard-app: About Waitron", () => {
     expect(api.getLegalAbout).toHaveBeenCalledOnce();
   });
 
+  it("the sign-in foot is as wide as its words and centred under the card", async () => {
+    const api = signedOut({
+      getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "abc1234" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(foot(el)).not.toBeNull());
+    const inner = foot(el)!.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    const card = login(el)!.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
+    expect(inner.width).toBeLessThan(card.width / 2);
+    const middle = (box: DOMRect) => box.left + box.width / 2;
+    expect(Math.abs(middle(inner) - middle(card))).toBeLessThanOrEqual(1);
+  });
+
   it("the sign-in foot reads About Waitron when the box has no release", async () => {
     const api = signedOut({
       getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "abc1234" }),

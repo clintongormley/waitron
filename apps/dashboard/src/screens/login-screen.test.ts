@@ -729,7 +729,9 @@ describe("login-screen", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
     expect(field(el, "password")).not.toBeNull();
-    await expect.element(page.getByText(t("login.email"), { exact: true })).toBeVisible();
+    const label = page.getByText(t("login.email"), { exact: true });
+    await expect.element(label).toBeInTheDocument();
+    expect(label.element().getBoundingClientRect().width).toBeLessThanOrEqual(1);
     await expect.element(page.getByText("owner@example.com", { exact: true })).toBeVisible();
     await expect
       .element(page.getByRole("textbox", { name: t("login.email") }))
@@ -4006,6 +4008,33 @@ describe("login-screen: a passkey Waitron no longer holds", () => {
 });
 
 describe("login-screen: chosen email", () => {
+  it("draws the address in an outlined box as wide as the password field, with Change as a link at its trailing edge", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    await openPassword(el, "bea@x.com");
+    const address = page.getByText("bea@x.com", { exact: true });
+    await expect.element(address).toBeVisible();
+    const chip = address.element().closest<HTMLElement>(".login-context")!;
+    const box = chip.getBoundingClientRect();
+    const password = field(el, "password").getBoundingClientRect();
+    expect(Math.abs(box.left - password.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.width - password.width)).toBeLessThanOrEqual(1);
+    const style = getComputedStyle(chip);
+    expect(style.borderTopStyle).toBe("solid");
+    expect(style.borderTopWidth).toBe("1px");
+
+    const change = el.shadowRoot!.querySelector<import("@waitron/ui").WtButton>(
+      "wt-button[data-test=change-account]",
+    )!;
+    expect(chip.contains(change)).toBe(true);
+    expect(change.variant).toBe("link");
+    expect(change.querySelector("svg")).toBeNull();
+    const changeBox = change.getBoundingClientRect();
+    expect(changeBox.left).toBeGreaterThan(box.left + box.width / 2);
+    expect(box.right - changeBox.right).toBeLessThanOrEqual(
+      parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth) + 1,
+    );
+  });
+
   it("wraps a long address within the sign-in card on a phone", async () => {
     const viewport = [window.innerWidth, window.innerHeight] as const;
     onTestFinished(() => page.viewport(...viewport));
@@ -4036,7 +4065,7 @@ describe("login-screen: chosen email", () => {
   });
 
   it.each(["invitation", "password_reset"])(
-    "shows the %s page's address as text without a Change action",
+    "shows the %s page's address in the account box without a Change action",
     async (purpose) => {
       history.replaceState(null, "", `/account?token=token-1&purpose=${purpose}`);
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
