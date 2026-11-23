@@ -4666,11 +4666,8 @@ it.each(
         expect(range.getBoundingClientRect().right, "availability heading").toBeLessThanOrEqual(
           pinned + 1,
         );
-        for (const label of [heading, root.querySelector('thead th[data-pinned="end"]')!]) {
-          range.selectNodeContents(label);
-          const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
-          expect(new Set(lines.map((rect) => rect.top)).size, label.textContent!).toBe(1);
-        }
+        const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+        expect(new Set(lines.map((rect) => rect.top)).size, heading.textContent!).toBe(1);
         expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
       } else {
         expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);

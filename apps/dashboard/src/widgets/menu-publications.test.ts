@@ -289,7 +289,7 @@ describe("a menu's scheduled versions", () => {
     expect(cell(el, "version-v-lunch-1")).toBeNull();
   });
 
-  it("keeps the Actions heading on one line inside text that may break anywhere", async () => {
+  it("shows the Actions icon with its accessible name inside text that may break anywhere", async () => {
     const api = stubApi();
     const { el, host } = await mountWidget<MenuPublicationsPanel>("dashboard-menu-publications", {
       api,
@@ -299,10 +299,9 @@ describe("a menu's scheduled versions", () => {
     host.style.overflowWrap = "anywhere";
     await flush(el);
     const heading = table(el).shadowRoot!.querySelector("th[data-actions]")!;
-    const words = document.createRange();
-    words.selectNodeContents(heading);
-    expect(heading.textContent!.trim()).toBe("Actions");
-    expect(new Set([...words.getClientRects()].map((rect) => Math.round(rect.top))).size).toBe(1);
+    await expect.element(page.elementLocator(heading)).toHaveAccessibleName("Actions");
+    const icon = heading.querySelector('wt-icon[name="kebab"]')!;
+    await expect.element(page.elementLocator(icon.shadowRoot!.querySelector("svg")!)).toBeVisible();
   });
 
   it("asks before cancelling, and Keep it sends nothing", async () => {

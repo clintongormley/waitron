@@ -1000,15 +1000,15 @@ describe("servers screen at phone width", () => {
     ],
   };
   it.each(["en-GB", "es-ES"])(
-    "keeps every row's menu on screen and uncovered at 320 px with larger text while the other columns scroll sideways (%s)",
+    "keeps every row's menu on screen and uncovered at 300 px with larger text while the other columns scroll sideways (%s)",
     async (locale) => {
       const width = window.innerWidth,
         height = window.innerHeight;
       const before = currentLocale();
       try {
         setLocale(locale);
-        await page.viewport(320, 844);
-        expect(window.innerWidth).toBe(320);
+        await page.viewport(300, 844);
+        expect(window.innerWidth).toBe(300);
         const { el, host } = await mountWidget<ServersScreen>("dashboard-servers-screen", {
           api: stubApi({ listServers: vi.fn().mockResolvedValue(phoneListing) }),
         });
