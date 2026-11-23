@@ -397,6 +397,15 @@ describe("preview live snapshot", () => {
 });
 
 describe("publishMenu", () => {
+  it("returns the box's recorded live time in both the publish answer and status", async () => {
+    const { lunch } = await menusFixture(fx.db);
+    const { hash } = await app((tx) => previewMenu(tx, lunch));
+    const at = new Date("2026-09-26T09:15:00.000Z");
+    const answer = await app((tx) => publishMenu(tx, lunch, hash, "person-1", { at }));
+    const status = (await app((tx) => menuStatus(tx, [lunch]))).get(lunch);
+    expect(status).toMatchObject({ state: "current", publishedAt: at.toISOString() });
+    expect(answer).toMatchObject({ publishedAt: at.toISOString() });
+  });
   it("writes version 1, its images, and points the publication at it", async () => {
     const f = await menusFixture(fx.db);
     await fx.db

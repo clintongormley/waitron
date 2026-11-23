@@ -19,7 +19,7 @@ export const dashboardPath: UrlPathConfig = {
       month: "month",
     },
     "venue-operations": { department: "department", view: "view", zone: "zone" },
-    menus: { menu: "menu", view: "view", "price-filter": "filter" },
+    menus: { menu: "menu", view: "view", section: "section", "price-filter": "filter" },
     modifiers: { view: "view", list: "list" },
     orders: {
       status: "status",

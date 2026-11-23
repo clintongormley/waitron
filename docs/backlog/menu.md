@@ -154,36 +154,21 @@ the 2026-09-30 folders design; what remains:
   later rebuild of that table meets the trap `docs/developers/conventions-data.md` records.
 - **A product reached through a section offers no extras list** (noted at #659, and already so
   before it, checked at `002b79f69`).
-- **The Menus screen (#664).** Which section is being edited is not in the address, only the menu
-  and the tab. A refused change's message sits
-  under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
-  names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
-  their change until the menu is next read; and no accessibility test covers that message.
+- **The Menus screen (#664).** If someone exactly undoes a move while it is saving, the move's
+  answer is shown over their change until the menu is next read.
 - **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
   that removing a product's last placement needs no warning before it clears the menu price and
-  variant settings. Open: the product editor's help lines are paragraphs beside their inputs, not linked to them (a
-  `hint` shows only as the placeholder since C104, so moving them there would hide them whenever
-  the field holds a value); and,
-  from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
-  not re-placed on resize.
-- **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
-  next read; the status
-  and preview reads build every menu's frozen copy inside `withTransaction`, the venue's write lock
-  — about 21 ms median for 4 menus and 300 dishes on a dev laptop, not measured on the box; at
-  phone width the list keeps a fixed room for the row menu, and a status sort falls back to a name
-  sort. The configuration import (`apps/server/src/configuration-transfer.ts`, inside
-  provisioning's `beforeCommit`) deletes every `menus` row, so a provisioning or demo-seed
-  path that publishes a menu BEFORE the import runs fails the import's commit on the append-only
-  `menu_versions` → `menus` key. `apps/dashboard/src/widgets/variant-form.test.ts` failed once
-  in a local dashboard coverage run; which of its tests failed was not recorded. The one
-  intermittent failure in that file whose cause is known, the Escape test, is fixed (A220f, #1075; see the
-  flaky-test entry); whether it was this one is not known.
-- **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
-  and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
-  active products only, so a shortcut to a product switched off since, once removed, cannot be
-  added again until the product is switched back on. Archiving a product turns its shortcut into
-  a Missing one (`takeOffMenus`, `packages/menu/src/menu-removal.ts`); how the Home page tab's
-  preview draws a shortcut to a product switched off any other way was not checked.
+  variant settings.
+- **Publishing (#677).** The status and preview reads build every menu's frozen copy inside
+  `withTransaction`, the venue's write lock. Measured about 21 ms median for 4 menus and 300
+  dishes on a dev laptop. The figure for the box is unknown. At phone width the list keeps a
+  fixed room for the row menu. The configuration import
+  (`apps/server/src/configuration-transfer.ts`, inside provisioning's `beforeCommit`) deletes every
+  `menus` row, so a provisioning or demo-seed path that publishes a menu BEFORE the import runs
+  fails the import's commit on the append-only `menu_versions` → `menus` key.
+  `apps/dashboard/src/widgets/variant-form.test.ts` failed once in a local dashboard coverage run.
+  The failed case was not recorded. The Escape case's intermittent failure was fixed (A220f,
+  #1075). Whether it was this one is unknown.
 
 ## Extras and Options — deliberate limits, and what is left open
 
@@ -436,6 +421,10 @@ original checks and their limits. The owner accepted its recommendations at 22:0
 retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
+
+- **Menu sorting on phones** (watcher, 2026-11-23). The Status heading sorts by status where
+  it is visible. The phone layout sorts by Name when Status disappears.
+  [Menus screen](../../apps/dashboard/src/screens/menus-screen.ts#L880-L891)
 
 ### Filters keeps a fixed breakpoint
 

@@ -137,16 +137,6 @@ function tabAddress(menuId: string, tab: Tab): string {
   return `/menus/menu/${encodeURIComponent(menuId)}/view/${tab}`;
 }
 
-/** The state a publish answered as version `number` left, shown until the next read replaces it.
- * The answer carries no publication time, so a new version shows this browser's clock. */
-function publishedStatus(number: number, hash: string, before: MenuStatus | null): MenuStatus {
-  const publishedAt =
-    before !== null && before.state !== "unpublished" && before.version === number
-      ? before.publishedAt
-      : new Date().toISOString();
-  return { state: "current", clashes: 0, version: number, publishedAt, hash };
-}
-
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
@@ -688,6 +678,7 @@ export class MenusScreen extends LitElement {
   #moveScope?: DraftScope<string>;
   readonly #moveId = {};
   @state() private memberError: string | null = null;
+  @state() private structureWriteError: string | null = null;
   @state() private view: Tab = TABS[0];
 
   /** Null until the open menu's prices are first read. */
@@ -861,7 +852,6 @@ export class MenusScreen extends LitElement {
   #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
   /** The list {@link path} names. */
-  #listId: string | null = null;
   #onMenu: string[] = [];
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
@@ -921,7 +911,7 @@ export class MenusScreen extends LitElement {
     if (changed.has("structure"))
       this.#keepSelectionOwned(changed.get("structure") as MenuStructure | null | undefined);
     this.#trackMoveDraft();
-    if (changed.has("structure") || changed.has("path")) {
+    if (changed.has("structure") || changed.has("path") || changed.has("view")) {
       this.#resolvePath();
       this.#closeLostList();
     }
@@ -973,11 +963,18 @@ export class MenusScreen extends LitElement {
     }
   }
 
-  /** Keeps the longest part of the path the structure still has, and derives the list it names. */
+  /** Keeps the longest valid prefix once the structure arrives. */
   #resolvePath(): void {
+    if (this.structure === null) return;
     const trail = trailOf(this.structure, this.path);
     if (trail.length < this.path.length) this.path = this.path.slice(0, trail.length);
-    this.#listId = listIdOf(this.structure, trail);
+    if (
+      this.view === "structure" &&
+      this.#url.read("dashboard") === "menus" &&
+      this.#url.read("menu") === this.menuId &&
+      this.#url.read("view") === "structure"
+    )
+      void this.#url.write({ section: this.path.join("/") || null }, true);
   }
 
   /** Whether the target's path, followed as far as the menu on screen still has it, ends at the
@@ -1011,17 +1008,19 @@ export class MenusScreen extends LitElement {
       this.memberError = fill("menus.list_gone_saved", { name: target.name });
   }
 
-  /** When a change to `target` is refused while the list on screen is not `target`'s — it is
-   * another menu's, another list of the same menu, or there is none — names the list with the
-   * refusal, so the refusal is not read as being about what is on screen. Says whether it did. */
-  #reportRefusedElsewhere(target: ListTarget, error: unknown): boolean {
-    if (target.menuId === this.menuId && target.listId === this.#listId) return false;
-    this.#reportRefused(target.name, error);
-    return true;
-  }
-
   #reportRefused(name: string, error: unknown): void {
     this.memberError = fill("menus.change_not_saved", { name, reason: codeMessage(codeOf(error)) });
+  }
+
+  #reportStructureRefusal(target: ListTarget, error: unknown): void {
+    if (target.menuId !== this.menuId || this.view !== "structure") {
+      this.#reportRefused(target.name, error);
+      return;
+    }
+    this.structureWriteError = fill("menus.change_not_saved", {
+      name: target.name,
+      reason: codeMessage(codeOf(error)),
+    });
   }
 
   /** Closes a window whose request was refused while another menu, or none, is on screen, so it is
@@ -1029,7 +1028,7 @@ export class MenusScreen extends LitElement {
    * open for its caller to show the refusal there. Says whether it closed one. */
   #closeRefusedElsewhere(target: ListTarget, error: unknown): boolean {
     if (target.menuId === this.menuId) return false;
-    this.#reportRefusedElsewhere(target, error);
+    this.#reportRefused(target.name, error);
     this.addingProducts = null;
     this.creatingSection = null;
     this.includingMenu = null;
@@ -1308,6 +1307,14 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.#select(this.#url.read("menu"));
+    const section = this.#url.read("section");
+    if (
+      this.menuId !== null &&
+      this.#url.read("view") === "structure" &&
+      (section !== null || this.view === "structure") &&
+      (section ?? "") !== this.path.join("/")
+    )
+      this.path = section?.split("/") ?? [];
     this.#checkAddress();
   }
 
@@ -1340,6 +1347,7 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
+    this.structureWriteError = null;
     this.publishResult = null;
     this.patching = false;
     this.#releasePrices();
@@ -1359,15 +1367,16 @@ export class MenusScreen extends LitElement {
     if (this.#url.read("dashboard") !== "menus") return;
     const addressView = this.#url.read("view");
     const priceFilter = this.#url.read("price-filter");
+    const section = this.#url.read("section");
     if (this.menuId === null) {
-      if (addressView !== null || priceFilter !== null)
-        this.#url.write({ view: null, "price-filter": null }, true);
+      if (addressView !== null || priceFilter !== null || section !== null)
+        this.#url.write({ view: null, section: null, "price-filter": null }, true);
       return;
     }
     const menu = this.#selectedMenu();
     if (!menu && !this.loading && !this.loadError) {
       this.#select(null);
-      this.#url.write({ menu: null, view: null, "price-filter": null }, true);
+      this.#url.write({ menu: null, view: null, section: null, "price-filter": null }, true);
       return;
     }
     const view =
@@ -1378,8 +1387,20 @@ export class MenusScreen extends LitElement {
           : TABS[0];
     this.showPriceClashes = view === "prices" && priceFilter === "clashes";
     if (view !== this.view || this.#statusFor !== this.menuId) this.#showView(view);
-    if (menu && (view !== addressView || (priceFilter !== null && !this.showPriceClashes)))
-      this.#url.write({ view, "price-filter": this.showPriceClashes ? priceFilter : null }, true);
+    if (
+      menu &&
+      (view !== addressView ||
+        (section !== null && view !== "structure") ||
+        (priceFilter !== null && !this.showPriceClashes))
+    )
+      this.#url.write(
+        {
+          view,
+          section: view === "structure" ? section : null,
+          "price-filter": this.showPriceClashes ? priceFilter : null,
+        },
+        true,
+      );
   }
 
   #open(menuId: string, view: Tab = TABS[0], priceFilter: "clashes" | null = null): void {
@@ -1387,12 +1408,24 @@ export class MenusScreen extends LitElement {
     if (this.#selectedMenu()?.kind === "set_menu") view = "set-menu";
     this.showPriceClashes = priceFilter === "clashes";
     this.#showView(view);
-    this.#url.write({ dashboard: "menus", menu: menuId, view, "price-filter": priceFilter });
+    this.#url.write({
+      dashboard: "menus",
+      menu: menuId,
+      view,
+      section: null,
+      "price-filter": priceFilter,
+    });
   }
 
   #backToList(): void {
     if (!navigationGuardFor(window)) this.#select(null);
-    this.#url.write({ dashboard: "menus", menu: null, view: null, "price-filter": null });
+    this.#url.write({
+      dashboard: "menus",
+      menu: null,
+      view: null,
+      section: null,
+      "price-filter": null,
+    });
   }
 
   #selectedMenu(): MenuSummary | undefined {
@@ -1497,11 +1530,10 @@ export class MenusScreen extends LitElement {
     this.publishResult = null;
     let result: PublishResult;
     try {
-      result = {
-        kind: "published",
-        number: (await this.api.publishMenu(menuId, hash)).number,
-        warnings,
-      };
+      const { number, publishedAt } = await this.api.publishMenu(menuId, hash);
+      result = { kind: "published", number, warnings };
+      if (this.menuId === menuId)
+        this.status = { state: "current", clashes: 0, version: number, publishedAt, hash };
     } catch (error) {
       const code = codeOf(error);
       result =
@@ -1522,10 +1554,8 @@ export class MenusScreen extends LitElement {
     this.publishResult = result;
     if (result.kind === "failed") return;
     // A publish that succeeded is never reported as a failed one: a failure here is a load failure.
-    if (result.kind === "published") {
-      this.status = publishedStatus(result.number, hash, live);
-      this.#followStatus(true);
-    } else if (this.view === "preview") void this.#watchPreview(menuId);
+    if (result.kind === "published") this.#followStatus(true);
+    else if (this.view === "preview") void this.#watchPreview(menuId);
   }
 
   async #publishRefusal(menuId: string, code: string, error: unknown): Promise<string> {
@@ -1554,13 +1584,13 @@ export class MenusScreen extends LitElement {
     const target = this.#targetAt(path);
     const { listId } = target;
     this.memberError = null;
+    this.structureWriteError = null;
     this.busy = true;
     this.#writes.run(listId, async () => {
       try {
         await write(listId);
       } catch (error) {
-        if (!this.#reportRefusedElsewhere(target, error))
-          this.memberError = codeMessage(codeOf(error));
+        this.#reportStructureRefusal(target, error);
         this.busy = false;
         return;
       }
@@ -1578,6 +1608,7 @@ export class MenusScreen extends LitElement {
     moves.out += 1;
     let sentOver: MenuStructure | null = null;
     this.memberError = null;
+    this.structureWriteError = null;
     this.#writes.move(
       listId,
       () => {
@@ -1610,8 +1641,7 @@ export class MenusScreen extends LitElement {
       async (error) => {
         // The moves queued behind a refused one are dropped unanswered, so its batch ends here.
         this.#moveBatches.delete(listId);
-        if (!this.#reportRefusedElsewhere(target, error))
-          this.memberError = codeMessage(codeOf(error));
+        this.#reportStructureRefusal(target, error);
         await this.#refresh(false);
       },
     );
@@ -1626,6 +1656,7 @@ export class MenusScreen extends LitElement {
     // `#targetAt` falls back to an ancestor for a path that no longer leads anywhere.
     const resolves = (path: string[]) => trailOf(this.structure, path).length === path.length;
     this.memberError = null;
+    this.structureWriteError = null;
     this.busy = true;
     this.#writes.run(this.#targetAt(to).listId, async () => {
       if (this.menuId !== menuId || !resolves(from) || !resolves(to)) {
@@ -1642,8 +1673,7 @@ export class MenusScreen extends LitElement {
           position,
         );
       } catch (error) {
-        if (!this.#reportRefusedElsewhere(destination, error))
-          this.memberError = codeMessage(codeOf(error));
+        this.#reportStructureRefusal(destination, error);
         await this.#refresh(false);
         this.busy = false;
         return;
@@ -1663,6 +1693,7 @@ export class MenusScreen extends LitElement {
     const captured = this.#selectedMembers(canonical);
     const destinationId = this.#targetAt(to).listId;
     this.memberError = null;
+    this.structureWriteError = null;
     this.busy = true;
     this.#writes.run(destinationId, async () => {
       const current = this.#sentKeys(this.#inTreeOrder(keys));
@@ -1692,8 +1723,7 @@ export class MenusScreen extends LitElement {
       try {
         await this.api.moveSectionMembersInto(destinationId, members, position);
       } catch (error) {
-        if (!this.#reportRefusedElsewhere(destination, error))
-          this.memberError = codeMessage(codeOf(error));
+        this.#reportStructureRefusal(destination, error);
         await this.#refresh(false);
         this.busy = false;
         return;
@@ -1711,6 +1741,7 @@ export class MenusScreen extends LitElement {
   #edit(path: string[]): void {
     this.path = path;
     this.memberError = null;
+    this.structureWriteError = null;
   }
 
   /** Opens an add's window on the list the tree row at `path` holds, which becomes current. */
@@ -2673,6 +2704,13 @@ export class MenusScreen extends LitElement {
       }`;
     return html`${error}
       ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
+      ${
+        this.structureWriteError
+          ? html`<p class="error" role="alert" data-test="structure-write-error">
+              ${this.structureWriteError}
+            </p>`
+          : nothing
+      }
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
         .menus=${this.menus}
@@ -4003,7 +4041,7 @@ export class MenusScreen extends LitElement {
             this.showPriceClashes = false;
             this.#showView(event.detail.value);
           }
-          void this.#url.write({ view: event.detail.value, "price-filter": null });
+          void this.#url.write({ view: event.detail.value, section: null, "price-filter": null });
         }}
       >
         <div slot="structure">${this.#renderStructure()}</div>

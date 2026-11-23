@@ -447,9 +447,10 @@ describe("overtaking a queued edition is refused", () => {
 
     await setSoup("5.00");
     const same = await hashOf(f.lunch);
-    expect(await app((tx) => publishMenu(tx, f.lunch, same, "person-1", { at: NOW }))).toEqual({
+    expect(await app((tx) => publishMenu(tx, f.lunch, same, "person-1", { at: day(8) }))).toEqual({
       versionId: v1,
       number: 1,
+      publishedAt: NOW.toISOString(),
     });
     expect(await publicationTables()).toEqual(before);
   });

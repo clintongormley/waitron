@@ -6149,8 +6149,12 @@ the `kitchen` key names no panel since A756 PR 8 (2026-10-24), so its address op
 (`/adjustment-reasons`) sits under Service. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/menus`) puts the menu's id before
 the tab:
-`/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
-`apps/dashboard/src/navigation.ts`).
+`/menus/menu/<id>/view/<key>`, with `structure`, `prices`, `home` and `preview` (`dashboardPath`,
+`apps/dashboard/src/navigation.ts`). Structure adds `/section/<path>` to the current address when a
+section is selected. The path joins the row's member IDs in order and encodes them as one segment.
+Another tab drops that segment. Returning to Structure puts the remembered selection back in the
+current address without a new history entry. Refusals for a remove or drag within the current
+Structure tab name the affected list in an alert directly above the tree.
 The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
 the selected tab's lists do not hold opens nothing and is dropped from the address without adding a

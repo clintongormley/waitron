@@ -4752,7 +4752,11 @@ describe("publishing a menu", () => {
     const published = await send(app, "POST", publish, { body: { expectedHash: first.hash } });
     expect(published.status).toBe(200);
     const one = (await published.json()) as { versionId: string; number: number };
-    expect(one).toEqual({ versionId: expect.any(String), number: 1 });
+    expect(one).toEqual({
+      versionId: expect.any(String),
+      number: 1,
+      publishedAt: expect.any(String),
+    });
     expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
     expect(await status(app, menuId)).toEqual({
       state: "current",

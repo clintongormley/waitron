@@ -1364,12 +1364,13 @@ describe("DashboardApi routes", () => {
       ],
       warnings: [{ kind: "shortcut_missing" as const, name: "Burger" }],
     };
+    const publishedAt = "2026-10-27T09:00:00.000Z";
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(statuses))
       .mockResolvedValueOnce(jsonResponse(current))
       .mockResolvedValueOnce(jsonResponse(preview))
-      .mockResolvedValueOnce(jsonResponse({ versionId: "v3", number: 3 }))
+      .mockResolvedValueOnce(jsonResponse({ versionId: "v3", number: 3, publishedAt }))
       .mockResolvedValueOnce(refusal("menu.changed_since_preview", 409));
     const api = new DashboardApi("", fetchImpl);
 
@@ -1379,6 +1380,7 @@ describe("DashboardApi routes", () => {
     await expect(api.publishMenu("c1", preview.hash)).resolves.toEqual({
       versionId: "v3",
       number: 3,
+      publishedAt,
     });
     await expect(api.publishMenu("c1", "stale")).rejects.toMatchObject({
       code: "menu.changed_since_preview",

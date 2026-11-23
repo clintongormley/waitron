@@ -470,7 +470,11 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
 
     expect((await send(app, "POST", cancelPath(menuId, v2.versionId))).status).toBe(204);
     const three = await json<{ versionId: string }>(await publish(), 200);
-    expect(three).toEqual({ versionId: expect.any(String), number: 3 });
+    expect(three).toEqual({
+      versionId: expect.any(String),
+      number: 3,
+      publishedAt: NOW.toISOString(),
+    });
     expect(await status(app, menuId)).toMatchObject({ state: "current", version: 3 });
     expect((await publications(app, menuId)).live).toMatchObject({
       versionId: three.versionId,
@@ -805,7 +809,11 @@ describe("two publication requests at once", () => {
         expect(answer.live).toMatchObject({ number: 1 });
         expect(answer.editions).toEqual([expect.objectContaining({ ...v2, state: "queued" })]);
       } else {
-        expect(await json(published!, 200)).toEqual({ versionId: expect.any(String), number: 2 });
+        expect(await json(published!, 200)).toEqual({
+          versionId: expect.any(String),
+          number: 2,
+          publishedAt: NOW.toISOString(),
+        });
         expect(await json(queued!, 409)).toEqual({
           error: { code: "menu_publication.unchanged", params: { menuId, number: 2 } },
         });

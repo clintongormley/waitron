@@ -225,10 +225,10 @@ the shortcuts differ from the live version's, and a `home_display_changed` chang
 there are any, and a display when it differs from the default.
 
 `POST /management-api/menus/:id/publish`, with `{ expectedHash }`, gives
-`{ versionId, number }` (200). It first refuses unresolved settings with
-`menu.clashes_unresolved` (409, `menuId`, `count`), then refuses a changed working hash with
-`menu.changed_since_preview` (409, `menuId`). An unchanged menu returns its existing live version
-without writing another. Otherwise, while any edition is still queued, the publish would overtake
+`{ versionId, number, publishedAt }` (200). The time is the recorded release time in ISO 8601.
+It first refuses unresolved settings with `menu.clashes_unresolved` (409, `menuId`, `count`), then
+refuses a changed working hash with `menu.changed_since_preview` (409, `menuId`). An unchanged
+menu returns the existing version and its original release time without writing another. Otherwise, while any edition is still queued, the publish would overtake
 it and is refused `menu_publication.overtakes_queued` (below). Missing or non-string `expectedHash`
 answers `management.request_invalid` (400). A malformed menu id answers `shared.invalid_id` (400),
 an unknown menu `menu.not_found` (404).
