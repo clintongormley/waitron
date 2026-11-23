@@ -2,8 +2,8 @@ import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolm
 import { SETTINGS_CHANGE_TYPE, type ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
-const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
-const STATE = "manager configuration / live service; copied to a standby, never drained back";
+const LEDGER = "what happened, keyed by the writing node";
+const STATE = "manager configuration / live service; copied to a standby";
 
 /**
  * The tables core's own module code owns. Core's change sources and its own backup check read this
