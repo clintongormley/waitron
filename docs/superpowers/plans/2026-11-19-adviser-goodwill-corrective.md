@@ -11,7 +11,9 @@ fold (`~/waitron-campaign-l/receipts/adviser-goodwill/plan-reread-2026-11-23.md`
 5 Important, 12 Minor): a refused filing now makes Refund a payment wait (section 4.6), the till
 sends a tip on its own (O2), D5 and D5c are owner questions O7 and O8, Task 7 is rebuilt on run 4
 (section 6), and section 12 lists the findings not folded. The owner's answers to O1–O6 (14:15–14:18)
-are recorded in section 10; the three of them that change the design are not yet written in.
+are recorded in section 10, and the three that change the design (O1, O4, O6) are written in
+(sections 4.1, 4.3, 4.5, 4.7, Tasks 3, 3b, 3c and 5; the O1 figures come from a prototype run,
+section 4.1). O7, O8 and a new O9 are open.
 
 Words used below, once:
 
@@ -77,10 +79,21 @@ given back as goodwill takes a corrective" (sheet `:68`), confirmed on 21 Novemb
 confirmed"; "yes and yes", `:174`). Task 8 adds a dated pointer to the A802 spec (a historical
 document, CLAUDE.md §6).
 
-**Choice 3 was out of this PR; the owner's answer brings it back.** Letting **Complaint** be chosen
-as a Correct invoice reason overrides the same A802 approval ("Reason: use A758's Void-reason
-dropdown", spec `:90`). It was question O6; the owner answered "Add it" on 23 November 14:18
-(`questions.md:1402-1405`), so it is written into this PR with the O1 and O4 answers (section 10).
+**Choice 3 was out of this PR until the owner added it on 2026-11-23 14:18.** Letting
+**Complaint** be chosen as a Correct invoice reason overrides the same A802 approval ("Reason: use
+A758's Void-reason dropdown", spec `:90`). It was question O6; the owner answered "Add it"
+(`questions.md:1404`), so Task 5 builds it.
+
+**Owner, 2026-11-23, relayed by the watcher** in `~/waitron-campaign-l/questions.md`:
+
+- O1, entry "WATCHER 2026-11-23 14:15" (`:1393-1395`): "what i mean is if item A (10%) is on the
+  menu for 10€ and item B (21%) is on the menu for 4 €, then the 10/14 of the discount has 10% vat
+  and 4/14 has 21% vat. does that work?" and "its the proportions which matter". The watcher's
+  build note: where a dish's share would exceed what is left of it, cap that dish and spread the
+  rest over the others in the same menu-price proportions.
+- O4, entry "WATCHER 2026-11-23 14:17" (`:1400`), on returning the €10 salad from a ticket with a
+  free €2 water: "they would have to return both, and get the 10€ back."
+- O6, entry "WATCHER 2026-11-23 14:18" (`:1404`): "Add it".
 
 **Decisions.** Section 10 lists every decision, split into those that need the owner (they decide
 what is filed with AEAT or what money staff hand over) and those that are the watcher's call. The
@@ -89,7 +102,7 @@ D- and O-numbers below point into it. The watcher cleared D1–D8 at the plan's 
 back". That label was wrong for D5 and D5c: D5 decides when money goes back with no corrective
 invoice, and D5c caps how much a second Refund a payment window hands back (the re-read's I-4). They
 are now owner questions O7 and O8, with the same defaults (D5's list corrected as section 4.6 says),
-and still open.
+and still open. O9 (section 10) is new in the revision that wrote in O1, O4 and O6, and open.
 
 ## 1. Should this exist?
 
@@ -115,14 +128,15 @@ ticket. Choice 3 (Complaint as a reason) is not needed for this; it is in the PR
 asked for it (O6, section 0).
 
 **True size** (estimates from the files each task names, not from a build; section 8 has the
-breakdown): about 210 production lines added and 42 removed (shared 40, menu 45, server 120, core
-and till 25 changed), about 1,100 test lines added or changed (setup changes for 177 tests in 8
-refund suites among them, section 6), about 70 lines of guides, sheet and backlog. Not counted: the
-O1, O4 and O6 write-ins (section 10). No generated file, no migration, no schema change.
+breakdown): about 440 production lines added and 55 removed (shared 40, menu 45, server about 250,
+core about 25, till about 85), about 1,650 test lines added or changed (setup changes for 177 tests
+in 8 refund suites among them, section 6), about 90 lines of guides, sheet and backlog. No generated
+file, no migration, no schema change. That passes the 300-line split line, so section 8 splits it
+into two PRs: a free item's share with O4, then goodwill.
 
 **Who approved:** section 0. Owner: the two needs, "split by menu price", and answers to O1–O6
 (section 10). Watcher: choice 1 of 19 November, the 22 November rebase on #3993, and D1–D8 at 13:47.
-O7 and O8 are open. One fresh-context read
+O7, O8 and O9 are open. One fresh-context read
 (`~/waitron-campaign-l/receipts/adviser-goodwill/plan-read-2026-11-23.md`, 1 Critical, 8 Important,
 10 Minor) and its one re-read (`plan-reread-2026-11-23.md` beside it, 0 Critical, 5 Important,
 12 Minor) are folded in; nobody has approved the plan as a whole.
@@ -136,8 +150,10 @@ O7 and O8 are open. One fresh-context read
   not change.
 - **Goodwill.** A guest complains after paying; on the past receipt the manager chooses **Correct
   invoice**, types the money back, leaves the dishes unticked, picks a reason and presses **Correct
-  and refund**, on any ticket. Waitron shares the amount across the dishes by price and files a
-  corrective. Staff may also tick dishes at different rates. If the manager chooses **Refund a
+  and refund**, on any ticket. Waitron shares the amount across the dishes in proportion to their
+  menu prices (no dish gives back more than is left of it; the rest goes to the others) and files a
+  corrective. Staff may also tick dishes at different rates, and the reason list now holds every
+  reason, **Complaint** included (O6). If the manager chooses **Refund a
   payment** instead for money Correct invoice could give back, the refusal says why and names
   **Correct invoice**. Where Correct invoice cannot correct the ticket (a full invoice naming a
   customer, a ticket filed by another box, records that need checking, and the other cases of
@@ -145,8 +161,11 @@ O7 and O8 are open. One fresh-context read
   refused is being fixed, neither gives it back until the filing has been sent again and accepted.
 - **Changed a little:** a refund naming cancelled dishes is capped at what those dishes still owe;
   a tip can come back on its own while payment money is left, and the till's window now lets staff
-  send one (O2, owner: "Yes"); Cancel and refund after payment on a shared ticket takes the free item
-  back with the paid dish and hands back what was paid (O4's answer, to be written in, section 10).
+  send one (O2, owner: "Yes").
+- **A dish given free comes back with the last paid dish** (O4, section 4.3). On a ticket where a
+  free item holds a share, Cancel and refund of the last paid dish lists the free item under it,
+  cancels both and hands back what was paid (salad and free water: €10.00). A free item cannot be
+  refunded on its own; while other paid dishes stay, each paid dish hands back its own share.
 - **Unchanged:** tickets eaten here, a discount on one dish with no free item, and a part payment's
   refund as #3993 allows it.
 
@@ -236,38 +255,68 @@ helpers (`packages/shared/src/money.ts`, `cancel-refund-share.ts`). Not merged:
 `discountShares` and `spreadBillDiscount` in `packages/adjustments/src/spread.ts:270` and `:308`,
 which rewrite stored unit prices to whole cents per unit, a different job.
 
-**What is built: one rounding function, two kinds of weight.**
+**What is built: one rounding function, one weight (menu price), and a cap in corrections.**
 
 - **At issuance (A445)** each line weighs its menu price: its stored list total where it has one,
   otherwise its gross. This is the owner's "split by menu price".
-- **In a correction (goodwill)** each line weighs what is left of its filed price, as today. On a
-  ticket with no discount and no earlier correction that is its menu price; on a ticket A445 shared
-  it is in proportion to menu price already (prototype: €1.00 back on the comped ticket shares
-  0.83 / 0.17, as 8.33 / 1.67 does).
+- **In a correction (goodwill, O1)** each line weighs its menu price too, and no line takes more than
+  is left of it (section below). Today it weighs what is left of its filed price
+  (`correction-allocation.ts:75-78`). The two agree on a ticket with no discount and no earlier
+  correction, and on a ticket A445 shared (the O1 prototype: €1.00 back on the comped ticket shares
+  0.83 / 0.17 either way).
 
-**O1, for the owner: the goodwill split when a dish was discounted.** The owner's answer was "split
-by menu price" (sheet `:164`, `:174`). Weighing by menu price can take more from a dish than is left
-of it, and a line below zero makes every later correction of that invoice refuse
-(`remainingLines`, `correction-allocation.ts:219-220`, read). The two rules differ only on a ticket
-where a dish was discounted or partly corrected before. Worked through the real `allocateCorrectionAmounts` (the "what
-is left" column) and by hand (the menu-price column), on a takeaway ticket with a salad (menu €10.00,
-4%) and a water (€2.00, 21%), €3.00 given back with no dishes ticked:
+**O1, the owner's rule (answered 23 November 14:15, section 0).** An amount given back is shared
+across the dishes in proportion to their menu prices. Where a dish's share would be more than is
+left of it (an earlier discount or correction), that dish takes exactly what is left, and the rest
+is shared over the other dishes in the same menu-price proportions, repeating until no dish's share
+is more than is left of it. No dish ever goes below zero, which would make every later correction of
+the invoice refuse (`remainingLines`, `correction-allocation.ts:219-220`).
 
-| Salad charged | By menu price (10 : 2) | By what is left (built) |
+- **Weight:** a line's menu price is its filed `sale_lines.list_gross` where stored, otherwise its
+  filed `line_gross`. `list_gross` is stored only where it differs from the gross (`listGrossOf`
+  returns nothing when they are equal, `apps/server/src/receipt-lines.ts:104-118`). Weights that add
+  up to zero while money is left stay refused `shared.invalid_decimal`, as `shareByWeight` refuses
+  them (Task 1).
+- **The same rule for ticked dishes.** When staff tick dishes, the amount is shared over the ticked
+  dishes by the same rule. Otherwise ticking every dish would give a different split from ticking
+  none on a ticket with a discounted dish, and Task 5 pins that the two are equal. This applies the
+  owner's "its the proportions which matter" beyond the unticked case the question asked about, so
+  it is listed as O9 (section 10) with this as its default.
+- **Rounding:** each pass is `shareByWeight` (Task 1): each share rounded down to the cent, the cents
+  left over to the largest remainders, a tie to the earlier line.
+
+**Measured, not reasoned.** In a throwaway worktree (`git worktree add --detach /tmp/ag-o1/wt HEAD`,
+`pnpm install --frozen-lockfile --offline`, removed afterwards) I gave `CorrectionAmountLine` a
+menu price, filled it in `readHistory` (`packages/core/src/correction-history.ts:257-263`) as above,
+replaced the call at `correction-allocation.ts:75-78` with the capped loop over the same rounding
+function, and removed the `required` refusal (choice 2). A probe suite of hand-built histories,
+`env -u CLAUDECODE -u AI_AGENT pnpm exec vitest run src/zz-probe-o1.test.ts` in `packages/core`
+(Tests 1 passed), printed, no dishes ticked:
+
+| Ticket | Given back | Corrective (gross, base, VAT) |
 | --- | --- | --- |
-| €5.00 (discounted) | salad −2.50 (base −2.40, VAT −0.10); water −0.50 (−0.41, −0.09) | salad −2.14 (−2.06, −0.08); water −0.86 (−0.71, −0.15) |
-| €1.00 (discounted) | salad −2.50 — more than the €1.00 left: **cannot be filed** | salad −1.00 (−0.96, −0.04); water −2.00 (−1.65, −0.35) |
+| The owner's example: A menu €10.00 at 10%, B menu €4.00 at 21% | €7.00 | A −5.00 (−4.55, −0.45); B −2.00 (−1.65, −0.35) |
+| Same | €1.00 | A −0.71 (−0.65, −0.06); B −0.29 (−0.24, −0.05) |
+| Salad menu €10.00 at 4% charged €5.00 (discounted), water €2.00 at 21% | €3.00 | salad −2.50 (−2.40, −0.10); water −0.50 (−0.41, −0.09) |
+| Salad charged €1.00 instead | €3.00 | salad −1.00 (−0.96, −0.04), capped; water −2.00 (−1.65, −0.35) |
+| Salad €10.00 at 4% with €8.00 of it corrected before, water €2.00 at 21% | €3.00 | salad −2.00 (−1.93, −0.07), capped; water −1.00 (−0.83, −0.17) |
+| Three lines, A menu €10.00 left €1.00 (4%), B menu €5.00 left €2.00 (10%), C menu €5.00 left €10.00 (21%) | €6.00 | A −1.00 (capped in the first pass), B −2.00 (capped in the second), C −3.00 |
+| The sheet's example: wine €12.00 at 21%, cheese €8.00 at 4% | €5.00 | wine −3.00 (−2.48, −0.52); cheese −2.00 (−1.92, −0.08), as today |
+| Section 4.2's comped ticket (salad 8.33 list 10.00, water 1.67 list 2.00) | €1.00 | 4%: −0.80 / −0.03; 21%: −0.14 / −0.03, as today |
 
-**Default: by what is left**, because it is the only one of the two that can always be filed. A
-third rule — menu price, each dish capped at what is left of it, the rest shared by what is left —
-matches the owner's words more often but adds code to the one function that divides a corrective's
-VAT; it is not planned unless the owner asks for it.
+The €1.00 row is the rounding check: €1.00 × 10/14 = 0.714 and × 4/14 = 0.286 round down to 0.71
+and 0.28; the cent left over goes to the larger remainder, B's (0.0057 against 0.0043), so B takes
+0.29. The old rule, by what is left, gave the discounted-salad row −2.14 / −0.86 (the real
+`allocateCorrectionAmounts`, run by the re-read).
 
-**The owner answered O1 on 23 November 14:15** (`questions.md:1393-1395`): "its the proportions which
-matter" — split by menu-price proportions, and where a dish's share would exceed what is left of it,
-cap that dish and spread the rest over the others in the same menu-price proportions (the third
-rule). This section, Task 5's O1 cases and question 14's goodwill bullet still describe "by what is
-left"; they are rewritten to the owner's rule before Task 5 is built (section 10).
+The same prototype ran the existing suites: `pnpm exec vitest run src/correction-allocation.test.ts
+src/correction-history.test.ts` in `packages/core`, **Tests 3 failed, 91 passed (94)**: the
+`required` row choice 2 deletes and two cases that pin "by what is left" (section 6); and the 16
+`apps/server` suites that make or read corrections (`git grep -ln
+"correctInvoice\|invoice-corrections\|previewCorrectionAmounts\|openInvoiceCorrection" --
+'apps/server/src/*.test.ts'`, plus `corrections-report.test.ts`), `env -u CLAUDECODE -u AI_AGENT
+pnpm exec vitest run <the 16 files> --reporter=json`: **686 tests, 686 passed**. Applying the rule
+to ticked dishes changed no existing assertion in either run.
 
 ### 4.2 D2: A445 — which tickets, and what is shared
 
@@ -370,25 +419,131 @@ It printed:
 | Top sellers and category sales reports | `sale_lines.line_total` / `line_gross` | yes: the salad's money falls by the water's share | `packages/reporting/src/top-sellers.ts:67`, `category-sales.ts:212` |
 | Dashboard order detail | a bill's own order lines; filed lines only for other kinds | a bill: no | `apps/server/src/orders-list.ts:756` |
 | Correct invoice window (till) | each filed dish's gross and what is left of it | yes: salad €8.33, water €1.67 | `invoice-correction-dialog.ts:586-590` (read) |
-| Cancel and refund after payment | each dish's filed gross (`byPosition`, `apps/server/src/cancellation-refund-value.ts:89-117`, then `cancelRefundShare`) | **O4, for the owner (default: yes, follow the filed share)** — returning the salad refunds €8.33 instead of €10.00, and returning the free water hands €1.67 in cash for a dish given free. Task 3 pins whichever the owner picks through the real `cancelItem` and `rowRefundValue`. With this default, cancelling the salad alone hands back €8.33 and choice 1 refuses a plain top-up of the other €1.67 (Correct invoice could give it), so staff must also cancel the water or use Correct invoice (the re-read's M-2). **The owner answered on 23 November 14:17** (`questions.md:1400`): "they would have to return both, and get the 10€ back" — the free item comes back with the paid dish and the guest gets what was paid. Not yet written into this row, Task 3 or section 4.7 (section 10) | read, not run. The alternative, the dish's price as sold, would refund more than the filed line holds, which A758 §3.8's planned corrective of a cancelled dish could not file (`docs/backlog/fiscal.md:942-947`) and choice 1's cap on named cancels would then let through |
+| Cancel and refund after payment | each dish's filed gross (`byPosition`, `apps/server/src/cancellation-refund-value.ts:89-117`, then `cancelRefundShare`) | each dish's value stays its filed share (salad €8.33, water €1.67); **O4 (owner): the free item comes back with the last paid dish**, so returning both hands back €10.00 in one refund, and a free item is never refunded alone (section 4.3.1) | read; Task 3 pins the values through the real `rowRefundValue`, Task 3b the pairing through the real `cancelItem`. Not the dish's price as sold: that would refund more than the filed line holds, which A758 §3.8's planned corrective of a cancelled dish could not file (`docs/backlog/fiscal.md:942-947`) |
 
-No guide sentence changes for A445: it changes nothing staff do (CLAUDE.md §3, "A guide sentence
-earns its place by changing what staff do").
+No guide sentence changes for A445's filing: it changes nothing staff do (CLAUDE.md §3, "A guide
+sentence earns its place by changing what staff do"). O4 does change what staff do; its guide
+sentences are in section 4.7.
+
+#### 4.3.1 O4: a dish given free comes back with the last paid dish
+
+The owner: "they would have to return both, and get the 10€ back" (section 0). Each dish keeps its
+filed share as its Cancel and refund value, so every cancel's refund stays within its own filed
+line, as A758 §3.8's planned corrective of a cancelled dish needs; what changes is which dishes must
+come back together.
+
+**Words.** On a settled bill whose sale has a filed record:
+
+- a **free item holding a share** is a dish line (no parent line) charged €0 with a menu price above
+  €0 — the Given free sheet's test (`free-items.ts:137-139`) — whose filed value
+  (`byPosition` or `byPortion`, `cancellation-refund-value.ts:89-152`) is above €0. Only a ticket
+  A445 shared has one: before it, such a line files €0 (section 3, finding section 1);
+- a **paid dish** is any other dish line whose filed value is above €0;
+- the **last paid dish** is a cancel with Refund ticked after which no paid dish of the bill has a
+  portion that is not cancelled. A served portion counts as not cancelled: after payment only
+  unserved portions can be cancelled (`availableOf`, `apps/server/src/line-cancel.ts:210-213`).
+
+**The rule for several paid dishes and one free item: the free item goes with the last paid dish.**
+While the guest keeps any paid dish, the free item stays theirs and its share stays on the ticket;
+when the last paid dish comes back, the free item comes back with it. So the money handed back never
+exceeds what was paid, and is all of it once everything has come back. Example: salad €10.00 and
+soup €6.00 at 4%, water €2.00 at 21% given free, €16.00 paid; the filed shares by menu price are
+8.89, 5.33 and 1.78 (`shareByWeight(16.00, [10, 6, 2])`: 8.888, 5.333, 1.777 round down to 8.88,
+5.33, 1.77, and the two cents left over go to the largest remainders, the salad's and the water's;
+the O1 prototype printed the same through that rounding). Returning the salad first hands back
+€8.89; returning the soup after it, with the water, hands back €5.33 + €1.78 = €7.11; €16.00 in all.
+With one paid dish, the owner's case, the salad is the last paid dish and returning it with the
+water hands back €8.33 + €1.67 = €10.00.
+
+**Server** (`cancelItem`'s keep-the-charge branch, `line-cancel.ts:372-540`, only when the refund
+handoff stands, `:408`, and the sale has a free item holding a share; a new reader beside
+`refundValues`, `cancellation-refund-value.ts:40-87`, which already reads the bill's stored lines and
+the sale's filed lines at `:46-55`, answers which lines are free items holding a share, which are
+paid dishes, and what each has left to cancel):
+
+1. A free item's own cancel with Refund ticked is refused `tab.free_item_with_dish` (new code,
+   beside `tab.cancel_context_changed`, `apps/server/src/errors.ts:1087`; 409 beside it,
+   `apps/server/src/till-api.ts:631`), reason `free_item`. Cancelling it without Refund stays
+   allowed: no money moves, and its share then stays on the ticket.
+2. The last paid dish's cancel with Refund ticked takes with it every free item holding a share that
+   still has a portion not cancelled. The request lists them in a new optional `withFree` (line ids)
+   on `CancelItemAsk` (`line-cancel.ts:64-82`); a list that differs from the server's is refused,
+   reason `not_listed`, and a free item with a served portion is refused, reason `served` (it cannot
+   come back, so Cancel and refund does not apply; the message says to untick Refund and give the
+   money back with Correct invoice). Otherwise the server cancels each listed free item in the same
+   command: their lines join `taken`, so `serviceCancellationFamilies` (`:389`),
+   `dishKitchenItems` (`:388`), `enqueueServiceCancellation` (`:482`) and
+   `writeServiceCancellations` (`:525`) cover them; each gets its own cancel record through
+   `recordAdjustment` (`:439`) with its own filed share as refund value
+   (`cancellationRefundValue`, `:418`), and its own entry in the answer's `refundLinks` (`:538`, one
+   entry today).
+3. Every other cancel is as today.
+
+**Consent.** The cancellation read (`apps/server/src/line-cancel-api.ts:150-193`) answers
+`withFree: { lineId, name, quantity, refundValue }[]` when the dish would be the last paid dish if
+all of its cancellable portions were cancelled, and `givenFree: true` for a free item holding a
+share, so the till can show both before anything is sent.
+
+**Finish table** (`apps/server/src/finish-party-service.ts:124-207`). Every unserved dish of a
+finished bill is in its request (`:154-169` refuses one that leaves a dish out), so a last paid dish
+and its unserved free items are always cancelled together; only the Refund ticks can disagree. The
+pairing is checked over the whole request before the loop at `:171`: a free item's tick is refused
+(reason `free_item`) unless the same request cancels its ticket's last paid dish with Refund ticked,
+and then each of the ticket's free items must be ticked (reason `not_listed`). The loop then cancels
+free items after paid dishes and tells `cancelItem` the pairing was checked over the request.
+
+**Till.**
+
+- The Cancel item window (`apps/till/src/widgets/cancel-item-dialog.ts`): when the consent carries
+  `withFree`, Refund is ticked and the quantity takes every cancellable portion, it lists them
+  under the tick (en "Comes back with it, given free: {dishes}" / es "Vuelve con él, por
+  invitación: {dishes}", in `apps/till/src/i18n/strings.ts` beside `cancel_item.title`, `:90`, and
+  its Spanish twin, `:2418`), adds their values to the amount (`#refundAmount`, `:218`), and sends
+  their ids as `withFree`. For a `givenFree` dish it offers no Refund tick (`#canRefund`, `:203`) —
+  exactly what a comped dish already gets on any ticket filed before A445, whose value is €0.
+- `#cancelRefundFill` (`apps/till/src/till-app.ts:17388`): the refund window's amount adds the free
+  items' values, and `cancellationIds` takes every link of the answer, not only the dish's
+  (`:17402`).
+- `tab.free_item_with_dish` reason `not_listed` re-reads the consent as `tab.cancel_context_changed`
+  does (`:17419`), so the window then lists the free items.
+- The Finish table window (refund amounts built per dish at `till-app.ts:20520-20575`): a free item
+  has no tick of its own; it is ticked, and its value counted, exactly when every paid dish of its
+  receipt in the list is ticked and the consent of its ticket's paid dishes names it in `withFree`.
+- Messages (`apps/till/src/i18n/codes.ts`, a table by reason beside `CORRECTION_NOT_ADMITTED`,
+  `:1051`, read in `codeMessage` as at `:1179-1184`):
+
+| Reason | en | es |
+| --- | --- | --- |
+| `free_item` | This dish was given free, so it gives money back only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it. | Este plato fue por invitación, así que solo devuelve dinero junto con el último plato pagado de la cuenta. Desmarca Devolución para cancelarlo solo, o elige Cancelar… en el último plato pagado: su ventana lo devuelve con él. |
+| `served` | A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then give the money back with Correct invoice on the receipt. | Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuelve el dinero con Rectificar factura en el recibo. |
+| `not_listed` | A dish given free comes back with this one. The window now lists it: check the amount and choose again. | Un plato por invitación vuelve con este. La ventana ya lo muestra: revisa el importe y vuelve a elegir. |
+
+The words **Void…** / **Cancelar…**, **Refund** / **Devolución** and **Correct invoice** /
+**Rectificar factura** are the till's and the guide's own (en guide `:292-311`, es guide
+`:309-328`; `strings.ts:172`, `:2503`).
+
+**Smaller alternative not taken:** keep each dish's value and add the free items' shares to the
+last paid dish's value, cancelling nothing else. It needs no new request field, but it hands back
+€10.00 while the guest keeps the free item, against "they would have to return both", and puts more
+on one cancel than its filed line holds.
+
+
 
 ### 4.4 D4: what is already filed or stored
 
 Nothing already filed changes; records are immutable. The rule applies to tickets issued after the
 change lands. No schema change (every column used exists), no migration, no venue reset. A
 correction of a ticket filed before the change follows that ticket's filed figures: its free line
-at €0 gets no share, since it has nothing left at its rate (`correction-allocation.ts:63` counts
-only lines above zero for the rate check, and the shares are by what is left).
+filed at €0 has nothing left, so O1's cap gives it no share (the O1 prototype skips a line with
+nothing left before sharing). Nor does O4 touch such a ticket: its free line's filed value is €0, so
+it is not a free item holding a share (section 4.3.1).
 
 ### 4.5 Goodwill choice 2: no dishes ticked shares the amount; the till drops its one-rate lock
 
 **Server.** Delete the refusal at `correction-allocation.ts:61-66` (keep the `else` branch's
 checks), and `"required"` from `refuseScope`'s parameter (`:58`) and from the reason type of
 `sale.correction_scope_invalid` (`packages/core/src/errors.ts:14`). With no dishes, every remaining
-dish takes a share by what is left of it (`:71`), which is the path ticked dishes already take.
+dish takes a share by O1's rule (section 4.1), which ticked dishes take too.
 Consumers traced: HTTP status (`apps/server/src/invoice-correction-api.ts:56`, unchanged), the
 till's field placement by code (`invoice-correction-dialog.ts:617`), the till message
 (`apps/till/src/i18n/codes.ts:528-531`). Nothing branches on the `required` reason
@@ -398,7 +553,7 @@ finds only the test row and the type).
 Run on the prototype (refusal removed): €1.00 with no dishes on the comped ticket previews 4%: 0.80 /
 0.03 and 21%: 0.14 / 0.03; the sheet's example (wine €12.00 at 21%, cheese €8.00 at 4%, €5.00
 back) gives −3.00 at 21% (−2.48 / −0.52) and −2.00 at 4% (−1.92 / −0.08), through
-`allocateCorrectionAmounts` itself.
+`allocateCorrectionAmounts` itself. The O1 prototype printed the same two (section 4.1).
 
 **Till.** Delete the clause `(picked !== undefined && picked.rate !== line.rate)`
 (`invoice-correction-dialog.ts:595`) and the now-unused `picked` (`:577`). The message for
@@ -408,6 +563,31 @@ back) gives −3.00 at 21% (−2.48 / −0.52) and −2.00 at 4% (−1.92 / −0
 | --- | --- |
 | en | The dishes chosen are not on this invoice. Close this window and choose Correct invoice again. |
 | es | Los platos elegidos no están en esta factura. Cierra esta ventana y vuelve a elegir Rectificar factura. |
+
+**O6 (owner, 2026-11-23 14:18, "Add it"): Correct invoice offers every reason.** A venue's reasons
+are of two kinds, Void and Comp (`REASON_KINDS`, `packages/shared/src/adjustment-policy-types.ts:3`);
+the starter **Complaint** is a Comp reason (`packages/adjustments/src/provisioning.ts:56`).
+
+- **Server:** delete the refusal `if (reason.kind !== "void") throw new
+  AppError("adjustment.action_not_allowed", {})` (`apps/server/src/invoice-corrections.ts:236`).
+  With two kinds, nothing is left for it to refuse. The note rule beside it (`:237`) stays.
+  Correct invoice reads only a reason's name and note rule; a Comp reason's amount and percentage
+  limits (`maxAmount`, `maxPercent`) are not applied to it, as no limit is applied to a Void reason
+  today. `adjustment.action_not_allowed` keeps its other raisers (for example `line-cancel.ts:380`),
+  so `scripts/errors-reachable.test.ts` still passes.
+- **Till:** the shared picker offers only reasons whose actions include `cancel`
+  (`voidReasons`, `apps/till/src/widgets/reason-picker.ts:10-12`, applied inside `reasonPicker` at
+  `:29`), and Refund a payment and the bill refund use it too
+  (`tender-refund-dialog.ts:145`, `:148`, `:399`; `bill-refund-dialog.ts:259`, `:407`). So
+  `reasonPicker` gains an optional `every` flag that offers every reason, Correct invoice passes it
+  (`invoice-correction-dialog.ts:657`), and its two lookups, `#reason` (`:361`) and the reason it
+  hands to the card step (`:775-778`), read every reason instead of `voidReasons`. The card step
+  opens the Refund a payment window with `correcting` set (`tender-refund-dialog.ts:111`) and that
+  reason to start on (`till-app.ts:9972`, `:10019`); in that mode the window passes `every` too, and
+  its `#reason` and `#startReason` (`:144-151`) read every reason, or a correction opened with
+  **Complaint** would start its card step with no reason chosen. (The server takes a correction
+  leg's reason from the correction, `tender-refund-reservation.ts:360`.) Otherwise Refund a payment
+  and the bill refund are unchanged.
 
 ### 4.6 O7 and O8 (D5 and D5c until the re-read): Goodwill choice 1 — Refund a payment refuses only what Correct invoice would take now
 
@@ -571,14 +751,18 @@ Arithmetic, A445: €10.00 × 10/12 = 8.333 → 8.33; €10.00 × 2/12 = 1.666 �
 left over, which goes to the larger remainder (the water's) → 1.67. 8.33 ÷ 1.04 = 8.0096 → base
 8.01, VAT 0.32; 1.67 ÷ 1.21 = 1.3802 → base 1.38, VAT 0.29; VAT 0.61 in all. Today 10.00 ÷ 1.04 =
 9.615 → 9.62 and 0.38. Goodwill: €5.00 × 12/20 = 3.00 and × 8/20 = 2.00; 3.00 ÷ 1.21 = 2.479 →
-2.48 and 0.52; 2.00 ÷ 1.04 = 1.923 → 1.92 and 0.08. The €3.00 case (salad charged €5.00): 3 × 5/7 =
-2.142 → 2.14; 3 × 2/7 = 0.857 → 0.85, plus the cent left over (the water's remainder is larger) →
-0.86; 2.14 ÷ 1.04 = 2.0577 → 2.06 and 0.08; 0.86 ÷ 1.21 = 0.7107 → 0.71 and 0.15 — the same as the
-real `allocateCorrectionAmounts` printed when run on that history. With €1.00 off the bill as well:
+2.48 and 0.52; 2.00 ÷ 1.04 = 1.923 → 1.92 and 0.08. The owner's example, €7.00 back on A €10.00
+at 10% and B €4.00 at 21%: 7 × 10/14 = 5.00 and 7 × 4/14 = 2.00; 5.00 ÷ 1.10 = 4.545 → 4.55 and
+0.45; 2.00 ÷ 1.21 = 1.653 → 1.65 and 0.35. The €3.00 case (salad menu €10.00 charged €5.00, water
+€2.00): 3 × 10/12 = 2.50 and 3 × 2/12 = 0.50, the salad's 2.50 within the 5.00 left of it; 2.50 ÷
+1.04 = 2.4038 → 2.40 and 0.10; 0.50 ÷ 1.21 = 0.4132 → 0.41 and 0.09. With the salad charged €1.00,
+its 2.50 is more than the 1.00 left, so it takes 1.00 (0.96 and 0.04) and the water the other 2.00
+(1.65 and 0.35). All three as the O1 prototype printed (section 4.1). With €1.00 off the bill as well:
 €9.00 × 10/12 = 7.50 and × 2/12 = 1.50; 7.50 ÷ 1.04 = 7.2115 → 7.21 and 0.29; 1.50 ÷ 1.21 = 1.2397 →
 1.24 and 0.26 (the prototype's run).
 
-Part 1 (the text follows the defaults of O1–O4; Task 8 rewords it to whatever the owner decides):
+Part 1 (the text follows the owner's answers to O1–O4 and the defaults of O7, O8 and O9; Task 8
+rewords it to whatever the owner decides on those three):
 
 > **14. Built since your answers: have we done this right?** (added 23 November)
 >
@@ -604,14 +788,17 @@ Part 1 (the text follows the defaults of O1–O4; Task 8 rewords it to whatever 
 >   before a switch to another box), one replaced by a full invoice, one with no filing record, one
 >   cancelled with the tax agency, one not yet fully paid, a full invoice naming a customer, and one
 >   whose records need checking. While the tax agency has refused a ticket's filing and it is being
->   fixed, neither way gives money back until the filing is accepted. Money not tied to particular items is shared across them in proportion
->   to what is left of each item's price on the ticket. That is the menu price unless an item was
->   discounted or partly given back before, and there it differs from the split in question 6: a
->   salad at €10.00 (4%) sold at €5.00 and a water at €2.00 (21%), €3.00 given back, files −€2.14 at
->   4% (base −€2.06, VAT −€0.08) and −€0.86 at 21% (base −€0.71, VAT −€0.15), where menu prices would
->   give −€2.50 and −€0.50. We do this because menu prices can take more from an item than is left of
->   it. The €5.00 of question 6's own example files −€3.00 at 21% (base −€2.48, VAT −€0.52) and
->   −€2.00 at 4% (base −€1.92, VAT −€0.08). *Have we done this right?*
+>   fixed, neither way gives money back until the filing is accepted. Money given back is shared
+>   across the items in proportion to their menu prices, and no item gives back more than is left
+>   of it on the ticket: where an earlier discount or correction left an item less than its share,
+>   it takes what is left and the rest is shared over the others in the same proportions. For
+>   example, items of €10.00 (10%) and €4.00 (21%) and €7.00 given back file −€5.00 at 10% (base
+>   −€4.55, VAT −€0.45) and −€2.00 at 21% (base −€1.65, VAT −€0.35). A salad at €10.00 (4%) sold at
+>   €5.00 and a water at €2.00 (21%), €3.00 given back, file −€2.50 at 4% (base −€2.40, VAT −€0.10)
+>   and −€0.50 at 21% (base −€0.41, VAT −€0.09); had the salad been sold at €1.00, it would give back
+>   only that €1.00 (base −€0.96, VAT −€0.04) and the water −€2.00 (base −€1.65, VAT −€0.35). The
+>   €5.00 of question 6's own example files −€3.00 at 21% (base −€2.48, VAT −€0.52) and −€2.00 at 4%
+>   (base −€1.92, VAT −€0.08). *Have we done this right?*
 
 Part 2:
 
@@ -642,15 +829,18 @@ Part 2:
 >   por una factura completa, uno sin registro presentado, uno anulado ante la Agencia Tributaria, uno
 >   aún no pagado del todo, una factura completa a nombre de un cliente y uno cuyos registros hay que
 >   revisar. Mientras la Agencia Tributaria ha rechazado la presentación de un tique y se está
->   corrigiendo, ninguna de las dos vías devuelve dinero hasta que se acepte. El dinero que no corresponde a
->   productos concretos se reparte entre ellos en proporción a lo que queda del precio de cada uno en
->   el tique. Es el precio de carta salvo que un producto tuviera un descuento o una devolución
->   anterior, y ahí difiere del reparto de la pregunta 6: una ensalada de 10,00 € (4 %) vendida a
->   5,00 € y un agua de 2,00 € (21 %), con 3,00 € devueltos, presentan −2,14 € al 4 % (base −2,06 €,
->   cuota −0,08 €) y −0,86 € al 21 % (base −0,71 €, cuota −0,15 €), donde los precios de carta darían
->   −2,50 € y −0,50 €. Lo hacemos así porque los precios de carta pueden quitar a un producto más de
->   lo que le queda. Los 5,00 € del propio ejemplo de la pregunta 6 presentan −3,00 € al 21 % (base
->   −2,48 €, cuota −0,52 €) y −2,00 € al 4 % (base −1,92 €, cuota −0,08 €). *¿Lo hemos hecho bien?*
+>   corrigiendo, ninguna de las dos vías devuelve dinero hasta que se acepte. El dinero devuelto se
+>   reparte entre los productos en proporción a sus precios de carta, y ningún producto devuelve más
+>   de lo que le queda en el tique: si un descuento o una rectificación anterior le dejó menos que su
+>   parte, devuelve lo que le queda y el resto se reparte entre los demás en las mismas proporciones.
+>   Por ejemplo, productos de 10,00 € (10 %) y 4,00 € (21 %) con 7,00 € devueltos presentan −5,00 € al
+>   10 % (base −4,55 €, cuota −0,45 €) y −2,00 € al 21 % (base −1,65 €, cuota −0,35 €). Una ensalada de
+>   10,00 € (4 %) vendida a 5,00 € y un agua de 2,00 € (21 %), con 3,00 € devueltos, presentan −2,50 €
+>   al 4 % (base −2,40 €, cuota −0,10 €) y −0,50 € al 21 % (base −0,41 €, cuota −0,09 €); si la ensalada
+>   se hubiera vendido a 1,00 €, devolvería solo ese 1,00 € (base −0,96 €, cuota −0,04 €) y el agua
+>   −2,00 € (base −1,65 €, cuota −0,35 €). Los 5,00 € del propio ejemplo de la pregunta 6 presentan
+>   −3,00 € al 21 % (base −2,48 €, cuota −0,52 €) y −2,00 € al 4 % (base −1,92 €, cuota −0,08 €).
+>   *¿Lo hemos hecho bien?*
 
 The repository copy only; the shared Google Doc is copied by the desk, as the sheet's other
 additions say. The full-invoice figures (€1.61, €0.27) are read, not rendered (D3b); Task 8 copies
@@ -692,11 +882,21 @@ no `{#id}` changes). The words follow O2's answer ("Yes") and O7's default.
   cuenta pagada se le cobró de más, o devuelves dinero por una queja, rectifica su factura: …"; the
   second paragraph's "Choose a **Reason**" gains ", such as **Complaint**" / "Elige un **Motivo**"
   gains ", como **Queja**" (the starter reason's names, `packages/adjustments/src/provisioning.ts:56`,
-  `starter-content.ts:36`), which holds once O6's answer is written in (the re-read's M-1); the
+  `starter-content.ts:36`), true once Task 5 offers every reason (O6; the re-read's M-1); the
   second paragraph's "otherwise leave them all unticked" gains ", and it is shared across every
-  dish by price" / ", y se reparte entre todos los platos según su precio".
-- Nothing for A445 or O4: neither changes what staff do (CLAUDE.md §3, "A guide sentence earns its
-  place by changing what staff do"; the Cancel and refund window fills its amount by itself).
+  dish by menu price" / ", y se reparte entre todos los platos según su precio de carta".
+- `{#cancel-paid-dish}` (en `:292-311`, es `:309-328`), after the paragraph on the **Refund** tick:
+  en "A dish given free comes back with the last paid dish on the bill: that dish's window lists it,
+  and the amount includes it. Cancelled on its own, a dish given free gives no money back." / es "Un
+  plato por invitación vuelve con el último plato pagado de la cuenta: la ventana de ese plato lo
+  muestra y el importe lo incluye. Cancelado solo, un plato por invitación no devuelve dinero." And
+  in `{#finish-paid-table}` (en `:312-337`, es `:329-356`), after "Tick **Refund** beside each
+  dish…": en "A dish given free has no tick of its own: its money comes back with the bill's paid
+  dishes when you tick them all." / es "Un plato por invitación no tiene marca propia: su dinero
+  vuelve con los platos pagados de la cuenta cuando los marcas todos." (O4; both change what staff
+  do.)
+- Nothing for A445's filing: it changes nothing staff do (CLAUDE.md §3, "A guide sentence earns its
+  place by changing what staff do").
 
 **Backlog.**
 
@@ -706,7 +906,7 @@ no `{#id}` changes). The words follow O2's answer ("Yes") and O7's default.
   historical docs keep what was true.
 - Add to `docs/backlog/fiscal.md` `## Decisions and deliberate limits` (`:1097`), each dated and
   marked owner or watcher as section 0 and section 10 record: the free-item rule and O3; the goodwill
-  split and O1; choice 1's rule, O2, O7 and O8; O4; O6.
+  split, O1 and O9; choice 1's rule, O2, O7 and O8; O4; O6.
 - Replace the goodwill bullet (`docs/backlog/fiscal.md:948-958`) and its sentence in
   `docs/backlog.md:371-372` with: goodwill goes through Correct invoice since this PR; Refund a
   payment refuses what Correct invoice would take; the adviser is asked (question 14). The
@@ -717,8 +917,9 @@ no `{#id}` changes). The words follow O2's answer ("Yes") and O7's default.
 ## 5. Fiscal boundary, and the checks every task runs
 
 What changes in what is filed: the per-rate base and VAT of a takeaway ticket mixing rates with a
-free item (A445), and the corrective's split when no dishes are ticked on a two-rate ticket
-(choice 2). `CuotaTotal` follows the breakdown, so the hash input changes for those tickets, but
+free item (A445), the corrective's split when no dishes are ticked on a two-rate ticket
+(choice 2), and which dish lines a corrective's amount is shared over where a dish was discounted
+or partly corrected before (O1, O9: by menu price, capped at what is left). `CuotaTotal` follows the breakdown, so the hash input changes for those tickets, but
 `computeHuella`, `recordSale`, `recordCorrection`, the chain, invoice numbering, series and the
 records table and its triggers are untouched (finding section 6; `recordSale` only checks the
 breakdown sums to the total, `packages/core/src/record-sale.ts:199-200`).
@@ -750,7 +951,7 @@ row). The till rows are read, not run (browser suites were not run on the protot
 the other ~1,350 `apps/server` suites, `apps/till`, `apps/dashboard`; CI's scoped run covers the
 changed packages, and Task 3 and Task 6 each run their package's affected suites in full.
 
-**A445, choice 2 and D3a**
+**A445, choice 2, D3a, O1 and O6**
 
 | File:line | Before | After | Decision | For the watcher |
 | --- | --- | --- | --- | --- |
@@ -758,6 +959,10 @@ changed packages, and Task 3 and Task 6 each run their package's affected suites
 | `packages/core/src/correction-allocation.test.ts:217` | `[undefined, "required"]`: no dishes on two rates refused | row deleted; new case: no dishes equals all dishes on `mixedRates()` (the figures already pinned at `:52-60`) | choice 2 | **Controversial: decides how a corrective's VAT is divided** |
 | `apps/till/src/widgets/invoice-correction-dialog.test.ts:238-253` | after ticking `steak`, `rice` (other rate) is disabled | `rice` stays enabled; ticking both previews with both ids | choice 2 | no money |
 | `invoice-correction-dialog.test.ts:358-361` | mocked refusal carries `reason: "required"` | `reason: "missing"`; the message is the new text | choice 2 | no money |
+| `packages/core/src/correction-allocation.test.ts:96-109` "counts consumed allocation against line and rate capacity" | two €11.00 lines at 10%, €9.90 of the first corrected before, €2.20 back with no dishes: 0.20 and 2.00, by what is left | 1.10 and 1.10, by menu price (11 : 11), the first exactly at what is left of it; same rate, so the corrective's VAT row is unchanged (2.00 / 0.20) | O1 | **Controversial: changes which line a corrective names**; O1 prototype run (section 4.1) |
+| `correction-allocation.test.ts:418-425` "weights remaining gross after an earlier return" | two €10.00 lines at 0%, €5.00 of the first corrected before, €3.00 back: 1.00 and 2.00 | 1.50 and 1.50; renamed "weighs menu price after an earlier return" | O1 | same rate, no VAT change |
+| `apps/server/src/invoice-correction-api.test.ts:439-450` "refuses a reason that is not a Void reason, and one asking for a note without it" | a Comp reason answers 409 `adjustment.action_not_allowed` | a Comp reason (the starter **Complaint**) opens the correction (200); the note case is unchanged | O6 | no money |
+| `apps/server/src/invoice-corrections.test.ts:898-911` "a reason that is not a Void reason, and opens with a Void reason" | the Comp reason is refused with nothing written | both open; renamed "opens with a Comp reason such as Complaint, and with a Void reason" | O6 | no money |
 
 **Choice 1, re-measured under section 4.6's rule.** Run 1 was the 19 November rule (three
 exemptions): 259 failing tests in 17 files. After the fresh read I built the new rule in a second
@@ -845,8 +1050,11 @@ Task 6, and its behaviour rows are for the watcher:
 | `invoice-correction-api.test.ts` "answers invoice_correction.money_short with 409" and "answers invoice_correction.refund_pending with 409" | set up with a plain refund | the same setup through a cancel or a Correct invoice step; the 409 assertions are unchanged |
 | `invoice-correction-alerts.test.ts` (2), `invoice-correction-cards.test.ts` (2) | set up with a plain refund | the same, through a named cancel |
 
+O1 and O6 rows come from the O1 prototype run (section 4.1: 3 core cases, 0 of 686 in the 16
+correction suites) and from reading the two O6 tests. O4 changes no existing assertion that I know
+of: run 2 found none on a free item holding a share, which only exists once A445 lands; not run.
 Also to be listed in the PR, not measured: the full-invoice A4 suites the `invoice-document.ts` half
-of D3a can change, the till's suites, and whatever the O1, O4 and O6 write-ins change. Any other
+of D3a can change, the till's suites, and any O4 or O6 assertion outside the files named here. Any other
 assertion that has to change is listed in the PR with file:line, before and after.
 
 ## 7. Tasks
@@ -860,7 +1068,7 @@ dashboard suites run real headless Chromium: check `memory_pressure | grep free`
 Vitest command with `env -u CLAUDECODE -u AI_AGENT` when you need a passing test's output, and read
 both the "Test Files" and the "Tests" count: a file name that does not exist is skipped silently
 and the run still passes. Every file named below was checked with `ls` on this branch, except the
-two new ones Tasks 1 and 3 create. Each task is sized for one implementer well under 100 tool calls (estimates
+new ones Tasks 1, 3 and 3b create. Each task is sized for one implementer well under 100 tool calls (estimates
 given).
 
 **Order.** VAT-RATES's remaining work (PR 3b and piece B's PR L) does not touch the code this plan
@@ -870,19 +1078,20 @@ rate list exactly as `rateLines` does, so it follows whatever list VAT-RATES sup
 go first (say so in `progress.log`). VAT-RATES Task 3b.4 adds a sentence to A445
 (`vat-rates-a.md:1226`); if this lands first, that sentence is dropped.
 
-**Which tasks wait on which owner decision** (the re-read's M-10). "Written in" means the owner has
-answered but the plan still describes the old default there (section 10).
+**Which tasks wait on which owner decision** (the re-read's M-10). O1–O6 are answered and written in;
+O7, O8 and O9 are open (section 10).
 
 | Task | Owner decisions | What depends on them |
 | --- | --- | --- |
 | 1 | none | — |
 | 2 | O3 (answered, default kept) | only the "water comped, then €1.00 off the bill" case: what the discounted salad weighs |
-| 3 | O3 (answered), O4 (answered, to be written in) | the Cancel and refund case (O4) and the €1.00-off case (O3). The water-comped, eaten-here, counter-sale and close-of-day cases and the `full-comp` row depend on none (every discounted line there is free) |
+| 3 | O3 (answered) | the €1.00-off case. The water-comped, eaten-here, counter-sale, close-of-day and Cancel-and-refund-value cases and the `full-comp` row depend on none (every discounted line there is free) |
+| 3b, 3c | O4 (answered) | all of them: the free item comes back with the last paid dish |
 | 4 | none | D3b is the watcher's |
-| 5 | O1 (answered, to be written in); O6 (answered, to be written in) | O1's two cases; offering every reason (O6). The no-dishes case on `mixedRates()` and the till's lock depend on none |
+| 5 | O1 and O6 (answered); O9 (open) | O1's cases; offering every reason (O6); the ticked-dishes case after a discount (O9's default). The no-dishes case on `mixedRates()` and the till's lock depend on none |
 | 6 | O2 (answered), O7 and O8 (open) | the tip cases and the message's tip clause (O2); which refusals lift and which wait (O7); the unnamed-cancel cases (O8). The gate, the code and the status depend on none |
 | 7 | O7 | group D exists only with O7's default; groups A and B depend on none |
-| 8 | O1–O4, O6, O7, O8 | question 14, the guides and the backlog entries |
+| 8 | O1–O4, O6 (answered); O7, O8, O9 (open) | question 14, the guides and the backlog entries |
 
 ### Task 1: one allocation in `@waitron/shared` — about 25 calls
 
@@ -918,16 +1127,78 @@ answered but the plan still describes the old default there (section 10).
    issue) and the `sale_lines` gross, base and list columns; the receipt `paySavedBillInCash`
    returns lists the salad at 10.00 and the water at 0.00 with "comp 2.00", and its VAT rows are
    the filed ones; a counter sale (`working-order.ts:7867`) and the close-of-day issue
-   (`close-of-day.ts:101`) file the same split; **O4:** after payment, Cancel and refund of the salad
-   and of the water, through the real `cancelItem` and `rowRefundValue`, fill €8.33 and €1.67 —
-   **replaced by the owner's answer** (return both, €10.00 back; section 4.3) once it is written in.
-   Run, watch them fail.
+   (`close-of-day.ts:101`) file the same split; after payment, the cancellation read
+   (`line-cancel-api.ts:176-181`) values the salad at €8.33 and the water at €1.67, their filed
+   shares (`cancellationRefundValue` and `rowRefundValue`), which section 4.3.1 keeps; which dishes
+   must come back together is Task 3b's. Run, watch them fail.
 2. Export `listGrossOf`; add `listGross` in `issuancePass`; call `shareFreeItems` in `issueMoment`.
 3. Fix every other assertion section 6 lists for A445, changing expected figures only where the
    table says.
 4. ```sh
    pnpm --filter @waitron/server exec vitest run src/free-item-share.test.ts src/issuance-pass.test.ts src/free-items.test.ts src/receipt-adjustments.test.ts src/full-comp.fiscal-identity.test.ts src/adjustments-apply.test.ts src/line-cancel.test.ts
    ```
+
+### Task 3b: the free item comes back with the last paid dish, server — about 60 calls
+
+Section 4.3.1. Tests first, in a new `apps/server/src/free-item-cancel.test.ts` on Task 3's setup
+(a takeaway bill, `takeawayRates({Salad:"4.00", Soup:"4.00", Water:"21.00"})`, the water comped,
+paid in cash, nothing served), cancelling through `cancelItemHttp`
+(`apps/server/src/testing/cancel-line.ts:279`) with the Refund tick (`keep_charge`,
+`refundHandoff`). Each refusal asserts the code, the reason and that no cancel record, service
+cancellation or kitchen correction was written:
+
+- **the owner's case:** salad €10.00 and the free water; the cancellation read for the salad answers
+  `withFree` with the water and €1.67, and for the water `givenFree: true`; cancelling the salad with
+  `withFree: [water]` cancels both lines, writes two cancel records with refund values €8.33 and
+  €1.67 and answers both refund links; a Refund a payment naming both cancellation ids for €10.00
+  is accepted through the real route;
+- the salad alone (no `withFree`): `tab.free_item_with_dish` reason `not_listed`;
+- the water alone with Refund: reason `free_item`; without Refund it is cancelled and no refund link
+  is answered; the salad's later cancel then needs no `withFree` and hands back €8.33;
+- the water marked served first: the salad's cancel with Refund, reason `served`;
+- **several paid dishes:** salad €10.00, soup €6.00, free water; the salad alone hands back €8.89 with
+  no `withFree`; the soup after it is the last paid dish: €5.33 and €1.78 with `withFree: [water]`;
+- a served paid dish stays: salad served, the soup's cancel with Refund is not the last paid dish,
+  so it is accepted without `withFree` and the water stays;
+- part of the last paid dish (one of two salads): no `withFree`, its own share;
+- **unchanged:** a ticket eaten here with the water comped (one rate, so the water files €0 and holds
+  no share): the salad's cancel with Refund needs no `withFree`, as today;
+- **Finish table** (`apps/server/src/finish-party-service.test.ts`, on a takeaway table bill,
+  `seatedTakeaway`, `apps/server/src/testing/advance-bills.ts:85-88`): salad ticked and water not,
+  reason `not_listed`; water ticked and salad not, reason `free_item`; both ticked, accepted with
+  both refund links.
+
+Run, watch them fail. Then the change: the reader beside `refundValues`, the three rules in
+`cancelItem`, `withFree` on `CancelItemAsk` and its parsing (`apps/server/src/line-cancel-input.ts`),
+the consent fields in `line-cancel-api.ts`, the request-wide check and the loop order in
+`finish-party-service.ts`, the code in `errors.ts` and 409 in `till-api.ts`.
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/free-item-cancel.test.ts src/free-item-share.test.ts src/line-cancel.test.ts src/line-cancel-api.test.ts src/line-cancel-context.test.ts src/finish-party-service.test.ts src/finish-party-collect.test.ts src/tender-refund-links.test.ts
+pnpm exec vitest run scripts/errors-reachable.test.ts
+```
+
+### Task 3c: the free item comes back with the last paid dish, till — about 50 calls
+
+Section 4.3.1, Till. Tests first:
+
+- `apps/till/src/widgets/cancel-item-dialog.test.ts`: a consent with `withFree` lists the water under
+  the Refund tick in English and Spanish, the amount reads €10.00 when the quantity takes every
+  portion and the dish's own share otherwise, and `withFree` is sent only in the first case; a
+  `givenFree` consent offers no Refund tick;
+- `apps/till/src/api/line-cancel-client.test.ts`: `withFree` is sent and the consent fields are read;
+- the refund window filled after the cancel (`till-app.ts:17388`): amount €10.00 and both
+  cancellation ids; reason `not_listed` re-reads the consent and shows its message;
+- `apps/till/src/widgets/finish-table-dialog.test.ts`: the water has no tick of its own, follows the
+  bill's paid dishes, and its value is counted only when they are all ticked;
+- `apps/till/src/i18n/codes.test.ts` and `strings.test.ts`: the three messages and the window line,
+  English and Spanish.
+
+Run, watch them fail; then the change. Check `memory_pressure | grep free` first (real Chromium).
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/cancel-item-dialog.test.ts src/widgets/cancel-item-dialog.a11y.test.ts src/widgets/finish-table-dialog.test.ts src/widgets/finish-table-dialog.a11y.test.ts src/api/line-cancel-client.test.ts src/i18n/codes.test.ts src/i18n/strings.test.ts
+```
 
 ### Task 4: reprints and the full invoice show the dish as sold — about 40 calls
 
@@ -947,32 +1218,57 @@ answered but the plan still describes the old default there (section 10).
    pnpm --filter @waitron/server exec vitest run src/transaction-receipt-api.test.ts src/invoice-document.test.ts src/invoice-document.issue-clock.test.ts src/receipt-document.test.ts src/receipt-ticket.test.ts
    ```
 
-### Task 5: Correct invoice shares an unticked amount; the till drops its lock — about 40 calls
+### Task 5: Correct invoice shares an unticked amount by menu price, offers every reason; the till drops its lock — about 65 calls
 
 1. Tests first:
-   - `packages/core/src/correction-allocation.test.ts`: delete the `[undefined, "required"]` row
+   - `packages/core/src/correction-allocation.test.ts`: the test helper `line()` (`:16-22`) takes an
+     optional menu price, defaulting to the line's gross. Delete the `[undefined, "required"]` row
      (`:217`); add "shares an amount with no dishes chosen across every rate, as choosing them all
      does" on `mixedRates()` (`{ gross: "2.00" }` equals `{ gross: "2.00", lineIds: ["wine",
-     "dish"] }`); add O1's two cases (salad charged €5.00 and €1.00, section 4.1's table) at the
-     owner's rule (section 4.1, written in before this task), plus the owner's own example (menu
-     €10.00 at 10% and €4.00 at 21%: 10/14 and 4/14, `questions.md:1394`).
+     "dish"] }`), and the same equality on the discounted-salad history below (O9's default). Add
+     O1's cases with section 4.1's printed figures: **the owner's example** (A menu €10.00 at 10%,
+     B €4.00 at 21%, €7.00 back: A −5.00, base −4.55, VAT −0.45; B −2.00, −1.65, −0.35), its €1.00
+     rounding case (A −0.71, B −0.29: the cent to the larger remainder), the discounted salad at
+     €5.00 (salad −2.50, water −0.50) and at €1.00 (salad −1.00 capped, water −2.00), the salad with
+     €8.00 corrected before (−2.00 capped, −1.00), and the three-line case that caps in two passes
+     (−1.00, −2.00, −3.00). Change the two rows section 6 lists for O1 (`:96-109`, `:418-425`).
+     Add: weights adding up to zero with money left are refused `shared.invalid_decimal`.
+   - `packages/core/src/correction-history.test.ts`: the history read gives each line its filed
+     `list_gross` as menu price where stored, its `line_gross` otherwise (the case at `:94` stores a
+     `listGross` of 11.00).
    - `apps/server/src/invoice-corrections.test.ts`: "files a corrective split across both rates when
      no dishes are chosen": `soldForCash(["Rib steak", "Cold soup"], ["17.60"], "0.00", "takeaway")`
      (as at `:479`), open €8.80 with no `lineIds`, give the cash, file; the corrective's
      `vat_breakdown` is `[{10.00, −2.50, −0.25}, {21.00, −5.00, −1.05}]`, total −8.80, and
-     `checkIntegrity` reports nothing. And on Task 3's comped ticket, €1.00 with no dishes previews
-     4%: 0.80 / 0.03, 21%: 0.14 / 0.03.
+     `checkIntegrity` reports nothing. On Task 3's comped ticket, €1.00 with no dishes previews
+     4%: 0.80 / 0.03, 21%: 0.14 / 0.03. **O1 through the real writers:** a takeaway ticket with the
+     salad discounted to €5.00 by a line discount (`free-items.test.ts`'s `adjust` helper) and a
+     water at €2.00, paid; €3.00 with no dishes files salad −2.50 and water −0.50 and
+     `checkIntegrity` reports nothing. **O6:** the two rows section 6 lists, and a correction opened
+     with the starter **Complaint** files with that reason's name on it.
    - `apps/till/src/widgets/invoice-correction-dialog.test.ts:238`: rename to "previews dishes
      picked at both VAT rates"; the dish at the other rate stays enabled and both ids are sent.
-     `:358-361`: `reason: "missing"`, and the message is the new text. `apps/till/src/i18n/codes.test.ts`:
-     the new English and Spanish text.
+     `:358-361`: `reason: "missing"`, and the message is the new text. **O6:** with a Comp reason in
+     `REASONS` (`:26-36` builds only Void ones), the picker offers it, choosing it sends its id, and
+     the card step starts on it; `apps/till/src/widgets/tender-refund-dialog.test.ts`: opened with
+     `correcting`, it starts on a Comp reason; opened without, it still offers only Void reasons.
+     `apps/till/src/i18n/codes.test.ts`: the new English and Spanish text.
    Run, watch them fail.
-2. Delete the refusal and `"required"` (section 4.5); delete the till clause and `picked`; replace
-   the message.
+2. The change:
+   - choice 2: delete the refusal and `"required"` (section 4.5); delete the till clause and
+     `picked`; replace the message;
+   - O1: `CorrectionAmountLine` (`correction-allocation.ts:20-26`) gains `menu`, filled in
+     `readHistory` (`correction-history.ts:257-263`) from `listGross ?? lineGross`; the call at
+     `correction-allocation.ts:75-78` becomes a private capped loop over `shareByWeight` (section
+     4.1): share by menu price over the lines with something left, give each line whose share is more
+     than is left exactly what is left, and share the rest again over the others, until none is over.
+     The base split at `:109-112` stays by each line's corrected gross;
+   - O6: delete `invoice-corrections.ts:236`; `reasonPicker`'s `every` flag, passed by Correct
+     invoice and by Refund a payment opened with `correcting`, and their lookups (section 4.5).
 3. ```sh
    pnpm --filter @waitron/core exec vitest run src/correction-allocation.test.ts src/correction-history.test.ts
-   pnpm --filter @waitron/server exec vitest run src/invoice-corrections.test.ts src/invoice-correction-api.test.ts
-   pnpm --filter @waitron/till exec vitest run src/widgets/invoice-correction-dialog.test.ts src/widgets/invoice-correction-dialog.a11y.test.ts src/i18n/codes.test.ts
+   pnpm --filter @waitron/server exec vitest run src/invoice-corrections.test.ts src/invoice-correction-api.test.ts src/invoice-correction-cards.test.ts src/advance-corrections.test.ts src/corrections-report.test.ts
+   pnpm --filter @waitron/till exec vitest run src/widgets/invoice-correction-dialog.test.ts src/widgets/invoice-correction-dialog.a11y.test.ts src/widgets/tender-refund-dialog.test.ts src/widgets/cancel-item-reasons.test.ts src/i18n/codes.test.ts
    pnpm exec vitest run scripts/errors-reachable.test.ts
    ```
 
@@ -1115,9 +1411,8 @@ Commands: each half's files, then Task 6's command; read the "Test Files" count.
 Section 4.7, and a dated pointer at the top of
 `docs/superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md` saying that
 policy 2's "goodwill refunds stay money-only" is replaced by this PR, on the owner's 18 and 21
-November words. Question 14 follows the owner's answers as written in (O1 and O4 differ from the
-defaults it shows now) and O7 and O8's answers; its full-invoice figures and labels come from the
-page Task 4 rendered. Then:
+November words. Question 14 follows the owner's answers as written in and O7, O8 and O9's answers;
+its full-invoice figures and labels come from the page Task 4 rendered. Then:
 
 ```sh
 pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts
@@ -1130,24 +1425,42 @@ section is section 0 and section 10 of this plan.
 
 ## 8. Size, and whether to split
 
+Estimates from the files each task names, not from a build. The O1 lines are the prototype's
+(section 4.1: the capped loop was 20 lines); the O4 and O6 lines are estimated from the sites
+section 4.3.1 and section 4.5 cite.
+
 | Part | Production (+/−) | Tests |
 | --- | --- | --- |
 | Task 1 shared rounding function | +40 / −20 | +50 |
 | Task 2 `shareFreeItems` | +45 | +120 |
 | Task 3 issuance wiring | +10 | +230 |
+| Task 3b O4, server (the free-item reader about 40, `cancelItem`'s three rules and the free items' own cancel records about 45, the consent fields about 12, Finish table's request-wide check and loop order about 20, parsing `withFree`, code, status) | +125 / −2 | +300 |
+| Task 3c O4, till (the Cancel item window's list, amount and `withFree` about 25, the refund window's fill and links, the re-read on `not_listed`, the Finish window's tie about 20, client types, three messages and a window line in two languages) | +75 / −3 | +150 |
 | Task 4 reprints | +4 / −2 | +120 |
-| Task 5 choice 2 | +2 / −10 (core, till) | +100 / −5 |
+| Task 5 choice 2, O1 (menu price on the line, read from the filed line, the capped loop) and O6 (the server line, the picker's flag and four lookups) | +32 / −18 (core, server, till) | +220 / −10 |
 | Task 6 choice 1 (`correctableNow`, the gate, O8 linking, the replay check, O2's tender rule and till form, the till's saved attempt, code, status, message, the new argument) | +110 / −10 | +280, and group C rewritten (19 tests in 7 files) |
 | Task 7 fixtures | — | 7a: a backend at five calls and one setter (about +20 / −5); 7b: a helper of about +40 and setup changes for 37 tests in 5 files (about +60 / −25) |
-| Task 8 docs | — | guides +20 / −4, sheet +40, backlog −15 / +15, A802 pointer +2 |
+| Task 8 docs | — | guides +30 / −4, sheet +45, backlog −15 / +15, A802 pointer +2 |
 
-About **210 production lines added and 42 removed**, about **1,100 test lines** added or changed,
-about 70 lines of guides, sheet and backlog; no generated file. Not counted: the O1, O4 and O6
-write-ins (section 10). The driver's brief for this plan set
+About **440 production lines added and 55 removed**, about **1,650 test lines** added or changed,
+about 90 lines of guides, sheet and backlog; no generated file, no migration. The driver's brief set
 the split line ("If the whole is more than about 300 production lines, split into two PRs"), so this
-is **one PR**, as the watcher asked. If the build passes about 300, split after Task 5: PR 1 is A445,
-choice 2 and their adviser bullet (Tasks 1–5, part of 8); PR 2 is choice 1 (Tasks 6–7, the rest of
-8). Each leaves `main` working.
+is **two PRs**, split by subject:
+
+- **PR 1 — a free item takes its share, and comes back with the last paid dish:** Tasks 1, 2, 3, 3b,
+  3c and 4, and Task 8's A445 parts (question 14's first bullet, the two O4 guide sentences, A445's
+  backlog deletion, the decision entries for the free-item rule, O3 and O4). About **299 production
+  lines**. It depends on no open owner question, so it can be built now. A445 and O4 land together,
+  so `main` never lets a free item be refunded on its own.
+- **PR 2 — goodwill takes a corrective:** Tasks 5, 6 and 7 and the rest of Task 8. About **142
+  production lines**. Task 5 can start at once; Tasks 6 and 7 wait for O7 and O8. Task 5's one case
+  on the comped ticket needs PR 1's A445, which lands first.
+
+PR 1 sits at the split line by estimate. If its build passes about 300, Tasks 3b and 3c become a PR
+of their own, landed straight after Tasks 1–4; between the two, `main` would let a free item be
+refunded on its own, which no venue meets while none is live (CLAUDE.md §3, "No
+backwards-compatibility or data-migration code until Waitron is in production"). Each PR leaves
+`main` working.
 
 ## 9. Open pull requests touching the same files
 
@@ -1164,20 +1477,23 @@ choice 2 and their adviser bullet (Tasks 1–5, part of 8); PR 2 is choice 1 (Ta
 
 | # | Decision | Recommended default | Owner's answer (`~/waitron-campaign-l/questions.md`) |
 | --- | --- | --- | --- |
-| O1 | How a goodwill amount with no dishes ticked is split when a dish was discounted or partly given back before (section 4.1) | by what is left of each dish's price; menu price can take more than is left | 14:15 (`:1393-1395`): by menu-price proportions, a dish capped at what is left of it and the rest spread in the same proportions. **To be written in** |
+| O1 | How a goodwill amount with no dishes ticked is split when a dish was discounted or partly given back before (section 4.1) | by what is left of each dish's price; menu price can take more than is left | 14:15 (`:1393-1395`): by menu-price proportions, a dish capped at what is left of it and the rest spread in the same proportions. Written in (section 4.1, the O1 prototype's figures; Task 5) |
 | O2 | A tip given back on its own while payment money is left (section 4.6) | allowed, up to what is left of the tip; a tip is not on the invoice | 14:17 (`:1398`): "Yes". Written in (section 4.6, Task 6) |
 | O3 | On a ticket with a free item, what other discounted dishes weigh (section 4.2) | their menu price, so their discounts are shared too | 14:17 (`:1399`): the default |
-| O4 | Money handed back by Cancel and refund after payment on a ticket A445 shared (section 4.3) | the dish's filed share (salad €8.33, free water €1.67), pinned by a Task 3 test | 14:17 (`:1400`): "they would have to return both, and get the 10€ back"; the watcher asks for the till to offer the free item ticked with the dish and refuse the paid dish alone, saying why, and for the plan to say which dish a free item goes with. **To be written in** |
+| O4 | Money handed back by Cancel and refund after payment on a ticket A445 shared (section 4.3) | the dish's filed share (salad €8.33, free water €1.67), pinned by a Task 3 test | 14:17 (`:1400`): "they would have to return both, and get the 10€ back". Written in (section 4.3.1; Tasks 3b and 3c): each dish keeps its filed share; the free item comes back with the last paid dish and cannot be refunded alone; €10.00 in the owner's case. With several paid dishes, the free item goes with the last paid dish (chosen in this revision, section 4.3.1); a free item already served makes the last paid dish's Cancel and refund refuse, pointing to Correct invoice |
 | O5 | Choice 1 replaces A802's "goodwill refunds stay money-only" (section 0) | yes, on the owner's 18 and 21 November words — recorded here for the owner to see, not to re-decide | 14:18 (`:1403`): shown, no objection |
-| O6 | Complaint as a Correct invoice reason (section 0) | not built; staff pick **Other** with a note | 14:18 (`:1404`): "Add it". **To be written in.** The sites, read: the server's void-only check (`apps/server/src/invoice-corrections.ts:236`), the dialog's two lookups (`apps/till/src/widgets/invoice-correction-dialog.ts:361`, `:777`) and the shared picker's own filter (`reason-picker.ts`, `voidReasons` inside `reasonPicker`, used by other windows too), plus their tests; the "about 10 lines" is not measured |
+| O6 | Complaint as a Correct invoice reason (section 0) | not built; staff pick **Other** with a note | 14:18 (`:1404`): "Add it". Written in (section 4.5, Task 5): Correct invoice, and its card step, offer every reason |
 | O7 | Which refusals of Correct invoice leave Refund a payment open, giving money back with no corrective, and which make it wait (section 4.6; D5 until the re-read) | wait while a filing the tax agency refused, stopped or held is being fixed, as the till and A802 policy 3 do; stay open for a ticket filed by another box, replaced by a full invoice, with no filing record, cancelled, not fully paid, a full invoice naming a customer, or records that need checking | open |
 | O8 | A Refund a payment naming no dishes on a ticket whose cancelled dishes still owe money (section 4.6, step 2; D5c until the re-read) | it counts against those cancels and is capped by them, which caps the money handed back; the PIN rule stays as today | open |
+| O9 | When staff tick dishes in Correct invoice, how the amount is shared over them (section 4.1; new in this revision) | the owner's O1 rule over the ticked dishes, so ticking every dish equals ticking none; it differs from today's "by what is left" only where a ticked dish was discounted or partly given back before | open; Task 5 builds the default |
 
-The watcher's 14:18 entry clears the plan to build once this re-read is folded and the O1 cap rule
-and O4 return-together rule are written in (`:1405`); O6's "Add it" is a third write-in. This
-revision folds the re-read only. Where the plan still shows an old default it says "to be written
-in" (sections 2, 4.1, 4.3, Tasks 3 and 5, and question 14). O7 and O8 were asked after 14:18 and are
-open.
+The watcher's 14:18 entry cleared the plan to build once the re-read was folded and the O1 cap rule
+and O4 return-together rule written in (`:1405`); with O6's "Add it", all three are written in by
+this revision. O7 and O8 were asked after 14:18 and are open; O9 is new here and open. Nothing in
+section 5's fiscal boundary moves: O1 changes only how `allocateCorrectionAmounts` divides an amount
+before `recordCorrection` files it, O4 changes which cancels may be asked together, and O6 a reason
+check; none touches `recordSale`, `computeHuella`, the chain, numbering, series or the records
+table.
 
 **The watcher's call** (cleared at 13:47, `questions.md:1388-1391`). D2 decides which tickets' filed
 VAT changes, within the scope of the adviser's answer 1.10, and question 14 asks the adviser about
@@ -1207,6 +1523,12 @@ it; the others decide neither what is filed nor the money handed back:
   the stop rule there.
 - The reason for today's whole-tip rule (O2): not recorded in #721's commit or the deleted split-bill
   design (section 4.6).
+- O4 (section 4.3.1): read, not prototyped. In particular, how Finish table's request-wide check
+  and its till window's tie sit with the existing Finish flow, and whether a free item's own
+  cancel record joins the dish's kitchen corrections cleanly, are found in Tasks 3b and 3c.
+- O1 through the real writers (a line discount, then a correction with no dishes): the prototype
+  ran hand-built histories and the existing correction suites only; Task 5 adds the real case.
+- O6 in the till: read, not run; the card step's start reason is found in Task 5's till cases.
 
 ## 12. Re-read findings not folded
 
