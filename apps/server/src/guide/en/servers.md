@@ -102,8 +102,7 @@ from there; if the main box is broken, switch it off and choose **Check again**.
 If the main box is silent, the page says what switching does and, when the spare knows, for how
 long. Check that the main box is plugged in and its network cable is connected; if it starts
 working again, keep using it. Until you choose **Switch to this box**, **Go back to the till** (**Go back** when you did
-not come from a till) leaves without switching; after switching, **Leave this page (the switch is
-saved)** or **Continue to this box** brings you back.
+not come from a till) leaves without switching.
 
 Choose **Start switching**, enter an administrator’s email and choose **Continue**, or pick a
 saved passkey offered in the email field. If you typed the email, choose **Use your passkey**, or enter your password
@@ -126,13 +125,11 @@ backup made after this spare joined its current main box.
 If the page reports too little temporary space, free disk space on the spare before choosing
 the backup again.
 
-On **Ready to switch**, tick all three statements and say why you are switching. Choose **Switch
-to this box**. The page then checks this box's time and starts the venue by itself. If this box
-cannot check its time over the internet, it first shows **Check the time** with this box's time
-and this device's, both in the venue's time zone. If they agree and both are right, choose
-**Confirm the time**. If they differ, choose **Your device is correct** to set this box's time from
-the device you are using; after **The box is correct** or **Both are wrong**, correct this
-device's time and choose **Check again**. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
+On **Ready to switch**, tick all three statements and say why you are switching. Choose **Switch to this box**. **Switching to this box** then checks this box's time and starts the
+venue by itself; keep the page open while this box restarts. Only if this box cannot check its time
+over the internet does it show **Check the time** with this box's time and this device's. If both
+are right, choose **Confirm the time**. If only this device's is right, choose **Your device is
+correct**; otherwise correct this device's time and choose **Check again**. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
 you choose a step and the spare needs it, usually once, and again only if the page waits 15 minutes for you to choose a step; if instead it
 says your passkey sign-in needs checking again, choose the step again (after **Switch to this
@@ -145,9 +142,13 @@ check when you choose **Switch to this box**, the page goes back there too: choo
 **Upload a backup file instead**.
 
 Once you have chosen **Switch to this box**, reloading or
-opening the address on another device finds the switch; sign in and continue with the
-clock check. An unfinished controlled handover offers its own progress page. If the copy cannot
-be verified against the saved switch, stop and keep both boxes’ data intact.
+opening the address on another device finds the switch; sign in and choose **Try again**. An unfinished controlled handover offers its own progress page. If the copy cannot be verified
+against the saved switch, stop and keep both boxes’ data intact.
+
+When the venue has started, **This box now runs the venue** says not to reset the old main box: it
+may hold data this box still needs, and when it is switched on again it sends that data here and
+stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
+box's Servers page in the dashboard. **Open the till** takes you back to the till.
 
 If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 

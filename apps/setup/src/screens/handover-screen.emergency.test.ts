@@ -175,6 +175,10 @@ async function mount(
      * be read after it.
      */
     alreadyActivated?: boolean;
+    /** Each start waits for this before answering. */
+    activateGate?: Promise<void>;
+    /** Once started, each progress read waits for this before answering, as while the box restarts. */
+    activatedReadGate?: Promise<void>;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -224,6 +228,8 @@ async function mount(
       (options.statusUnavailable || (options.alreadyActivated && activated))
     )
       throw new TypeError("progress unavailable");
+    if (init?.method === "GET" && activated && options.activatedReadGate)
+      await options.activatedReadGate;
     if (init?.method === "GET")
       return new Response(
         JSON.stringify({
@@ -425,6 +431,7 @@ async function mount(
       );
     }
     if (path.endsWith("/activate")) {
+      await options.activateGate;
       attemptedActivation = true;
       if (options.activationExpired)
         return new Response(JSON.stringify({ error: { code: "password.invalid" } }), {
@@ -899,7 +906,9 @@ it("resumes a saved declaration on another page, prepares and starts without rep
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   const preparation = posts.filter(({ path }) => path.endsWith("/preparation"));
   expect(preparation.map(({ body }) => (body.proposal as { action: string }).action)).toEqual(
@@ -918,7 +927,9 @@ it("a start refused for a stale clock reading reads the clocks again and starts 
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   expect(activations(posts)).toBe(2);
   const preparation = posts.filter(({ path }) => path.endsWith("/preparation"));
   expect(preparation.map(({ body }) => (body.proposal as { action: string }).action)).toEqual([
@@ -940,7 +951,7 @@ it("a second stale clock reading in a row is explained and not retried, until th
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
   const staleTwice =
-    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.";
+    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Try again.";
   await vi.waitFor(() =>
     expect(actions(el).includes(staleTwice) || activations(posts) > 2).toBe(true),
   );
@@ -951,7 +962,9 @@ it("a second stale clock reading in a row is explained and not retried, until th
   const again = q(el, "[data-test=authenticate]");
   expect(staleTwice).toContain(again.textContent!.trim());
   again.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   expect(activations(posts)).toBe(4);
 });
 
@@ -1019,7 +1032,9 @@ it("an automatic start the box refuses for want of the passkey opens no prompt; 
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(again));
   expect(get).toHaveBeenCalledTimes(1);
   again.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   expect(get).toHaveBeenCalledTimes(2);
   // Try again leans on the lapsed proof first, then sends the passkey answer.
   expect(
@@ -1051,7 +1066,9 @@ it("Try again after the time reading has gone stale prompts once, and the page's
   await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(again));
   expect(get).toHaveBeenCalledTimes(1);
   again.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   // One prompt to sign in, and one for Try again.
   expect(get).toHaveBeenCalledTimes(2);
   // The refused start set the proof that the clock step and the automatic start lean on.
@@ -1736,7 +1753,7 @@ it("a declaration that was recorded though its answer was refused carries on to 
 });
 
 it.each([
-  ["activated", "handover.done"],
+  ["activated", "handover.emergency.done_heading"],
   ["abandoned", "handover.closed"],
 ] as const)(
   "a saved declaration whose handover is already %s says so instead of asking again",
@@ -1995,9 +2012,11 @@ async function stopAndContinueLinks(pageUrl: string) {
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
   await startVenue(el);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   const proceed = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-    (link) => link.textContent === t("handover.continue"),
+    (link) => link.textContent!.trim() === t("handover.emergency.open_till"),
   )!;
   return { stop: stopHref, proceed: proceed.getAttribute("href") };
 }
@@ -2052,12 +2071,15 @@ async function declareAndReload(pageUrl: string) {
     operationId: saved.operationId,
     pageUrl: replaced.href,
   });
+  await vi.waitFor(() => expect(q(reloaded, '[name="handover-email"]')).not.toBeNull());
+  // After Switch the page offers no way to leave; the till is reached from the done page.
+  expect(q(reloaded, "[data-test=go-back]")).toBeNull();
+  await authenticate(reloaded);
+  q(reloaded, "[data-test=authenticate]").click();
   const stop = await vi.waitFor(() => {
-    const link = [...reloaded.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-      (candidate) => candidate.textContent === t("handover.emergency.leave_saved"),
-    );
-    expect(link).toBeDefined();
-    return link!;
+    const link = q<HTMLAnchorElement>(reloaded, "[data-test=open-till]");
+    expect(link).not.toBeNull();
+    return link;
   });
   return { address: replaced, stop: stop.getAttribute("href") };
 }
@@ -3058,7 +3080,9 @@ it("a passkey switch unlocks once and the later steps lean on the proof, through
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
   await startVenue(el);
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   expect(get).toHaveBeenCalledTimes(1);
   const steps = posts.map(({ path, body }) => [
     path.split("/").at(-1),
@@ -3180,7 +3204,9 @@ it("with no internet time, a passkey switch confirms the time, and a proof lapse
   expect(selects()).toEqual([]);
   expect(get).toHaveBeenCalledTimes(1);
   q(entry, "[data-test=confirm-time]").click();
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.done_heading")),
+  );
   const confirmed = { action: "select", comparisonId: "comparison", confirmed: true };
   expect(selects()).toEqual([
     [confirmed, "none"],
@@ -3586,7 +3612,7 @@ it.each(["en-GB", "es-ES"])(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "the leave link says it goes back before Declare and that the switch is saved after (%s)",
+  "the leave link says it goes back before Declare, and there is none after (%s)",
   async (locale) => {
     setLocale(locale);
     const { el } = await mount({ secondClockMissing: 1 });
@@ -3597,7 +3623,8 @@ it.each(["en-GB", "es-ES"])(
     await declarationFields(el);
     q(el, "[data-test=emergency-declare]").click();
     await startVenue(el);
-    expect(leaveLink(el).textContent).toBe(t("handover.emergency.leave_saved"));
+    expect(leaveLink(el)).toBeNull();
+    expect(q(el, "[data-test=go-back]")).toBeNull();
   },
 );
 
@@ -3834,5 +3861,212 @@ it.each([
       timeout: 10_000,
     });
     goesBack();
+  },
+);
+
+function gate() {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  return { opened, open };
+}
+/** Each row of the page's progress list: its name, its state and its words. */
+const rows = (el: SetupHandoverScreen) =>
+  [...el.shadowRoot!.querySelectorAll("ol.progress > li")].map((li) => [
+    li.getAttribute("data-test"),
+    li.getAttribute("data-state"),
+    li.querySelector(".label")!.textContent!.trim(),
+  ]);
+const occurrences = (el: SetupHandoverScreen, words: string) =>
+  el.shadowRoot!.textContent!.split(words).length - 1;
+const switchingWords = {
+  "en-GB": {
+    heading: "Switching to this box",
+    recorded: "Switch recorded: this box now takes over the venue",
+    checking: "Checking this box's time",
+    internet: "Box clock synced with internet time",
+    confirmed: "Box time confirmed",
+    starting: "Starting the venue on this box…",
+    keepOpen: "Keep this page open while this box restarts.",
+  },
+  "es-ES": {
+    heading: "Cambiando a este servidor",
+    recorded: "Cambio registrado: este servidor pasa a llevar el local",
+    checking: "Comprobando la hora del servidor",
+    internet: "Reloj del servidor sincronizado con la hora de internet",
+    confirmed: "Hora del servidor confirmada",
+    starting: "Iniciando el local en este servidor…",
+    keepOpen: "Mantén esta página abierta mientras se reinicia el servidor.",
+  },
+} as const;
+
+it.each(["en-GB", "es-ES"] as const)(
+  "after Switch, one progress page lists the switch, the clock and the start, says the internet's time synced the clock, and stays up while the box restarts (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const words = switchingWords[locale];
+    const clock = gate();
+    const start = gate();
+    const restart = gate();
+    const { el } = await mount({
+      preparationGate: () => clock.opened,
+      activateGate: start.opened,
+      activatedReadGate: restart.opened,
+    });
+    await authenticate(el);
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() =>
+      expect(rows(el)).toEqual([
+        ["step-switch", "done", words.recorded],
+        ["step-clock", "working", words.checking],
+        ["step-start", "waiting", words.starting],
+      ]),
+    );
+    expect(heading(el)).toBe(words.heading);
+    expect(q(el, "p.note").textContent!.trim()).toBe(words.keepOpen);
+    // The list is the page's one account of what is happening.
+    expect(occurrences(el, words.checking)).toBe(1);
+    expect(occurrences(el, words.starting)).toBe(1);
+    expect(q<LitElement>(el, "vf-recovery-hour").shadowRoot!.textContent!.trim()).toBe("");
+    // After Switch the page offers no way to leave.
+    expect(q(el, "[data-test=go-back]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('a[href="/"]')).toBeNull();
+    clock.open();
+    await vi.waitFor(() =>
+      expect(rows(el)).toEqual([
+        ["step-switch", "done", words.recorded],
+        ["step-clock", "done", words.internet],
+        ["step-start", "working", words.starting],
+      ]),
+    );
+    expect(occurrences(el, words.starting)).toBe(1);
+    start.open();
+    await vi.waitFor(() => expect(Reflect.get(el, "restarting")).toBe(true));
+    await el.updateComplete;
+    expect(heading(el)).toBe(words.heading);
+    expect(rows(el)).toEqual([
+      ["step-switch", "done", words.recorded],
+      ["step-clock", "done", words.internet],
+      ["step-start", "working", words.starting],
+    ]);
+    expect(q(el, "p.note").textContent!.trim()).toBe(words.keepOpen);
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.restarting"));
+    expect(occurrences(el, words.starting)).toBe(1);
+    expect(q(el, "[data-test=go-back]")).toBeNull();
+    restart.open();
+    await vi.waitFor(() => expect(heading(el)).toBe(t("handover.emergency.done_heading")));
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "when the box cannot check its time over the internet, the clock step asks below the list, and a confirmed time is never called the internet's (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const words = switchingWords[locale];
+    const start = gate();
+    const { el } = await mount({ noInternetTime: true, activateGate: start.opened });
+    await authenticate(el);
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    const entry = await vi.waitFor(() => {
+      const found = q<LitElement>(el, "vf-recovery-hour");
+      expect(found && q(found, "[data-test=confirm-time]")).not.toBeNull();
+      return found;
+    });
+    expect(rows(el)[1]).toEqual(["step-clock", "working", words.checking]);
+    const list = q(el, "ol.progress");
+    expect(list.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(q(entry, "[data-test=clock-heading]").textContent!.trim()).toBe(
+      locale === "en-GB" ? "Check the time" : "Comprueba la hora",
+    );
+    q(entry, "[data-test=confirm-time]").click();
+    await vi.waitFor(() => expect(rows(el)[1]).toEqual(["step-clock", "done", words.confirmed]));
+    expect(rows(el)[2]).toEqual(["step-start", "working", words.starting]);
+    expect(el.shadowRoot!.textContent).not.toContain(words.internet);
+    start.open();
+    await vi.waitFor(() => expect(heading(el)).toBe(t("handover.emergency.done_heading")));
+  },
+);
+
+const doneWords = {
+  "en-GB": {
+    heading: "This box now runs the venue",
+    warning: "Do not reset the old main box!",
+    oldBox:
+      "It may hold data that this box still needs. When it is switched on again, it sends any outstanding data to this box and then stands down.",
+    afterwards: "Afterwards, you can choose Wipe and remove on the Servers page in the dashboard.",
+    action: "Wipe and remove",
+    servers: "Servers page",
+    till: "Open the till",
+  },
+  "es-ES": {
+    heading: "Este servidor lleva ahora el local",
+    warning: "¡No reinicies el servidor principal antiguo!",
+    oldBox:
+      "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará a este servidor los datos pendientes y después se retirará.",
+    afterwards: "Después, puedes elegir Borrar y retirar en la página Servidores del panel.",
+    action: "Borrar y retirar",
+    servers: "página Servidores",
+    till: "Abrir la caja",
+  },
+} as const;
+it.each(["en-GB", "es-ES"] as const)(
+  "once the switch has finished, the done page warns against resetting the old main box, links this box's Servers page and opens the till (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const words = doneWords[locale];
+    const { el } = await mount({ saved: true, pageUrl: spareSwitchPage(TILL) });
+    await authenticate(el);
+    q(el, "[data-test=authenticate]").click();
+    await vi.waitFor(() => expect(heading(el)).toBe(words.heading));
+    const done = q(el, "[data-test=emergency-done]");
+    expect(
+      [...done.querySelectorAll("p")].map((p) => p.textContent!.replace(/\s+/g, " ").trim()),
+    ).toEqual([words.warning, words.oldBox, words.afterwards]);
+    expect(done.querySelector("p strong")!.textContent).toBe(words.warning);
+    expect(done.querySelectorAll("p")[2]!.querySelector("strong")!.textContent).toBe(words.action);
+    const servers = done.querySelector<HTMLAnchorElement>("p a")!;
+    expect(servers.textContent).toBe(words.servers);
+    expect(servers.getAttribute("href")).toBe("https://box-b.waitron.local/servers");
+    const till = q<HTMLAnchorElement>(el, "[data-test=open-till]");
+    expect(till.textContent!.trim()).toBe(words.till);
+    expect(till.getAttribute("href")).toBe(TILL);
+    expect(till.classList.contains("primary")).toBe(true);
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.done"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.continue"));
+    expect(q(el, "[data-test=go-back]")).toBeNull();
+  },
+);
+
+it("on the switch, the clock step's own button reads Try again", async () => {
+  const { el } = await mount({ saved: true });
+  await authenticate(el);
+  expect(q(el, "[data-test=authenticate]").textContent!.trim()).toBe(t("handover.try_again"));
+});
+
+it.each([
+  [
+    "en-GB",
+    "The old main box answered. Open its Servers page, or switch it off and press Try again.",
+  ],
+  [
+    "es-ES",
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y pulsa Volver a intentarlo.",
+  ],
+] as const)(
+  "after Switch, the old main box answering names the Try again on screen (%s)",
+  async (locale, line) => {
+    setLocale(locale);
+    const { el } = await mount({
+      saved: true,
+      preparationRefusal: "handover.source_still_answering",
+    });
+    await authenticate(el);
+    q(el, "[data-test=authenticate]").click();
+    await vi.waitFor(() => expect(actions(el)).toBe(line));
+    const entry = q<LitElement>(el, "vf-recovery-hour");
+    const again = entry ? q(entry, "[data-test=compare]") : q(el, "[data-test=authenticate]");
+    expect(line).toContain(again.textContent!.trim());
+    expect(again.textContent!.trim()).toBe(t("handover.try_again"));
   },
 );

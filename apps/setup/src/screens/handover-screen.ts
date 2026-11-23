@@ -337,14 +337,11 @@ export class SetupHandoverScreen extends LitElement {
   get #signInShown(): boolean {
     return !this.copyPreview || this.signInOpen || (this.attempted && !this.#valid());
   }
-  #leaveLink() {
-    return html`<a href=${this.#leaveHref}
-      >${t(this.#declared ? "handover.emergency.leave_saved" : this.#leaveLabel)}</a
-    >`;
-  }
   @state() private status?: HandoverStatus;
   @state() private readFailed = false;
   @state() private restarting = false;
+  /** How the clock step confirmed the time for the start that was sent, kept once the step is gone. */
+  @state() private timeConfirmedBy?: "internet" | "person";
   @property({ attribute: false }) contributions: readonly SetupContribution[] = SETUP_MODULES;
   @state() private usePasskey = false;
   /** The emergency sign-in asks for the email first, then how to sign in. */
@@ -658,6 +655,8 @@ export class SetupHandoverScreen extends LitElement {
   }
   get #heading(): StringKey {
     const page = this.#page;
+    if (this.#isEmergency && activated(this.status)) return "handover.emergency.done_heading";
+    if (this.#switching) return "handover.emergency.switching_to";
     if ((this.restarting && page !== "preparing") || activated(this.status) || closed(this.status))
       return "handover.heading";
     if (this.mainCheck === "checking") return "handover.emergency.checking_heading";
@@ -828,6 +827,7 @@ export class SetupHandoverScreen extends LitElement {
       );
       if (controller?.signal.aborted) return;
       this.#staleRetried = false;
+      this.timeConfirmedBy = entry.timeConfirmedBy;
       this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
@@ -992,7 +992,10 @@ export class SetupHandoverScreen extends LitElement {
     if (code === "password.throttled") return "handover.emergency.throttled";
     if (code === "node.operation_page_required") return "handover.emergency.connection";
     if (code === "authorization.not_permitted") return "handover.emergency.permission";
-    if (code === "handover.source_still_answering") return "handover.emergency.source_answered";
+    if (code === "handover.source_still_answering")
+      return this.#switching
+        ? "handover.emergency.source_answered_try"
+        : "handover.emergency.source_answered";
     if (code === "handover.controlled_unresolved") return "handover.emergency.controlled";
     if (code === "handover.copy_predates_destination") return "handover.emergency.backup_too_old";
     if (code === "restore.archive_resource_limit") return "shell.restore.archive_resource_limit";
@@ -1599,12 +1602,6 @@ export class SetupHandoverScreen extends LitElement {
         ? t("handover.fix")
         : "";
   }
-  #links() {
-    return html`<p>
-      ${this.refusalLink ? html`<a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a>` : nothing}
-      ${this.#leaveLink()}
-    </p>`;
-  }
   #refusalLink() {
     return this.refusalLink
       ? html`<p><a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a></p>`
@@ -1619,7 +1616,11 @@ export class SetupHandoverScreen extends LitElement {
       <div class="choices">${this.#signInSubmit()} ${this.#goBackButton()}</div>
       ${this.#refusalLink()}`;
   }
-  #progressRow(name: "follow" | "check", label: StringKey, state: "done" | "working" | "waiting") {
+  #progressRow(
+    name: "follow" | "check" | "switch" | "clock" | "start",
+    label: StringKey,
+    state: "done" | "working" | "waiting",
+  ) {
     return html`<li data-test=${`step-${name}`} data-state=${state}>
       <span class="mark" aria-hidden="true"
         >${state === "done" ? "✓" : state === "working" ? html`<wt-spinner decorative size="sm"></wt-spinner>` : "–"}</span
@@ -1790,10 +1791,13 @@ export class SetupHandoverScreen extends LitElement {
           >
         </p>`;
   }
+  /** Once the switch is recorded, the page offers no way to leave until the venue has started. */
   #goBackButton() {
-    return html`<a class="button" data-test="go-back" href=${this.#leaveHref}
-      >${t(this.#declared ? "handover.emergency.leave_saved" : this.#leaveLabel)}</a
-    >`;
+    return this.#declared
+      ? nothing
+      : html`<a class="button" data-test="go-back" href=${this.#leaveHref}
+          >${t(this.#leaveLabel)}</a
+        >`;
   }
   /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
   #readyPage() {
@@ -1855,44 +1859,113 @@ export class SetupHandoverScreen extends LitElement {
     if (reopened)
       return html`<p>${t("handover.emergency.switching_body")}</p>
         ${this.#signInShown ? this.#signInFields() : nothing} ${this.#signInChoices()}`;
-    return html` ${this.#signInShown ? this.#signInFields(this.#isEmergency) : nothing}
-      ${this.#isEmergency ? this.#emergencyContent() : nothing}
+    if (this.#isEmergency) return this.#switchingPage();
+    return html` ${this.#signInShown ? this.#signInFields() : nothing}
       ${
         this.entry
-          ? html`${this.#isEmergency ? nothing : html`<p>${t("handover.zone")}</p>`} ${this.entry}
-            ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
+          ? html`<p>${t("handover.zone")}</p>
+              ${this.entry}
+              ${this.busy ? html`<p role="status">${t("handover.starting")}</p>` : nothing}`
           : nothing
       }
-      <wt-form-actions .error=${this.#formError}>
-        ${
-          this.entry
-            ? this.activationHeld || this.retrying
-              ? html`<wt-button
-                  data-test="retry-activation"
-                  .disabled=${!this.busy && !this.#valid()}
-                  ?loading=${this.busy}
-                  variant="primary"
-                  @click=${() => void this.#retry()}
-                  >${t("handover.try_again")}</wt-button
-                >`
-              : nothing
-            : html`<wt-button
-                data-test="authenticate"
-                .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
-                variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
-                @click=${() => void this.#authenticate()}
-                >${t("handover.compare")}</wt-button
-              >`
-        }
-      </wt-form-actions>
-      ${this.#isEmergency ? this.#links() : nothing}`;
+      <wt-form-actions .error=${this.#formError}>${this.#startButton()}</wt-form-actions>`;
+  }
+  /** The clock step's Try again once a start was refused, or the button that runs the step again. */
+  #startButton() {
+    if (this.entry)
+      return this.activationHeld || this.retrying
+        ? html`<wt-button
+            data-test="retry-activation"
+            .disabled=${!this.busy && !this.#valid()}
+            ?loading=${this.busy}
+            variant="primary"
+            @click=${() => void this.#retry()}
+            >${t("handover.try_again")}</wt-button
+          >`
+        : nothing;
+    return html`<wt-button
+      data-test="authenticate"
+      .disabled=${this.busy || (this.attempted && !this.#valid()) || (this.#isEmergency && (this.copyRefused || !this.status))}
+      variant=${this.busy || (this.#isEmergency && (this.copyRefused || !this.status)) ? "secondary" : "primary"}
+      @click=${() => void this.#authenticate()}
+      >${t(this.#isEmergency ? "handover.try_again" : "handover.compare")}</wt-button
+    >`;
+  }
+  /** After Switch, until the venue has started: the switch, the clock step and the start, in turn. */
+  get #switching(): boolean {
+    return (
+      this.#isEmergency &&
+      this.#declared &&
+      this.#page === undefined &&
+      !!this.copyPreview &&
+      !activated(this.status) &&
+      !closed(this.status) &&
+      !this.backupRestarting &&
+      !this.followRestarting
+    );
+  }
+  #switchingPage() {
+    const restarting = this.restarting;
+    const entry = this.entry;
+    const ready = entry?.readOperation() != null;
+    const starting = restarting || (this.busy && ready);
+    const clockState = starting || ready ? "done" : entry ? "working" : "waiting";
+    const confirmedBy = entry?.timeConfirmedBy ?? this.timeConfirmedBy;
+    const clockLabel =
+      clockState !== "done"
+        ? "handover.emergency.step_clock"
+        : confirmedBy === "internet"
+          ? "handover.emergency.step_clock_internet"
+          : "handover.emergency.step_clock_confirmed";
+    return html`${!restarting && this.#signInShown ? this.#signInFields(true) : nothing}
+      <div role="status">
+        <ol class="progress">
+          ${this.#progressRow("switch", "handover.emergency.step_switch", "done")}
+          ${this.#progressRow("clock", clockLabel, clockState)}
+          ${this.#progressRow("start", "handover.starting", starting ? "working" : "waiting")}
+        </ol>
+      </div>
+      ${
+        restarting
+          ? nothing
+          : html`${this.#emergencyContent()} ${entry ?? nothing}
+              <wt-form-actions .error=${this.#formError}>${this.#startButton()}</wt-form-actions>`
+      }
+      <p class="note">${t("handover.emergency.keep_open_restart")}</p>
+      ${restarting ? nothing : this.#refusalLink()}`;
+  }
+  /** The switch has finished: what to leave alone, what to do afterwards, and the way to the till. */
+  #donePage() {
+    const servers = new URL("/servers", this.pageUrl).href;
+    const afterwards = t("handover.emergency.done_afterwards")
+      .split(/(\{action\}|\{page\})/)
+      .map((part) =>
+        part === "{action}"
+          ? html`<strong>${t("handover.emergency.done_action")}</strong>`
+          : part === "{page}"
+            ? html`<a href=${servers}>${t("handover.emergency.done_servers")}</a>`
+            : part,
+      );
+    return html`<section data-test="emergency-done">
+        <p role="status"><strong>${t("handover.emergency.done_warning")}</strong></p>
+        <p>${t("handover.emergency.done_old_box")}</p>
+        <p>${afterwards}</p>
+      </section>
+      <div class="choices">
+        <a class="button primary" data-test="open-till" href=${this.#leaveHref}
+          >${t("handover.emergency.open_till")}</a
+        >
+      </div>`;
   }
   #content() {
     const status = this.status;
     if (activated(status))
-      return html`<p role="status">${t("handover.done")}</p>
-        <a href=${this.#leaveHref}>${t("handover.continue")}</a>`;
+      return this.#isEmergency
+        ? this.#donePage()
+        : html`<p role="status">${t("handover.done")}</p>
+            <a href=${this.#leaveHref}>${t("handover.continue")}</a>`;
     if (closed(status)) return html`<p role="status">${t("handover.closed")}</p>`;
+    if (this.#switching) return this.#switchingPage();
     if (this.restarting && this.#page !== "preparing")
       return html`<p role="status">
         ${t(this.backupRestarting ? "handover.emergency.backup_restarting" : this.followRestarting ? "handover.emergency.followed_restarting" : "handover.restarting")}
@@ -1916,6 +1989,7 @@ export class SetupHandoverScreen extends LitElement {
         this.#resetSelection();
       }}
       @promotion-change=${() => {
+        this.requestUpdate();
         if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
