@@ -1404,6 +1404,7 @@ export const en = {
   "venue_details.iban_checksum":
     "This IBAN's check digits do not match. Check it for a typing mistake.",
   "venue_details.bank_iban_required": "Enter the IBAN, or clear the bank too.",
+  "venue_details.bank_name_too_long": "Shorten the bank name to {max} characters or fewer.",
   "venue_details.bank_account_unchanged": "This is already the bank account.",
   "venue_details.bank_account_not_saved":
     "The bank-account change was not confirmed. Check the bank account in Venue settings before trying again.",
@@ -6130,6 +6131,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.iban_checksum":
     "Los dígitos de control de este IBAN no coinciden. Comprueba que no haya un error al escribirlo.",
   "venue_details.bank_iban_required": "Introduce el IBAN o borra también el banco.",
+  "venue_details.bank_name_too_long": "Acorta el nombre del banco a {max} caracteres como máximo.",
   "venue_details.bank_account_unchanged": "Ya es la cuenta bancaria.",
   "venue_details.bank_account_not_saved":
     "No se ha confirmado el cambio de cuenta bancaria. Comprueba la cuenta bancaria en Ajustes del local antes de volver a intentarlo.",

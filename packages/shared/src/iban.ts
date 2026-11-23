@@ -58,6 +58,9 @@ export function ibanShapeProblem(iban: string): "format" | undefined {
   return undefined;
 }
 
+/** The most characters a saved bank name may hold: as many as a SEPA payment's name field. */
+export const BANK_NAME_MAX_LENGTH = 70;
+
 export function ibanGroups(iban: string): string[] {
   return iban.match(/.{1,4}/g) ?? [];
 }

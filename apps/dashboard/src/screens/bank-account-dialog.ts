@@ -1,8 +1,8 @@
 import { css, html, type TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { ibanGroups, ibanProblem, normalizeIban } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { BANK_NAME_MAX_LENGTH, ibanGroups, ibanProblem, normalizeIban } from "@waitron/shared";
+import { fill, t } from "../i18n/t.js";
 import {
   normalizedText,
   TaxpayerFieldDialog,
@@ -18,6 +18,7 @@ export interface BankAccountValue {
 
 const SETTINGS: TaxpayerFieldSettings<BankAccountValue> = {
   field: "iban",
+  otherFields: ["bankName"],
   dataTest: "bank-account",
   heading: "venue_details.change_bank_account",
   note: "venue_details.bank_account_note",
@@ -31,6 +32,9 @@ const SETTINGS: TaxpayerFieldSettings<BankAccountValue> = {
   },
   send: (api, { iban, bankName }, expected) => api.saveBankAccount({ iban, bankName, expected }),
 };
+
+const tooLong = (): string =>
+  fill("venue_details.bank_name_too_long", { max: String(BANK_NAME_MAX_LENGTH) });
 
 /** Sets, changes or clears the bank account that invoices for deferred-payment bills print. An
  *  empty IBAN clears it. */
@@ -62,12 +66,27 @@ export class BankAccountDialog extends TaxpayerFieldDialog<BankAccountValue, Ban
 
   protected override fieldErrors(draft: BankAccountValue): Record<string, string> {
     const { iban, bankName } = this.storedForm(draft);
-    if (iban === "") return bankName === "" ? {} : { iban: t("venue_details.bank_iban_required") };
-    const problem = ibanProblem(iban);
-    if (problem === undefined) return {};
-    return {
-      iban: t(problem === "checksum" ? "venue_details.iban_checksum" : "venue_details.iban_format"),
-    };
+    const errors: Record<string, string> = {};
+    if (iban === "") {
+      if (bankName !== "") errors.iban = t("venue_details.bank_iban_required");
+    } else {
+      const problem = ibanProblem(iban);
+      if (problem !== undefined)
+        errors.iban = t(
+          problem === "checksum" ? "venue_details.iban_checksum" : "venue_details.iban_format",
+        );
+    }
+    if ([...bankName].length > BANK_NAME_MAX_LENGTH) errors.bankName = tooLong();
+    return errors;
+  }
+
+  protected override refusalFor(
+    reason: string,
+    _draft: BankAccountValue,
+    message: string,
+    field: string,
+  ): Record<string, string> {
+    return { [field]: reason === "too_long" ? tooLong() : message };
   }
 
   protected override renderFields(view: TaxpayerFieldsView<BankAccountValue>): TemplateResult {

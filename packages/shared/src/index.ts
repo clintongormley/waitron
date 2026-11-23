@@ -59,6 +59,7 @@ export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from
 export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export { formatBytes } from "./bytes-format.js";
 export {
+  BANK_NAME_MAX_LENGTH,
   ibanGroups,
   ibanProblem,
   ibanShapeProblem,

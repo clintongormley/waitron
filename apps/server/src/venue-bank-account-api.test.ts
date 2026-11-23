@@ -133,6 +133,15 @@ describe("saving the venue's bank account", () => {
     });
   });
 
+  it("refuses a bank name over 70 characters under the bank name field, saving nothing", async () => {
+    const response = await save({ ...valid, bankName: "B".repeat(71) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.detail_invalid", params: { field: "bankName", reason: "too_long" } },
+    });
+    expect(await stored()).toBeNull();
+  });
+
   it.each([
     ["a non-object body", ["x"], "body", "type"],
     ["an unknown key", { ...valid, colour: "red" }, "body", "unknown_field"],

@@ -28,6 +28,8 @@ export type TaxpayerField = "legalName" | "taxpayerDomicile" | "bankAccount";
 export interface TaxpayerFieldSettings<V = string> {
   /** The field a `venue.detail_invalid` refusal names when it is this dialog's. */
   field: string;
+  /** Further fields of this dialog whose `venue.detail_invalid` refusals it shows beside them. */
+  otherFields?: readonly string[];
   /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
   dataTest: string;
   heading: StringKey;
@@ -97,10 +99,15 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
    *  is pressed. */
   protected abstract fieldErrors(draft: Draft): Record<string, string>;
 
-  /** A `venue.detail_invalid` refusal for this field, `message`, by the field it is shown under;
+  /** A `venue.detail_invalid` refusal naming `field`, `message`, by the field it is shown under;
    *  focus goes to the first. */
-  protected refusalFor(_reason: string, _draft: Draft, message: string): Record<string, string> {
-    return { [this.settings.field]: message };
+  protected refusalFor(
+    _reason: string,
+    _draft: Draft,
+    message: string,
+    field: string,
+  ): Record<string, string> {
+    return { [field]: message };
   }
 
   /** Errors kept by these names belong to no field: they are the bottom message. */
@@ -277,16 +284,21 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
         typeof error === "object" && error !== null
           ? (error as { params?: Record<string, unknown> }).params
           : undefined;
-      if (code === "venue.detail_invalid" && params?.field === this.settings.field) {
+      const refused = String(params?.field);
+      if (
+        code === "venue.detail_invalid" &&
+        (refused === this.settings.field || this.settings.otherFields?.includes(refused) === true)
+      ) {
         const refusals: Record<string, StringKey> = {
           required: "venue_details.required",
           ...this.settings.refusals,
         };
-        const reason = String(params.reason);
+        const reason = String(params?.reason);
         this.refusal = this.refusalFor(
           reason,
           draft,
           t(refusals[reason] ?? "venue_details.invalid"),
+          refused,
         );
         await this.#focusField(Object.keys(this.refusal)[0]!);
       } else {

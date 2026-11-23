@@ -74,6 +74,7 @@ describe("the venue document", () => {
     for (const bankAccount of [
       { iban, bankName: "Openbank" },
       { iban, bankName: null },
+      { iban, bankName: "Banco ".repeat(200).trim() },
     ])
       expect(api.VENUE_SETTINGS.parse({ ...doc, bankAccount })).toEqual({
         ok: true,

@@ -3,7 +3,7 @@ import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import type { WtButton, WtDialog, WtFormActions, WtInput } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
-import { setLocale, t } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
 import "./venue-details-panel.js";
 
@@ -147,6 +147,49 @@ for (const [iban, key] of [
     expect(save(panel).disabled).toBe(false);
   });
 }
+
+it("a bank name over 70 characters is marked under the bank name and blocks Save until shortened, in English and Spanish", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi();
+    const panel = await mount(api);
+    await open(panel);
+    await type(panel, "bankName", ` ${"e\u0301".repeat(71)} `);
+    await press(panel);
+    expect(api.saveBankAccount).not.toHaveBeenCalled();
+    expect(field(panel, "bankName").error).toBe(
+      fill("venue_details.bank_name_too_long", { max: "70" }),
+    );
+    expect(field(panel, "iban").error).toBe("");
+    expect(actions(panel).error).toBe(t("form.fix_fields"));
+    expect(save(panel).disabled).toBe(true);
+    await type(panel, "bankName", ` ${"e\u0301".repeat(70)} `);
+    expect(field(panel, "bankName").error).toBe("");
+    expect(save(panel).disabled).toBe(false);
+    cleanupWidgets();
+  }
+});
+
+it("a server refusal of a too-long bank name shows under the bank name, in English and Spanish", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi();
+    api.saveBankAccount.mockRejectedValue({
+      code: "venue.detail_invalid",
+      params: { field: "bankName", reason: "too_long" },
+    });
+    const panel = await mount(api);
+    await open(panel);
+    await type(panel, "bankName", "Other bank");
+    await press(panel);
+    expect(field(panel, "bankName").error).toBe(
+      fill("venue_details.bank_name_too_long", { max: "70" }),
+    );
+    expect(field(panel, "iban").error).toBe("");
+    expect(actions(panel).error).toBe(t("form.fix_fields"));
+    cleanupWidgets();
+  }
+});
 
 it("a bank name without an IBAN is marked under the IBAN", async () => {
   const api = stubApi();

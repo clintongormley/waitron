@@ -157,6 +157,27 @@ describe("saveBankAccount and readBankAccount", () => {
     });
   });
 
+  it("stores a bank name of 70 characters and refuses a longer one beside the bank name, saving nothing", async () => {
+    const at = "\u00e9".repeat(69);
+    await save({ iban: IBAN, bankName: `${at}a` });
+    expect(await read()).toEqual({ iban: IBAN, bankName: `${at}a` });
+    const revision = await venueRevision();
+    expect(
+      await refusal(
+        save({ expected: { iban: IBAN, bankName: `${at}a` }, iban: IBAN, bankName: `${at}ab` }),
+      ),
+    ).toEqual({
+      code: "venue.detail_invalid",
+      params: { field: "bankName", reason: "too_long" },
+    });
+    expect(await venueRevision()).toBe(revision);
+  });
+
+  it("counts a decomposed bank name by its composed spelling", async () => {
+    await save({ iban: IBAN, bankName: "e\u0301".repeat(70) });
+    expect(await read()).toEqual({ iban: IBAN, bankName: "\u00e9".repeat(70) });
+  });
+
   it("stores the bank name in its composed spelling", async () => {
     await save({ iban: IBAN, bankName: "Cafe\u0301 Bank" });
     expect(await read()).toEqual({ iban: IBAN, bankName: "Caf\u00e9 Bank" });
