@@ -226,24 +226,24 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
 /** The words for a setup request refused while the server holds a first setup this page does not. */
 const FIRST_SETUP_HELD = {
   provision: [
-    "This server holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
     "Este servidor tiene una primera configuración sin terminar, así que no configura nada más mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
   ],
   restore: [
-    "This server holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
     "Este servidor tiene una primera configuración sin terminar, así que no restaura ninguna copia mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
   ],
   reset: [
-    "This server holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
+    "This box holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
     "Este servidor tiene una primera configuración sin terminar, así que no restablece nada mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
   ],
 } as const;
 const SETUP_NOT_ACCEPTED = [
-  "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+  "This box did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
   "Este servidor no ha aceptado esta petición desde esta página, así que no ha cambiado nada. Recargar empieza la configuración de nuevo desde su primera pantalla; lo que has escrito en esta página no se guarda.",
 ] as const;
 const SETUP_CONFLICT = [
-  "Another setup on this server is in the way, so the server did not do this. Reload shows where setup on this server stands and what can be done next.",
+  "Another setup on this box is in the way, so the box did not do this. Reload shows where setup on this box stands and what can be done next.",
   "Otra configuración de este servidor lo impide, así que el servidor no lo ha hecho. Recargar muestra en qué punto está la configuración de este servidor y qué se puede hacer después.",
 ] as const;
 type HeldCode = "setup.owner_required" | "setup.attempt_uncertain" | "setup.attempt_conflict";
@@ -348,15 +348,13 @@ async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
   const text = (await screenText(el, "provisioning", "[data-test=error]"))!.replace(/\s+/g, " ");
   expect(text).toContain("partly set up");
   expect(text).toContain("stopped partway");
-  expect(text).toContain(
-    "Choosing Reset this server clears what the stopped join left on this server",
-  );
+  expect(text).toContain("Choosing Reset this box clears what the stopped join left on this box");
   expect(text).not.toContain("Contact support");
   const host = await screenHost(el, "provisioning");
   expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
   expect(host.shadowRoot!.querySelector("[data-test=reload]")).toBeNull();
   expect(host.shadowRoot!.querySelector("[data-test=reset]")?.textContent?.trim()).toBe(
-    "Reset this server",
+    "Reset this box",
   );
 }
 
@@ -1428,7 +1426,7 @@ describe("setup-app", () => {
       "Download recovery pack (PDF)",
     );
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Server key 15 Oct 2026 · K7QF",
+      "Box key 15 Oct 2026 · K7QF",
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
     expect(await screenText(el, "done", "[data-test=break-glass-warning]")).toContain(
@@ -1469,7 +1467,7 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
     const connection = await screenHost(el, "connection");
     expect(connection.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-      "needs a secure connection to show your server key",
+      "needs a secure connection to show your box key",
     );
     expect(connection.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
   });
@@ -1768,7 +1766,7 @@ describe("setup-app", () => {
       [
         [
           "en-GB",
-          "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+          "This box is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
           "Reload",
         ],
         [
@@ -2146,7 +2144,7 @@ describe("setup-app", () => {
     await finishJoining(el);
     await flush(el);
     expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Server key 15 Oct 2026 · K7QF",
+      "Box key 15 Oct 2026 · K7QF",
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
   });
@@ -2188,7 +2186,7 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
+      "This box already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this box would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this box as it is.",
     ],
     [
       "es-ES",
@@ -2215,7 +2213,7 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "This server's own settings give a WAITRON_CREDENTIALS_KEY setting a value that is not the primary server's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
+      "This box's own settings give a WAITRON_CREDENTIALS_KEY setting a value that is not the primary box's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this box, or set them to the primary box's, then restart it and join again.",
     ],
     [
       "es-ES",
@@ -2244,7 +2242,7 @@ describe("setup-app", () => {
       "server.config_missing",
       { variable: "WAITRON_MANAGEMENT_RP_ID" },
       "en-GB",
-      "This server's own settings leave out WAITRON_MANAGEMENT_RP_ID, which it needs to start after joining this primary server. Nothing was changed. Set WAITRON_MANAGEMENT_RP_ID on this server, then restart it and join again.",
+      "This box's own settings leave out WAITRON_MANAGEMENT_RP_ID, which it needs to start after joining this primary box. Nothing was changed. Set WAITRON_MANAGEMENT_RP_ID on this box, then restart it and join again.",
     ],
     [
       "server.config_missing",
@@ -2256,7 +2254,7 @@ describe("setup-app", () => {
       "server.config_invalid",
       { variable: "WAITRON_MANAGEMENT_ORIGIN", reason: "not_an_origin" },
       "en-GB",
-      "This server's own WAITRON_MANAGEMENT_ORIGIN setting has a value it could not start with after joining this primary server. Nothing was changed. Correct WAITRON_MANAGEMENT_ORIGIN on this server, then restart it and join again.",
+      "This box's own WAITRON_MANAGEMENT_ORIGIN setting has a value it could not start with after joining this primary box. Nothing was changed. Correct WAITRON_MANAGEMENT_ORIGIN on this box, then restart it and join again.",
     ],
     [
       "server.config_invalid",
@@ -2268,7 +2266,7 @@ describe("setup-app", () => {
       "server.unreleased_build",
       {},
       "en-GB",
-      "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary server is for real sales. Nothing was changed. Install a released version on this server, then join again.",
+      "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary box is for real sales. Nothing was changed. Install a released version on this box, then join again.",
     ],
     [
       "server.unreleased_build",
@@ -2280,7 +2278,7 @@ describe("setup-app", () => {
       "mirror.environment_mismatch",
       { expected: "preproduction", actual: "production" },
       "en-GB",
-      "This server's WAITRON_ENV setting names a different mode from the primary server's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this server, or set it to the primary server's mode, then restart it and join again.",
+      "This box's WAITRON_ENV setting names a different mode from the primary box's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this box, or set it to the primary box's mode, then restart it and join again.",
     ],
     [
       "mirror.environment_mismatch",
@@ -2323,7 +2321,7 @@ describe("setup-app", () => {
         module: "fiscal-verifactu",
       });
       expect(await bottomOf(connect)).toBe(
-        "This server could not finish joining just now. Check that it is switched on and connected, then try again.",
+        "This box could not finish joining just now. Check that it is switched on and connected, then try again.",
       );
     });
 
@@ -2606,7 +2604,7 @@ describe("resetting a join that stopped partway", () => {
       );
       await expectAdoptIncompleteWithReset(el);
       const screen = await openReset(el);
-      expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Reset this server");
+      expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Reset this box");
       screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
       await el.updateComplete;
       await expectAdoptIncompleteWithReset(el);
@@ -2770,7 +2768,7 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     expect((await screenText(el, "reset", "[data-test=outcome]"))?.replace(/\s+/g, " ")).toBe(
-      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
+      "The box is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this box again.",
     );
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
   });
@@ -2778,12 +2776,12 @@ describe("resetting a join that stopped partway", () => {
   it.each([
     [
       "setup.reset_unavailable",
-      "There is no half-finished join to reset on this server. Reload to start setup again.",
+      "There is no half-finished join to reset on this box. Reload to start setup again.",
     ],
-    ["setup.already_provisioning", "Setup is already in progress on this server."],
+    ["setup.already_provisioning", "Setup is already in progress on this box."],
     [
       "setup.operation_conflict",
-      "This server holds saved setup work that does not match this request, so it did not do this one.",
+      "This box holds saved setup work that does not match this request, so it did not do this one.",
     ],
   ])("ends at a Reload for %s", async (code, message) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
@@ -2834,11 +2832,11 @@ describe("resetting a join that stopped partway", () => {
     await submitReset(el);
     expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "The server could not be reset. Check the connection and try again.",
+      "The box could not be reset. Check the connection and try again.",
     );
   });
 
-  it.each([["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."]])(
+  it.each([["setup.not_ready", 503, "The box isn't ready yet. Wait a moment, then try again."]])(
     "keeps the form with its own message for %s",
     async (code, status, message) => {
       const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status });
@@ -2863,7 +2861,7 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "The server could not be reset. Check the connection and try again.",
+      "The box could not be reset. Check the connection and try again.",
     );
     const screen = await screenHost(el, "reset");
     expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
@@ -2884,7 +2882,7 @@ describe("resetting a join that stopped partway", () => {
     await submitReset(el);
     const screen = await screenHost(el, "reset");
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
-      "The server could not be reset. Check the connection and try again.",
+      "The box could not be reset. Check the connection and try again.",
     );
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await el.updateComplete;
@@ -3461,7 +3459,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     });
     await flush(el);
     expect(await bottomOf(await screenHost(el, "restore"))).toBe(
-      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     );
   });
 
@@ -3759,7 +3757,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   };
 
   const PARTS_DIFFER_EN =
-    "This export comes from a newer version of Waitron. Update the software on this server then load the export again.";
+    "This export comes from a newer version of Waitron. Update the software on this box then load the export again.";
   const PARTS_DIFFER_ES =
     "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.";
 
@@ -3788,7 +3786,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "This export comes from a newer version of Waitron. Update the software on this server then load the export again.",
+      "This export comes from a newer version of Waitron. Update the software on this box then load the export again.",
     ],
     [
       "es-ES",
@@ -4359,12 +4357,12 @@ describe("restore from my bucket", () => {
     [
       "restore.stream_pointer_unverified",
       undefined,
-      "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+      "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
     ],
     [
       "restore.stream_pointer_unverified",
       { reason: "signature" },
-      "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+      "The copy in the bucket was not written by the box this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
     ],
     [
       "restore.stream_pointer_unverified",
@@ -4384,17 +4382,17 @@ describe("restore from my bucket", () => {
     [
       "restore.stream_integrity_failed",
       undefined,
-      "The downloaded copy did not pass its checks. Try again, or choose another backup. Nothing on this server was changed.",
+      "The downloaded copy did not pass its checks. Try again, or choose another backup. Nothing on this box was changed.",
     ],
     [
       "restore.stream_state_missing",
       { nodeId: "n1" },
-      "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+      "The copy in the bucket does not hold the old box's locked settings, so it cannot be rebuilt from.",
     ],
     [
       "restore.identity_unknown",
       { nodeId: "n1" },
-      "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this server was changed.",
+      "The copy in the bucket does not say which business it belongs to, so it cannot be restored. Nothing on this box was changed.",
     ],
     [
       "recovery.passphrase_invalid",
@@ -4414,12 +4412,12 @@ describe("restore from my bucket", () => {
     [
       "backup.stream_restore_failed",
       { exitCode: 1, diskFull: false },
-      "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
+      "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
     ],
     [
       "backup.stream_request_failed",
       { operation: "get", key: "k", status: 403, name: "AccessDenied" },
-      "The bucket did not answer, or refused the key in this kit. Check this server's internet connection and that the bucket and its key still exist, then try again.",
+      "The bucket did not answer, or refused the key in this kit. Check this box's internet connection and that the bucket and its key still exist, then try again.",
     ],
     [
       "restore.environment_mismatch",
@@ -4429,29 +4427,29 @@ describe("restore from my bucket", () => {
     [
       "provisioning.database_ahead",
       undefined,
-      "The copy in the bucket was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
+      "The copy in the bucket was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
     ],
     [
       "restore.schema_too_new",
       { module: "core", backup: 9, target: 8 },
-      "The copy in the bucket was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
+      "The copy in the bucket was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.",
     ],
     [
       "setup.already_provisioning",
       undefined,
-      "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
+      "Setup is already in progress on this box. Wait for it to finish, then reload this page.",
     ],
-    ["setup.not_ready", undefined, "The server isn't ready yet. Wait a moment, then try again."],
+    ["setup.not_ready", undefined, "The box isn't ready yet. Wait a moment, then try again."],
     [
       "setup.operation_conflict",
       undefined,
-      "This server holds saved setup work that does not match this request, so it did not do this one.",
+      "This box holds saved setup work that does not match this request, so it did not do this one.",
     ],
     ["setup.request_invalid", { field: "kit" }, "Check the recovery pack or kit file."],
     [
       "restore.hook_failed",
       { module: "fiscal", code: "x.y" },
-      "The copy could not be restored. (restore.hook_failed) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "The copy could not be restored. (restore.hook_failed) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     ],
     [
       "restore.administrator_password_missing",
@@ -4518,7 +4516,7 @@ describe("restore from my bucket", () => {
         status: 409,
       },
       "old-box-gone",
-      "Check your answer about the old server.",
+      "Check your answer about the old box.",
     ],
     [
       "venueConfirmed",
@@ -4554,7 +4552,7 @@ describe("restore from my bucket", () => {
   );
 
   it.each([
-    ["oldBoxGone", "Check your answer about the old server."],
+    ["oldBoxGone", "Check your answer about the old box."],
     ["venueConfirmed", "Check the confirmation that this is your business."],
   ])(
     "says above Restore to check the %s tick box when that tick box is not on the screen",
@@ -4609,7 +4607,7 @@ describe("restore from my bucket", () => {
   it("says the server rejected the details, naming no field, when its request check names none", async () => {
     const screen = await refusedWith({ code: "setup.request_invalid", params: {}, status: 400 });
     expect(await bottomOf(screen)).toBe(
-      "The server rejected the details. Check your entries, then try again.",
+      "The box rejected the details. Check your entries, then try again.",
     );
     expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
     await expectBucketSharedFieldsUnmarked(screen);
@@ -4619,21 +4617,21 @@ describe("restore from my bucket", () => {
   it("says the disk filled during the download", async () => {
     const screen = await refusedWith({ code: "restore.stream_disk_full", status: 507 });
     expect(screen.errorMessage).toBe(
-      "This server's disk filled while the copy was downloading. Nothing on this server was changed. Free some space and try again.",
+      "This box's disk filled while the copy was downloading. Nothing on this box was changed. Free some space and try again.",
     );
   });
 
   it("tells the owner to check the connection when nothing answered", async () => {
     const screen = await refusedWith(new TypeError("Failed to fetch"));
     expect(screen.errorMessage).toBe(
-      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     );
   });
 
   it("does not stay on the provisioning screen when the rejection carries nothing", async () => {
     const screen = await refusedWith(undefined);
     expect(screen.errorMessage).toBe(
-      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     );
   });
 
@@ -4858,7 +4856,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBeUndefined();
       expect(await bottomOf(screen)).toBe(
-        "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
+        "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
       );
     },
   );
@@ -4908,7 +4906,7 @@ describe("restoring a backup file whose old server may still be running", () => 
     restoreRequest(el, backup);
     await flush(el);
     expect(await bottomOf(await screenHost(el, "restore"))).toBe(
-      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     );
   });
 
@@ -5324,13 +5322,13 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
         liveUnknown: false,
       });
       expect(screen.errorMessage).toBe(
-        "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+        "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
       );
     },
   );
 
   const cloudOtherVersion =
-    "The snapshot was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.";
+    "The snapshot was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another copy.";
   const cloudUnopenable =
     "This snapshot could not be opened. It is damaged, or the backup encryption key Waitron Cloud holds for it does not open it.";
   it.each([
@@ -5402,7 +5400,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     const input = screen.shadowRoot!.querySelector("[data-test=old-box-gone]")!;
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
-      "Check your answer about the old server.",
+      "Check your answer about the old box.",
     );
     expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
     expect(screen.shadowRoot!.textContent).not.toContain(unavailable);
@@ -5424,7 +5422,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     cloudRecoveryAction(el, "restore", pointId, false);
     await flush(el);
     const screen = await cloudScreen(el);
-    expect(await bottomOf(screen)).toBe("Check your answer about the old server.");
+    expect(await bottomOf(screen)).toBe("Check your answer about the old box.");
     expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
   });
 
@@ -5466,7 +5464,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     cloudRecoveryAction(el, "restore", pointId, true);
     await flush(el);
     let screen = await cloudScreen(el);
-    const sentence = "Check your answer about the old server.";
+    const sentence = "Check your answer about the old box.";
     expect(screen.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(sentence);
     for (const box of ["acknowledge", "old-box-gone"]) {
       const input = screen.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${box}]`)!;
@@ -5524,7 +5522,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
       await flush(el);
       const screen = await cloudScreen(el);
       expect(await bottomOf(screen)).toBe(
-        "The server rejected the details. Check your entries, then try again.",
+        "The box rejected the details. Check your entries, then try again.",
       );
       expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
       expect(screen.shadowRoot!.querySelector("p.error[id$='-error']")).toBeNull();
@@ -5625,7 +5623,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     cloudRecoveryAction(el, "restore", pointId, false);
     await flush(el);
     expect(await bottomOf(await screenHost(el, "cloud-restore"))).toBe(
-      "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+      "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
     );
     goto(el, "restore");
     await flush(el);
@@ -5873,7 +5871,7 @@ describe("the wizard's language", () => {
   it("speaks British English when the browser names no language the wizard speaks", async () => {
     await mountWithBrowserLanguages(["fr-FR"], unreachable());
     expect(document.documentElement.lang).toBe("en-GB");
-    expect(document.title).toBe("Waitron — set up your server");
+    expect(document.title).toBe("Waitron — set up your box");
   });
 
   it("names the chosen language on the chooser once the page switches to it", async () => {
@@ -5891,7 +5889,7 @@ describe("the wizard's language", () => {
   it("offers the language chooser, and a choice re-words the message already on screen", async () => {
     const el = await mountWithBrowserLanguages(["en-GB"], unreachable());
     expect(await screenText(el, "connection", "[role=alert]")).toBe(
-      "We could not reach the server. Check its power and your network connection.",
+      "We could not reach the box. Check its power and your network connection.",
     );
     await choose(el, "es-ES");
     expect(document.documentElement.lang).toBe("es-ES");
@@ -6591,7 +6589,7 @@ it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-res
     await screen.updateComplete;
     expect(
       [...screen.shadowRoot!.querySelectorAll("p")].some(
-        (p) => p.textContent?.trim() === "Restoring replaces the database already on this server.",
+        (p) => p.textContent?.trim() === "Restoring replaces the database already on this box.",
       ),
     ).toBe(true);
   },
