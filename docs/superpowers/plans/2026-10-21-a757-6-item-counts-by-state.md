@@ -765,6 +765,10 @@ it is an extra step, not a substitute.
     decimal places from when it was ordered, but whether the unit weighs or measures is read from
     the product's unit now, so a product moved to another unit after it was ordered is read by the
     new one.
+
+    **2026-11-23, A997.** A saved line keeps the counting rule from the published menu that
+    priced it. Between a unit change and the next menu publish, an unsent dish counts by the new
+    unit, then by the published unit once sent (330 whole units can become one 330 ml dish).
 16. **The chips' colours:** items plain, unsent dashed amber, held grey, waiting amber, ready green;
     no icons, as picture 05 draws them.
 17. **Requested** counts as held with no change once A773-2 stores it (Decision 9).

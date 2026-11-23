@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "de36c0b9-24ec-4fae-9f37-6d948d6a88af",
+  "id": "04b13cef-e0b7-4671-ac57-7b74c7f4f66e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -545,6 +545,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "count_as_portions": {
+          "name": "count_as_portions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         },
         "quantity": {
           "name": "quantity",

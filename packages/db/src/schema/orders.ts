@@ -226,6 +226,7 @@ export const workingOrderLines = table(
     // default content language of that time — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
+    countAsPortions: flag("count_as_portions").notNull().default(true),
     quantity: quantity("quantity").notNull(),
     priceQuantity: quantity("price_quantity").notNull().default(1000),
     // The GROSS (VAT-inclusive) unit price LOCKED at add time — the authoritative input the FILED

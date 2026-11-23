@@ -429,7 +429,7 @@ A508. Show the owner, on the running till:
   (`docs/superpowers/plans/2026-10-20-a757-4b-owner-look-changes.md`).
 - the choices slice 6 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-21-a757-6-item-counts-by-state.md`), each built with the default
-  named there.
+  named there. Point 15 now has a dated note about the rule saved on each order line.
 - the choices slice 8 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`), each built with the default
   named there.
@@ -574,22 +574,6 @@ change that label, so by reading, Sam's split bill moved from table 2 to table 4
 bill's own label on purpose (`apps/till/src/widgets/order-table-names.test.ts`), so dropping it
 is a decision. The counter's Waiting list and department transfers (`counter-waiting.ts`,
 `department-transfers.ts`) show no bill number or name at all.
-
-
-## A997. An open order's item counts change when its dish's unit is changed (left open by A757 slice 6).
-
-A line freezes its unit's decimal places (`unit_precision`) but not whether the unit
-is a measure or a scale's, so `readOrderStateCounts` (`apps/server/src/order-state-counts.ts`)
-reads those from the product's current unit. Measured 2026-10-22 with a case added for the run to
-`apps/server/src/order-state-counts.test.ts` and not kept: a parked 330 ml dish read `ordered: 1`
-before `assignProductUnit` moved its product to a whole-portion unit and `ordered: 330` after. The
-plan's owner point 15 names this default. The fix freezes that choice on the line, which takes a
-migration.
-
-
-The affected readers are `readOrderStateCounts`, the floor’s ready and held counts, the
-Current orders classification sent to Sent, and Find a bill’s saved item count. Find a bill
-excludes open drafts; Parked orders can include them.
 
 ## A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).
 
@@ -1100,14 +1084,6 @@ against 650 px at 130%. The measured 1280 × 800 cases fit at both sizes. These 
 figures; the historical Serif 130% case above remains open. The permanent scrolling-strip
 contract stays in force (design-system.md, Till shell). For a future owner review: keep scrolling
 as designed, or revisit what stays on the bar? No collapse order is proposed.
-
-## Bundle: One count of items everywhere
-
-1 entry, size M.
-
-- **A997. An open order's item counts change when its dish's unit is changed (left open by A757
-  slice 6).** The fix freezes that choice on the line, which takes a migration.
-  [Detail](till.md#a997-an-open-orders-item-counts-change-when-its-dishs-unit-is-changed-left-open-by-a757-slice-6)
 
 ## Bundle: One rule for a booking when the evening's layout changes
 
