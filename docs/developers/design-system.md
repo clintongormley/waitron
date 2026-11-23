@@ -4490,13 +4490,15 @@ explicit action. Navigation, refresh, logout and session expiry must leave that 
 Never use server-side account status or passkey enrolment to select a public screen, because the
 difference would reveal whether the account exists or has a passkey.
 
-On method screens, use **Login with password**, **Login with passkey** or **Login with Google** as
-the heading. Show the address as wrapping text under **Email**, with a pencil and a visible
-**Change** action beside it, spoken as **Change email address**. The watcher cleared this layout
-after the owner's 2026-11-22 request to make the address look non-editable, superseding A189's
-read-only field. **Change** clears the current attempt and the saved email and method, then focuses
-the blank email field.
-The reset and account-setup page and the passkey offer after sign-in show the same address text.
+On method screens, use **Log in with password**, **Log in with passkey** or **Log in with Google**
+as the heading. Show the address in an account box as wide as the fields: a 1px
+`--wt-color-border` outline with `--wt-radius-md` corners and no fill; a muted person icon; the
+address in medium weight, wrapping on a narrow screen; and a `link` **Change** at the trailing
+edge, spoken as **Change email address**. **Email** is spoken but not shown (owner, 2026-11-23).
+**Change** clears the current attempt and the saved email and method, then focuses the blank email
+field.
+The reset and account-setup page and the passkey offer after sign-in show the same account box,
+without **Change**.
 The password step, the code step and the reset and account-setup page keep a hidden semantic
 username input for password managers. Ordinary login has no separate Cancel or Forget button.
 

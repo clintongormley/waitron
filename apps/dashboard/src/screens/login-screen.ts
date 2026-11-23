@@ -21,6 +21,7 @@ import {
   submitOnEnter,
   baseStyles,
   pageTitleStyles,
+  visuallyHiddenStyles,
   navigationGuardFor,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -143,23 +144,40 @@ export class LoginScreen extends LitElement {
       .login-context {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-3);
+        padding-block: var(--wt-space-1);
+        padding-inline: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .login-context > svg {
+        flex: none;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        fill: none;
+        stroke: var(--wt-color-text-muted);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       .login-address {
+        flex: 1;
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        display: flex;
+        align-items: center;
         margin: 0;
         overflow-wrap: anywhere;
+        font-weight: var(--wt-font-weight-medium);
       }
       .login-address-label {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+        ${visuallyHiddenStyles}
       }
       .change-account {
         flex: none;
       }
 
       .password-toggle svg,
-      .change-account svg,
       .method svg,
       .method img {
         display: block;
@@ -168,7 +186,6 @@ export class LoginScreen extends LitElement {
         height: var(--wt-font-size-lg);
       }
       .password-toggle svg,
-      .change-account svg,
       .method svg {
         fill: none;
         stroke: currentColor;
@@ -1052,6 +1069,10 @@ export class LoginScreen extends LitElement {
 
   #renderLoginContext(changeable = true) {
     return html`<div class="field login-context">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </svg>
       <p class="login-address">
         <span class="login-address-label">${t("login.email")}</span>
         <span data-test="login-context">${this.email}</span>
@@ -1060,7 +1081,7 @@ export class LoginScreen extends LitElement {
         changeable
           ? html`<wt-button
               class="change-account"
-              variant="ghost"
+              variant="link"
               data-test="change-account"
               aria-label=${t("login.change_email")}
               ?disabled=${this.busy}
@@ -1068,9 +1089,6 @@ export class LoginScreen extends LitElement {
                 if (!this.busy) this.#cancelLogin();
               }}
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" />
-              </svg>
               ${t("action.change")}
             </wt-button>`
           : nothing

@@ -987,7 +987,7 @@ Offer passive browser passkey autofill on email entry, then open the password fo
 unless an opted-in local preference selects another method. A modal passkey prompt requires an
 explicit action; navigation, refresh, logout and session expiry never open one. Do not query account
 status or passkey enrolment to choose the public screen. Save the authenticated email and successful
-method only with Remember selected, never in tab storage. The change-account icon clears the saved
+method only with Remember selected, never in tab storage. **Change** in the account box clears the saved
 shortcut and current attempt. Recovery uses one public entry for pending-account setup and
 active-account reset, with the same acknowledgement for every address. Owner decision, built in
 #317.
