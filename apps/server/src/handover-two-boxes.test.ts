@@ -1496,7 +1496,7 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       };
       const invoices = dataRows(tab(words.invoiceSheet));
       expect(invoices).toHaveLength(1);
-      expect(invoices[0]).toContain(afterCopy.record.num_serie_factura);
+      expect(invoices[0]![0]).toBe(afterCopy.record.sale_id);
       const cutoffTime = `${new Date(copyAt - 10 * 60_000).toISOString().slice(0, 23).replace("T", " ")} UTC`;
       for (const name of [words.ordersSheet, words.hoursSheet, words.activitySheet])
         expect(row(tab(name), 1), name).toEqual([
