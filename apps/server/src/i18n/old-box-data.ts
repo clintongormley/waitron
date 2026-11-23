@@ -33,9 +33,9 @@ export const OLD_BOX_DATA_WORDS = {
     yes: "Yes",
     no: "No",
     sinceCopyIntro:
-      "Everything this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from. Some rows may also be on the new main box, and changes made to older rows are not listed.",
+      "Everything this box recorded from {time}, 10 minutes before the last sale or order in the copy the new main box started from. Some rows may also be on the new main box; changes made to older rows, and lines not yet sent on older orders, are not listed.",
     sinceOwnIntro:
-      "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told the time of the last sale or order in the copy the new main box started from, and anything earlier is not listed. Some rows may also be on the new main box, and changes made to older rows are not listed.",
+      "Everything this box recorded from {time}, 7 days before its own last sale or order. This box has not been told the time of the last sale or order in the copy the new main box started from, and anything earlier is not listed. Some rows may also be on the new main box; changes made to older rows, and lines not yet sent on older orders, are not listed.",
     sinceAllIntro: "Everything this box recorded. Some rows may also be on the new main box.",
     ordersSheet: "Orders",
     orderColumns: [
@@ -74,7 +74,7 @@ export const OLD_BOX_DATA_WORDS = {
       "Person",
       "Id",
     ],
-    paymentKinds: { part: "Part payment", card: "Card payment", drawer: "Cash drawer" },
+    paymentKinds: { part: "Payment", card: "Card payment", drawer: "Cash drawer" },
     methods: { cash: "Cash", card: "Card" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pending",
@@ -163,9 +163,9 @@ export const OLD_BOX_DATA_WORDS = {
     yes: "Sí",
     no: "No",
     sinceCopyIntro:
-      "Todo lo que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal, y no se listan los cambios hechos en filas anteriores.",
+      "Todo lo que este servidor registró desde el {time}, 10 minutos antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal. Algunas filas pueden estar también en el nuevo servidor principal; no se listan los cambios hechos en filas anteriores ni las líneas aún no enviadas de pedidos anteriores.",
     sinceOwnIntro:
-      "Todo lo que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y no se lista nada anterior. Algunas filas pueden estar también en el nuevo servidor principal, y no se listan los cambios hechos en filas anteriores.",
+      "Todo lo que este servidor registró desde el {time}, 7 días antes de su propia última venta o pedido. A este servidor no se le ha indicado la hora de la última venta o pedido de la copia con la que empezó el nuevo servidor principal, y no se lista nada anterior. Algunas filas pueden estar también en el nuevo servidor principal; no se listan los cambios hechos en filas anteriores ni las líneas aún no enviadas de pedidos anteriores.",
     sinceAllIntro:
       "Todo lo que este servidor registró. Algunas filas pueden estar también en el nuevo servidor principal.",
     ordersSheet: "Pedidos",
@@ -205,7 +205,7 @@ export const OLD_BOX_DATA_WORDS = {
       "Persona",
       "Id",
     ],
-    paymentKinds: { part: "Pago parcial", card: "Pago con tarjeta", drawer: "Cajón" },
+    paymentKinds: { part: "Pago", card: "Pago con tarjeta", drawer: "Cajón" },
     methods: { cash: "Efectivo", card: "Tarjeta" } as Readonly<Record<string, string>>,
     partPaymentStates: {
       pending: "Pendiente",

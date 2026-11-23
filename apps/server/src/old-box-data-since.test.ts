@@ -475,9 +475,9 @@ describe("the old box's Payments and cash tab", () => {
     );
     // prettier-ignore
     expect([3, 4, 5, 6, 7, 8].map((n) => row(xml, n))).toEqual([
-      ["Part payment", iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "Marta Ruiz", part],
+      ["Payment", iso(CUTOFF), "5.00", "0.50", "Cash", "Received", "12", "", "", "", "Marta Ruiz", part],
       ["Card payment", iso(CUTOFF + MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-alone", "", "", alone],
-      ["Part payment", iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "Marta Ruiz", cardPart],
+      ["Payment", iso(CUTOFF + 2 * MINUTE), "5.00", "0.00", "Card", "Received", "12", "", "", "", "Marta Ruiz", cardPart],
       ["Card payment", iso(CUTOFF + 3 * MINUTE), "7.00", "", "", "Captured", "12", "simulator", "ref-named", cardPart, "", named],
       ["Cash drawer", iso(CUTOFF + 4 * MINUTE), "5.00", "", "", "Cash payment", "12", "", "", part, "Marta Ruiz", drawer],
       [],

@@ -80,7 +80,7 @@ it("lists part payments and drawer entries, and no card payments, when the payme
   });
   const xml = sheetNamed(unzipSync(bytes), OLD_BOX_DATA_WORDS.en.paymentsSheet)!;
   expect([3, 4, 5].map((n) => row(xml, n).slice(0, 2))).toEqual([
-    ["Part payment", AT],
+    ["Payment", AT],
     ["Cash drawer", AT],
     [],
   ]);
