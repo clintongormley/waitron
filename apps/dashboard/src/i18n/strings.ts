@@ -1399,8 +1399,9 @@ export const en = {
   "venue_details.iban": "IBAN",
   "venue_details.bank_name": "Bank (optional)",
   "venue_details.bank_account_note":
-    "Printed on invoices for bills closed as a deferred payment. Administrators with an email address are told about every change when email goes through the venue's own mail server.",
-  "venue_details.iban_format": "Enter a whole IBAN, starting with its country code, such as ES.",
+    "Printed on invoices for bills closed as a deferred payment. Administrators with an email address are told about every change when you use your own mail server.",
+  "venue_details.iban_format":
+    "Enter a whole IBAN, starting with its country code, such as ES, with the length and characters its country uses.",
   "venue_details.iban_checksum":
     "This IBAN's check digits do not match. Check it for a typing mistake.",
   "venue_details.bank_iban_required": "Enter the IBAN, or clear the bank too.",
@@ -6125,9 +6126,9 @@ export const es: Record<StringKey, string> = {
   "venue_details.iban": "IBAN",
   "venue_details.bank_name": "Banco (opcional)",
   "venue_details.bank_account_note":
-    "Se imprime en las facturas de las cuentas cerradas como pago aplazado. Los administradores con correo electrónico reciben un aviso de cada cambio si el correo sale por el servidor de correo del local.",
+    "Se imprime en las facturas de las cuentas cerradas como pago aplazado. Los administradores con correo electrónico reciben un aviso de cada cambio si usas tu propio servidor de correo.",
   "venue_details.iban_format":
-    "Introduce el IBAN completo, empezando por el código del país, como ES.",
+    "Introduce el IBAN completo, empezando por el código del país, como ES, con la longitud y los caracteres de su país.",
   "venue_details.iban_checksum":
     "Los dígitos de control de este IBAN no coinciden. Comprueba que no haya un error al escribirlo.",
   "venue_details.bank_iban_required": "Introduce el IBAN o borra también el banco.",

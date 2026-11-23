@@ -177,7 +177,7 @@ muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirs
 
 Para las cuentas cerradas como [pago aplazado](table-service.md#deferred-payment), indica tu cuenta bancaria con
 **Cambiar cuenta bancaria** en la misma tarjeta **Negocio**: introduce el **IBAN** y, si quieres,
-el banco. Si el correo sale por el servidor de correo del local, Waitron envía un correo a cada
+el banco. Si [añades tu propio servidor de correo](email.md#set-up), Waitron envía un correo a cada
 administrador con correo electrónico por cada cambio; si
 recibes uno que nadie de tu equipo ha hecho, revisa la cuenta enseguida.
 

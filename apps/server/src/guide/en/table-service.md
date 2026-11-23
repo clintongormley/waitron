@@ -166,7 +166,7 @@ already issued keep the one they were issued with.
 
 For bills closed as a [deferred payment](table-service.md#deferred-payment), set your bank account with **Change
 bank account** on the same **Business** card: enter the **IBAN** and, if you want, the bank.
-When email goes through the venue's own mail server, Waitron emails every administrator with an
+If you [add your own mail server](email.md#set-up), Waitron emails every administrator with an
 email address about each change; if you get one that
 nobody in your team made, check the account straight away.
 

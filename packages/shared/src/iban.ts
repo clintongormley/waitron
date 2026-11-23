@@ -3,7 +3,8 @@ export type IbanProblem = "format" | "checksum";
 const IBAN_SHAPE = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/;
 const SPANISH_LENGTH = 24;
 
-// Each country's BBAN format from the SWIFT IBAN registry: n digits, a capital letters, c either.
+// Each country's BBAN format, from schwifty 2026.11.4's copy of the SWIFT IBAN registry: n digits,
+// a capital letters, c either.
 const REGISTRY = `AD4!n4!n12!c AE3!n16!n AL8!n16!c AT5!n11!n AX3!n11!n AZ4!a20!c BA3!n3!n8!n2!n BE3!n7!n2!n
 BG4!a4!n2!n8!c BH4!a14!c BI5!n5!n11!n2!n BL5!n5!n11!c2!n BR8!c5!n10!n1!c1!c BY4!c4!n16!c CH5!n12!c
 CR4!n14!n CY3!n5!n16!c CZ4!n6!n10!n DE8!n10!n DJ23!n DK4!n9!n1!n DO4!c20!n EE2!n2!n11!n1!n
@@ -58,7 +59,7 @@ export function ibanShapeProblem(iban: string): "format" | undefined {
   return undefined;
 }
 
-/** The most characters a saved bank name may hold: as many as a SEPA payment's name field. */
+/** The most characters a saved bank name may hold. */
 export const BANK_NAME_MAX_LENGTH = 70;
 
 export function ibanGroups(iban: string): string[] {

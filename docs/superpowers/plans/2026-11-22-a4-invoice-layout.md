@@ -408,7 +408,9 @@ Same rule and the same unedited guard suites as 6a.
   lines when the sale has a payment of its own and nothing owed; owed → payment lines and the owed
   amount bold; no payment of its own → refunds only, or no footer; then the department footer message,
   at the foot of the last page. Summary + TOTAL + footer move to a new page whole; pages after the
-  first open with a muted `continuedPage` line.
+  first open with a muted `continuedPage` line. (2026-11-23, after review: a closing block too tall
+  for one page keeps the summary and TOTAL together and continues the payment lines onto further
+  pages.)
 
 - [ ] **Step 1: Write the failing tests** (elements, plus one PDF through `renderInvoicePdf` read with
   pdfjs as `invoice-pdf.test.ts`'s `rendered()` does): the fixture's "Total con IVA" cells read

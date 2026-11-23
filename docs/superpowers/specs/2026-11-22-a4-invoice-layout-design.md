@@ -154,6 +154,9 @@ and for a case where per-row VAT would drift. The IVA column is
 always shown (today it shows only when rates differ).
 
 Discounts, extras, answers and advances stay where the builder puts them today, as indented rows.
+On a full invoice that has filed lines, a whole-bill discount also adds a row under each line with
+no filed figures, for that line's share of the discount with VAT included, on the A4 page and on
+the roll, so the column still adds up to TOTAL.
 
 Simplified invoices printed on A4 (`printsAsFullInvoice` false) have no customer and show amounts
 with VAT. Their table: Descripción · Cant. · Precio · Importe, VAT included, with the same VAT
@@ -163,7 +166,9 @@ summary table under it.
 
 The header (QR, letterhead, band) and the customer box are on page 1 only; the QR stays on page 1
 only, as today. The table heading row repeats on every page the table reaches. The VAT summary,
-TOTAL and payment footer move to the next page whole rather than split. Later pages carry a small
+TOTAL and payment footer move to the next page whole when they fit on one page; a block too tall
+for one page keeps the VAT summary and TOTAL together and continues the payment footer, between
+its lines, onto further pages. Later pages carry a small
 "Factura FF/1 · 2/3" line at the top so a loose page can be matched to its invoice.
 
 ## The payment footer's first word
@@ -180,7 +185,8 @@ TOTAL and payment footer move to the next page whole rather than split. Later pa
 department: one per venue. Edited on the dashboard on Venue settings → Venue details → the Business
 card (`apps/dashboard/src/screens/venue-details-panel.ts`), next to the legal name and tax number.
 The IBAN is validated (country format and the mod-97 check) and stored without spaces; it prints
-in groups of four. The bank name is free text. Both are optional; the bank name is printed only
+in groups of four. The bank name is free text of at most 70 characters, checked when it is saved; reading a
+saved account does not check it. Both are optional; the bank name is printed only
 when given.
 
 **Where it is stored.** In the core `settings.venue` document (`VENUE_SETTINGS`,
