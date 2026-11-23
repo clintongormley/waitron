@@ -4,13 +4,22 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as kdf from "./scrypt-kdf.js";
 import * as fileIo from "./artifact-file-io.js";
-import { decryptArtifact, encryptArtifact, KDF_BY_VERSION } from "./artifact-cipher.js";
+import {
+  decryptArtifact,
+  decryptArtifactUnderBackupKey,
+  encryptArtifact,
+  encryptArtifactUnderBackupKey,
+  KDF_BY_VERSION,
+} from "./artifact-cipher.js";
 import {
   decryptArtifactFile,
+  decryptArtifactFileUnderBackupKey,
   encryptArtifactFile,
+  encryptArtifactFileUnderBackupKey,
   createArchiveKeySlot,
+  readArtifactFileHeader,
 } from "./artifact-cipher-file.js";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 const dirs: string[] = [];
 async function scratch() {
   const dir = await mkdtemp(join(tmpdir(), "cipher-file-"));
@@ -282,4 +291,195 @@ it("erases a retained key on replacement and expiry and matches every derivation
     slot.clear();
     vi.useRealTimers();
   }
+});
+
+describe("file artifact cipher, version 2 under a backup key", () => {
+  const backupKey = randomBytes(32);
+  const masterKeyId = Buffer.from("8899aabbccddeeff", "hex");
+  const keyNumber = 3;
+  const input = { backupKey, keyNumber, masterKeyId };
+
+  it("names its master key id and N before it is opened", async () => {
+    const dir = await scratch();
+    const path = join(dir, "artifact");
+    await encryptArtifactFileUnderBackupKey(chunks(Buffer.alloc(200000, 5)), path, input);
+    expect(await readArtifactFileHeader(path)).toEqual({ version: 2, masterKeyId, keyNumber });
+    await writeFile(join(dir, "v1"), encryptArtifact(Buffer.alloc(10), "right"));
+    expect(await readArtifactFileHeader(join(dir, "v1"))).toEqual({ version: 1 });
+    expect(await readdir(dir)).toEqual(["artifact", "v1"]);
+  });
+
+  it.each([
+    [Buffer.alloc(3), "too_short"],
+    [Buffer.alloc(61), "bad_magic"],
+    [Buffer.concat([Buffer.from("WBK1"), Buffer.from([9]), Buffer.alloc(56)]), "bad_version"],
+    [Buffer.concat([Buffer.from("WBK1"), Buffer.from([2]), Buffer.alloc(55)]), "too_short"],
+  ])("reads no header from malformed frame %s", async (bytes, reason) => {
+    const dir = await scratch();
+    await writeFile(join(dir, "artifact"), bytes);
+    await expect(readArtifactFileHeader(join(dir, "artifact"))).rejects.toMatchObject({
+      code: "backup.artifact_invalid",
+      params: { reason },
+    });
+  });
+
+  it.each([0, 196625])(
+    "round-trips %i bytes across chunks, cross-opening the in-memory codec",
+    async (size) => {
+      const dir = await scratch();
+      const payload = randomBytes(size);
+      const path = join(dir, "artifact");
+      const writes = vi.spyOn(fileIo, "writeAll");
+      await encryptArtifactFileUnderBackupKey(chunks(payload), path, input);
+      const artifact = await readFile(path);
+      expect(artifact.length).toBe(size + 61);
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      expect(decryptArtifactUnderBackupKey(artifact, backupKey).equals(payload)).toBe(true);
+      const digest = await decryptArtifactFileUnderBackupKey(path, join(dir, "out"), backupKey);
+      expect(digest).toBe(createHash("sha256").update(artifact).digest("hex"));
+      expect((await readFile(join(dir, "out"))).equals(payload)).toBe(true);
+      expect((await stat(join(dir, "out"))).mode & 0o777).toBe(0o600);
+      await writeFile(join(dir, "memory"), encryptArtifactUnderBackupKey(payload, input));
+      await decryptArtifactFileUnderBackupKey(join(dir, "memory"), join(dir, "out2"), backupKey);
+      expect((await readFile(join(dir, "out2"))).equals(payload)).toBe(true);
+      expect(Math.max(...writes.mock.calls.map((call) => call[1].length))).toBeLessThanOrEqual(
+        65536,
+      );
+    },
+  );
+
+  it("refuses another backup key and leaves no plaintext", async () => {
+    const dir = await scratch();
+    await writeFile(
+      join(dir, "artifact"),
+      encryptArtifactUnderBackupKey(Buffer.alloc(150000, 71), input),
+    );
+    await expect(
+      decryptArtifactFileUnderBackupKey(join(dir, "artifact"), join(dir, "out"), randomBytes(32)),
+    ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
+    expect(await readdir(dir)).toEqual(["artifact"]);
+  });
+
+  it.each([
+    ["master key id", 5],
+    ["N", 13],
+    ["salt", 17],
+    ["iv", 33],
+    ["tag", 45],
+    ["ciphertext", 140000],
+  ])("refuses a changed %s byte by authentication and removes the plaintext", async (_, offset) => {
+    const dir = await scratch();
+    const artifact = encryptArtifactUnderBackupKey(Buffer.alloc(150000, 71), input);
+    artifact[offset] ^= 1;
+    await writeFile(join(dir, "artifact"), artifact);
+    await expect(
+      decryptArtifactFileUnderBackupKey(join(dir, "artifact"), join(dir, "out"), backupKey),
+    ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
+    expect(await readdir(dir)).toEqual(["artifact"]);
+  });
+
+  it.each([
+    ["magic", 0, "bad_magic"],
+    ["version", 4, "bad_version"],
+  ])("refuses a changed %s byte as a malformed frame", async (_, offset, reason) => {
+    const dir = await scratch();
+    const artifact = encryptArtifactUnderBackupKey(Buffer.alloc(100, 71), input);
+    artifact[offset] ^= 1;
+    await writeFile(join(dir, "artifact"), artifact);
+    await expect(
+      decryptArtifactFileUnderBackupKey(join(dir, "artifact"), join(dir, "out"), backupKey),
+    ).rejects.toMatchObject({ code: "backup.artifact_invalid", params: { reason } });
+    expect(await readdir(dir)).toEqual(["artifact"]);
+  });
+
+  it("is refused by the version 1 opener before any key derivation, and the reverse", async () => {
+    const dir = await scratch();
+    await writeFile(join(dir, "v2"), encryptArtifactUnderBackupKey(Buffer.alloc(100), input));
+    const scrypt = vi.spyOn(kdf, "deriveKeyAsync");
+    const slot = createArchiveKeySlot();
+    const slotDerive = vi.spyOn(slot, "derive");
+    await expect(
+      decryptArtifactFile(join(dir, "v2"), join(dir, "out"), "right", slot),
+    ).rejects.toMatchObject({ code: "backup.artifact_invalid", params: { reason: "bad_version" } });
+    expect(slotDerive).not.toHaveBeenCalled();
+    expect(scrypt).not.toHaveBeenCalled();
+    await writeFile(join(dir, "v1"), encryptArtifact(Buffer.alloc(100), "right"));
+    await expect(
+      decryptArtifactFileUnderBackupKey(join(dir, "v1"), join(dir, "out"), backupKey),
+    ).rejects.toMatchObject({ code: "backup.artifact_invalid", params: { reason: "bad_version" } });
+    expect(await readdir(dir)).toEqual(["v1", "v2"]);
+  });
+
+  it("refuses bad writer inputs and leaves no file", async () => {
+    const dir = await scratch();
+    for (const [change, field] of [
+      [{ backupKey: randomBytes(16) }, "backup_key"],
+      [{ masterKeyId: randomBytes(4) }, "master_key_id"],
+      [{ keyNumber: 0 }, "key_number"],
+    ] as const) {
+      await expect(
+        encryptArtifactFileUnderBackupKey(chunks(Buffer.from("x")), join(dir, "out"), {
+          ...input,
+          ...change,
+        }),
+      ).rejects.toMatchObject({ code: "backup.archive_key_invalid", params: { input: field } });
+    }
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("stops once its signal aborts and leaves no partial ciphertext", async () => {
+    const dir = await scratch();
+    const controller = new AbortController();
+    async function* stopsAfterFirst() {
+      yield Buffer.alloc(70000);
+      controller.abort();
+      yield Buffer.alloc(70000);
+    }
+    await expect(
+      encryptArtifactFileUnderBackupKey(
+        stopsAfterFirst(),
+        join(dir, "out"),
+        input,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(await readdir(dir)).toEqual([]);
+  });
+
+  it("removes partial ciphertext on iterator failure and keeps an existing destination", async () => {
+    const dir = await scratch();
+    const failure = new Error("reader failed");
+    async function* broken() {
+      yield Buffer.alloc(70000);
+      throw failure;
+    }
+    await expect(encryptArtifactFileUnderBackupKey(broken(), join(dir, "out"), input)).rejects.toBe(
+      failure,
+    );
+    expect(await readdir(dir)).toEqual([]);
+    await writeFile(join(dir, "out"), "old");
+    await expect(
+      encryptArtifactFileUnderBackupKey(chunks(Buffer.from("new")), join(dir, "out"), input),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    await writeFile(
+      join(dir, "artifact"),
+      encryptArtifactUnderBackupKey(Buffer.from("new"), input),
+    );
+    await expect(
+      decryptArtifactFileUnderBackupKey(join(dir, "artifact"), join(dir, "out"), backupKey),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect((await readFile(join(dir, "out"))).toString()).toBe("old");
+  });
+
+  it("opens twice without scrypt or the passphrase key cache", async () => {
+    const dir = await scratch();
+    const path = join(dir, "artifact");
+    await writeFile(path, encryptArtifactUnderBackupKey(Buffer.from("private"), input));
+    const scrypt = vi.spyOn(kdf, "deriveKeyAsync");
+    for (const name of ["a", "b"]) {
+      await decryptArtifactFileUnderBackupKey(path, join(dir, name), backupKey);
+      expect(await readFile(join(dir, name), "utf8")).toBe("private");
+    }
+    expect(scrypt).not.toHaveBeenCalled();
+  });
 });

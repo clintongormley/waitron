@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import { deriveKey, deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
@@ -19,8 +19,28 @@ const TAG_LEN = 16;
 /** The authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
  * bound into the GCM tag as AAD, so a flipped header byte fails authentication. */
 const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33
-/** Everything an artifact holds besides its ciphertext, which is as long as its plaintext. */
-export const ARTIFACT_HEADER_BYTES = AAD_LEN + TAG_LEN; // 49
+const BACKUP_KEY_VERSION = 2;
+const MASTER_KEY_ID_LEN = 8;
+const KEY_NUMBER_LEN = 4;
+/** Version 2's authenticated prefix: MAGIC|version|master key id|N|salt|iv. */
+const BACKUP_KEY_AAD_LEN =
+  MAGIC.length + 1 + MASTER_KEY_ID_LEN + KEY_NUMBER_LEN + SALT_LEN + IV_LEN;
+const BACKUP_KEY_INFO = Buffer.from("waitron.archive.v2");
+
+export type ArtifactVersion = 1 | 2;
+export type ArtifactHeader =
+  { version: 1 } | { version: 2; masterKeyId: Buffer; keyNumber: number };
+export interface BackupKeyFrameInput {
+  backupKey: Uint8Array;
+  keyNumber: number;
+  masterKeyId: Uint8Array;
+}
+
+/** Everything an artifact of this version holds besides its ciphertext, which is as long as its
+ * plaintext. */
+export function artifactHeaderBytes(version: ArtifactVersion): number {
+  return (version === 1 ? AAD_LEN : BACKUP_KEY_AAD_LEN) + TAG_LEN;
+}
 
 /** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
@@ -77,7 +97,7 @@ export async function decryptArtifactAsync(
 
 function readFrame(framed: Uint8Array) {
   const buf = Buffer.from(framed.buffer, framed.byteOffset, framed.byteLength);
-  if (buf.length < ARTIFACT_HEADER_BYTES)
+  if (buf.length < artifactHeaderBytes(1))
     throw new AppError("backup.artifact_invalid", { reason: "too_short" });
   if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) {
     throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
@@ -96,7 +116,10 @@ function readFrame(framed: Uint8Array) {
   return { salt, iv, tag, ct, header, params };
 }
 
-function openFrame({ iv, tag, ct, header }: ReturnType<typeof readFrame>, key: Buffer): Buffer {
+function openFrame(
+  { iv, tag, ct, header }: Pick<ReturnType<typeof readFrame>, "iv" | "tag" | "ct" | "header">,
+  key: Buffer,
+): Buffer {
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAAD(header);
   decipher.setAuthTag(tag);
@@ -104,5 +127,96 @@ function openFrame({ iv, tag, ct, header }: ReturnType<typeof readFrame>, key: B
     return Buffer.concat([decipher.update(ct), decipher.final()]);
   } catch {
     throw new AppError("recovery.passphrase_invalid", {});
+  }
+}
+
+/** Reads the version and, for version 2, which master key and backup key N the artifact needs,
+ * without opening it. Nothing read here is authenticated until the artifact opens. */
+export function readArtifactHeader(framed: Uint8Array): ArtifactHeader {
+  const buf = Buffer.from(framed.buffer, framed.byteOffset, framed.byteLength);
+  const version = buf[MAGIC.length];
+  if (version === undefined) throw new AppError("backup.artifact_invalid", { reason: "too_short" });
+  if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) {
+    throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
+  }
+  if (version !== 1 && version !== BACKUP_KEY_VERSION) {
+    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
+  }
+  if (buf.length < artifactHeaderBytes(version)) {
+    throw new AppError("backup.artifact_invalid", { reason: "too_short" });
+  }
+  if (version === 1) return { version };
+  const idStart = MAGIC.length + 1;
+  return {
+    version,
+    masterKeyId: Buffer.from(buf.subarray(idStart, idStart + MASTER_KEY_ID_LEN)),
+    keyNumber: buf.readUInt32BE(idStart + MASTER_KEY_ID_LEN),
+  };
+}
+
+/** The authenticated prefix of a version 2 frame, which its tag follows. */
+export function backupKeyFrameHeader(
+  { keyNumber, masterKeyId }: Omit<BackupKeyFrameInput, "backupKey">,
+  salt: Uint8Array,
+  iv: Uint8Array,
+): Buffer {
+  if (masterKeyId.length !== MASTER_KEY_ID_LEN) {
+    throw new AppError("backup.archive_key_invalid", { input: "master_key_id" });
+  }
+  if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > 0xffffffff) {
+    throw new AppError("backup.archive_key_invalid", { input: "key_number" });
+  }
+  const n = Buffer.alloc(KEY_NUMBER_LEN);
+  n.writeUInt32BE(keyNumber);
+  return Buffer.concat([MAGIC, Buffer.from([BACKUP_KEY_VERSION]), masterKeyId, n, salt, iv]);
+}
+
+/** The AES-256-GCM key of a version 2 frame: HKDF-SHA256 over backup key N, salted by the frame. */
+export function backupKeyFrameKey(backupKey: Uint8Array, salt: Uint8Array): Buffer {
+  if (backupKey.length !== 32) {
+    throw new AppError("backup.archive_key_invalid", { input: "backup_key" });
+  }
+  return Buffer.from(hkdfSync("sha256", backupKey, salt, BACKUP_KEY_INFO, 32));
+}
+
+/** Frame version 2: MAGIC|2|master key id|N (uint32 BE)|salt|iv|tag|ciphertext. */
+export function encryptArtifactUnderBackupKey(
+  plaintext: Uint8Array,
+  input: BackupKeyFrameInput,
+): Buffer {
+  const salt = randomBytes(SALT_LEN);
+  const iv = randomBytes(IV_LEN);
+  const header = backupKeyFrameHeader(input, salt, iv);
+  const key = backupKeyFrameKey(input.backupKey, salt);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  key.fill(0);
+  cipher.setAAD(header);
+  const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return Buffer.concat([header, cipher.getAuthTag(), ct]);
+}
+
+/** Opens a version 2 frame; refuses a version 1 frame as `bad_version`. A wrong key and a changed
+ * byte are alike: recovery.passphrase_invalid, as for version 1. */
+export function decryptArtifactUnderBackupKey(framed: Uint8Array, backupKey: Uint8Array): Buffer {
+  const buf = Buffer.from(framed.buffer, framed.byteOffset, framed.byteLength);
+  if (readArtifactHeader(buf).version !== BACKUP_KEY_VERSION) {
+    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
+  }
+  const saltStart = BACKUP_KEY_AAD_LEN - IV_LEN - SALT_LEN;
+  const salt = buf.subarray(saltStart, saltStart + SALT_LEN);
+  const iv = buf.subarray(saltStart + SALT_LEN, BACKUP_KEY_AAD_LEN);
+  const key = backupKeyFrameKey(backupKey, salt);
+  try {
+    return openFrame(
+      {
+        iv,
+        tag: buf.subarray(BACKUP_KEY_AAD_LEN, artifactHeaderBytes(BACKUP_KEY_VERSION)),
+        ct: buf.subarray(artifactHeaderBytes(BACKUP_KEY_VERSION)),
+        header: buf.subarray(0, BACKUP_KEY_AAD_LEN),
+      },
+      key,
+    );
+  } finally {
+    key.fill(0);
   }
 }
