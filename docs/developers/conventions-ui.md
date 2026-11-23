@@ -334,8 +334,7 @@ with no built setup app answers every other GET with its 200 placeholder
 Each answer is one self-contained HTML page with no external file, sent with
 `Cache-Control: no-cache`. The page loads no file, so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
 of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
-`var(--wt-…)`. Copies holding rem lengths (the font sizes, the typed-text size and the form width)
-match the shared defaults; the page renderer converts each rem to px at the 16px root
+`var(--wt-…)`. Copies holding rem lengths match the shared defaults; the page renderer converts each rem to px at the 16px root
 (`fixedFontValue` in `apps/server/src/html-page-tokens.ts`) so standalone pages keep their sizes.
 Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
 reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
