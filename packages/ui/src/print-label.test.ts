@@ -6,6 +6,9 @@ import { printEquipmentLabel } from "./print-label.js";
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const BROKEN = "data:image/png;base64,bm90IGFuIGltYWdl";
+/** Twice as wide as it is tall, so a label that sized only one side would print it oblong. */
+const WIDE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAC0lEQVR4nGNgAAMAAAcAAbKGrPQAAAAASUVORK5CYII=";
 
 const frames = () => [...document.querySelectorAll("iframe")];
 
@@ -58,7 +61,7 @@ describe("printEquipmentLabel", () => {
   });
 
   it("prints the name larger and bolder than the code, in Waitron's own type, with the QR 40 mm square", async () => {
-    const view = await printed({ qr: PIXEL, code: "CODE", name: "Bar" });
+    const view = await printed({ qr: WIDE, code: "CODE", name: "Bar" });
     const doc = view.document;
     const [name, code] = [...doc.querySelectorAll("p")];
     const look = (element: Element) => view.getComputedStyle(element);
