@@ -622,6 +622,43 @@ describe("the new box's join attempt", () => {
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
+  it("keeps one poll in flight when a cancel refused as approving lands while a poll is held", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let holding = false;
+    let inFlight = 0;
+    let most = 0;
+    const holdingPolls: typeof boxExchange = async (url, options) => {
+      if (!url.pathname.endsWith("/poll")) return exchange(url, options);
+      most = Math.max(most, ++inFlight);
+      try {
+        const answer = await exchange(url, options);
+        if (holding) await held;
+        return answer;
+      } finally {
+        inFlight -= 1;
+      }
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: holdingPolls }));
+    await attempt.start(MAIN_URL);
+    await attempt.confirm();
+    expect(requests.approve.begin(requests.listed()[0]!.id)).not.toHaveProperty("refused");
+
+    holding = true;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    await expect(attempt.cancel()).rejects.toMatchObject({ code: "mirror.join_approving" });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "cancel"]);
+
+    release();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll", "cancel", "poll"]);
+    expect(attempt.current()).toMatchObject({ state: "waiting" });
+    expect(most).toBe(1);
+  });
+
   it.each<[string, () => Promise<{ bundle: unknown; signingKey?: string }>]>([
     ["approved", async () => ({ bundle: await bundleFor() })],
     ["failed", async () => ({ bundle: await bundleFor(), signingKey: otherKey() })],
@@ -861,6 +898,43 @@ describe("the new box's join attempt", () => {
     await vi.advanceTimersByTimeAsync(2_000);
     expect(attempt.current()).toEqual(state);
     expect(attempt.joined()?.bundle ?? null).toEqual(sayYes ? bundle : null);
+  });
+
+  it("refuses an approved answer to a poll sent without the Yes, though the Yes came while it was out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const bundle = await bundleFor();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const approvedAnswer: { text?: string } = {};
+    let polls = 0;
+    // The first poll is held, then answered approved whatever it carried.
+    const holdingFirstPoll: typeof boxExchange = async (url, options) => {
+      const answer = await exchange(url, options);
+      if (!url.pathname.endsWith("/poll") || ++polls > 1) return answer;
+      await held;
+      return { status: 200, text: approvedAnswer.text! };
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: holdingFirstPoll }));
+    await attempt.start(MAIN_URL);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+    expect(sent[2]!.body).toMatchObject({ confirmed: false });
+
+    const confirming = attempt.confirm();
+    const locked = lockJoinBundle({
+      requestId: requests.listed()[0]!.id,
+      encryptionKey: (sent[0]!.body as { encryptionKey: string }).encryptionKey,
+      bundle: Buffer.from(JSON.stringify(bundle)),
+      mainPrivateKey: await mainKey(),
+    });
+    approvedAnswer.text = JSON.stringify({ state: "approved", locked });
+    release();
+    await confirming;
+
+    expect(attempt.current()).toEqual({ state: "failed", error: "mirror.join_invalid" });
+    expect(attempt.joined()).toBeNull();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
   });
 
   it("cancels after the Yes, and the main box ends the request", async () => {

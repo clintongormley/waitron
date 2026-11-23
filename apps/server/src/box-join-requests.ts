@@ -435,7 +435,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     approve: {
       /**
        * Marks the request building before the caller's first await, so a second approve waits.
-       * Nothing is built before the new box's Yes, so until then its cancel still ends the request.
+       * The new box's cancel ends the request until an approve has begun.
        */
       begin(
         requestId: string,
