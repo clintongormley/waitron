@@ -425,7 +425,7 @@ own, can also make scheduled backups, and can export your setup to start another
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
   as that passphrase.
-  Read its pages before you need the pack: they may name an older pack or sheet you also need.
+  Read the recovery pack's pages before you need it: they may name an older pack or sheet you also need.
   Keep those papers and the packs for any older backups you may still need. Keep every recovery
   pack locked away, off the box.
 
