@@ -552,6 +552,12 @@ describe("POST /api/node/reset-order's copy time", () => {
   });
 });
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
 describe("an acknowledgement", () => {
   it("raises no alert when a return that commits while the comparison runs brings the missing record", async () => {
     await completedReturn();
@@ -575,8 +581,8 @@ describe("an acknowledgement", () => {
       secuencia: 1,
       huella: "F".repeat(64),
     };
-    const compared = Promise.withResolvers<void>();
-    const holdingLock = Promise.withResolvers<void>();
+    const compared = deferred();
+    const holdingLock = deferred();
     const lacking = vi.fn(
       async (...args: Parameters<NonNullable<typeof VERIFACTU_HANDOVER.lacking>>) => {
         const missing = await VERIFACTU_HANDOVER.lacking!(...args);
