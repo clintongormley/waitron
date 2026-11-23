@@ -30,7 +30,7 @@ import { createPinThrottle, tillSessions, persons, setProfileAdmission } from "@
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listDepartments, setProfileServiceAccess, setRoutingCell } from "@waitron/venue-service";
 import { readCancellationContext } from "./line-cancel-context.js";
-import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { readBillFiling, refundValueIn } from "./cancellation-refund-value.js";
 import { AppError } from "@waitron/shared";
 
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -800,7 +800,9 @@ describe("the public cancellation read and command", () => {
         .where(eq(sales.workingOrderId, other.billId));
       const before = await frozen();
       expect(
-        await inTx(venue, (tx) => cancellationRefundValue(tx, p.billId, sale!.id, p.parent.id)),
+        await inTx(venue, async (tx) =>
+          refundValueIn(await readBillFiling(tx, p.billId, sale!.id), p.parent.id),
+        ),
       ).toBeUndefined();
       expect(await frozen()).toEqual(before);
     },

@@ -30,7 +30,7 @@ import { cancelRefundShare, decimal, workingOrderId } from "@waitron/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { readBillFiling, refundValueIn } from "./cancellation-refund-value.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import { createCourse } from "./kitchen.js";
@@ -682,7 +682,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
         .select({ id: sales.id })
         .from(sales)
         .where(eq(sales.workingOrderId, billId));
-      return cancellationRefundValue(tx, billId, sale!.id, lineId);
+      return refundValueIn(await readBillFiling(tx, billId, sale!.id), lineId);
     });
   }
 

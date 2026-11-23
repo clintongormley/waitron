@@ -29,26 +29,8 @@ export interface BillFiling {
   links: { saleLineId: string; dishLineId: string }[];
 }
 
-export async function cancellationRefundValue(
-  tx: Transaction,
-  billId: string,
-  saleId: string,
-  lineId: string,
-): Promise<Value | undefined> {
-  return refundValueIn(await readBillFiling(tx, billId, saleId), lineId);
-}
-
 export function refundValueIn(filing: BillFiling, lineId: string): Value | undefined {
   return refundValues(filing, [lineId])[0];
-}
-
-export async function rowRefundValue(
-  tx: Transaction,
-  billId: string,
-  saleId: string,
-  lineIds: readonly string[],
-): Promise<Value | undefined> {
-  return rowRefundValueIn(await readBillFiling(tx, billId, saleId), lineIds);
 }
 
 /** A till row of identical portions valued as one grouped line (plan D32): the portions' count and

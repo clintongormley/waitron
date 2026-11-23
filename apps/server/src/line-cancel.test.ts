@@ -56,7 +56,7 @@ import {
 } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { readBillFiling, refundValueIn } from "./cancellation-refund-value.js";
 import { cancelRefundShare, decimal } from "@waitron/shared";
 import {
   billWith,
@@ -1466,7 +1466,7 @@ describe("What a cancel records for refunds", () => {
   async function filedValue(order: Fixture) {
     return inTx(venue, async (tx) => {
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, order.billId));
-      return cancellationRefundValue(tx, order.billId, sale!.id, order.parent.id);
+      return refundValueIn(await readBillFiling(tx, order.billId, sale!.id), order.parent.id);
     });
   }
   it("records a still-charge cancel of a started dish as charge kept and started", async () => {

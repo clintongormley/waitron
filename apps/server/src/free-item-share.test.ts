@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, type AdjustmentAction } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
+import { readBillFiling, refundValueIn, rowRefundValueIn } from "./cancellation-refund-value.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { buildReceiptDocument } from "./receipt-document.js";
@@ -273,10 +273,10 @@ describe("a free item on a takeaway ticket mixing VAT rates", () => {
     const water = await lineIdOf(venue, billId, 2);
 
     const values = await inTx(venue, async (tx) => ({
-      salad: await cancellationRefundValue(tx, billId, saleId, salad),
-      water: await cancellationRefundValue(tx, billId, saleId, water),
-      saladRow: await rowRefundValue(tx, billId, saleId, [salad]),
-      waterRow: await rowRefundValue(tx, billId, saleId, [water]),
+      salad: refundValueIn(await readBillFiling(tx, billId, saleId), salad),
+      water: refundValueIn(await readBillFiling(tx, billId, saleId), water),
+      saladRow: rowRefundValueIn(await readBillFiling(tx, billId, saleId), [salad]),
+      waterRow: rowRefundValueIn(await readBillFiling(tx, billId, saleId), [water]),
     }));
     expect(values).toEqual({
       salad: { quantity: "1.000", gross: "8.33" },
