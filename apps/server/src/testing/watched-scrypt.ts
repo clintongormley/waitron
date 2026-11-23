@@ -30,12 +30,18 @@ const pins = {
 // Records each key derivation while a test watches: inside one of the request's transactions in
 // `order`, outside them in `outside`.
 const passwords = {
-  watching: false,
   /** How many of the request's transactions are open, on either file. */
   inRequestTransaction: 0,
   order: [] as string[],
   outside: 0,
 };
+
+const watchSlot = Symbol.for("waitron.watchAllScryptDerivations");
+const watchState = globalThis as typeof globalThis & { [watchSlot]?: boolean };
+
+export function isWatchingDerivations(): boolean {
+  return watchState[watchSlot] === true;
+}
 
 let failing: string | null = null;
 
@@ -43,7 +49,7 @@ let failing: string | null = null;
 export function watchedCrypto(actual: Crypto): Crypto {
   const scrypt = (secret: string, salt: Buffer, keyLength: number, done: Done) => {
     if (secret === failing) throw new Error("scrypt failed (test fault)");
-    if (passwords.watching) {
+    if (isWatchingDerivations()) {
       if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");
       else passwords.outside += 1;
     }
@@ -144,12 +150,13 @@ export async function watchingDerivations<T>(
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
   const order: string[] = [];
-  Object.assign(passwords, { watching: true, order, outside: 0 });
+  Object.assign(passwords, { order, outside: 0 });
+  watchState[watchSlot] = true;
   try {
     const result = await request();
     return { result, order, outside: passwords.outside };
   } finally {
-    passwords.watching = false;
+    watchState[watchSlot] = false;
   }
 }
 
