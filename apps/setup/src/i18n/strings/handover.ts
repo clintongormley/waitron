@@ -51,8 +51,6 @@ export const handoverEn = {
     "Your passkey sign-in on the spare has expired. Choose Use your passkey to try again.",
   "handover.emergency.held_passkey_refused":
     "This spare's own copy did not accept your passkey. To use it, sign in with your password.",
-  "handover.emergency.saved": "The switch is saved and cannot be undone.",
-  "handover.emergency.details": "Details",
   "handover.emergency.copy": "Copy held on this spare",
   "handover.emergency.selected_backup": "Selected backup",
   "handover.emergency.followed": "Latest copy from the main box",
@@ -91,7 +89,6 @@ export const handoverEn = {
   "handover.emergency.copy_changed":
     "The copy changed while you were reading. Check its latest sale or order, then Proceed and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest sale or order in this copy",
-  "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "This copy holds no sale or order with a date.",
   "handover.emergency.servers": "Open the Servers page on the old main box",
   "handover.emergency.sourceSwitchedOff": "The old main box is switched off.",
@@ -103,7 +100,6 @@ export const handoverEn = {
   "handover.emergency.declare": "Switch to this box",
   "handover.emergency.leave": "Go back",
   "handover.emergency.leave_till": "Go back to the till",
-  "handover.emergency.leave_saved": "Leave this page (the switch is saved)",
   "handover.emergency.progress": "Open handover progress",
   "handover.emergency.controlled_link": "Open the unfinished handover",
   "handover.emergency.code_expired":
@@ -168,6 +164,25 @@ export const handoverEn = {
   "handover.emergency.switching_heading": "This box is switching from spare to main box",
   "handover.emergency.switching_body":
     "The switch was recorded but has not finished. Sign in to finish it.",
+  "handover.emergency.switching_to": "Switching to this box",
+  "handover.emergency.step_switch": "Switch recorded: this box now takes over the venue",
+  "handover.emergency.step_clock": "Checking this box's time",
+  "handover.emergency.step_clock_internet": "Box clock synced with internet time",
+  "handover.emergency.step_clock_confirmed": "Box time confirmed",
+  "handover.emergency.keep_open_restart": "Keep this page open while this box restarts.",
+  "handover.emergency.source_answered_try":
+    "The old main box answered. Open its Servers page, or switch it off and press Try again.",
+  "handover.emergency.source_answered_sign_in":
+    "The old main box answered. Open its Servers page, or switch it off and sign in again.",
+  "handover.emergency.done_heading": "This box now runs the venue",
+  "handover.emergency.done_warning": "Do not reset the old main box!",
+  "handover.emergency.done_old_box":
+    "It may hold data that this box still needs. When it is switched on again, it sends its invoice records to this box and then stands down.",
+  "handover.emergency.done_afterwards":
+    "Afterwards, you can choose {action} on the {page} in the dashboard.",
+  "handover.emergency.done_action": "Wipe and remove",
+  "handover.emergency.done_servers": "Servers page",
+  "handover.emergency.open_till": "Open the till",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
@@ -257,13 +272,10 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Tu identificación con passkey en el servidor de reserva ha caducado. Elige Usar tu passkey para volver a intentarlo.",
   "handover.emergency.held_passkey_refused":
     "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, identifícate con tu contraseña.",
-  "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",
-  "handover.emergency.details": "Detalles",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
     "La copia cambió mientras la leías. Revisa su última venta o pedido, pulsa Seguir y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última venta o pedido en esta copia",
-  "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "Esta copia no tiene ninguna venta ni pedido con fecha.",
   "handover.emergency.servers": "Abrir la página Servidores en el servidor principal anterior",
   "handover.emergency.sourceSwitchedOff": "El servidor principal anterior está apagado.",
@@ -275,7 +287,6 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.declare": "Cambiar a este servidor",
   "handover.emergency.leave": "Volver",
   "handover.emergency.leave_till": "Volver a la caja",
-  "handover.emergency.leave_saved": "Salir de esta página (el cambio está guardado)",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
   "handover.emergency.controlled_link": "Abrir el traspaso pendiente",
   "handover.emergency.code_expired":
@@ -342,4 +353,24 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.switching_heading": "Este servidor está pasando de reserva a principal",
   "handover.emergency.switching_body":
     "El cambio quedó registrado, pero no ha terminado. Identifícate para terminarlo.",
+  "handover.emergency.switching_to": "Cambiando a este servidor",
+  "handover.emergency.step_switch": "Cambio registrado: este servidor pasa a llevar el local",
+  "handover.emergency.step_clock": "Comprobando la hora del servidor",
+  "handover.emergency.step_clock_internet":
+    "Reloj del servidor sincronizado con la hora de internet",
+  "handover.emergency.step_clock_confirmed": "Hora del servidor confirmada",
+  "handover.emergency.keep_open_restart":
+    "Mantén esta página abierta mientras se reinicia el servidor.",
+  "handover.emergency.source_answered_try":
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y pulsa Volver a intentarlo.",
+  "handover.emergency.source_answered_sign_in":
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a identificarte.",
+  "handover.emergency.done_heading": "Este servidor lleva ahora el local",
+  "handover.emergency.done_warning": "¡No restablezcas el servidor principal antiguo!",
+  "handover.emergency.done_old_box":
+    "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará sus registros de facturación a este servidor y después se retirará.",
+  "handover.emergency.done_afterwards": "Después, puedes elegir {action} en la {page} del panel.",
+  "handover.emergency.done_action": "Borrar y retirar",
+  "handover.emergency.done_servers": "página Servidores",
+  "handover.emergency.open_till": "Abrir la caja",
 };

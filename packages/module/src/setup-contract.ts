@@ -97,4 +97,9 @@ export interface ModulePromotionEntry extends HTMLElement {
   starting: boolean;
   clear(): void;
   readOperation(): { binding: RecoveryOperationBinding; input: unknown } | null;
+  /**
+   * Once the step has chosen, whether the internet's time confirmed the box's time or a person
+   * did; undefined before then, and on steps that do not say.
+   */
+  readonly timeConfirmedBy?: "internet" | "person";
 }

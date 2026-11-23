@@ -113,8 +113,7 @@ averiado, apágalo y elige **Comprobar otra vez**.
 Si el servidor principal no responde, la página dice qué hace el cambio y, cuando el servidor de
 reserva lo sabe, desde hace cuánto. Comprueba que el servidor principal está enchufado y que su
 cable de red está conectado; si vuelve a funcionar, sigue usándolo. Hasta que elijas **Cambiar a este servidor**, **Volver
-a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar; tras hacer el cambio, **Salir de
-esta página (el cambio está guardado)** o **Continuar en este servidor** te devuelve adonde estabas.
+a la caja** (**Volver** si no llegaste desde una caja) sale sin cambiar.
 
 Elige **Empezar el cambio**, escribe el correo de un administrador y elige **Continuar**, o elige
 una passkey guardada que te ofrezca el campo del correo. Si escribiste el correo, elige **Usar tu passkey**, o
@@ -139,14 +138,12 @@ servidor de reserva se uniera a su principal actual.
 Si la página indica que falta espacio temporal, libera espacio en el disco del servidor de
 reserva antes de volver a elegir la copia de seguridad.
 
-En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige
-**Cambiar a este servidor**. La página comprueba entonces la hora de este servidor e inicia el
-local por sí sola. Si este servidor no puede comprobar su hora por internet, muestra antes
-**Comprueba la hora** con la hora de este servidor y la de este dispositivo, las dos en la zona
-horaria del local. Si coinciden y las dos son correctas, elige **Confirmar la hora**. Si no
-coinciden, elige **Tu dispositivo tiene la hora correcta** para poner la hora de este servidor con
-la del dispositivo que estás usando; después de **El servidor tiene la hora correcta** o **Las dos
-están mal**, corrige la hora de este dispositivo y elige **Volver a comprobar**. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
+En **Listo para cambiar**, marca las tres declaraciones y explica por qué haces el cambio. Elige **Cambiar a este servidor**. La página **Cambiando a este servidor** comprueba entonces la hora de este
+servidor e inicia el local por sí sola; mantén la página abierta mientras se reinicia el servidor.
+Solo si este servidor no puede comprobar su hora por internet muestra **Comprueba la hora** con la
+hora de este servidor y la de este dispositivo. Si las dos son correctas, elige **Confirmar la
+hora**. Si solo es correcta la de este dispositivo, elige **Tu dispositivo tiene la hora correcta**;
+si no, corrige la hora de este dispositivo y elige **Volver a comprobar**. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. Con una
 passkey, la página te la pide cuando eliges un paso y el servidor de reserva la necesita,
 normalmente una vez, y de nuevo solo si la página pasa 15 minutos esperando a que elijas un paso; si en su lugar dice que hay que volver a
@@ -159,9 +156,14 @@ supera su comprobación al elegir **Cambiar a este servidor**, la página tambi�
 **Volver a intentarlo** o **Subir un archivo de copia de seguridad en su lugar**.
 
 Una vez elegido **Cambiar a este servidor**, al recargar o abrir la dirección en otro
-dispositivo se encuentra el cambio; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
+dispositivo se encuentra el cambio; identifícate y elige **Volver a intentarlo**. Un traspaso controlado pendiente
 ofrece su página de progreso. Si no se puede verificar la copia con el cambio guardado, para y
 conserva los datos de ambos servidores.
+
+Cuando el local se haya iniciado, **Este servidor lleva ahora el local** te pide que no restablezcas el
+servidor principal antiguo: puede tener datos que este servidor no tiene. Cuando se vuelva a
+encender, envía aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
+para él en la página Servidores de este servidor, en el panel.
 
 Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
 

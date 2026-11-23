@@ -41,13 +41,13 @@ export const promotionWords = {
   emergency: {
     en: {
       secondClockDo:
-        "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.",
+        "Open this page on a till or phone on the venue's network, sign in and press Try again, or let the box keep its time over the internet.",
       secondClockEnds:
         "It carries on by itself once the box keeps its time over the internet, while this page stays open.",
     },
     es: {
       secondClockDo:
-        "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
+        "Abre esta página en una caja o un móvil del local, identifícate y pulsa Volver a intentarlo, o deja que el servidor se ponga en hora por internet.",
       secondClockEnds:
         "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
     },
@@ -87,8 +87,8 @@ type EmergencyClockWords = Pick<
   | "inUse"
 > &
   Required<Pick<SharedClockWords, "deviceCorrect">> &
-  Pick<(typeof checkVenueStrings)["en"], "compareAgain"> & {
-    checking: string;
+  Pick<(typeof checkVenueStrings)["en"], "compareAgain"> &
+  Pick<SharedClockWords, "whyWait" | "whySecondClock" | "minuteTaken" | "newCodeIn"> & {
     clockHeading: string;
     /** Names the page's own button, which this step does not draw. */
     staleTwice: string;
@@ -97,8 +97,13 @@ type EmergencyClockWords = Pick<
   };
 export const emergencyClockWords = {
   en: {
-    checking: "Checking this box's time…",
     clockHeading: "Check the time",
+    whyWait: "Waiting to confirm this box's time before the venue starts.",
+    whySecondClock:
+      "Before the venue starts here, the box checks its time over the internet, or you confirm it against this device's time.",
+    minuteTaken:
+      "This box must wait a moment before the venue can start. It carries on by itself when the countdown ends.",
+    newCodeIn: "Starting in",
     whichCorrect: `${internetCheck} Which device is correct?`,
     confirmWhy: `${internetCheck} Check that both times below are right, then press Confirm the time.`,
     serverTime: "This box",
@@ -120,13 +125,18 @@ export const emergencyClockWords = {
       "The venue cannot start yet: this box's time is earlier than a time this venue has already used. Press Check again.",
     inUse: "The venue cannot be started. This is a fault in Waitron.",
     staleTwice:
-      "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.",
+      "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Try again.",
     zoneTime: (city, abbreviation) => `${city} time (${abbreviation})`,
     zoneNote: (city) => `Your device is set to ${city} time; both are shown in the venue's time.`,
   },
   es: {
-    checking: "Comprobando la hora del servidor…",
     clockHeading: "Comprueba la hora",
+    whyWait: "Esperando a confirmar la hora del servidor antes de iniciar el local.",
+    whySecondClock:
+      "Antes de iniciar el local aquí, el servidor comprueba su hora por internet, o la confirmas con la hora de este dispositivo.",
+    minuteTaken:
+      "El servidor debe esperar un momento antes de iniciar el local. Sigue solo cuando termine la cuenta atrás.",
+    newCodeIn: "Empieza en",
     whichCorrect: `${internetCheckEs} ¿Qué dispositivo tiene la hora correcta?`,
     confirmWhy: `${internetCheckEs} Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.`,
     serverTime: "Este servidor",
@@ -148,7 +158,7 @@ export const emergencyClockWords = {
       "El local todavía no puede iniciarse: la hora de este servidor es anterior a una hora que este local ya ha usado. Pulsa Volver a comprobar.",
     inUse: "No se puede iniciar el local. Es un fallo de Waitron.",
     staleTwice:
-      "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a intentarlo.",
+      "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Volver a intentarlo.",
     zoneTime: (city, abbreviation) => `hora de ${city} (${abbreviation})`,
     zoneNote: (city) =>
       `Tu dispositivo está en la hora de ${city}; las dos se muestran en la hora del local.`,
@@ -165,6 +175,15 @@ function focusFallen(): boolean {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
   return active === null || active === document.body;
+}
+/**
+ * Moves focus to the clock question as `focusNewScreen` does, and also from the heading of the page
+ * around the step, where the page put focus when the pressed button went.
+ */
+function focusNewAsk(host: HTMLElement, root: ShadowRoot, target: HTMLElement): void {
+  if ((host.getRootNode() as Document | ShadowRoot).activeElement instanceof HTMLHeadingElement)
+    target.focus();
+  else focusNewScreen(root, target);
 }
 const isEmergency = (context: Context) => isPromotion(context) && context.scenario === "emergency";
 interface Draft {
@@ -304,6 +323,10 @@ export class RecoveryHourEntry extends LitElement {
   #focusInside = false;
   #confirmed = false;
   @state() private continued = false;
+  #timeConfirmedBy?: "internet" | "person";
+  get timeConfirmedBy(): "internet" | "person" | undefined {
+    return this.#timeConfirmedBy;
+  }
   /**
    * An emergency switch checks the clocks by itself when connected or given a new context. A
    * `clear()` alone does not: the page clears a step it is about to discard.
@@ -346,7 +369,7 @@ export class RecoveryHourEntry extends LitElement {
     const answered = isEmergency(this.context) && this.#wait.answered;
     const clockShown = `${this.#wait.problem?.kind}:${answered}`;
     const fallen = focusFallen();
-    if (heading && !this.#clockAsked) focusNewScreen(root, heading);
+    if (heading && !this.#clockAsked) focusNewAsk(this, root, heading);
     else if (answered && !this.#clockAnswered) focusNewScreen(root, compare);
     // A change that removed what had focus in the step hands focus to what the step now offers.
     else if (
@@ -355,11 +378,16 @@ export class RecoveryHourEntry extends LitElement {
       fallen &&
       this.#focusInside
     ) {
-      const target = heading ?? compare ?? root.querySelector<HTMLElement>("h3")!;
+      // An emergency step has no title, so with neither heading nor button the sentence that the
+      // venue cannot start takes focus.
+      const sentence = root.querySelector<HTMLElement>("[data-test=minute-in-use]");
+      if (sentence) sentence.tabIndex = -1;
+      const target = heading ?? compare ?? sentence;
       // A button drawn by this update has no inner button to take focus until it has drawn too.
-      void Promise.resolve((target as Partial<LitElement>).updateComplete).then(() => {
-        if (focusFallen()) target.focus();
-      });
+      if (target)
+        void Promise.resolve((target as Partial<LitElement>).updateComplete).then(() => {
+          if (focusFallen()) target.focus();
+        });
     }
     this.#clockAsked = heading !== null;
     this.#clockAnswered = answered;
@@ -401,6 +429,7 @@ export class RecoveryHourEntry extends LitElement {
     ++this.#generation;
     this.#confirmed = false;
     this.continued = false;
+    this.#timeConfirmedBy = undefined;
     this.busy = false;
     this.sending = undefined;
     this.comparison = undefined;
@@ -596,6 +625,8 @@ export class RecoveryHourEntry extends LitElement {
           throw new Error("invalid selection");
       } else if (selected.status !== "waiting" || !validWait(selected))
         throw new Error("invalid wait");
+      if (selected.status === "selected")
+        this.#timeConfirmedBy = select.confirmed ? "person" : "internet";
       this.#wait.show(undefined, selected as unknown as Selected);
       if (selected.status === "selected" && isEmergency(context)) this.continued = true;
     } catch (cause) {
@@ -681,12 +712,12 @@ export class RecoveryHourEntry extends LitElement {
         ? emergencyWords?.clockHeading
         : undefined;
     const ownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const checking =
-      this.busy && !sending && !problem && !this.#wait.counting
-        ? emergencyWords?.checking
-        : undefined;
+    // On an emergency switch the page's own progress says the time is being checked and then
+    // that it was confirmed, so the step draws something only while it asks the person.
+    if (emergency && (selectedHour || (this.busy && !sending && !problem && !this.#wait.counting)))
+      return nothing;
     const title = promote ? words.promotionHeading : words.heading;
-    return html`<h3 tabindex=${emergency ? "-1" : nothing}>${title}</h3>
+    return html`${emergency ? nothing : html`<h3>${title}</h3>`}
       <div data-test="check-venue" ?hidden=${selectedHour !== undefined}>
         ${
           observations.length === 0
@@ -789,8 +820,7 @@ export class RecoveryHourEntry extends LitElement {
                   ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
                 </p>`
         }
-        ${checking ? html`<p role="status" data-test="checking">${checking}</p>` : nothing}
-        ${clockHeading ? html`<h4 data-test="clock-heading" tabindex="-1">${clockHeading}</h4>` : nothing}
+        ${clockHeading ? html`<h2 data-test="clock-heading" tabindex="-1">${clockHeading}</h2>` : nothing}
         ${this.#wait.renderProblem(
           words,
           clock,

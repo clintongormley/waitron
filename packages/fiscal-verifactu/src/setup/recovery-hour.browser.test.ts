@@ -1713,7 +1713,7 @@ async function mountPromotion(
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
 const SWITCH_PAGE_DO =
-  "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.";
+  "Open this page on a till or phone on the venue's network, sign in and press Try again, or let the box keep its time over the internet.";
 const SWITCH_PAGE_ENDS =
   "It carries on by itself once the box keeps its time over the internet, while this page stays open.";
 
@@ -2036,11 +2036,12 @@ it.each(["en", "es"] as const)(
     }) as LitElement & ModulePromotionEntry;
     host.append(el);
     await el.updateComplete;
+    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+    await el.updateComplete;
+    // Drawn once the step asks something: while it only checks, the step draws nothing.
     const actions = el.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & {
       error: string;
     };
-    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
-    await el.updateComplete;
     expect(actions.error).toBe("");
     explained = false;
     await userEvent.click(button(el, "compare"));
@@ -2090,12 +2091,14 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
   }) as Promotion;
   host.append(el);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("h3")!.textContent).toBe("Iniciar el local en este servidor");
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
+      "Abre esta página en una caja o un móvil del local, identifícate y pulsa Volver a intentarlo, o deja que el servidor se ponga en hora por internet.",
     ),
   );
+  // The emergency step has no title of its own: the page's progress names the start.
+  expect(el.shadowRoot!.querySelector("h3")).toBeNull();
+  expect(text(el)).not.toContain("Iniciar el local en este servidor");
   expect(text(el)).toContain(
     "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
   );
@@ -2828,7 +2831,6 @@ function emergencyPrepare(decision: () => typeof clock = () => clock) {
   });
   return { prepare, release };
 }
-const CHECKING = "Checking this box's time…";
 const statusLines = (el: LitElement) =>
   [...el.shadowRoot!.querySelectorAll("[data-test=checking]")].map((p) => p.textContent!.trim());
 const zoneNote = (el: LitElement) =>
@@ -2851,8 +2853,8 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
     expect(promotionActions(prepare)).toEqual(["clock-challenge", "compare-clocks"]),
   );
   await el.updateComplete;
-  expect(statusLines(el)).toEqual([CHECKING]);
-  expect(el.shadowRoot!.querySelector("[data-test=checking]")!.getAttribute("role")).toBe("status");
+  // The page's own progress says the time is being checked, so the step draws nothing meanwhile.
+  expect(text(el).trim()).toBe("");
   expect(el.shadowRoot!.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
   expect(text(el)).not.toContain("These details are correct.");
   expect(text(el)).not.toContain("Check this venue");
@@ -2879,7 +2881,7 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
   el.starting = true;
   await el.updateComplete;
   // The page says it is starting the venue; the step claims no check of its own meanwhile.
-  expect(statusLines(el)).toEqual([]);
+  expect(text(el).trim()).toBe("");
   el.clear();
   await el.updateComplete;
   expect(el.readOperation()).toBeNull();
@@ -2898,10 +2900,12 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
     "select",
   ]);
 });
-it("a Spanish emergency switch says it is checking the box's time", async () => {
+it("a Spanish emergency switch leaves saying it is checking the box's time to the page", async () => {
   const { prepare } = emergencyPrepare();
   const el = await mountPromotion(prepare, "emergency", { locale: "es" });
-  await vi.waitFor(() => expect(statusLines(el)).toEqual(["Comprobando la hora del servidor…"]));
+  await vi.waitFor(() => expect(promotionActions(prepare)).toHaveLength(2));
+  await el.updateComplete;
+  expect(text(el).trim()).toBe("");
 });
 it("a context change restarts an emergency switch's check, and the old answer is dropped", async () => {
   const { prepare, release } = emergencyPrepare();
@@ -2953,7 +2957,10 @@ it.each([
     const rows = detailRows(el, "clock-times");
     expect(rows.map(([label]) => label)).toEqual(labels);
     for (const [, value] of rows) expect(value).toMatch(zone);
-    expect(statusLines(el)).toEqual([]);
+    // The step announces only its question, never that it is checking.
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[role=status]")].map((p) => p.textContent!.trim()),
+    ).toEqual([lead]);
     expect(promotionSelects(prepare)).toEqual([]);
     await userEvent.click(button(el, "confirm-time"));
     await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
@@ -3160,7 +3167,7 @@ function confirmedThen(answer: "disagreement" | "later" | "in-use", hold?: Promi
 it.each([
   ["disagreement", "the Check the time heading", "[data-test=clock-heading]"],
   ["later", "Check again", "[data-test=compare]"],
-  ["in-use", "the step's heading", "h3"],
+  ["in-use", "the sentence saying the venue cannot start", "[data-test=minute-in-use]"],
 ] as const)(
   "on an emergency switch, Confirm the time answered %s moves focus from the button it removes to %s",
   async (answer, _target, selector) => {
@@ -3173,6 +3180,29 @@ it.each([
     await vi.waitFor(() =>
       expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(selector)),
     );
+  },
+);
+it.each([
+  ["the page's heading, where the page put it", "h1", true],
+  ["a field on the page", "input", false],
+] as const)(
+  "on an emergency switch, with focus on %s, Check the time takes it when the clock asks: %s",
+  async (_where, tag, moves) => {
+    const { prepare, release } = emergencyPrepare(() => deviceOnly);
+    const el = await mountPromotion(prepare, "emergency");
+    const before = document.createElement(tag);
+    before.tabIndex = -1;
+    el.before(before);
+    before.focus();
+    release();
+    const heading = await vi.waitFor(() => {
+      const found = el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-heading]");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    await el.updateComplete;
+    expect(document.activeElement).toBe(moves ? el : before);
+    expect(el.shadowRoot!.activeElement).toBe(moves ? heading : null);
   },
 );
 it("on an emergency switch, focus moved elsewhere while Confirm the time is answered stays there", async () => {
@@ -3215,11 +3245,11 @@ it.each([
 it.each([
   [
     "en",
-    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Continue to clock check to try again.",
+    "Starting the venue took too long after this box's time was checked, twice in a row, so the venue has not started. Press Try again.",
   ],
   [
     "es",
-    "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Continuar a la comprobación del reloj para volver a intentarlo.",
+    "Iniciar el local tardó demasiado después de comprobar la hora de este servidor, dos veces seguidas, así que el local no se ha iniciado. Pulsa Volver a intentarlo.",
   ],
 ] as const)(
   "an emergency switch explains a stale clock reading by what happened and the button it offers (%s); a planned handover keeps its own words",
@@ -3280,4 +3310,130 @@ it("a planned handover keeps the details tick, Proceed and the series with Conti
   await continueOn(el);
   expect(el.readOperation()).not.toBeNull();
   expect(statusLines(el)).toEqual([]);
+});
+
+/** Answers every request at once: the clocks are `decision`, and select answers `selectAnswer`. */
+function answering(decision: typeof clock, selectAnswer: () => unknown = () => promotionSelected) {
+  let compared = 0;
+  return vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: `comparison-${++compared}`, clock: decision };
+    if (action === "select") {
+      const answer = selectAnswer();
+      if ((answer as { code?: string }).code) throw answer;
+      return answer;
+    }
+    throw new Error("unexpected promotion proposal");
+  });
+}
+it("an emergency switch says the internet's time confirmed the box's time only when it did", async () => {
+  const internet = await mountPromotion(answering(clock), "emergency");
+  expect(internet.timeConfirmedBy).toBeUndefined();
+  await vi.waitFor(() => expect(internet.readOperation()).not.toBeNull());
+  expect(internet.timeConfirmedBy).toBe("internet");
+  internet.clear();
+  expect(internet.timeConfirmedBy).toBeUndefined();
+
+  const person = await mountPromotion(answering(deviceOnly), "emergency");
+  await vi.waitFor(() => expect(button(person, "confirm-time")).not.toBeNull());
+  expect(person.timeConfirmedBy).toBeUndefined();
+  await userEvent.click(button(person, "confirm-time"));
+  await vi.waitFor(() => expect(person.readOperation()).not.toBeNull());
+  expect(person.timeConfirmedBy).toBe("person");
+});
+it("an emergency switch draws nothing of its own while it only checks the time, leaving the page's progress to say so", async () => {
+  const { prepare, release } = emergencyPrepare();
+  const el = await mountPromotion(prepare, "emergency");
+  await vi.waitFor(() => expect(promotionActions(prepare)).toHaveLength(2));
+  await el.updateComplete;
+  expect(text(el).trim()).toBe("");
+  expect(el.shadowRoot!.querySelector("h3")).toBeNull();
+  release();
+  await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+  await el.updateComplete;
+  expect(text(el).trim()).toBe("");
+});
+const emergencyWait = {
+  en: {
+    whyWait: "Waiting to confirm this box's time before the venue starts.",
+    whySecondClock:
+      "Before the venue starts here, the box checks its time over the internet, or you confirm it against this device's time.",
+    minuteTaken:
+      "This box must wait a moment before the venue can start. It carries on by itself when the countdown ends.",
+    newCodeIn: "Starting in",
+  },
+  es: {
+    whyWait: "Esperando a confirmar la hora del servidor antes de iniciar el local.",
+    whySecondClock:
+      "Antes de iniciar el local aquí, el servidor comprueba su hora por internet, o la confirmas con la hora de este dispositivo.",
+    minuteTaken:
+      "El servidor debe esperar un momento antes de iniciar el local. Sigue solo cuando termine la cuenta atrás.",
+    newCodeIn: "Empieza en",
+  },
+} as const;
+const minuteInUse = {
+  code: "sif.allocation_invalid",
+  params: {
+    reason: "minute_in_use",
+    allowedFromMs: instant + 180_000,
+    remainingMs: 180_000,
+    recheckInMs: 30_000,
+  },
+};
+it.each(["en", "es"] as const)(
+  "an emergency switch's waits never mention invoice series, while a planned handover's keep their words (%s)",
+  async (locale) => {
+    const words = emergencyWait[locale];
+    const series = locale === "en" ? /invoice series/ : /series? de facturas/;
+    const shared = recoveryHourStrings[locale];
+    const states = [
+      ["second clock", noSecondClock, () => promotionSelected, [words.whySecondClock]],
+      [
+        "box's wait",
+        clock,
+        () => ({ status: "waiting", targetMs: instant + 60_000, remainingMs: 60_000 }),
+        [words.whyWait],
+      ],
+      ["taken minute", clock, () => minuteInUse, [words.minuteTaken, words.newCodeIn]],
+    ] as const;
+    for (const [name, decision, answer, lines] of states) {
+      const el = await mountPromotion(answering(decision, answer), "emergency", { locale });
+      await vi.waitFor(() => expect(text(el), name).toContain(lines[0]));
+      for (const line of lines) expect(text(el), name).toContain(line);
+      expect(text(el), name).not.toMatch(series);
+    }
+    const planned = await mountPromotion(answering(noSecondClock), "controlled", { locale });
+    check(planned, "recovery-details-confirmed");
+    await planned.updateComplete;
+    await proceed(planned);
+    await vi.waitFor(() => expect(text(planned)).toContain(shared.whySecondClock));
+    expect(shared.whySecondClock).toMatch(series);
+    expect(shared.whyWait).toMatch(series);
+    expect(shared.minuteTaken).toMatch(series);
+  },
+);
+it("on an emergency switch the step draws no title of its own, and Check the time is a level-2 heading", async () => {
+  const el = await mountPromotion(answering(deviceOnly), "emergency");
+  await vi.waitFor(() => expect(button(el, "confirm-time")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector("h3")).toBeNull();
+  expect(text(el)).not.toContain("Start the venue on this box");
+  const heading = el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-heading]")!;
+  expect(heading.tagName).toBe("H2");
+  expect(heading.getAttribute("tabindex")).toBe("-1");
+  expect([...el.shadowRoot!.querySelectorAll("h1, h2, h3, h4, h5, h6")]).toEqual([heading]);
+});
+it("on an emergency switch a refused check shows its refusal and Try again with no heading of its own", async () => {
+  const el = await mountPromotion(
+    vi.fn(async () => {
+      throw { code: "password.throttled" };
+    }),
+    "emergency",
+  );
+  await vi.waitFor(() => expect(action(el)).toBe("Try again"));
+  expect(el.shadowRoot!.querySelectorAll("h1, h2, h3, h4, h5, h6")).toHaveLength(0);
+  const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    error: string;
+  };
+  expect(actions.error).toBe(recoveryHourStrings.en.promotionThrottled);
 });
