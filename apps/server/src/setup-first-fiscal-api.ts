@@ -6,6 +6,7 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
+import { labelContactUrl } from "./box-name.js";
 import { recordSetupCloudPublication, setupCloudBinding } from "./setup-cloud-sign-in.js";
 import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { parseEmailSettings } from "./email-settings-api.js";
@@ -292,9 +293,13 @@ export function mountSetupFirstFiscalApi(
                   },
                 }
               : deps;
-          await activateFirstFiscal(host, cloudPublication, owner, body, hold);
+          const { nodeId } = await activateFirstFiscal(host, cloudPublication, owner, body, hold);
           setTimeout(() => deps.requestRestart?.(), 0);
-          return c.json({ provisioned: true, restarting: true });
+          return c.json({
+            provisioned: true,
+            restarting: true,
+            ...labelContactUrl(deps.advertisedOrigin, nodeId),
+          });
         });
       });
     });
