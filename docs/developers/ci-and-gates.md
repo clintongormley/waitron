@@ -57,7 +57,7 @@ sudo and APT installation. Vitest's driver uses the existing Chromium cache in r
 mode, with a headless-shell install on a miss. The same browser directory holds WebKit, but
 the WebKit cache archives only `webkit-*` under a key for the OS, architecture, Ubuntu release
 and Playwright version. Before a matching default-branch cache exists, each selected pull request
-can save its own copy. [GitHub cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)
+can save its own copy. See [GitHub's cache access rules](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)
 
 After full verification on main, the run publishes its pinned SHA images and asks the existing
 `main-tag-guard.sh` before moving `:main`. Ordinary main pushes and pushes to `maintenance/*` publish no container image.
@@ -3332,8 +3332,9 @@ It passes APT configuration on sudo's command line so dpkg stays in the process 
 can stop. The deadline sends KILL to the group because the CLI can exit on TERM before GNU
 timeout would send its second signal. After a failed attempt, the job bounds `dpkg --configure -a` before retrying once.
 The hosted [dpkg stall probe](https://github.com/clintongormley/waitron/actions/runs/45254587589/job/137972944893)
-exited 137 at the deadline. The process group had no running members, neither lock was held and
-the retry installed the libraries.
+held the frontend lock at its pre-invoke hook. The backend lock was free at that point.
+It exited 137 at the deadline with no running process in the group. Neither lock was held
+afterwards, and the retry installed the libraries.
 
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
@@ -3457,8 +3458,8 @@ Guards: the "apt waits" and "Playwright dependency waits" cases in `scripts/ci-w
 and "the Dockerfile's apt waits" (which also reads the bench's CA probe image) and "waitron.sh's apt
 waits" cases in `scripts/deploy-image-env.test.ts`, each weaker than its name — all read TEXT. The
 Playwright guard reads the same shell line. It accepts `timeout <n>` or `gnutimeout <n>`
-for `--with-deps`. For `install-deps` it checks for the resolved GNU timeout with KILL inside
-sudo. The guard checks command shape. The waitron.sh case asks
+for `--with-deps`. For `install-deps` it checks that the command names
+`"$gnu_timeout" -s KILL` inside sudo. The waitron.sh case asks
 that every `apt-get` outside a whole-line comment or a `command -v apt-get` sits inside `apt_get()`,
 and that every `apt-get` in that body, other than one named inside quotes, runs under
 `"$limit" <n>` in its own command; it does not run the shell. The numbers `apt_get` hands to `timeout`,

@@ -31,8 +31,8 @@ required CI. Qualify the entire hosted job against 240 seconds in both a cold an
    ([CI and gates](../../developers/ci-and-gates.md#every-pnpm-setup-is-bounded)). The existing
    `withDepsWaits` check accepts this resolved timeout only inside sudo. After a failed attempt, run bounded `dpkg --configure -a`
    before retrying once. Fail the job if recovery or the second attempt fails. Bound the step.
-   In a disposable hosted run, force a stall inside dpkg. Capture the PIDs, process groups and
-   both dpkg locks before the timeout. Require exit 137, the apt and dpkg processes no
+   In a disposable hosted run, stall dpkg at its pre-invoke hook. Capture the PIDs, process
+   groups and the state of both locks. Require exit 137, the apt and dpkg processes no
    longer running, and both locks free before recovery and a successful retry. Keep the probe out
    of the shipped workflow.
 5. **Run and measure.** With `WAITRON_STARTUP_ENGINES=webkit`, run
