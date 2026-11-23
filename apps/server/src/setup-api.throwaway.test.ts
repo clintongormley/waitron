@@ -8,13 +8,19 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueResult } from "@waitron/provisioning";
-import { readRecoveryPacks, type Database } from "@waitron/db";
+import { masterKeys, readRecoveryPacks, type Database } from "@waitron/db";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
-import { AppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { PDFDocument } from "pdf-lib";
 import * as invoiceFont from "./invoice-font.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  masterKeyCheckValue,
+  masterKeyName,
+  sealingPublicKey,
+  type KeyRing,
+} from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
@@ -433,7 +439,8 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       operations?: SetupOperationStore;
       requestRestart?: SetupDeps["requestRestart"];
       log?: Logger;
-      recoveryPackEvidence?: NonNullable<SetupDeps["recoveryPackEvidence"]>;
+      /** null mounts setup with no evidence reader, so it makes no pack. */
+      recoveryPackEvidence?: NonNullable<SetupDeps["recoveryPackEvidence"]> | null;
     } = {},
   ) {
     const app = new Hono();
@@ -445,7 +452,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         db: venueDb.db,
         node: venueDb.node,
         ring,
-        recoveryPackEvidence,
+        ...(recoveryPackEvidence === null ? {} : { recoveryPackEvidence }),
         operations,
         provision,
         recoverProvision: (req) => recoverProvisionedVenue(venueDb.db, req),
@@ -486,11 +493,96 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       );
   }
 
+  const storedMasterKeys = () => venueDb.db.select().from(masterKeys);
+
+  it.each<[string, Mode, Box]>([
+    ["Preparation", "prepare", PREPRODUCTION_BOX],
+    ["Demo", "demo", PREPRODUCTION_BOX],
+    ["Live on a development box", "live", DEV_BOX],
+  ])(
+    "preparation, demo and Live on a development box each end with one master_keys row: %s",
+    async (_, mode, box) => {
+      const lines: string[] = [];
+      const post = realApp(box, {
+        log: (level, event, fields) => lines.push(JSON.stringify([level, event, fields])),
+      });
+      const request = body(mode);
+      const response = await post(request);
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const { masterKey, masterKeyName: name } = await response.json();
+      const bytes = decodeMasterKeyCode(masterKey);
+      expect(masterKey).toBe(encodeMasterKeyCode(bytes));
+      const publicKey = sealingPublicKey(bytes);
+      expect(name).toBe(masterKeyName(publicKey, "2026-10-16"));
+      expect(await storedMasterKeys()).toEqual([
+        {
+          number: 1,
+          name,
+          checkValue: masterKeyCheckValue(bytes),
+          publicKey: new Uint8Array(publicKey),
+          madeAt: new Date("2026-10-16T11:40:00.000Z"),
+          madeBy: null,
+        },
+      ]);
+      expect(lines.join("\n")).not.toContain(masterKey.slice(0, 9));
+      const replayed = await realApp(box)(request);
+      expect(replayed.status).toBe(200);
+      expect(await replayed.json()).not.toHaveProperty("masterKey");
+      expect(await storedMasterKeys()).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    ["with its pack", {}],
+    ["with no pack evidence reader", { recoveryPackEvidence: null }],
+  ] as const)(
+    "a failed node.db save in preparation setup leaves no master_keys row, and a retry leaves one: %s",
+    async (_, options) => {
+      venueDb.node.run(
+        sql`create trigger refuse_box_key before insert on box begin select raise(abort, 'refused'); end`,
+      );
+      let refused: Response;
+      try {
+        refused = await realApp(PREPRODUCTION_BOX, options)(body("prepare"));
+      } finally {
+        venueDb.node.run(sql`drop trigger refuse_box_key`);
+      }
+      expect(refused.status).toBe(500);
+      expect(await refused.json()).not.toHaveProperty("masterKey");
+      expect(await storedMasterKeys()).toEqual([]);
+      const retried = await realApp(PREPRODUCTION_BOX, options)(body("prepare"));
+      expect(retried.status).toBe(200);
+      const { masterKeyName: name } = await retried.json();
+      expect(await storedMasterKeys()).toMatchObject([{ number: 1, name }]);
+    },
+  );
+
+  it("a Preparation retried after a failure before publication ends with one master_keys row, the one it showed", async () => {
+    const post = realApp(PREPRODUCTION_BOX, {
+      persistTrading: vi
+        .fn<NonNullable<SetupDeps["persistTrading"]>>()
+        .mockRejectedValueOnce(new Error("write refused"))
+        .mockResolvedValue(undefined),
+    });
+    expect((await post(body("prepare"))).status).toBe(500);
+    expect(await storedMasterKeys()).toEqual([]);
+    const retried = await post(body("prepare"));
+    expect(retried.status).toBe(200);
+    const { masterKeyName: name } = await retried.json();
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name }]);
+  });
+
   it("Demo with no initialOperations makes a throwaway venue without a server key", async () => {
     const res = await realApp(PREPRODUCTION_BOX)(body("demo"));
 
     expect(res.status, await res.clone().text()).toBe(200);
-    expect(await res.json()).toEqual({ provisioned: true, restarting: true });
+    expect(await res.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      masterKey: expect.any(String),
+      masterKeyName: expect.any(String),
+    });
     expectThrowawayVenue("preproduction");
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(await readRecoveryKeyName(venueDb.node, id)).toBeNull();
@@ -501,7 +593,14 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const res = await realApp(PREPRODUCTION_BOX)(request);
     expect(res.status).toBe(200);
     expectThrowawayVenue("preproduction");
-    const { breakGlassSecret, breakGlassKeyName, recoveryPackPdf, ...result } = await res.json();
+    const {
+      breakGlassSecret,
+      breakGlassKeyName,
+      recoveryPackPdf,
+      masterKey: _masterKey,
+      masterKeyName: _masterKeyName,
+      ...result
+    } = await res.json();
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(typeof breakGlassKeyName).toBe("string");
     const secret = FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret);
@@ -782,7 +881,13 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const replayed = await post(body("demo"));
 
     expect(replayed.status, await replayed.clone().text()).toBe(200);
-    expect(await replayed.json()).toEqual({ provisioned: true, restarting: true });
+    expect(await replayed.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      masterKey: expect.any(String),
+      masterKeyName: expect.any(String),
+    });
+    expect(await storedMasterKeys()).toHaveLength(1);
     expect(facts()).toEqual(before);
     expect(venueDb.db.all(sql`select * from fiscal_allocations`)).toEqual(ledger);
     expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");

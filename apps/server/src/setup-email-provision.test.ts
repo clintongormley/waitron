@@ -166,6 +166,8 @@ describe("setup provision email credential", () => {
       expect(await response.json()).toEqual({
         provisioned: true,
         restarting: true,
+        masterKey: expect.any(String),
+        masterKeyName: expect.any(String),
         ...(mode === "prepare"
           ? {
               breakGlassSecret: expect.any(String),

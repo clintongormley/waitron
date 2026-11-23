@@ -20,7 +20,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import type { MadeMasterKey, VenueRequest, VenueResult } from "@waitron/provisioning";
 import {
   validateVenueFields,
   venueFiscalSelection,
@@ -86,6 +86,7 @@ import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { makePreparationRecoveryPack } from "./backup-recovery-pack-output.js";
+import { makeNewMasterKey, saveNewMasterKey } from "./master-key-record.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
@@ -1086,8 +1087,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       }
 
       let key: { secret: string; name: string; recoveryPackPdf?: string } | undefined;
+      let madeMasterKey: MadeMasterKey | undefined;
       let cloudStaffEmailUnavailable = operation?.data.cloudStaffEmailUnavailable === true;
       if (!setupPhaseReached(operation, "publishing")) {
+        const masterKey = makeNewMasterKey(new Date().toISOString().slice(0, 10));
         if (keyOutput !== undefined) {
           const handles = { venue: db, node: keyOutput.node };
           const minted =
@@ -1126,6 +1129,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
+        // The request's last database write, so a failure before it leaves the old key current.
+        // It follows node.db's key save: the stated exception to venue.db first, ending in PR 2b.
+        madeMasterKey = await saveNewMasterKey(db, masterKey, new Date(), null);
         await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
 
@@ -1137,13 +1143,20 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
-      if (key === undefined) return c.json(publicResult);
+      if (key === undefined && madeMasterKey === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
       return c.json({
         ...publicResult,
-        breakGlassSecret: key.secret,
-        breakGlassKeyName: key.name,
-        ...(key.recoveryPackPdf === undefined ? {} : { recoveryPackPdf: key.recoveryPackPdf }),
+        ...madeMasterKey,
+        ...(key === undefined
+          ? {}
+          : {
+              breakGlassSecret: key.secret,
+              breakGlassKeyName: key.name,
+              ...(key.recoveryPackPdf === undefined
+                ? {}
+                : { recoveryPackPdf: key.recoveryPackPdf }),
+            }),
       });
     };
     return runProvision(c, log, async () => {
