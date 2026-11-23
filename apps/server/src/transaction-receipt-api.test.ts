@@ -30,6 +30,7 @@ import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setProfileServiceAccess, writeKitchenNote } from "@waitron/venue-service";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -40,6 +41,10 @@ import {
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import { seedGivenAwayLine } from "./testing/cancel-line.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -59,11 +64,6 @@ import {
   resendInvoicePrintJob,
 } from "./invoice-print.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { seedGivenAwayLine } from "./testing/cancel-line.js";
-import { issueOrderInvoice } from "./testing/issue-order.js";
-import { placeOrder } from "./testing/order-writer-fixture.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
-import { setTakeawayVatRate } from "@waitron/menu";
 import { RECEIPT_OUT_OF_DATE, saleReceiptLayout } from "./receipt-print.js";
 import * as receiptDocument from "./receipt-document.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
