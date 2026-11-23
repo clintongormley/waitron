@@ -254,6 +254,17 @@ export class TillTenderRefundDialog extends LitElement {
   #money(value: string): string {
     return formatMoney(value, currentLocale());
   }
+  /** Payment money the server would refuse only after staff returned it on the terminal. */
+  #needsCorrection(row: RefundableTender | undefined): boolean {
+    const applied = tenderRefundAmount(this.draft.appliedAmount);
+    return (
+      !this.correcting &&
+      row?.manual === true &&
+      row.plainRefundLimit !== undefined &&
+      applied !== null &&
+      compareDecimal(decimal(applied), decimal(row.plainRefundLimit)) > 0
+    );
+  }
   #errors(): Map<Field, string> {
     const errors = new Map<Field, string>();
     const row = this.#selected();
@@ -284,7 +295,7 @@ export class TillTenderRefundDialog extends LitElement {
       errors.set("note", t("adjust.note_required"));
     else if (reason.noteRequired && this.draft.note.trim().length > REASON_MAX)
       errors.set("note", t("bill_refund.reason_long"));
-    if (row.manual && !this.draft.manualConfirmed)
+    if (row.manual && !this.#needsCorrection(row) && !this.draft.manualConfirmed)
       errors.set("confirmation", t("tender_refund.confirm_required"));
     return errors;
   }
@@ -419,7 +430,7 @@ export class TillTenderRefundDialog extends LitElement {
     });
   }
   #confirm(row: RefundableTender, error: string) {
-    if (!row.manual) return nothing;
+    if (!row.manual || this.#needsCorrection(row)) return nothing;
     return html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>
       <wt-switch
         name="manualConfirmed"
@@ -447,8 +458,10 @@ export class TillTenderRefundDialog extends LitElement {
     const errors = new Map(own);
     const refused = this.#refusalField();
     if (refused !== null) errors.set(refused, this.#refusalText());
+    const blocked = !this.#locked() && this.#needsCorrection(this.#selected());
     const message = [
       errors.size > 0 ? t("form.fix_fields") : "",
+      blocked ? codeMessage("tender.refund_needs_correction") : "",
       refused === null ? this.#refusalText() : "",
     ]
       .filter(Boolean)
@@ -551,7 +564,7 @@ export class TillTenderRefundDialog extends LitElement {
                   .variant=${selected && this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
                   data-submit
                   .loading=${this.#busy()}
-                  .disabled=${this.#busy() || !selected || own.size > 0}
+                  .disabled=${this.#busy() || !selected || own.size > 0 || blocked}
                   @click=${() => void this.#submit()}
                   >${t("bill_pay.refund")}</wt-button
                 >`

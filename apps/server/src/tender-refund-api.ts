@@ -24,8 +24,10 @@ import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
-import { authorizeStoredTenderRefund } from "./tender-refund-reservation.js";
-import { readRefundableTenders } from "./tender-refund-balance.js";
+import {
+  authorizeStoredTenderRefund,
+  readRefundableTendersWithLimits,
+} from "./tender-refund-reservation.js";
 import { refundSettledTender, toTenderRefundView } from "./tender-refunds.js";
 import {
   claimTenderRefund,
@@ -172,7 +174,12 @@ export function mountTenderRefundApi(
       const id = pathId(c.req.param("saleId"), "sale");
       const result = await withTransaction(deps.db, async (tx) => {
         await checkAccess(tx, session, id);
-        return readRefundableTenders(tx, id);
+        return readRefundableTendersWithLimits(
+          tx,
+          deps.cfg.nodeId,
+          { backend: deps.backend, reading: deps.clock.now() },
+          id,
+        );
       });
       return c.json(result);
     }),

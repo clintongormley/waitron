@@ -900,6 +900,40 @@ describe("Refund a payment naming no cancels", () => {
     return { b, paid, burger };
   }
 
+  it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/working-orders/${b.billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "manual",
+        applied: "37.00",
+        tip: "0.00",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, b.billId)),
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, b.billId));
+    await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    expect(
+      await send(
+        venue.app,
+        venue.cookie.manager,
+        "GET",
+        `/api/transactions/${sale!.id}/refundable-tenders`,
+      ),
+    ).toMatchObject({
+      status: 200,
+      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "12.00" }],
+    });
+  });
+
   it("is refused on a sale with no cancels, writing nothing", async () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await pay(b, "37.00");

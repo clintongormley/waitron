@@ -25,6 +25,9 @@ export interface RefundableTender {
   tipRemaining: string;
   pendingRefundId: string | null;
   manual: boolean;
+  /** On a hand-keyed card payment, the payment money Refund a payment may give back now without a
+   * corrective; absent on other payments and on a part payment. */
+  plainRefundLimit?: string;
 }
 
 export interface TenderRefundView {

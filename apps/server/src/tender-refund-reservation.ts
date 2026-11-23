@@ -39,7 +39,7 @@ import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { TenderRefundRequest } from "./tender-refund-types.js";
+import type { RefundableTender, TenderRefundRequest } from "./tender-refund-types.js";
 import "./errors.js";
 
 function moneyCents(value: unknown, field: string): number {
@@ -155,31 +155,62 @@ function namedNoCancels(refund: typeof refunds.$inferSelect): boolean {
 }
 
 /**
- * Refuses `tender.refund_needs_correction` a refund, outside Correct invoice, of more payment
- * money than the cancels it pays for still owe (`owed`) plus what Correct invoice could not give
- * back on the sale now.
+ * The payment money, up to `upTo` cents, a refund outside Correct invoice may give back on the
+ * sale now: what the cancels it pays for still owe (`owed`) plus what Correct invoice could not
+ * give back.
  */
-async function refuseMoneyCorrectInvoiceTakes(
+async function plainRefundLimit(
   tx: Transaction,
   nodeId: DeviceRequestConfig["nodeId"],
   fiscal: RefundFiscal,
   saleId: string,
-  tenderId: string,
-  appliedAmount: number,
+  upTo: number,
   owed: number,
-): Promise<void> {
-  if (appliedAmount <= owed) return;
-  const refused = (amounts: { refundable: number; correctable: number }) =>
-    appliedAmount > owed + amounts.refundable - amounts.correctable;
+): Promise<number> {
+  if (upTo <= owed) return upTo;
+  const limit = (amounts: { refundable: number; correctable: number }) =>
+    owed + amounts.refundable - amounts.correctable;
   const amounts = await correctableNow(
     tx,
     fiscal.backend,
     { nodeId },
     fiscal.reading,
     brandSaleId(saleId),
-    refused,
+    (amounts) => upTo > limit(amounts),
   );
-  if (refused(amounts)) throw new AppError("tender.refund_needs_correction", { tenderId });
+  return Math.min(upTo, limit(amounts));
+}
+
+/**
+ * The sale's refundable payments, each hand-keyed card payment with its `plainRefundLimit`, so the
+ * till never asks staff to return money on the terminal that the refund would then be refused.
+ */
+export async function readRefundableTendersWithLimits(
+  tx: Transaction,
+  nodeId: DeviceRequestConfig["nodeId"],
+  fiscal: RefundFiscal,
+  saleId: string,
+): Promise<RefundableTender[]> {
+  const rows = await readRefundableTenders(tx, saleId);
+  if (!rows.some((row) => row.manual) || (await isPartPayment(tx, saleId))) return rows;
+  const remaining = (row: RefundableTender) => decimalToCents(decimal(row.appliedRemaining));
+  const upTo = Math.max(...rows.filter((row) => row.manual).map(remaining));
+  const owedIds = await cancelsStillOwedBy(tx, saleId);
+  const owed =
+    owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
+  let limit: number;
+  try {
+    limit = await plainRefundLimit(tx, nodeId, fiscal, saleId, upTo, owed);
+  } catch (error) {
+    // A refusal that passes by waiting refuses the refund above `owed` for now.
+    if (!(error instanceof AppError)) throw error;
+    limit = Math.min(upTo, owed);
+  }
+  return rows.map((row) =>
+    row.manual
+      ? { ...row, plainRefundLimit: centsToDecimal(Math.min(limit, remaining(row))) }
+      : row,
+  );
 }
 
 /** The fiscal backend and the clock reading a refund outside Correct invoice is checked with. */
@@ -436,16 +467,19 @@ export async function reserveTenderRefund(
     plain && cancellationIds === undefined ? await cancelsStillOwedBy(tx, saleId) : [];
   const unnamed =
     owedIds.length === 0 ? undefined : await allocateToCancels(tx, saleId, owedIds, appliedAmount);
-  if (plain)
-    await refuseMoneyCorrectInvoiceTakes(
-      tx,
-      cfg.nodeId,
-      fiscal,
-      saleId,
-      tenderId,
-      appliedAmount,
-      (allocation ?? unnamed)?.canStillTake ?? 0,
-    );
+  if (
+    plain &&
+    appliedAmount >
+      (await plainRefundLimit(
+        tx,
+        cfg.nodeId,
+        fiscal,
+        saleId,
+        appliedAmount,
+        (allocation ?? unnamed)?.canStillTake ?? 0,
+      ))
+  )
+    throw new AppError("tender.refund_needs_correction", { tenderId });
   const covered =
     allocation !== undefined && tipAmount === 0 && appliedAmount <= allocation.canStillTake;
   let authorizedBy: string;
