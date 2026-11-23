@@ -17,6 +17,15 @@ jobs.push({
     "utf8",
   ).match(/^ {4}runs-on: (.+)$/m)[1],
 });
+const hostedOnly = [
+  "server-queue-watchdog",
+  "publish",
+  "release",
+  "ci",
+  "image-smoke",
+  "test-webkit-startup",
+];
+
 function route(
   expression,
   {
@@ -213,7 +222,7 @@ describe("server-first workflow routing", () => {
             continue;
           }
           if (
-            ["server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(job.id) ||
+            hostedOnly.includes(job.id) ||
             (attempt === 1 && (job.id.endsWith("-merge") || job.id === "mutation-shared-aggregate"))
           ) {
             expect(selected).toBe("ubuntu-latest");
@@ -227,12 +236,7 @@ describe("server-first workflow routing", () => {
     },
   );
   it("keeps an explicitly selected overflow attempt hosted while ordinary reruns remain server-first", () => {
-    for (const job of jobs.filter(
-      (job) =>
-        !["changes", "server-queue-watchdog", "publish", "release", "ci", "image-smoke"].includes(
-          job.id,
-        ),
-    )) {
+    for (const job of jobs.filter((job) => job.id !== "changes" && !hostedOnly.includes(job.id))) {
       expect(route(job.route, { attempt: 2, hosted: '{"1234":2}' }), job.id).toBe("ubuntu-latest");
       expect(route(job.route, { attempt: 3, hosted: '{"1234":2}' }), job.id).toEqual([
         "self-hosted",
