@@ -602,8 +602,8 @@ Slice 3.
   ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): wiping it before
   its return completes, the download of the data the old box holds that this box lacks (after an
   emergency switch the 10a dialog already points to the old box's address for it), and checking in
-  the dialog whether the old box holds records this box lacks. Each as its own pull request: the old
-  box's own page redesign, and the old box also returning other boxes' invoice records it holds.
+  the dialog whether the old box holds records this box lacks. As its own pull request: the old box
+  also returning other boxes' invoice records it holds.
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
   real boxes.
 
