@@ -166,17 +166,16 @@ If the old box will never come back with its data, choose **Will not return** in
 Invoice records it made after the copy the new main box started from stay only on it, unless it is
 switched on again before you remove it.
 
-Once its invoice records are back, its row menu offers **Wipe and remove**. If the dialog says the
-old main box may hold data that this box does not have, open the old box's address, which the dialog
-links to, and [download that data](servers.md#handed-over) before you confirm: once the wipe
-starts, it can no longer be downloaded. A **CAUTION** line in the
-dialog means the recovered records exist only on this box until a backup is made. Once you confirm,
-the row says **Wipe asked**. The old main box wipes itself and leaves the list the next time it is
-on and can reach this box, then restarts on setup's first page: [re-add it as a
-spare](servers.md#adding-a-spare) from there, comparing the code it shows with the one on this box.
-If it was already wiped by hand, choose **Remove from venue**. If this main box is itself replaced
-before the old one has wiped itself, the old one never receives the wipe: choose **Remove from
-venue** on the new main box and wipe it from a terminal.
+Once its invoice records are back, its row menu offers **Wipe and remove**. The dialog says the old
+main box may hold data that this box does not have and links to the old box's address: open it and
+[download that data](servers.md#handed-over) before you confirm, because once the wipe starts it can
+no longer be downloaded. A **CAUTION** line in the dialog means the recovered records exist only on
+this box until a backup is made. Once you confirm, the row says **Wipe asked**. The old main box
+wipes itself and leaves the list the next time it is on and can reach this box, then restarts on
+setup's first page: [re-add it as a spare](servers.md#adding-a-spare) from there, comparing the code
+it shows with the one on this box. If it was already wiped by hand, choose **Remove from venue**. If
+this main box is itself replaced before the old one has wiped itself, the old one never receives the
+wipe: choose **Remove from venue** on the new main box and wipe it from a terminal.
 
 To remove an old main box without wiping it, choose **Remove from venue** in its row menu. If it has
 not returned its invoice records, tick that it has been wiped or will never be switched on again. If
@@ -243,12 +242,12 @@ handover on the spare.
 Keep this box running while it returns its invoice records to the main box. Filing with the tax
 agency continues on the main box.
 
-If the main box's **Wipe and remove** dialog says this box may hold data it does not have, download
-that data under **Download this box's data** before the box is wiped. Enter the email and password
-of an administrator, or of an account with **Manage boxes**, as they were when this box stopped
-running the venue, and the authenticator code if the account uses one; passkeys and Google sign-in
-do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice records; its
-first line says whether they are only those the main box did not have or every one this box holds.
+Before the main box wipes this box, download its data under **Download this box's data**. Enter the
+email and password of an administrator, or of an account with **Manage boxes**, as they were when
+this box stopped running the venue, and the authenticator code if the account uses one; passkeys and
+Google sign-in do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice
+records; its first line says whether they are only those the main box did not have or every one this
+box holds.
 
 Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a

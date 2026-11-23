@@ -937,10 +937,12 @@ the listing's `recoveredRecordsBackup`, which compares when a destination's newe
 with when the return completed. The "will be lost" emergency paragraph and the machine number are
 gone.
 
-**Since PR 10b's first part (23 November 2026).** The main box also compares an old box's latest
-chain summary with no order standing, while Wipe and remove is offered after a planned handover,
-and the dialog's download line shows then only when that comparison finds something; after an
-emergency switch it always shows. The download lives on the old box's own page, not on the main
+**Since PR 10b's first part (23 November 2026).** The dialog's download line now shows on every
+Wipe and remove, after a planned handover as well as after an emergency switch. A comparison of the
+old box's latest chain summary with the main box's records, which showed the line after a planned
+handover only when it found something, was built and then dropped on the watcher's decision of 23
+November 14:25: a wrong answer from it would hide the pointer exactly when records could be lost.
+The download lives on the old box's own page, not on the main
 box's Servers row: an administrator or a **Manage boxes** holder signs in there with the old box's
 copy of the accounts. Revision 6 above is superseded on those points; PR 10b's own plans
 (revisions 7 and 8) were kept in the campaign's working folder, not here.

@@ -182,18 +182,18 @@ fila. Los registros de facturación que hizo después de la copia con la que emp
 principal se quedan solo en él, salvo que se vuelva a encender antes de que lo retires.
 
 Cuando haya devuelto sus registros de facturación, el menú de su fila ofrece **Borrar y retirar**.
-Si el diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no
-tiene, abre la dirección del servidor anterior, que el diálogo enlaza, y [descarga esos
-datos](servers.md#handed-over) antes de confirmar: una vez empezado el borrado, ya no se pueden
-descargar. Una línea de **ATENCIÓN** en el diálogo indica que los registros
-recuperados solo están en este servidor hasta que se haga una copia de seguridad. Cuando lo
-confirmes, la fila dice **Borrado solicitado**. El servidor principal anterior se borra y sale de la
-lista la próxima vez que esté encendido y pueda conectar con este servidor, y se reinicia en la
-primera página de la configuración: desde ahí, [vuelve a añadirlo como servidor de
-reserva](servers.md#adding-a-spare), comparando el código que muestra con el de este servidor. Si ya
-se borró a mano, elige **Retirar del local**. Si este servidor principal también se sustituye antes
-de que el anterior se haya borrado, el anterior nunca recibe el borrado: elige **Retirar del local**
-en el nuevo servidor principal y bórralo desde un terminal.
+El diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no tiene
+y enlaza la dirección del servidor anterior: ábrela y [descarga esos datos](servers.md#handed-over)
+antes de confirmar, porque una vez empezado el borrado ya no se pueden descargar. Una línea de
+**ATENCIÓN** en el diálogo indica que los registros recuperados solo están en este servidor hasta
+que se haga una copia de seguridad. Cuando lo confirmes, la fila dice **Borrado solicitado**. El
+servidor principal anterior se borra y sale de la lista la próxima vez que esté encendido y pueda
+conectar con este servidor, y se reinicia en la primera página de la configuración: desde ahí,
+[vuelve a añadirlo como servidor de reserva](servers.md#adding-a-spare), comparando el código que
+muestra con el de este servidor. Si ya se borró a mano, elige **Retirar del local**. Si este
+servidor principal también se sustituye antes de que el anterior se haya borrado, el anterior nunca
+recibe el borrado: elige **Retirar del local** en el nuevo servidor principal y bórralo desde un
+terminal.
 
 Para retirar un servidor principal anterior sin borrarlo, elige **Retirar del local** en el menú de
 su fila. Si no ha devuelto sus registros de facturación, marca que se ha borrado o que no se volverá
@@ -267,14 +267,13 @@ el traspaso en el servidor de reserva.
 Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
 El envío a Hacienda continúa en el principal.
 
-Si el diálogo **Borrar y retirar** del servidor principal dice que puede que este servidor tenga
-datos que él no tiene, descárgalos en **Descargar los datos de este servidor** antes de que se
-borre. Introduce el correo electrónico y la contraseña de un administrador, o de una cuenta con
-**Gestionar servidores**, tal como estaban cuando este servidor dejó de llevar el local, y el
-código del autenticador si la cuenta lo usa; las llaves de acceso y el inicio de sesión con Google
-no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los registros de
-facturación; su primera línea dice si son solo los que el principal no tenía o todos los que tiene
-este servidor.
+Antes de que el servidor principal borre este servidor, descarga sus datos en **Descargar los datos
+de este servidor**. Introduce el correo electrónico y la contraseña de un administrador, o de una
+cuenta con **Gestionar servidores**, tal como estaban cuando este servidor dejó de llevar el local,
+y el código del autenticador si la cuenta lo usa; las llaves de acceso y el inicio de sesión con
+Google no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los
+registros de facturación; su primera línea dice si son solo los que el principal no tenía o todos
+los que tiene este servidor.
 
 Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
 servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
