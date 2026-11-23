@@ -134,7 +134,7 @@ export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: 
 export function boxPageAnswer(
   c: Context,
   html: string,
-  status: 200 | 404 | 500 | 503,
+  status: 200 | 400 | 401 | 403 | 404 | 409 | 429 | 500 | 503,
   cache: "no-cache" | "no-store" = "no-cache",
   scripts?: BoxPageScripts,
 ): Response {

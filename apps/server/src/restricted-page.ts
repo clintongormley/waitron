@@ -1,5 +1,5 @@
 import type { ReturnState } from "./return-records.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { isOpen } from "@waitron/handover";
 import {
@@ -39,8 +39,29 @@ export interface RestrictedPageDeps {
 export type Successor =
   { kind: "id"; id: string } | { kind: "host"; host: string; main: boolean; contactUrl: string };
 
+/** Why `POST /old-box-data` answered the page instead of the workbook. */
+export type OldBoxDownloadRefusal =
+  | "insecure"
+  | "otherPage"
+  | "wipeUnderWay"
+  | "fieldsMissing"
+  | "busy"
+  | "throttled"
+  | "signInRefused"
+  | "totpRequired"
+  | "notPermitted"
+  | "failed";
+
+/** The download section's state after a refused download: the refusal and the email kept. */
+export interface OldBoxDownloadState {
+  refusal: OldBoxDownloadRefusal;
+  email: string;
+  retryAfterSeconds?: number;
+}
+
 interface RestrictedView {
   returnState: ReturnState;
+  download?: OldBoxDownloadState;
   successorUrl?: string;
   handoverPage?: string;
   reset?: "ordered" | "setAsideRefused";
@@ -161,7 +182,11 @@ async function progressPage(
   return await handoverPageOf({ db: deps.venue }, operation);
 }
 
-async function readView(deps: RestrictedPageDeps, requestId: string): Promise<RestrictedView> {
+async function readView(
+  deps: RestrictedPageDeps,
+  requestId: string,
+  download?: OldBoxDownloadState,
+): Promise<RestrictedView> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
@@ -190,6 +215,7 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
           ),
     returnState,
     reset: await resetLine(deps, requestId),
+    ...(download === undefined ? {} : { download }),
   };
 }
 
@@ -216,29 +242,39 @@ function renderFailure(locale: SupportedLocale): string {
   return renderLogoBoxPage(locale, heading, `<h1>${escapeHtml(heading)}</h1>`);
 }
 
+/** The restricted page as this request's answer, with the download section's state when given. */
+export async function restrictedPageAnswer(
+  deps: RestrictedPageDeps,
+  c: Context,
+  status: 200 | 400 | 401 | 403 | 409 | 429 | 500,
+  download?: OldBoxDownloadState,
+): Promise<Response> {
+  const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
+  c.header("Cache-Control", "no-store");
+  c.header("Vary", "Accept-Language");
+  try {
+    return boxPageAnswer(
+      c,
+      renderPage(await readView(deps, c.get("requestId"), download), locale),
+      status,
+      "no-store",
+    );
+  } catch (error) {
+    deps.log("error", "restricted_page.failed", {
+      errorCode: codeOf(error),
+      requestId: c.get("requestId"),
+    });
+    return boxPageAnswer(c, renderFailure(locale), 500, "no-store");
+  }
+}
+
 /** The page a person opening a stepped-down box sees, at its own, the till's and the dashboard's pages. */
 export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => void {
   return (app) => {
     app.get("*", async (c, next) => {
       const path = c.req.path;
       if (path !== "/till" && !path.startsWith("/till/") && !isDashboardPath(path)) return next();
-      const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-      c.header("Cache-Control", "no-store");
-      c.header("Vary", "Accept-Language");
-      try {
-        return boxPageAnswer(
-          c,
-          renderPage(await readView(deps, c.get("requestId")), locale),
-          200,
-          "no-store",
-        );
-      } catch (error) {
-        deps.log("error", "restricted_page.failed", {
-          errorCode: codeOf(error),
-          requestId: c.get("requestId"),
-        });
-        return boxPageAnswer(c, renderFailure(locale), 500, "no-store");
-      }
+      return restrictedPageAnswer(deps, c, 200);
     });
   };
 }
