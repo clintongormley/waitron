@@ -9,7 +9,9 @@ TRANSLATION-ABANDON-BOX queue entry at 11:52 on 23 November defines the scope.
 - [ ] In `apps/server/src/content-suggestion-runner.test.ts`, adapt the lost-submit,
   local expiry and interrupted-collection cases to assert abandon uses the original ID.
   For the lost submit, check the Cloud job expires and the next submit reaches Cloud.
-  Keep the stored-page and normal release assertions. Cover failure to reach Cloud
+  Keep the stored-page and normal release assertions. The service-off, 24-hour running
+  and backward-clock cases now expect abandon before closing. A job Cloud never took
+  still expires locally after 24 hours. Cover failure to reach Cloud
   before and at the existing local expiry, using a new runner to check the same ID
   survives a retry. Run these cases red before adding the box call.
 - [ ] Extend `apps/server/test/translation-cloud-fixture.ts` to accept the signed action
@@ -26,14 +28,17 @@ TRANSLATION-ABANDON-BOX queue entry at 11:52 on 23 November defines the scope.
   still-connected unfinished job, including when venue translation is off. Close
   normally if Cloud already said the job is gone or the installation is disconnected.
   While the job is within the existing lifetime, let temporary Cloud failures use the
-  current runner retry. At local expiry, give Cloud one attempt and let the box close
-  on Cloud failure. Reuse the same ID throughout and keep network calls outside the
-  database transaction. Leave fully collected and Cloud-failed jobs on the release path.
+  current runner retry. Close locally on `cloud.request_invalid`; recorded revocation
+  closes as not connected on the next step. Check age first: at expiry, give both
+  unfinished and half-collected jobs one attempt before closing. Reuse the same ID
+  throughout and keep network calls outside the database transaction. Leave fully
+  collected and Cloud-failed jobs on the release path.
 - [ ] For a last page that fails the accounting check, update
   `packages/menu/src/content-suggestion-store.ts` and
-  `content-suggestion-jobs.ts` to leave the existing release flag unset. The row is
-  already eligible for cleanup as a failed job with a Cloud ID. Have the runner abandon
-  that row by its original operation ID before marking it released. Keep both
+  `content-suggestion-jobs.ts` to leave the release flag unset via an option used only
+  in the `!complete` branch. The existing cleanup read returns that row as failed with
+  a Cloud ID and no release recorded. The runner uses its `rejected` failure to select
+  abandon by original operation ID and then marks the row released. Keep both
   `content-suggestion-store.test.ts` assertions for the failed outcome and page contents.
 - [ ] Run the changed server and menu test files. Update the two outdated paragraphs
   in `docs/developers/cloud-connection.md` and remove the entry and bundle line in

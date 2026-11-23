@@ -26,7 +26,11 @@ export type MachineServiceAction =
   | "owner-recovery-refuse";
 
 export type TranslationAction =
-  "translation-submit" | "translation-status" | "translation-collect" | "translation-release";
+  | "translation-submit"
+  | "translation-status"
+  | "translation-collect"
+  | "translation-release"
+  | "translation-abandon";
 
 export function jobFingerprint(body: string): { jobSha256: string; jobBytes: number } {
   const bytes = Buffer.from(body, "utf8");
@@ -112,6 +116,7 @@ const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
   "translation-status": { reply: 65536, ms: 8000 },
   "translation-collect": { reply: COLLECT_REPLY_BYTES, ms: 120_000 },
   "translation-release": { reply: 65536, ms: 8000 },
+  "translation-abandon": { reply: 65536, ms: 8000 },
 };
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
@@ -339,4 +344,21 @@ export async function releaseTranslation(
     onRefusal,
   );
   if (v.jobId !== jobId || v.state !== "collected") unavailable();
+}
+
+export async function abandonTranslation(
+  state: SavedCloudState,
+  operationId: string,
+  signal?: AbortSignal,
+  onRefusal?: OnRefusal,
+): Promise<void> {
+  await serviceExchange(
+    state,
+    "translation-abandon",
+    operationId,
+    '{"version":1}',
+    {},
+    signal,
+    onRefusal,
+  );
 }

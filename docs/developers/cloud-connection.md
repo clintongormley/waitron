@@ -191,22 +191,18 @@ accepts it, and the row's own id is the operation ID, so a retried submit signs 
 fingerprint with the same operation ID and Cloud answers with the job it already made. A lost
 page, or a restart part-way through the pages, fetches again from the saved position.
 
-A job that ends after at least one of its items has been accounted for, but before its last page,
-because Cloud answers that it has expired or that it has no such job, because the box's own
-24-hour clock runs out, or because the service is no longer on, keeps the suggestions already
-stored. Every item not yet accounted for is counted as one that could not be done, so when the
-alerts bell's Translate all notice appears, it says how many could not be done. No release is sent for such a job.
+If a job ends part-way through collection, the box keeps the suggestions it already saved.
+It counts each remaining item as one it could not translate, so the Translate all notice tells
+you how many were missed.
 
-The box also ends a job itself, without asking Cloud. It does so when the job is 24 hours old,
-counted from when the box recorded it; when Cloud's last configuration reply no longer lists the
-service as ready, or the connection is revoked; when Cloud refuses a call as a request it will
-never accept; when Cloud says the job has expired; and when its last page leaves an item
-unaccounted for, or accounts for a number of items other than Cloud's total. A job the box ends itself is marked
-released without a call to Cloud. Unless Cloud had already expired it, Cloud may still hold it
-until its own deletion: 24 hours
-after the job finished, or 24 hours after it was submitted if it never finished (the contract's
-`expired` state). The backlog entry "a job the box ends itself is marked released without a call
-to Cloud" covers what that leaves open.
+When the box ends unfinished work because the service goes off, the local job expires, or
+the last page fails the accounting check, it asks Cloud to abandon the job. It signs the
+request with the original submit operation ID, which the box has even if it lost the submit
+reply. Cloud can then clear a queued or running job so you can start another Translate all
+run. If Cloud refuses the request as invalid, the box closes the job. If Cloud is unreachable,
+the box retries up to the existing 24-hour job lifetime and gives it one final attempt at expiry.
+Cloud may keep the job until its own expiry if that last attempt fails. If Cloud already
+reported the job gone, or the installation is disconnected, the box closes it locally.
 
 Translation calls take the connection's lock only to renew the access lease, or to record that
 Cloud refused the installation as revoked or its proof as invalid (`leaseState` and
