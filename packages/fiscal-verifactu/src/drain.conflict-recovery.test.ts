@@ -10,6 +10,7 @@ import { collideAtAeat, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
+import { readFilingOverview } from "./filing-overview.js";
 import * as conflicts from "./conflict-evidence.js";
 import type { ConflictEvidence } from "./conflict-evidence.js";
 
@@ -234,8 +235,18 @@ describe("durable conflict observations", () => {
         evidence: { codigo: null, mensaje: null, csv: null },
         now: FIRST,
       });
-      const data =
-        '{"attempt":1,"cause":"fiscal.duplicado_anulado","cause":"fiscal.huella_divergente","evidence":{}}';
+      const evidence = {
+        line: {
+          IDFactura: {
+            IDEmisorFactura: seeded.nif,
+            NumSerieFactura: "S1/1",
+            FechaExpedicionFactura: "20-07-2026",
+          },
+        },
+        comparison: { kind: "annulled" },
+        csv: null,
+      };
+      const data = `{"attempt":1,"cause":"fiscal.duplicado_anulado","cause":"fiscal.huella_divergente","evidence":${JSON.stringify(evidence)}}`;
       await tx.execute(sql`insert into verifactu_history (id, seq, kind, node_id, at, data, event_key, registro_id)
         values ('observation', 1, 'conflict.observed', ${seeded.nodeId}, ${SECOND.toISOString()},
           ${data}, ${`conflict:${registroId}:1:fiscal.duplicado_anulado`}, ${registroId})`);
@@ -247,6 +258,10 @@ describe("durable conflict observations", () => {
         evidenceId: "observation",
       }),
     ]);
+    const overview = await withTransaction(suite.db, (tx) =>
+      readFilingOverview(tx, { nodeId: seeded.nodeId, limit: null }),
+    );
+    expect(overview.cases[0]?.conflicts[0]?.cause).toBe("fiscal.duplicado_anulado");
   });
 
   it("retains a mismatching fingerprint when the stored software identity is absent", async () => {

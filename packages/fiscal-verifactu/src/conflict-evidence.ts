@@ -83,7 +83,7 @@ export async function readActiveConflicts(
     .orderBy(
       asc(verifactuRecords.secuencia),
       asc(sql`json_extract(${observed.data}, '$.attempt')`),
-      // When both causes share an attempt, show the annulled observation first.
+      // The annulled cause code sorts first when both causes share an attempt.
       asc(observedCause),
     );
   const found = new Set<string>();

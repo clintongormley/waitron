@@ -103,7 +103,10 @@ export async function observedConflicts(
   registroIds: SQLWrapper,
 ): Promise<(RetainedConflict & ObservedConflictData)[]> {
   const rows = await tx
-    .select(retainedConflict)
+    .select({
+      ...retainedConflict,
+      cause: sql<ConflictCause>`json_extract(${verifactuHistory.data}, '$.cause')`,
+    })
     .from(verifactuHistory)
     .where(
       and(
@@ -119,7 +122,6 @@ export async function observedConflicts(
     ...row,
     registroId: registroId!,
     attempt: data.attempt as number,
-    cause: data.cause as ConflictCause,
     evidence: data.evidence as ConflictEvidence,
   }));
 }
