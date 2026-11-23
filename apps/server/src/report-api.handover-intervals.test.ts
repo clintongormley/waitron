@@ -72,7 +72,7 @@ async function activation(
       destinationNodeId: destination,
       membership: { term: 1, digest: "a".repeat(64) },
     },
-    wordingVersion: "a1018-emergency-v2",
+    wordingVersion: "a1018-emergency-v3",
     locale: "en",
     statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
     reason: "The old box failed during lunch",

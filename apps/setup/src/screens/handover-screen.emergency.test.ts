@@ -6,7 +6,7 @@ import { formatDuration } from "@waitron/shared";
 import { SetupApi } from "../api/client.js";
 import { format, setLocale, t } from "../i18n/t.js";
 import { handoverEs } from "../i18n/strings/handover.js";
-import { chooseFiles, drawnFileName, fileControl } from "@waitron/ui/src/test-helpers.js";
+import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupHandoverScreen } from "./handover-screen.js";
 
@@ -30,6 +30,7 @@ const preview = {
   joinedAtMs: 1789819200000,
   operation: null,
 };
+const failedAutomaticCopy = ["handover.copy_damaged"];
 const heldActivityMs = 1790078400000;
 // A zone the browser running this test is not in, so passing the device's zone fails.
 const venueZone =
@@ -71,12 +72,6 @@ const actions = (el: SetupHandoverScreen) =>
     el.shadowRoot!.querySelector(".form-message") ??
     q(el, "wt-form-actions")?.shadowRoot!.querySelector("[data-error]")
   )?.textContent ?? "";
-async function backupControlDisabled(el: SetupHandoverScreen): Promise<boolean> {
-  await useDifferentCopy(el);
-  const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
-  await picker.updateComplete;
-  return fileControl(picker).disabled;
-}
 async function edit(el: LitElement, name: string, value: string) {
   const field = q<LitElement>(el, `[name="${name}"]`);
   await field.updateComplete;
@@ -102,7 +97,6 @@ async function mount(
     statusUnavailable?: boolean;
     lostBeforeWrite?: boolean;
     changeBeforeDeclare?: boolean;
-    backup?: boolean;
     backupRefusal?: string;
     backupRefusalReason?: string;
     backupNeedsKeyCode?: string;
@@ -675,9 +669,13 @@ async function declarationFields(el: SetupHandoverScreen) {
   }
   await el.updateComplete;
 }
+async function failAutomaticPreparation(el: SetupHandoverScreen) {
+  await passwordSignIn(el, signIn.email, signIn.password, signIn.totp);
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.copy_unchecked")));
+}
 /** Opens the backup choice on Preparing the venue. */
 async function useDifferentCopy(el: SetupHandoverScreen) {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=upload-backup]")?.click();
+  q(el, "[data-test=upload-backup]").click();
   await el.updateComplete;
 }
 /**
@@ -703,8 +701,8 @@ afterEach(() => {
 });
 
 it("draws the backup picker's words in the chooser's language, not the browser's", async () => {
-  const { el } = await mount({ backup: true });
-  await authenticate(el);
+  const { el } = await mount({ later: failedAutomaticCopy });
+  await failAutomaticPreparation(el);
   await useDifferentCopy(el);
   setLocale("es-ES");
   await el.updateComplete;
@@ -719,8 +717,8 @@ it("draws the backup picker's words in the chooser's language, not the browser's
 
 it("writes the chosen backup's size in the chooser's language", async () => {
   setLocale("es-ES");
-  const { el } = await mount({ backup: true });
-  await authenticate(el);
+  const { el } = await mount({ later: failedAutomaticCopy });
+  await failAutomaticPreparation(el);
   await useDifferentCopy(el);
   const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
   chooseFiles(picker, new File([new Uint8Array(48_200)], "venue.enc"));
@@ -738,12 +736,12 @@ it.each(
   async ({ locale, theme }) => {
     setLocale(locale);
     const { el, posts } = await mount({
-      backup: true,
+      later: failedAutomaticCopy,
       theme,
       backupNeedsKeyCode:
         theme === "dark" ? "recovery.passphrase_invalid" : "handover.backup_key_missing",
     });
-    await authenticate(el);
+    await failAutomaticPreparation(el);
     await useDifferentCopy(el);
     const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
@@ -799,8 +797,8 @@ it.each(["en-GB", "es-ES"])(
   "says a typed archive key is too short and keeps asking for it (%s)",
   async (locale) => {
     setLocale(locale);
-    const { el, posts } = await mount({ backup: true });
-    await authenticate(el);
+    const { el, posts } = await mount({ later: failedAutomaticCopy });
+    await failAutomaticPreparation(el);
     await useDifferentCopy(el);
     chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
     await el.updateComplete;
@@ -830,11 +828,11 @@ it.each([
   async (code, key, locale, reason) => {
     setLocale(locale);
     const { el, posts } = await mount({
-      backup: true,
+      later: failedAutomaticCopy,
       backupRefusal: code,
       backupRefusalReason: reason,
     });
-    await authenticate(el);
+    await failAutomaticPreparation(el);
     await useDifferentCopy(el);
     const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
@@ -1428,8 +1426,7 @@ it("while the spare catches up the page waits and says so, then offers the copy 
   await vi.waitFor(() => catchingUp(el));
   expect(followedTakes(posts)).toBe(1);
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
-  await useDifferentCopy(el);
-  expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
   await vi.advanceTimersByTimeAsync(2000);
   expect(followedTakes(posts)).toBe(2);
   await vi.advanceTimersByTimeAsync(56_000);
@@ -1438,7 +1435,7 @@ it("while the spare catches up the page waits and says so, then offers the copy 
   await el.updateComplete;
   expect(q(el, "[data-test=emergency-held]")).not.toBeNull();
   expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.still_catching_up"));
-  expect(await backupControlDisabled(el)).toBe(false);
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
   const taken = followedTakes(posts);
   vi.useRealTimers();
   q(el, "[data-test=emergency-held]").click();
@@ -1496,7 +1493,7 @@ it("says the held copy is from when this spare joined when the joining date is u
   );
 });
 
-it("from the press, waits visibly with Choose a backup open, and offers the held copy at 60 seconds even while a take is still held", async () => {
+it("from the press, waits visibly and offers the held copy at 60 seconds even while a take is still held", async () => {
   let release!: () => void;
   const takeGate = new Promise<void>((resolve) => (release = resolve));
   const { el, posts } = await mount({ held: true, takes: ["catching-up"], takeGate });
@@ -1505,7 +1502,7 @@ it("from the press, waits visibly with Choose a backup open, and offers the held
   await vi.waitFor(() => expect(followedTakes(posts)).toBe(1));
   await el.updateComplete;
   catchingUp(el);
-  expect(await backupControlDisabled(el)).toBe(false);
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
   await vi.advanceTimersByTimeAsync(59_000);
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
   await vi.advanceTimersByTimeAsync(1000);
@@ -1599,7 +1596,7 @@ it("pressing the held copy while the old process is still going down waits for t
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.held_waiting")),
   );
   expect(actions(el)).not.toContain(t("handover.emergency.failed"));
-  expect(await backupControlDisabled(el)).toBe(false);
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
   await vi.advanceTimersByTimeAsync(4000);
   await vi.waitFor(() =>
     expect(q(el, "[data-test=emergency-copy]").textContent).toContain(t("handover.emergency.copy")),
@@ -1645,7 +1642,7 @@ it("a person only the up-to-date copy knows waits for it, with no held copy to o
   expect(q(el, "[data-test=emergency-held]")).toBeNull();
   expect(q(el, "[data-test=held-copy]")).toBeNull();
   expect(actions(el)).not.toContain(t("handover.emergency.sign_in_failed"));
-  expect(await backupControlDisabled(el)).toBe(false);
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
 });
 
 it("a followed copy placed earlier goes through the take, which may find a newer one", async () => {
@@ -1893,25 +1890,8 @@ it("the held copy is offered with no sign-in field left to empty, and a refused 
   expect(button(el, "sign-in-password").disabled).toBe(false);
 });
 
-it("choosing a backup while the spare catches up stops the catching up", async () => {
-  const { el, posts } = await mount({ held: true, takes: ["catching-up"] });
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  await check(el);
-  await vi.waitFor(() => catchingUp(el));
-  await useDifferentCopy(el);
-  chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
-  await el.updateComplete;
-  q(el, "[data-test=emergency-backup]").click();
-  await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
-  const taken = followedTakes(posts);
-  await vi.advanceTimersByTimeAsync(6000);
-  expect(followedTakes(posts)).toBe(taken);
-  expect(step(el, "follow")).not.toBe("working");
-  expect(Reflect.get(el, "following")).toBe(false);
-});
-
 async function chooseBackup(el: SetupHandoverScreen) {
-  await authenticate(el);
+  await failAutomaticPreparation(el);
   await useDifferentCopy(el);
   chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
   await el.updateComplete;
@@ -1923,7 +1903,7 @@ async function chooseBackup(el: SetupHandoverScreen) {
 }
 
 it("after choosing a backup, the page keeps waiting until the box shows that backup in place", async () => {
-  const { el, posts } = await mount({ backup: true, later: ["ok", "unplaced"] });
+  const { el, posts } = await mount({ later: [...failedAutomaticCopy, "unplaced"] });
   await chooseBackup(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.backup_restarting")),
@@ -1947,8 +1927,7 @@ it("after choosing a backup, the page keeps waiting until the box shows that bac
 
 it("after choosing a backup, a changed copy is waited out but a refused check ends the wait and says why", async () => {
   const { el, posts } = await mount({
-    backup: true,
-    later: ["ok", "handover.copy_mismatch", "password.throttled"],
+    later: [...failedAutomaticCopy, "handover.copy_mismatch", "password.throttled"],
   });
   await chooseBackup(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.throttled")), {
@@ -2806,13 +2785,15 @@ it("a backup chosen while the box restarts may open the prompt though the restar
   const hold: { gate?: Promise<void> } = {};
   const { el, posts } = await mount({
     proof,
-    takes: ["catching-up", "restarting"],
+    takes: ["taken", "catching-up", "restarting"],
+    later: failedAutomaticCopy,
     backupGate: () => hold.gate ?? Promise.resolve(),
   });
   await choosePasskey(el);
-  await vi.waitFor(() => catchingUp(el));
-  // The backup choice is opened while the spare catches up; the next take restarts the box.
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.copy_unchecked")));
   await useDifferentCopy(el);
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => catchingUp(el));
   chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
   await vi.waitFor(
     () => expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
@@ -3502,11 +3483,11 @@ it.each(["en-GB", "es-ES"])(
   "the sign-in page has no backup choice; Preparing the venue has no sign-in, and its backup link opens only the backup choice (%s)",
   async (locale) => {
     setLocale(locale);
-    const { el } = await mount();
+    const { el } = await mount({ later: failedAutomaticCopy });
     expect(signInDrawn(el)).toEqual([false, true, false, false, false]);
     await toMethods(el);
     expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
-    await authenticate(el);
+    await failAutomaticPreparation(el);
     expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
     expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.sign_in"));
     expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.backup_intro"));
@@ -3624,8 +3605,8 @@ it.each(["en-GB", "es-ES"])(
 );
 
 it("Enter on Upload a backup file instead moves focus to the backup file it reveals", async () => {
-  const { el } = await mount();
-  await authenticate(el);
+  const { el } = await mount({ later: failedAutomaticCopy });
+  await failAutomaticPreparation(el);
   q(el, "[data-test=upload-backup]").shadowRoot!.querySelector("button")!.focus();
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() =>
@@ -3709,7 +3690,7 @@ async function proceed(el: SetupHandoverScreen) {
 }
 
 it.each(["en-GB", "es-ES"])(
-  "Continue leads to Preparing the venue: its two steps, then the copy's latest sale or order, Proceed and the backup link (%s)",
+  "Continue leads to Preparing the venue: its two steps, then the copy's latest sale or order, and Proceed without the backup link (%s)",
   async (locale) => {
     setLocale(locale);
     const changed = 1791000000000;
@@ -3742,16 +3723,26 @@ it.each(["en-GB", "es-ES"])(
     expect(el.shadowRoot!.querySelector(`a[href="${preview.sourceServersUrl}"]`)).toBeNull();
     expect(q(el, "[data-test=proceed]").textContent!.trim()).toBe(t("handover.emergency.proceed"));
     expect(q(el, "[data-test=proceed]").getAttribute("variant")).toBe("primary");
-    expect(q(el, "[data-test=upload-backup]").textContent!.trim()).toBe(
-      t("handover.emergency.upload_backup"),
-    );
+    expect(q(el, "[data-test=upload-backup]")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.keep_open"));
     expect(q(el, ".statements")).toBeNull();
     expect(q(el, "[data-test=emergency-declare]")).toBeNull();
   },
 );
 
-it("enables no button but the backup link while catching up, and none while the copy is checked", async () => {
+it("focuses the Preparing heading without painting an outline", async () => {
+  const { el } = await mount();
+  await signInFields(el);
+  const signIn = q(el, "[data-test=sign-in-password]").shadowRoot!.querySelector("button")!;
+  signIn.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(heading(el)).toBe(t("handover.emergency.preparing_heading")));
+  const title = q(el, "h1");
+  expect(el.shadowRoot!.activeElement).toBe(title);
+  expect(getComputedStyle(title).outlineStyle).toBe("none");
+});
+
+it("enables no button while catching up or checking, then offers only Proceed", async () => {
   let open!: () => void;
   const { el, posts } = await mount({
     takes: ["catching-up", "taken"],
@@ -3761,8 +3752,8 @@ it("enables no button but the backup link while catching up, and none while the 
   q(el, "[data-test=sign-in-password]").click();
   await vi.waitFor(() => expect(posts.some(({ path }) => path.endsWith("/followed"))).toBe(true));
   await el.updateComplete;
-  // While it catches up, only the way to a backup instead is offered.
-  expect(enabledButtons(el)).toEqual([t("handover.emergency.upload_backup")]);
+  expect(enabledButtons(el)).toEqual([]);
+  expect(q(el, "[data-test=upload-backup]")).toBeNull();
   catchingUp(el);
   // The take answers taken, and the copy's check waits on its answer.
   await vi.waitFor(
@@ -3775,17 +3766,14 @@ it("enables no button but the backup link while catching up, and none while the 
   expect([step(el, "follow"), step(el, "check")]).toEqual(["done", "working"]);
   open();
   await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
-  expect(enabledButtons(el)).toEqual([
-    t("handover.emergency.proceed"),
-    t("handover.emergency.upload_backup"),
-  ]);
+  expect(enabledButtons(el)).toEqual([t("handover.emergency.proceed")]);
 });
 
 it("offers the backup file on Preparing the venue behind its link, never on the sign-in page", async () => {
-  const { el } = await mount({ backup: true });
+  const { el } = await mount({ later: failedAutomaticCopy });
   expect(q(el, 'wt-file-input[name="handover-backup"]')).toBeNull();
   expect(q(el, "[data-test=upload-backup]")).toBeNull();
-  await authenticate(el);
+  await failAutomaticPreparation(el);
   expect(q(el, 'wt-file-input[name="handover-backup"]')).toBeNull();
   q(el, "[data-test=upload-backup]").click();
   await el.updateComplete;
@@ -3802,6 +3790,20 @@ it.each(["en-GB", "es-ES"])(
     const { el } = await mount({ pageUrl: spareSwitchPage(TILL) });
     await authenticate(el);
     await proceed(el);
+    const statements =
+      locale === "es-ES"
+        ? [
+            handoverEs["handover.emergency.noParallelRecovery"],
+            handoverEs["handover.emergency.missingTailAccepted"],
+          ]
+        : [
+            "Nobody else is trying to switch the venue to a new main box at the moment.",
+            "I accept that the latest activity might be missing.",
+          ];
+    for (const [index, name] of ["noParallelRecovery", "missingTailAccepted"].entries())
+      expect(q(el, `[name="${name}"]`).closest("label")!.textContent!.trim()).toBe(
+        `${statements[index]} *`,
+      );
     expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
     expect(el.shadowRoot!.activeElement).toBe(q(el, "h1"));
     expect(q(el, "[data-test=emergency-copy]")).toBeNull();
@@ -3840,7 +3842,7 @@ it.each(["en-GB", "es-ES"])(
     expect(back.getAttribute("href")).toBe(TILL);
     expect(back.textContent!.trim()).toBe(t("handover.emergency.leave_till"));
     expect(q(el, "[data-test=emergency-ready]").getAttribute("data-wording-version")).toBe(
-      "a1018-emergency-v2",
+      "a1018-emergency-v3",
     );
   },
 );

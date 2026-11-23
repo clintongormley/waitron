@@ -2398,7 +2398,7 @@ export const en = {
   "servers.not_primary":
     "Only the primary box can remove machines or clear them from the list. Open this screen on the primary.",
   "servers.this_server": "This box",
-  "servers.standing.primary": "Primary",
+  "servers.standing.primary": "Main box",
   "servers.standing.standby": "Standby",
   "servers.standing.sell_only": "Replaced; not selling",
   "servers.replaced_note": "Keep it switched on while it returns its invoice records.",
@@ -7183,7 +7183,7 @@ export const es: Record<StringKey, string> = {
   "servers.not_primary":
     "Solo el servidor principal puede retirar máquinas o quitarlas de la lista. Abre esta pantalla en el principal.",
   "servers.this_server": "Este servidor",
-  "servers.standing.primary": "Principal",
+  "servers.standing.primary": "Servidor principal",
   "servers.standing.standby": "En espera",
   "servers.standing.sell_only": "Sustituido; no vende",
   "servers.replaced_note": "Mantenlo encendido mientras devuelve sus registros de facturación.",

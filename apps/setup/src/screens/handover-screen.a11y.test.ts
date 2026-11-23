@@ -104,15 +104,13 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 }),
               );
             if (String(input).endsWith("/followed"))
-              return stage === "waiting" || stage === "different-copy"
-                ? new Response(
-                    JSON.stringify({ state: stage === "waiting" ? "catching-up" : "taken" }),
-                  )
+              return stage === "waiting"
+                ? new Response(JSON.stringify({ state: "catching-up" }))
                 : new Response(JSON.stringify({ error: { code: "handover.chain_broken" } }), {
                     status: 409,
                   });
             if (String(input).endsWith("/preview")) {
-              if (stage === "refusal")
+              if (stage === "refusal" || stage === "different-copy")
                 return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
                   status: 409,
                 });
@@ -122,14 +120,14 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                   destinationNodeId: "new",
                   sourceServersUrl: "https://main.example/servers",
                   copy: {
-                    ...(stage === "declaration" || stage === "different-copy"
+                    ...(stage === "declaration"
                       ? { source: "followed-copy", sourceId: "c".repeat(64) }
                       : { source: "mirror-copy" }),
                     identifier: "a".repeat(64),
                     lastChangeAtMs: 1792147200000,
                   },
                   joinedAtMs: 1789819200000,
-                  operation: ["declaration", "different-copy", "waiting", "held"].includes(stage)
+                  operation: ["declaration", "waiting", "held"].includes(stage)
                     ? null
                     : {
                         operationId: "emergency",
@@ -213,7 +211,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             );
           if (stage === "different-copy") {
             await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector("[data-test=emergency-copy]")).not.toBeNull(),
+              expect(el.shadowRoot!.querySelector("[data-test=upload-backup]")).not.toBeNull(),
             );
             await el.updateComplete;
             await expectNoA11yViolations(host);
@@ -355,12 +353,7 @@ describe.each(["en-GB", "es-ES"])("emergency switch pages %s", (locale) => {
         await el.updateComplete;
         await expectNoA11yViolations(host);
         await shoot("06-done");
-        root.querySelector<HTMLElement>("[data-test=upload-backup]")!.click();
-        await vi.waitFor(() =>
-          expect(root.querySelector('wt-file-input[name="handover-backup"]')).not.toBeNull(),
-        );
-        await expectNoA11yViolations(host);
-        await shoot("06-backup");
+        expect(root.querySelector("[data-test=upload-backup]")).toBeNull();
         root.querySelector<HTMLElement>("[data-test=proceed]")!.click();
         await vi.waitFor(() =>
           expect(root.querySelector("[data-test=emergency-ready]")).not.toBeNull(),

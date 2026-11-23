@@ -191,6 +191,7 @@ function service(
         declaration?: {
           body: {
             binding: unknown;
+            wordingVersion: string;
             lastCopy: { identifier: string; lastChangeAtMs: number | null };
           };
         };
@@ -477,6 +478,7 @@ it("records a signed declaration before answering, then replays without asking t
   const s = service();
   const first = await s.post();
   expect(first.status).toBe(200);
+  expect(first.body.declaration?.body.wordingVersion).toBe("a1018-emergency-v3");
   expect(
     verifyEnvelope(first.body.declaration, "declaration", () => nodeSigningPublicKey(spareKey))
       .valid,

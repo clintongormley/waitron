@@ -94,7 +94,7 @@ import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
 
 export interface Declaration {
   binding: HandoverBinding;
-  wordingVersion: "a1018-emergency-v2";
+  wordingVersion: "a1018-emergency-v3";
   locale: "en" | "es";
   statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
   reason: string;
@@ -604,7 +604,7 @@ export function mountHandoverEmergencyApi(
     const lastCopy = await compareCopy(request.expectedCopy, c.req.raw.signal);
     const body: Declaration = {
       binding,
-      wordingVersion: "a1018-emergency-v2",
+      wordingVersion: "a1018-emergency-v3",
       locale: request.locale,
       statements: request.statements,
       reason: request.reason,

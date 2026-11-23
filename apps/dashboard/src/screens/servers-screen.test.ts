@@ -163,6 +163,15 @@ afterEach(() => {
 });
 
 describe("servers screen list", () => {
+  it.each([
+    ["en-GB", "Main box"],
+    ["es-ES", "Servidor principal"],
+  ] as const)("names the main box on its Servers row in %s", async (locale, label) => {
+    setLocale(locale);
+    const el = await mount();
+    expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(label);
+  });
+
   it("names each machine's role in words and marks which one is this box", async () => {
     const el = await mount();
     expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(t("servers.standing.primary"));

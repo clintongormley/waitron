@@ -58,7 +58,7 @@ copia por la red del local y se reinicia como servidor de reserva. Su página te
 del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en
 el servidor.
 
-En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del servidor de reserva en segundos y la **Última copia recibida**.
+En el servidor principal, abre **Sistema → Servidores** y busca la fila marcada **Servidor principal**. Comprueba el retraso del servidor de reserva en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,
 comprueba que el servidor de reserva esté conectado a la red del restaurante. **Reconstruyendo la copia** indica que debes dejar ambos servidores encendidos mientras se restaura la copia.
 
@@ -91,10 +91,11 @@ Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el s
 anterior y mantenlo apagado, porque dos servidores principales encendidos podrían cobrar y enviar
 registros por separado. El cambio no se puede deshacer.
 
-En una caja o un terminal de camarero, **El servidor principal no responde.** ocupa en rojo la
-pantalla de inicio de sesión, en lugar del teclado del PIN mientras el servidor principal no responda, y aparece
-como una franja roja en las demás pantallas. Ofrece **Cambiar al servidor de reserva** en la
-pantalla de inicio de sesión, y a quien tenga **Gestionar servidores**. Abre esta página en el servidor de reserva. Cuando el servidor
+Si la pantalla de la caja o del terminal de camarero se pone roja, déjala abierta. Cuando el
+servidor principal vuelva a responder, podrás seguir con tu pedido. Si el servidor de reserva
+responde, elige **Cambiar al servidor de reserva** en la pantalla de acceso o con la sesión
+iniciada y el permiso **Gestionar servidores**. El botón indica que se está comprobando la
+conexión antes de abrir esta página en el servidor de reserva. Cuando el servidor
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
 más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
@@ -128,8 +129,9 @@ reserva** ofrece la copia que ya tiene, normalmente la de cuando se incorporó, 
 Cuando la copia esté comprobada, revisa **Última venta o pedido en esta copia**: puede faltar lo
 posterior. Después elige **Seguir**.
 
-Para usar una copia de seguridad cifrada, elige **Subir un archivo de copia de seguridad en su lugar** en
-**Preparando el local**, elige el archivo y pulsa **Usar esta copia de seguridad**.
+Si falla la preparación automática, puedes usar una copia de seguridad cifrada. En **Preparando
+el local**, elige **Subir un archivo de copia de seguridad en su lugar**, elige el archivo y pulsa
+**Usar esta copia de seguridad**.
 Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última venta o pedido antes de elegir **Seguir**. Elige una copia hecha después de que este
@@ -165,7 +167,7 @@ servidor principal antiguo: puede tener datos que este servidor no tiene. Cuando
 encender, envía aquí sus registros de facturación por sí solo y se retira. Después, elige [**Borrar y retirar**](servers.md#old-box-returns)
 para él en la página Servidores de este servidor, en el panel.
 
-Si el alojamiento de emergencia está disponible para tu local, la franja roja o la pantalla roja de inicio de sesión también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
+Si el alojamiento de emergencia está disponible para tu local, la pantalla roja también ofrece **Iniciar el local en la nube**, incluso sin servidor de reserva. La opción aparece en la pantalla de acceso y para todo el personal. [Comprueba qué necesitas](servers.md#cloud-emergency) antes de abrirla.
 
 ## Conservar los datos del servidor averiado {#old-box-returns}
 
@@ -471,7 +473,7 @@ la tarjeta, igual que salir de esta pantalla. La dirección junto al código cor
 La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
 en su perfil. La tarjeta no inicia el local.
 
-Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la franja roja o la pantalla roja de inicio de sesión ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la pantalla roja ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
 
 Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
 

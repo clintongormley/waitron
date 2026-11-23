@@ -174,6 +174,9 @@ export class SetupHandoverScreen extends LitElement {
       h1 {
         margin-top: 0;
       }
+      h1[data-preparing]:focus {
+        outline: none;
+      }
       .statements label {
         display: flex;
         align-items: start;
@@ -1634,8 +1637,7 @@ export class SetupHandoverScreen extends LitElement {
         : "waiting";
     const held = !preview && this.heldOffered ? this.heldCopy : undefined;
     const refused = !preview && !working && this.actionError !== "";
-    const backupOffered =
-      this.#offersOtherCopy && !this.backupOpen && !this.busy && !this.restarting;
+    const backupOffered = refused && this.#offersOtherCopy && !this.backupOpen;
     return html`<div role="status">
         <ol class="progress">
           ${followed ? this.#progressRow("follow", "handover.emergency.step_follow", followState) : nothing}
@@ -1788,7 +1790,7 @@ export class SetupHandoverScreen extends LitElement {
   }
   /** Ready to switch: the statements and the reason the switch records, then Switch to this box. */
   #readyPage() {
-    return html`<section data-test="emergency-ready" data-wording-version="a1018-emergency-v2">
+    return html`<section data-test="emergency-ready" data-wording-version="a1018-emergency-v3">
         ${this.#signInShown ? this.#signInFields(true) : nothing} ${this.#controlledLink()}
         <div class="statements">
           ${(["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
@@ -1970,6 +1972,7 @@ export class SetupHandoverScreen extends LitElement {
   override render() {
     this.#emailStepDrawn = false;
     const status = this.status;
+    const heading = this.#heading;
     return html`<main
       lang=${currentLocale()}
       @recovery-edit-details=${(event: Event) => {
@@ -1981,7 +1984,9 @@ export class SetupHandoverScreen extends LitElement {
         if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
-      <h1 tabindex="-1">${t(this.#heading)}</h1>
+      <h1 tabindex="-1" ?data-preparing=${heading === "handover.emergency.preparing_heading"}>
+        ${t(heading)}
+      </h1>
       ${this.#content()}
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : status.waitingReason === "handover.copy_check_failed" ? "handover.check_failed" : "handover.wait")}</p>` : nothing}
       ${status?.waitingReason === "handover.copy_check_failed" ? html`<p><a href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/servers#emergency`}>${t("handover.check_help")}</a></p>` : nothing}
