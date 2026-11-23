@@ -4,7 +4,7 @@ import {
   addDecimal,
   decimal,
   divideDecimal,
-  ibanGroups,
+  formatIban,
   isZeroDecimal,
   MONEY_SCALE,
   negateDecimal,
@@ -21,12 +21,11 @@ import {
   type InvoicePageElement,
   type InvoiceTextWeight,
 } from "./invoice-page.js";
-import { cardName } from "./card-details.js";
+import { cardEntryLabel, cardName } from "./card-details.js";
 import { qrModules } from "./qr-matrix.js";
 import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import {
   CONTACT_SEPARATOR,
-  rateLetters,
   receiptFacts,
   type ReceiptDocumentInput,
   type DatedInvoice,
@@ -61,6 +60,35 @@ const LOGO_PITCH = 72 / 203;
 
 const lineHeight = (size: number): number => size * LINE_SPACING;
 
+type Tone = "ink" | "muted";
+
+/** Drawing calls that add to whichever list `into` returns when each is called. */
+function pen(into: () => InvoicePageElement[]) {
+  const text = (
+    value: string,
+    x: number,
+    y: number,
+    size: number,
+    weight: InvoiceTextWeight = "regular",
+    tone: Tone = "ink",
+  ): void => {
+    into().push({ kind: "text", text: value, x, y, size, weight, tone });
+  };
+  const rule = (x: number, y: number, width: number, thickness: number): void => {
+    into().push({ kind: "rule", x, y, width, thickness });
+  };
+  /** Text whose right edge is at `right`. */
+  const rightAt = (
+    value: string,
+    right: number,
+    y: number,
+    size: number,
+    weight: InvoiceTextWeight = "regular",
+    tone: Tone = "ink",
+  ): void => text(value, right - invoiceTextWidth(value, size, weight), y, size, weight, tone);
+  return { text, rule, rightAt };
+}
+
 function practiceNotices({ practice, labels }: ReceiptFacts): string[] {
   if (practice === undefined) return [];
   return [labels.practice, ...(practice.noRealCharge ? [labels.noRealCharge] : [])];
@@ -74,31 +102,16 @@ function layoutNoticeBox(
   const inner = TEXT_WIDTH - 2 * BOX_PADDING;
   const lines = notices.flatMap((notice) => wrapInvoiceText(notice, inner, BODY_SIZE));
   const height = 2 * BOX_PADDING + lines.length * lineHeight(BODY_SIZE);
-  const rule = (x: number, y: number, width: number, thickness: number): InvoicePageElement => ({
-    kind: "rule",
-    x,
-    y,
-    width,
-    thickness,
-  });
-  return {
-    elements: [
-      rule(MARGIN, top, TEXT_WIDTH, LIGHT_RULE),
-      rule(MARGIN, top + height - LIGHT_RULE, TEXT_WIDTH, LIGHT_RULE),
-      rule(MARGIN, top, LIGHT_RULE, height),
-      rule(RIGHT - LIGHT_RULE, top, LIGHT_RULE, height),
-      ...lines.map((line, at): InvoicePageElement => ({
-        kind: "text",
-        text: line,
-        x: MARGIN + BOX_PADDING,
-        y: top + BOX_PADDING + at * lineHeight(BODY_SIZE),
-        size: BODY_SIZE,
-        weight: "regular",
-        tone: "ink",
-      })),
-    ],
-    bottom: top + height,
-  };
+  const elements: InvoicePageElement[] = [];
+  const { text, rule } = pen(() => elements);
+  rule(MARGIN, top, TEXT_WIDTH, LIGHT_RULE);
+  rule(MARGIN, top + height - LIGHT_RULE, TEXT_WIDTH, LIGHT_RULE);
+  rule(MARGIN, top, LIGHT_RULE, height);
+  rule(RIGHT - LIGHT_RULE, top, LIGHT_RULE, height);
+  lines.forEach((line, at) =>
+    text(line, MARGIN + BOX_PADDING, top + BOX_PADDING + at * lineHeight(BODY_SIZE), BODY_SIZE),
+  );
+  return { elements, bottom: top + height };
 }
 
 function invoiceTitle({ labels, corrects, simplified, band }: ReceiptFacts): string {
@@ -119,19 +132,7 @@ export function layoutInvoiceHeader(
 ): { elements: InvoicePageElement[]; bottom: number } {
   const { labels, locale, letterhead, band, corrects, customer } = facts;
   const elements: InvoicePageElement[] = [];
-  const text = (
-    value: string,
-    x: number,
-    y: number,
-    size: number,
-    weight: InvoiceTextWeight = "regular",
-    tone: "ink" | "muted" = "ink",
-  ): void => {
-    elements.push({ kind: "text", text: value, x, y, size, weight, tone });
-  };
-  const rule = (x: number, y: number, width: number, thickness: number): void => {
-    elements.push({ kind: "rule", x, y, width, thickness });
-  };
+  const { text, rule, rightAt } = pen(() => elements);
   let y = MARGIN;
 
   const notices = [
@@ -176,7 +177,7 @@ export function layoutInvoiceHeader(
     weight: InvoiceTextWeight = "regular",
   ): void => {
     for (const line of lines) {
-      text(line, RIGHT - invoiceTextWidth(line, size, weight), at, size, weight);
+      rightAt(line, RIGHT, at, size, weight);
       at += lineHeight(size);
     }
   };
@@ -455,7 +456,7 @@ function paymentLines(facts: ReceiptFacts): Line[] {
     const { account } = deferred;
     if (account === null) return [{ text: `${labels.deferredPayment}.` }];
     const instruction = labels.transferInstruction.replace("{number}", () => band.invoiceNumber);
-    const iban = `${labels.iban}: ${ibanGroups(account.iban).join(" ")}`;
+    const iban = `${labels.iban}: ${formatIban(account.iban)}`;
     return [
       { text: `${labels.deferredPayment}. ${instruction}` },
       {
@@ -467,12 +468,8 @@ function paymentLines(facts: ReceiptFacts): Line[] {
 
   const cardParts = (card: CardDetails | undefined, amount: Decimal): string[] => {
     if (card === undefined) return [`${labels.card} ${money(amount)}`];
-    const presented = {
-      contactless: ` (${labels.paymentContactless})`,
-      chip: ` (${labels.paymentChip})`,
-      swipe: ` (${labels.paymentSwipe})`,
-      unknown: "",
-    }[card.entryMode];
+    const entry = cardEntryLabel(card.entryMode, labels);
+    const presented = entry === undefined ? "" : ` (${entry})`;
     return [
       `${cardName(card, labels.card)}${presented} ${money(amount)}`,
       ...(card.authCode === null ? [] : [`${labels.paymentAuthorization} ${card.authCode}`]),
@@ -541,7 +538,7 @@ interface ClosingPiece {
  *  may break between: the summary with TOTAL, the payment heading with its first line, each
  *  further line, and the notice box. */
 function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
-  const { labels, locale, total, simplified } = facts;
+  const { labels, locale, total } = facts;
   let elements: InvoicePageElement[] = [];
   const pieces: ClosingPiece[] = [{ elements, top: 0, bottom: 0 }];
   const piece = (top: number): void => {
@@ -549,24 +546,7 @@ function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
     elements = [];
     pieces.push({ elements, top, bottom: top });
   };
-  const text = (
-    value: string,
-    x: number,
-    y: number,
-    size: number,
-    weight: InvoiceTextWeight = "regular",
-    tone: "ink" | "muted" = "ink",
-  ): void => {
-    elements.push({ kind: "text", text: value, x, y, size, weight, tone });
-  };
-  const rightAt = (
-    value: string,
-    right: number,
-    y: number,
-    size: number,
-    weight: InvoiceTextWeight = "regular",
-    tone: "ink" | "muted" = "ink",
-  ): void => text(value, right - invoiceTextWidth(value, size, weight), y, size, weight, tone);
+  const { text, rule, rightAt } = pen(() => elements);
   const money = (value: Decimal): string => formatMoney(value, locale);
 
   const left = MARGIN + TEXT_WIDTH / 2;
@@ -577,10 +557,8 @@ function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
     labels.vatSummaryAmountColumn,
     labels.taxTotalColumn,
   ];
-  const letters = simplified ? rateLetters(facts.vat) : null;
-  const rows = facts.vat.map(({ rate, base, tax }) => {
+  const rows = facts.vat.map(({ rate, base, tax, letter }) => {
     const shown = formatVatRate(rate, locale);
-    const letter = letters?.get(rate);
     return [
       letter === undefined ? shown : `${letter} ${shown}`,
       money(base),
@@ -603,7 +581,7 @@ function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
   const cellRight = (index: number): number =>
     left + columns.slice(0, index + 1).reduce((sum, column) => sum + column, 0) - CELL_PADDING;
   let y = 0;
-  const cells = (values: string[], size: number, tone: "ink" | "muted"): void => {
+  const cells = (values: string[], size: number, tone: Tone): void => {
     const wrapped = values.map((value, index) =>
       wrapInvoiceText(value, columns[index]! - 2 * CELL_PADDING, size),
     );
@@ -617,7 +595,7 @@ function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
   cells(headings, LABEL_SIZE, "muted");
   for (const row of rows) cells(row, BODY_SIZE, "ink");
   y += GAP / 2;
-  elements.push({ kind: "rule", x: left, y, width, thickness: HEAVY_RULE });
+  rule(left, y, width, HEAVY_RULE);
   y += HEAVY_RULE + GAP / 2;
   text(labels.total, left, y, TOTAL_SIZE, "bold");
   rightAt(money(total), RIGHT, y, TOTAL_SIZE, "bold");
@@ -635,7 +613,7 @@ function layoutClosing(facts: ReceiptFacts): ClosingPiece[] {
   if (lines.length > 0) {
     y += GAP;
     piece(y);
-    elements.push({ kind: "rule", x: MARGIN, y, width: TEXT_WIDTH, thickness: LIGHT_RULE });
+    rule(MARGIN, y, TEXT_WIDTH, LIGHT_RULE);
     y += LIGHT_RULE + GAP;
     text(labels.paymentMethodHeading, MARGIN, y, BODY_SIZE, "bold");
     y += lineHeight(BODY_SIZE);
@@ -679,16 +657,7 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
     pages.push(page);
     y = continuedTop;
   };
-  const text = (
-    value: string,
-    x: number,
-    top: number,
-    size: number,
-    weight: InvoiceTextWeight,
-    tone: "ink" | "muted",
-  ): void => {
-    page.push({ kind: "text", text: value, x, y: top, size, weight, tone });
-  };
+  const { text, rule } = pen(() => page);
 
   const rows = tableRows(facts);
   const columns = tableColumns(facts, rows);
@@ -717,7 +686,7 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
     lines: readonly string[][],
     size: number,
     weight: InvoiceTextWeight,
-    tone: "ink" | "muted",
+    tone: Tone,
     indent: number,
   ): void => {
     lines.forEach((cell, index) => {
@@ -762,7 +731,7 @@ export function layoutA4Invoice(input: ReceiptDocumentInput): InvoicePage[] {
     }
     drawCells(lines, BODY_SIZE, "regular", row.muted ? "muted" : "ink", indent);
     y += height - ROW_RULE;
-    page.push({ kind: "rule", x: MARGIN, y, width: TEXT_WIDTH, thickness: ROW_RULE });
+    rule(MARGIN, y, TEXT_WIDTH, ROW_RULE);
     y += ROW_RULE;
   }
 

@@ -1,7 +1,7 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
-import { cardName } from "./card-details.js";
+import { cardEntryLabel, cardName } from "./card-details.js";
 import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 
@@ -47,12 +47,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   b.line();
   if (input.card !== null) {
     row(labels.card, cardName(input.card, labels.card));
-    const entries: Partial<Record<CardDetails["entryMode"], string>> = {
-      contactless: labels.paymentContactless,
-      chip: labels.paymentChip,
-      swipe: labels.paymentSwipe,
-    };
-    const entry = entries[input.card.entryMode];
+    const entry = cardEntryLabel(input.card.entryMode, labels);
     if (entry !== undefined) row(labels.paymentEntry, entry);
     if (input.card.authCode !== null) row(labels.paymentAuthorization, input.card.authCode);
     b.line();

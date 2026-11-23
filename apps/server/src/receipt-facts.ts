@@ -143,7 +143,8 @@ export type FigureSection =
 export interface ReceiptFigures {
   simplified: boolean;
   sections: FigureSection[];
-  vat: { rate: Decimal; base: Decimal; tax: Decimal }[];
+  /** `letter` is the rate's letter on a simplified invoice with more than one rate. */
+  vat: { rate: Decimal; base: Decimal; tax: Decimal; letter?: string }[];
   total: Decimal;
 }
 
@@ -491,11 +492,15 @@ export function receiptFigures({
   return {
     simplified,
     sections,
-    vat: result.vatBreakdown.map((v) => ({
-      rate: decimal(v.rate),
-      base: decimal(v.base),
-      tax: decimal(v.tax),
-    })),
+    vat: result.vatBreakdown.map((v) => {
+      const letter = rateLetter(v.rate);
+      return {
+        rate: decimal(v.rate),
+        base: decimal(v.base),
+        tax: decimal(v.tax),
+        ...(letter === undefined ? {} : { letter }),
+      };
+    }),
     total: decimal(result.total),
   };
 }

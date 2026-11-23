@@ -2,10 +2,9 @@ import type { CardDetails } from "@waitron/payments";
 import { recipientIdentifierLabel, receiptCountryNameFor } from "@waitron/country-packs";
 import {
   addDecimal,
-  compareDecimal,
   decimal,
   divideDecimal,
-  ibanGroups,
+  formatIban,
   MONEY_SCALE,
   negateDecimal,
   subtractDecimal,
@@ -16,7 +15,6 @@ import {
 } from "@waitron/shared";
 import {
   filedRates,
-  rateLetters,
   receiptFacts,
   type DatedInvoice,
   type ReceiptDocumentInput,
@@ -29,7 +27,7 @@ import {
   receiptDay,
   receiptDayNumeric,
 } from "./receipt-dates.js";
-import { cardName } from "./card-details.js";
+import { cardEntryLabel, cardName } from "./card-details.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { TenderBlock } from "./till-sale.js";
@@ -107,11 +105,6 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
   const align = (alignment: "left" | "center"): void => {
     elements.push({ kind: "align", alignment });
   };
-  const letters = simplified ? rateLetters(result.vatBreakdown) : null;
-  const rateLetter = (rate: string): string | undefined =>
-    letters === null
-      ? undefined
-      : [...letters].find(([seen]) => compareDecimal(decimal(seen), decimal(rate)) === 0)?.[1];
   const lettered = (letter: string): string => (letter === "" ? "" : ` ${letter}`);
   const takenOff = (item: string, amount: Decimal, indent: number, letter = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
@@ -297,9 +290,8 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
         },
         rows: facts.vat.map((v) => {
           const rate = formatVatRate(v.rate, locale);
-          const found = rateLetter(v.rate);
           return {
-            rate: found === undefined ? rate : `${found} ${rate}`,
+            rate: v.letter === undefined ? rate : `${v.letter} ${rate}`,
             base: formatAmount(v.base, locale),
             tax: formatAmount(v.tax, locale),
             total: formatAmount(addDecimal(v.base, v.tax), locale),
@@ -320,12 +312,8 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
       row(label.card, formatMoney(amount, locale));
       return;
     }
-    const presented = {
-      contactless: ` (${label.paymentContactless})`,
-      chip: ` (${label.paymentChip})`,
-      swipe: ` (${label.paymentSwipe})`,
-      unknown: "",
-    }[card.entryMode];
+    const entry = cardEntryLabel(card.entryMode, label);
+    const presented = entry === undefined ? "" : ` (${entry})`;
     row(`${cardName(card, label.card)}${presented}`, formatMoney(amount, locale));
     if (card.authCode !== null) text(`${label.paymentAuthorization} ${card.authCode}`);
   };
@@ -369,7 +357,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     else {
       const instruction = label.transferInstruction.replace("{number}", () => band.invoiceNumber);
       text(`${label.deferredPayment}. ${instruction}`);
-      const iban = ibanGroups(account.iban).join(" ");
+      const iban = formatIban(account.iban);
       if (paperWidth === "58mm") {
         text(`${label.iban}:`);
         text(iban);
