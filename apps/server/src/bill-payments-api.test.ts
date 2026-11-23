@@ -3408,7 +3408,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     await inTx((tx) =>
       tx
         .update(products)
-        .set({ vatClass: "reduced" })
+        .set({ vatClass: "super_reduced" })
         .where(eq(products.id, venue.productIds.get("Salad")!)),
     );
 

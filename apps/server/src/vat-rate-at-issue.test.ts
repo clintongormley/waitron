@@ -192,7 +192,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const burger = await product("Hamburguesa", "10.00", "reduced");
     const cheese = await product("Queso", "0.75", "reduced");
     const wine = await product("Vino", "3.63", "general");
-    // Served here at `general`; its takeaway rates are set by the takeaway case.
+    // Its takeaway rates are set by the takeaway case.
     const juice = await createProduct(tx, {
       categoryId: null,
       name: "Juice",
@@ -501,8 +501,8 @@ describe("a takeaway order's product rate is taken on the day its invoice is iss
         .delete(productTakeawayVatRates)
         .where(eq(productTakeawayVatRates.productId, v.products.juice));
       await tx.insert(productTakeawayVatRates).values([
-        { productId: v.products.juice, startsOn: null, rate: 1000 },
-        { productId: v.products.juice, startsOn: "2027-01-01", rate: 400 },
+        { productId: v.products.juice, startsOn: null, rate: 2100 },
+        { productId: v.products.juice, startsOn: "2027-01-01", rate: 1000 },
       ]);
     });
     at(EVE);
@@ -519,8 +519,11 @@ describe("a takeaway order's product rate is taken on the day its invoice is iss
     at(NEW_YEAR);
     await payCash(v, newYear, "2.50");
 
-    expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
-    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
+    expect(await filed(eve)).toMatchObject({
+      total: 250,
+      vatBreakdown: [{ rate: "21.00", base: "2.07", tax: "0.43" }],
+    });
+    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
   });
 });
 
