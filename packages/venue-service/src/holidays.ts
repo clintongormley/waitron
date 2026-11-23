@@ -25,7 +25,7 @@ import {
 } from "./holiday-types.js";
 import { rangeDates } from "./hours-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
-import type { HolidayDates } from "./special-days.js";
+import type { HolidayDates } from "./repeat-rules.js";
 import type { HolidayReader } from "./hours.js";
 import "./errors.js";
 

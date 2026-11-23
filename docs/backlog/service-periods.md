@@ -26,14 +26,6 @@ login behaviour; decide the future schema/contract and test it separately.
 Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
 read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
-## The special-day-then-season rule is written out in several places
-
-With named days gone (A506-5), the rule "special day, then season" is still written out in
-`day-resolver.ts` (twice, for departments and for zones) and `business-day-schedule.ts`; special-day paint is
-read by separately written queries in `special-days.ts` and `business-day-schedule.ts`;
-`specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
-the browser-safe repeat rules. Each could collapse to one place.
-
 ## `isLocalDate` reads years 0 to 99 as 1900 to 1999
 
 `isLocalDate` (`packages/venue-service/src/hours-rules.ts`) still builds its date with `Date.UTC`,
@@ -47,17 +39,6 @@ publication dates, imports), so it needs a decision.
   editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
   under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
   stops scrolling, no number is selected, and no click or menu follows the lift.
-
-## Loose ends left by A506-4 (#1597).
-
-- [The special-day-then-season rule is written out in several places](#the-special-day-then-season-rule-is-written-out-in-several-places).
-
-## Bundle: Business-day start checks after A760
-
-1 entry, size L.
-
-- **Loose ends left by A506-4 (#1597).**
-  [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
 
 ## Decisions and deliberate limits
 

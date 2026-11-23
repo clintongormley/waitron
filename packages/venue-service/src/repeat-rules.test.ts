@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrence, occurrenceIn, occursOn, repeatKey } from "./repeat-rules.js";
+import {
+  nextOccurrence,
+  occurrenceIn,
+  occursOn,
+  repeatKey,
+  sharedSpecialDate,
+  specialDateIn,
+} from "./repeat-rules.js";
 
 const xmas = { date: "2026-12-25", repeats: true };
 const once = { ...xmas, repeats: false };
@@ -76,5 +83,32 @@ describe("special-day occurrences", () => {
     [xmas, "9999-12-26", null],
   ])("finds the next occurrence of %j on or after %s", (day, from, want) => {
     expect(nextOccurrence(day, from)).toBe(want);
+  });
+});
+
+describe("special days following a holiday", () => {
+  const holiday = { date: "2026-04-03", repeats: true, holidayName: "Spring holiday" };
+  const dates = new Map(
+    (["2028-04-14", "2027-03-26"] as const).map((date) => [
+      Number(date.slice(0, 4)),
+      new Map([
+        ["Spring holiday", date],
+        ["Regional holiday", date],
+      ]),
+    ]),
+  );
+
+  it.each([
+    [2025, null],
+    [2026, "2026-04-03"],
+    [2027, "2027-03-26"],
+    [2029, null],
+  ])("places the special day in %i", (year, want) => {
+    expect(specialDateIn(holiday, year, dates)).toBe(want);
+  });
+
+  it("finds the earliest shared date after both repeating rules start", () => {
+    const other = { date: "2026-04-06", repeats: true, holidayName: "Regional holiday" };
+    expect(sharedSpecialDate(holiday, other, dates)).toBe("2027-03-26");
   });
 });
