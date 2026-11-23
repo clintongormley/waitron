@@ -6,8 +6,7 @@ import { DashboardApi } from "./client.js";
 import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
 
 it("quiets only the audited database queries while connected", () => {
-  const expected =
-    `getMenuSettings listMenus getMenuStructure getMenuStructures getMenuPrices getMenuHome
+  const expected = `listMenus getMenuStructure getMenuStructures getMenuPrices getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
@@ -776,7 +775,7 @@ it("does not subscribe a Structure-only shared read to unrelated publication tab
   ]);
 });
 
-it("subscribes menu defaults to their stored settings and the rows that decide takeaway VAT", async () => {
+it("subscribes menu defaults to their stored settings, the rows that decide takeaway VAT and the saved time zone that dates the dine-in rate", async () => {
   const api = new DashboardApi(
     "",
     async () => new Response('{"defaultProductVatClass":"reduced","takeawayVat":true}'),
@@ -786,8 +785,68 @@ it("subscribes menu defaults to their stored settings and the rows that decide t
     { type: "settings.menu" },
     { type: "settings.venue" },
     { type: "taxpayer" },
+    { type: "settings.business_day" },
   ]);
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced", takeawayVat: true });
+});
+
+// The dine-in rate is the one in force on the venue's date, and no table change announces a new
+// date, so only the timer can bring a dated rate in.
+it("reads the menu settings' dine-in rate again on its passive minute timer while connected", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  let reads = 0;
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(async () => {
+    reads++;
+    return new Response(JSON.stringify({ dineInVatRate: reads === 1 ? "10.00" : "21.00" }));
+  });
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  api.liveData.setConnected(true);
+  // `vi.waitFor` moves faked timers itself, so the reads are awaited through the observer.
+  let firstReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    firstReady = resolve;
+  });
+  let refreshReady!: () => void;
+  const refreshed = new Promise<void>((resolve) => {
+    refreshReady = resolve;
+  });
+  const observed = api.liveData.observe(dashboardQuery(api, "getMenuSettings", []), () => {
+    if (observed.snapshot.value?.dineInVatRate === "10.00") firstReady();
+    if (observed.snapshot.value?.dineInVatRate === "21.00") refreshReady();
+  });
+  try {
+    await ready;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(reads).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reads).toBe(2);
+    await refreshed;
+    expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  } finally {
+    observed.unsubscribe();
+    vi.useRealTimers();
+  }
+});
+
+it("reads the menu settings' dine-in rate again when the saved time zone changes", async () => {
+  let reads = 0;
+  const fetchImpl = vi.fn(async () => {
+    reads++;
+    return new Response(JSON.stringify({ dineInVatRate: reads === 1 ? "10.00" : "7.50" }));
+  });
+  const api = new DashboardApi("", fetchImpl);
+  api.liveData.setConnected(true);
+  const observed = api.liveData.observe(dashboardQuery(api, "getMenuSettings", []), () => {});
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.value?.dineInVatRate).toBe("10.00"));
+    api.liveData.invalidate([{ type: "settings.business_day" }]);
+    await vi.waitFor(() => expect(observed.snapshot.value?.dineInVatRate).toBe("7.50"));
+  } finally {
+    observed.unsubscribe();
+  }
 });
 
 it("subscribes the venue defaults to the clock document, venue document, menu settings and the taxpayer row that decides takeaway VAT", () => {
