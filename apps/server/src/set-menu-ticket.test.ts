@@ -1,10 +1,20 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { sales } from "@waitron/db";
+import { listAdjustmentReasons } from "@waitron/adjustments";
+import { saleLines, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId } from "@waitron/shared";
-import { previewInvoiceCorrection } from "./invoice-corrections.js";
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
+import { readReceiptEmailDocument } from "./invoice-document.js";
+import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
+import {
+  openInvoiceCorrection,
+  parseInvoiceCorrection,
+  previewInvoiceCorrection,
+} from "./invoice-corrections.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket } from "./till-sale.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { billRow, inTx, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
@@ -146,7 +156,7 @@ function previewCorrection(saleId: ReturnType<typeof brandSaleId>, gross: string
   );
 }
 
-// Regression case: passes without the role being filed, since Task 2a-ii lets the bill be paid.
+// Regression case: a set menu's own line is a priced line, which a partial correction may name.
 it("a correction of one set menu's ticket is usable", async () => {
   const { saleId, lines } = await paidSpecSale();
   const daily = lines.find(({ name }) => name === "Daily menu")!;
@@ -160,4 +170,102 @@ it("a covered dish cannot be corrected on its own", async () => {
   await expect(previewCorrection(saleId, "1.00", soup.id)).rejects.toMatchObject({
     code: "sale.correction_amount_invalid",
   });
+});
+
+function rolesOf(saleId: string) {
+  return venue.db
+    .select({ name: saleLines.name, setMenuRole: saleLines.setMenuRole })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId))
+    .orderBy(saleLines.lineNo);
+}
+
+/** Each line's role on the receipt read by sale id, and on the emailed document. */
+async function receiptRoles(saleId: string) {
+  const [receipt, emailed] = await inTx(venue, async (tx) => [
+    await readTransactionReceipt(venue.backend, tx, venue.cfg, saleId),
+    (await readReceiptEmailDocument(venue.backend, tx, venue.cfg, saleId)).result,
+  ]);
+  const roles = receipt.lines.map(({ setMenuRole }) => setMenuRole ?? null);
+  expect(emailed.lines.map(({ setMenuRole }) => setMenuRole ?? null)).toEqual(roles);
+  return roles;
+}
+
+/** The spec bill printed, its invoice issued unpaid, then credited whole; answers both sales. */
+async function creditedSpecSale() {
+  const { partyId, tabId } = await specBill(spec, "fire");
+  await printSpecBill(spec, partyId, tabId);
+  const lines = await specSaleLines(spec, tabId);
+  const creditId = await inTx(venue, async (tx) =>
+    creditWholeInvoice(tx, specDeps(spec), venue.cfg, (await readOrderInvoice(tx, tabId))!, {
+      sessionId: venue.operator.sessionId,
+    }),
+  );
+  return { creditId, lines };
+}
+
+it("a reprint by sale id, an emailed invoice and a correction receipt carry each line's role", async () => {
+  const { saleId, lines } = await paidSpecSale();
+  const filed = lines.map(({ setMenuRole }) => setMenuRole);
+  expect(filed).toContain("set_menu");
+  expect(await receiptRoles(saleId)).toEqual(filed);
+  const credited = await creditedSpecSale();
+  expect(await receiptRoles(credited.creditId)).toEqual(
+    credited.lines.map(({ setMenuRole }) => setMenuRole),
+  );
+});
+
+it("a whole-invoice credit carries each line's role", async () => {
+  const { creditId, lines } = await creditedSpecSale();
+  expect(lines.map(({ setMenuRole }) => setMenuRole)).toContain("dish");
+  expect(await rolesOf(creditId)).toEqual(
+    lines.map(({ name, setMenuRole }) => ({ name, setMenuRole })),
+  );
+});
+
+it("a partial correction of a set menu keeps its role", async () => {
+  const { saleId, lines } = await paidSpecSale();
+  const daily = lines.find(({ name }) => name === "Daily menu")!;
+  const [split] = (await previewCorrection(saleId, "14.00", daily.id)).vatBreakdown;
+  const actor = {
+    personId: venue.operator.personId,
+    authz: { sessionId: venue.operator.sessionId },
+    authorization: {
+      authorizedBy: venue.operator.personId,
+      permission: "sale.rectify",
+      viaOverride: false,
+    },
+  };
+  const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
+  const corrected = await inTx(venue, async (tx) => {
+    const { correction } = await openInvoiceCorrection(
+      tx,
+      deps,
+      venue.cfg,
+      saleId,
+      parseInvoiceCorrection({
+        submissionId: crypto.randomUUID(),
+        gross: "14.00",
+        lineIds: [daily.id],
+        reasonId: (await listAdjustmentReasons(tx))[0]!.id,
+        note: "Overcooked",
+        expectedSplit: [{ rate: split!.rate, base: split!.base, tax: split!.tax }],
+      }),
+      actor,
+    );
+    return giveCorrectionCash(
+      tx,
+      deps,
+      venue.cfg,
+      correction.id,
+      parseCorrectionCash({ submissionId: crypto.randomUUID(), amount: "14.00" }),
+      { ...actor, authorization: { ...actor.authorization, permission: "sale.refund" } },
+    );
+  });
+  const [corrective] = await venue.db
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.correctsSaleId, saleId));
+  expect(corrected.correction.state).toBe("filed");
+  expect(await rolesOf(corrective!.id)).toEqual([{ name: "Daily menu", setMenuRole: "set_menu" }]);
 });

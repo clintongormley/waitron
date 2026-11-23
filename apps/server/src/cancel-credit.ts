@@ -113,7 +113,7 @@ export function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSa
         correctsLineId: row.id,
         advanceRole: row.advanceRole,
         deductsSaleId: row.deductsSaleId,
-        setMenuRole: null,
+        setMenuRole: row.setMenuRole,
       }) satisfies Required<RecordSaleLine>,
   );
 }

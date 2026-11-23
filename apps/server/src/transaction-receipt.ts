@@ -113,6 +113,7 @@ export async function readTransactionReceipt(
         priceQuantity: thousandthsToDecimal(row.priceQuantity),
         lineGross: grosses.get(row.id)!,
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
+        setMenuRole: row.setMenuRole,
       })),
     },
     dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),

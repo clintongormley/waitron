@@ -417,6 +417,19 @@ it("keeps an invoice line's advance role, and a deduction line's sale", async ()
   ]);
 });
 
+it("keeps an invoice line's set-menu role", async () => {
+  const { rows, ids } = await sell();
+  const lines = correctionLinesFor(
+    [
+      { ...rows[0]!, setMenuRole: "set_menu" },
+      { ...rows[1]!, setMenuRole: "dish" },
+    ],
+    [allocation(ids[0]!, "10.00", "0.55", "0.50"), allocation(ids[1]!, "21.00", "1.21", "1.00")],
+  );
+
+  expect(lines.map(({ setMenuRole }) => setMenuRole)).toEqual(["set_menu", "dish"]);
+});
+
 function preview(saleId: SaleId, of = backend as FiscalBackend) {
   return withTransaction(suite.db, (tx) =>
     previewCorrectionAmounts(tx, of, saleId, nodeId, { gross: decimal("6.05") }),

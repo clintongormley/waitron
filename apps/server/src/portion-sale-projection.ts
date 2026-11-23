@@ -43,6 +43,7 @@ function rowKey(line: StoredOrderLine): string {
     variantDescriptions: rest.variantDescriptions ?? null,
     variantKitchenName: rest.variantKitchenName ?? null,
     kitchenName: rest.kitchenName ?? null,
+    setMenuRole: rest.setMenuRole ?? null,
     identity: {
       ...line.identity,
       id: null,
