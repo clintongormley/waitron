@@ -134,6 +134,18 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-refund-br-1]")!.textContent).toContain("1");
   });
 
+  it("shows the combined pending payment and tip when they exceed one stored amount", async () => {
+    const el = await mount(
+      stubApi({
+        listStuckBillPayments: vi
+          .fn()
+          .mockResolvedValue([{ ...PAYMENT, applied: "999999999999.99", tip: "0.01" }]),
+      }),
+    );
+
+    expect(q(el, "[data-test=bill-payment-bp-1]")!.textContent).toContain("€1,000,000,000,000.00");
+  });
+
   it("hides the recovery section when both lists are empty, then shows a new pending payment on a live change", async () => {
     const listStuckBillPayments = vi.fn().mockResolvedValueOnce([]).mockResolvedValue([PAYMENT]);
     const api = stubApi({

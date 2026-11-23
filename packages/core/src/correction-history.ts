@@ -8,6 +8,7 @@ import {
   decimal,
   decimalToBasisPoints,
   decimalToCents,
+  rawCentsToDecimal,
   thousandthsToDecimal,
   type Decimal,
   type NodeId,
@@ -318,8 +319,8 @@ function mealView(
     }
     vatBreakdown.push({
       rate: decimal(group.rate),
-      base: centsToDecimal(base),
-      tax: centsToDecimal(tax),
+      base: rawCentsToDecimal(String(base)),
+      tax: rawCentsToDecimal(String(tax)),
     });
   }
   const taken = deductionsTaken(

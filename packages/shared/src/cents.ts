@@ -8,6 +8,8 @@ import { RAW_COUNT_PATTERN, scaledCount, scaledLiteral } from "./scales.js";
 // bounds the ROUNDED amount at twelve integer digits, so its count stays inside
 // `Number.MAX_SAFE_INTEGER`, and the only rounding is `toScale`'s, in BigInt.
 
+const MONEY_COUNT_LIMIT = 10 ** (MAX_MONEY_INTEGER_DIGITS + MONEY_SCALE);
+
 /** The count of whole cents in an amount: "12.34" is 1234. */
 export function decimalToCents(value: Decimal): number {
   return scaledCount(value, MONEY_SCALE, MAX_MONEY_INTEGER_DIGITS);
@@ -23,7 +25,7 @@ export function stringToCents(value: string): number {
 }
 
 /**
- * The decimal literal for a stored count of cents: 1234 is "12.34", and 0 is "0.00".
+ * The decimal literal for one stored money amount: 1234 is "12.34", and 0 is "0.00".
  *
  * Always two places, because the literal is what a receipt prints and what a fiscal record
  * hashes — "0" and "0.00" are one amount and two different byte strings.
@@ -32,17 +34,25 @@ export function centsToDecimal(cents: number): Decimal {
   if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value: String(cents) });
   }
-  return scaledLiteral(cents, MONEY_SCALE);
+  const value = scaledLiteral(cents, MONEY_SCALE);
+  if (cents <= -MONEY_COUNT_LIMIT || cents >= MONEY_COUNT_LIMIT) {
+    throw new AppError("shared.decimal_overflow", {
+      value,
+      maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS,
+    });
+  }
+  return value;
 }
 
 /**
- * The amount for a count of cents read by RAW SQL, where the count arrives as TEXT.
+ * The amount for a count of cents supplied as an integer string. Totals can exceed the limit
+ * for individual amounts. The count must fit in a JavaScript safe integer.
  *
  * This engine hands an uncast integer to a raw read as a JavaScript number, which is refused here
  * with `shared.invalid_cents`; the query casts it with `cast(x as text)` (the engine has no `::`).
  * Not `cast(x as integer)`, which still arrives as a number, and not a fixed-scale rendering: 7734
- * cents written "7734.00" reads as a hundred times the amount, so a point is refused. A typed
- * drizzle `.select()` over a schema column needs `centsToDecimal` instead.
+ * cents written "7734.00" reads as a hundred times the amount, so a point is refused.
+ * Use `centsToDecimal` for one amount read from a typed schema column.
  */
 export function rawCentsToDecimal(value: string): Decimal {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
@@ -54,5 +64,5 @@ export function rawCentsToDecimal(value: string): Decimal {
   if (!Number.isSafeInteger(cents)) {
     throw new AppError("shared.invalid_cents", { value });
   }
-  return centsToDecimal(cents);
+  return scaledLiteral(cents, MONEY_SCALE);
 }

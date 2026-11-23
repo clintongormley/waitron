@@ -507,6 +507,11 @@ describe("standingOff: what a reason still has off a bill, its lines prorated (o
     );
   });
 
+  it("adds separate stored reductions wider than the single-amount limit", () => {
+    const reduction = row("600000000000.00", "1.000", "1.000");
+    expect(standingOff([reduction, reduction])).toBe("1200000000000.00");
+  });
+
   it("counts half of a line of two after one is cancelled, and nothing of a line now at none", () => {
     expect(standingOff([row("12.00", "2.000", "1.000"), row("9.00", "1.000", "0.000")])).toBe(
       "6.00",

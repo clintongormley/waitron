@@ -57,8 +57,14 @@ describe("centsToDecimal", () => {
     });
   });
 
-  it("renders the largest whole number held exactly", () => {
-    expect(centsToDecimal(Number.MAX_SAFE_INTEGER)).toBe("90071992547409.91");
+  it.each([
+    [100000000000000, "1000000000000.00"],
+    [-100000000000000, "-1000000000000.00"],
+  ])("refuses %i cents just beyond the money bound", (cents, value) => {
+    expect(refusalOf(() => centsToDecimal(cents))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
+    });
   });
 });
 
@@ -83,6 +89,7 @@ describe("decimalToCents", () => {
     expect(decimalToCents(widest)).toBe(99999999999999);
     expect(99999999999999).toBeLessThan(Number.MAX_SAFE_INTEGER);
     expect(centsToDecimal(decimalToCents(widest))).toBe(widest);
+    expect(centsToDecimal(-99999999999999)).toBe("-999999999999.99");
   });
 
   it("refuses an amount wider than the money scale admits", () => {

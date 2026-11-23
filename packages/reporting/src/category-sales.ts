@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { centsToDecimal, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
+import { decimalToCents, rawCentsToDecimal } from "@waitron/shared";
 import type { Decimal, SaleLineClassification } from "@waitron/shared";
 import {
   issuedSalesClause,
@@ -168,11 +168,11 @@ function toTotal(node: Node, depth: number): CategoryTotal {
     id: node.id,
     name: node.name,
     depth,
-    gross: centsToDecimal(node.grossCents),
-    net: centsToDecimal(node.netCents),
+    gross: rawCentsToDecimal(String(node.grossCents)),
+    net: rawCentsToDecimal(String(node.netCents)),
     direct: {
-      gross: centsToDecimal(node.directGrossCents),
-      net: centsToDecimal(node.directNetCents),
+      gross: rawCentsToDecimal(String(node.directGrossCents)),
+      net: rawCentsToDecimal(String(node.directNetCents)),
       lines: node.directLines,
     },
     children: [...node.children.values()]
@@ -340,8 +340,8 @@ export async function computeCategorySales(
   return {
     mode: input.mode,
     tree: [...roots.values()].sort(byReportOrder).map((root) => toTotal(root, 0)),
-    gross: centsToDecimal(grossCents),
-    net: centsToDecimal(netCents),
+    gross: rawCentsToDecimal(String(grossCents)),
+    net: rawCentsToDecimal(String(netCents)),
     grossComplete: linesWithoutGross === 0,
     linesWithoutGross,
   };

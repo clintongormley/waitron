@@ -157,6 +157,38 @@ describe("computeCategorySales at time of sale", () => {
     expect([report.gross, report.net]).toEqual(["3.30", "3.00"]);
   });
 
+  it("keeps period and category totals wider than one sale amount", async () => {
+    for (const invoiceNumber of [1, 2]) {
+      await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: at("2026-08-04"),
+        total: "550000000000.00",
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "500000000000.00",
+            lineGross: "550000000000.00",
+            classification: classified(chain(DRINKS)),
+          },
+        ],
+      });
+    }
+
+    const report = await run();
+
+    expect([report.gross, report.net]).toEqual(["1100000000000.00", "1000000000000.00"]);
+    expect(rows(report.tree)).toEqual([
+      {
+        path: "Drinks",
+        id: "cat-drinks",
+        depth: 0,
+        gross: "1100000000000.00",
+        net: "1000000000000.00",
+        direct: "1100000000000.00/1000000000000.00/2",
+      },
+    ]);
+  });
+
   it("splits a category moved mid-period across each parent it had, never grouping by its id alone", async () => {
     await sell("2026-08-03", [
       { net: "10.00", gross: "11.00", cls: classified(chain(DRINKS, ALCOHOLIC, COCKTAILS)) },

@@ -1,11 +1,11 @@
 import {
   addDecimal,
-  centsToDecimal,
   compareDecimal,
   decimal,
   decimalToCents,
   decimalToThousandths,
   multiplyDecimal,
+  rawCentsToDecimal,
   subtractDecimal,
   type AdjustmentAction,
   type AdjustmentPolicySnapshot,
@@ -265,5 +265,5 @@ export function standingOff(
     numerator = numerator * then + cents * now * denominator;
     denominator *= then;
   }
-  return centsToDecimal(Number((2n * numerator + denominator) / (2n * denominator)));
+  return rawCentsToDecimal(String((2n * numerator + denominator) / (2n * denominator)));
 }

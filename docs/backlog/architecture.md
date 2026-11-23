@@ -38,14 +38,6 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   checks read `packages/provisioning` and `apps/server/src` only. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`. Prune with those.
 
-## `centsToDecimal` does not refuse a count past the money bound
-
-- A count of more than 99999999999999 cents either way, up to `Number.MAX_SAFE_INTEGER` either
-  way, that reaches `centsToDecimal` without passing `decimalToCents` (which refuses the amount,
-  #583) is turned into an amount without refusal. `rawCentsToDecimal` passes such counts on
-  purpose, because a total can be wider than any one amount, so the money bound cannot simply move
-  into `centsToDecimal`.
-
 ## Comments and test titles still cite sections of specs that were deleted
 
 **OPEN (2026-09-26).**
@@ -981,7 +973,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-13 entries, size M.
+12 entries, size M.
 
 - **`MAX_MODIFIER_INTEGER` and the extras contract's `whole` bound have no stated reason on this
   engine** — OPEN (found by #603). Read only, not run: both were PostgreSQL's integer maximum.
@@ -1019,8 +1011,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   wide** — found by #567 while pruning comments. The same claim stands in
   `packages/fiscal-verifactu/src/venue-fields.ts`.
   [Detail](architecture.md#nothing-under-apps-may-import-a-regime-package-scriptsmodule-seamstestts--is-too-wide)
-- **`centsToDecimal` does not refuse a count past the money bound**
-  [Detail](architecture.md#centstodecimal-does-not-refuse-a-count-past-the-money-bound)
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26).
   **Next action:** fold into the comment-pruning sweeps: re-point each to
   the pull request that built the work, or drop the tag.

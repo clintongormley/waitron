@@ -1182,11 +1182,10 @@ conversion it exists for and forbids the rest.
 **There is no column width left to measure, and that is the change.** SQLite's INTEGER is 64-bit
 whatever the declared type says (`packages/db/src/schema/columns.ts` states it at
 `smallCount`/`bigCount`), so nothing below the converters bounds a money value at all. The bound the
-system states is twelve integer digits — 99999999999999 cents, `MAX_MONEY_INTEGER_DIGITS`, enforced
-by `decimalToCents` on the amount after rounding it to cents, and by `packages/menu`'s price
-validators — and it is the only money bound; `centsToDecimal` and `rawCentsToDecimal` refuse only
-a count past a safe integer. That figure is well inside the 9007199254740991 a JavaScript number counts
-exactly, so nothing in range loses a cent to the number type.
+system states for one stored amount is twelve integer digits, or 99999999999999 cents.
+`decimalToCents` checks it after rounding to cents, and `centsToDecimal` checks it when reading
+the count. `rawCentsToDecimal` also takes totals supplied as integer text, up to
+9007199254740991 cents in either direction, the range JavaScript numbers count exactly.
 
 Drizzle's typed `.select()` needs no cast at all: the column maps the value, and the read mapping is
 now the ONLY thing separating helpers that emit the same SQL type — `money`, `quantity`, `count` and
@@ -6218,8 +6217,9 @@ vocabulary itself imports, so `blob` passes anywhere.
 ### A money column holds a count of whole cents, and the conversion happens AT THE ROW
 
 **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
-(`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
-for a raw-SQL read, which casts `cast(x as text)`). Above the row every amount stays the exact `Decimal`; a money
+(`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, both limiting one amount
+to twelve integer digits). Use `rawCentsToDecimal` for counts from `cast(x as text)` and totals expressed
+as integer text. Above the row every amount stays the exact `Decimal`; a money
 total summed out of JSON is summed in JavaScript at the money scale. **Nothing guards the boundary
 itself, and there is no LOUD form of getting it wrong**. Guards, both narrower than their names:
 `packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.

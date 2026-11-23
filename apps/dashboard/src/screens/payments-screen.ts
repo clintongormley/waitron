@@ -26,7 +26,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
-import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
+import { formatMoney, rawCentsToDecimal, stringToCents } from "@waitron/shared";
 import {
   registerCatalogue,
   QueryController,
@@ -124,9 +124,11 @@ function readerStatusLabel(key: ReaderStatusKey): string {
 type HeldField = "outcome" | "note" | "pin";
 
 function billAmount(target: BillTarget): string {
-  return target.kind === "payment"
-    ? centsToDecimal(stringToCents(target.row.applied) + stringToCents(target.row.tip))
-    : centsToDecimal(stringToCents(target.row.appliedAmount) + stringToCents(target.row.tipAmount));
+  const [applied, tip] =
+    target.kind === "payment"
+      ? [target.row.applied, target.row.tip]
+      : [target.row.appliedAmount, target.row.tipAmount];
+  return rawCentsToDecimal(String(stringToCents(applied) + stringToCents(tip)));
 }
 
 function billRefusalText(error: unknown): string {
