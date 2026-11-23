@@ -425,7 +425,8 @@ called weaker than its name, the topic file lists what it does not see. Receipts
   every line it writes; the answer keeps it. Name it for whose it is (`guestName`,
   `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is the venue's own):
   the list is flat across every code.** Cost: staff names and emails reached the sign-in-free
-  recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name: reads text.
+  recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
+  judges field names by a word list and named registry types by their names.
   [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.

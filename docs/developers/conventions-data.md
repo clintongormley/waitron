@@ -6488,6 +6488,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 2026-11-18: `PERSONAL_LOG_PATHS` no longer exists; a SumUp merchant's name travels as
 `merchantName`, a key on `PERSONAL_LOG_KEYS`.
 
+2026-11-23. The guard reads TypeScript syntax and checks spread keys in inline log fields and direct
+`AppError` details. See the [current limits](conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
+
 ### Configuration preview field guard
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
