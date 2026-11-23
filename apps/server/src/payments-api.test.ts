@@ -14,7 +14,10 @@ import {
   billPayments,
   devices,
   deviceProfiles,
+  diningTables,
   nowIso,
+  parties,
+  partyTables,
   removeIdFromJson,
   taxpayer,
   withTransaction,
@@ -30,6 +33,7 @@ import {
   seedVenue,
   seedWorkingOrder,
   seedPerson,
+  seedZone,
 } from "@waitron/db/testing/seed.js";
 import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
@@ -3641,11 +3645,37 @@ describe("backup-machine audit read", () => {
 it("reports paired SumUp captures and charges once for the selected Madrid day", async () => {
   const venue = await seedVenueWithStaff();
   const manager = await seedPerson(suite.db, { displayName: "Hold reviewer" });
-  const order = await seedWorkingOrder(suite.db, { source: "dashboard" });
+  const [closedParty, openParty] = await suite.db
+    .insert(parties)
+    .values([
+      {
+        openedBy: manager,
+        closedBy: manager,
+        closedAt: nowIso(),
+        state: "closed",
+        tableNames: ["Table 6"],
+      },
+      { openedBy: manager },
+    ])
+    .returning();
+  const zone = await seedZone(suite.db, { name: "Terrace" });
+  const [table] = await suite.db
+    .insert(diningTables)
+    .values({ label: "Table 9", zoneId: zone.id })
+    .returning();
+  await suite.db.insert(partyTables).values({ partyId: openParty!.id, tableId: table!.id });
+  const order = await seedWorkingOrder(suite.db, { partyId: closedParty!.id, billNumber: 41 });
+  const linkedOrder = await seedWorkingOrder(suite.db, { partyId: openParty!.id, billNumber: 2 });
   const deviceId = await seedDevice();
-  const [reader] = await suite.db
+  const readers = await suite.db
     .insert(cardReaders)
-    .values({ name: "Counter reader", provider: "sumup", providerRef: nextRef() })
+    .values(
+      ["Counter reader", "Terrace reader"].map((name) => ({
+        name,
+        provider: "sumup",
+        providerRef: nextRef(),
+      })),
+    )
     .returning();
   const start = "2026-07-01T22:00:00.000Z";
   const checkedAt = "2026-07-02T02:00:00.000Z";
@@ -3664,17 +3694,17 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
   ] as const;
   await suite.db.insert(payments).values(
     entries.map(([paymentRef, settledAt]) => ({
-      workingOrderId: order.id,
+      workingOrderId: paymentRef === "linked" ? linkedOrder.id : order.id,
       source: "device" as const,
       deviceId,
-      readerId: reader!.id,
+      readerId: readers[paymentRef === "linked" ? 1 : 0]!.id,
       provider: "sumup",
       paymentRef,
       externalRef: settledAt === null ? null : `charge-${paymentRef}`,
       amount: 1000,
       state: settledAt === null ? ("attempting" as const) : ("captured" as const),
       settledAt,
-      createdAt: start,
+      createdAt: paymentRef === "linked" ? "2026-07-01T21:59:00.000Z" : start,
       ...(paymentRef === "held-resolved"
         ? {
             holdProviderAmount: 1100,
@@ -3698,13 +3728,10 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
         at: new Date(at),
       });
   });
-  const linked = {
-    references: ["linked-charge"],
-    amount: "10.00",
-    settledAt: start,
-    hintedPaymentRef: "linked",
-  };
-  const unlinked = { ...linked, references: ["standalone-charge"], hintedPaymentRef: null };
+  const charge = { amount: "10.00", settledAt: start };
+  const linked = { ...charge, references: ["linked-charge"], hintedPaymentRef: "linked" };
+  const standalone = { ...charge, references: ["standalone-charge"] };
+  const unlinked = { ...standalone, hintedPaymentRef: null };
   const finding = {
     paymentRef: "multiple-findings",
     references: ["charge-multiple-findings"],
@@ -3744,15 +3771,7 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
       finishedAt: "2026-07-03T02:00:00.000Z",
       summary: {
         backupMatches: [],
-        backupUnmatched: [
-          {
-            references: unlinked.references,
-            amount: unlinked.amount,
-            settledAt: start,
-            reason: "unmatched",
-            kind: "charge",
-          },
-        ],
+        backupUnmatched: [{ ...standalone, reason: "unmatched", kind: "charge" }],
         chargeAudit: { matches: [], missingLocal: [linked, unlinked] },
       },
     },
@@ -3788,6 +3807,18 @@ it("reports paired SumUp captures and charges once for the selected Madrid day",
     linked: ["missing_local"],
   });
   expect(pairedAudit.rows).toHaveLength(8);
+  const byRef = (ref: string) =>
+    pairedAudit.rows.find((row: { paymentRef: string }) => row.paymentRef === ref);
+  expect(byRef("match")).toMatchObject({
+    readerName: "Counter reader",
+    billNumber: 41,
+    tableName: "Table 6",
+  });
+  expect(byRef("linked")).toMatchObject({
+    readerName: "Terrace reader",
+    billNumber: 2,
+    tableName: "Table 9",
+  });
   expect(backupUnmatched).toMatchObject([{ kind: "charge", references: ["standalone-charge"] }]);
 });
 

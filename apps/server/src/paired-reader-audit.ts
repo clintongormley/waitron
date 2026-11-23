@@ -1,14 +1,22 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
-import { statementChunks, type Transaction } from "@waitron/db";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import {
+  diningTables,
+  parties,
+  statementChunks,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
+import {
+  cardReaders,
   payments,
   type BackupPaymentMatch,
   type BackupPaymentUnmatched,
   type PaymentReconcileResult,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { centsToDecimal } from "@waitron/shared";
+import { centsToDecimal, partyTablesName } from "@waitron/shared";
 import { pairedAuditRuns } from "./backup-audit-day.js";
+import { readPartyTables } from "./orders-list.js";
 
 const findings = {
   drift: "drift",
@@ -27,11 +35,11 @@ type Status =
   | "refunded_at_sumup"
   | "missing_local";
 type StandaloneCharge = Extract<BackupPaymentUnmatched, { kind: "charge" }>;
-type ComparisonRow = {
-  paymentRef: string | null;
-  references: string[];
-  settledAt: string;
-  amount: string;
+type ComparisonRow = Omit<StandaloneCharge, "kind" | "reason"> & {
+  paymentRef: string;
+  readerName: string;
+  billNumber: number;
+  tableName: string | null;
   statuses: Status[];
 };
 
@@ -59,14 +67,28 @@ export async function readPairedReaderAudit(
   },
 ) {
   const { startAt, endAt } = bounds;
-  const inside = (at: string) => at >= startAt && at < endAt;
   const { runs, complete } = pairedAuditRuns(bounds, candidates);
-  const charges = runs.flatMap(
-    ({ summary }) =>
-      summary?.chargeAudit?.missingLocal.filter((row) => inside(row.settledAt)) ?? [],
-  );
+  const charges = runs
+    .flatMap(({ summary }) => summary?.chargeAudit?.missingLocal ?? [])
+    .filter(({ settledAt }) => settledAt >= startAt && settledAt < endAt);
   const paired = and(eq(payments.provider, "sumup"), isNotNull(payments.readerId));
-  const readPayments = () => tx.select().from(payments);
+  const readPayments = () =>
+    tx
+      .select({
+        payment: payments,
+        readerName: cardReaders.name,
+        billNumber: sql<number>`coalesce(${workingOrders.billNumber}, ${workingOrders.orderNumber})`,
+        partyId: workingOrders.partyId,
+        tableNames: parties.tableNames,
+        deliveryLabel: sql<
+          string | null
+        >`coalesce(${diningTables.label}, ${workingOrders.deliveryTableLabel})`,
+      })
+      .from(payments)
+      .innerJoin(cardReaders, eq(cardReaders.id, payments.readerId))
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
+      .leftJoin(diningTables, eq(diningTables.id, workingOrders.deliveryTableId));
   const local = await readPayments().where(
     and(
       paired,
@@ -80,25 +102,37 @@ export async function readPairedReaderAudit(
       ),
     ),
   );
-  const pairedRefs = new Set(local.map((row) => row.paymentRef));
-  const linkedRefs = [
-    ...new Set(
-      charges.flatMap((row) =>
-        row.hintedPaymentRef === null || pairedRefs.has(row.hintedPaymentRef)
-          ? []
-          : [row.hintedPaymentRef],
-      ),
+  const pairedRefs = new Map(local.map((row) => [row.payment.paymentRef, row]));
+  const linkedRefs = new Set(
+    charges.flatMap(({ hintedPaymentRef }) =>
+      hintedPaymentRef !== null && !pairedRefs.has(hintedPaymentRef) ? [hintedPaymentRef] : [],
     ),
-  ];
-  for (const refs of statementChunks(payments, linkedRefs)) {
+  );
+  for (const refs of statementChunks(payments, [...linkedRefs])) {
     const linked = await readPayments().where(and(paired, inArray(payments.paymentRef, refs)));
-    for (const row of linked) pairedRefs.add(row.paymentRef);
+    for (const row of linked) pairedRefs.set(row.payment.paymentRef, row);
   }
+  const liveTables = new Map<string, string[]>();
+  const liveParties = new Set(
+    [...pairedRefs.values()].flatMap(({ partyId, tableNames }) =>
+      tableNames === null ? (partyId ?? []) : [],
+    ),
+  );
+  for (const ids of statementChunks(parties, [...liveParties]))
+    for (const [id, names] of await readPartyTables(tx, ids)) liveTables.set(id, names);
+  const identity = (row: (typeof local)[number]) => ({
+    readerName: row.readerName,
+    billNumber: row.billNumber,
+    tableName:
+      row.partyId === null
+        ? row.deliveryLabel
+        : partyTablesName(row.tableNames ?? liveTables.get(row.partyId) ?? []) || null,
+  });
 
   const refunds = new Map<string, { amount: number; createdAt: string }[]>();
   for (const ids of statementChunks(
     paymentRefunds,
-    local.map((row) => row.id),
+    local.map(({ payment }) => payment.id),
   )) {
     const refunded = await tx
       .select()
@@ -131,7 +165,8 @@ export async function readPairedReaderAudit(
   }
 
   const rows: ComparisonRow[] = [];
-  for (const row of local) {
+  for (const item of local) {
+    const row = item.payment;
     const at = row.settledAt ?? row.createdAt;
     const flags = [...(problems.get(row.paymentRef) ?? [])];
     if (
@@ -162,6 +197,7 @@ export async function readPairedReaderAudit(
     }
     rows.push({
       paymentRef: row.paymentRef,
+      ...identity(item),
       references: row.externalRef === null ? [] : [row.externalRef],
       settledAt: at,
       amount: centsToDecimal(row.amount),
@@ -175,21 +211,25 @@ export async function readPairedReaderAudit(
   );
   const extraStandalone: StandaloneCharge[] = [];
   for (const { hintedPaymentRef, ...charge } of charges) {
-    if (hintedPaymentRef !== null && pairedRefs.has(hintedPaymentRef)) {
-      const duplicate = charge.references.some((ref) => pairedCharges.has(ref));
-      for (const ref of charge.references) pairedCharges.add(ref);
-      if (!duplicate)
-        rows.push({ ...charge, paymentRef: hintedPaymentRef, statuses: ["missing_local"] });
-    } else {
-      if (!charge.references.some((ref) => standaloneSeen.has(ref)))
-        extraStandalone.push({ ...charge, kind: "charge", reason: "unmatched" });
-      for (const ref of charge.references) standaloneSeen.add(ref);
-    }
+    const pairedPayment = hintedPaymentRef === null ? undefined : pairedRefs.get(hintedPaymentRef);
+    const seen = pairedPayment === undefined ? standaloneSeen : pairedCharges;
+    const duplicate = charge.references.some((ref) => seen.has(ref));
+    for (const ref of charge.references) seen.add(ref);
+    if (duplicate) continue;
+    if (pairedPayment === undefined)
+      extraStandalone.push({ ...charge, kind: "charge", reason: "unmatched" });
+    else
+      rows.push({
+        ...charge,
+        paymentRef: pairedPayment.payment.paymentRef,
+        ...identity(pairedPayment),
+        statuses: ["missing_local"],
+      });
   }
   const isProblem = ({ statuses }: ComparisonRow) =>
-    !statuses.some(
+    statuses.every(
       (status) =>
-        status === "matched" || status === "refunded_before_check" || status === "resolved",
+        status !== "matched" && status !== "refunded_before_check" && status !== "resolved",
     );
 
   return {

@@ -70,10 +70,10 @@ describe("saved paired-reader evidence", () => {
     ...run(day, generation, []),
     summary: { chargeAudit: { matches: [], missingLocal: [] } },
   });
+  const first = saved("2026-11-13", 1);
+  const second = saved("2026-11-14", 0);
 
   it("covers a Madrid day with the newest evidence from two runs", () => {
-    const first = saved("2026-11-13", 1);
-    const second = saved("2026-11-14", 0);
     const old = { ...saved("2026-11-13", 0), summary: null };
     expect(pairedAuditRuns(bounds, [first, old, second])).toEqual({
       complete: true,
@@ -82,8 +82,6 @@ describe("saved paired-reader evidence", () => {
   });
 
   it("marks unreadable SumUp charges as incomplete even when both runs succeeded", () => {
-    const first = saved("2026-11-13", 0);
-    const second = saved("2026-11-14", 0);
     const missingLocal = [{ workingOrderId: null }];
     const audit = (unlinkedCharges: number) =>
       pairedAuditRuns(bounds, [
@@ -95,9 +93,8 @@ describe("saved paired-reader evidence", () => {
   });
 
   it("reports a gap or a latest run without paired charge evidence", () => {
-    const first = saved("2026-11-13", 0);
     const old = { ...saved("2026-11-14", 1), summary: null };
     expect(pairedAuditRuns(bounds, [first]).complete).toBe(false);
-    expect(pairedAuditRuns(bounds, [first, saved("2026-11-14", 0), old]).complete).toBe(false);
+    expect(pairedAuditRuns(bounds, [first, second, old]).complete).toBe(false);
   });
 });

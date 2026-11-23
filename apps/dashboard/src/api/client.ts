@@ -2586,6 +2586,30 @@ export interface RefundAuditItem {
   localAt: string | null;
 }
 export interface BackupAuditView {
+  pairedAudit: {
+    complete: boolean;
+    matched: number;
+    toCheck: number;
+    rows: {
+      settledAt: string;
+      amount: string;
+      readerName: string;
+      billNumber: number;
+      tableName: string | null;
+      statuses: (
+        | "matched"
+        | "resolved"
+        | "refunded_before_check"
+        | "refunded_at_sumup"
+        | "not_checked"
+        | "missing_local"
+        | "drift"
+        | "orphan"
+        | "unsettled"
+        | "lost_settlement"
+      )[];
+    }[];
+  };
   refundAudit: {
     complete: boolean;
     checkedAt: string[];

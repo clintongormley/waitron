@@ -2,6 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import type { WtInput } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { DashboardApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -16,6 +17,23 @@ const result = {
   day: "2026-07-01",
   timeZone: "Europe/Madrid",
   complete: false,
+  pairedAudit: {
+    complete: false,
+    matched: 1,
+    toCheck: 1,
+    rows: (["refunded_at_sumup", "matched", "refunded_before_check", "resolved"] as const).map(
+      (status, index) => ({
+        paymentRef: `paired-${index}`,
+        references: [`charge-${index}`],
+        amount: "42.50",
+        settledAt: "2026-07-01T18:46:00.000Z",
+        readerName: index === 0 ? "Terrace reader" : "Counter reader",
+        billNumber: 41 + index,
+        tableName: index === 0 ? "Table 6" : null,
+        statuses: [status],
+      }),
+    ),
+  },
   backupMatches: [
     {
       references: ["charge-7"],
@@ -76,9 +94,14 @@ const result = {
   ],
 };
 
-it("shows matches and exceptions, and reads a changed day passively", async () => {
+it("shows standalone matches and exceptions, filters paired readers and reads a changed day passively", async () => {
+  const changedDay = {
+    ...result,
+    day: "2026-07-02",
+    pairedAudit: { complete: true, matched: 0, toCheck: 0, rows: [] },
+  };
   const fetch = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
-    async () => new Response(JSON.stringify(result)),
+    async (path) => new Response(JSON.stringify(path.includes("?day=") ? changedDay : result)),
   );
   const activity = vi.fn();
   const api = new DashboardApi("", fetch, undefined, activity);
@@ -101,6 +124,22 @@ it("shows matches and exceptions, and reads a changed day passively", async () =
     t("payments.backup.recorded_unmatched"),
   ])
     expect(el.shadowRoot!.textContent).toContain(text);
+  expect(el.shadowRoot!.textContent).toContain("1 matched · 1 to check");
+  expect(el.shadowRoot!.textContent).toContain("Check incomplete.");
+  const pairedTable = () => el.shadowRoot!.querySelector("wt-data-table")?.shadowRoot;
+  const pairedRows = () => [...(pairedTable()?.querySelectorAll("tbody tr") ?? [])];
+  await expect.poll(() => pairedRows().length).toBe(1);
+  expect(pairedRows()[0]!.textContent).toContain("Terrace reader");
+  expect(pairedRows()[0]!.textContent).toContain("Table 6 · bill 41");
+  expect(pairedRows()[0]!.textContent).toContain("Refunded at SumUp only");
+  const status = el.shadowRoot!.querySelector("wt-combobox")!;
+  await chooseOption(status, "matched");
+  await expect.poll(() => pairedRows().length).toBe(2);
+  expect(pairedRows()[1]!.textContent).toContain("Refunded before the check");
+  await chooseOption(status, "resolved");
+  await expect.poll(() => pairedRows()[0]?.textContent).toContain("Resolved");
+  await chooseOption(status, "all");
+  await expect.poll(() => pairedRows().length).toBe(4);
   const day = el.shadowRoot!.querySelector<WtInput>("wt-input")!;
   day.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -110,6 +149,9 @@ it("shows matches and exceptions, and reads a changed day passively", async () =
     }),
   );
   await expect.poll(() => fetch.mock.calls.length).toBe(2);
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("0 matched · 0 to check");
+  expect(el.shadowRoot!.textContent).not.toContain("Check incomplete.");
+  expect(pairedRows()).toHaveLength(0);
   expect(fetch.mock.calls[1]![0]).toBe("/management-api/payments/backup-audit?day=2026-07-02");
   expect(new Headers(fetch.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
   expect(new Headers(fetch.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
@@ -147,6 +189,10 @@ it.each(
   await expect.poll(() => el.shadowRoot?.textContent).toContain("Backup Solo");
   await expectNoA11yViolations(host);
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
+  const pairedScroll = el
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector('[role="region"]')!;
+  expect(pairedScroll.scrollWidth).toBeLessThanOrEqual(pairedScroll.clientWidth);
   await page.screenshot({
     path: `__screenshots__/a949-refunds/${locale}-${theme}-${width}.png`,
     fullPage: true,
