@@ -249,6 +249,9 @@ importers:
       '@waitron/node-db':
         specifier: workspace:*
         version: link:../../packages/node-db
+      '@waitron/orders-sales':
+        specifier: workspace:*
+        version: link:../../packages/orders-sales
       '@waitron/payments':
         specifier: workspace:*
         version: link:../../packages/payments
@@ -1659,6 +1662,34 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/orders-sales:
+    dependencies:
+      '@waitron/layouts':
+        specifier: workspace:*
+        version: link:../layouts
+      '@waitron/media':
+        specifier: workspace:*
+        version: link:../media
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../printing
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
       typescript:
         specifier: ^7.0.0
         version: 7.0.2

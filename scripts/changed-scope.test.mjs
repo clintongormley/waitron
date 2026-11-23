@@ -339,6 +339,15 @@ describe("gateOutputs", () => {
     expect(contract.light_b).toBe("false");
   });
 
+  it("selects only the light B test bin for an orders-and-sales package change", () => {
+    const { light_a, light_b, server } = gates(packagesInScope(ls("@waitron/orders-sales")));
+    expect({ light_a, light_b, server }).toEqual({
+      light_a: "false",
+      light_b: "true",
+      server: "false",
+    });
+  });
+
   it("runs light_a for a bin-A package and light_b for a bin-B package", () => {
     const a = gates(packagesInScope(ls("@waitron/core")));
     expect(a.light_a).toBe("true");

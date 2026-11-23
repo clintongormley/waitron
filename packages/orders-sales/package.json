@@ -1,0 +1,31 @@
+{
+  "name": "@waitron/orders-sales",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./receipt-dates.js": "./src/receipt-dates.ts",
+    "./receipt-logo.js": "./src/receipt-logo.ts",
+    "./receipt-money.js": "./src/receipt-money.ts",
+    "./receipt-table.js": "./src/receipt-table.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@waitron/layouts": "workspace:*",
+    "@waitron/media": "workspace:*",
+    "@waitron/printing": "workspace:*",
+    "@waitron/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^4.1.12",
+    "typescript": "^7.0.0",
+    "vitest": "^4.1.12"
+  }
+}

@@ -5,7 +5,10 @@ the package on its own. Keep forwarding re-exports at the four server paths so t
 sales reports, drawer tickets, boot and other callers keep their imports. Run the moved suites
 with package coverage and check both package-only and server-only CI selection. Preserve the
 server's focused receipt and logo checks. The watcher cleared this order at 19:07 on 23 November
-after Claude's plan read. [Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices)
+after Claude's plan read. At 19:20 the watcher cleared keeping `previewLogoAddress` and
+`drawLibraryLogo` in the server, where the receipt preview and themes routes exercise them.
+Move the logo cache, raster and preview drawing with the other helpers.
+[Build order](2026-11-08-a1308-build-order.md#batch-2--area-slices)
 
 ## Parked bill fixture design
 
@@ -28,7 +31,7 @@ request-body helpers there. Use `cfg.locale` for the mounts. The extraction alon
 +270/−230 support and +20/−10 test lines. Add the move and import changes to that budget when
 planning the PR.
 
-## Checks
+### Checks for the future bill fixture split
 
 In `order-preview.test.ts` and `working-order.customer-fallback.test.ts`, add a hoisted
 `vi.mock("./till-api.js", …)` whose factory throws `Error("till must not load")`.
@@ -40,8 +43,11 @@ suite leaves the server, when the independent package run takes over. Keep the H
 80 tests on the base via `pnpm --filter @waitron/server exec vitest run src/<file> …`.
 
 Run those five focused files, server `typecheck` and root `scripts/workspace-cycles.test.ts`.
-PR CI must run the selected server suites for the fixture's other callers. Lane H's queue
-requires the unchanged fiscal and menu gates for each slice. Run `write-path.e2e.test.ts`,
+PR CI must run the selected server suites for the fixture's other callers.
+
+## Checks for every slice
+
+Lane H's queue requires the unchanged fiscal and menu gates for each slice. Run `write-path.e2e.test.ts`,
 `inmutabilidad.test.ts`, `till-api.sell-published.test.ts` (Review Focus 1 and 2) and
 `till-app-menu-refresh.test.ts` in their packages to satisfy that rule.
 
