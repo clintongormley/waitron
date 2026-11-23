@@ -1,6 +1,6 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
-import { LeaveController, setHelpMode } from "@waitron/ui";
+import { LeaveController, NavigationGuard, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -397,6 +397,7 @@ const WRITES = [
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
+const NEXT_PUBLISHED_AT = "2026-09-26T10:35:00.000Z";
 const LUNCH_LIVE_HASH = "a".repeat(64);
 const LUNCH_HASH = "b".repeat(64);
 
@@ -672,7 +673,11 @@ function api(
     getMenuPreview: vi.fn(async (id: string) =>
       id === "menu-lunch" ? lunchPreview() : dinnerPreview(),
     ),
-    publishMenu: vi.fn().mockResolvedValue({ versionId: "v-lunch-3", number: 3 }),
+    publishMenu: vi.fn().mockResolvedValue({
+      versionId: "v-lunch-3",
+      number: 3,
+      publishedAt: NEXT_PUBLISHED_AT,
+    }),
     getMenuPublications: vi.fn(async () => ({
       timeZone: "Europe/Madrid",
       live: null,
@@ -2906,15 +2911,28 @@ it("creates a section without leaving the editor and adds it to the list being e
   expect(currentPlace(el)).toBe("Lunch Menu › Drinks");
 });
 
-it("closes the new-section form, sending nothing, when another change takes its list off the menu before Save", async () => {
+it("corrects the address without asking to leave when an open section form loses its list", async () => {
+  const host = await placementLeaveHost();
   const live = new LiveData();
   const client = api({ liveData: live });
   const el = await mountLunch(client);
+  const request = vi.fn((proceed: () => void | Promise<void>, signal: AbortSignal) =>
+    host.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+  );
+  const guard = new NavigationGuard(window, {
+    isDirty: () => host.leave.coordinator.isDirty(),
+    request,
+  });
+  onTestFinished(() => guard.dispose());
   await editDrinks(el);
+  expect(location.pathname).toBe(LUNCH_PATH + "/section/m-drinks");
   await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
+  await vi.waitFor(() => expect(host.leave.coordinator.isDirty()).toBe(true));
   await takeDrinksOff(el, client, live);
+  expect(request).not.toHaveBeenCalled();
+  expect(location.pathname).toBe(LUNCH_PATH);
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await new Promise((resolve) => setTimeout(resolve));
   expect(client.addSectionMember.mock.calls).toEqual([]);
@@ -3388,7 +3406,11 @@ it("reads the menu again when a move made after a refusal is out and a read land
   emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Lunch Menu")
+        .replace("{reason}", codeMessage("menu_section.invalid")),
+    ),
   );
   await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]));
   const third = deferred<SectionMember[]>();
@@ -3553,7 +3575,11 @@ it("explains a refused move, reads the menu again, and drops the moves queued be
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   refuse({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Lunch Menu")
+        .replace("{reason}", codeMessage("menu_section.invalid")),
+    ),
   );
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
   expect(client.moveSectionMember).toHaveBeenCalledOnce();
@@ -3621,7 +3647,7 @@ it("moves a member into a closed section with no position, so the server puts it
   expect(position).toBeUndefined();
 });
 
-it("shows a refused move into the list on screen in the member error line, and reads the menu again", async () => {
+it("shows a refused move into the list on screen above the Structure tree and reads the menu again", async () => {
   const client = api({
     moveSectionMembersInto: vi.fn().mockRejectedValue({ code: "menu_section.member_duplicate" }),
   });
@@ -3633,8 +3659,10 @@ it("shows a refused move into the list on screen in the member error line, and r
     position: 0,
   });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      codeMessage("menu_section.member_duplicate"),
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Lunch Menu")
+        .replace("{reason}", codeMessage("menu_section.member_duplicate")),
     ),
   );
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
@@ -3657,7 +3685,7 @@ it("names the destination with a refused move into a list that is not the one on
     position: 0,
   });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Favourites")
         .replace("{reason}", codeMessage("menu_section.member_duplicate")),
@@ -4474,15 +4502,20 @@ it("closes a new-section form whose section is refused while the person is on th
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
-it("names the list on the menus list when a change to it is refused after the person pressed Back", async () => {
+it.each(["back", "prices"])("names the list in a late refusal on %s", async (destination) => {
   const removing = deferred<void>();
   const client = api({ removeSectionMember: vi.fn(() => removing.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
   await rowAction(el, "m-drinks/m-lemonade", "remove");
   await vi.waitFor(() => expect(client.removeSectionMember).toHaveBeenCalledOnce());
-  await click(el, "back");
-  expect(table(el)).not.toBeNull();
+  if (destination === "back") {
+    await click(el, "back");
+    expect(table(el)).not.toBeNull();
+  } else {
+    await chooseTab(el, "prices");
+    expect(location.pathname).toBe(PRICES_PATH);
+  }
   removing.reject({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
@@ -4522,7 +4555,7 @@ it("names the list when a change to it is refused after the person went up to th
   expect(currentPlace(el)).toBe("Lunch Menu");
   removing.reject({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Drinks")
         .replace("{reason}", codeMessage("menu_section.not_found")),
@@ -4541,7 +4574,7 @@ it("names the list when a move in it is refused after the person went up to the 
   expect(currentPlace(el)).toBe("Lunch Menu");
   moving.reject({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Drinks")
         .replace("{reason}", codeMessage("menu_section.invalid")),
@@ -4549,7 +4582,7 @@ it("names the list when a move in it is refused after the person went up to the 
   );
 });
 
-it("shows a refused move without naming the list when the person is still on its menu", async () => {
+it("names the list in a refused move while that list is current", async () => {
   const moving = deferred<SectionMember[]>();
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
@@ -4558,7 +4591,11 @@ it("shows a refused move without naming the list when the person is still on its
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   moving.reject({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Drinks")
+        .replace("{reason}", codeMessage("menu_section.invalid")),
+    ),
   );
   expect(structure(el)).not.toBeNull();
 });
@@ -4728,15 +4765,21 @@ it("reports no lost list when a product add is saved while its menu's structure 
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
-it("shows a refused change beside the list", async () => {
+it("puts a refused change directly above the Structure tree and names the top-level list", async () => {
   const client = api({
     removeSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
   });
   const el = await mountLunch(client);
   await rowAction(el, "m-burger", "remove");
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.not_found")),
-  );
+  await vi.waitFor(() => {
+    const alert = q(el, '[role="alert"]');
+    expect(alert?.nextElementSibling).toBe(structure(el));
+    expect(text(alert)).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Lunch Menu")
+        .replace("{reason}", codeMessage("menu_section.not_found")),
+    );
+  });
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
 });
 
@@ -4817,6 +4860,47 @@ function includeForm(el: MenusScreen): IncludeForm {
 const includeModal = (el: MenusScreen) => includeForm(el).shadowRoot!.querySelector("wt-modal")!;
 
 describe("the Structure tree", () => {
+  it.each([
+    ["m-fav%2Fm-fav-drinks", "m-fav/m-fav-drinks", "m-fav%2Fm-fav-drinks"],
+    ["m-fav%2Fmissing", "m-fav", "m-fav"],
+  ])("opens a section from %s after the structure arrives", async (address, key, canonical) => {
+    const path = LUNCH_PATH + "/section/" + address;
+    const fixture = api();
+    const answer = deferred<MenuStructure>();
+    const el = await mount(api({ getMenuStructure: vi.fn(() => answer.promise) }), path);
+    expect(q(el, '[data-test="structure-loading"]')).not.toBeNull();
+    expect(location.pathname).toBe(path);
+    answer.resolve(await fixture.getMenuStructure("menu-lunch"));
+    await vi.waitFor(() => expect(currentKey(el)).toBe(key));
+    expect(location.pathname).toBe(LUNCH_PATH + "/section/" + canonical);
+  });
+
+  it("remembers a selected section across tabs and replaces the Structure address", async () => {
+    const el = await mountLunch();
+    const replace = vi.spyOn(history, "replaceState");
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => {
+      replace.mockRestore();
+      push.mockRestore();
+    });
+    const address = LUNCH_PATH + "/section/m-drinks";
+    await editDrinks(el);
+    expect(location.pathname).toBe(address);
+    expect(push).not.toHaveBeenCalled();
+
+    await chooseTab(el, "prices");
+    expect(location.pathname).toBe(PRICES_PATH);
+    await chooseTab(el, "structure");
+    expect(location.pathname).toBe(address);
+    expect(currentKey(el)).toBe("m-drinks");
+    const [, , last] = replace.mock.lastCall!;
+    expect(new URL(String(last), location.origin).pathname).toBe(address);
+
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(currentKey(el)).toBe("");
+    expect(location.pathname).toBe(DINNER_PATH);
+  });
+
   /** Wines is another menu, included at Lunch's top level after Lunch's own members. */
   function wines(): MenuStructureNode {
     return {
@@ -4920,7 +5004,7 @@ describe("the Structure tree", () => {
     );
   });
 
-  it("makes the row an add is chosen from current, leaves a refusal in that list unnamed, and names a refused move in another", async () => {
+  it("makes the row an add is chosen from current and names refusals in both lists", async () => {
     const moving = deferred<SectionMember[]>();
     const client = api({
       removeSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
@@ -4935,7 +5019,11 @@ describe("the Structure tree", () => {
 
     await rowAction(el, "m-fav/m-fav-lemonade", "remove");
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.not_found")),
+      expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+        t("menus.change_not_saved")
+          .replace("{name}", "Favourites")
+          .replace("{reason}", codeMessage("menu_section.not_found")),
+      ),
     );
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-fav", "m-fav-lemonade");
 
@@ -4949,7 +5037,7 @@ describe("the Structure tree", () => {
     );
     moving.reject({ code: "menu_section.invalid" });
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
         t("menus.change_not_saved")
           .replace("{name}", "Lunch Menu")
           .replace("{reason}", codeMessage("menu_section.invalid")),
@@ -6082,7 +6170,7 @@ describe("the Structure tree", () => {
       await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
       await vi.waitFor(() => expect(structure(el).busy).toBe(false));
       expect(structure(el).selected).toEqual(["m-coffee/m-iced", "m-desserts/m-cake"]);
-      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
         t("menus.change_not_saved")
           .replace("{name}", "Storage")
           .replace("{reason}", codeMessage("menu_section.member_duplicate")),
@@ -9256,7 +9344,7 @@ describe("publishing", () => {
       publishMenu: vi
         .fn()
         .mockRejectedValueOnce({ code: "menu.changed_since_preview" })
-        .mockResolvedValue({ versionId: "v3", number: 3 }),
+        .mockResolvedValue({ versionId: "v3", number: 3, publishedAt: NEXT_PUBLISHED_AT }),
     });
     const el = await mountPreview(client);
     await publish(el);
@@ -9821,7 +9909,7 @@ describe("publishing", () => {
     );
   });
 
-  it("shows the version it published in the header when the preview cannot be read again", async () => {
+  it("shows the box's publish time in the header when the preview cannot be read again", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     onTestFinished(() => {
       vi.useRealTimers();
@@ -9838,14 +9926,18 @@ describe("publishing", () => {
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
-      `(Live: version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")})`,
+      `(Live: version 3 · ${formatIsoMinute(NEXT_PUBLISHED_AT)})`,
     );
     expect(inPanel(el, "live")).toBeNull();
     cleanupWidgets();
 
     // Answered with the version already live, as when that content was published already: its
     // own publication time stays.
-    const again = api({ publishMenu: vi.fn().mockResolvedValue({ versionId: "v2", number: 2 }) });
+    const again = api({
+      publishMenu: vi
+        .fn()
+        .mockResolvedValue({ versionId: "v2", number: 2, publishedAt: PUBLISHED_AT }),
+    });
     const kept = await mountPreview(again);
     again.getMenuPreview.mockRejectedValue(new Error("offline"));
     await publish(kept);
@@ -9856,13 +9948,13 @@ describe("publishing", () => {
   });
 
   it("sends one publish while one is out", async () => {
-    const out = deferred<{ versionId: string; number: number }>();
+    const out = deferred<Awaited<ReturnType<DashboardApi["publishMenu"]>>>();
     const client = api({ publishMenu: vi.fn(() => out.promise) });
     const el = await mountPreview(client);
     await publish(el);
     await publish(el);
     expect(client.publishMenu).toHaveBeenCalledTimes(1);
-    out.resolve({ versionId: "v-lunch-3", number: 3 });
+    out.resolve({ versionId: "v-lunch-3", number: 3, publishedAt: NEXT_PUBLISHED_AT });
     await vi.waitFor(() => expect(inPanel(el, "result")).not.toBeNull());
   });
 
@@ -10109,12 +10201,12 @@ describe("publishing", () => {
   });
 
   it("finishes a publish quietly when the person has left the menu, and names one refused as out of date", async () => {
-    const published = deferred<{ versionId: string; number: number }>();
+    const published = deferred<Awaited<ReturnType<DashboardApi["publishMenu"]>>>();
     const client = api({ publishMenu: vi.fn(() => published.promise) });
     const el = await mountPreview(client);
     await publish(el);
     await click(el, "back");
-    published.resolve({ versionId: "v-lunch-3", number: 3 });
+    published.resolve({ versionId: "v-lunch-3", number: 3, publishedAt: NEXT_PUBLISHED_AT });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(q(el, '[data-test="member-error"]')).toBeNull();
     cleanupWidgets();
@@ -10133,10 +10225,12 @@ describe("publishing", () => {
   });
 
   it("keeps each menu's publish apart: another menu publishes while one's publish is out", async () => {
-    const lunchOut = deferred<{ versionId: string; number: number }>();
+    const lunchOut = deferred<Awaited<ReturnType<DashboardApi["publishMenu"]>>>();
     const client = api({
       publishMenu: vi.fn((id: string) =>
-        id === "menu-lunch" ? lunchOut.promise : Promise.resolve({ versionId: "v-d", number: 6 }),
+        id === "menu-lunch"
+          ? lunchOut.promise
+          : Promise.resolve({ versionId: "v-d", number: 6, publishedAt: NEXT_PUBLISHED_AT }),
       ),
     });
     const el = await mountPreview(client);
@@ -10155,7 +10249,7 @@ describe("publishing", () => {
     history.back();
     await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publishing Lunch Menu…"));
     expect(button()!.loading).toBe(true);
-    lunchOut.resolve({ versionId: "v-lunch-3", number: 3 });
+    lunchOut.resolve({ versionId: "v-lunch-3", number: 3, publishedAt: NEXT_PUBLISHED_AT });
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
         "Lunch Menu version 3 is now live. 1 shortcut on Lunch Menu's Device Home Page points at something no longer in this menu. It stays as an empty space until you remove it.",

@@ -302,6 +302,10 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+En **Estructura**, selecciona una sección y copia la dirección de la página para volver a abrir
+esa misma sección. Si se rechaza quitar una fila o moverla con su control de arrastre, encima
+del árbol verás la lista afectada y el motivo.
+
 ## Cartas a precio fijo {#set-menus}
 
 Para ofrecer varios platos por un precio único, elige **Añadir carta** y después
@@ -361,7 +365,8 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 Abre **Vista previa** para revisar tus cambios antes de publicar. Pulsa **Ver** junto a un cambio
 para ver dónde aparece. Sigue el enlace **Editar** para abrir el producto o la carta incluida. Si
 cambió un precio, **Editar producto** abre el producto y el enlace **Editar** de la carta incluida
-abre su pestaña **Precios propios**.
+abre su pestaña **Precios propios**. Tras publicar, comprueba la versión y la hora de publicación
+del servidor en el encabezado de la carta.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 

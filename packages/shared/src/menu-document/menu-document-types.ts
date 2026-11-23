@@ -412,6 +412,7 @@ export interface MenuPreview {
 export interface PublishedMenuVersion {
   versionId: string;
   number: number;
+  publishedAt: string;
 }
 
 export interface OvertakenEdition {

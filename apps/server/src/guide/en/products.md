@@ -288,6 +288,10 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+In **Structure**, select a section and copy the page address to open that same section later.
+If removing a row or moving it with its drag handle is refused, look above the tree for the
+list and the reason.
+
 ## Set menus {#set-menus}
 
 To sell several courses for one price, choose **Add menu**, then **Set menu**. Give it a name
@@ -342,7 +346,8 @@ own sections leaves the source as it was; included menus still point to the same
 Open **Preview** to review your changes before publishing. Choose **View** beside a change to
 see where it appears. Follow the **Edit** link to open the product or included menu. For a price
 change, **Edit product** opens the product, and the included menu's **Edit** link opens its
-**Price overrides** tab.
+**Price overrides** tab. After you publish, check the version and the box's publication time in
+the menu heading.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 

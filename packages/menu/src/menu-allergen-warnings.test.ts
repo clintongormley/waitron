@@ -119,7 +119,7 @@ describe("unreviewed offered allergens", () => {
         { kind: "allergens_unreviewed", products: [unknown(f.soup, "Soup")] },
       ]);
       const publish = (hash: string) =>
-        app((tx) =>
+        app<{ number: number }>((tx) =>
           mode === "now"
             ? publishMenu(tx, f.lunch, hash, "person-1")
             : queueMenuPublication(

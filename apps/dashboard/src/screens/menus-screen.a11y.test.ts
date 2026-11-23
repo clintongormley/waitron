@@ -352,6 +352,25 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
+  it("announces an inline Structure refusal", async () => {
+    const client = api("populated");
+    client.removeSectionMember = vi.fn().mockRejectedValue({ code: "menu_section.not_found" });
+    history.replaceState(null, "", LUNCH);
+    const { el, host } = await mountWidget<MenusScreen>(
+      "dashboard-menus-screen",
+      { api: client },
+      theme,
+    );
+    await editDrinks(el);
+    await rowAction(el, "m-drinks/m-lager", "remove");
+    await vi.waitFor(() => {
+      const alert = q(el, '[role="alert"]');
+      expect(alert?.nextElementSibling).toBe(q(el, "dashboard-menu-structure-table"));
+      expect(alert?.textContent).toContain("Drinks");
+    });
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible expanded owned section being edited", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await vi.waitFor(() =>

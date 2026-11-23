@@ -698,7 +698,11 @@ export async function publishMenu(
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
   const current = (await liveVersions(tx, [menuId], "format", publishedAt)).get(menuId);
   if (current?.contentHash === contentHash)
-    return { versionId: current.versionId, number: current.number };
+    return {
+      versionId: current.versionId,
+      number: current.number,
+      publishedAt: current.since.toISOString(),
+    };
   const number = await nextNumber(tx, menuId);
   refuseOvertaken(menuId, await overtakenBy(tx, menuId, number, publishedAt));
   const versionId = await insertVersion(tx, {
@@ -710,7 +714,7 @@ export async function publishMenu(
     createdBy: personId,
   });
   await makeLive(tx, menuId, versionId, publishedAt);
-  return { versionId, number };
+  return { versionId, number, publishedAt: publishedAt.toISOString() };
 }
 
 async function makeLive(
