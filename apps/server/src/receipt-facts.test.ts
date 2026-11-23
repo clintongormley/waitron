@@ -1,6 +1,6 @@
 import { addDecimal, decimal, type Decimal } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { receiptFigures, type ReceiptFigures } from "./receipt-facts.js";
+import { rateLetters, receiptFigures, type ReceiptFigures } from "./receipt-facts.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {
@@ -39,6 +39,9 @@ const charged = (figures: ReceiptFigures): Decimal[] =>
     }
   });
 
+const fixtureName = (index: number): string =>
+  FULL_INVOICE_DOCUMENT_FIXTURE.result.lines[index]!.descriptions["es-ES"]!;
+
 const sum = (amounts: readonly Decimal[]): Decimal =>
   amounts.reduce((total, amount) => addDecimal(total, amount), decimal("0.00"));
 
@@ -59,7 +62,7 @@ describe("receiptFigures", () => {
         {
           kind: "line",
           units: "1",
-          item: "Menú del día con un nombre especialmente largo",
+          item: fixtureName(0),
           indent: 0,
           unitPrice: "10.00",
           amountExVat: "10.00",
@@ -78,7 +81,7 @@ describe("receiptFigures", () => {
         {
           kind: "line",
           units: "2",
-          item: "Agua mineral",
+          item: fixtureName(1),
           indent: 0,
           unitPrice: "4.00",
           amountExVat: "8.00",
@@ -128,6 +131,28 @@ describe("receiptFigures", () => {
     ]);
   });
 
+  it("charges the advance taken off after the bill's discount at its rate", () => {
+    expect(charged(receiptFigures(advanceTakenOff()))).toEqual(["120.00", "-12.00", "-30.00"]);
+  });
+
+  it("charges a dish's own discount what it took and the bill's share at each rate the rest", () => {
+    expect(charged(receiptFigures(burgerAndBreadWithBillDiscount()))).toEqual([
+      "12.00",
+      "-1.20",
+      "2.50",
+      "-1.08",
+      "-0.25",
+    ]);
+  });
+
+  it("charges a row whose list price could not be priced before VAT what it was charged", () => {
+    const input = burgerAndBreadWithBillDiscount();
+    delete input.result.lines[1]!.listUnitPriceGross;
+    const figures = receiptFigures(input);
+    expect(charged(figures)).toEqual(["12.00", "-1.20", "2.25", "-1.08"]);
+    expect(sum(charged(figures))).toBe(figures.total);
+  });
+
   it.each<[string, () => ReceiptDocumentInput]>([
     ["the fixture", () => FULL_INVOICE_DOCUMENT_FIXTURE],
     ["a dish discount over extras at another rate", dishDiscountOverExtraAtAnotherRate],
@@ -146,5 +171,18 @@ describe("receiptFigures", () => {
   ])("adds up to TOTAL exactly: %s", (_name, input) => {
     const figures = receiptFigures(input());
     expect(sum(charged(figures))).toBe(sum([figures.total]));
+  });
+});
+
+describe("rateLetters", () => {
+  it("letters each rate once, however its digits are written", () => {
+    expect([...rateLetters([{ rate: "21" }, { rate: "21.00" }, { rate: "10" }])!]).toEqual([
+      ["21", "A"],
+      ["10", "B"],
+    ]);
+  });
+
+  it("letters nothing on a bill with one rate", () => {
+    expect(rateLetters([{ rate: "10" }, { rate: "10.00" }])).toBeNull();
   });
 });

@@ -97,7 +97,7 @@ export const fullComp = (): ReceiptDocumentInput => {
   const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
   input.result.lines = [
     {
-      descriptions: { "es-ES": "Jamón ibérico" },
+      descriptions: { "es-ES": "Iberian ham" },
       unitName: { es: "kg" },
       quantity: "0.123",
       gross: "0.00",

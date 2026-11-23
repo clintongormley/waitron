@@ -41,7 +41,7 @@ export interface FiledFigureRow {
   unitPrice?: Decimal;
   amountExVat?: Decimal;
   rate?: Decimal;
-  /** What the row was charged, VAT included; the rows of a receipt add up to its total. */
+  /** What the row was charged, VAT included; a table's rows add up to its lines' `gross`. */
   chargedWithVat?: Decimal;
 }
 
@@ -135,8 +135,9 @@ export function rateLetters(vatBreakdown: readonly { rate: string }[]): Map<stri
 /** A filed line's VAT-included amount, consistent with its VAT-exclusive figures: the list price
  *  only where `beforeVatFigures` priced the row from it. */
 function chargedFor({ line, figures }: FiguredLine): Decimal {
+  if (line.listGross === undefined) return decimal(line.gross);
   if (compareDecimal(figures.amount, decimal(line.net.base)) === 0) return decimal(line.gross);
-  return decimal(line.listGross ?? line.gross);
+  return decimal(line.listGross);
 }
 
 export function receiptFigures({
