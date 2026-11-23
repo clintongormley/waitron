@@ -1,11 +1,4 @@
-import {
-  AppError,
-  decimal,
-  isAppError,
-  toScale,
-  type ContentLanguages,
-  VAT_CLASSES,
-} from "@waitron/shared";
+import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@waitron/shared";
 import "./errors.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 import type { DocumentMember, MenuDocument, IncludeFolderOverrides } from "@waitron/shared";
@@ -97,9 +90,6 @@ function checkedValue(change: number, field: string, value: unknown): unknown {
       return value.trim();
     case "price":
       if (typeof value !== "string" || !isProductPrice(value)) throw invalid(change, field);
-      return value;
-    case "vatClass":
-      if (!(VAT_CLASSES as readonly unknown[]).includes(value)) throw invalid(change, field);
       return value;
     default:
       // customerName, names and description: the field table admits nothing else.

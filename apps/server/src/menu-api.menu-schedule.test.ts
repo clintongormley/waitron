@@ -135,7 +135,6 @@ async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: strin
     name: "Soup",
     pricingUnit: "each",
     unitPrice: "4.00",
-    vatClass: "general",
   });
   const structure = await json<{ rootSectionId: string }>(
     await send(app, "GET", `/management-api/menus/${menuId}/structure`),

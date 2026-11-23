@@ -181,6 +181,11 @@ export async function takeawayVatRatesToday(
   return rates;
 }
 
+/** The area's dine-in rate in force on the venue's local date today (plan D14). */
+export async function dineInVatRateToday(tx: Transaction, rates: AreaVatRates): Promise<string> {
+  return rateOn(rates.dineIn, await venueToday(tx));
+}
+
 async function venueToday(tx: Transaction): Promise<string> {
   const zone = classifySavedTimeZone((await readVenue(tx)).timeZone);
   if (zone.kind !== "valid") throw new AppError("venue.time_zone_invalid", { reason: zone.kind });

@@ -584,7 +584,7 @@ describe("venue defaults", () => {
     }
   }
 
-  it("answers Barcelona's fixed language, the pack's choices and the VAT class", async () => {
+  it("answers Barcelona's fixed language, the pack's choices and the takeaway rates", async () => {
     await at("Barcelona", ["ca-ES"], async () => {
       const response = await read();
       expect(response.status).toBe(200);
@@ -592,7 +592,6 @@ describe("venue defaults", () => {
         receiptLanguage: "ca-ES",
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: "ca-ES",
-        defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
         takeawayVat: true,
         vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -606,7 +605,6 @@ describe("venue defaults", () => {
         receiptLanguage: "es-ES",
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
-        defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
         takeawayVat: true,
         vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -628,7 +626,6 @@ describe("venue defaults", () => {
         receiptLanguage: "gl-ES",
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
-        defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "10.00",
         takeawayVat: true,
         vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -637,14 +634,23 @@ describe("venue defaults", () => {
     });
   });
 
-  it("saves the VAT class alone and leaves the receipt language", async () => {
-    await at("Madrid", ["es-ES"], async () => {
-      const response = await write({ defaultProductVatClass: "zero" });
-      expect(response.status).toBe(200);
-      expect((await response.json()).defaultProductVatClass).toBe("zero");
-      expect(await stored()).toEqual({ languages: ["es-ES"], vatClass: "zero" });
-    });
-  });
+  it.each([
+    ["alone", { defaultProductVatClass: "zero" }],
+    ["of null", { defaultProductVatClass: null }],
+    ["beside a language", { receiptLanguage: "gl-ES", defaultProductVatClass: "zero" }],
+  ])(
+    "refuses the retired VAT class for new products %s as an invalid body without writing",
+    async (_label, body) => {
+      await at("Madrid", ["es-ES"], async () => {
+        const response = await write(body);
+        expect(response.status).toBe(400);
+        expect(await response.json()).toEqual({
+          error: { code: "management.request_invalid", params: { field: "body" } },
+        });
+        expect(await stored()).toEqual(untouched());
+      });
+    },
+  );
 
   it("saves the takeaway rate for new products alone and leaves the rest", async () => {
     await at("Madrid", ["es-ES"], async () => {
@@ -654,7 +660,6 @@ describe("venue defaults", () => {
         receiptLanguage: "es-ES",
         receiptLanguageChoices: SPAIN_RECEIPT,
         fixedReceiptLanguage: null,
-        defaultProductVatClass: initialVatClass,
         defaultTakeawayVatRate: "4.00",
         takeawayVat: true,
         vatRates: ["0.00", "4.00", "10.00", "21.00"],
@@ -679,9 +684,9 @@ describe("venue defaults", () => {
     },
   );
 
-  it("refuses a non-Catalan language in Barcelona and writes no VAT class", async () => {
+  it("refuses a non-Catalan language in Barcelona and writes no takeaway rate", async () => {
     await at("Barcelona", ["ca-ES"], async () => {
-      const response = await write({ receiptLanguage: "es-ES", defaultProductVatClass: "zero" });
+      const response = await write({ receiptLanguage: "es-ES", defaultTakeawayVatRate: "4.00" });
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: {
@@ -690,17 +695,7 @@ describe("venue defaults", () => {
         },
       });
       expect(await stored()).toEqual({ languages: ["ca-ES"], vatClass: initialVatClass });
-    });
-  });
-
-  it("takes back the language it wrote when the VAT class is refused", async () => {
-    await at("Madrid", ["es-ES"], async () => {
-      const response = await write({ receiptLanguage: "gl-ES", defaultProductVatClass: "bogus" });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: "product.invalid", params: { field: "defaultProductVatClass" } },
-      });
-      expect(await stored()).toEqual(untouched());
+      expect((await (await read()).json()).defaultTakeawayVatRate).toBe("10.00");
     });
   });
 
@@ -708,11 +703,6 @@ describe("venue defaults", () => {
     ["receiptLanguage", null, "management.request_invalid"],
     ["receiptLanguage", [], "management.request_invalid"],
     ["receiptLanguage", 10, "management.request_invalid"],
-    ["defaultProductVatClass", null, "product.invalid"],
-    ["defaultProductVatClass", [], "product.invalid"],
-    ["defaultProductVatClass", 10, "product.invalid"],
-    ["defaultProductVatClass", ["reduced"], "product.invalid"],
-    ["defaultProductVatClass", "unknown", "product.invalid"],
   ])("refuses %s of %j as %s without writing", async (field, value, code) => {
     const response = await write({ [field]: value });
     expect(response.status).toBe(400);
@@ -723,7 +713,7 @@ describe("venue defaults", () => {
   it.each([
     ["an empty body", {}],
     ["another key", { other: 1 }],
-    ["another key beside a valid one", { defaultProductVatClass: "zero", other: 1 }],
+    ["another key beside a valid one", { defaultTakeawayVatRate: "4.00", other: 1 }],
     ["a list", ["gl-ES"]],
     ["null", null],
     ["a bare string", "gl-ES"],
@@ -742,10 +732,10 @@ describe("venue defaults", () => {
     const anonymous = await app().request(PATH, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultProductVatClass: "zero" }),
+      body: JSON.stringify({ defaultTakeawayVatRate: "4.00" }),
     });
     expect(anonymous.status).toBe(401);
-    expect((await write({ defaultProductVatClass: "zero" }, venue.staffCookie)).status).toBe(403);
+    expect((await write({ defaultTakeawayVatRate: "4.00" }, venue.staffCookie)).status).toBe(403);
     expect(await stored()).toEqual(untouched());
   });
 
@@ -771,7 +761,7 @@ describe("venue defaults", () => {
         {
           method: "PUT",
           headers: { cookie: venue.managerCookie, "content-type": "application/json" },
-          body: JSON.stringify({ receiptLanguage: "es-ES", defaultProductVatClass: "zero" }),
+          body: JSON.stringify({ receiptLanguage: "es-ES", defaultTakeawayVatRate: "4.00" }),
         },
       ]) {
         opened = 0;

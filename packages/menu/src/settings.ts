@@ -76,6 +76,10 @@ export async function readMenuSettings(
   return menuDefaultsOf(tx, doc, rates);
 }
 
+export async function readDefaultProductVatClass(tx: Transaction): Promise<VatClass> {
+  return (await readSettings(tx, MENU_SETTINGS)).doc.defaultProductVatClass;
+}
+
 /** The venue's default colour alone, which reads no VAT rates. */
 export async function readMenuDefaultColor(tx: Transaction): Promise<string | null> {
   return (await readSettings(tx, MENU_SETTINGS)).doc.defaultColor;

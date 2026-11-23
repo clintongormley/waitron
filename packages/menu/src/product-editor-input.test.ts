@@ -6,7 +6,7 @@ const unitId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const extrasListId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const optionsListId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-const input: ProductEditorInput = {
+const input: Omit<ProductEditorInput, "vatClass"> = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
   // Not the column default, so a parser that dropped the field and let storage default it fails.
@@ -19,7 +19,6 @@ const input: ProductEditorInput = {
   // Active and Available carry DIFFERENT values, so a parser that reads one into the other fails.
   active: true,
   available: false,
-  vatClass: "zero",
   takeawayVatRate: "21.00",
   variants: [],
   primaryCategoryId: null,
@@ -38,7 +37,6 @@ const inheriting = {
   image: null,
   unitId: null,
   unitPrice: null,
-  vatClass: null,
   takeawayVatRate: null,
   primaryCategoryId: null,
   allergens: null,
@@ -53,24 +51,19 @@ it("parses a variant's own values for the fields it overrides", () => {
     parseVariant({
       ...inheriting,
       unitPrice: "3.5",
-      vatClass: "general",
       dietaryDeclarations: ["vegan"],
     }),
   ).toEqual({
     ...inheriting,
     unitPrice: "3.50",
-    vatClass: "general",
     dietaryDeclarations: ["vegan"],
   });
 });
-it.each(["unitPrice", "vatClass"] as const)(
-  "refuses a blank %s on a product with no parent, naming it",
-  (field) => {
-    expect(() => parse({ ...input, [field]: null })).toThrow(
-      expect.objectContaining({ code: "product.invalid", params: { field } }),
-    );
-  },
-);
+it("refuses a blank unitPrice on a product with no parent, naming it", () => {
+  expect(() => parse({ ...input, unitPrice: null })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "unitPrice" } }),
+  );
+});
 it("refuses blank dietary declarations on a product with no parent, as any malformed list", () => {
   expect(() => parse({ ...input, dietaryDeclarations: null })).toThrow(
     expect.objectContaining({ code: "diet.declaration_invalid" }),
@@ -111,7 +104,7 @@ it.each(["not-a-uuid", 42, false])("refuses a malformed parent id %j", (parentId
   );
 });
 
-it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
+it("preserves unavailable and unreviewed rather than choosing defaults", () => {
   expect(parse(input)).toEqual(input);
   expect(parseVariant({ ...input, unitId: null })).toEqual({ ...input, unitId: null });
 });
@@ -142,7 +135,7 @@ it.each([true, false])(
   },
 );
 it("keeps omitted availability absent on the product and its listed variants", () => {
-  const body: ProductEditorSaveBody = { ...input };
+  const body: Omit<ProductEditorSaveBody, "vatClass"> = { ...input };
   delete body.available;
   const variant = {
     name: "Small",
@@ -223,14 +216,22 @@ it.each(["general", null])(
       );
   },
 );
-it.each([undefined, "", "none", "invalid", false])(
-  "rejects an unsupported or missing tax choice %j",
+it.each(["general", null, "", "none", false])(
+  "refuses a body still naming the retired eat-in class %j, on a product or a variant",
   (vatClass) => {
-    expect(() => parse({ ...input, vatClass })).toThrow(
-      expect.objectContaining({ code: "product.invalid", params: { field: "vatClass" } }),
-    );
+    for (const run of [
+      () => parse({ ...input, vatClass }),
+      () => parseVariant({ ...inheriting, vatClass }),
+    ])
+      expect(run).toThrow(
+        expect.objectContaining({ code: "product.invalid", params: { field: "vatClass" } }),
+      );
   },
 );
+it("parses a body without an eat-in class into a save that names none", () => {
+  expect(parse(input)).not.toHaveProperty("vatClass");
+  expect(parseVariant(inheriting)).not.toHaveProperty("vatClass");
+});
 it.each([undefined, null, [], "product"])("rejects a malformed body %j", (body) => {
   expect(() => parse(body)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "product" } }),

@@ -34,7 +34,7 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { readNewProductVatRates } from "./settings.js";
+import { readDefaultProductVatClass, readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
   insertFirstTakeawayVatRate,
@@ -137,7 +137,9 @@ export interface CreateProductInput {
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   unitPrice: string;
-  vatClass: VatClass;
+  /** Omitted takes the menu settings' `defaultProductVatClass`: `products_top_level_owns_ck`
+   * requires one on a product with no parent. */
+  vatClass?: VatClass;
   /** One of the area's pickable rates ("10.00"); omitted takes the venue's default for new
    * products. */
   takeawayVatRate?: string;
@@ -1030,7 +1032,7 @@ async function insertProduct(
     kitchenName: input.kitchenName?.trim() || null,
     dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
     unitPrice: stringToCents(input.unitPrice),
-    vatClass: input.vatClass,
+    vatClass: input.vatClass ?? (await readDefaultProductVatClass(tx)),
     active: input.active ?? true,
     available: input.available ?? true,
     ordering: input.ordering ?? "public",

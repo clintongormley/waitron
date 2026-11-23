@@ -561,25 +561,25 @@ describe("a receipt-language change while orders are open", () => {
 });
 
 describe("PUT /management-api/venue-defaults while orders are open", () => {
-  const vatClass = () =>
-    rows<{ default_product_vat_class: string }>(
-      sql`select json_extract(doc, '$.defaultProductVatClass') as default_product_vat_class from settings where module = 'menu'`,
-    )[0]?.default_product_vat_class ?? "general";
+  const takeawayRate = () =>
+    rows<{ default_takeaway_vat_rate: string | null }>(
+      sql`select json_extract(doc, '$.defaultTakeawayVatRate') as default_takeaway_vat_rate from settings where module = 'menu'`,
+    )[0]?.default_takeaway_vat_rate ?? null;
 
-  it("refuses a changed receipt language and writes neither it nor the VAT class beside it", async () => {
+  it("refuses a changed receipt language and writes neither it nor the takeaway rate beside it", async () => {
     reset();
     await seatedWith(venue, "Paella");
-    const before = vatClass();
-    expect(before).not.toBe("zero");
+    const before = takeawayRate();
+    expect(before).not.toBe("4.00");
 
     const answer = await send(settings, manager, "PUT", "/management-api/venue-defaults", {
       receiptLanguage: "gl-ES",
-      defaultProductVatClass: "zero",
+      defaultTakeawayVatRate: "4.00",
     });
 
     expect(answer).toEqual(refusedFor(1));
     expect(language()).toEqual(["es-ES"]);
-    expect(vatClass()).toBe(before);
+    expect(takeawayRate()).toBe(before);
   });
 });
 

@@ -631,24 +631,25 @@ it("corrects live wording on both offers and keeps the set-menu surcharge and ch
   expect((await copied())?.offers[f.sirloinItem]?.name).toBe("Sirloin");
 });
 
-it("corrects the frozen rates on a copy-only dish and keeps the set menu's rates", async () => {
+it("refuses a patch of a copy-only dish's eat-in class and keeps the set menu's rates", async () => {
   await place();
   await app((tx) => updateMenuDetails(tx, f.daily, { setTakeawayVatClass: "general" }));
   const { versionId } = await publish();
   const target = { kind: "offer", menuItemId: await app((tx) => itemId(tx, f.daily, f.soup)) };
-  await app((tx) =>
-    patchLiveMenu(
-      tx,
-      f.lunch,
-      versionId,
-      [{ target, field: "vatClass", value: "general" }],
-      personId,
+  const before = await fromLive();
+  await expect(
+    app((tx) =>
+      patchLiveMenu(
+        tx,
+        f.lunch,
+        versionId,
+        [{ target, field: "vatClass", value: "general" }],
+        personId,
+      ),
     ),
-  );
-  expect(await fromLive()).toMatchObject({
-    terms: { vatClass: "reduced", takeawayVatClass: "general" },
-    offers: { [target.menuItemId]: { vatClass: "general" } },
-  });
+  ).rejects.toMatchObject({ code: "menu_patch.invalid", params: { change: 0, field: "field" } });
+  expect(await fromLive()).toEqual(before);
+  expect(before).toMatchObject({ terms: { vatClass: "reduced", takeawayVatClass: "general" } });
 });
 
 it("corrects an option wherever its list is offered in the live menu and its set menu", async () => {

@@ -206,7 +206,6 @@ export async function saveProductEditor(
         unitId: value.unitId,
         // The parser refuses a blank on a product with no parent, which every created one is.
         unitPrice: value.unitPrice!,
-        vatClass: value.vatClass!,
         takeawayVatRate: value.takeawayVatRate!,
         active: value.active,
         available: value.available ?? true,
@@ -227,7 +226,6 @@ export async function saveProductEditor(
       kitchenName: value.kitchenName,
       unitId: value.unitId,
       unitPrice: value.unitPrice,
-      vatClass: value.vatClass,
       active: value.active,
       ...(value.available === undefined ? {} : { available: value.available }),
       ordering: value.ordering,

@@ -298,7 +298,6 @@ async function createProduct(app: Hono, cookie: string, name: string): Promise<s
     name,
     pricingUnit: "each",
     unitPrice: "1.00",
-    vatClass: "general",
   });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -327,7 +326,6 @@ describe("Menu API — option groups, gates, by-id FKs", () => {
         name: "Refused",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       }),
     );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
@@ -399,7 +397,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
     name: "Dish",
     pricingUnit: "each",
     unitPrice: "5.00",
-    vatClass: "reduced",
     modifiers,
   });
   expect(create.status).toBe(201);
@@ -410,6 +407,8 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   expect(editor.status).toBe(200);
   const editorBody = (await editor.json()) as Record<string, unknown>;
   delete editorBody.courseId;
+  // The read still carries the eat-in class, which a save refuses.
+  delete editorBody.vatClass;
   expect(
     (
       await send(app, "PUT", `/management-api/products/${product.id}/editor`, cookie, {

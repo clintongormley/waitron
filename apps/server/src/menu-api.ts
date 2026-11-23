@@ -27,6 +27,7 @@ import {
   menuExists,
   readMenuSettings,
   readVenueVatRates,
+  dineInVatRateToday,
   saveMenuDefaultColor,
   type MenuDefaults,
   readContentLanguages,
@@ -131,16 +132,17 @@ import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
 
 /** The menu's defaults, whether the venue's region charges a product a second VAT class when it
- * is taken away, and the takeaway rates a person may pick: they travel here so anyone who may edit
- * products reads them. */
+ * is taken away, the takeaway rates a person may pick and today's dine-in rate: they travel here so
+ * anyone who may edit products reads them. */
 async function readMenuSettingsAnswer(
   tx: Transaction,
-): Promise<MenuDefaults & { takeawayVat: boolean; vatRates: string[] }> {
+): Promise<MenuDefaults & { takeawayVat: boolean; vatRates: string[]; dineInVatRate: string }> {
   const rates = await readVenueVatRates(tx);
   return {
     ...(await readMenuSettings(tx, rates)),
     takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
     vatRates: [...rates.pickable],
+    dineInVatRate: await dineInVatRateToday(tx, rates),
   };
 }
 
@@ -509,6 +511,7 @@ function refuseRetiredFields(body: Record<string, unknown>): void {
     "optionGroupIds",
     "soldAlone",
     "menuId",
+    "vatClass",
     "takeawayVatClass",
   ])
     if (body[retired] !== undefined)
@@ -1625,7 +1628,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         unitId?: unknown;
         pricingUnit?: unknown;
         unitPrice?: unknown;
-        vatClass?: unknown;
         takeawayVatRate?: unknown;
         allergens?: unknown;
         dietOverride?: unknown;
@@ -1658,9 +1660,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "unitPrice" });
       }
       refuseInvalidPrice(body.unitPrice, "unitPrice");
-      if (typeof body.vatClass !== "string") {
-        throw new AppError("management.request_invalid", { field: "vatClass" });
-      }
       if (body.image !== undefined && typeof body.image !== "string") {
         throw new AppError("management.request_invalid", { field: "image" });
       }
@@ -1685,7 +1684,6 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
           ? { pricingUnit: body.pricingUnit as never }
           : { unitId: body.unitId as string }),
         unitPrice: body.unitPrice,
-        vatClass: body.vatClass as never,
         // `createProduct` refuses a rate the area does not offer; omitted takes the venue's default.
         ...(body.takeawayVatRate === undefined
           ? {}

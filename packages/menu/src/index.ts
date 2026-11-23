@@ -14,6 +14,7 @@ export {
 export { isProductOrdering, PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 export * from "./units.js";
 export {
+  dineInVatRateToday,
   readTakeawayVatSchedules,
   readVenueVatRates,
   setTakeawayVatRate,

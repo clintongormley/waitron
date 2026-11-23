@@ -9,9 +9,15 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { seedTakeawayVatRate, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedTakeawayVatRate,
+  seedTaxpayer,
+  seedVenue,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  dineInVatRateToday,
   readTakeawayVatSchedules,
   readVenueVatRates,
   setTakeawayVatRate,
@@ -64,6 +70,23 @@ describe("readVenueVatRates", () => {
       code: "vat_rate.area_unsupported",
       params: { country: "ES", territory: "ES-nowhere" },
     });
+  });
+});
+
+describe("dineInVatRateToday", () => {
+  it("gives the dine-in rate in force on the venue's date, at two places", async () => {
+    await seedVenue(suite.db);
+    const area = vatRatesFor("ES", "ES-common")!;
+    expect(await app((tx) => dineInVatRateToday(tx, area))).toBe("10.00");
+    const dated = {
+      ...area,
+      dineIn: [
+        { from: null, rate: "10.00" },
+        { from: "2000-01-01", rate: "7.5" },
+        { from: "9999-01-01", rate: "21.00" },
+      ],
+    };
+    expect(await app((tx) => dineInVatRateToday(tx, dated))).toBe("7.50");
   });
 });
 

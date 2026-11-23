@@ -1,11 +1,6 @@
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import {
-  readMenuSettings,
-  readVenueVatRates,
-  saveMenuDefaultTakeawayVatRate,
-  saveMenuSettings,
-} from "@waitron/menu";
+import { readMenuSettings, readVenueVatRates, saveMenuDefaultTakeawayVatRate } from "@waitron/menu";
 import {
   readVenue,
   saveVenueFields,
@@ -126,12 +121,11 @@ async function readVenueDefaults(
   { venue, rules }: ReceiptLanguageState,
 ): Promise<VenueDefaults> {
   const rates = await readVenueVatRates(tx);
-  const { defaultProductVatClass, defaultTakeawayVatRate } = await readMenuSettings(tx, rates);
+  const { defaultTakeawayVatRate } = await readMenuSettings(tx, rates);
   return {
     receiptLanguage: venue.invoiceLocales[0]!,
     receiptLanguageChoices: [...rules.choices],
     fixedReceiptLanguage: rules.fixed?.locale ?? null,
-    defaultProductVatClass,
     defaultTakeawayVatRate,
     takeawayVat: await VENUE_SERVICE.venueChargesTakeawayVat(tx),
     vatRates: [...rates.pickable],
@@ -140,11 +134,10 @@ async function readVenueDefaults(
 
 interface VenueDefaultsRequest {
   receiptLanguage?: unknown;
-  defaultProductVatClass?: unknown;
   defaultTakeawayVatRate?: unknown;
 }
 
-const VENUE_DEFAULTS_KEYS = ["receiptLanguage", "defaultProductVatClass", "defaultTakeawayVatRate"];
+const VENUE_DEFAULTS_KEYS = ["receiptLanguage", "defaultTakeawayVatRate"];
 
 function venueDefaultsRequest(body: unknown): VenueDefaultsRequest {
   const keys =
@@ -428,14 +421,6 @@ export function mountVenueSettingsApi(
             personId,
           );
         }
-        if ("defaultProductVatClass" in request)
-          await saveMenuSettings(
-            tx,
-            {
-              defaultProductVatClass: request.defaultProductVatClass,
-            },
-            personId,
-          );
         if ("defaultTakeawayVatRate" in request)
           await saveMenuDefaultTakeawayVatRate(tx, request.defaultTakeawayVatRate, personId);
         return readVenueDefaults(tx, state ?? (await readReceiptLanguageState(tx)));

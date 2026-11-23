@@ -140,7 +140,6 @@ async function lunchIncludingDrinks(app: Hono): Promise<Fixture> {
       name: `Soup ${tag}`,
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "general",
     })
   ).id;
   const productMember = (await created(app, members, { ref: { kind: "product", productId } })).id;
