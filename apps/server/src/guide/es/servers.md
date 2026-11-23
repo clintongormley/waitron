@@ -263,8 +263,7 @@ La página muestra una línea más solo mientras algo te necesita, y dice qué h
 el traspaso en el servidor de reserva.
 
 Mantén este servidor encendido mientras devuelve sus registros de facturación al servidor principal.
-Los reembolsos con tarjeta en curso se devuelven con sus pagos originales. El envío a Hacienda
-continúa en el principal.
+El envío a Hacienda continúa en el principal.
 
 Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
 servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
@@ -310,9 +309,7 @@ Pulsa **Actualizar intervalos** para comprobar la recepción del inventario. **R
 confirmada** significa que el nuevo servidor ha contabilizado todos los lotes de un inventario anunciado
 por el anterior. No confirma la actividad que falte ni los importes, ni reconstruye los arqueos. Una
 recepción sin confirmar necesita una devolución completa; si el servidor anterior ya dejó de enviar,
-reinícialo mientras sigue restringido para que reenvíe los datos. Si vuelve el servidor anterior,
-comprueba que su fila en **Sistema → Servidores** ya no dice **Esperando a que el servidor principal
-anterior devuelva sus registros de facturación** antes de elegir **Borrar y retirar**.
+reinícialo mientras sigue restringido para que reenvíe los datos.
 
 Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida por primera vez
 con el servidor de origen, la instalación que la generó, la fecha de expedición original y los
