@@ -148,6 +148,10 @@ async function mount(
     proof?: SwitchProof;
     /** The clock comparison has no internet time, so the person confirms the time. */
     noInternetTime?: boolean;
+    /** How many clock comparisons, from the first, find no second clock. */
+    secondClockMissing?: number;
+    /** Each passkey challenge waits for what this returns before answering. */
+    challengeGate?: () => Promise<void>;
     /** The proof lapses as the first select arrives. */
     proofLapsesAtSelect?: boolean;
     /** When the main box's latest copy last changed; otherwise it has no dated activity. */
@@ -174,6 +178,7 @@ async function mount(
   let sent = false;
   let previewLost = false;
   let proofLapsed = false;
+  let secondClockMissing = options.secondClockMissing ?? 0;
   const later = [...(options.later ?? [])];
   const api = new SetupApi("", async (input, init) => {
     const path = String(input);
@@ -193,6 +198,7 @@ async function mount(
     }
     const proof = options.proof;
     if (proof && path.endsWith("/emergency/passkey-challenge")) {
+      await options.challengeGate?.();
       const challenge = `chal${String(proof.issued.size).padStart(4, "0")}`;
       proof.issued.set(challenge, Date.now());
       return new Response(JSON.stringify({ options: { challenge, rpId: location.hostname } }));
@@ -413,7 +419,7 @@ async function mount(
       unavailable: options.noInternetTime
         ? [{ source: "internet", result: "unavailable", reason: "offline" }]
         : [],
-      secondClock: true,
+      secondClock: !(action === "compare-clocks" && secondClockMissing-- > 0),
       disagreement: false,
       releaseBlocked: false,
       rangeBlocked: false,
@@ -2301,7 +2307,7 @@ it("Continue with an email that is not one marks the field and sends nothing", a
   q(el, "[data-test=emergency-preview]").click();
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.fix")));
   const email = q<LitElement & { error: string }>(el, '[name="handover-email"]');
-  expect(email.error).toBe(t("handover.required"));
+  expect(email.error).toBe(t("handover.email_invalid"));
   expect(q(el, "[data-test=sign-in-passkey]")).toBeNull();
   expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-preview]").disabled).toBe(
     true,
@@ -2309,7 +2315,7 @@ it("Continue with an email that is not one marks the field and sends nothing", a
   expect(posts).toEqual([]);
 });
 
-it("offers a saved passkey in the email field, and one picked there signs in with no second prompt", async () => {
+it("offers a saved passkey in the email field, and a pick the box accepts signs in with no second prompt", async () => {
   const { get, autofills, prompts } = stubAutofill();
   const { el, posts } = await mount({ proof: newProof() });
   await vi.waitFor(() => expect(autofills).toHaveLength(1));
@@ -2341,6 +2347,184 @@ it("renews the passkey offer each minute while the email step shows, and cancels
   await vi.advanceTimersByTimeAsync(120_000);
   expect(autofills).toHaveLength(2);
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("a passkey picked from the field that the box refuses opens no prompt, and Use your passkey then opens one", async () => {
+  const { autofills, prompts } = stubAutofill();
+  const proof = newProof();
+  const { el } = await mount({ proof });
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  // The box has already used this field's challenge, so it refuses the pick as lapsed.
+  proof.used.add("chal0000");
+  autofills[0]!.pick();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again")));
+  expect(prompts()).toBe(0);
+  expect(heading(el)).toBe(t("handover.emergency.sign_in_heading"));
+  const passkey = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
+  await vi.waitFor(() => expect(passkey.disabled).toBe(false));
+  passkey.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(prompts()).toBe(1);
+});
+
+it("after a refused pick with no email typed, the method step offers the passkey, and the password asks for the email first", async () => {
+  const { autofills } = stubAutofill();
+  const proof = newProof();
+  const { el, posts } = await mount({ proof });
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  proof.used.add("chal0000");
+  autofills[0]!.pick();
+  await vi.waitFor(() => expect(q(el, "[data-test=sign-in-passkey]")).not.toBeNull());
+  expect(q(el, "[data-test=sign-in-email]")).toBeNull();
+  expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+  const email = q<LitElement & { error: string; required: boolean }>(el, '[name="handover-email"]');
+  expect(email.required).toBe(true);
+  expect(email.getAttribute("autocomplete")).toBe("username");
+  const sent = posts.length;
+  q(el, "[data-test=sign-in-password]").click();
+  await vi.waitFor(() => expect(email.error).toBe(t("handover.required")));
+  expect(actions(el)).toBe(t("handover.fix"));
+  expect(posts).toHaveLength(sent);
+  await edit(el, "handover-email", signIn.email);
+  await edit(el, "handover-password", signIn.password);
+  q(el, "[data-test=sign-in-password]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  expect(posts[sent]!.body.signIn).toEqual({ email: signIn.email, password: signIn.password });
+});
+
+it("an automatic check of the clocks that the box refuses for want of the passkey opens no prompt; the clock step's Try again opens one", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  const { el } = await mount({ proof, secondClockMissing: 1 });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=clock-wait]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(1);
+  proof.cookie = false;
+  await vi.advanceTimersByTimeAsync(15_000);
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_again")));
+  expect(get).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
+  const again = q<HTMLElement & { disabled: boolean }>(entry, "[data-test=compare]");
+  await vi.waitFor(() => expect(again.disabled).toBe(false));
+  again.click();
+  await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
+  expect(get).toHaveBeenCalledTimes(2);
+});
+
+it("starts no passkey offer once the page is left, and offers it again on the sign-in of the page restored", async () => {
+  const { autofills } = stubAutofill();
+  const { el } = await mount({ proof: newProof() });
+  // Each offer first asks whether the browser can offer a passkey in the field, in the same turn.
+  const asked = () =>
+    vi.mocked(PublicKeyCredential.isConditionalMediationAvailable).mock.calls.length;
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  const before = asked();
+  window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  await el.updateComplete;
+  expect(autofills[0]!.request.signal!.aborted).toBe(true);
+  expect(asked()).toBe(before);
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  // A restored page checks the main box again, then explains the switch before the sign-in.
+  await startSwitching(el);
+  await vi.waitFor(() => expect(autofills).toHaveLength(2));
+});
+
+it("renews no passkey offer while the page is hidden, and offers it again once it shows", async () => {
+  const { autofills } = stubAutofill();
+  const { el } = await mount({ proof: newProof(), explanation: true });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await startSwitching(el);
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  let hidden = true;
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() =>
+    hidden ? "hidden" : "visible",
+  );
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.waitFor(() => expect(autofills[0]!.request.signal!.aborted).toBe(true));
+  // A hidden page still redraws, as when its progress is read again.
+  const asked = () =>
+    vi.mocked(PublicKeyCredential.isConditionalMediationAvailable).mock.calls.length;
+  const before = asked();
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(asked()).toBe(before);
+  await vi.advanceTimersByTimeAsync(180_000);
+  expect(autofills).toHaveLength(1);
+  hidden = false;
+  document.dispatchEvent(new Event("visibilitychange"));
+  await vi.waitFor(() => expect(autofills).toHaveLength(2));
+  expect(autofills[1]!.request.signal!.aborted).toBe(false);
+});
+
+it("waits to renew the passkey offer while the email field has focus, and renews it when the field loses focus", async () => {
+  const { autofills } = stubAutofill();
+  const { el } = await mount({ proof: newProof(), explanation: true });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await startSwitching(el);
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  const field = q<LitElement>(el, '[name="handover-email"]');
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.focus();
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(autofills).toHaveLength(1);
+  expect(autofills[0]!.request.signal!.aborted).toBe(false);
+  input.blur();
+  await vi.waitFor(() => expect(autofills).toHaveLength(2));
+  expect(autofills[0]!.request.signal!.aborted).toBe(true);
+});
+
+it("a passkey challenge that arrives after the page is left opens no prompt", async () => {
+  const get = stubPasskey();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const challengeGate = vi.fn(() => gate);
+  const { el } = await mount({ proof: newProof(), challengeGate });
+  await choosePasskey(el);
+  await vi.waitFor(() => expect(challengeGate).toHaveBeenCalledTimes(1));
+  window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  release();
+  await vi.waitFor(() => expect(Reflect.get(el, "busy")).toBe(false));
+  expect(get).not.toHaveBeenCalled();
+});
+
+it("the method step names the email for a password manager in a field nobody can reach, and labels Change by what it changes", async () => {
+  const { el } = await mount();
+  await toMethods(el);
+  const username = q<HTMLInputElement>(el, 'input[autocomplete="username"]');
+  expect(username.name).toBe("username");
+  expect(username.value).toBe(signIn.email);
+  expect(username.readOnly).toBe(true);
+  expect(username.tabIndex).toBe(-1);
+  expect(username.getAttribute("aria-hidden")).toBe("true");
+  expect(username.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+  const password = q(el, '[name="handover-password"]');
+  expect(username.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  const change = q<LitElement>(el, "[data-test=change-email]");
+  await change.updateComplete;
+  expect(change.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
+    t("handover.emergency.change_email_label"),
+  );
+});
+
+it("Continue refuses an address the email field itself calls malformed, and says why beside it", async () => {
+  const { el, posts } = await mount();
+  await edit(el, "handover-email", "owner@");
+  q(el, "[data-test=emergency-preview]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.fix")));
+  const email = q<LitElement & { error: string }>(el, '[name="handover-email"]');
+  expect(email.error).toBe(t("handover.email_invalid"));
+  expect(q(el, "[data-test=sign-in-passkey]")).toBeNull();
+  expect(posts).toEqual([]);
 });
 
 it("Use your passkey opens one prompt when the box asks for it, and none when its proof is enough", async () => {
@@ -2380,7 +2564,7 @@ it("a refused sign-in goes back to how to sign in, keeping the email, and does n
   expect(actions(el)).not.toContain(signIn.email);
 });
 
-it("on Ready to switch, Use your passkey in a sign-in a refusal opened switches with one more prompt", async () => {
+it("on Ready to switch, a sign-in a refusal opened only chooses the method, and Switch to this box sends it with one more prompt", async () => {
   const get = stubPasskey();
   const proof = newProof();
   const { el, posts } = await mount({ proof });
@@ -2394,14 +2578,89 @@ it("on Ready to switch, Use your passkey in a sign-in a refusal opened switches 
   expect(get).toHaveBeenCalledTimes(2);
   expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
   const declared = posts.filter(({ path }) => path.endsWith("/declare")).length;
-  const passkey = q<HTMLElement & { disabled: boolean }>(el, "[data-test=sign-in-passkey]");
-  await vi.waitFor(() => expect(passkey.disabled).toBe(false));
-  passkey.click();
+  const sent = posts.length;
+  expect(q(el, "[data-test=sign-in-passkey]")).toBeNull();
+  expect(q(el, "[data-test=sign-in-password]")).toBeNull();
+  const method = q<LitElement & { value: string }>(el, '[name="handover-sign-in-method"]');
+  expect(method.value).toBe("passkey");
+  expect(q(el, '[name="handover-password"]')).toBeNull();
+  await chooseMethod(el, "password");
+  expect(method.value).toBe("password");
+  expect(q(el, '[name="handover-password"]')).not.toBeNull();
+  await chooseMethod(el, "passkey");
+  expect(q(el, '[name="handover-password"]')).toBeNull();
+  expect(posts).toHaveLength(sent);
+  expect(get).toHaveBeenCalledTimes(2);
+  const declare = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
+  await vi.waitFor(() => expect(declare.disabled).toBe(false));
+  declare.click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   expect(get).toHaveBeenCalledTimes(3);
   // The declaration already sent checks the copy first, so the prompt comes at that check.
   expect(posts.filter(({ path }) => path.endsWith("/declare")).length).toBe(declared + 1);
 });
+
+it("on Ready to switch, a passkey picked from the email field only chooses the passkey, and Switch to this box sends it", async () => {
+  const { autofills, prompts } = stubAutofill();
+  const { el, posts } = await mount({ proof: newProof(), expired: true });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.code_expired")));
+  const offered = autofills.length;
+  q(el, "[data-test=change-email]").click();
+  await vi.waitFor(() => expect(autofills).toHaveLength(offered + 1));
+  const sent = posts.length;
+  autofills.at(-1)!.pick();
+  await vi.waitFor(() =>
+    expect(q<LitElement & { value: string }>(el, '[name="handover-sign-in-method"]')?.value).toBe(
+      "passkey",
+    ),
+  );
+  expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
+  expect(posts).toHaveLength(sent);
+  const declare = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
+  await vi.waitFor(() => expect(declare.disabled).toBe(false));
+  declare.click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(prompts()).toBe(0);
+  const picked = posts.slice(sent).find(({ body }) => body.signIn !== undefined)!;
+  expect(Object.keys(picked.body.signIn as object)).toEqual(["passkey"]);
+});
+
+it("on Ready to switch with no email typed, the passkey asks for no email and the password asks for one", async () => {
+  const { autofills } = stubAutofill();
+  const proof = newProof();
+  const { el } = await mount({ proof });
+  await vi.waitFor(() => expect(autofills).toHaveLength(1));
+  autofills[0]!.pick();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-copy]")).not.toBeNull());
+  await declarationFields(el);
+  proof.cookie = false;
+  proof.refusals = ["passkey.verification_failed"];
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
+  expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
+  expect(q(el, '[name="handover-email"]')).toBeNull();
+  expect(q(el, "[data-test=sign-in-email]")).toBeNull();
+  await chooseMethod(el, "password");
+  const email = q<LitElement & { required: boolean }>(el, '[name="handover-email"]');
+  expect(email.required).toBe(true);
+  expect(q(el, '[name="handover-password"]')).not.toBeNull();
+  expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]").disabled).toBe(
+    true,
+  );
+});
+
+/** Chooses how to sign in where a later button sends the sign-in. */
+async function chooseMethod(el: SetupHandoverScreen, method: "password" | "passkey") {
+  const methods = q<LitElement>(el, '[name="handover-sign-in-method"]');
+  await methods.updateComplete;
+  methods
+    .shadowRoot!.querySelectorAll<HTMLButtonElement>("button")
+    [method === "password" ? 0 : 1]!.click();
+  await el.updateComplete;
+}
 
 it("a passkey switch unlocks once and the later steps lean on the proof, through to activation", async () => {
   const get = stubPasskey();
@@ -2476,7 +2735,9 @@ it("a refused passkey, or a lapsed proof, offers the passkey again rather than e
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.passkey_failed")));
   expect(get).toHaveBeenCalledTimes(2);
-  expect(q(el, "[data-test=sign-in-passkey]")).not.toBeNull();
+  expect(q<LitElement & { value: string }>(el, '[name="handover-sign-in-method"]').value).toBe(
+    "passkey",
+  );
   const declare = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
   await vi.waitFor(() => expect(declare.disabled).toBe(false));
   declare.click();
@@ -2664,7 +2925,7 @@ it.each([
 
 const signInDrawn = (el: SetupHandoverScreen) =>
   [
-    "[data-test=sign-in-passkey]",
+    '[data-test=sign-in-passkey], [name="handover-sign-in-method"]',
     '[name="handover-email"], [data-test=sign-in-email]',
     '[name="handover-password"]',
     '[name="handover-code"]',

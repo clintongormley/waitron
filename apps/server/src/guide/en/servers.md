@@ -133,7 +133,8 @@ and this device's: check that both are right (both are shown in the venue's time
 the device you are using and the page carries on; after **The box** or **Both times are wrong**,
 correct this device's time and reconnect. Choose **Continue** to start the venue on this box. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
-the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
+you choose a step and the spare needs it, usually once, and again after 15 minutes; if a check the
+page makes by itself needs it, choose **Use your passkey** and then the step again. Your reason and statements stay in place.
 
 If the copy changes before you switch, the page goes back to **Preparing the venue**: check its
 latest sale or order, choose **Proceed** and tick the three statements again. If the copy fails its
