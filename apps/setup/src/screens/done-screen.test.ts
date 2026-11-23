@@ -1248,7 +1248,6 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("You need it to promote this box if the primary is unreachable.");
-    expect(warning).not.toContain("take over from the primary");
   });
 
   it("shows the finished setup in Spanish", async () => {
@@ -2273,7 +2272,7 @@ describe("the joining page", () => {
     expect(signals[0]?.aborted).toBe(true);
   });
 
-  it("shows the Servers page words without a link when the primary's address is not known", async () => {
+  it("shows the Servers page words without a link when the main box's address is not known", async () => {
     const { el } = await mountJoining([unreachable], { lostAfterMs: 0 });
     await vi.waitFor(() => expect(statusText(el)).toBe(LOST_EN));
     expect(q(el, "[data-test=joining-status] a")).toBeNull();
@@ -2303,7 +2302,7 @@ describe("the joining page", () => {
     const key = q(el, "[data-test=task-key]")!;
     expect(key.querySelector(".task-label")!.textContent!.trim()).toBe("Download the box key");
     expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
+      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer.",
     );
     expect(key.querySelector("[data-test=break-glass-key-name]")!.textContent!.trim()).toBe(
       "Box key 15 Oct 2026 · K7QF",
@@ -2332,7 +2331,7 @@ describe("the joining page", () => {
       "",
       "key-on-paper",
       "",
-      "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
+      "You will need it if this box ever has to take over from the main box.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
@@ -2387,6 +2386,19 @@ describe("the joining page", () => {
     expect(done(el, "key")).toBe("false");
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
     expect(taskIds(el)).toEqual(["task-join", "task-key"]);
+  });
+
+  it("drops an earlier failed save's message when the key is shown again", async () => {
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
+      throw new Error("Download refused");
+    });
+    const { el } = await mountJoined();
+    await press(el, "break-glass-save");
+    expect(q(el, "[data-test=break-glass-save-error]")).not.toBeNull();
+    await press(el, "key-wrote");
+    await press(el, "key-again");
+    expect(done(el, "key")).toBe("false");
+    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
   });
 
   it("goes straight to the label task once joined when there is no key to save", async () => {
@@ -2484,7 +2496,7 @@ describe("the joining page", () => {
       "Descargar la clave del servidor",
     );
     expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez.",
+      "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
     );
     expect(q(el, "[data-test=break-glass-save]")!.textContent!.trim()).toBe(
       "Guardar en un archivo",

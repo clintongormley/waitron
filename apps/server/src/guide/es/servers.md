@@ -53,7 +53,7 @@ En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa p�
 equivocado termina la solicitud; elige **Empezar de nuevo** en el servidor nuevo.
 
 De vuelta en el servidor nuevo, elige **Terminar la unión**. El servidor nuevo recibe su primera copia por la red del
-local y se reinicia solo como servidor de reserva. Cuando se haya unido, su página te pide guardar
+local y se reinicia solo como servidor de reserva. Su página te pide guardar
 la clave del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y
 pegarla en el servidor.
 
@@ -67,7 +67,7 @@ La campana y **Estado del servidor** avisan si se retrasa el envío o la aplicac
 ## Imprimir una etiqueta de cambio para cada servidor {#switch-label}
 
 El servidor de un restaurante nuevo ofrece su etiqueta en su página **Configuración completada**, y
-un servidor de reserva en su propia página cuando se ha unido: elige **Imprimir etiqueta** y pega la
+un servidor de reserva en su propia página: elige **Imprimir etiqueta** y pega la
 etiqueta en ese servidor. Para volver a imprimirla, abre **Sistema → Servidores** en el servidor
 principal, abre el menú de la fila del servidor y elige **Imprimir etiqueta de cambio** y después
 **Imprimir**. Si

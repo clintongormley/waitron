@@ -51,8 +51,8 @@ and tap the code the new box shows. A wrong tap ends the request; choose **Start
 box.
 
 Back on the new box, choose **Finish joining**. The
-new box takes its first copy over the venue's network and restarts by itself as the spare. Once it
-has joined, its page asks you to save the box key, then to print its own
+new box takes its first copy over the venue's network and restarts by itself as the spare. Its
+page asks you to save the box key, then to print its own
 [switch label](servers.md#switch-label) and stick it on the box.
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
@@ -64,8 +64,8 @@ The bell and **Box status** warn when sending or applying changes is delayed, or
 
 ## Print a switch label for each box {#switch-label}
 
-A new restaurant's box offers its label on its **Setup complete** page, and a spare on its own page
-once it has joined: choose **Print label** and stick the label on that box. To print one again, open **System → Servers** on the main box, open the box's row menu, choose
+A new restaurant's box offers its label on its **Setup complete** page, and a spare on its own page:
+choose **Print label** and stick the label on that box. To print one again, open **System → Servers** on the main box, open the box's row menu, choose
 **Print switch label**, then **Print**. If the main box fails, scan the spare's label with any till or phone on the venue's
 network to open its [switch page](servers.md#emergency).
 

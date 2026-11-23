@@ -642,7 +642,7 @@ export class SetupDoneScreen extends LitElement {
         this.#preparation()
           ? "done.break_glass.file_purpose"
           : this.mirrorJoin
-            ? "done.task.key_why"
+            ? "done.task.key_file_purpose"
             : "done.break_glass.promote",
       ),
       ...(this.mirrorJoin ? [] : [t("done.break_glass.backups")]),
@@ -829,7 +829,6 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
-  /** One task at a time: each appears once the one before it is done. */
   #renderJoining(): TemplateResult {
     const secret = this.breakGlassSecret;
     const keyOpen = this.revealed && secret !== undefined && !this.keyConfirmed;
@@ -859,6 +858,7 @@ export class SetupDoneScreen extends LitElement {
                         variant="ghost"
                         data-test="key-again"
                         @click=${() => {
+                          this.breakGlassSaveFailed = false;
                           this.keyConfirmed = false;
                         }}
                         >${t("done.task.key_again")}</wt-button

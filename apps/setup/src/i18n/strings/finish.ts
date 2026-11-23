@@ -112,8 +112,10 @@ export const finishEn = {
   "done.task.join": "Join the restaurant",
   "done.task.key": "Download the box key",
   "done.task.key_why":
-    "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer. It is shown only once.",
+    "You need this key if this box ever has to take over from the main box. Save it as a file or write it down, and keep it off this computer.",
   "done.task.key_wrote": "I wrote it down",
+  "done.task.key_file_purpose":
+    "You will need it if this box ever has to take over from the main box.",
   "done.task.key_again": "Show the key again",
   "done.task.label": "Print this box's label",
   "done.task.label_why":
@@ -244,8 +246,10 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.join": "Unirse al restaurante",
   "done.task.key": "Descargar la clave del servidor",
   "done.task.key_why":
-    "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez.",
+    "Necesitas esta clave si algún día este servidor tiene que sustituir al servidor principal. Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
   "done.task.key_wrote": "La he anotado",
+  "done.task.key_file_purpose":
+    "La necesitarás si algún día este servidor tiene que sustituir al servidor principal.",
   "done.task.key_again": "Mostrar la clave de nuevo",
   "done.task.label": "Imprimir la etiqueta de este servidor",
   "done.task.label_why":
