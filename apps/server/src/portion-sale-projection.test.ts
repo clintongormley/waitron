@@ -10,6 +10,7 @@ import {
   grossLockedLines,
   rateLines,
   readContentLanguages,
+  readVenueVatRates,
   writeProductModifiers,
   type LockedLine,
   type VatClass,
@@ -20,7 +21,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { addDecimal, decimal, sumDecimals, VAT_RATE_TABLE } from "@waitron/shared";
+import { addDecimal, decimal, sumDecimals, VAT_RATE_TABLE, type DatedRate } from "@waitron/shared";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -169,11 +170,11 @@ function portions(
  * What would be filed, compared as a multiset of rows (decision D8: row order is not compared),
  * with each extra paired to its dish, and the total and VAT breakdown.
  */
-function filed(lines: readonly (StoredOrderLine | ProjectedLine)[]) {
+function filed(lines: readonly (StoredOrderLine | ProjectedLine)[], dineIn?: readonly DatedRate[]) {
   const priced = rateLines(
     grossLockedLines(
       lines.map((line) => line.locked),
-      lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+      lines.map((line) => ratesOf(line, dineIn)),
     ),
     DAY,
   );
@@ -187,6 +188,14 @@ function filed(lines: readonly (StoredOrderLine | ProjectedLine)[]) {
     total: priced.total,
     vat: [...priced.vatBreakdown].sort((a, b) => a.rate.localeCompare(b.rate)),
   };
+}
+
+/** A line's rates: its label's, or, on a bill eaten here, which carries none, `dineIn`. */
+function ratesOf(
+  line: StoredOrderLine | ProjectedLine,
+  dineIn: readonly DatedRate[] = [],
+): readonly DatedRate[] {
+  return line.vatClass === null ? dineIn : VAT_RATE_TABLE[line.vatClass];
 }
 
 /** Today's result, the portions grouped back, and the portions with no grouping at all. */
@@ -588,7 +597,10 @@ describe("A803 monetary comparison: operations on portions through the real path
     bindings?: ReadonlyMap<string, PortionBinding>,
   ) {
     const stored = await readLockedLines(tx, billId);
-    return filed(bindings === undefined ? stored : projectPortionSale(stored, bindings));
+    return filed(
+      bindings === undefined ? stored : projectPortionSale(stored, bindings),
+      (await readVenueVatRates(tx)).dineIn,
+    );
   }
 
   /** The rows as every filing path hands them to `recordSale`, through `withReceiptListPrices`. */
@@ -599,10 +611,11 @@ describe("A803 monetary comparison: operations on portions through the real path
   ): Promise<string[]> {
     const stored = await readLockedLines(tx, billId);
     const lines = bindings === undefined ? stored : projectPortionSale(stored, bindings);
+    const { dineIn } = await readVenueVatRates(tx);
     const priced = rateLines(
       grossLockedLines(
         lines.map((line) => line.locked),
-        lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+        lines.map((line) => ratesOf(line, dineIn)),
       ),
       DAY,
     );
@@ -784,7 +797,10 @@ describe("A803 monetary comparison: operations on portions through the real path
       const today = await fileBill(tx, todayBill);
       expect(await fileBill(tx, bill.billId, bill.bindings)).toEqual(today);
       const stored = await readLockedLines(tx, bill.billId);
-      const control = filed(groupByDishAlone(stored, bill.bindings));
+      const control = filed(
+        groupByDishAlone(stored, bill.bindings),
+        (await readVenueVatRates(tx)).dineIn,
+      );
       expect(control.rows).toEqual([
         expect.stringMatching(/^Burger 2\.000 /),
         expect.stringMatching(/^Cheese 1\.000 .* under Burger 2\.000 /),
@@ -1014,10 +1030,11 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
    */
   async function filedOf(tx: Transaction, billId: string) {
     const lines = await readLockedLines(tx, billId);
+    const { dineIn } = await readVenueVatRates(tx);
     const priced = rateLines(
       grossLockedLines(
         lines.map((line) => line.locked),
-        lines.map((line) => VAT_RATE_TABLE[line.vatClass]),
+        lines.map((line) => ratesOf(line, dineIn)),
       ),
       DAY,
     );
@@ -1065,7 +1082,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
     return rows.map((row) => `${row.lineNo} ${row.name}`);
   }
 
-  it("A803 monetary comparison: €1.00 off 3 × €3.33 at 21% and 1 × €5.00 at 10%", async () => {
+  it("A803 monetary comparison: €1.00 off 3 × €3.33 and 1 × €5.00, eaten here at 10%", async () => {
     await withTransaction(db, async (tx) => {
       const { today, bill } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);
       await discountBill(tx, today, "1.00");

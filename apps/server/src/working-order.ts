@@ -1197,10 +1197,10 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // The label for the order's way of selling, so both readers join the order.
-  vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
+  // Eaten here no label rates a line, so none may tell portions apart; both readers join the order.
+  vatClass: sql<GetColumnData<typeof workingOrderLines.takeawayVatClass> | null>`case
     when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
-    else ${workingOrderLines.vatClass} end`,
+    else null end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -1331,7 +1331,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    vatClass: line.vatClass as VatClass,
+    vatClass: line.vatClass as VatClass | null,
     identity: {
       id: line.id,
       productId: line.productId,
@@ -1359,12 +1359,12 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity, its locked composition, and its VAT label for its
- * order's way of selling, which grouping bound portions compares. */
+/** A stored working-order line: its identity, its locked composition, and, on a takeaway order,
+ * its takeaway VAT label, which grouping bound portions compares; null on an order eaten here. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
-  vatClass: VatClass;
+  vatClass: VatClass | null;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */

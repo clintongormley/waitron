@@ -320,6 +320,54 @@ describe("A803 portions: filing a bill of portions", () => {
     ]);
   });
 
+  it("eaten in, two portions whose extras' stored VAT labels differ still file as one row", async () => {
+    const { billId, portions } = await seed(burgersWithCheese("2"));
+    await inTx(venue, async (tx) => {
+      const [cheese] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, "Cheese")),
+        )
+        .orderBy(workingOrderLines.lineNo)
+        .limit(1);
+      await tx
+        .update(workingOrderLines)
+        .set({ vatClass: "general" })
+        .where(eq(workingOrderLines.id, cheese!.id));
+    });
+
+    await payInCash(billId);
+
+    // Apart, as four rows, the burgers would file base 3.03 + 3.03 and the sale 6.70 + 0.66.
+    expect(await filedRows(billId)).toEqual([
+      {
+        name: "Burger",
+        quantity: 2000,
+        base: 605,
+        menuId: offers.menuId,
+        portions: portionIdsOf(portions, portions[0]!),
+      },
+      {
+        name: "Cheese",
+        quantity: 2000,
+        base: 64,
+        menuId: offers.menuId,
+        portions: portionIdsOf(portions, portions[0]!),
+      },
+    ]);
+    const [sale] = await inTx(venue, (tx) =>
+      tx
+        .select({ total: sales.total, vatBreakdown: sales.vatBreakdown })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(sale).toEqual({
+      total: 736,
+      vatBreakdown: [{ rate: "10.00", base: "6.69", tax: "0.67" }],
+    });
+  });
+
   it("A803 portions: issuing an unpaid invoice links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("3"));
 
