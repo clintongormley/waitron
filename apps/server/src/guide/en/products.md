@@ -10,8 +10,7 @@ and enter its price.
 The editor holds three cards. The first holds the category, Name with its photo, and **Available**.
 The third holds the price, the variants and the modifiers. Between them, **Details** holds the rest:
 the prep station, how the product appears on the menu, allergens and diet, VAT, and ordering.
-Details is open when you add a product and closed when you edit one, because you set those once and
-then rarely change them. While it is closed, it shows a line for each of its groups that has
+Details is open when you add a product and closed when you edit one. While it is closed, it shows a line for each of its groups that has
 something set, so you can see what is set without opening it. Click its heading to open or close it. If
 it contains something you need to fix, it opens itself and stays open until you have fixed it.
 

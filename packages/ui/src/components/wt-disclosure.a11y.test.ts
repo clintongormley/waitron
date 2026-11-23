@@ -10,9 +10,9 @@ afterEach(cleanup);
 afterEach(() => setHelpMode(false));
 
 describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (theme) => {
-  test.each(["", "open", "has-error"])("ruled section %s", async (state) => {
+  test.each(["", "open", "has-error"])("section with a slotted summary %s", async (state) => {
     await mountThemed(
-      `<wt-disclosure ruled heading="Selling" ${state}><span slot="summary">Available</span><p>Anyone can order</p></wt-disclosure>`,
+      `<wt-disclosure heading="Selling" ${state}><span slot="summary">Available</span><p>Anyone can order</p></wt-disclosure>`,
       theme,
     );
     await expectNoA11yViolations(host);
@@ -123,7 +123,7 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
 
   test.each(["", "open"])("card section %s", async (state) => {
     const el = await mountThemed(
-      `<wt-disclosure card ruled heading="Selling" summary="Available" ${state}><p>Anyone can order</p></wt-disclosure>`,
+      `<wt-disclosure card heading="Selling" summary="Available" ${state}><p>Anyone can order</p></wt-disclosure>`,
       theme,
     );
     // Without this the scan could pass on a section that drew no card.

@@ -6,36 +6,9 @@ import "./wt-card.js";
 
 afterEach(cleanup);
 
-test("a ruled section paints its full heading line and spaces summary rows at normal line height", async () => {
+test("a custom closed summary is visible below the heading and hides on open", async () => {
   const el = (await mount(
-    '<wt-disclosure ruled heading="Descriptors"><p>body</p></wt-disclosure>',
-  )) as HTMLElementTagNameMap["wt-disclosure"];
-  el.summaryRows = [
-    { fields: [{ label: "Name", value: "None" }], lines: 1 },
-    { fields: [{ label: "Description", value: "None" }], lines: 2 },
-  ];
-  await el.updateComplete;
-  host.style.setProperty("--wt-color-border", "rgb(8, 9, 10)");
-  const heading = el.shadowRoot!.querySelector<HTMLElement>(".heading")!;
-  const header = el.shadowRoot!.querySelector<HTMLElement>(".header")!;
-  const title = el.shadowRoot!.querySelector<HTMLElement>(".title");
-  expect(title).not.toBeNull();
-  const line = getComputedStyle(title!);
-  expect(line.borderBottomWidth).toBe("1px");
-  expect(line.borderBottomColor).toBe("rgb(8, 9, 10)");
-  expect(title!.getBoundingClientRect().width).toBe(header.getBoundingClientRect().width);
-  const summary = el.shadowRoot!.querySelector<HTMLElement>(".summary")!;
-  expect(summary.getBoundingClientRect().top).toBeGreaterThan(
-    heading.getBoundingClientRect().bottom,
-  );
-  expect(parseFloat(getComputedStyle(summary).lineHeight)).toBeGreaterThan(
-    parseFloat(getComputedStyle(summary).fontSize),
-  );
-});
-
-test("a custom closed summary is visible below the ruled heading and hides on open", async () => {
-  const el = (await mount(
-    '<wt-disclosure ruled heading="Selling"><span slot="summary">Unavailable</span><p>body</p></wt-disclosure>',
+    '<wt-disclosure heading="Selling"><span slot="summary">Unavailable</span><p>body</p></wt-disclosure>',
   )) as HTMLElementTagNameMap["wt-disclosure"];
   const slot = el.shadowRoot!.querySelector<HTMLSlotElement>('slot[name="summary"]');
   expect(slot).not.toBeNull();
@@ -43,16 +16,6 @@ test("a custom closed summary is visible below the ruled heading and hides on op
   el.open = true;
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('slot[name="summary"]')).toBeNull();
-});
-
-test("an open ruled section leaves token spacing between its heading line and its first field", async () => {
-  const el = await mount(
-    '<wt-disclosure ruled open heading="Kitchen"><div>Kitchen name</div></wt-disclosure>',
-  );
-  const title = el.shadowRoot!.querySelector(".title")!.getBoundingClientRect();
-  const content = el.firstElementChild!.getBoundingClientRect();
-  const gap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3"));
-  expect(content.top - title.bottom).toBe(gap);
 });
 
 function pauseHeightTransition(body: HTMLElement, previous?: Animation): Promise<Animation> {
@@ -991,7 +954,7 @@ test("the summary fades in after a close, not on first render, and never under r
 
 test("a card section looks like a raised wt-card", async () => {
   await mount(
-    '<wt-disclosure card ruled heading="Kitchen" summary="BAR"><p>body</p></wt-disclosure><wt-card raised><p>body</p></wt-card>',
+    '<wt-disclosure card heading="Kitchen" summary="BAR"><p>body</p></wt-disclosure><wt-card raised><p>body</p></wt-card>',
   );
   const disclosure = host.querySelector("wt-disclosure")!;
   const card = host.querySelector("wt-card")! as HTMLElement & { updateComplete: Promise<unknown> };
@@ -1023,6 +986,4 @@ test("a card section looks like a raised wt-card", async () => {
   expect(look(section)).toEqual(look(frame));
   expect(look(section).background).toBe("rgb(2, 3, 4)");
   expect(look(section).padding).toEqual(["19px", "19px", "19px", "19px"]);
-  const title = disclosure.shadowRoot!.querySelector(".title")!;
-  expect(getComputedStyle(title).borderBottomWidth).toBe("0px");
 });

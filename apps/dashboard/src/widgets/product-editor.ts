@@ -108,7 +108,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
   return `${name}${SUMMARY_SEPARATOR}${t(KIND_TITLE[kind])}`;
 }
 
-/** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
+/** Which field names the folding section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
   details: [
@@ -1528,7 +1528,6 @@ export class ProductEditor extends LitElement {
       </div>`;
   }
 
-  /** Beside the editor's window rather than in the Pricing section, which may be folded shut. */
   private renderUnitChooser() {
     return html`<wt-dialog
       data-test="unit-chooser"

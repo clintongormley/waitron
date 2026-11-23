@@ -10,8 +10,7 @@ introduce su precio.
 El editor tiene tres tarjetas. La primera reúne la categoría, el Nombre con su foto y **Disponible**.
 La tercera reúne el precio, las variantes y los modificadores. Entre las dos, **Detalles** reúne el
 resto: la estación de preparación, cómo aparece el producto en la carta, los alérgenos y la dieta, el
-IVA y los pedidos. Detalles está abierta cuando añades un producto y cerrada cuando editas uno, porque
-esos datos se configuran una vez y luego casi no cambian. Mientras está cerrada, muestra una línea por
+IVA y los pedidos. Detalles está abierta cuando añades un producto y cerrada cuando editas uno. Mientras está cerrada, muestra una línea por
 cada uno de sus grupos que tiene algo configurado, así ves lo que está configurado sin abrirla. Haz clic en su
 encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se abre sola y sigue
 abierta hasta que lo corriges.

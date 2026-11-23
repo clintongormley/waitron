@@ -269,7 +269,6 @@ it("the editor draws three cards on a grey dialog", async () => {
   const cards = [...form.children] as HTMLElement[];
   expect(cards[0]!.matches('wt-card[raised][data-section="identity"]')).toBe(true);
   expect(cards[1]!.matches('wt-disclosure[card][data-section="details"]')).toBe(true);
-  expect(cards[1]!.hasAttribute("ruled")).toBe(false);
   expect(cards[2]!.matches('wt-card[raised][data-section="price"]')).toBe(true);
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
   expect(getComputedStyle(modal).getPropertyValue("--wt-dialog-surface").trim()).toBe(

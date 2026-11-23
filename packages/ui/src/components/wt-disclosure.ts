@@ -123,36 +123,10 @@ export class WtDisclosure extends LitElement {
         flex-direction: column;
       }
 
-      .title {
-        grid-column: 1 / -1;
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-        min-height: var(--wt-tap-min);
-        border-bottom: 1px solid var(--wt-color-border);
-        padding-block-end: var(--wt-space-2);
-      }
-      .title .heading {
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-      .title .chevron {
-        flex: none;
-      }
       .summary-slot {
         grid-column: 1 / -1;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-      :host([ruled]) .summary-slot {
-        margin-block-start: var(--wt-space-2);
-      }
-      :host([ruled]) .summary {
-        line-height: calc(var(--wt-font-size-sm) + var(--wt-space-2));
-      }
-      :host([ruled]) .body > slot {
-        display: block;
-        padding-block-start: var(--wt-space-3);
       }
 
       .summary-row {
@@ -208,15 +182,10 @@ export class WtDisclosure extends LitElement {
         ${cardFrameStyles}
         ${cardRaisedStyles}
       }
-
-      :host([card]) .title {
-        border-bottom: 0;
-      }
     `,
   ];
 
   @property() heading = "";
-  @property({ type: Boolean, reflect: true }) ruled = false;
   @property() summary = "";
   /** The closed line as named values, each after its name; used instead of `summary` when it
    * holds any. */
@@ -224,7 +193,7 @@ export class WtDisclosure extends LitElement {
   /** The closed line as rows of named values, each row cut with an ellipsis after its `lines`
    * lines; used instead of `summaryFields` and `summary` when it holds any. */
   @property({ attribute: false }) summaryRows: readonly SummaryRow[] = [];
-  /** Drawn as a raised card, as `<wt-card raised>` is, with no line under a ruled heading. */
+  /** Drawn as a raised card, as `<wt-card raised>` is. */
   @property({ type: Boolean, reflect: true }) card = false;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean, reflect: true, attribute: "has-error" }) hasError = false;
@@ -390,7 +359,8 @@ export class WtDisclosure extends LitElement {
             aria-controls=${this.bodyId}
             @click=${this.onToggle}
           >
-            ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
+            <span class="heading">${this.heading}</span
+            ><wt-icon class="chevron" name="chevron-down"></wt-icon>
             ${this.open || this.closing ? nothing : html`<span class=${this.summaryFades ? "summary-slot fade-in" : "summary-slot"} part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
           </button>
           <slot name="help"></slot>
