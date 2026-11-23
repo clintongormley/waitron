@@ -1,3 +1,4 @@
+import { nextInvoiceNumberOf } from "../allocate-number.js";
 import { withFoldedPersonKeys } from "../schema/identity/fold.js";
 import type { DepartmentReceiptConfig, ReceiptLogoRasters } from "@waitron/shared";
 import { mediaImages, mediaBlobs } from "../schema/media/images.js";
@@ -5,7 +6,7 @@ import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
 import { persons } from "../schema/identity/persons.js";
-import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -380,6 +381,45 @@ export async function seedPerson(
     .values(withFoldedPersonKeys({ id, displayName: input.displayName ?? "Test person" }))
     .onConflictDoNothing({ target: persons.id });
   return id;
+}
+
+export const seriesWithNextNumber = {
+  ...getTableColumns(invoiceSeries),
+  nextNumber: nextInvoiceNumberOf(invoiceSeries.id),
+};
+
+export async function seedInvoiceNumber(
+  db: Database | Transaction,
+  { nodeId, seriesId }: { nodeId: string; seriesId: string },
+  invoiceNumber: number,
+) {
+  await db.insert(sales).values({
+    nodeId,
+    seriesId,
+    source: "operator_script",
+    invoiceNumber,
+    issuedAt: "2026-10-16T09:00:00.000Z",
+    issuedOffsetMinutes: 0,
+    total: 1000,
+    vatBreakdown: [],
+    locale: "en",
+    invoiceLocales: ["en"],
+    fiscalBackend: "none",
+    fiscalState: "not_applicable",
+  });
+}
+
+/** Gives each live series of the selected node a final numbered sale for a history fixture. */
+export async function advanceSeriesTo(
+  db: Database | Transaction,
+  nodeId: string,
+  nextNumber: number,
+) {
+  const live = await db
+    .select({ nodeId: invoiceSeries.nodeId, seriesId: invoiceSeries.id })
+    .from(invoiceSeries)
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)));
+  for (const series of live) await seedInvoiceNumber(db, series, nextNumber - 1);
 }
 
 export async function seedCashSale(db: Database | Transaction) {

@@ -274,7 +274,7 @@ export async function verifyCoreBackupData(input: {
     if (
       await first(
         query,
-        "select 1 from sales s join invoice_series i on i.id = s.series_id where s.node_id <> i.node_id or s.invoice_number >= i.next_number limit 1",
+        "select 1 from sales s join invoice_series i on i.id = s.series_id where s.node_id <> i.node_id limit 1",
       )
     )
       return false;

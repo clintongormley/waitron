@@ -1141,3 +1141,10 @@ FOR EACH ROW WHEN new.last_bill_number < old.last_bill_number
 BEGIN
   SELECT raise(abort, 'a party''s last bill number never goes down');
 END;
+
+--> statement-breakpoint
+CREATE TRIGGER invoice_series_guard_update BEFORE UPDATE ON invoice_series
+WHEN new.id IS NOT old.id OR new.node_id IS NOT old.node_id OR new.code IS NOT old.code
+  OR new.purpose IS NOT old.purpose
+  OR (old.retired_at IS NOT NULL AND new.retired_at IS NOT old.retired_at)
+BEGIN SELECT RAISE(ABORT, 'invoice_series: only retired_at may be set, once'); END;

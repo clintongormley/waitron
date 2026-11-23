@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { saleId as brandSaleId, seriesId as brandSeriesId, stringToCents } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
@@ -103,4 +104,27 @@ export async function seedBareSale(
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
+}
+
+/** Occupy the selected number during insertion so SQLite itself refuses the duplicate. */
+export async function withInvoiceNumberCollision<T>(db: Database, issue: () => Promise<T>) {
+  await db.execute(sql`
+    create trigger invoice_number_collision before insert on sales
+    when new.id <> 'invoice-number-collision-decoy'
+    begin
+      insert into sales (
+        id, source, series_id, node_id, invoice_number, issued_at, issued_offset_minutes,
+        total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
+      ) values (
+        'invoice-number-collision-decoy', 'operator_script', new.series_id, new.node_id,
+        new.invoice_number, new.issued_at, new.issued_offset_minutes, 100,
+        new.vat_breakdown, new.locale, new.invoice_locales, 'none', 'not_applicable'
+      );
+    end
+  `);
+  try {
+    return await issue();
+  } finally {
+    await db.execute(sql`drop trigger invoice_number_collision`);
+  }
 }

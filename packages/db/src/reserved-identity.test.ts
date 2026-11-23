@@ -1,3 +1,4 @@
+import { nextInvoiceNumberOf } from "@waitron/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
@@ -74,19 +75,19 @@ describe("reserved-identity accessors", () => {
     expect(await readNodeEndorsement(suite.db, "00000000-0000-4000-8000-000000000000")).toBeNull();
   });
 
-  it("insertReservedSeriesTx inserts the reserved series at next_number 1", async () => {
+  it("insertReservedSeriesTx inserts the reserved series with first number 1", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: CLOUD_NODE, code: "FA-3", purpose: "standard" },
         { nodeId: CLOUD_NODE, code: "RF-3", purpose: "corrective" },
       ]),
     );
-    const rows = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ code: string; next_number: number }>(
-        sql`select code, next_number from invoice_series where node_id = ${CLOUD_NODE} order by code`,
-      ),
-    );
-    expect(rows.rows.map((r) => [r.code, Number(r.next_number)])).toEqual([
+    const rows = await suite.db
+      .select({ code: invoiceSeries.code, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, CLOUD_NODE))
+      .orderBy(invoiceSeries.code);
+    expect(rows.map((r) => [r.code, r.nextNumber])).toEqual([
       ["FA-3", 1],
       ["RF-3", 1],
     ]);
@@ -275,7 +276,7 @@ describe("reserved-identity accessors", () => {
     ).rejects.toMatchObject({ code: "series.code_collision", params: { code: "FA-7" } });
   });
 
-  it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
+  it("insertNodeSeriesTx inserts with first number 1 and refuses a code the node holds, live OR retired", async () => {
     const node = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
@@ -285,7 +286,10 @@ describe("reserved-identity accessors", () => {
       insertNodeSeriesTx(tx, node, [{ code: "FA-7", purpose: "standard" }]),
     );
     const [fresh] = await suite.db
-      .select({ nextNumber: invoiceSeries.nextNumber, retiredAt: invoiceSeries.retiredAt })
+      .select({
+        nextNumber: nextInvoiceNumberOf(invoiceSeries.id),
+        retiredAt: invoiceSeries.retiredAt,
+      })
       .from(invoiceSeries)
       .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "FA-7")));
     expect(fresh).toEqual({ nextNumber: 1, retiredAt: null });

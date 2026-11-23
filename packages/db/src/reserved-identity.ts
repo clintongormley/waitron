@@ -38,7 +38,7 @@ export interface ReservedSeriesInput {
 }
 
 /**
- * Insert the standby's reserved invoice series (next_number defaults to 1). Runs under the caller's
+ * Insert the standby's reserved invoice series. Runs under the caller's
  * transaction, alongside the reserved node + SIF (see `insertReservedNodeTx`). A no-op on an
  * empty list rather than emitting an INSERT with no rows.
  */
@@ -116,8 +116,7 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
 
 /**
  * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
- * **Nothing in the database refuses this update.** A restore calls it, before opening the node's
- * replacement series.
+ * A restore retires these series before opening replacements.
  */
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx
@@ -129,7 +128,7 @@ export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promi
 }
 
 /**
- * Open fresh series for a node at `next_number = 1`. Refuses — `series.code_collision` — a code the
+ * Open fresh series for a node. Refuses — `series.code_collision` — a code the
  * node already holds, live or retired, or a duplicate within the batch. The existing-row check
  * covers the sequential restore path; concurrent callers can still hit the unique key.
  * A no-op on an empty list.

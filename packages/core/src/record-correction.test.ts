@@ -20,6 +20,7 @@ import {
   saleLines,
   sales,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,7 +30,12 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
+import {
+  seedBareSale,
+  seedCorrectiveSeries,
+  seedTaxpayer,
+  withInvoiceNumberCollision,
+} from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
@@ -246,7 +252,7 @@ async function countCorrectives(originalId: SaleId): Promise<number> {
 
 async function rectSeriesNext(): Promise<number | undefined> {
   const [series] = await suite.db
-    .select({ n: invoiceSeries.nextNumber })
+    .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.id, rectSeriesId));
   return series?.n;
@@ -332,17 +338,10 @@ describe("recordCorrection — series purpose guard", () => {
       .update(invoiceSeries)
       .set({ retiredAt })
       .where(eq(invoiceSeries.id, rectSeriesId));
-    try {
-      await expect(correct(backend, saleId)).rejects.toMatchObject({
-        code: "sale.series_retired",
-        params: { seriesId: rectSeriesId, retiredAt: retiredAt.toISOString() },
-      });
-    } finally {
-      await suite.db
-        .update(invoiceSeries)
-        .set({ retiredAt: null })
-        .where(eq(invoiceSeries.id, rectSeriesId));
-    }
+    await expect(correct(backend, saleId)).rejects.toMatchObject({
+      code: "sale.series_retired",
+      params: { seriesId: rectSeriesId, retiredAt: retiredAt.toISOString() },
+    });
   });
 
   it("rejects a series that does not exist", async () => {
@@ -368,10 +367,9 @@ describe("recordCorrection — series purpose guard", () => {
 });
 
 describe("recordCorrection — numbering", () => {
-  it("refuses with sale.number_reused when the number the series hands out is already a sale's", async () => {
+  it("refuses with sale.number_reused when insertion encounters a duplicate number", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    // The corrective series' counter still stands at 1, so the correction draws this number.
     await seedBareSale(
       suite.db,
       { deviceId, nodeId, seriesId: rectSeriesId },
@@ -379,17 +377,19 @@ describe("recordCorrection — numbering", () => {
     );
     const recordsBefore = (await backend.recordsFor(nodeId)).length;
 
-    const error = await captureError(() => correct(backend, saleId));
+    const error = await withInvoiceNumberCollision(suite.db, () =>
+      captureError(() => correct(backend, saleId)),
+    );
 
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({
       code: "sale.number_reused",
-      params: { seriesId: rectSeriesId, invoiceNumber: 1 },
+      params: { seriesId: rectSeriesId, invoiceNumber: 2 },
     });
     expect(await countRows("sales")).toBe(2);
     expect(await countCorrectives(saleId)).toBe(0);
     expect((await backend.recordsFor(nodeId)).length).toBe(recordsBefore);
-    expect(await rectSeriesNext()).toBe(1);
+    expect(await rectSeriesNext()).toBe(2);
   });
 });
 
@@ -476,7 +476,7 @@ describe("recordCorrection — the corrective sale", () => {
     expect(row?.seriesId).toBe(rectSeriesId);
     expect(row?.invoiceNumber).toBe(1);
     const [series] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, rectSeriesId));
     expect(series?.n).toBe(2); // advanced past the number just allocated
@@ -1138,7 +1138,7 @@ describe("recordCorrection — authorization", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
     const [before] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, rectSeriesId));
 
@@ -1147,7 +1147,7 @@ describe("recordCorrection — authorization", () => {
     ).rejects.toMatchObject({ code: "authorization.not_permitted" });
 
     const [after] = await suite.db
-      .select({ n: invoiceSeries.nextNumber })
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.id, rectSeriesId));
     expect(after?.n).toBe(before?.n); // no number burned
