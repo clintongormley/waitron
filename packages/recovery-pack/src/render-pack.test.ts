@@ -44,8 +44,6 @@ const file: RecoveryPackFile = {
 const bucket: PackPart = {
   kind: "bucket",
   state: "included",
-  lastChanged: "2026-09-20",
-  check: "key of 20 Sep 2026 · rev 4",
   page: {
     title: "Bucket copy",
     intro: "The box sends a continuous copy of the venue to your bucket.",
@@ -57,8 +55,6 @@ const bucket: PackPart = {
 const archives: PackPart = {
   kind: "archives",
   state: "included",
-  lastChanged: "2026-09-20",
-  check: "key of 20 Sep 2026 · rev 4",
   page: {
     title: "Archives",
     rows: [],
@@ -69,8 +65,6 @@ const archives: PackPart = {
 const serverKey: PackPart = {
   kind: "server-key",
   state: "included",
-  lastChanged: "2026-09-02",
-  check: "2026-09-02 · K7QF",
   page: {
     title: "Server key",
     rows: [
@@ -255,8 +249,6 @@ describe("long names", () => {
         {
           kind: "server-key",
           state: "included",
-          lastChanged: "2026-10-17",
-          check: "2026-10-17 · ACRY",
           page: serverKeyPage(legalName, venueName),
           serverKeyLocation: { kind: "this-pack" },
         },
@@ -705,7 +697,6 @@ it.each(["en", "es"] as const)(
     const emergency: PackPart = {
       kind: "emergency",
       state: "included",
-      lastChanged: "2026-10-12",
       page: {
         title: "Emergency start",
         intro: "Starts a locked copy; sign in with your password.",
@@ -768,7 +759,6 @@ describe("pack typography", () => {
       const name = "2026-11-16-Il10O";
       const part: PackPart = {
         ...bucket,
-        check: name,
         page: {
           title: "Recovery page",
           address: { label: "Address", text: address, qr: true },

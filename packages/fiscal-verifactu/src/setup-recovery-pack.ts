@@ -26,8 +26,6 @@ export async function renderSetupRecoveryPack(
         kind: "server-key",
         state: "included",
         page: serverKeyPage(document, { locale, timeZone }),
-        lastChanged: document.createdAt.slice(0, 10),
-        check: document.nodeKey.name,
         serverKeyLocation: { kind: "this-pack" },
       },
     ],

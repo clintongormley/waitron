@@ -90,16 +90,6 @@ type PartWords = {
     notEnrolled: string;
     nobody: string;
     steps: string[];
-    absent: Record<
-      | "not_connected"
-      | "not_primary"
-      | "permission"
-      | "setting_off"
-      | "level_inactive"
-      | "no_payment_method"
-      | "not_provisioned",
-      string
-    >;
     failed: PartFailure;
   };
   bucket: {
@@ -120,8 +110,6 @@ type PartWords = {
     stepsFolder: string[];
   };
   keyRow: string;
-  /** The cover's check for a part guarded by the backup encryption key. */
-  check: (keyDay: string, revision: string | undefined) => string;
   keyChangedOn: (day: string) => string;
   alsoServerKey: (page: number) => string;
   keyNotReplaced: string;
@@ -156,20 +144,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         "4. Review any missing minutes and confirm that the old box is stopped.",
         "5. Follow the page to join the tills to the cloud copy.",
       ],
-      absent: {
-        not_connected:
-          "This box is not connected to Cloud. Connect it from Cloud services, then make a new pack.",
-        not_primary: "This box is not the main box. Make the pack on the main box.",
-        permission:
-          "The maker cannot start the venue in the cloud; the code is left out. An administrator can make a pack with the code.",
-        setting_off: "Emergency start is off. Enable it in Cloud, then make a new pack.",
-        level_inactive:
-          "The Cloud level for emergency start is inactive. Check it in Cloud, then make a new pack.",
-        no_payment_method:
-          "Cloud has no payment method for emergency start. Add one in Cloud, then make a new pack.",
-        not_provisioned:
-          "Cloud cannot start this venue yet. Make a new pack when emergency start is available.",
-      },
       failed: {
         what: "The emergency code could not be read from Cloud.",
         todo: "Make a new pack when Cloud answers; if you just requested a code, try again in a minute.",
@@ -209,10 +183,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       ],
     },
     keyRow: "Backup encryption key",
-    check: (keyDay, revision) =>
-      revision === undefined
-        ? `key of ${keyDay}`
-        : `key of ${keyDay} · rev ${revision.slice(0, 8)}`,
     keyChangedOn: (day) => `changed on ${day}`,
     alsoServerKey: (page) => `It also needs the box key: page ${page}, or the pack it names.`,
     keyNotReplaced: "The box key was not replaced.",
@@ -271,21 +241,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         "4. Revisa los minutos que falten y confirma que el servidor antiguo está parado.",
         "5. Sigue la página para conectar las cajas a la copia en la nube.",
       ],
-      absent: {
-        not_connected:
-          "Este servidor no está conectado a Cloud. Conéctalo desde Servicios en la nube y haz un paquete nuevo.",
-        not_primary: "Este no es el servidor principal. Haz el paquete en el servidor principal.",
-        permission:
-          "Quien hizo el paquete no puede iniciar el local en la nube; se omite el código. Un administrador puede hacer un paquete con el código.",
-        setting_off:
-          "El inicio de emergencia está desactivado. Actívalo en Cloud y haz un paquete nuevo.",
-        level_inactive:
-          "El nivel de Cloud para el inicio de emergencia está inactivo. Revísalo en Cloud y haz un paquete nuevo.",
-        no_payment_method:
-          "Cloud no tiene un método de pago para el inicio de emergencia. Añade uno en Cloud y haz un paquete nuevo.",
-        not_provisioned:
-          "Cloud aún no puede iniciar este local. Haz un paquete nuevo cuando el inicio de emergencia esté disponible.",
-      },
       failed: {
         what: "No se pudo leer el código de emergencia de Cloud.",
         todo: "Haz un paquete nuevo cuando Cloud responda; si acabas de pedir un código, vuelve a intentarlo en un minuto.",
@@ -324,10 +279,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       ],
     },
     keyRow: "Clave de cifrado de copias",
-    check: (keyDay, revision) =>
-      revision === undefined
-        ? `clave del ${keyDay}`
-        : `clave del ${keyDay} · rev ${revision.slice(0, 8)}`,
     keyChangedOn: (day) => `cambiada el ${day}`,
     alsoServerKey: (page) =>
       `También necesita la clave del servidor: página ${page}, o el paquete que esta indica.`,

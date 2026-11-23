@@ -99,8 +99,6 @@ describe("the bucket part", () => {
     expect(built.part).toMatchObject({
       kind: "bucket",
       state: "included",
-      lastChanged: "2026-09-20",
-      check: `key of 20 Sept 2026 · rev ${revision!.slice(0, 8)}`,
     });
     const page = built.part.page!;
     expect(page.secret).toEqual({
@@ -248,14 +246,6 @@ describe("the archives part", () => {
     expect((await inTx((tx) => buildArchivesPart(tx, short))).part.failure).toEqual(words);
   });
 
-  it("prints the stored record's revision in the check of archives the box keeps", async () => {
-    await storeArchives();
-    const built = await inTx((tx) => buildArchivesPart(tx, context));
-    expect(built.part.check).toBe(
-      `key of 20 Sept 2026 · rev ${built.record.settingsRevision!.slice(0, 8)}`,
-    );
-  });
-
   it("carries the whole archive code for a switched-off record's bucket, listed after its folder", async () => {
     const bucket = { ...BUCKET, prefix: "archives/" };
     await storeArchives({
@@ -344,8 +334,6 @@ describe("the server key part", () => {
         kind: "server-key",
         state: "included",
         page,
-        lastChanged: "2026-09-02",
-        check: keyInForce.name,
         serverKeyLocation: holder,
       },
       record: {
@@ -376,8 +364,6 @@ describe("the server key part", () => {
     );
     expect(built.part).toMatchObject({
       state: "included",
-      check: newKey.name,
-      lastChanged: "2026-10-30",
       serverKeyLocation: { kind: "this-pack" },
     });
     expect(built.record).toEqual({

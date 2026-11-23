@@ -107,15 +107,4 @@ describe("part failure words", () => {
       "The current box key is on recovery pack 3, made on 2 September 2026, but when this pack was made the box had not been told that pack 3 arrived. If you do not have pack 3, make a new pack with Also make a new box key ticked.",
     );
   });
-
-  it("prints a part's check as the key's day and the first eight characters of the revision", () => {
-    expect(PART_WORDS.en.check("20 Sept 2026", "0123456789abcdef")).toBe(
-      "key of 20 Sept 2026 · rev 01234567",
-    );
-    expect(PART_WORDS.es.check("20 sept 2026", "0123456789abcdef")).toBe(
-      "clave del 20 sept 2026 · rev 01234567",
-    );
-    expect(PART_WORDS.en.check("20 Sept 2026", undefined)).toBe("key of 20 Sept 2026");
-    expect(PART_WORDS.es.check("20 sept 2026", undefined)).toBe("clave del 20 sept 2026");
-  });
 });
