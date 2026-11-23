@@ -948,17 +948,13 @@ A802 slice 5b (#3108):
   refunded through the ordinary refund, with no correction of its own. Owner decision (Q43 e,
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
-  −€0.50.
-- **Money given back as goodwill takes a corrective.** Asked whether a €10 goodwill return on a
-  paid €62 ticket needs a corrective, the owner answered "yes" (owner, 2026-11-18, question 6 of the
-  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details); the sheet
-  records as open that the "yes" does not say which of the two choices it answers, and reads it as
-  the corrective being required. On 21 November the owner answered "yes and yes" to whether a goodwill amount
-  on a bill with two VAT rates is split by menu price and whether a corrective is needed, which
-  settles that reading; the adviser is still to confirm. The work stays parked (owner, 19 November). Today a refund files a corrective only when it is a leg of an
-  invoice correction (`refundSettledTender`, `apps/server/src/tender-refunds.ts:144-146`), and the
-  A802 design leaves a served dish's goodwill return to the ordinary **Refund a payment** on purpose
-  (`docs/superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md:301-302`).
+  −€0.50. When this lands, the refund suites whose setups refund a named cancel (Task 7 of the
+  goodwill plan) start filing correctives, so their counts of filed records change.
+- **Money given back as goodwill takes a corrective, built 2026-11-23.** Goodwill money goes back
+  through **Correct invoice**, and **Refund a payment** refuses what Correct invoice would give back
+  ([decision](#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23)). The
+  adviser is asked to confirm it (question 14 of the
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)).
 
 Also open, from before A802:
 
@@ -1142,6 +1138,44 @@ is refused once the free item was served, pointing staff to Correct invoice, are
 calls ("WATCHER 2026-11-23 15:17"). Question 14 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Goodwill money back goes through Correct invoice (owner and watcher, 2026-11-23)
+
+Money given back as goodwill takes a corrective: the owner's "yes" to question 6 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md) on 18 November, "yes and yes" on 21
+November, and "take this as confirmed" (lane L `questions.md`, "WATCHER 2026-11-21 18:17"). So
+**Refund a payment** refuses the payment money **Correct invoice** would give back now, and Correct
+invoice gives it back with a corrective (`plainRefundLimit`, `apps/server/src/tender-refund-reservation.ts`).
+That rule is the watcher's choice 1, cleared on 19 November at 09:05 and shown to the owner as replacing the
+A802 design's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
+A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
+Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
+filing record, cancelled, not fully paid, a full invoice naming a customer, records that need
+checking), Refund a payment stays open; where it only waits (a refused filing, another refund
+pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
+2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still
+owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
+refund is refused before the terminal step, so staff never return money that the refund would then
+refuse: the watcher's clearance of the lane's change (2026-11-23 22:51).
+[Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Money given back is shared by menu price (owner and watcher, 2026-11-23)
+
+A correction's amount is shared across the dishes in proportion to their menu prices: the owner's
+words, "its the proportions which matter" (O1, lane L `questions.md`, "WATCHER 2026-11-23 14:15").
+A dish whose share is more than is left of it (after an earlier discount or correction) gives back
+what is left, and the rest is shared over the others in the same proportions: the watcher's build
+rule in that entry, not the owner's words. When staff tick dishes, the same rule runs over the
+ticked dishes, so ticking every dish equals ticking none: the watcher's call (O9, "WATCHER
+2026-11-23 15:17"). Question 14 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
+[Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Correct invoice offers every reason, Complaint included (owner, 2026-11-23)
+
+Correct invoice, and its card step, offer every adjustment reason, so staff choose **Complaint**
+for goodwill money back: the owner's "Add it" (O6, lane L `questions.md`, "WATCHER 2026-11-23
+14:18").
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 

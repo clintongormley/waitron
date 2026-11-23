@@ -1,5 +1,11 @@
 # A802: Correct part of a paid invoice
 
+> **2026-11-23:** policy 2's "goodwill refunds stay money-only" no longer holds: goodwill money
+> goes back through Correct invoice, and Refund a payment refuses what Correct invoice would give
+> back, on the owner's words of 18 and 21 November
+> ([decision](../../backlog/fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23);
+> [plan](../plans/2026-11-19-adviser-goodwill-corrective.md)).
+>
 > **2026-11-12:** the owner replaced "file when opened" with "When all money is back"
 > ([decision](../../backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12));
 > the build now follows the [reshape plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a802-reshape.md).

@@ -374,6 +374,14 @@ entrega el dinero al cliente cuando la devolución se haya hecho. **Descargar pa
 en **Ventas y recaudación** del panel, lista estas devoluciones en una hoja propia, con el IVA que sigue declarado porque no se emite
 factura rectificativa.
 
+Devolver un pago devuelve dinero sin rectificar la factura, así que rechaza el dinero que
+**Rectificar factura** puede devolver, como por una queja: usa Rectificar factura para eso. Sigue
+devolviendo una propina, lo que falta por devolver de platos cancelados con **Cancelar y devolver** o
+**Cerrar mesa**, un pago parcial como el de abajo y el dinero de una factura que Rectificar factura no
+puede rectificar. Mientras la Agencia Tributaria haya rechazado la presentación de la factura,
+Rectificar factura no devuelve nada y Devolver un pago sigue rechazando ese dinero: vuelve a
+intentarlo cuando se haya enviado de nuevo.
+
 Para devolver un pago parcial que el ticket de la mesa ya descontó, usa primero **Rectificar
 factura** en el ticket de la mesa. Cuando haya devuelto todo lo pagado en él, elige **Devolver un
 pago** en el ticket propio del pago parcial para el resto.
@@ -384,8 +392,9 @@ importe es el total de los platos, la propina es 0,00, el motivo es el que diste
 platos aparecen debajo.
 
 No necesitas otro PIN para devolver hasta el valor pendiente de los platos cancelados, sin
-propina. Si subes el importe o añades propina, necesitas permiso para devolver o una nueva
-aprobación con PIN. La devolución sigue contando para los platos cancelados, hasta su valor.
+propina. Para devolver más que el valor pendiente de los platos cancelados, usa **Rectificar
+factura**. Si no puede rectificar el recibo, subir el importe necesita permiso para devolver o una
+nueva aprobación con PIN, y añadir propina siempre lo necesita. La devolución sigue contando para los platos cancelados, hasta su valor.
 Una tarjeta registrada desde un datáfono aparte siempre pide un PIN nuevo para confirmar que la
 devolución en el datáfono se ha hecho.
 
@@ -397,8 +406,7 @@ Cuando el pago elegido tiene menos que el total de los platos, el importe es lo 
 línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Cuenta desde el
 importe de la ventana, así que también aparece, o sube, si bajas el importe. Para devolver el
 resto, elige otra vez **Devolver un pago** y escoge un pago. Esa ventana no viene rellenada: escribe tú el
-importe y el motivo. Si no puedes hacer devoluciones, pide el PIN, y las entradas de esos platos en
-el informe no muestran esa parte. Si ese pago no se puede devolver en este dispositivo, la ventana te indica que lo
+importe y el motivo. Si no puedes hacer devoluciones, pide el PIN. Si ese pago no se puede devolver en este dispositivo, la ventana te indica que lo
 devuelvas en una caja.
 
 Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha devuelto dinero.
@@ -410,14 +418,14 @@ de impresión** del panel durante siete días.
 
 ## Rectificar una factura {#correct-invoice}
 
-Cuando a una cuenta pagada se le cobró de más, rectifica su factura: el cliente recibe la
+Cuando a una cuenta pagada se le cobró de más, o devuelves dinero por una queja, rectifica su factura: el cliente recibe la
 diferencia y Waitron presenta una factura rectificativa por ella. En un recibo anterior, elige
 **Rectificar factura**, junto a **Devolver un pago**. La caja no puede rectificar una factura
 completa a nombre de un cliente.
 
 Si el cobro de más fue en platos concretos, márcalos en **Platos que se rectifican (opcional)**; si
-no, déjalos todos sin marcar. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
-muestra para cada tipo. Elige un **Motivo** y después **Rectificar y devolver**. Si no puedes
+no, déjalos todos sin marcar, y se reparte entre todos los platos según su precio de carta. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
+muestra para cada tipo. Elige un **Motivo**, como **Queja**, y después **Rectificar y devolver**. Si no puedes
 rectificar facturas, alguien que pueda introduce su PIN.
 
 Cuando la cuenta se pagó solo en efectivo, se abre el cajón y la factura rectificativa se presenta
@@ -451,8 +459,8 @@ Si la ventana dice que una petición anterior no recibió respuesta, elige **Env
 Si el TPV indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
 antes de devolver el dinero en el datáfono: Waitron no puede registrar la devolución mientras dure.
 
-Para un pago con tarjeta registrado desde un datáfono aparte, Waitron te pide que lo devuelvas
-primero en ese datáfono. Completa la devolución allí antes de elegir **Devuelto en el datáfono**.
+Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
+cuando la ventana te lo pida, y completa allí la devolución antes de elegir **Devuelto en el datáfono**.
 Después, un supervisor o encargado aprueba su registro en Waitron con su PIN.
 
 Si una devolución no recibe respuesta, revisa los pagos de la cuenta antes de intentarla otra vez.
