@@ -461,7 +461,7 @@ export function buildReceiptDocument({
       const unit = decimal(recorded);
       // A weighed amount is rounded to the cent, so the price it was sold at may not give it back.
       if (compareDecimal(multiplyDecimal(unit, sold), amount) === 0) {
-        const price = formatMoney(unit, locale);
+        const price = `${surcharge ? "+" : ""}${formatMoney(unit, locale)}`;
         // Counted exactly when the quantity printed above carries no unit name.
         const each =
           shown === formatDecimalInput(count, locale)

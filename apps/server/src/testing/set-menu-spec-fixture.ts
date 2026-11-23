@@ -73,7 +73,8 @@ const DISHES: { name: SpecDish; course: "Starter" | "Main"; price: string }[] = 
 /**
  * The plan's fixture venue: Daily menu (€14.00, Sirloin +€5.00) and Special menu (€20.00, Sirloin
  * and Sea bass included), each listing Soup and Hake, with one "1 × Starter" and one "1 × Main"
- * line. Soup offers a paid extra, Bread at €1.50, which `specBill` does not order. The till has a receipt printer, so Print the bill runs.
+ * line. Soup offers a paid extra, Bread at €1.50, which `specBill` does not order. The till has a
+ * receipt printer, so Print the bill runs.
  */
 export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
   const venue = await setupPartyVenue(db);

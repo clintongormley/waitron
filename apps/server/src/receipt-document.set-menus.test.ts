@@ -213,8 +213,47 @@ it("a surcharge does not merge with the same dish ordered on its own", () => {
 });
 
 it("a corrected dish with an amount prints, alone and below zero", () => {
-  const result = simplified([line("Sirloin", "-5.00", { setMenuRole: "dish" })], "-5.00");
-  expect(items(result)).toEqual([["1  Sirloin", "-5,00"]]);
+  const result: Result = {
+    ...simplified(
+      [line("Sirloin", "-5.00", { setMenuRole: "dish", quantity: "-1", unitPriceGross: "5.00" })],
+      "-5.00",
+    ),
+    invoiceType: "R5",
+    invoiceNumber: "R/7",
+    corrects: {
+      invoiceNumber: "FF/1",
+      issuedAt: "2026-08-17T22:34:00.000Z",
+      issuedOffsetMinutes: 120,
+    },
+  };
+  expect(items(result)).toEqual([["-1  Sirloin", "-5,00"]]);
+});
+
+it.each([
+  ["en-GB", "+10.00", "+€5.00 each"],
+  ["es-ES", "+10,00", "+5,00 € por unidad"],
+])("merged surcharges print each one's price with a plus (%s)", (locale, total, each) => {
+  const result = simplified(
+    [
+      line("Daily menu", "14.00", { setMenuRole: "set_menu" }),
+      line("Daily menu", "14.00", { setMenuRole: "set_menu" }),
+      line("Sirloin", "5.00", { setMenuRole: "dish", unitPriceGross: "5.00" }),
+      line("Sirloin", "5.00", { setMenuRole: "dish", unitPriceGross: "5.00" }),
+    ],
+    "38.00",
+  );
+  const { elements } = buildReceiptDocument({
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    surface: "thermal",
+    invoiceLocale: locale,
+    namesLocale: locale,
+    result,
+  });
+  const at = elements.findIndex(
+    (element) => element.kind === "amount" && element.caption === "2  Sirloin",
+  );
+  expect(elements[at]).toMatchObject({ amount: total });
+  expect(elements[at + 1]).toMatchObject({ kind: "text", text: `${" ".repeat(3)}${each}` });
 });
 
 it("a reprint prints what the first print did", async () => {
