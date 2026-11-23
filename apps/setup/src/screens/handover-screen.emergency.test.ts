@@ -1034,6 +1034,35 @@ it("a changed copy whose fresh check gets no answer drops the old copy and offer
   expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=proceed]").disabled).toBe(false);
 });
 
+it.each([
+  ["its answer was lost", { lostAnswer: true }, 1],
+  [
+    "it was refused though saved, and Switch is pressed again",
+    { declareRefusal: { code: "server.unavailable", recorded: true } },
+    2,
+  ],
+] as const)(
+  "a switch that may be saved, whose copy then fails its check (%s), stays on Ready to switch offering no backup",
+  async (_case, options, presses) => {
+    const { el, posts } = await mount({ ...options, later: ["ok", "handover.copy_check_failed"] });
+    await authenticate(el);
+    await declarationFields(el);
+    for (let press = 1; press <= presses; press++) {
+      q(el, "[data-test=emergency-declare]").click();
+      await vi.waitFor(() => expect(Reflect.get(el, "busy")).toBe(false));
+    }
+    await vi.waitFor(() =>
+      expect(actions(el)).toContain(t("handover.emergency.copy_unchecked_only")),
+    );
+    expect(heading(el)).toBe(t("handover.emergency.ready_heading"));
+    expect(q(el, "[data-test=upload-backup]")).toBeNull();
+    expect(
+      q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]").disabled,
+    ).toBe(true);
+    expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(1);
+  },
+);
+
 it("a copy that fails its check at Switch goes back to Preparing the venue, offering a backup and Try again", async () => {
   const { el } = await mount({
     declareRefusal: { code: "handover.chain_broken", recorded: false },

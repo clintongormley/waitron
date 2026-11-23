@@ -1077,6 +1077,9 @@ export class SetupHandoverScreen extends LitElement {
     if (this.busy || !this.#validDeclaration() || this.copyRefused) return;
     this.busy = true;
     this.actionError = "";
+    // A copy refusal the switch request itself answered saved nothing; one from a check of the copy
+    // afterwards may be of a switch already saved, so it never sends the person back to choose a copy.
+    let switchRefused = false;
     try {
       if (this.#checksMain && !(await this.#checkMain())) return;
       if (this.#pendingDeclaration && (await this.#readPreview())) {
@@ -1097,7 +1100,10 @@ export class SetupHandoverScreen extends LitElement {
       const declaration = this.#pendingDeclaration;
       const answer = await this.#step((signIn) =>
         this.api.declareEmergencyHandover({ ...declaration, signIn }),
-      );
+      ).catch((cause: unknown) => {
+        switchRefused = typeof (cause as { code?: unknown } | null)?.code === "string";
+        throw cause;
+      });
       this.declaredAtMs = answer.declaration.body.declaredAtMs;
       this.signInOpen = false;
       await this.#resume(this.#pendingDeclaration.operationId);
@@ -1108,7 +1114,7 @@ export class SetupHandoverScreen extends LitElement {
         cause !== null &&
         "code" in cause &&
         cause.code === "handover.copy_mismatch" &&
-        !this.#declared
+        switchRefused
       ) {
         this.#backToPreparing();
         try {
@@ -1130,7 +1136,10 @@ export class SetupHandoverScreen extends LitElement {
         }
       }
       if (!this.actionError) this.actionError = this.#emergencyError(cause);
-      if (this.copyRefused && this.#offersOtherCopy) this.#backToPreparing();
+      if (this.copyRefused && this.#offersOtherCopy) {
+        if (switchRefused) this.#backToPreparing();
+        else this.actionError = t("handover.emergency.copy_unchecked_only");
+      }
     } finally {
       this.busy = false;
     }
