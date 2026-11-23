@@ -104,7 +104,7 @@ describe("Orders table pages", () => {
       );
       expect(total.rows[direction === "ascending" ? 10 : 0]!.id).toBe(larger);
     }
-    await credit(venue, invoices[0]!, "2.00", "-2.42");
+    await credit(venue, invoices[0]!, "2.00", "-2.20");
     const sortedAfterCredit = await withTransaction(venue.db, (tx) =>
       orders.listOrdersTablePage(tx, filter, {
         ...request,
@@ -118,7 +118,7 @@ describe("Orders table pages", () => {
     expect(credited.rows[0]).toMatchObject({
       id: invoices[0],
       total: "30.00",
-      stillOwed: "27.58",
+      stillOwed: "27.80",
       credited: "in_part",
       staff: [{ id: venue.operatorId, name: "Anna" }],
     });

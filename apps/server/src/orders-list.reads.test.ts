@@ -64,7 +64,7 @@ async function oneOfEach(): Promise<void> {
   const party = await seatedWith(venue, "Caña", "Tarta");
   await contribute(venue, party.tabId, "5.00");
   const invoiced = await placedIssuedBill(venue, "Red wine bottle");
-  await credit(venue, invoiced, "2.00", "-2.42");
+  await credit(venue, invoiced, "2.00", "-2.20");
   await departed(venue, "Croquettes");
 }
 

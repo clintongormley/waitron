@@ -28,6 +28,7 @@ import {
   inTx,
   lineIdOf,
   provisionAdjustmentVenue,
+  takeawayRates,
   rowsOf,
   todayLine,
   type AdjustmentVenue,
@@ -519,7 +520,7 @@ describe("the free list", () => {
         department: "Terrace",
         menuPrice: decimal("12.10"),
         amountTakenOff: decimal("12.10"),
-        estimatedCost: decimal("5.00"),
+        estimatedCost: decimal("5.50"),
       }),
     ]);
   });
@@ -631,10 +632,12 @@ describe("the estimated cost", () => {
 
   it("takes each dish's own rate, and for a whole bill the sum over its lines", async () => {
     await setMargin(departmentId, 3000);
-    const dish = await bill([{ name: "Bread" }, { name: "Salad" }]);
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
+    await takeawayRates(venue, { Bread: "10.00", Salad: "21.00" });
+    const dish = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
     await reprice(dish.billId, 1, 1100, "reduced");
     await adjust(dish.billId, { lineId: await lineIdOf(venue, dish.billId, 1), action: "comp" });
-    const whole = await bill([{ name: "Bread" }, { name: "Salad" }]);
+    const whole = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
     await reprice(whole.billId, 1, 1100, "reduced");
     await reprice(whole.billId, 2, 1210, "general");
     await adjust(whole.billId, { action: "discount_percent", percentBp: 10000 });
@@ -660,7 +663,11 @@ describe("the estimated cost", () => {
 
   it("takes a dish's extra at the extra's own rate", async () => {
     await setMargin(departmentId, 3000);
-    const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }]);
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
+    await takeawayRates(venue, { Pizza: "10.00", Olives: "21.00" });
+    const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }], {
+      dining: "takeaway",
+    });
     expect((await rowsOf(venue, billId)).map(({ name }) => name)).toEqual([
       "Pizza",
       "Olives",
@@ -699,38 +706,20 @@ describe("the estimated cost", () => {
         kind: "discount",
         menuPrice: decimal("12.10"),
         amountTakenOff: decimal("12.10"),
-        estimatedCost: decimal("7.00"),
+        estimatedCost: decimal("7.70"),
       }),
     ]);
   });
 
-  it("takes the dish's takeaway class on a takeaway bill", async () => {
+  it("takes the dine-in rate for an eaten-in dish, not the label on its line", async () => {
     await setMargin(departmentId, 3000);
-    const { partyId, billId } = await bill([]);
-    await inTx(venue, async (tx) => {
-      await tx
-        .update(workingOrders)
-        .set({ dining: "takeaway" })
-        .where(eq(workingOrders.id, billId));
-      await placeGroups(tx, venue.cfg, partyId, {
-        groups: [{ lines: [{ menuItemId: venue.item("Salad"), quantity: "1" }], release: "fire" }],
-        operatorId: venue.staffId,
-        billId,
-      });
-      await tx
-        .update(workingOrderLines)
-        .set({
-          unitPriceGross: 1100,
-          lineTotal: 1100,
-          vatClass: "general",
-          takeawayVatClass: "reduced",
-        })
-        .where(eq(workingOrderLines.workingOrderId, billId));
-    });
+    const { billId } = await bill([{ name: "Bread" }]);
+    await reprice(billId, 1, 1100, "general");
     await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    // 11.00 ÷ 1.10 × 0.70 = 7.00, where the line's `general` label would give 6.36.
     expect(await freeOn(billId)).toEqual([
       row({
-        item: "Salad",
+        item: "Bread",
         menuPrice: decimal("11.00"),
         amountTakenOff: decimal("11.00"),
         estimatedCost: decimal("7.00"),

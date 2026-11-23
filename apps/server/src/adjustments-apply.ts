@@ -593,7 +593,7 @@ function canonical(value: unknown): string {
 
 /** What a filed group shows, its quantity, cohort and position left out; a list price equal to the
  * price reads as none, as filing drops it. */
-function groupFields({ identity, locked, vatClass }: StoredOrderLine): unknown {
+function groupFields({ identity, locked }: StoredOrderLine): unknown {
   const { id, lineIds, dishLineIds, listUnitGross, ...kept } = identity;
   void id;
   void lineIds;
@@ -604,7 +604,7 @@ function groupFields({ identity, locked, vatClass }: StoredOrderLine): unknown {
       listUnitGross !== null && compareDecimal(listUnitGross, decimal(locked.grossUnitPrice)) !== 0
         ? listUnitGross
         : null,
-    locked: { ...locked, vatClass, quantity: null, parentLineNo: null },
+    locked: { ...locked, quantity: null, parentLineNo: null },
   };
 }
 

@@ -495,7 +495,6 @@ export {
   localToday,
   VAT_CLASSES,
   VAT_RATE_TABLE,
-  ADVANCE_VAT_CLASS,
   type VatClass,
   type DatedRate,
   type VatRateTable,

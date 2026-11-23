@@ -119,9 +119,9 @@ Rescheduling records the old and new activation times and the acting person in
 
 ## What a sold line freezes
 
-A line freezes its names, its gross price and its eat-in VAT class when it is added and never reads
-them from the menu again, so editing a product does not rewrite yesterday's receipt; the class comes
-from the published menu and its rate from the day the invoice is issued, below. A line taken away,
+A line freezes its names and its gross price when it is added and never reads them from the menu
+again, so editing a product does not rewrite yesterday's receipt. A line eaten here files at the
+dine-in rate on the day the invoice is issued, below. A line taken away,
 other than a set-menu line, freezes no rate: it files at its product's takeaway rate, read when the
 invoice is issued; a set-menu line files at the takeaway class its set menu froze. `working_order_lines` and `sale_lines` each carry:
 
@@ -169,33 +169,29 @@ names, and records the same product in its own `product_id` and a variant's pare
 `parent_product_id`, as plain values with no foreign key, so no menu edit reaches a filed
 line. Neither table has a `variant_id` column.
 
-**Eaten here, a line files at the class its published menu froze, fixed when its price is, at the
-rate in force on the day the invoice is issued. Taken away, a line files at its product's own
+**Eaten here, every line files at the dine-in rate in force on the day the invoice is issued.
+Taken away, a line files at its product's own
 takeaway rate on that day, read when the line is rated.** Each published menu version records the
 eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
 `packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
 product's current ones. A line added to a held order or a tab stores that class
 (`working_order_lines.vat_class`) with its gross price, which is the same either way; its
-`takeaway_vat_class` sets the rate only of a set-menu line; on other lines it is part of what
-groups portions (`readLockedLines`), never their rate. The order's `working_orders.dining` picks
+`takeaway_vat_class` sets the rate only of a set-menu line. Neither label decides an eaten-in
+line's rate. The order's `working_orders.dining` picks
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
 `apps/server/src/working-order.ts`), which leaves a line without rates, and is filed from the
 lines it stored. Reading stored lines for a bill, payment or filing takes each line's rate list
 from `readLineVatRates`
-(`apps/server/src/line-vat-rates.ts`): eaten here, its class's list in `VAT_RATE_TABLE`; taken
+(`apps/server/src/line-vat-rates.ts`): eaten here, the venue area's dine-in list
+(`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts`); taken
 away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
 `product_takeaway_vat_rates`, or its parent's when a variant has none
-(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A variant with no class
-of its own was frozen at its parent's class, and an extras line takes the class frozen for its
-picked product. Raising the quantity of an unsent line in place keeps that row's class; a line an
-edit adds takes the class of the version live then. So a change to a product's eat-in VAT class
-reaches a till only when a menu including it is published again, and until then that menu shows
-Unpublished changes; a change to its takeaway rate reaches every takeaway line rated from then on,
-open orders included, with no publish. Patching a live menu (`patchLiveMenu`,
-`packages/menu/src/menu-publication.ts`) changes an eat-in class in that menu's live version alone;
-the product keeps its own, and a patch cannot change a takeaway rate.
+(`readTakeawayVatSchedules`, `packages/menu/src/takeaway-vat-rates.ts`). A change to a product's
+takeaway rate reaches every takeaway line rated from then on, open orders included, with no
+publish, and patching a live menu (`patchLiveMenu`, `packages/menu/src/menu-publication.ts`)
+cannot change it.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
 `packages/shared/src/menu-document/vat-rates.ts`): a legal change ships as a new entry dated from the day it

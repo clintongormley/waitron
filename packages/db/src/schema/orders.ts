@@ -188,12 +188,10 @@ export const workingOrders = table(
  * Gross prices, VAT classes, descriptions and the reporting classification are snapshotted here
  * when a line is added, never read live from the menu, so a later menu edit to any of them
  * is a freshness problem, never a correctness one. The filed `sale_lines` carry the line's gross total,
- * descriptions and classification, and the percentage the class had on the day of issue, naming a
- * product only as a value, never a key.
+ * descriptions and classification, naming a product only as a value, never a key.
  *
  * The line-add snapshot IS the filed gross: a retrieved order is FILED from the locked gross unit
- * price without a re-price (grossLockedLines, @waitron/menu), at its class's rate on the day the
- * invoice is issued.
+ * price without a re-price (grossLockedLines, @waitron/menu).
  *
  * `descriptions` is a locale→string map holding exactly the venue's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
@@ -233,11 +231,9 @@ export const workingOrderLines = table(
     // sale_lines are rebuilt from. Stored rather than recovered as `line_total ÷ quantity`, which
     // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
-    // The class the line takes when its order is eaten here, frozen by the published menu version
-    // when the line was added. Its rate is looked up on the day the invoice is issued, so no rate
-    // is stored here.
+    // No rate reads this label: an eaten-in line files at the dine-in rate.
     vatClass: label("vat_class").notNull(),
-    // Rates a set-menu line taken away, and groups portions; a product line taken away files at its
+    // Rates a set-menu line taken away; a product line taken away files at its
     // product's takeaway rate (`product_takeaway_vat_rates`), not this label.
     takeawayVatClass: label("takeaway_vat_class").notNull(),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list

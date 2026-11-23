@@ -60,6 +60,7 @@ import {
   inTx,
   PINS,
   provisionAdjustmentVenue,
+  takeawayRates,
   REASONS,
   rowsOf,
   type AdjustmentVenue,
@@ -137,7 +138,10 @@ async function splitCut(
   return splitPartyBill(tx, venue.cfg, billId, await cutParts(tx, venue.cfg, billId, transfers));
 }
 
-async function seated(tx: Transaction): Promise<{ billId: string; partyId: string }> {
+async function seated(
+  tx: Transaction,
+  dining?: "takeaway",
+): Promise<{ billId: string; partyId: string }> {
   const table = await createTable(tx, venue.cfg, {
     label: `R-${randomUUID().slice(0, 8)}`,
     zoneId: venue.tables.zoneId,
@@ -148,6 +152,9 @@ async function seated(tx: Transaction): Promise<{ billId: string; partyId: strin
     operatorId: venue.staffId,
   });
   await writePartyAllergy(tx, party.partyId, { answer: "none", guests: [] }, venue.staffId);
+  if (dining !== undefined) {
+    await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, party.tabId));
+  }
   return { billId: party.tabId, partyId: party.partyId };
 }
 
@@ -157,9 +164,9 @@ interface Bill {
 }
 
 /** Today's shape: each request line one stored line of its count, fired. */
-function groupedBill(lines: RoundLine[]): Promise<Bill> {
+function groupedBill(lines: RoundLine[], dining?: "takeaway"): Promise<Bill> {
   return inTx(venue, async (tx) => {
-    const bill = await seated(tx);
+    const bill = await seated(tx, dining);
     const round = await priceTabRound(tx, venue.cfg, bill.billId, roundOf(lines), "checked");
     await insertTabRound(tx, venue.cfg, round, round.rows);
     const stored = await tx
@@ -174,9 +181,9 @@ function groupedBill(lines: RoundLine[]): Promise<Bill> {
 }
 
 /** The same lines as bound portions, one dish per line, fired. */
-function portionsBill(lines: RoundLine[]): Promise<Bill> {
+function portionsBill(lines: RoundLine[], dining?: "takeaway"): Promise<Bill> {
   return inTx(venue, async (tx) => {
-    const bill = await seated(tx);
+    const bill = await seated(tx, dining);
     await addPortionRound(tx, venue.cfg, bill.billId, roundOf(lines), { fire: true });
     return bill;
   });
@@ -369,9 +376,9 @@ async function outcomeOf(billId: string) {
  * Applies `ask` to the dishes named `target` on both shapes — today's one line, and every portion
  * of the row named in `lineIds` — and answers both outcomes.
  */
-async function bothShapes(lines: RoundLine[], target: string, ask: Ask) {
-  const grouped = await groupedBill(lines);
-  const portions = await portionsBill(lines);
+async function bothShapes(lines: RoundLine[], target: string, ask: Ask, dining?: "takeaway") {
+  const grouped = await groupedBill(lines, dining);
+  const portions = await portionsBill(lines, dining);
   const [line] = await dishesNamed(grouped.billId, target);
   const members = await dishesNamed(portions.billId, target);
   await adjust(grouped.billId, { ...ask, lineId: line! });
@@ -400,14 +407,18 @@ const bread: RoundLine = { name: "Bread" };
 
 describe("A803 portions: a discount or comp on a whole row of identical portions", () => {
   it("A803 portions: 10% off a row of three €3.33 croquettes files 2 × €3.00 and 1 × €2.99 and prints one 10% line under the row, as one line of three does", async () => {
+    // Taken away, so the Croquettes' 21% and the Bread's 10% print two rate letters.
+    await takeawayRates(venue, { Croquettes: "21.00" });
     const {
       grouped,
       portions,
       portionsBill: bill,
-    } = await bothShapes([{ name: "Croquettes", quantity: "3" }, bread], "Croquettes", {
-      action: "discount_percent",
-      percentBp: 1000,
-    });
+    } = await bothShapes(
+      [{ name: "Croquettes", quantity: "3" }, bread],
+      "Croquettes",
+      { action: "discount_percent", percentBp: 1000 },
+      "takeaway",
+    );
 
     expect(grouped.record.reduction).toBe(100);
     expect(grouped.due).toBe("11.49");
@@ -1179,6 +1190,42 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         .set({ courseId: null })
         .where(eq(workingOrderLines.workingOrderId, billId)),
     );
+    await adjust(billId, { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds });
+    expect((await recordedOn(billId)).map((row) => row.action)).toEqual(["discount_percent"]);
+  });
+
+  it("eaten in, two croquette rows from two rounds whose stored VAT labels differ adjust as one row", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
+    await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, billId, roundOf([{ name: "Croquettes", quantity: "2" }])),
+    );
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
+    expect(croquetteLineIds).toHaveLength(4);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ vatClass: "zero" })
+        .where(eq(workingOrderLines.id, croquetteLineIds[2]!)),
+    );
+
+    await adjust(billId, { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds });
+    expect((await recordedOn(billId)).map((row) => row.action)).toEqual(["discount_percent"]);
+  });
+
+  it("taken away, two croquette rows from two rounds whose stored takeaway VAT labels differ adjust as one row", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }], "takeaway");
+    await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, billId, roundOf([{ name: "Croquettes", quantity: "2" }])),
+    );
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
+    expect(croquetteLineIds).toHaveLength(4);
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ takeawayVatClass: "zero" })
+        .where(eq(workingOrderLines.id, croquetteLineIds[2]!)),
+    );
+
     await adjust(billId, { ...tenOff, lineId: croquetteLineIds[0]!, lineIds: croquetteLineIds });
     expect((await recordedOn(billId)).map((row) => row.action)).toEqual(["discount_percent"]);
   });

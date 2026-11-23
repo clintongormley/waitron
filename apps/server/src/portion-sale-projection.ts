@@ -13,7 +13,6 @@ export interface PortionBinding {
 export interface ProjectedLine {
   identity: OrderLineIdentity & { lineIds: string[]; dishLineIds: string[] };
   locked: LockedLine;
-  vatClass: StoredOrderLine["vatClass"];
 }
 
 /** Object keys sorted, so two descriptions written in a different key order still compare equal. */
@@ -34,7 +33,6 @@ function rowKey(line: StoredOrderLine): string {
   const listed = line.identity.listUnitGross;
   return canonical({
     ...rest,
-    vatClass: line.vatClass,
     quantity: null,
     parentLineNo: null,
     priceQuantity: rest.priceQuantity ?? null,
@@ -129,7 +127,6 @@ export function projectPortionSale(
         dishLineIds,
       },
       locked: { ...first.line.locked, quantity: sum(members.map((dish) => dish.line)) },
-      vatClass: first.line.vatClass,
     });
     const unclaimed = members.slice(1).map((dish) => [...dish.extras]);
     for (const extra of first.extras) {
@@ -151,7 +148,6 @@ export function projectPortionSale(
           dishLineIds,
         },
         locked: { ...extra.locked, quantity: sum(matches), parentLineNo: dishNo },
-        vatClass: extra.vatClass,
       });
     }
   }

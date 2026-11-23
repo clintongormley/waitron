@@ -52,22 +52,23 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
-// A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
-vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
-  const table = {
-    ...original.VAT_RATE_TABLE,
-    reduced: [
-      { from: null, rate: "10.00" },
-      { from: "2027-01-01", rate: "4.00" },
-    ],
-  };
+// The area's dine-in rate: 10%, and 4% from 1 January 2027.
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/country-packs")>();
   return {
-    ...original,
-    VAT_RATE_TABLE: table,
-    vatRatesOn: (...[date, given]: Parameters<typeof original.vatRatesOn>) =>
-      original.vatRatesOn(date, given ?? table),
+    ...actual,
+    vatRatesFor: (...args: Parameters<typeof actual.vatRatesFor>) => {
+      const rates = actual.vatRatesFor(...args);
+      return (
+        rates && {
+          ...rates,
+          dineIn: [
+            { from: null, rate: "10.00" },
+            { from: "2027-01-01", rate: "4.00" },
+          ],
+        }
+      );
+    },
   };
 });
 
@@ -191,7 +192,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     const burger = await product("Hamburguesa", "10.00", "reduced");
     const cheese = await product("Queso", "0.75", "reduced");
     const wine = await product("Vino", "3.63", "general");
-    // Served here at `general`; its takeaway rates are set by the takeaway case.
+    // Its takeaway rates are set by the takeaway case.
     const juice = await createProduct(tx, {
       categoryId: null,
       name: "Juice",
@@ -398,7 +399,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     expect(sale.lines.map((line) => [line.productId, line.vatRate])).toEqual([
       [v.products.burger, 400],
       [v.products.cheese, 400],
-      [v.products.wine, 2100],
+      [v.products.wine, 400],
     ]);
     expect(sale.total).toBe(1438);
   });
@@ -500,8 +501,8 @@ describe("a takeaway order's product rate is taken on the day its invoice is iss
         .delete(productTakeawayVatRates)
         .where(eq(productTakeawayVatRates.productId, v.products.juice));
       await tx.insert(productTakeawayVatRates).values([
-        { productId: v.products.juice, startsOn: null, rate: 1000 },
-        { productId: v.products.juice, startsOn: "2027-01-01", rate: 400 },
+        { productId: v.products.juice, startsOn: null, rate: 2100 },
+        { productId: v.products.juice, startsOn: "2027-01-01", rate: 1000 },
       ]);
     });
     at(EVE);
@@ -518,8 +519,11 @@ describe("a takeaway order's product rate is taken on the day its invoice is iss
     at(NEW_YEAR);
     await payCash(v, newYear, "2.50");
 
-    expect(await filed(eve)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
-    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_4_PERCENT });
+    expect(await filed(eve)).toMatchObject({
+      total: 250,
+      vatBreakdown: [{ rate: "21.00", base: "2.07", tax: "0.43" }],
+    });
+    expect(await filed(newYear)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
   });
 });
 

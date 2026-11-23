@@ -106,7 +106,8 @@ describe("a walk-up cola filed in one request", () => {
     expect(filedLine(id)).toEqual([EXPECTED[dining]]);
   });
 
-  // The burger is `general` both ways; its lemon soda extra is `reduced` here and `zero` taken away.
+  // Taken away, the burger files at its 21% and its lemon soda extra at its own 0%; eaten here,
+  // both file at the dine-in rate.
   const burgerWithSoda = () => [
     {
       menuItemId: counter.offerFor(menu.burger),
@@ -114,10 +115,10 @@ describe("a walk-up cola filed in one request", () => {
       extras: [{ listId: menu.burgerExtras, picks: [{ productId: menu.lemonSoda, quantity: 1 }] }],
     },
   ];
-  const EXTRA_RATES: Record<Dining, number[]> = { takeaway: [2100, 0], eat_in: [2100, 1000] };
+  const EXTRA_RATES: Record<Dining, number[]> = { takeaway: [2100, 0], eat_in: [1000, 1000] };
 
   it.each(["takeaway", "eat_in"] as const)(
-    "files a cash sale's extra %s at the extra's own class",
+    "files a cash sale's dish and its extra %s at that way's rates",
     async (dining) => {
       const workingOrderId = randomUUID();
       const sold = await counterPayment(workingOrderId, burgerWithSoda(), dining, {
@@ -130,7 +131,7 @@ describe("a walk-up cola filed in one request", () => {
   );
 
   it.each(["takeaway", "eat_in"] as const)(
-    "files a card sale's extra %s at the extra's own class",
+    "files a card sale's dish and its extra %s at that way's rates",
     async (dining) => {
       const id = randomUUID();
       const paid = await counterPayment(id, burgerWithSoda(), dining, {

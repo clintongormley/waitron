@@ -7,7 +7,14 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
+import {
+  assignMenuToVenue,
+  createMenu,
+  createCategory,
+  createProduct,
+  setTakeawayVatRate,
+} from "@waitron/menu";
+import { departments } from "@waitron/venue-service";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
@@ -114,8 +121,9 @@ describe("the category report reconciles with the till's sales", () => {
       simplifiedInvoiceLimit: null,
     });
 
-    // Drinks > Softs; Water sits in Drinks itself; Bread and Olives have no category. Two rates, and
-    // prices whose VAT does not divide evenly, so a net summed some other way would drift a cent.
+    // Drinks > Softs; Water sits in Drinks itself; Bread and Olives have no category. Sold taken
+    // away, Cola and Olives at 21% and the rest at 10%: two rates, and prices whose VAT does not
+    // divide evenly, so a net summed some other way would drift a cent.
     const { products, managerSid } = await withTransaction(suite.db, async (tx) => {
       const menu = await createMenu(tx, { name: "Delicatessen" });
       const drinks = await createCategory(tx, { name: "Bebidas" });
@@ -144,6 +152,9 @@ describe("the category report reconciles with the till's sales", () => {
         bread: await product("Pan", null, "0.95", "reduced"),
         olives: await product("Aceitunas", null, "3.33", "general"),
       };
+      await tx.update(departments).set({ dining: "takeaway" });
+      await setTakeawayVatRate(tx, ids.cola, "21.00");
+      await setTakeawayVatRate(tx, ids.olives, "21.00");
       await assignMenuToVenue(tx, menu.id);
       const [manager] = await seedPersons(tx, {
         displayName: "The Manager",

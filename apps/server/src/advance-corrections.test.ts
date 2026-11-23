@@ -81,9 +81,17 @@ useVenueDb({
 });
 
 const venue = () => advanceVenue.venue;
-const { seated, cash, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
-  () => advanceVenue,
-);
+const {
+  seated,
+  seatedTakeaway,
+  cash,
+  advance,
+  payRest,
+  restId,
+  advanceFacts,
+  caption,
+  readTicket,
+} = advanceBills(() => advanceVenue);
 const supervisor = () => ({ personId: venue().adminId, pin: "1234" });
 
 type Split = { rate: string; base: string; tax: string }[];
@@ -147,9 +155,9 @@ async function linesOf(saleId: string) {
 }
 
 /** The bill's rest's invoice once `dishes` were served, `advances` paid on account and `rest`
- * paid. */
-async function restOf(dishes: string[], advances: string[], rest: string) {
-  const billId = await seated(...dishes);
+ * paid; `seat` makes the bill, eaten here unless it says otherwise. */
+async function restOf(dishes: string[], advances: string[], rest: string, seat = seated) {
+  const billId = await seat(...dishes);
   const advanceIds: string[] = [];
   for (const amount of advances) advanceIds.push(await advance(billId, amount));
   await payRest(billId, rest);
@@ -343,7 +351,7 @@ describe("Correct invoice on the rest's invoice", () => {
   });
 
   it("the correction lines of a rest's invoice list its dishes and not the advance's line", async () => {
-    const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00");
+    const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00", seatedTakeaway);
 
     const answer = await send(
       venue().app,
@@ -402,7 +410,7 @@ describe("Correct invoice on the rest's invoice", () => {
   });
 
   it("example 2: the 10% the advance more than covers has nothing to correct, and €50 at 21% files −41.32/−8.68", async () => {
-    const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00");
+    const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00", seatedTakeaway);
 
     expect(await preview(rest.saleId, "1.00", [rest.dishIds[0]!])).toMatchObject({
       status: 409,
@@ -436,7 +444,7 @@ describe("Correct invoice on the rest's invoice", () => {
 
 describe("a 10% advance on a bill whose meal is all at 21%", () => {
   it("takes nothing off the 21% dishes, and what is corrected stays capped at the rest's invoice", async () => {
-    const rest = await restOf(["Wine case"], ["30.00"], "50.00");
+    const rest = await restOf(["Wine case"], ["30.00"], "50.00", seatedTakeaway);
     expect(recordOf(rest.saleId)).toEqual([
       ["10.00", "-27.27", "-2.73"],
       ["21.00", "66.12", "13.88"],

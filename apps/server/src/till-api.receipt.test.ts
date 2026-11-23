@@ -51,6 +51,7 @@ import {
   updateProduct,
   writeContentLanguages,
   previewMenu,
+  setTakeawayVatRate,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
@@ -3668,6 +3669,8 @@ describe("receipt lines' VAT rates", () => {
         unitPrice: "2.20",
         vatClass: "reduced",
       });
+      await tx.update(departments).set({ dining: "till_choice" });
+      await setTakeawayVatRate(tx, each.id, "21.00");
       const item = await addProductToMenu(tx, {
         menuId: each.menuId,
         productId: product.id,
@@ -3684,7 +3687,7 @@ describe("receipt lines' VAT rates", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
-        dining: "eat_in",
+        dining: "takeaway",
         submissionId: workingOrderId,
         kind: "share",
         shareOf: 1,

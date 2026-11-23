@@ -156,7 +156,7 @@ it("reads paid and orderless original sales and a correction by their own identi
   const order = await placedIssuedBill(venue, "Caña");
   expect((await collect(venue, order, "3.00")).status).toBe(200);
   const original = await saleOf(order);
-  await credit(venue, order, "1.00", "-1.21");
+  await credit(venue, order, "1.00", "-1.10");
   const correction = (
     await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, original.id)),
@@ -173,7 +173,7 @@ it("reads paid and orderless original sales and a correction by their own identi
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({
       invoiceNumber: `${series!.code}/${sale!.invoiceNumber}`,
-      total: id === correction ? "-1.21" : id === loose ? "12.10" : "3.00",
+      total: id === correction ? "-1.10" : id === loose ? "12.10" : "3.00",
       issuedAt: new Date(sale!.issuedAt).toISOString(),
       lines: [
         {
@@ -181,7 +181,7 @@ it("reads paid and orderless original sales and a correction by their own identi
             "es-ES":
               id === correction ? "Descuento" : id === loose ? "Venta suelta" : "Caña de cerveza",
           },
-          gross: id === correction ? "-1.21" : id === loose ? "12.10" : "3.00",
+          gross: id === correction ? "-1.10" : id === loose ? "12.10" : "3.00",
         },
       ],
     });

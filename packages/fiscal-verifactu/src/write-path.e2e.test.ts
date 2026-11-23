@@ -7,14 +7,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import {
-  incidents,
-  products,
-  saleLines,
-  sales,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { incidents, saleLines, sales, withTransaction, type Transaction } from "@waitron/db";
 import {
   addProductToMenu,
   createMenu,
@@ -693,98 +686,6 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
     });
 
     expect({ huella, importe_total, cuota_total }).toEqual(GOLDEN);
-  });
-});
-
-describe("a variant line is filed at its own effective VAT rate", () => {
-  // Review Focus 1 of the variants-as-products plan: a variant leaving its VAT blank is taxed at its
-  // PARENT's rate, and one setting its own at its own. A wrong rate on a filed invoice cannot be
-  // repaired (CLAUDE.md §5), so the rate is read back from the filed record, not from the pricer.
-  //
-  // The basket is composed the way the order path composes it (`priceOrderLines`,
-  // `apps/server/src/working-order.ts`): from what `selectMenuVariant` resolves for the chosen
-  // variant — its names, price and effective selling values.
-  async function wineOffer(tx: Transaction) {
-    const menu = await createMenu(tx, { name: "Barra" });
-    const parent = await createProduct(tx, {
-      categoryId: null,
-      name: "Wine by the glass",
-      customerName: { "es-ES": "Vino de la casa" },
-      kitchenName: "VINO",
-      unitId: null,
-      unitPrice: "4.00",
-      vatClass: "reduced",
-    });
-    const [wine125, wine175] = await setProductVariants(
-      tx,
-      parent.id,
-      [
-        {
-          name: "Wine 125",
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: "4.50",
-          available: true,
-        },
-        {
-          name: "Wine 175",
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: "5.50",
-          available: true,
-        },
-      ],
-      "es-ES",
-    );
-    await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, wine175!.id));
-    await addProductToMenu(tx, { menuId: menu.id, productId: parent.id, grossPrice: null });
-    const [offer] = await listMenuOffers(tx, [menu.id]);
-    return { offer: offer!, wine125: wine125!.id, wine175: wine175!.id };
-  }
-
-  function lineFor(offer: MenuOffer, variantId: string): BasketItem {
-    const selected = selectMenuVariant(offer, variantId);
-    const text = customerPresentationText(selected, "es-ES");
-    return {
-      product: { ...selected, descriptions: text.product, variantDescriptions: text.variant },
-      quantity: "1",
-    };
-  }
-
-  it("files a 10% line for the variant inheriting its parent's VAT and a 21% line for the one setting its own", async () => {
-    const desglose = await withTransaction(pg.db, async (tx) => {
-      const { offer, wine125, wine175 } = await wineOffer(tx);
-      const priced = priceBasket([lineFor(offer, wine125), lineFor(offer, wine175)]);
-      const { saleId } = await recordSale(
-        tx,
-        backend,
-        saleInput({
-          nodeId,
-          seriesId,
-          total: priced.total,
-          lines: priced.lines,
-          vatBreakdown: priced.vatBreakdown,
-          settlement: { kind: "deferred" },
-        }),
-      );
-      const [row] = await tx
-        .select({ desglose: verifactuRecords.desglose })
-        .from(verifactuRecords)
-        .where(eq(verifactuRecords.saleId, saleId));
-      return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
-    });
-
-    expect(
-      desglose.map(({ TipoImpositivo, BaseImponibleOimporteNoSujeto }) => ({
-        TipoImpositivo,
-        BaseImponibleOimporteNoSujeto,
-      })),
-    ).toEqual([
-      { TipoImpositivo: "10.00", BaseImponibleOimporteNoSujeto: "4.09" },
-      { TipoImpositivo: "21.00", BaseImponibleOimporteNoSujeto: "4.55" },
-    ]);
   });
 });
 

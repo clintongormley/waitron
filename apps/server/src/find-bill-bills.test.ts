@@ -960,12 +960,12 @@ describe("Find Bills SQL paging", () => {
   });
   it("keeps original issued totals but reads corrected debt and departed receipt identity", async () => {
     const id = await placedIssuedBill(venue, "Caña");
-    await credit(venue, id, "1.00", "-1.21");
+    await credit(venue, id, "1.00", "-1.10");
     const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
       total: "3.00",
       paid: "0.00",
-      stillOwed: "1.79",
+      stillOwed: "1.90",
       collectionStatus: "waiting_for_payment",
     });
     expect((await list({ q: row.invoiceNumber! })).rows.map((r) => r.workingOrderId)).toEqual([id]);
@@ -1040,7 +1040,7 @@ describe("Find Bills SQL paging", () => {
 
   it("offers collection only while the legacy collector can take a positive debt", async () => {
     const cleared = await placedIssuedBill(venue, "Caña");
-    await credit(venue, cleared, "2.48", "-3.00");
+    await credit(venue, cleared, "2.73", "-3.00");
     expect(await inTx(venue, (tx) => readFindBill(tx, cleared))).toMatchObject({
       stillOwed: "0.00",
       collectionStatus: null,

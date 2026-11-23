@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
+  billPayments,
   billSetMenuCopies,
   kitchenCourses,
   products,
@@ -14,6 +16,8 @@ import {
   readInvoiceLocales,
   requireMenuRoot,
 } from "@waitron/menu";
+import { insertCapturedPayment } from "@waitron/payments";
+import { decimal } from "@waitron/shared";
 import { saveDraftForTest } from "./draft-command-fixture.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
 import { publishWorkingMenu } from "./publish-menu.js";
@@ -82,6 +86,41 @@ export async function seedBillSetMenu(
     })
     .returning({ id: workingOrderLines.id });
   return id;
+}
+
+/** A €26.00 card payment on the bill that the provider captured and the bill has not yet received;
+ * returns the bill payment's id. */
+export async function capturedCardPayment(
+  tx: Transaction,
+  venue: PartyVenue,
+  workingOrderId: string,
+): Promise<string> {
+  const [{ id: paymentId }] = await tx
+    .insert(billPayments)
+    .values({
+      workingOrderId,
+      submissionId: randomUUID(),
+      fingerprint: "pending-card-payment",
+      kind: "contribution",
+      method: "card",
+      applied: 2600,
+      state: "pending",
+      requestedBy: venue.operator.personId,
+      source: venue.cfg.origin.source,
+      deviceId: venue.cfg.origin.deviceId,
+    })
+    .returning({ id: billPayments.id });
+  await insertCapturedPayment(tx, {
+    origin: venue.cfg.origin,
+    nodeId: venue.cfg.nodeId,
+    workingOrderId,
+    billPaymentId: paymentId,
+    provider: "fake",
+    paymentRef: randomUUID(),
+    amount: decimal("26.00"),
+    settledAt: venue.clock.now().instant,
+  });
+  return paymentId;
 }
 
 export function saveSetMenuDraft(

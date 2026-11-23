@@ -6,7 +6,14 @@ import { saleLineDishes, saleLines, sales, withTransaction, workingOrderLines } 
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
+import {
+  assignMenuToVenue,
+  createMenu,
+  createCategory,
+  createProduct,
+  setTakeawayVatRate,
+} from "@waitron/menu";
+import { departments } from "@waitron/venue-service";
 import { VerifactuBackend, verifactuRecords } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -75,9 +82,9 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 
 interface Seeded {
   cfg: DeviceRequestConfig;
-  /** "Agua" — each, 1.50 gross, general(21%). */
+  /** "Agua" — each, 1.50 gross; taken away, 21%. */
   waterId: string;
-  /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
+  /** "Jamón" — WEIGHT, 24.90/kg gross; taken away, 10%. */
   hamId: string;
   tableId: string;
   /** Both products offered in the table's zone. */
@@ -86,9 +93,10 @@ interface Seeded {
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed the two-product menu and one
- * dining table.
+ * dining table. With `takeaway`, the department sells only takeaway, so Agua and Jamón file at
+ * different rates.
  */
-async function setupVenue(): Promise<Seeded> {
+async function setupVenue(opts: { takeaway?: boolean } = {}): Promise<Seeded> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -138,6 +146,10 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
+    if (opts.takeaway) {
+      await tx.update(departments).set({ dining: "takeaway" });
+      await setTakeawayVatRate(tx, water.id, "21.00");
+    }
     await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
@@ -208,7 +220,7 @@ function seqOf(result: TillSaleResult): number {
 
 describe("split-bill: pay each check files its own registro", () => {
   it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 registros with contiguous numbers", async () => {
-    const seeded = await setupVenue();
+    const seeded = await setupVenue({ takeaway: true });
     const deps = { db: suite.db, backend, clock };
 
     const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, {
@@ -263,7 +275,7 @@ describe("split-bill: pay each check files its own registro", () => {
   });
 
   it("on a tab written before portions, the whole agua line files on its own check", async () => {
-    const { cfg, waterId, hamId, tableId, offers } = await setupVenue();
+    const { cfg, waterId, hamId, tableId, offers } = await setupVenue({ takeaway: true });
     const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
     const lines = offers.toOfferLines([
       { productId: waterId, quantity: "3" },
@@ -314,7 +326,7 @@ describe("split-bill: pay each check files its own registro", () => {
   });
 
   it("partitions the items — every unit filed on exactly ONE check, quantity conserved, origin emptied", async () => {
-    const seeded = await setupVenue();
+    const seeded = await setupVenue({ takeaway: true });
     const deps = { db: suite.db, backend, clock };
 
     const { tabId, a } = await splitIntoThreeChecks(seeded, {

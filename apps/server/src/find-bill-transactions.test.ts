@@ -135,7 +135,7 @@ describe("Find Transactions SQL paging", () => {
     const paidOrder = await placedIssuedBill(venue, "Caña");
     expect((await collect(venue, paidOrder, "3.00")).status).toBe(200);
     const paid = await saleOf(paidOrder);
-    await credit(venue, paidOrder, "1.00", "-1.21");
+    await credit(venue, paidOrder, "1.00", "-1.10");
     const unpaidOrder = await parked(venue, "Tarta");
     const full = await invoice(
       {
@@ -164,7 +164,7 @@ describe("Find Transactions SQL paging", () => {
       amount: "12.10",
     });
     expect(rows.find((r) => r.type === "correction")).toMatchObject({
-      amount: "-1.21",
+      amount: "-1.10",
       workingOrderId: null,
       scopeOrderIds: [paidOrder],
     });

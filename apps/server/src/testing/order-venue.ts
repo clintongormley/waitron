@@ -192,7 +192,7 @@ function adminSession(venue: BillVenue, tx: Transaction) {
   return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
-/** A corrective of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
+/** A corrective of `base` at 10% totalling `total` against the bill's invoice, through `recordCorrection`. */
 export async function credit(
   venue: BillVenue,
   billId: string,
@@ -222,7 +222,7 @@ export async function credit(
           descriptions: { [venue.cfg.locale]: "Descuento" },
           quantity: "-1",
           unitPrice: base,
-          vatRate: "21.00",
+          vatRate: "10.00",
           lineTotal: `-${base}`,
         },
       ],

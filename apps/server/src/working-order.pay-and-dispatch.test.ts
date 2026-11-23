@@ -18,7 +18,7 @@ import {
   updateHeldOrder,
   placeOrder,
 } from "./testing/order-writer-fixture.js";
-import { departments } from "@waitron/venue-service";
+import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -37,6 +37,7 @@ import {
   createProduct,
   EACH_UNIT,
   listAvailableProducts,
+  setTakeawayVatRate,
 } from "@waitron/menu";
 import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -188,18 +189,19 @@ interface SeededVenue {
   available: AvailableProduct[];
   /** The venue's counter-default zone. */
   zoneId: string;
-  /** "Café" — each, 1.50 gross, general(21%). */
+  /** "Café" — each, 1.50 gross. */
   coffee: OfferedProduct;
-  /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
+  /** "Agua" — each, 2.00 gross, at café's rate either way, so a two-line basket has one VAT group. */
   water: OfferedProduct;
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF, then seed a menu and read back two
- * `each`/general(21%) products. Each test gets its OWN taxpayer so its sale / fiscal record counts are
- * order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a menu and read back two `each`
+ * products. Each test gets its OWN taxpayer so its sale / fiscal record counts are
+ * order-independent (CLAUDE.md §4). With `takeaway`, the department sells only takeaway and both
+ * products' takeaway rate is 21.00.
  */
-async function setupVenue(): Promise<SeededVenue> {
+async function setupVenue(opts: { takeaway?: boolean } = {}): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -239,20 +241,25 @@ async function setupVenue(): Promise<SeededVenue> {
     await ensureOperator(tx, OPERATOR);
     const cat = await createMenu(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
-    await createProduct(tx, {
+    const coffee = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await createProduct(tx, {
+    const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
     });
+    if (opts.takeaway) {
+      await setDepartmentSalePolicyField(tx, department!.id, "dining", "takeaway");
+      await setTakeawayVatRate(tx, coffee.id, "21.00");
+      await setTakeawayVatRate(tx, water.id, "21.00");
+    }
     await assignMenuToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;
   });
@@ -592,7 +599,7 @@ describe("cash bill payments", () => {
     expect(res.invoiceNumber).toBe("A/1");
     expect(res.total).toBe("1.50");
     expect(res.tender).toEqual({ method: "cash", change: "3.50" });
-    expect(res.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    expect(res.vatBreakdown).toEqual([{ rate: "10.00", base: "1.36", tax: "0.14" }]);
     // The FILED line list the receipt renders: the priced walk-up composition — name, the
     // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
     expect(res.lines).toEqual([
@@ -601,7 +608,7 @@ describe("cash bill payments", () => {
         quantity: "1",
         gross: "1.50",
         unitPriceGross: "1.50",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -658,7 +665,7 @@ describe("cash bill payments", () => {
         quantity: "1",
         gross: "1.50",
         unitPriceGross: "1.50",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -668,7 +675,7 @@ describe("cash bill payments", () => {
         quantity: "1",
         gross: "2.00",
         unitPriceGross: "2.00",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -722,7 +729,7 @@ describe("cash bill payments", () => {
         quantity: "2",
         gross: "3.00",
         unitPriceGross: "1.50",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -769,12 +776,12 @@ describe("cash bill payments", () => {
   });
 
   it("idempotent replay: a second pay with the same id returns the SAME ticket — filed QR and breakdown, no second record", async () => {
-    const { cfg, coffee, water, zoneId } = await setupVenue();
+    const { cfg, coffee, water, zoneId } = await setupVenue({ takeaway: true });
     const id = randomUUID();
     const req = {
       id,
       zoneId,
-      // A DIVERGENCE-PRONE basket at ONE rate (21%): café×1 (gross 1.50 → base 1.24) + agua×2 (gross
+      // A DIVERGENCE-PRONE basket at ONE rate (21%, taken away): café×1 (gross 1.50 → base 1.24) + agua×2 (gross
       // 4.00 → base 3.31). The FILED difference-method group is base 4.55, tax = 5.50 − 4.55 = 0.95;
       // a naive base×rate recompute gives round(4.55 × 21%) = 0.96 — a DIFFERENT cent.
       lines: [
@@ -1847,7 +1854,7 @@ describe("prepare & collect — zone payment timing", () => {
         quantity: "1",
         gross: "1.50",
         unitPriceGross: "1.50",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -1857,7 +1864,7 @@ describe("prepare & collect — zone payment timing", () => {
         quantity: "1",
         gross: "2.00",
         unitPriceGross: "2.00",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,
@@ -2150,7 +2157,7 @@ describe("prepare & collect — zone payment timing", () => {
         quantity: "1",
         gross: "1.50",
         unitPriceGross: "1.50",
-        vatRate: "21.00",
+        vatRate: "10.00",
         parentLineNo: null,
         optionSnapshots: [],
         ...EACH_UNIT_SNAPSHOT,

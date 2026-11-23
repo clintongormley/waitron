@@ -158,7 +158,6 @@ export async function listFreeItems(
       productId: workingOrderLines.productId,
       setMenuRole: workingOrderLines.setMenuRole,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
-      vatClass: workingOrderLines.vatClass,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
@@ -189,7 +188,6 @@ export async function listFreeItems(
       lines.map((line) => ({
         productId: line.productId,
         setMenuRole: line.setMenuRole,
-        vatClass: line.vatClass as VatClass,
         takeawayVatClass: line.takeawayVatClass as VatClass,
       })),
     );

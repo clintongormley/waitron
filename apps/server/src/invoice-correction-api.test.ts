@@ -141,7 +141,7 @@ async function sold(
 }
 
 const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
-const SPLIT = [{ rate: "21.00", base: "4.13", tax: "0.87" }];
+const SPLIT = [{ rate: "10.00", base: "4.55", tax: "0.45" }];
 const body = (patch: Record<string, unknown> = {}) => ({
   submissionId: randomUUID(),
   gross: "5.00",
@@ -300,7 +300,7 @@ describe("GET /api/transactions/:saleId/corrections/lines", () => {
         {
           id: expect.any(String),
           descriptions: expect.any(Object),
-          rate: "21.00",
+          rate: "10.00",
           gross: "10.00",
           left: "10.00",
         },
@@ -348,8 +348,8 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     ["reasonId", { reasonId: undefined }],
     ["lineIds", { lineIds: null }],
     ["note", { note: 3 }],
-    ["expectedSplit", { expectedSplit: [{ rate: "21.00", base: 4.13, tax: "0.87" }] }],
-    ["expectedSplit", { expectedSplit: [{ rate: "021.00", base: "4.13", tax: "0.87" }] }],
+    ["expectedSplit", { expectedSplit: [{ rate: "10.00", base: 4.55, tax: "0.45" }] }],
+    ["expectedSplit", { expectedSplit: [{ rate: "010.00", base: "4.55", tax: "0.45" }] }],
     ["override", { override: null }],
   ])("refuses a malformed %s, naming it and writing nothing", async (field, patch) => {
     const saleId = await sold(["10.00"]);
@@ -504,7 +504,7 @@ describe("POST /api/transactions/:saleId/corrections", () => {
       "invoice_correction.split_changed",
       async () => ({
         saleId: await sold(["10.00"]),
-        patch: { expectedSplit: [{ rate: "21.00", base: "4.12", tax: "0.88" }] },
+        patch: { expectedSplit: [{ rate: "10.00", base: "4.54", tax: "0.46" }] },
       }),
     ],
     [
@@ -918,7 +918,7 @@ const fileNow = (correctionId: string, payload: unknown, cookie = venue.cookie) 
   send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/file`, payload);
 const closeIt = (correctionId: string, payload: unknown, cookie = venue.cookie) =>
   send(venue.app, cookie, "POST", `/api/invoice-corrections/${correctionId}/close`, payload);
-const THREE_BACK = [{ rate: "21.00", base: "2.48", tax: "0.52" }];
+const THREE_BACK = [{ rate: "10.00", base: "2.73", tax: "0.27" }];
 const fileBody = (patch: Record<string, unknown> = {}) => ({
   expectedSplit: THREE_BACK,
   override: supervisor(),
@@ -987,7 +987,7 @@ describe("POST /api/invoice-corrections/:id/file and /close", () => {
   });
 
   it.each([
-    ["expectedSplit", { expectedSplit: [{ rate: "21.00", base: 2.48, tax: "0.52" }] }],
+    ["expectedSplit", { expectedSplit: [{ rate: "10.00", base: 2.73, tax: "0.27" }] }],
     ["expectedSplit", { expectedSplit: null }],
     ["override", { override: null }],
   ])("File now refuses a malformed %s, naming it and writing nothing", async (field, patch) => {

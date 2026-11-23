@@ -7,7 +7,8 @@ process.env.TZ = "Europe/Madrid";
 import { createHash } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { saleLines, sales, workingOrders, type Database } from "@waitron/db";
+import { products, saleLines, sales, workingOrders, type Database } from "@waitron/db";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
@@ -154,8 +155,8 @@ async function adjust(venue: AdjustmentVenue, billId: string, lineNo: number, as
   });
 }
 
-/** One bill: Burger comped, Bottle's whole list price taken off, Bread 50% then €1.25 off, Water
- * paid. */
+/** One takeaway bill: Burger comped, Bottle's whole list price taken off, Bread 50% then €1.25 off,
+ * Water paid. Bread is at 10% and the rest at 21%, so the bill files two rates. */
 async function fileFullComps(db: Database) {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
@@ -163,12 +164,20 @@ async function fileFullComps(db: Database) {
       vi.setSystemTime(new Date(ISSUED_AT.getTime() - minutesBefore * MINUTE));
     at(10);
     const venue = await provisionAdjustmentVenue(db, { clock: fixedClock });
-    const { billId } = await billWith(venue, [
-      { name: "Burger" },
-      { name: "Bottle" },
-      { name: "Bread" },
-      { name: "Water" },
-    ]);
+    await inTx(venue, async (tx) => {
+      for (const name of ["Burger", "Bottle", "Water"]) {
+        const [product] = await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(eq(products.name, name));
+        await setTakeawayVatRate(tx, product!.id, "21.00");
+      }
+    });
+    const { billId } = await billWith(
+      venue,
+      [{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }, { name: "Water" }],
+      { dining: "takeaway" },
+    );
     at(8);
     await adjust(venue, billId, 1, { action: "comp" });
     at(6);

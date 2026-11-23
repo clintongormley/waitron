@@ -24,7 +24,6 @@ import {
   refunds,
   billPayments,
   diningTables,
-  invoiceSeries,
   kitchenStations,
   partyTables,
   parties,
@@ -38,10 +37,11 @@ import {
   workingOrderLines,
   withTransaction,
 } from "@waitron/db";
-import { listOutstandingSales, recordCorrection } from "@waitron/core";
+import { listOutstandingSales } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import { decimal, saleId as brandSaleId } from "@waitron/shared";
+import { credit } from "./testing/order-venue.js";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -228,48 +228,9 @@ async function expectNothingWritten(
   expect((await partyState(partyId)).state).toBe("open");
 }
 
-/** Records a corrective of 2.00 base (-2.42) against the bill's invoice. */
+/** Records a corrective of 2.00 base (-2.20) against the bill's invoice. */
 function creditTwoEuros(billId: string): Promise<void> {
-  return credit(billId, "2.00", "-2.42");
-}
-
-/** Records a corrective of `base` at 21% VAT, totalling `total`, against the bill's invoice. */
-async function credit(billId: string, base: string, total: string): Promise<void> {
-  const [issued] = await salesOf(billId);
-  await inTx(venue, async (tx) => {
-    const [series] = await tx
-      .select({ id: invoiceSeries.id })
-      .from(invoiceSeries)
-      .where(
-        and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.purpose, "corrective")),
-      );
-    const session = await loginWithPin(tx, {
-      deviceId: venue.deviceId,
-      personId: venue.adminId,
-      pin: "1234",
-    });
-    await recordCorrection(tx, venue.backend, {
-      operationDescription: "Restaurante",
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      seriesId: brandSeriesId(series!.id),
-      correctsSaleId: brandSaleId(issued!.id),
-      total,
-      lines: [
-        {
-          lineNo: 1,
-          name: "Descuento",
-          descriptions: { [venue.cfg.locale]: "Descuento" },
-          quantity: "-1",
-          unitPrice: base,
-          vatRate: "21.00",
-          lineTotal: `-${base}`,
-        },
-      ],
-      clock: venue.clock,
-      authz: { sessionId: session.id },
-    });
-  });
+  return credit(venue, billId, "2.00", "-2.20");
 }
 
 function nextInvoiceNumbers(): { id: string; next: number }[] {
@@ -756,7 +717,7 @@ describe("bills already presented", () => {
     expect(fiscalRecordCount(venue, placedId)).toBe(1);
     expect(await salesOf(placedId)).toEqual([invoiced]);
     expect(await departuresOf(placedId)).toEqual([
-      expect.objectContaining({ saleId: invoiced!.id, amount: 1558 }),
+      expect.objectContaining({ saleId: invoiced!.id, amount: 1580 }),
     ]);
     expect(fiscalRecordCount(venue, party.tabId)).toBe(0);
     expect(await departuresOf(party.tabId)).toEqual([]);
@@ -992,7 +953,7 @@ describe("a bill that owes nothing", () => {
   it("settles a presented bill whose corrective brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
-    await credit(placedId, "14.88", "-18.00");
+    await credit(venue, placedId, "16.36", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
     const answer = await depart(party.partyId, {
@@ -1079,7 +1040,7 @@ describe("a bill that owes nothing", () => {
   it("closes a party whose only owing bill a corrective has brought to nothing, settling it and recording no departure", async () => {
     const party = await seatedWith(venue);
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
-    await credit(placedId, "14.88", "-18.00");
+    await credit(venue, placedId, "16.36", "-18.00");
     const [invoiced] = await salesOf(placedId);
 
     const answer = await depart(party.partyId, {
@@ -1139,7 +1100,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
   it("reads a presented bill whose corrective cancels its invoice as owing nothing, leaving its outstanding as it was", async () => {
     const party = await seatedWith(venue);
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
-    await credit(placedId, "14.88", "-18.00");
+    await credit(venue, placedId, "16.36", "-18.00");
 
     const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === placedId);
 
@@ -1157,10 +1118,10 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
       reason: REASON,
     });
 
-    expect(bill).toMatchObject({ outstanding: "18.00", amountDue: "15.58" });
+    expect(bill).toMatchObject({ outstanding: "18.00", amountDue: "15.80" });
     expect(answer.status).toBe(200);
     expect(answer.json.departures).toEqual([
-      expect.objectContaining({ workingOrderId: placedId, amount: "15.58" }),
+      expect.objectContaining({ workingOrderId: placedId, amount: "15.80" }),
     ]);
   });
 
@@ -2469,7 +2430,7 @@ describe("left unpaid with part paid", () => {
       venue.operatorId,
     );
     expect((await payInCash(party.tabId, "20.00")).status).toBe(200);
-    await credit(party.tabId, "10.00", "-12.10");
+    await credit(venue, party.tabId, "11.00", "-12.10");
 
     const answer = await departNow(party.partyId);
 

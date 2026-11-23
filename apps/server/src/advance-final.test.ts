@@ -21,7 +21,7 @@ import {
 import { createCategory, createProduct } from "@waitron/menu";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { listAdjustmentReasons } from "@waitron/adjustments";
-import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
+import { addDecimal, decimal, saleId as brandSaleId, type Dining } from "@waitron/shared";
 import {
   filedInvoicesOf,
   type FiledInvoice,
@@ -62,15 +62,21 @@ let venue: BillVenue;
 let kit: DeferredCloseKit;
 let offerFor: (name: string) => string;
 
-/** Dishes at 10% and 21%, each priced so one line is one of the plan's worked examples. */
-const DISHES: { name: string; price: string; vatClass: "reduced" | "general" }[] = [
-  { name: "Tasting menu", price: "120.00", vatClass: "reduced" },
-  { name: "Bread roll", price: "1.05", vatClass: "reduced" },
-  { name: "Salad bowl", price: "20.00", vatClass: "reduced" },
-  { name: "Seafood platter", price: "30.05", vatClass: "reduced" },
-  { name: "Wine case", price: "80.00", vatClass: "general" },
-  { name: "Cava bottle", price: "30.00", vatClass: "general" },
-  { name: "Reserva bottle", price: "50.00", vatClass: "general" },
+/** Dishes taken away at 10% and 21%, each priced so one line is one of the plan's worked
+ * examples. */
+const DISHES: {
+  name: string;
+  price: string;
+  vatClass: "reduced" | "general";
+  takeawayVatRate: string;
+}[] = [
+  { name: "Tasting menu", price: "120.00", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Bread roll", price: "1.05", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Salad bowl", price: "20.00", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Seafood platter", price: "30.05", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Wine case", price: "80.00", vatClass: "general", takeawayVatRate: "21.00" },
+  { name: "Cava bottle", price: "30.00", vatClass: "general", takeawayVatRate: "21.00" },
+  { name: "Reserva bottle", price: "50.00", vatClass: "general", takeawayVatRate: "21.00" },
 ];
 
 useVenueDb({
@@ -94,6 +100,7 @@ useVenueDb({
           pricingUnit: "each",
           unitPrice: dish.price,
           vatClass: dish.vatClass,
+          takeawayVatRate: dish.takeawayVatRate,
         });
         ids.set(dish.name, product.id);
       }
@@ -105,7 +112,19 @@ useVenueDb({
 });
 
 /** A party at a fresh table whose bill carries one line per named dish, in order, its dishes sent. */
-async function seated(...names: string[]): Promise<{ billId: string; partyId: string }> {
+function seated(...names: string[]): Promise<{ billId: string; partyId: string }> {
+  return seatedFor("eat_in", names);
+}
+
+/** {@link seated}, the bill taken away: each dish files at its product's takeaway rate. */
+function seatedTakeaway(...names: string[]): Promise<{ billId: string; partyId: string }> {
+  return seatedFor("takeaway", names);
+}
+
+async function seatedFor(
+  dining: Dining,
+  names: string[],
+): Promise<{ billId: string; partyId: string }> {
   return withTransaction(venue.db, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `A-${randomUUID().slice(0, 8)}`,
@@ -115,6 +134,9 @@ async function seated(...names: string[]): Promise<{ billId: string; partyId: st
       tableId: table.id,
       lines: names.map((name) => ({ menuItemId: offerFor(name), quantity: "1" })),
     });
+    if (dining !== "eat_in") {
+      await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, tabId));
+    }
     await fireAll(tx, venue.cfg, tabId);
     return { billId: tabId, partyId };
   });
@@ -627,7 +649,7 @@ describe("the rest's invoice takes the advances off", () => {
   });
 
   it("advances equal to the meal issue and print a €0.00 rest's invoice: example 2 with €50 of the wine removed", async () => {
-    const bill = await seated("Salad bowl", "Cava bottle", "Reserva bottle");
+    const bill = await seatedTakeaway("Salad bowl", "Cava bottle", "Reserva bottle");
     await advance(bill.billId, "50.00");
 
     const removed = await removeDish(bill, "Reserva bottle");
@@ -646,7 +668,7 @@ describe("the rest's invoice takes the advances off", () => {
   });
 
   it("example 2 through the route: a €50 advance at 10% on a bill mostly at 21% leaves 10% negative", async () => {
-    const bill = await seated("Salad bowl", "Wine case");
+    const bill = await seatedTakeaway("Salad bowl", "Wine case");
     const advanceId = await advance(bill.billId, "50.00");
 
     const paid = await cash(bill.billId, "50.00");

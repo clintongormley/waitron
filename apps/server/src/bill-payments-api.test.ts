@@ -3396,19 +3396,19 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         .where(eq(saleLines.saleId, sale!.id)),
     );
     expect(filedLines.map((line) => basisPointsToDecimal(line.vatRate))).toEqual([
-      "21.00",
-      "21.00",
+      "10.00",
+      "10.00",
     ]);
     expect(await statusOf(billId)).toBe("settled");
   });
 
-  it("files each line at the rate of the class recorded on it, not the class its product has when the last payment lands", async () => {
+  it("eaten in, files each line at the dine-in rate, whatever class it recorded when added or its product has when the last payment lands", async () => {
     const billId = await tabWith("Salad");
     expect((await contribute(billId, "5.00")).status).toBe(200);
     await inTx((tx) =>
       tx
         .update(products)
-        .set({ vatClass: "reduced" })
+        .set({ vatClass: "super_reduced" })
         .where(eq(products.id, venue.productIds.get("Salad")!)),
     );
 
@@ -3421,7 +3421,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           .from(saleLines)
           .where(eq(saleLines.saleId, sale!.id)),
       );
-      expect(basisPointsToDecimal(line!.vatRate)).toBe("21.00");
+      expect(basisPointsToDecimal(line!.vatRate)).toBe("10.00");
       expect(line!.classification).not.toBeNull();
     } finally {
       await inTx((tx) =>
@@ -5229,7 +5229,7 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(printed[start]).toBe("TOTAL 40,00 €");
     expect(withoutRules(printed.slice(start + 1))).toEqual([
       "Tipo Base IVA Total",
-      "21% 33,05 6,95 40,00",
+      "10% 36,36 3,64 40,00",
       "Efectivo 50,00 €",
       "Devolución -10,00 €",
     ]);

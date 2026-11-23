@@ -1197,10 +1197,6 @@ const storedLineColumns = {
   listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   priceQuantity: workingOrderLines.priceQuantity,
-  // The label for the order's way of selling, so both readers join the order.
-  vatClass: sql<GetColumnData<typeof workingOrderLines.vatClass>>`case
-    when ${workingOrders.dining} = ${"takeaway" satisfies Dining} then ${workingOrderLines.takeawayVatClass}
-    else ${workingOrderLines.vatClass} end`,
   name: workingOrderLines.name,
   descriptions: workingOrderLines.descriptions,
   optionSnapshots: workingOrderLines.optionSnapshots,
@@ -1236,7 +1232,6 @@ export async function readLockedLines(
   const rows = await tx
     .select({ ...storedLineColumns, ...portionColumns })
     .from(workingOrderLines)
-    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
   return groupedByPortion(rows, toStoredLines(rows));
@@ -1259,7 +1254,6 @@ async function readLockedLinesForIssuance(
       ...storedLineColumns,
       ...portionColumns,
       dining: workingOrders.dining,
-      eatInVatClass: workingOrderLines.vatClass,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
       setMenuRole: workingOrderLines.setMenuRole,
       sentAt: workingOrderLines.sentAt,
@@ -1280,12 +1274,11 @@ async function readLockedLinesForIssuance(
     rows.map((row) => ({
       productId: row.productId,
       setMenuRole: row.setMenuRole,
-      vatClass: row.eatInVatClass as VatClass,
       takeawayVatClass: row.takeawayVatClass as VatClass,
     })),
   );
   // A grouped row carries the id of the first working line it stands for; the lines it stands for
-  // share the product and the label for the order's way of selling, all their rates depend on.
+  // share everything their rates depend on.
   const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
   return {
     lines: stored.map((line, i) => ({
@@ -1333,7 +1326,6 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    vatClass: line.vatClass as VatClass,
     identity: {
       id: line.id,
       productId: line.productId,
@@ -1361,12 +1353,10 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   }));
 }
 
-/** A stored working-order line: its identity, its locked composition, and its VAT label for its
- * order's way of selling, which grouping bound portions compares. */
+/** A stored working-order line: its identity and its locked composition. */
 export interface StoredOrderLine {
   identity: OrderLineIdentity;
   locked: LockedLine;
-  vatClass: VatClass;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */

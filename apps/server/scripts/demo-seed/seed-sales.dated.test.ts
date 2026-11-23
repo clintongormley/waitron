@@ -11,35 +11,41 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { planVenue } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { localCalendarDate } from "@waitron/menu";
+import { timeZoneOffsetMinutes } from "@waitron/shared";
 import { ALL_MODULES } from "../../src/modules.js";
 import { seedSales } from "./seed-sales.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const offsetAt = (instant: Date) => -instant.getTimezoneOffset();
+const VENUE_ZONE = "Europe/Madrid";
 
-// A reduced rate of 4% from yesterday's local date, the shipped table otherwise.
+// The area's dine-in rate: 10%, and 4% from yesterday's date in the venue's time zone, which is
+// the day a sale files by, whatever the host's zone.
 const CHANGE = vi.hoisted(() => {
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const local = new Date(yesterday.getTime() - yesterday.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const part = (type: string) => parts.find((one) => one.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 });
-vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@waitron/shared/src/menu-document/vat-rates.js")>();
-  const table = {
-    ...original.VAT_RATE_TABLE,
-    reduced: [
-      { from: null, rate: "10.00" },
-      { from: CHANGE, rate: "4.00" },
-    ],
-  };
+vi.mock("@waitron/country-packs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/country-packs")>();
   return {
-    ...original,
-    VAT_RATE_TABLE: table,
-    vatRateOn: (...[vatClass, date, given]: Parameters<typeof original.vatRateOn>) =>
-      original.vatRateOn(vatClass, date, given ?? table),
-    vatRatesOn: (...[date, given]: Parameters<typeof original.vatRatesOn>) =>
-      original.vatRatesOn(date, given ?? table),
+    ...actual,
+    vatRatesFor: (...args: Parameters<typeof actual.vatRatesFor>) => {
+      const rates = actual.vatRatesFor(...args);
+      return (
+        rates && {
+          ...rates,
+          dineIn: [
+            { from: null, rate: "10.00" },
+            { from: CHANGE, rate: "4.00" },
+          ],
+        }
+      );
+    },
   };
 });
 
@@ -64,7 +70,7 @@ describe("seedSales across a rate change", () => {
           postalCode: "28013",
           city: "Madrid",
           province: "Madrid",
-          timeZone: "Europe/Madrid",
+          timeZone: VENUE_ZONE,
           dayCutover: "05:00",
           seriesCode: "A",
           correctiveSeriesCode: "R",
@@ -105,7 +111,10 @@ describe("seedSales across a rate change", () => {
       .innerJoin(sales, eq(sales.id, saleLines.saleId));
     const byDay = lines.map(({ issuedAt, vatRate }) => {
       const instant = new Date(issuedAt);
-      return { on: localCalendarDate(instant, offsetAt(instant)), vatRate };
+      return {
+        on: localCalendarDate(instant, timeZoneOffsetMinutes(VENUE_ZONE, instant)),
+        vatRate,
+      };
     });
     const before = byDay.filter(({ on }) => on < CHANGE);
     const from = byDay.filter(({ on }) => on >= CHANGE);

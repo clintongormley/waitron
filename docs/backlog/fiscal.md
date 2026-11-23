@@ -80,14 +80,13 @@ the adviser is still to confirm the details:
 Built: on a part payment that leaves something owed on a bill with no invoice yet, set for a
 ticket, the till asks "Does this payer want their own receipt for this amount?"
 (`#ownReceiptAsked` in `apps/till/src/widgets/bill-pay-dialog.ts`). **Yes** issues the payer a ticket of one line,
-«Pago a cuenta — consumo en mesa 7», at Waitron's shipped reduced rate, 10% today
-(`issueAdvance` in `apps/server/src/bill-advances.ts`, `ADVANCE_VAT_CLASS` in
-`packages/shared/src/menu-document/vat-rates.ts:9`). The bill's own invoice, however it is issued,
+«Pago a cuenta — consumo en mesa 7», at the dine-in rate of the day it was paid
+(`issueAdvance` in `apps/server/src/bill-advances.ts`). The bill's own invoice, however it is issued,
 takes each advance off (`apps/server/src/advance-deduction.ts`). Its printed ticket lists the
 dishes, then «Pago a cuenta n.º A/12, 19/11/2026 −30,00» for each advance, then the total less the
 advances, with no base or VAT printed under the advance line (`apps/server/src/receipt-advances.test.ts`,
 "no base or VAT, and no price each, is printed under an advance line"), though the ticket's VAT
-table takes the advance off its rate's row: with dishes of €20 at 10% and €80 at 21% and a €50
+table takes the advance off its rate's row: with dishes taken away of €20 at 10% and €80 at 21% and a €50
 advance, that row reads `10% −27,27 −2,73` (the same file, "example 2: … the VAT table's 10% row
 is negative"); whether that is enough is
 asked in question 12 of the 19 November sheet (the advances plan's Q4). Its record takes off the advance's own filed base and VAT
@@ -908,12 +907,12 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
 requests; the first, storing each product's takeaway rate, landed as #4047; the second, which files a
 takeaway line at its product's own dated takeaway rate and lets a manager pick that rate as a percentage,
-has landed too; PR 3 (the one eat-in rate) is next, the owner's D10, D11, D17 and D18
-answered "yes" on 2026-11-22; pieces B and C have no plan yet. From M7v, owner rulings
+has landed too; the third files everything eaten here at the one dine-in rate (the owner's
+D10, D11, D17 and D18, answered "yes" on 2026-11-22); PR 3b, its screens and guides, is next;
+pieces B and C have no plan yet. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
-reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
-copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it.
+reads its one clock after the order's lines.
 
 ## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
 

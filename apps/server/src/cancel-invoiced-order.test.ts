@@ -22,8 +22,15 @@ import {
   unpaidDepartures,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
-import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/menu";
+import {
+  createExtraList,
+  createProduct,
+  setTakeawayVatRate,
+  units,
+  writeProductModifiers,
+} from "@waitron/menu";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { createPinThrottle, hashPin, loginWithPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
@@ -98,15 +105,15 @@ useVenueDb({
       const [category] = db.all<{ id: string }>(
         sql`select id from categories where name = 'Platos'`,
       );
-      // 0.55 at 21% is invoiced 0.45 + 0.10 by the menu's gross arithmetic and 2.10 is
+      // Taken away at 21%, 0.55 is invoiced 0.45 + 0.10 by the menu's gross arithmetic and 2.10 is
       // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Café with two 0.50 extras at
       // 10% matches both ways.
       const created = new Map<string, string>();
-      for (const [name, price, vatClass] of [
-        ["Mosto", "0.55", "general"],
-        ["Zumo", "2.10", "general"],
-        ["Café", "3.00", "reduced"],
-        ["Leche", "1.00", "reduced"],
+      for (const [name, price, vatClass, takeawayVatRate] of [
+        ["Mosto", "0.55", "general", "21.00"],
+        ["Zumo", "2.10", "general", "21.00"],
+        ["Café", "3.00", "reduced", "10.00"],
+        ["Leche", "1.00", "reduced", "10.00"],
       ] as const) {
         const product = await createProduct(tx, {
           categoryId: category!.id,
@@ -116,6 +123,7 @@ useVenueDb({
           pricingUnit: "each",
           unitPrice: price,
           vatClass,
+          takeawayVatRate,
         });
         created.set(name, product.id);
       }
@@ -141,6 +149,7 @@ useVenueDb({
         unitId: kg!.id,
         unitPrice: "0.27",
         vatClass: "general",
+        takeawayVatRate: "21.00",
       });
       const portions = await createExtraList(
         tx,
@@ -165,6 +174,8 @@ useVenueDb({
       );
       portionListId = portions.id;
       await writeProductModifiers(tx, created.get("Café")!, [{ kind: "extras", id: extras.id }]);
+      const [beer] = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`);
+      await setTakeawayVatRate(tx, beer!.id, "21.00");
       await writeProductModifiers(tx, created.get("Mosto")!, [{ kind: "extras", id: portions.id }]);
       return new Map(
         db
@@ -202,6 +213,7 @@ async function placed(
   lines: { name: string; quantity: string; extras?: unknown[] }[],
   zoneId = ticketThenPayZone,
   issued = true,
+  dining: "eat_in" | "takeaway" = "eat_in",
 ): Promise<string> {
   const id = randomUUID();
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
@@ -211,6 +223,12 @@ async function placed(
     lines: lines.map(({ name, ...line }) => ({ menuItemId: offerOf(name), ...line })),
   });
   expect(parked.status).toBe(200);
+  // The counter department sells eaten in; the way is switched before the kitchen has the order.
+  if (dining === "takeaway") {
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, id)),
+    );
+  }
   if (issued) {
     await issueOrderInvoice(
       {
@@ -534,16 +552,21 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("credits a two-rate invoice line by line, an extras pick under its dish, each rate the exact negative of the invoice's", async () => {
-    const id = await placed([
-      { name: "Caña", quantity: "2" },
-      {
-        name: "Café",
-        quantity: "1",
-        extras: [
-          { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
-        ],
-      },
-    ]);
+    const id = await placed(
+      [
+        { name: "Caña", quantity: "2" },
+        {
+          name: "Café",
+          quantity: "1",
+          extras: [
+            { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
+          ],
+        },
+      ],
+      ticketThenPayZone,
+      true,
+      "takeaway",
+    );
     const original = await invoiceOf(id);
     expect(original.vatBreakdown).toHaveLength(2);
 
@@ -575,15 +598,20 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("credits a three-pick physical extra with its frozen price basis and exact line total", async () => {
-    const id = await placed([
-      {
-        name: "Mosto",
-        quantity: "1",
-        extras: [
-          { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
-        ],
-      },
-    ]);
+    const id = await placed(
+      [
+        {
+          name: "Mosto",
+          quantity: "1",
+          extras: [
+            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+          ],
+        },
+      ],
+      ticketThenPayZone,
+      true,
+      "takeaway",
+    );
     const original = await invoiceOf(id);
     const invoiced = await linesOf(original.id);
     expect(invoiced[1]).toMatchObject({
@@ -864,7 +892,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   ])(
     "credits %s for %s with the invoice's own VAT split negated, where its lines would tax another",
     async (name, total, invoiced) => {
-      const id = await placed([{ name, quantity: "1" }]);
+      const id = await placed([{ name, quantity: "1" }], ticketThenPayZone, true, "takeaway");
       const original = await invoiceOf(id);
       expect(original.vatBreakdown).toEqual([invoiced]);
 

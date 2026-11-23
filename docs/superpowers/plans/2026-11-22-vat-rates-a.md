@@ -292,9 +292,15 @@ Every place piece A touches. Every task's requirements include this list.
 - **"Sale-path read changed:"** (CLAUDE.md §4, the A1308 rule) — PR 2's description carries
   "Sale-path read changed: issuing a takeaway order, and pricing a new takeaway basket, read the
   products' takeaway rates in one query (`readTakeawayVatSchedules`)." PR 3's carries "Sale-path
-  read changed: issuing an order, pricing a new basket and issuing an advance read the venue's area
-  (taxpayer row and venue settings) once for the dine-in list." Rates are read **only** by `readLockedLinesForIssuance` and `priceOrderLines`;
-  `readLockedLines` and every gross-only reader read none.
+  read changed: the dine-in rate is read from the venue's area, the taxpayer row and the venue
+  settings (`readVenueVatRates`, `packages/menu/src/takeaway-vat-rates.ts:28`), once per call of
+  `readLineVatRates` that has eaten-in lines (`apps/server/src/line-vat-rates.ts:24`) and once per
+  advance invoice (`issueAdvance`, `apps/server/src/bill-advances.ts:132`). `readLineVatRates` is
+  called when an order is issued (`readLockedLinesForIssuance`, `apps/server/src/working-order.ts:1271`,
+  through `priceStoredOrderForIssuance` at :1455) and by the corrections report's free-items listing
+  (`listFreeItems`, `apps/server/src/free-items.ts:185`, once per way of selling)." Pricing a new
+  basket (`priceOrderLines`, `working-order.ts:653`) reads no rate, since PR 2 its gross lines carry
+  `vatRates: []` (:952, :1014); `readLockedLines` (:1228) reads none either, and no longer joins the order.
 - **Compiling:** each task says which packages do not typecheck until which later task in the same
   PR. No PR ends with a package that does not typecheck: each PR's last task runs `pnpm -r typecheck`.
   Suites failing at runtime inside a PR are named in the task that starts them (only PR 3's D10
@@ -331,7 +337,7 @@ Every place piece A touches. Every task's requirements include this list.
   `pickableVatRates` `["0.00", "4.00", "10.00", "21.00"]`, `"10.00"`; `GB-vat`: D6 (`"0.00"` in every
   list). `CountryPack.defaultProductVatClass` (`country.ts:155`) and Spain's value
   go in PR L.
-- **Shared names:** new `rateOn` (PR 1). Left in place at piece A's end, deleted in PR L (piece B): `vatRatesOn`, `ADVANCE_VAT_CLASS`,
+- **Shared names:** new `rateOn` (PR 1). Left in place at piece A's end, deleted in PR L (piece B): `vatRatesOn`,
   `appliedVatClass`; the label fields of `MenuOffer`, `MenuOfferVariant`, `AvailableProduct`,
   `OfferedExtraItem`, `Product`, `ListedVariant.effective`, `ProductEditorValue`/`InheritedValues`
   (`product-types.ts:85-86, 120-122, 173-176, 214-217`), and `SetMenuCopy.terms`
@@ -1005,7 +1011,7 @@ commit.
 | `write-path.e2e.test.ts:697-787` (D11(a)) | eat-in variant with its own label at 21% | deleted; Task 3.1's eat-in variant case at 10%; Task 2.4's takeaway twin stays | "Eaten here: one rate for everything" |
 | `spanish-practice-sales.golden.json` (D17) | eat-in at 21/10/4/0 | re-recorded, all 10% | "Eaten here: the dine-in rate" |
 | the D10 files (3.4–3.14) | eat-in `general` at 21% | 10%, or takeaway at the two rates | same |
-| LATER-SALE-DATE, `vat-rate-at-issue`, `seed-sales.dated` | mocked label table | mocked pack list, same figures | "the day the meal ends" |
+| LATER-SALE-DATE, `vat-rate-at-issue`, `seed-sales.dated` | mocked label table | mocked pack list; `vat-rate-at-issue`'s eaten-in wine 21.00 → 4.00 and its takeaway juice now 21% then 10% | "the day the meal ends" |
 | `advance-*` | `reduced` (10%) | dine-in (10%), same figures | "Advances: the dine-in rate on the day paid" |
 
 ---
@@ -1089,7 +1095,7 @@ rate, for piece B to remove:
 - `PriceableProduct.vatClass` (the label fallback beside `vatRates`), `LockedLine`-era label inputs
   in `line-vat-rates.ts`, the settings key `defaultProductVatClass`, `CountryPack.defaultProductVatClass`;
 - in `packages/shared`: `VatClass`, `VAT_CLASSES`, `VAT_RATE_TABLE`, `vatRateOn`, `vatRatesOn`,
-  `ADVANCE_VAT_CLASS`, `vat_rate.table_invalid`;
+  `vat_rate.table_invalid`;
 - set menus' own two labels, form fields and copy terms (piece B's own subject);
 - about 1,400 single-line label properties in test fixtures (measured below).
 
@@ -1107,8 +1113,8 @@ read, so this PR needs no new read of the recorded copy.
 single-line deletions plus hand edits); generated baseline and snapshot about −100.
 
 **When it lands:** nothing a person sees changes. The product and order-line label columns, their
-checks and trigger lines, the type fields, the settings key, the pack field, `vatRatesOn`,
-`ADVANCE_VAT_CLASS` and every fixture's mention go (`appliedVatClass` went in Task 2.3); set menus
+checks and trigger lines, the type fields, the settings key, the pack field, `vatRatesOn`
+and every fixture's mention go (`appliedVatClass` went in Task 2.3, `ADVANCE_VAT_CLASS` in PR 3); set menus
 keep theirs (D2). First line: "Reset test venues: remove VAT labels from products, order lines and
 menu copies (VAT rates, PR L)".
 
@@ -1193,7 +1199,7 @@ commit with the deleted assertions listed.
 ### Task L.19: Drop
 
 **Files:** `menus.ts`, `orders.ts` (drop the five columns and their checks), `core.sql` (the trigger
-lines), baseline rebuild; `vat-rates.ts` (delete `vatRatesOn`, `ADVANCE_VAT_CLASS`; keep `VatClass`,
+lines), baseline rebuild; `vat-rates.ts` (delete `vatRatesOn`; keep `VatClass`,
 `VAT_CLASSES`, `VAT_RATE_TABLE`, `vatRateOn`, `DatedRate`, `rateOn`, the date helpers — D2),
 `index.ts`; delete the optional label fields from the types (a missed fixture fails typecheck and
 is fixed here); `scripts/schema-constraints.test.ts` (D11(c)); `docs/developers/products.md` and
@@ -1211,8 +1217,10 @@ their columns (D11(c)); `country-es/src/demo/data.test.ts:341-352` deleted (true
 ## What this changes elsewhere
 
 - **A445** (`docs/backlog/fiscal.md`; adviser answer 1.10, `docs/compliance/2026-11-15-adviser-answers.md:255`).
-  After PR 3 an eaten-in bill has one rate, advances included, so a free item on it cannot shift VAT
-  between rates (at one rate both methods give the same VAT, as the adviser sheet says). A445 still
+  After PR 3 an eaten-in bill's own lines share one rate, so a free item among them cannot shift VAT
+  between rates (at one rate both methods give the same VAT, as the adviser sheet says). An advance
+  keeps the rate of the day it was paid, so a bill whose advance was paid before a dine-in rate
+  change carries two rates; whether A445 needs anything for that case is not yet checked. A445 still
   matters for takeaway bills mixing rates (the deli's 4%, 10%, 21%), and would matter for eaten-in
   bills again only if the adviser rules that drinks served without food take 21%. Task 3b.4 adds
   that sentence to A445.
