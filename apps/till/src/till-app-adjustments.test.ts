@@ -3890,6 +3890,42 @@ describe("till-app: service cancellation consent", () => {
       });
     });
 
+    it("fills in a grouped row's refund as the server records it, its last portion first", async () => {
+      // Three salads filed as one €28.13 row are worth 9.38, 9.38 and 9.37 each; the row gives up
+      // its last first, so cancelling one refunds €9.37, not a third of €28.13.
+      const lineIds = ["line-1", "line-2", "line-3"];
+      const base = { ...consent("settled"), saleId: "own-sale" };
+      const read: CancellationRead = {
+        ...base,
+        refundValue: { quantity: "3.000", gross: "28.13" },
+        rowRefunds: ["9.37", "9.38", "9.38"],
+        context: {
+          ...base.context,
+          components: lineIds.map((lineId, i) => ({
+            ...base.context.components[0]!,
+            id: `kitchen-${i + 1}`,
+            lineId,
+          })),
+        },
+      };
+      const { el } = await mountApp(
+        linkedMethods({ getCancellation: vi.fn().mockResolvedValue(read) }),
+      );
+      await openTable4(el);
+      emit(tableOrder(el), "cancel-item", { lineId: "line-1", lineIds });
+      await flush(el);
+      emit(cancelDialog(el)!, "cancel-item-choice", {
+        lineId: "line-1",
+        quantity: "1",
+        outcome: "refund",
+        consent: read,
+        reasonId: "r-unserved",
+      });
+      await flush(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect(refundForm(el)!.target).toBe("9.37");
+    });
+
     it("keeps cancellation ids when the amount is raised above the filled total", async () => {
       const { el } = await mountApp(linkedMethods());
       await openTable4(el);

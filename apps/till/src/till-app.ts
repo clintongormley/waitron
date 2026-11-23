@@ -219,8 +219,7 @@ import {
   type OverrideConfirmDetail,
 } from "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
-import "./widgets/cancel-item-dialog.js";
-import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
+import { cancelRefundOf, type CancelItemChoice } from "./widgets/cancel-item-dialog.js";
 import "./widgets/finish-table-dialog.js";
 import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
 import type {
@@ -17396,20 +17395,22 @@ export class TillApp extends LitElement {
     choice: CancelItemChoice,
     links: RefundLink[],
   ): RefundFill | undefined {
-    const value = choice.consent.refundValue;
     const ids = open.lineIds ?? [open.lineId];
     const dishes = choice.consent.context.components.filter((row) => ids.includes(row.lineId));
-    if (value === undefined || dishes.length === 0) return undefined;
-    const cancelled = sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity)));
+    if (dishes.length === 0) return undefined;
+    const own = cancelRefundOf(
+      choice.consent,
+      open.lineIds !== undefined,
+      sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity))),
+      choice.quantity,
+    );
+    if (own === undefined) return undefined;
     const free = (choice.consent.withFree ?? []).filter((item) =>
       choice.withFree?.includes(item.lineId),
     );
     return {
       target: toScale(
-        sumDecimals([
-          cancelRefundShare(value, cancelled, choice.quantity),
-          ...free.map((item) => decimal(item.refundAmount)),
-        ]),
+        sumDecimals([own, ...free.map((item) => decimal(item.refundAmount))]),
         MONEY_SCALE,
       ),
       startReasonId: choice.reasonId ?? "",

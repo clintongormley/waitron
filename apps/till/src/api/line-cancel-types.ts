@@ -24,6 +24,9 @@ export interface CancellationRead {
   billId: string;
   saleId?: string;
   refundValue?: { quantity: string; gross: string };
+  /** On a row's read of a settled bill: what each portion the row can still give up refunds, in the
+   * order it gives them up. A cancel of `k` portions refunds the first `k`. */
+  rowRefunds?: string[];
   /** The free items that come back with this dish when every portion it has left is cancelled with
    * Refund: it is the bill's last paid dish. A `served` one cannot come back, so that cancel cannot
    * give money back. */

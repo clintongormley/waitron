@@ -15,6 +15,7 @@ import {
 import {
   AppError,
   cancelRefundShare,
+  rowCancelRefund,
   centsToDecimal,
   decimal,
   type Decimal,
@@ -36,7 +37,7 @@ import {
   isLastPaidDish,
   readBillFiling,
   refundValueIn,
-  rowRefundValueIn,
+  rowRefundsIn,
   shareHoldersIn,
   type BillFiling,
   type ShareHolder,
@@ -481,15 +482,12 @@ export async function cancelItem(
                 ask.quantity,
               );
           } else {
-            const value = rowRefundValueIn(filing, dishIds);
-            if (value !== undefined)
-              refundValue = cancelRefundShare(
-                value,
-                thousandthsToDecimal(
-                  dishes.reduce((total, dish) => total + (priorOf(dish.id)?.quantity ?? 0), 0),
-                ),
-                ask.quantity,
-              );
+            const refunds = rowRefundsIn(
+              filing,
+              dishIds,
+              new Map(priors.map((prior) => [prior.lineId, prior.quantity])),
+            );
+            if (refunds !== undefined) refundValue = rowCancelRefund(refunds, ask.quantity) ?? null;
           }
         }
         const cancelRecord = (cancelled: {

@@ -20,6 +20,7 @@ import { issueIfFullyPaid } from "./bill-payments.js";
 import { asObject, submissionIdOf } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { readLineCancellations } from "./line-service-state.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
@@ -31,6 +32,7 @@ import {
   readBillFiling,
   refundValueIn,
   rowRefundValueIn,
+  rowRefundsIn,
   shareHoldersIn,
 } from "./cancellation-refund-value.js";
 import {
@@ -194,6 +196,10 @@ export function mountLineCancelApi(
             : lineIds === undefined
               ? refundValueIn(filing, lineId)
               : rowRefundValueIn(filing, lineIds);
+        const rowRefunds =
+          filing === undefined || lineIds === undefined
+            ? undefined
+            : rowRefundsIn(filing, lineIds, await readLineCancellations(tx, lineIds));
         const holders =
           filing === undefined ? { free: [], paid: [] } : await shareHoldersIn(tx, filing);
         const subject = lineIds ?? [lineId];
@@ -217,6 +223,7 @@ export function mountLineCancelApi(
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
           ...(refundValue === undefined ? {} : { refundValue }),
+          ...(rowRefunds === undefined ? {} : { rowRefunds }),
           ...(givenFree ? { givenFree: true, comesBackWith: [...back.keys()] } : {}),
           ...(withFree === undefined || withFree.length === 0 ? {} : { withFree }),
         };

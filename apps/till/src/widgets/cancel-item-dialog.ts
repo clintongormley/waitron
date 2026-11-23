@@ -6,8 +6,10 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  rowCancelRefund,
   subtractDecimal,
   sumDecimals,
+  type Decimal,
 } from "@waitron/shared";
 import {
   baseStyles,
@@ -52,6 +54,21 @@ export interface CancelItemChoice {
   note?: string;
 }
 
+/**
+ * What a cancel of `quantity` refunds before any free item, as the server records it: for a row,
+ * its first `quantity` portion refunds; for one line, its share of the line's filed value after
+ * `cancelled`. None when the read gives no value.
+ */
+export function cancelRefundOf(
+  read: CancellationRead,
+  row: boolean,
+  cancelled: Decimal,
+  quantity: string,
+): Decimal | undefined {
+  if (row) return read.rowRefunds && rowCancelRefund(read.rowRefunds, quantity);
+  return read.refundValue && cancelRefundShare(read.refundValue, cancelled, quantity);
+}
+
 function quantityValue(value: string): string {
   return /^\d+$/.test(value) ? value.replace(/^0+(?=\d)/, "") : value;
 }
@@ -62,6 +79,7 @@ function consentKey(read: CancellationRead | null): string {
     read.billId,
     read.saleId,
     read.refundValue,
+    read.rowRefunds,
     read.withFree,
     read.givenFree,
     read.revision,
@@ -215,6 +233,7 @@ export class TillCancelItemDialog extends LitElement {
       this.refundAvailable &&
       this.consent?.givenFree !== true &&
       value !== undefined &&
+      (this.lineIds === undefined || this.consent?.rowRefunds !== undefined) &&
       compareDecimal(decimal(value.quantity), decimal("0")) > 0 &&
       compareDecimal(
         sumDecimals([
@@ -232,10 +251,14 @@ export class TillCancelItemDialog extends LitElement {
     return options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null;
   }
   #refundAmount(): string {
-    const value = this.consent?.refundValue;
-    if (value === undefined || !this.#quantityValid()) return "";
-    const cancelled = sumDecimals(this.#dishes().map((row) => decimal(row.cancelledQuantity)));
-    const own = cancelRefundShare(value, cancelled, quantityValue(this.draft.quantity));
+    if (this.consent === null || !this.#quantityValid()) return "";
+    const own = cancelRefundOf(
+      this.consent,
+      this.lineIds !== undefined,
+      sumDecimals(this.#dishes().map((row) => decimal(row.cancelledQuantity))),
+      quantityValue(this.draft.quantity),
+    );
+    if (own === undefined) return "";
     return formatMoney(
       sumDecimals([own, ...this.#freeBack().map((item) => decimal(item.refundAmount))]),
       currentLocale(),

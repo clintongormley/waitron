@@ -6,6 +6,7 @@ import {
   lineServiceCancellations,
   parties,
   printJobs,
+  saleLines,
   sales,
   tenders,
   ticketItems,
@@ -14,6 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { kitchenNotices } from "@waitron/venue-service";
+import { cancelRefundShare, decimalToCents, rowCancelRefund } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -198,6 +200,45 @@ async function written(t: Ticket) {
       ),
     jobs: (await venue.db.select({ id: printJobs.id }).from(printJobs)).length,
   };
+}
+
+/** The cents the bill's sale filed. */
+async function filedCents(t: Ticket): Promise<number> {
+  const rows = await venue.db
+    .select({ gross: saleLines.lineGross })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, t.saleId));
+  return rows.reduce((total, row) => total + row.gross!, 0);
+}
+
+const refundedCancels = new Set<string>();
+
+/** Refund, on the bill's payment, every cancel with Refund ticked not yet refunded, for exactly what
+ * the cancels recorded. */
+async function refundNewCancels(t: Ticket) {
+  const fresh = (
+    await venue.db
+      .select({ id: adjustments.id, action: adjustments.action, cents: adjustments.refundValue })
+      .from(adjustments)
+      .where(eq(adjustments.workingOrderId, t.billId))
+  ).filter((row) => row.action === "cancel" && !refundedCancels.has(row.id));
+  const cents = fresh.reduce((total, row) => total + row.cents!, 0);
+  const refund = await send(
+    venue.app,
+    venue.cookie.manager,
+    "POST",
+    `/api/transactions/${t.saleId}/refunds`,
+    {
+      submissionId: randomUUID(),
+      tenderId: t.tenderId,
+      appliedAmount: (cents / 100).toFixed(2),
+      tipAmount: "0.00",
+      reason: "Brought back",
+      cancellationIds: fresh.map((row) => row.id),
+    },
+  );
+  expect(refund.status, JSON.stringify(refund.json)).toBe(200);
+  for (const row of fresh) refundedCancels.add(row.id);
 }
 
 async function refused(
@@ -447,6 +488,7 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     ]);
     expect(await consent(t, salads[0]!, row)).toMatchObject({
       refundValue: { quantity: "3.000", gross: "28.13" },
+      rowRefunds: ["9.37", "9.38", "9.38"],
       withFree: [{ lineId: water.id, refundAmount: "1.87" }],
     });
 
@@ -460,7 +502,8 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     expect(last.status, JSON.stringify(last.json)).toBe(200);
 
     const cancels = (await written(t)).cancels;
-    expect(cancels.map((row) => row.refundValue)).toEqual([938, 937, 938, 187]);
+    // The row gives up its last salad first, and each salad refunds its own value.
+    expect(cancels.map((row) => row.refundValue)).toEqual([937, 938, 938, 187]);
     expect(cancels.at(-1)).toEqual({ lineId: water.id, refundValue: 187 });
     expect(cancels.reduce((total, row) => total + row.refundValue!, 0)).toBe(3000);
     const refund = await send(
@@ -485,6 +528,63 @@ describe("a free item holding a share comes back with the last paid dish", () =>
       },
     );
     expect(refund.status, JSON.stringify(refund.json)).toBe(200);
+  });
+
+  it.each([3, 4, 7])(
+    "hands back exactly what %i salads and the water filed, one salad at a time through the row still on the bill, each refunded straight away",
+    async (count) => {
+      const t = await ticket([{ name: "Salad", quantity: String(count) }, { name: "Water" }]);
+      const water = dish(t, "Water");
+      let seen = 0;
+      let left = Array.from({ length: count }, (_, nth) => dish(t, "Salad", nth));
+      while (left.length > 0) {
+        const row = left.map((salad) => salad.id);
+        const read = (await consent(t, left[0]!, left.length === 1 ? undefined : row)) as {
+          refundValue: { quantity: string; gross: string };
+          rowRefunds?: string[];
+        };
+        const shown =
+          left.length === 1
+            ? cancelRefundShare(read.refundValue, "0", "1")
+            : rowCancelRefund(read.rowRefunds!, "1");
+        const one =
+          left.length === 1
+            ? await cancel(t, left[0]!, { withFree: [water.id] })
+            : await cancel(t, left[0]!, { lineIds: row, quantity: "1" });
+        expect(one.status, JSON.stringify(one.json)).toBe(200);
+        const cancels = (await written(t)).cancels;
+        expect(decimalToCents(shown!)).toBe(cancels[seen]!.refundValue);
+        seen = cancels.length;
+        await refundNewCancels(t);
+        const gone = new Set((await written(t)).cancellations.map((row) => row.lineId));
+        left = left.filter((salad) => !gone.has(salad.id));
+      }
+      const recorded = (await written(t)).cancels.map((row) => row.refundValue!);
+      expect(recorded.reduce((total, cents) => total + cents, 0)).toBe(await filedCents(t));
+      expect(await filedCents(t)).toBe(count * 1000);
+    },
+  );
+
+  it("hands back exactly what four salads and the water filed when single portions and the row mix", async () => {
+    const t = await ticket([{ name: "Salad", quantity: "4" }, { name: "Water" }]);
+    const salads = [0, 1, 2, 3].map((nth) => dish(t, "Salad", nth));
+    const water = dish(t, "Water");
+    for (const attempt of [
+      () => cancel(t, salads[1]!, { lineIds: salads.map((salad) => salad.id), quantity: "1" }),
+      () => cancel(t, salads[0]!),
+      () =>
+        cancel(t, salads[1]!, {
+          lineIds: [salads[1]!.id, salads[2]!.id],
+          quantity: "2",
+          withFree: [water.id],
+        }),
+    ]) {
+      const one = await attempt();
+      expect(one.status, JSON.stringify(one.json)).toBe(200);
+      await refundNewCancels(t);
+    }
+    const recorded = (await written(t)).cancels.map((row) => row.refundValue!);
+    expect(recorded.reduce((total, cents) => total + cents, 0)).toBe(4000);
   });
 
   it("keeps the water from the soup while a salads row that does not split evenly stays", async () => {

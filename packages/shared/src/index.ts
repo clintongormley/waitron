@@ -101,7 +101,7 @@ export {
   thousandthsToDecimal,
 } from "./scales.js";
 export type { Decimal } from "./money.js";
-export { cancelRefundShare } from "./cancel-refund-share.js";
+export { cancelRefundShare, rowCancelRefund } from "./cancel-refund-share.js";
 export { shareByWeight } from "./share-by-weight.js";
 export {
   addDecimal,

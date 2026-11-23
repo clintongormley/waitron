@@ -34,7 +34,8 @@ export function refundValueIn(filing: BillFiling, lineId: string): Value | undef
 }
 
 /** A till row of identical portions valued as one grouped line (plan D32): the portions' count and
- * the sum of each one's filed value; none when any portion's value cannot be read. */
+ * the sum of each one's filed value; none when any portion's value cannot be read. What a cancel of
+ * some of them refunds is {@link rowRefundsIn}'s, not a share of this. */
 export function rowRefundValueIn(
   filing: BillFiling,
   lineIds: readonly string[],
@@ -45,6 +46,31 @@ export function rowRefundValueIn(
     quantity: sumDecimals(values.map((value) => decimal(value!.quantity))),
     gross: sumDecimals(values.map((value) => decimal(value!.gross))),
   };
+}
+
+/**
+ * What each portion a till row of `lineIds` can still give up refunds, in the order the row gives
+ * them up (its last first, plan D32), `cancelled` holding the portions cancelled so far (thousandths,
+ * by line id). A portion refunds its own filed value ({@link refundValueIn}) whichever way it is
+ * cancelled, so however a filed row's portions are cancelled they refund no more than it filed, and
+ * exactly that once all are refunded. None when a portion's value cannot be read.
+ */
+export function rowRefundsIn(
+  filing: BillFiling,
+  lineIds: readonly string[],
+  cancelled: ReadonlyMap<string, number>,
+): string[] | undefined {
+  const cancellable = filing.stored.filter(
+    (row) =>
+      lineIds.includes(row.id) &&
+      row.quantity - (cancelled.get(row.id) ?? 0) - row.servedQuantity > 0,
+  );
+  const values = refundValues(
+    filing,
+    cancellable.map((row) => row.id),
+  );
+  if (values.some((value) => value === undefined)) return undefined;
+  return values.map((value) => value!.gross).reverse();
 }
 
 /** A paid dish line of a settled bill, and its portions cancelled so far. */

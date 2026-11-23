@@ -713,12 +713,18 @@ it("shows its in-flight cancellation on the native action button", async () => {
   expect(button(el).shadowRoot!.querySelector("button")!.getAttribute("aria-busy")).toBe("true");
 });
 
-/** A paid row of three portions, each quantity 1, `cancelled` of each already cancelled. */
-const paidRow = (cancelled: Record<string, string> = {}): CancellationRead => {
+/** A paid row of three portions filed as one €10.00 row, each quantity 1, `cancelled` of each
+ * already cancelled; `rowRefunds` is what the server reads for the portions still on the row. */
+const paidRow = (
+  cancelled: Record<string, string> = {},
+  rowRefunds = ["3.33", "3.33", "3.34"],
+  gross = "10.00",
+): CancellationRead => {
   const base = read("settled");
   return {
     ...base,
-    refundValue: { quantity: "3.000", gross: "10.00" },
+    refundValue: { quantity: "3.000", gross },
+    rowRefunds,
     context: {
       ...base.context,
       components: ["dish-1", "dish-2", "dish-3"].map((lineId, i) => ({
@@ -739,17 +745,40 @@ it("A803 portion grouping: a grouped row offers a count up to its three portions
   expect(stepper.max).toBe(3);
 });
 it.each([
-  ["1", {}, "€3.33"],
-  ["2", {}, "€6.67"],
-  ["1", { "dish-3": "1.000" }, "€3.34"],
+  ["1", {}, undefined, "€3.33"],
+  ["2", {}, undefined, "€6.66"],
+  ["1", { "dish-3": "1.000" }, ["3.33", "3.34"], "€3.33"],
 ] as const)(
-  "A803 portion grouping: the refund shown for %s of a paid row of three (cancelled before: %o) is the row's value shared as the server caps it",
-  async (count, cancelled, amount) => {
-    const el = await mount({ consent: paidRow(cancelled), lineIds: rowIds, refundAvailable: true });
+  "A803 portion grouping: the refund shown for %s of a paid row of three (cancelled before: %o) is its portions' own refunds, as the server records it",
+  async (count, cancelled, refunds, amount) => {
+    const el = await mount({
+      consent: paidRow(cancelled, refunds && [...refunds]),
+      lineIds: rowIds,
+      refundAvailable: true,
+    });
     await fill(el, count);
     expect(button(el).textContent?.trim()).toBe(`Cancel and refund ${amount}`);
   },
 );
+it("shows one salad of an uneven row refunding what the server records, not a third of the row", async () => {
+  // Three salads filed as one €28.13 row: the server records €9.37 for the first one the row gives
+  // up, where a third of the row would round to €9.38.
+  const el = await mount({
+    consent: paidRow({}, ["9.37", "9.38", "9.38"], "28.13"),
+    lineIds: rowIds,
+    refundAvailable: true,
+  });
+  await fill(el, "1");
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €9.37");
+});
+it("does not offer a row's Refund tick without its portions' refunds", async () => {
+  const consent = paidRow();
+  delete consent.rowRefunds;
+  const el = await mount({ consent, lineIds: rowIds, refundAvailable: true });
+  await fill(el, "1");
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  expect(button(el).textContent?.trim()).toBe("Cancel");
+});
 
 const withWater = (): CancellationRead => ({
   ...read("settled"),
