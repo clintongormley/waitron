@@ -18199,6 +18199,29 @@ describe("the main-server strip", () => {
     },
   );
 
+  it("allows switching during a new outage if the first switch left the till open", async () => {
+    const { el, router } = await mount();
+    const navigate = vi.fn();
+    el.navigate = navigate;
+    await silentFor(el, router, 20_000);
+    (await switchControl(lockStrip(el)!)).click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledOnce();
+
+    answering.main = true;
+    await router.probeNow();
+    await settle(el);
+    expect(lockStrip(el)).toBeNull();
+
+    answering.main = false;
+    await silentFor(el, router, 20_000);
+    const button = await switchControl(lockStrip(el)!);
+    expect(button.hasAttribute("aria-disabled")).toBe(false);
+    button.click();
+    await settle(el);
+    expect(navigate).toHaveBeenCalledTimes(2);
+  });
+
   it("a press does not navigate when the spare stops answering during the final probe", async () => {
     const { el, router, fetchImpl } = await mount();
     const navigate = vi.fn();

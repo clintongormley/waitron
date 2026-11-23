@@ -2962,6 +2962,7 @@ export class TillApp extends LitElement {
     this.#watchMainSilence();
     if (this.#mainServerStrip() === undefined) {
       this.mainServerRefused = false;
+      if (this.spareSwitchBusy) this.#invalidateSpareSwitch();
       this.#closeCloudEmergency();
     }
     this.requestUpdate();
@@ -2977,8 +2978,7 @@ export class TillApp extends LitElement {
   @state() private cloudEmergencyRefused = false;
   @state() private cloudEmergencyOpen = false;
   #mainSilentTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Moves on at `pagehide`, when the till is detached from the page or its router, and when its
-   * server changes; voids a pending switch. */
+  /** A switch attempt belongs to this page, router and outage. */
   #switchGeneration = 0;
 
   #invalidateSpareSwitch(): void {
