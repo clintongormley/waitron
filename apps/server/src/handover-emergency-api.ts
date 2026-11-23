@@ -502,6 +502,8 @@ export function mountHandoverEmergencyApi(
       seen.appliedTXID === null ||
       seen.appliedTXID !== seen.uploadedTXID
     ) {
+      // Unlike the dashboard's automatic reads, the page's catch-up requests renew the sign-in: one
+      // check covers the whole switch (owner, 2026-11-23).
       await keepSwitchSignInAlive(c, switchSignIn, deps.db, signIn);
       return { state: "catching-up" as const };
     }

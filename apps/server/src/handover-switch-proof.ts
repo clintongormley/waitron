@@ -140,8 +140,8 @@ interface HeldChallenge {
 /**
  * Passkey challenges for the switch, kept in memory and never in `sign_in_challenges`, which
  * streams with the copy a spare follows (A947 4d plan D9). Each succeeds at most once, and is live
- * for 2 minutes from when it is made, or 15 from when it is given back or last kept alive by a
- * catch-up request.
+ * for 2 minutes from when it is made, or 15 from when it is given back or last carried by a
+ * catching-up take.
  */
 export function createSwitchChallenges() {
   const made = new Map<string, HeldChallenge>();
@@ -179,11 +179,9 @@ export function createSwitchChallenges() {
       prune();
       made.set(challenge, { until: Date.now() + SWITCH_PROOF_TTL_MS, givenBack: true });
     },
-    /** A live challenge that was given back stays live for as long as a proof from now. */
+    /** A live challenge stays live for as long as a proof from now. */
     keepAlive(challenge: string): void {
-      const held = made.get(challenge);
-      if (held?.givenBack === true && live(challenge))
-        held.until = Date.now() + SWITCH_PROOF_TTL_MS;
+      if (live(challenge)) made.get(challenge)!.until = Date.now() + SWITCH_PROOF_TTL_MS;
     },
   };
 }
@@ -286,7 +284,7 @@ export async function precheckSwitchCredentials(
 
 /**
  * For a take answered while the spare catches up: a proof that still passes against `db` is
- * renewed, and a given-back passkey challenge that is still live is kept alive. A sign-in that
+ * renewed, and a passkey answer's challenge that is still live is kept alive. A sign-in that
  * cannot be kept alive is left as it is and not refused here.
  */
 export async function keepSwitchSignInAlive(

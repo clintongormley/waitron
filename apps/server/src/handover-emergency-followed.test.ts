@@ -399,18 +399,40 @@ it("a passkey answer refused as unknown lasts through a catch-up longer than 15 
   await restarted(s);
 });
 
-it("a passkey answer nobody has checked keeps its two minutes while the page keeps asking", async () => {
+it("a fresh passkey answer the page sends with its catch-up requests lasts past two minutes", async () => {
   const seen = progress({ uploadedTXID: "00000000000000b2" });
   const s = service({ progress: seen });
   const passkey = signingPasskey("spare.example");
   enrol(followedVenue(), passkey);
   const challenge = (await s.post({}, "passkey-challenge")).body.options!.challenge;
   const signIn = { passkey: passkey.assert(challenge, "https://spare.example") };
-  vi.setSystemTime(Date.now() + 90_000);
-  expect((await s.post({ signIn })).body).toEqual({ state: "catching-up" });
-  vi.setSystemTime(Date.now() + 60_000);
+  for (let poll = 0; poll < 4; poll++) {
+    vi.setSystemTime(Date.now() + 90_000);
+    expect((await s.post({ signIn })).body).toEqual({ state: "catching-up" });
+  }
   seen.uploadedTXID = seen.appliedTXID;
-  expect((await s.post({ signIn })).body.error?.code).toBe("passkey.challenge_expired");
+  expect((await s.post({ signIn })).body).toEqual({ state: "restarting" });
+  await restarted(s);
+});
+
+it("a passkey answer no request carries keeps its two minutes while the page keeps asking with another", async () => {
+  const seen = progress({ uploadedTXID: "00000000000000b2" });
+  const s = service({ progress: seen });
+  const passkey = signingPasskey("spare.example");
+  enrol(followedVenue(), passkey);
+  const answer = async () => ({
+    passkey: passkey.assert(
+      (await s.post({}, "passkey-challenge")).body.options!.challenge,
+      "https://spare.example",
+    ),
+  });
+  const unsent = await answer();
+  const carried = await answer();
+  vi.setSystemTime(Date.now() + 90_000);
+  expect((await s.post({ signIn: carried })).body).toEqual({ state: "catching-up" });
+  vi.setSystemTime(Date.now() + 30_000);
+  seen.uploadedTXID = seen.appliedTXID;
+  expect((await s.post({ signIn: unsent })).body.error?.code).toBe("passkey.challenge_expired");
   expect(s.stopForSwitch).not.toHaveBeenCalled();
 });
 
