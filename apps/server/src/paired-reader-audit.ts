@@ -1,11 +1,5 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
-import {
-  diningTables,
-  parties,
-  statementChunks,
-  workingOrders,
-  type Transaction,
-} from "@waitron/db";
+import { and, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { parties, statementChunks, workingOrders, type Transaction } from "@waitron/db";
 import {
   cardReaders,
   payments,
@@ -38,7 +32,8 @@ type StandaloneCharge = Extract<BackupPaymentUnmatched, { kind: "charge" }>;
 type ComparisonRow = Omit<StandaloneCharge, "kind" | "reason"> & {
   paymentRef: string;
   readerName: string;
-  billNumber: number;
+  billNumber: number | null;
+  orderNumber: number;
   tableName: string | null;
   statuses: Status[];
 };
@@ -71,37 +66,29 @@ export async function readPairedReaderAudit(
   const charges = runs
     .flatMap(({ summary }) => summary?.chargeAudit?.missingLocal ?? [])
     .filter(({ settledAt }) => settledAt >= startAt && settledAt < endAt);
-  const paired = and(eq(payments.provider, "sumup"), isNotNull(payments.readerId));
+  const sumup = eq(payments.provider, "sumup");
   const readPayments = () =>
     tx
       .select({
         payment: payments,
         readerName: cardReaders.name,
-        billNumber: sql<number>`coalesce(${workingOrders.billNumber}, ${workingOrders.orderNumber})`,
+        billNumber: workingOrders.billNumber,
+        orderNumber: workingOrders.orderNumber,
         partyId: workingOrders.partyId,
         tableNames: parties.tableNames,
-        deliveryLabel: sql<
-          string | null
-        >`coalesce(${diningTables.label}, ${workingOrders.deliveryTableLabel})`,
+        deliveryLabel: workingOrders.deliveryTableLabel,
       })
       .from(payments)
       .innerJoin(cardReaders, eq(cardReaders.id, payments.readerId))
       .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
-      .leftJoin(diningTables, eq(diningTables.id, workingOrders.deliveryTableId));
-  const local = await readPayments().where(
-    and(
-      paired,
-      or(
-        and(gte(payments.settledAt, startAt), lt(payments.settledAt, endAt)),
-        and(
-          isNull(payments.settledAt),
-          gte(payments.createdAt, startAt),
-          lt(payments.createdAt, endAt),
-        ),
-      ),
-    ),
-  );
+      .leftJoin(parties, eq(parties.id, workingOrders.partyId));
+  const { createdAt, settledAt } = payments;
+  const local = [
+    ...(await readPayments().where(and(sumup, gte(settledAt, startAt), lt(settledAt, endAt)))),
+    ...(await readPayments().where(
+      and(sumup, isNull(settledAt), gte(createdAt, startAt), lt(createdAt, endAt)),
+    )),
+  ];
   const pairedRefs = new Map(local.map((row) => [row.payment.paymentRef, row]));
   const linkedRefs = new Set(
     charges.flatMap(({ hintedPaymentRef }) =>
@@ -109,7 +96,7 @@ export async function readPairedReaderAudit(
     ),
   );
   for (const refs of statementChunks(payments, [...linkedRefs])) {
-    const linked = await readPayments().where(and(paired, inArray(payments.paymentRef, refs)));
+    const linked = await readPayments().where(and(sumup, inArray(payments.paymentRef, refs)));
     for (const row of linked) pairedRefs.set(row.payment.paymentRef, row);
   }
   const liveTables = new Map<string, string[]>();
@@ -123,6 +110,7 @@ export async function readPairedReaderAudit(
   const identity = (row: (typeof local)[number]) => ({
     readerName: row.readerName,
     billNumber: row.billNumber,
+    orderNumber: row.orderNumber,
     tableName:
       row.partyId === null
         ? row.deliveryLabel
@@ -145,11 +133,18 @@ export async function readPairedReaderAudit(
     }
   }
 
-  const matches = new Map<string, boolean>();
+  const matchesIn = (evidence: readonly PairedAuditRun[]) =>
+    new Map(
+      evidence.flatMap(({ summary }) =>
+        (summary?.chargeAudit?.matches ?? []).map(
+          (match) => [match.paymentRef, match.providerRefunded] as const,
+        ),
+      ),
+    );
+  const matches = matchesIn(runs);
+  const priorMatches = matchesIn(candidates.toSorted((a, b) => a.generation - b.generation));
   const problems = new Map<string, Set<Finding>>();
   for (const { summary } of runs) {
-    for (const match of summary?.chargeAudit?.matches ?? [])
-      matches.set(match.paymentRef, match.providerRefunded);
     for (const kind of Object.keys(findings) as (keyof typeof findings)[]) {
       for (const finding of summary?.[kind] ?? []) {
         if (
@@ -177,23 +172,21 @@ export async function readPairedReaderAudit(
     const window = runs.find((run) => at >= run.periodFrom && at < run.periodTo);
     const checkedAt = window?.startedAt ?? window?.finishedAt;
     const localRefunds = refunds.get(row.id) ?? [];
-    const beforeCheck =
-      localRefunds
-        .filter((refund) => checkedAt != null && refund.createdAt <= checkedAt)
-        .reduce((total, refund) => total + refund.amount, 0) >= row.amount;
+    const beforeCheck = localRefunds.some(
+      (refund) => checkedAt != null && refund.createdAt <= checkedAt,
+    );
     const refunded = localRefunds.reduce((total, refund) => total + refund.amount, 0) >= row.amount;
     let statuses: Status[] = flags;
     if (row.holdOutcome !== null) statuses = ["resolved"];
-    else if (beforeCheck) statuses = ["refunded_before_check"];
     else if (flags.length === 0) {
-      const providerRefunded = matches.get(row.paymentRef);
-      statuses = [
-        providerRefunded === undefined
-          ? "not_checked"
-          : providerRefunded && !refunded
-            ? "refunded_at_sumup"
-            : "matched",
-      ];
+      // A refund drops the capture from later checks, so retain any earlier match.
+      const providerRefunded =
+        matches.get(row.paymentRef) ?? (beforeCheck ? priorMatches.get(row.paymentRef) : undefined);
+      let status: Status = "matched";
+      if (providerRefunded === undefined)
+        status = beforeCheck ? "refunded_before_check" : "not_checked";
+      else if (providerRefunded && !refunded) status = "refunded_at_sumup";
+      statuses = [status];
     }
     rows.push({
       paymentRef: row.paymentRef,

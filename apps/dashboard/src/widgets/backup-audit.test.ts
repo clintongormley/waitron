@@ -28,7 +28,8 @@ const result = {
         amount: "42.50",
         settledAt: "2026-07-01T18:46:00.000Z",
         readerName: index === 0 ? "Terrace reader" : "Counter reader",
-        billNumber: 41 + index,
+        billNumber: index === 0 ? 41 : null,
+        orderNumber: 41 + index,
         tableName: index === 0 ? "Table 6" : null,
         statuses: [status],
       }),
@@ -135,6 +136,7 @@ it("shows standalone matches and exceptions, filters paired readers and reads a 
   const status = el.shadowRoot!.querySelector("wt-combobox")!;
   await chooseOption(status, "matched");
   await expect.poll(() => pairedRows().length).toBe(2);
+  expect(pairedRows()[0]!.textContent).toContain("Order 42");
   expect(pairedRows()[1]!.textContent).toContain("Refunded before the check");
   await chooseOption(status, "resolved");
   await expect.poll(() => pairedRows()[0]?.textContent).toContain("Resolved");
@@ -189,10 +191,12 @@ it.each(
   await expect.poll(() => el.shadowRoot?.textContent).toContain("Backup Solo");
   await expectNoA11yViolations(host);
   expect(host.scrollWidth).toBeLessThanOrEqual(width);
-  const pairedScroll = el
-    .shadowRoot!.querySelector("wt-data-table")!
-    .shadowRoot!.querySelector('[role="region"]')!;
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const pairedScroll = table.shadowRoot!.querySelector('[role="region"]')!;
   expect(pairedScroll.scrollWidth).toBeLessThanOrEqual(pairedScroll.clientWidth);
+  const amount = document.createRange();
+  amount.selectNodeContents(pairedScroll.querySelector("tbody td[data-align=end]")!);
+  expect(amount.getClientRects()).toHaveLength(1);
   await page.screenshot({
     path: `__screenshots__/a949-refunds/${locale}-${theme}-${width}.png`,
     fullPage: true,

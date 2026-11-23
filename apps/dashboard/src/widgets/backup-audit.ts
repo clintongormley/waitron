@@ -37,11 +37,10 @@ export class BackupAudit extends LitElement {
         color: var(--wt-color-danger);
       }
       wt-combobox {
-        margin-block: var(--wt-space-2);
         width: max-content;
       }
       wt-data-table {
-        overflow-wrap: anywhere;
+        --wt-table-cell-padding-inline: var(--wt-space-2);
       }
     `,
   ];
@@ -92,10 +91,15 @@ export class BackupAudit extends LitElement {
       {
         key: "bill",
         label: t("orders.col.bill"),
-        cell: (row) =>
-          [row.tableName, fill("payments.paired.bill_number", { number: String(row.billNumber) })]
-            .filter(Boolean)
-            .join(" · "),
+        cell: ({ tableName, billNumber, orderNumber }) => {
+          const label = fill(
+            billNumber === null ? "payments.stuck.order" : "payments.paired.bill_number",
+            {
+              number: String(billNumber ?? orderNumber),
+            },
+          );
+          return tableName ? `${tableName} · ${label}` : label;
+        },
       },
       { key: "reader", label: t("payments.paired.reader"), cell: (row) => row.readerName },
       {

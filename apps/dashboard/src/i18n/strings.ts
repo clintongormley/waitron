@@ -8267,7 +8267,7 @@ export const es: Record<StringKey, string> = {
   "payments.backup.day": "Día natural del local",
   "payments.backup.incomplete":
     "Comparación incompleta. Falta una o ambas comprobaciones diarias. La última comprobación está prevista para la 01:00 UTC después de que termine este día.",
-  "payments.backup.matched": "Pagos vinculados de datáfonos de reserva",
+  "payments.backup.matched": "Coincidencias en datáfonos de reserva",
   "payments.backup.recorded_unmatched": "Sin cargo coincidente de SumUp — compruébalo en SumUp",
   "payments.backup.exceptions": "Pagos por comprobar de datáfonos de reserva",
   "payments.backup.ambiguous": "Varias coincidencias posibles — compruébalo en SumUp",

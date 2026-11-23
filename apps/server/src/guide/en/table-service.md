@@ -80,8 +80,8 @@ including tips, within 30 minutes. Check ambiguous or unmatched charges in SumUp
 any correction. The comparison sends no refunds. If the comparison is incomplete, try again after
 the final check, due at 01:00 UTC after the day ends.
 
-In **Paired readers**, start with **To check**. Use the reader and bill or table to find the payment
-in SumUp. Choose **All statuses** to see every payment.
+In **Paired readers**, start with **To check**. Use the reader and bill or table to identify which
+payment to check in SumUp. Choose **All statuses** to see every payment.
 
 The refund groups compare the saved SumUp check with your current refund records. Refresh after
 recording an outcome. A confirmed match has the same refund ID and amount; an amount agreement is

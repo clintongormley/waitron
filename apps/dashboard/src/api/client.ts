@@ -2594,7 +2594,8 @@ export interface BackupAuditView {
       settledAt: string;
       amount: string;
       readerName: string;
-      billNumber: number;
+      billNumber: number | null;
+      orderNumber: number;
       tableName: string | null;
       statuses: (
         | "matched"

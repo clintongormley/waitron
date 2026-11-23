@@ -85,7 +85,7 @@ devoluciones. Si la comparación está incompleta, vuelve a intentarlo tras la �
 prevista para la 01:00 UTC después de que termine el día.
 
 En **Datáfonos vinculados**, empieza por **Por comprobar**. Usa el datáfono y la cuenta o la mesa
-para localizar el pago en SumUp. Elige **Todos los estados** para ver todos los pagos.
+para identificar qué pago comprobar en SumUp. Elige **Todos los estados** para ver todos los pagos.
 
 Los grupos de devoluciones comparan la consulta guardada de SumUp con tus anotaciones actuales.
 Actualiza después de anotar un resultado. Una coincidencia confirmada tiene el mismo identificador
