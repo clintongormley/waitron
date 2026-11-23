@@ -1562,13 +1562,17 @@ export class ProductEditor extends LitElement {
     return this.draft.variants.some((variant) => variant.active);
   }
 
+  /** A variant with no rate of its own folds its product's, as its open field offers it; an own
+   * rate no longer offered folds nothing, since saving refuses it. */
   private takeawayVatSummary(): SummaryField[] {
+    if (!this.takeawayVat) return [];
+    const label = t("editor.takeaway_vat");
     const ownRate = this.draft.takeawayVatRate;
-    const takeaway =
-      this.takeawayVat && ownRate !== null && this.vatRates.includes(ownRate) ? ownRate : null;
-    return takeaway === null
-      ? []
-      : [{ label: t("editor.takeaway_vat"), value: vatRateText(takeaway) }];
+    if (ownRate === null) {
+      const parentRate = this.inherited?.takeawayVatRate;
+      return parentRate ? [{ label, value: vatRateText(parentRate), placeholder: true }] : [];
+    }
+    return this.vatRates.includes(ownRate) ? [{ label, value: vatRateText(ownRate) }] : [];
   }
 
   private renderPrice() {

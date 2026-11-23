@@ -4106,9 +4106,10 @@ separated by commas, "None" once someone has said the dish contains none of them
 reviewed" marked `warning`; then the chosen diet labels followed by the labels they imply. VAT's row
 names VAT when taken away while the product has a rate the form offers, and Ordering's names
 Standalone ordering by unless it is Anyone. On a variant's page, a field the variant leaves blank
-to take its parent's value (the course, the description, the allergens, the diet labels) shows the
-parent's value marked `placeholder`. A variant's blank prep station and customer-facing names fall
-back to its own Name, not the parent's, so they are left off its line as on a product.
+to take its parent's value (the course, the description, the allergens, the diet labels, the VAT
+when taken away) shows the parent's value marked `placeholder`. A variant's blank prep station and
+customer-facing names fall back to its own Name, not the parent's, so they are left off its line as
+on a product.
 
 A names section (the Extras editor's "Customer-facing names") puts each language's customer-facing
 name after its upper-case code — "ES: ¿Cómo la quiere hecha? · EN: How would you like it cooked?" —

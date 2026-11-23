@@ -6667,6 +6667,28 @@ it("shows a variant's own values folded as its own, never as placeholders", asyn
   ]);
 });
 
+it("shows a variant's takeaway VAT folded as its product's rate in italic, or its own upright", async () => {
+  inLocale("en-GB");
+  const takeawayOf = (el: ProductEditor) =>
+    summaryOf(el, "details").filter(({ label }) => label === t("editor.takeaway_vat"));
+  let el = await mountTakeaway(glass);
+  expect(takeawayOf(el)).toEqual([
+    { label: t("editor.takeaway_vat"), value: vatRateText("10.00"), placeholder: true },
+  ]);
+  expect(await foldedLine(el)).toContain(`${t("editor.takeaway_vat")}: [10%]`);
+  cleanupWidgets();
+  el = await mountTakeaway({ ...glass, takeawayVatRate: "21.00" });
+  expect(takeawayOf(el)).toEqual([
+    { label: t("editor.takeaway_vat"), value: vatRateText("21.00") },
+  ]);
+  cleanupWidgets();
+  el = await mountTakeaway({ ...glass, takeawayVatRate: "5.00" });
+  expect(takeawayOf(el)).toEqual([]);
+  cleanupWidgets();
+  el = await mountTakeaway(glass, false);
+  expect(takeawayOf(el)).toEqual([]);
+});
+
 it("names a product's course missing from the course list as unavailable on the folded line", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
