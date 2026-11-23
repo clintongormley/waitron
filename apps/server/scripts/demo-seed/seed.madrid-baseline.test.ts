@@ -1350,6 +1350,7 @@ for (const locale of ["en", "es"] as const) {
         "diet",
         "diet_override",
         "late_period_name",
+        "late_period_id",
         "late_confirmed_by",
         "sent_nutrition",
         "offer_unit_name",

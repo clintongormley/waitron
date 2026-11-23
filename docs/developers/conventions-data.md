@@ -770,11 +770,14 @@ exception: `priceOrderLines` accepts it at its taken price when a menu the runni
 in the zone also sells its product and variant on its own, and otherwise refuses it
 `menu_period.ended` (409) unless the request's `lateSend` names its menu and, where its department's
 `late_send_needs_manager` is on, someone holding `venue.configure` authorises it — the
-sender, or a manager's PIN (`apps/server/src/late-send.ts`). A confirmed dish's service context
-rows (`working_order_lines.late_period_name` and `late_confirmed_by`) record the period and who
-confirmed; the kitchen ticket and the kitchen screen read them through `readLateSendMarks`. Plan
-D19–D28. Extras added later to a dish already sent (stamped sent or holding a ticket item, held or
-fired) whose period ended earlier that day, through either
+sender, or a manager's PIN (`apps/server/src/late-send.ts`). The kitchen ticket and kitchen screen
+read the stored `late_period_name` and whether there was a confirmer through `readLateSendMarks`.
+A confirmed dish records `working_order_lines.late_period_id` when its period is known. This
+id survives period deletion and follows the dish if the bill is split. Sends without a confirmation
+and confirmations that identify only a menu leave the id empty. Plan D19–D28.
+
+Extras added later to a dish already sent (stamped sent or holding a ticket item, held or fired)
+whose period ended earlier that day, through either
 order edit (`PUT /api/working-orders/:id` or `/lines/:lineNo`), take the same check and record
 their own confirmation, never the dish's. Extras added to a dish not yet sent are not checked when
 added; they are judged when the dish is sent, as below. Neither is refused

@@ -3723,7 +3723,7 @@ describe("a line sent late", () => {
           {
             workingOrderLineId: late,
             menuItemId: venue.menuItemId,
-            late: { periodName: "Lunch", confirmedBy: "person-7" },
+            late: { periodId: null, periodName: "Lunch", confirmedBy: "person-7" },
           },
           { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
         ],
@@ -3759,8 +3759,8 @@ describe("a line sent late", () => {
       const [asked, unasked, untouched] = lines as [string, string, string];
       await seedPerson(tx, { id: "person-7", displayName: "Late confirmer" });
       await recordLateSendMarks(tx, [
-        { lineId: asked, periodName: "Lunch", confirmedBy: "person-7" },
-        { lineId: unasked, periodName: "Brunch", confirmedBy: null },
+        { lineId: asked, periodId: null, periodName: "Lunch", confirmedBy: "person-7" },
+        { lineId: unasked, periodId: null, periodName: "Brunch", confirmedBy: null },
       ]);
       const stored = await tx.execute<{
         working_order_line_id: string;

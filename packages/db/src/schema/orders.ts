@@ -285,6 +285,8 @@ export const workingOrderLines = table(
     diet: json<unknown>("diet"),
     dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),
+    // A recorded agreement survives deleting its service period.
+    latePeriodId: id("late_period_id"),
     lateConfirmedBy: id("late_confirmed_by"),
     sentNutrition: json<{ allergens: AllergenMap | null; dietaryDeclarations: string[] }>(
       "sent_nutrition",

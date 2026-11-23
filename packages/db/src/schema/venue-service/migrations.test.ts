@@ -158,6 +158,11 @@ describe("the late-send storage", () => {
       notnull: 0,
       dflt_value: null,
     });
+    expect(await column("working_order_lines", "late_period_id")).toEqual({
+      name: "late_period_id",
+      notnull: 0,
+      dflt_value: null,
+    });
     expect(await column("working_order_lines", "late_confirmed_by")).toEqual({
       name: "late_confirmed_by",
       notnull: 0,

@@ -117,6 +117,7 @@ CREATE TABLE `working_order_lines` (
 	`diet` text,
 	`diet_override` text,
 	`late_period_name` text,
+	`late_period_id` text,
 	`late_confirmed_by` text,
 	`sent_nutrition` text,
 	`offer_unit_name` text,
@@ -3298,6 +3299,7 @@ BEGIN
       AND new.diet IS old.diet
       AND new.diet_override IS old.diet_override
       AND new.late_period_name IS old.late_period_name
+      AND new.late_period_id IS old.late_period_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name
@@ -3373,12 +3375,17 @@ BEGIN
       AND new.diet_override IS old.diet_override
       -- A late release records its decision before taking the sent stamp.
       AND (
-        (new.late_period_name IS old.late_period_name AND new.late_confirmed_by IS old.late_confirmed_by)
+        (
+          new.late_period_name IS old.late_period_name
+          AND new.late_period_id IS old.late_period_id
+          AND new.late_confirmed_by IS old.late_confirmed_by
+        )
         OR (
           new.group_id IS old.group_id
           AND old.menu_item_id IS NOT NULL
           AND old.sent_at IS NULL
           AND old.late_period_name IS NULL
+          AND old.late_period_id IS NULL
           AND old.late_confirmed_by IS NULL
           AND new.late_period_name IS NOT NULL
         )
@@ -3460,6 +3467,7 @@ BEGIN
       AND new.diet IS old.diet
       AND new.diet_override IS old.diet_override
       AND new.late_period_name IS old.late_period_name
+      AND new.late_period_id IS old.late_period_id
       AND new.late_confirmed_by IS old.late_confirmed_by
       AND new.sent_nutrition IS old.sent_nutrition
       AND new.offer_unit_name IS old.offer_unit_name
