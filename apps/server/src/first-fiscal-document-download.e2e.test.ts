@@ -250,10 +250,26 @@ it.each(["en", "es"] as const)(
       await click(`${vf} [data-test=download-pdf]`);
       const download = await downloadPromise;
       await download.saveAs(join(receipt, "wizard-original.pdf"));
-      expect(await page.locator(`${vf} [data-test=download-pdf]`).getAttribute("href")).toBe(
-        await page.locator(`${vf} [data-test=print-pdf]`).getAttribute("href"),
+      await page.evaluate(() => {
+        const open = window.open.bind(window);
+        window.open = (target, ...rest) => {
+          (window as unknown as { printed?: string }).printed = String(target);
+          return open(target, ...rest);
+        };
+      });
+      await click(`${vf} [data-test=print-pdf]`);
+      // In this headless Chromium the tab Print opens makes no request, so read the address it was given.
+      const printed = Buffer.from(
+        await page.evaluate(async () => {
+          const target = (window as unknown as { printed?: string }).printed;
+          if (target === undefined) throw new Error("Print opened nothing");
+          return Array.from(new Uint8Array(await (await fetch(target)).arrayBuffer()));
+        }),
       );
-      await page.locator(`${vf} input[name=setup-pdf-kept]`).check();
+      expect(
+        printed.equals(await readFile(join(receipt, "wizard-original.pdf"))),
+        "Print opens the same pack file that Download saves",
+      ).toBe(true);
       await click(`${vf} [data-test=kept]`);
       await prove();
       await click("setup-initial-setup-screen [data-test=next]");

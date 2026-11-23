@@ -133,16 +133,26 @@ async function mount(stage = async () => old, reissue = async () => replacement)
   await expect.poll(() => control(el, "compare")?.disabled).toBe(false);
   await userEvent.click(control(el, "compare"));
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
+  expect(control(el, "replace-key"), "no replacement while the box may hold its key").toBeNull();
   return { el, parent, calls, api };
+}
+const lost = async (): Promise<InitialSetupNodeKey> => {
+  throw { code: "setup.attempt_conflict" };
+};
+/** Asks for the key the box has lost, which is what offers the replacement. */
+async function loseKey(el: LitElement) {
+  await userEvent.click(control(el, "prepare-pdf"));
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
+    .not.toBeNull();
+  await expect.poll(() => control(el, "replace-key")).not.toBeNull();
 }
 async function keep(el: LitElement) {
   await userEvent.click(control(el, "kept"));
   await expect.poll(() => control(el, "kept").disabled).toBe(true);
 }
 it("offers explicit replacement after raw-key loss and delivers the new real PDF for the same frozen hour", async () => {
-  const { el, calls } = await mount(async () => {
-    throw { code: "setup.attempt_conflict" };
-  });
+  const { el, calls } = await mount(lost);
   await userEvent.click(control(el, "prepare-pdf"));
   await expect
     .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
@@ -153,6 +163,8 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   expect(replace.disabled).toBe(false);
   await userEvent.click(replace);
   await expect.poll(() => download(el)).not.toBeNull();
+  expect(control(el, "replace-key"), "the replacement is offered once per lost key").toBeNull();
+  await userEvent.click(download(el)!);
   const decoded = await readRecoveryPdf(
     new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer()),
   );
@@ -167,52 +179,52 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   await keep(el);
   expect(calls.find((c) => c.action === "keep")?.value).toMatchObject({ stageId: "replacement" });
 });
-it("revokes the old PDF and kept choice before replacement, and retry requires keeping the newly registered document", async () => {
+it("keeps a refused replacement retryable, and the retried one needs its own use and keep of the newly registered document", async () => {
   let replacements = 0;
-  const { el, calls } = await mount(undefined, async () => {
+  const { el, calls } = await mount(lost, async () => {
     if (++replacements === 1) throw { code: "password.invalid" };
     return replacement;
   });
-  await userEvent.click(control(el, "prepare-pdf"));
-  await expect.poll(() => download(el)).not.toBeNull();
-  const oldUrl = saved.at(-1)!;
-  await keep(el);
+  await loseKey(el);
   const replace = control(el, "replace-key");
-  expect(replace, "replacement remains available after keeping a PDF").not.toBeNull();
   await userEvent.click(replace);
+  await expect.poll(() => calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   await expect
     .poll(() => el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
     .not.toBeNull();
   expect(download(el)).toBeNull();
-  await expect(fetch(oldUrl)).rejects.toThrow();
-  expect(control(el, "replace-key").disabled).toBe(false);
+  await expect.poll(() => control(el, "replace-key")?.disabled).toBe(false);
   await userEvent.click(control(el, "replace-key"));
   await expect.poll(() => download(el)).not.toBeNull();
-  expect(saved.at(-1)).not.toBe(oldUrl);
+  expect(control(el, "kept"), "Continue waits for Download, Print or Copy").toBeNull();
+  await userEvent.click(download(el)!);
+  expect(saved).toHaveLength(1);
   expect(control(el, "kept").disabled).toBe(false);
   expect(el.shadowRoot!.textContent).not.toContain("Recovery pack confirmed.");
   const registrations = calls.filter((c) => c.action === "register");
-  expect(registrations).toHaveLength(2);
-  expect(registrations[1]!.value).toMatchObject({
+  expect(registrations).toHaveLength(1);
+  expect(registrations[0]!.value).toMatchObject({
     stageId: "replacement",
     statement: { nodeKey: { nodeId: "node", name: "New key" } },
   });
-  expect(calls.filter((c) => c.action === "keep")).toHaveLength(1);
+  expect(calls.filter((c) => c.action === "keep")).toHaveLength(0);
   await keep(el);
-  expect(calls.filter((c) => c.action === "keep")[1]!.value).toMatchObject({
+  expect(calls.filter((c) => c.action === "keep")[0]!.value).toMatchObject({
     stageId: "replacement",
   });
+  expect(control(el, "replace-key"), "no replacement after keeping a PDF").toBeNull();
   expect(calls.filter((c) => c.action === "select")).toHaveLength(1);
 });
 it("drops a delayed replacement after its module context changes", async () => {
   let release!: (value: InitialSetupNodeKey) => void;
   const { el, parent, calls } = await mount(
-    undefined,
+    lost,
     () =>
       new Promise((resolve) => {
         release = resolve;
       }),
   );
+  await loseKey(el);
   const replace = control(el, "replace-key");
   expect(replace).not.toBeNull();
   await userEvent.click(replace);

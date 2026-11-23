@@ -649,6 +649,7 @@ it("reads back a completed activation after a lost response and offers no second
   await expect
     .poll(() => hour.shadowRoot!.querySelector("[data-test=download-pdf]"))
     .not.toBeNull();
+  await click(hour, "download-pdf");
   await click(hour, "kept");
   await proof();
   await expect

@@ -184,6 +184,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
           await userEvent.click(control(hour, "compare"));
           await password();
           await expect.poll(() => control(hour, "selected-hour")).not.toBeNull();
+          expect(control(hour, "replace-key")).toBeNull();
           await userEvent.click(control(hour, "prepare-pdf"));
           await password();
           await expect
@@ -201,37 +202,33 @@ for (const locale of ["en-GB", "es-ES"] as const)
           });
           await password();
           await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
+          expect(control(hour, "replace-key")).toBeNull();
+          expect(control(hour, "kept")).toBeNull();
+          await userEvent.click(control(hour, "download-pdf"));
           const bytes = new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer());
           expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
           expect(control(shell, "next").disabled).toBe(true);
+          expect(
+            leaveCoordinatorFor(hour)!.isDirty([shell]),
+            "a replacement PDF needs kept consent before leaving",
+          ).toBe(true);
           await userEvent.click(control(hour, "kept"));
           await password();
           await expect.poll(() => control(shell, "next").disabled).toBe(false);
           expect(leaveCoordinatorFor(hour)!.isDirty([shell])).toBe(false);
+          expect(control(hour, "replace-key")).toBeNull();
           expect((await axe.run(host)).violations).toEqual([]);
           await page.screenshot({
             path: `__screenshots__/a679-reissue/${locale}-${theme}-${width}-kept.png`,
           });
-          await userEvent.click(control(hour, "replace-key"));
-          await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
-          expect(control(shell, "next").disabled).toBe(true);
-          expect(
-            leaveCoordinatorFor(hour)!.isDirty([shell]),
-            "a replacement PDF needs fresh kept consent before leaving",
-          ).toBe(true);
-          expect(control(hour, "download-pdf")).toBeNull();
-          await password();
-          await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
-          expect(control(hour, "kept").disabled).toBe(false);
-          expect(control(shell, "next").disabled).toBe(true);
           expect(
             requests.filter((r) => r.path.endsWith("/node-key-reissue")).map((r) => r.body),
-          ).toEqual([{ password: venue.admin.password }, { password: venue.admin.password }]);
+          ).toEqual([{ password: venue.admin.password }]);
           expect(
             requests
               .filter((r) => r.path.endsWith("/recovery-document"))
               .map((r) => (r.body as { stageId: string }).stageId),
-          ).toEqual(["replacement-1", "replacement-2"]);
+          ).toEqual(["replacement-1"]);
           expect(
             requests
               .filter((r) => r.path.endsWith("/recovery-document-kept"))

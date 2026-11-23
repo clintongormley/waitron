@@ -74,14 +74,17 @@ export const firstHourStrings = {
     packLead:
       "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
     packWarning: "This is the only time the master key is shown.",
+    showKey: "Show the master key",
     masterKey: "Master key",
     download: "Download",
     print: "Print",
     copy: "Copy",
     copied: "Copied.",
+    copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
-    replace: "Make the pack again with a new box key",
+    keyLost: "The box no longer holds the master key it made. Make new keys to carry on.",
+    replace: "Make new keys",
   },
   es: {
     ...clockWaitStrings.es,
@@ -100,14 +103,17 @@ export const firstHourStrings = {
     packLead:
       "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
     packWarning: "Esta es la única vez que se muestra la clave maestra.",
+    showKey: "Mostrar la clave maestra",
     masterKey: "Clave maestra",
     download: "Descargar",
     print: "Imprimir",
     copy: "Copiar",
     copied: "Copiada.",
+    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
-    replace: "Hacer el paquete otra vez con una nueva clave del servidor",
+    keyLost: "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",
+    replace: "Crear claves nuevas",
   },
 };
 @customElement("vf-first-setup-hour")
@@ -173,6 +179,7 @@ export class FirstSetupHour extends LitElement {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text);
+        overflow-wrap: anywhere;
       }
       .pack-actions {
         display: flex;
@@ -185,6 +192,10 @@ export class FirstSetupHour extends LitElement {
         margin: 0;
         color: var(--wt-color-success);
         font-weight: var(--wt-font-weight-bold);
+      }
+      .pack-copy-failed {
+        margin: 0;
+        color: var(--wt-color-danger);
       }
     `,
     checkVenueStyles,
@@ -199,9 +210,14 @@ export class FirstSetupHour extends LitElement {
   @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private error = false;
   @state() private pdfUrl?: string;
-  /** Download, Print or Copy has been used, which is what shows Continue. */
   @state() private pdfUsed = false;
   @state() private copied = false;
+  @state() private copyFailed = false;
+  /**
+   * Staging was refused because the box no longer holds the keys it made, as after a restart. Only
+   * then may the step make new ones: new keys would orphan a master key the person already copied.
+   */
+  @state() private keyLost = false;
   @state() private masterKey?: { masterKey: string; masterKeyName: string };
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
@@ -271,11 +287,13 @@ export class FirstSetupHour extends LitElement {
     this.pdfUrl = undefined;
     this.pdfUsed = false;
     this.copied = false;
+    this.copyFailed = false;
     this.masterKey = undefined;
     this.kept = false;
   }
   #clear(): void {
     this.#disposeDelivery();
+    this.keyLost = false;
     ++this.#generation;
     this.busy = false;
     this.sending = undefined;
@@ -501,9 +519,12 @@ export class FirstSetupHour extends LitElement {
       delivery = undefined;
       this.pdfUrl = url;
       this.masterKey = { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName };
-      this.#downloadPdf();
-    } catch {
-      if (current()) this.error = true;
+      this.keyLost = false;
+    } catch (error) {
+      if (!current()) return;
+      this.error = true;
+      if (!replace && (error as { code?: unknown } | null)?.code === "setup.attempt_conflict")
+        this.keyLost = true;
     } finally {
       delivery?.dispose();
       if (current()) this.busy = false;
@@ -525,14 +546,16 @@ export class FirstSetupHour extends LitElement {
     this.pdfUsed = true;
   }
   async #copyKey(made: { masterKey: string }): Promise<void> {
+    let refused = false;
     try {
       await navigator.clipboard.writeText(made.masterKey);
     } catch {
-      return;
+      refused = true;
     }
     if (made !== this.masterKey) return;
-    this.copied = true;
-    this.pdfUsed = true;
+    this.copied = !refused;
+    this.copyFailed = refused;
+    if (!refused) this.pdfUsed = true;
   }
   async #keepPdf(): Promise<void> {
     if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
@@ -562,6 +585,13 @@ export class FirstSetupHour extends LitElement {
         </p>
         <code data-test="master-key">${made.masterKey}</code>
       </div>
+      ${
+        this.copyFailed
+          ? html`<p class="pack-copy-failed" data-test="copy-failed" role="alert">
+              ${t.copyFailed}
+            </p>`
+          : nothing
+      }
       <div class="pack-actions">
         <wt-button data-test="download-pdf" variant="secondary" @click=${() => this.#downloadPdf()}
           >${t.download}</wt-button
@@ -669,24 +699,22 @@ export class FirstSetupHour extends LitElement {
           ${
             this.pdfUrl && this.masterKey
               ? this.#packControls(t, this.masterKey)
-              : html`<wt-button
-                  data-test="prepare-pdf"
-                  variant="primary"
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#preparePdf()}
-                  >${t.download}</wt-button
-                >`
-          }
-          ${
-            this.api.reissueNodeKey
-              ? html`<wt-button
-                  data-test="replace-key"
-                  variant=${this.busy ? "secondary" : "primary"}
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#preparePdf(true)}
-                  >${t.replace}</wt-button
-                >`
-              : nothing
+              : this.keyLost && this.api.reissueNodeKey
+                ? html`<p data-test="key-lost">${t.keyLost}</p>
+                    <wt-button
+                      data-test="replace-key"
+                      variant=${this.busy ? "secondary" : "primary"}
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#preparePdf(true)}
+                      >${t.replace}</wt-button
+                    >`
+                : html`<wt-button
+                    data-test="prepare-pdf"
+                    variant="primary"
+                    ?disabled=${this.busy}
+                    @click=${() => void this.#preparePdf()}
+                    >${t.showKey}</wt-button
+                  >`
           }
         </section>
         ${failure}`;

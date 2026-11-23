@@ -1102,6 +1102,8 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
   );
+  expect(downloads).toHaveLength(0);
+  await userEvent.click(button(el, "download-pdf"));
   expect(downloads).toHaveLength(1);
   await userEvent.click(button(el, "print-pdf"));
   expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
@@ -1175,6 +1177,7 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
     );
+    await userEvent.click(button(el, "download-pdf"));
     const task = openRecoveryPdf(
       new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer()),
     );
@@ -1196,23 +1199,17 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
 });
 
 it.each([
-  [
-    "en",
-    "Recovery pack",
-    "Download",
-    "Make the pack again with a new box key",
-    "Recovery pack confirmed.",
-  ],
+  ["en", "Recovery pack", "Show the master key", "Download", "Recovery pack confirmed."],
   [
     "es",
     "Paquete de recuperación",
+    "Mostrar la clave maestra",
     "Descargar",
-    "Hacer el paquete otra vez con una nueva clave del servidor",
     "Paquete de recuperación confirmado.",
   ],
 ] as const)(
   "names the %s step's download a recovery pack and never the server key a recovery key",
-  async (locale, next, make, replace, complete) => {
+  async (locale, next, show, download, complete) => {
     const { downloads } = captureDownloads();
     const { el, api } = await mount({ locale });
     api.stageNodeKey = async () => ({
@@ -1230,15 +1227,16 @@ it.each([
       expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
     );
     expect(el.shadowRoot!.textContent).toContain(next);
-    expect(button(el, "prepare-pdf").textContent!.trim()).toBe(make);
+    expect(button(el, "prepare-pdf").textContent!.trim()).toBe(show);
     await userEvent.click(button(el, "prepare-pdf"));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
     );
+    expect(button(el, "download-pdf").textContent!.trim()).toBe(download);
+    await userEvent.click(button(el, "download-pdf"));
     expect(downloads.map((d) => d.name)).toEqual(["waitron-recovery-pack-1.pdf"]);
-    expect(button(el, "download-pdf").textContent!.trim()).toBe(make);
     expect(el.shadowRoot!.querySelector('input[name="setup-pdf-kept"]')).toBeNull();
-    expect(button(el, "replace-key").textContent!.trim()).toBe(replace);
+    expect(el.shadowRoot!.querySelector("[data-test=replace-key]")).toBeNull();
     await userEvent.click(button(el, "kept"));
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(complete));
     expect(el.shadowRoot!.textContent).not.toMatch(/recovery key|clave de recuperación/i);
@@ -1583,10 +1581,12 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
   );
+  captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
   );
+  await userEvent.click(button(el, "download-pdf"));
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).not.toBeNull(),
@@ -2745,11 +2745,11 @@ it.each(["en", "es"] as const)(
   },
 );
 it.each([
-  ["en", "We've created these invoice series:", "Download"],
-  ["es", "Hemos creado estas series de facturas:", "Descargar"],
+  ["en", "We've created these invoice series:", "Show the master key"],
+  ["es", "Hemos creado estas series de facturas:", "Mostrar la clave maestra"],
 ] as const)(
-  "%s: after Proceed the second screen lists the series, explains the pack and offers to download it",
-  async (locale, heading, download) => {
+  "%s: after Proceed the second screen lists the series, explains the pack and offers to show the master key",
+  async (locale, heading, show) => {
     const el = await pressed({ locale });
     await shows(el, "selected-hour");
     expect(el.shadowRoot!.querySelector("[data-test=selected-hour] h2")?.textContent?.trim()).toBe(
@@ -2759,7 +2759,7 @@ it.each([
     expect(el.shadowRoot!.querySelector('input[name="setup-details-confirmed"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=pack-lead]")).not.toBeNull();
-    expect(button(el, "prepare-pdf").textContent?.trim()).toBe(download);
+    expect(button(el, "prepare-pdf").textContent?.trim()).toBe(show);
   },
 );
 it("after Proceed focus moves to the second screen's heading, and the screen is announced", async () => {
