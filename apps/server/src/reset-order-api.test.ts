@@ -58,6 +58,7 @@ const modules: WaitronModule[] = [
 
 const MISSING_CHAIN = earlierBoxChain();
 const LACKING_CHAIN = lackingChainOf(MISSING_CHAIN, "record_missing");
+const LAST_CHANGE_MS = Date.parse("2026-11-12T09:41:07.123Z");
 
 let main: string;
 let oldBox: string;
@@ -140,6 +141,10 @@ function app(seats: WaitronModule[] = modules) {
 /** A completed return from the old box to this one, against a closed takeover. */
 async function completedReturn(
   scenario: "controlled" | "emergency" = "emergency",
+  {
+    body = { lastCopy: { lastChangeAtMs: LAST_CHANGE_MS } },
+    activatedAt = "2026-11-12T10:00:00.000Z",
+  }: { body?: Record<string, CanonicalValue>; activatedAt?: string } = {},
 ): Promise<string> {
   const operationId = randomUUID();
   const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
@@ -152,12 +157,12 @@ async function completedReturn(
       scenario,
       evidence: {
         purpose: "waitron.handover.declaration.v1",
-        body: {},
+        body,
         signerNodeId: main,
         signature: "signature",
       },
       personId,
-      activatedAt: "2026-11-12T10:00:00.000Z",
+      activatedAt,
     });
     for (const [index, digest] of digests.entries())
       await recordReturnBatchTx(tx, { operationId, inventory, index, count: 2, digest });
@@ -436,6 +441,7 @@ describe("POST /api/node/reset-order answers", () => {
       order: { orderId: order.orderId, acceptLoss: false },
       lacking: { fiscal: [LACKING_CHAIN] },
       holdings: { fiscal: [] },
+      lastChangeAtMs: LAST_CHANGE_MS,
     });
     expect(events("reset_acknowledged")).toEqual([]);
   });
@@ -488,6 +494,61 @@ describe("POST /api/node/reset-order answers", () => {
     const after = await answerOf(await ask(await queryBody({ nonce: "ordered" })));
     expect(after?.order).not.toBeNull();
     expect(after?.holdings).toEqual({ fiscal: own });
+  });
+});
+
+describe("POST /api/node/reset-order's copy time", () => {
+  const orderFor = () =>
+    orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: false },
+    );
+
+  it("the copy's latest change after an emergency switch from the asking box, with or without an order", async () => {
+    await completedReturn("emergency");
+    const before = await answerOf(await ask(await queryBody({ nonce: "no-order" })));
+    expect(before?.order).toBeNull();
+    expect(before?.lastChangeAtMs).toBe(LAST_CHANGE_MS);
+
+    await orderFor();
+    const after = await answerOf(await ask(await queryBody({ nonce: "ordered" })));
+    expect(after?.order).not.toBeNull();
+    expect(after?.lastChangeAtMs).toBe(LAST_CHANGE_MS);
+  });
+
+  it("null when the copy held no dated sale or order", async () => {
+    await completedReturn("emergency", { body: { lastCopy: { lastChangeAtMs: null } } });
+    const answer = await answerOf(await ask(await queryBody()));
+    expect(answer).toHaveProperty("lastChangeAtMs", null);
+  });
+
+  it("no lastChangeAtMs after a planned handover, and the latest takeover from the box decides", async () => {
+    await completedReturn("controlled");
+    expect(await answerOf(await ask(await queryBody({ nonce: "planned" })))).not.toHaveProperty(
+      "lastChangeAtMs",
+    );
+
+    await completedReturn("emergency", { activatedAt: "2026-11-11T10:00:00.000Z" });
+    expect(await answerOf(await ask(await queryBody({ nonce: "older" })))).not.toHaveProperty(
+      "lastChangeAtMs",
+    );
+  });
+
+  it("leaves lastChangeAtMs out, with a warning, and still sends the order, when the takeover's declaration has no lastCopy", async () => {
+    await completedReturn("emergency", { body: {} });
+    const order = await orderFor();
+    const res = await ask(await queryBody());
+    expect(res.status).toBe(200);
+    const answer = await answerOf(res);
+    expect(answer?.order).toEqual({ orderId: order.orderId, acceptLoss: false });
+    expect(answer).not.toHaveProperty("lastChangeAtMs");
+    expect(lines.filter((line) => line.event === "reset-order.copy_unread")).toEqual([
+      {
+        level: "warn",
+        event: "reset-order.copy_unread",
+        fields: { nodeId: oldBox, errorCode: "handover.copy_check_failed" },
+      },
+    ]);
   });
 });
 

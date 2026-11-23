@@ -1,6 +1,8 @@
+import "./errors.js";
 import { desc, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { handoverActivations, nodes, type Transaction } from "@waitron/db";
+import { handoverActivations, nodes, type Database, type Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { readCompletedReturns } from "./return-completion.js";
 import type { Declaration } from "./handover-emergency-api.js";
 
@@ -31,4 +33,30 @@ export async function readHandoverIntervals(tx: Transaction) {
       reason: declaration.reason,
     };
   });
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The copy's latest sale or order time when the latest takeover from `sourceNodeId` was an
+ * emergency switch; null after a planned handover or with no takeover from that box.
+ */
+export async function emergencyCopyFrom(
+  db: Database,
+  sourceNodeId: string,
+): Promise<{ lastChangeAtMs: number | null } | null> {
+  const [row] = await db
+    .select({ scenario: handoverActivations.scenario, evidence: handoverActivations.evidence })
+    .from(handoverActivations)
+    .where(eq(handoverActivations.sourceNodeId, sourceNodeId))
+    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
+    .limit(1);
+  if (row?.scenario !== "emergency") return null;
+  const body: unknown = row.evidence.body;
+  const lastCopy = isRecord(body) ? body.lastCopy : undefined;
+  const at = isRecord(lastCopy) ? lastCopy.lastChangeAtMs : undefined;
+  if (at !== null && !Number.isSafeInteger(at))
+    throw new AppError("handover.copy_check_failed", { module: "core" });
+  return { lastChangeAtMs: at as number | null };
 }

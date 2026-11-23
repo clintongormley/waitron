@@ -18,6 +18,7 @@ import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { reloadAfterRemoval, removeStandby } from "./membership-removal.js";
+import { emergencyCopyFrom } from "./handover-intervals.js";
 import { readHoldings } from "./old-box-holdings.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { raiseSetAsideOnReset } from "./reset-alert.js";
@@ -211,6 +212,21 @@ async function ownHoldings(
   }
 }
 
+/** The copy's latest change for the answer; left out when it cannot be read, so an order still goes. */
+async function copyTime(
+  deps: ResetOrderApiDeps,
+  log: Logger,
+  source: string,
+): Promise<{ lastChangeAtMs?: number | null }> {
+  try {
+    const copy = await emergencyCopyFrom(deps.db, source);
+    return copy === null ? {} : { lastChangeAtMs: copy.lastChangeAtMs };
+  } catch (error) {
+    log("warn", "reset-order.copy_unread", { nodeId: source, errorCode: codeOf(error) });
+    return {};
+  }
+}
+
 /** `POST /api/node/reset-order`: a replaced old main box asks whether it is ordered to reset. */
 export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logger): void {
   const run = createErrorBoundary(
@@ -237,6 +253,7 @@ export function mountResetOrderApi(app: Hono, deps: ResetOrderApiDeps, log: Logg
           order: order === null ? null : { orderId: order.orderId, acceptLoss: order.acceptLoss },
           lacking,
           ...(await ownHoldings(deps, log, source)),
+          ...(await copyTime(deps, log, source)),
         }),
         200,
       );

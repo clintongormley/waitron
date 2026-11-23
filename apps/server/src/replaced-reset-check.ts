@@ -20,12 +20,15 @@ export type ReplacedResetCheck =
       setAside: boolean;
       lacking: Record<string, CanonicalValue[]>;
       holdings?: Record<string, CanonicalValue>;
+      copy?: HeardCopyTime;
     }
   | {
       outcome: "no-order";
       lacking: Record<string, CanonicalValue[]>;
       /** The main box's own summary; absent when it sent none or sent something else. */
       holdings?: Record<string, CanonicalValue>;
+      /** The copy's latest sale or order time; absent when the main box sent none or something else. */
+      copy?: HeardCopyTime;
     }
   /** The main box answered `handover.reset_query_refused`. */
   | { outcome: "refused"; reason: unknown }
@@ -42,6 +45,8 @@ export type ReplacedResetCheck =
         | "source"
         | "unconfirmed";
     };
+
+type HeardCopyTime = { lastChangeAtMs: number | null };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -88,7 +93,7 @@ export async function replacedResetCheck(
     sent.nonce,
   );
   if (!checked.ok) return failed(checked.check);
-  const { sourceNodeId, order, lacking, holdings } = checked.body;
+  const { sourceNodeId, order, lacking, holdings, lastChangeAtMs } = checked.body;
   if (sourceNodeId !== deps.nodeId) return failed("source");
   if (
     !isRecord(lacking) ||
@@ -102,7 +107,12 @@ export async function replacedResetCheck(
   )
     return failed("answer");
   const lackingChains = lacking as Record<string, CanonicalValue[]>;
-  const heard = isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {};
+  const heard = {
+    ...(isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {}),
+    ...(lastChangeAtMs === null || Number.isSafeInteger(lastChangeAtMs)
+      ? { copy: { lastChangeAtMs: lastChangeAtMs as number | null } }
+      : {}),
+  };
   if (order === null) return { outcome: "no-order", lacking: lackingChains, ...heard };
 
   const acceptLoss = order.acceptLoss as boolean;

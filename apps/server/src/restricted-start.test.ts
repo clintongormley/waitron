@@ -17,7 +17,12 @@ describe("startRestricted", () => {
       app,
       nodeId: "node-1",
       environment: "preproduction",
-      resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+      resetOrder: {
+        answer: () => null,
+        mainHoldings: () => null,
+        mainCopy: () => null,
+        stop: async () => {},
+      },
       readMembership: () => Promise.resolve(null),
       cors: corsForVenue(() => Promise.resolve(false)),
       routes: [(a) => a.get("/stand-in", (c) => c.text("ok"))],
@@ -56,7 +61,12 @@ describe("startRestricted", () => {
         app,
         nodeId: "old-main",
         environment: "preproduction",
-        resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+        resetOrder: {
+          answer: () => null,
+          mainHoldings: () => null,
+          mainCopy: () => null,
+          stop: async () => {},
+        },
         readMembership: async () => null,
         cors: corsForVenue(async (origin) => origin === "https://new-main.test"),
         routes: [],
@@ -84,7 +94,12 @@ describe("startRestricted", () => {
       app,
       nodeId: "node-1",
       environment: "preproduction",
-      resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+      resetOrder: {
+        answer: () => null,
+        mainHoldings: () => null,
+        mainCopy: () => null,
+        stop: async () => {},
+      },
       readMembership: () => Promise.resolve(null),
       cors: corsForVenue((origin) => Promise.resolve(origin === "https://m2.test")),
       routes: [(a) => a.post("/api/node/membership", (c) => c.json({ accepted: false }))],
@@ -126,7 +141,12 @@ it("stops the return sender before a restricted server closes its stores", async
     cors: corsForVenue(async () => false),
     routes: [],
     log: () => {},
-    resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+    resetOrder: {
+      answer: () => null,
+      mainHoldings: () => null,
+      mainCopy: () => null,
+      stop: async () => {},
+    },
     returnRecords: {
       state: () => "waiting",
       passNow: async () => "waiting",
@@ -159,6 +179,7 @@ it("stops the reset-order duty before a restricted server closes its stores", as
     resetOrder: {
       answer: () => null,
       mainHoldings: () => null,
+      mainCopy: () => null,
       stop: async () => {
         events.push("reset order stopped");
       },

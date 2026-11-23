@@ -116,6 +116,7 @@ type Answer = {
   sourceNodeId: string;
   order: { orderId: string; acceptLoss: boolean } | null;
   lacking: Record<string, CanonicalValue[]>;
+  lastChangeAtMs?: CanonicalValue;
 };
 const answerBody = (over: Partial<Answer> = {}): Answer => ({
   nonce: NONCE,
@@ -166,6 +167,23 @@ it("goes ahead on a fenced chart with a confirmed return and nothing lacking, se
     setAside: false,
     lacking: { sample: [] },
   });
+});
+
+it("keeps the main box's copy time from a checked answer, a number or null, on both outcomes, and none for anything else", async () => {
+  const copyOf = async (over: Partial<Answer>) => {
+    const checked = await check(await signedAnswer(answerBody(over)));
+    expect(checked.outcome === "ordered" || checked.outcome === "no-order").toBe(true);
+    return "copy" in checked ? checked.copy : "absent";
+  };
+  const at = Date.parse("2026-11-12T09:41:07.123Z");
+  expect(await copyOf({ lastChangeAtMs: at })).toEqual({ lastChangeAtMs: at });
+  expect(await copyOf({ lastChangeAtMs: null })).toEqual({ lastChangeAtMs: null });
+  expect(await copyOf({ order: null, lastChangeAtMs: at })).toEqual({ lastChangeAtMs: at });
+  expect(await copyOf({ order: null, lastChangeAtMs: null })).toEqual({ lastChangeAtMs: null });
+  expect(await copyOf({ lastChangeAtMs: String(at) })).toBe("absent");
+  expect(await copyOf({ lastChangeAtMs: 1.5 })).toBe("absent");
+  expect(await copyOf({ order: null, lastChangeAtMs: "soon" })).toBe("absent");
+  expect(await copyOf({})).toBe("absent");
 });
 
 it("goes ahead while its chart still names itself main and its restriction names the target", async () => {
