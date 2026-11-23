@@ -24,6 +24,7 @@ const primaryRow = {
   needsResetStatement: false,
   reset: null,
   canReset: false,
+  canWipeWithLoss: false,
   returnScenario: null,
   recoveredRecordsBackup: null,
 } as const;

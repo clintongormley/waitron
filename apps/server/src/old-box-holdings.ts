@@ -10,6 +10,11 @@ export interface HeardHoldings {
   readonly heardAt: Date;
 }
 
+/** The copy's latest sale or order time, as the main box last sent it after an emergency switch. */
+export interface HeardCopy {
+  readonly lastChangeAtMs: number | null;
+}
+
 /** This box's own summary, per module that fills the `holdings` seat; reads only. */
 export async function readHoldings(
   db: Database,

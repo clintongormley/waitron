@@ -32,7 +32,7 @@ import {
   returnsCompletedAt,
 } from "./return-completion.js";
 import type { BackupStatus } from "./backup-status.js";
-import { readResetOrders, resetRefusal } from "./reset-order.js";
+import { readResetOrders, resetOptions, resetRefusal } from "./reset-order.js";
 
 type ChartRefusal =
   | "membership.node_not_found"
@@ -176,6 +176,12 @@ export interface ServerListing {
      * loss: an order already stands, or this venue holds the box's completed return.
      */
     readonly canReset: boolean;
+    /**
+     * This box would accept Wipe and remove for the box only as the order that accepts the loss:
+     * no order stands, no return from it is complete here, and `orderReset` would find a takeover
+     * to name.
+     */
+    readonly canWipeWithLoss: boolean;
     /** The scenario of the takeover from the box: the one whose return completed, else the latest. */
     readonly returnScenario: "controlled" | "emergency" | null;
     /** For a box this venue holds a completed return from, whether the records it returned are on a backup. */
@@ -248,6 +254,13 @@ export async function listServers(
           ...facts,
           resetStatement,
         });
+      const options = resetOptions({
+        refused: resetRefusal(held, selfNodeId, n.nodeId, open, pinned) !== null,
+        standing: order,
+        returnCompleted: facts.returnCompleted,
+        returnOutstanding: facts.returnOutstanding,
+        activated: activation !== undefined,
+      });
       return {
         nodeId: n.nodeId,
         contactUrl: n.contactUrl,
@@ -260,11 +273,8 @@ export async function listServers(
         returnOutstanding: facts.returnOutstanding,
         needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
         reset: order === null ? null : "ordered",
-        // orderReset's test without the loss: a standing order is answered as it stands, else
-        // holdsCompletedReturnFrom, which reads this same activationsBySource field.
-        canReset:
-          resetRefusal(held, selfNodeId, n.nodeId, open, pinned) === null &&
-          (order !== null || facts.returnCompleted),
+        canReset: options.plain,
+        canWipeWithLoss: options.withLoss && !options.plain,
         returnScenario: activation?.scenario ?? null,
         recoveredRecordsBackup: facts.returnCompleted
           ? recoveredRecordsBackup(completedAt.get(n.nodeId), backup)

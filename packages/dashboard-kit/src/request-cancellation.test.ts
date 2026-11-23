@@ -197,6 +197,23 @@ it.each(["success", "expiry", "reset", "network"] as const)(
   },
 );
 
+it("reports a box's handover.stepping_down even when the request's sign-in has moved on", async () => {
+  let generation = 1;
+  const pending = held<Response>();
+  const onError = vi.fn();
+  const request = createRequest({
+    fetchImpl: () => pending.promise,
+    onError,
+    sessionGeneration: () => generation,
+  });
+  const result = request("/management-api/session", "POST", {}, { sessionErrors: "caller" });
+  const observed = result.catch((error: unknown) => error);
+  generation = 2;
+  pending.resolve(json({ error: { code: "handover.stepping_down" } }, 503));
+  expect(await observed).toEqual({ code: "handover.stepping_down", status: 503 });
+  expect(onError.mock.calls).toEqual([["handover.stepping_down", 1]]);
+});
+
 it("still reports current generation activity and a current ordinary session refusal", async () => {
   const onSuccess = vi.fn();
   const onError = vi.fn();

@@ -1,5 +1,7 @@
 # A1558 PR 10: the replaced main box becomes a spare — plan (revision 5.1, cleared)
 
+> 2026-11-23: PR 10b part B (branch `feat/service-a1558-pr10b-b`) built Wipe and remove before the return completes and the download's tabs since the copy, from lane B's `a1558-pr10b-b-plan.md` revision 9, which replaced this plan's part B where they differ.
+
 > Lane B, 21 November 2026. **Cleared by the watcher at 12:22** (lane B's `questions.md`, "WATCHER 2026-11-21 12:22"), with two conditions folded in as revision 5.1. **Build order: after the join-environment PR (landed as #3955, `712e06e354`) and PR 9.** Code facts were **read** on main at `1390e4b373`, not run; the two commits since revision 4's `ae87c0dcf9` touched only box upgrades and `deploy/waitron.sh`, whose reset pointers are updated below. The only commands run were `git`, `grep`, `sed`, `awk`, and (for revision 4) one `node` import of `packages/store/src/state-layout.ts`. The owner's first choice ("Yes: a, b and c") is in lane B's `questions.md`, "WATCHER 2026-11-21 10:18"; the owner's answers to this plan's four questions are under "WATCHER 2026-11-21 11:41" (PR 10 part) and "WATCHER 2026-11-21 11:46"; the environment answer ("yes") is at 12:05. The watcher kept PR 10 in lane B and accepted its shape: the old box asks the main box (signed), the order is a new kind of handover event row with no new table, and the databases are set aside rather than deleted when records would be lost. **Full review path; the owner lands it.** Revisions 2 to 5.1 are explained in the last section.
 
 ## What a person can do when this lands
@@ -496,6 +498,8 @@ The first seven columns are new and describe the record:
 | Record created at (UTC) | Registro generado el (UTC) |
 | Sent to AEAT (Waiting / Being sent / Accepted / Accepted with errors / Refused / Stopped / Held) | Envío a la AEAT (Pendiente / Enviándose / Aceptado / Aceptado con errores / Rechazado / Detenido / Retenido) |
 | Whole chain listed (Yes when the main box's copy could not be matched) | Cadena completa (Sí cuando no se ha podido cotejar la copia del servidor principal) |
+
+2026-11-23 pointer: PR #4152 shows every time in the old box's download with its offset from UTC, in the venue's local time except the Working hours tab's clock-event time, which keeps the offset recorded with it; the headings no longer say UTC (the owner's choice, 2026-11-23).
 
 The rest are the workbook's invoice columns and words, unchanged. Unlike the workbook, the file
 **includes** a record whose sale is a substitution (F3), because that record is unreturned too.

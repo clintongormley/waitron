@@ -22,6 +22,7 @@ const listing: ServerListing = {
       needsResetStatement: false,
       reset: null,
       canReset: false,
+      canWipeWithLoss: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
     },
@@ -37,6 +38,7 @@ const listing: ServerListing = {
       needsResetStatement: false,
       reset: null,
       canReset: false,
+      canWipeWithLoss: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
     },
@@ -52,6 +54,7 @@ const listing: ServerListing = {
       needsResetStatement: false,
       reset: null,
       canReset: false,
+      canWipeWithLoss: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
     },
@@ -67,6 +70,7 @@ const listing: ServerListing = {
       needsResetStatement: false,
       reset: null,
       canReset: false,
+      canWipeWithLoss: false,
       returnScenario: null,
       recoveredRecordsBackup: null,
     },
@@ -232,6 +236,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           needsResetStatement: false,
           reset: null,
           canReset: false,
+          canWipeWithLoss: false,
           returnScenario: null,
           recoveredRecordsBackup: null,
         },
@@ -443,6 +448,34 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
       "wt-dialog[data-test=reset-dialog] wt-form-actions",
     )!;
     expect(await formMessageOf(actions)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders Wipe and remove when the return cannot complete, with its tick, accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(
+            withFormer({
+              returnOutstanding: true,
+              canWipeWithLoss: true,
+              returnScenario: "emergency",
+            }),
+          ),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openOn(el, "reset");
+    expect(el.shadowRoot!.querySelector("[data-test=reset-loss-warning]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-switch[data-test=reset-loss-confirm]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("wt-switch[data-test=reset-loss-confirm]")!
+      .shadowRoot!.querySelector("input")!
+      .click();
+    await flush(el);
     await expectNoA11yViolations(host);
   });
 

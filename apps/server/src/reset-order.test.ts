@@ -17,13 +17,13 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { appendHandoverEventTx, beginHandoverOperationTx } from "@waitron/node-db";
 import { startManagementSession } from "@waitron/identity";
 import type { MembershipNode } from "@waitron/membership";
-import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
-import { MEMBERSHIP_API_STATUS, mountMembershipRemovalApi } from "./membership-removal-api.js";
+import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { recordReturnBatchTx } from "./return-completion.js";
 import { returnDigest } from "./return-records.js";
-import { orderReset, readResetOrderFor } from "./reset-order.js";
+import { readResetOrderFor } from "./reset-order.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -70,18 +70,6 @@ async function primary(): Promise<Primary> {
     app,
     { db, node: suite.node, ring: RING, nodeId, reloadStream: vi.fn(async () => {}) },
     log,
-  );
-  // The route refuses loss orders until PR 10b, so they are made below it, under its refusals.
-  const runReset = createErrorBoundary(MEMBERSHIP_API_STATUS, "handover.reset_order_failed");
-  app.post("/below-route/:nodeId/loss-order", (c) =>
-    runReset(c, log, async () =>
-      c.json(
-        await orderReset(
-          { db, node: suite.node, nodeId },
-          { targetNodeId: c.req.param("nodeId"), personId: adminPersonId, acceptLoss: true },
-        ),
-      ),
-    ),
   );
   return {
     db,
@@ -187,9 +175,8 @@ async function order(
   });
 }
 
-/** A loss order, made below the route that refuses one. */
 async function orderWithLoss(p: Primary, nodeId: string): Promise<Response> {
-  return p.app.request(`/below-route/${nodeId}/loss-order`, { method: "POST" });
+  return order(p, nodeId, { acceptLoss: true });
 }
 
 async function errorOf(res: Response): Promise<{ code: string; params: unknown }> {
@@ -273,20 +260,16 @@ describe("POST /management-api/servers/:nodeId/reset", () => {
       await expectNothingWritten(p);
     });
 
-    it("refuses a loss order, which ships with its download of unreturned records, as management.request_invalid (400)", async () => {
+    it("orders a loss reset through the route: 200 with acceptLoss: true, and the awaiting takeover reads return_abandoned", async () => {
       const p = await primary();
       const oldMain = await withFormer(p);
       const operationId = await takeover(p, oldMain);
 
       const res = await order(p, oldMain, { acceptLoss: true });
 
-      expect(res.status).toBe(400);
-      expect(await errorOf(res)).toEqual({
-        code: "management.request_invalid",
-        params: { field: "acceptLoss" },
-      });
-      expect(operationState(p, operationId)).toBe("activated");
-      await expectNothingWritten(p);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ orderId: orderIdOf(operationId, true), acceptLoss: true });
+      expect(operationState(p, operationId)).toBe("return_abandoned");
     });
 
     it("refuses on a box that is not the chart's serving primary as membership.not_primary (409)", async () => {

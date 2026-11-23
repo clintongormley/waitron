@@ -906,7 +906,7 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **Form implementation leftovers:** eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
+- **Form implementation leftovers:** eventual summary retirement; a focused invalid field's look. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
 
 
@@ -1317,7 +1317,7 @@ Not in any track until the standalone primary is done.
   Qualify with a current-baseline year copy before go-live.
   [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
-- **Remaining setup and failover gaps** (bundle of 6, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
+- **Remaining setup and failover gaps** (bundle of 7, 3 important, size M). [Detail](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 
 **The on-prem mirror.** Two local boxes with failover are built and checked on real boxes; this
 section records what remains.

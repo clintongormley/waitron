@@ -1555,6 +1555,25 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("orders a wipe accepting the loss", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ orderId: "order", acceptLoss: true }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(
+      api.orderServerReset("55555555-5555-4555-8555-555555555555", true),
+    ).resolves.toEqual({ orderId: "order", acceptLoss: true });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/servers/55555555-5555-4555-8555-555555555555/reset",
+        "POST",
+        { acceptLoss: true },
+      ],
+    ]);
+  });
+
   it("clears a removed server by its id, passing a refusal's code through", async () => {
     const fetchImpl = vi
       .fn()

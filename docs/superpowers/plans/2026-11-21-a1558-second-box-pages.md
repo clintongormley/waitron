@@ -53,6 +53,7 @@ The work is in `apps/setup/src/screens/handover-screen.ts` and its strings, `app
   - This is the session's addition, not the owner's request. The owner met a bare "404 Not Found" from the stood-down box on a till address.
   - A box that has handed over starts restricted, and every route except `/` gives a bare 404 (`restricted-start.ts:38-47`). That was a recorded decision of the handover-refusal-words plan: "no new unknown-route case".
   - This PR overrules it for GET `/till`, `/till/*` and the dashboard's pages only. A person who opens those meets a dead end, while the API stays as it is.
+  - 2026-11-23 pointer: PR #4152 (A1558 PR 10b part B) changed the API too: a replaced box now answers every `/management-api/*` request with 503 `handover.stepping_down`, so an open dashboard reloads to the box's own page.
   - Those pages serve the restricted page, with a link to the box that runs the venue. The address is taken from the restriction's successor id (`restricted-page.ts:73`), never from the box's own server list, which can still name itself as main (lane L's `6653033aac`).
 - **Overlap.** Lane L's A1561 changes `restricted-page.ts` and its wording. Build on main; whoever lands second rebases.
 

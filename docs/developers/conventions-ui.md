@@ -334,8 +334,9 @@ with no built setup app answers every other GET with its 200 placeholder
 Each answer is one self-contained HTML page with no external file, sent with
 `Cache-Control: no-cache`. The page loads no file, so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
 of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
-`var(--wt-…)`. Font copies use rem, matching the shared defaults; the page renderer converts them
-to px so standalone pages keep their sizes. Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
+`var(--wt-…)`. Copies holding rem lengths match the shared defaults; the page renderer converts each rem to px at the 16px root
+(`fixedFontValue` in `apps/server/src/html-page-tokens.ts`) so standalone pages keep their sizes.
+Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
 reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
 its exact name only in the default light block, the `prefers-color-scheme: dark` block, the
 `[data-theme="light"]` and `[data-theme="dark"]` blocks a chosen theme uses, and the structure file,
@@ -354,6 +355,13 @@ carries this Content-Security-Policy, which lets that one script run by its hash
 `frame-ancestors 'self'` lets a page on the box's own origin show a guide in a frame, and nobody
 else. The "sends no-cache and a policy that allows only the page's own script" case in
 `guide-pages.test.ts` hashes the page's script and compares the whole header.
+
+`BOX_FORM_STYLE` (in `guide-pages.ts`) draws the two server-drawn box forms in the dashboard's
+field look, with each label above its field: the replaced box's download form on the restricted
+page, and the waiting page's Carry on form. Only those two pages carry it. The waiting page is drawn
+by `renderDocument`, so it takes the tokens, the box pages' typeface, text colour and background
+(its links keep the browser's colours), and the form style through `BOX_FORM_HEAD`, and follows the
+device's light or dark setting rather than the theme chosen in the apps.
 
 The page's own words (the "Waitron guide" trail, each guide's short name, the missing-twin line, the
 404 and 500 pages) are in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`.

@@ -2,7 +2,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { billAdvances, invoiceSeries, liveBackupQuery, type Database } from "@waitron/db";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { CanonicalValue } from "@waitron/membership";
@@ -15,12 +15,13 @@ import {
   seedSale,
   seedSubstitution,
   seedVenueWithSeries,
+  seedVoid,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { readAccountantInvoices } from "./accountant-export.js";
+import { INVOICE_LINE_KEYS, readAccountantInvoices } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
 import {
   insertFiscalRecord,
   insertNumberedFiscalRecord,
@@ -76,19 +77,21 @@ function sheet(bytes: Uint8Array, name = "xl/worksheets/sheet1.xml"): string {
   return strFromU8(unzipSync(bytes)[name]!);
 }
 
-function build(
+async function build(
   db: Database,
   modules: readonly WaitronModule[],
   language: "en" | "es" = "en",
   mainHoldings: Readonly<Record<string, CanonicalValue>> | null = { fiscal: [] },
 ) {
-  return buildOldBoxWorkbook({
-    db,
-    modules,
-    mainHoldings: mainHoldings === null ? null : { holdings: mainHoldings, heardAt: MADE_AT },
-    madeAt: MADE_AT,
-    language,
-  });
+  return (
+    await makeOldBoxWorkbook({
+      db,
+      modules,
+      mainHoldings: mainHoldings === null ? null : { holdings: mainHoldings, heardAt: MADE_AT },
+      madeAt: MADE_AT,
+      language,
+    })
+  ).bytes;
 }
 
 /** A part payment: its own ticket, paid in cash on an open bill. */
@@ -147,16 +150,18 @@ describe("the old box's Invoices tab", () => {
     const accountant = ACCOUNTANT_EXPORT_WORDS.en;
 
     expect(row(xml, 1)).toEqual([
-      "Invoice records the new main box did not have at 2026-11-23 09:30 UTC, when it last told this box what it holds. This box may still send some of these to it before it is wiped.",
+      "Invoice records the new main box did not have at 2026-11-23 10:30+01:00, when it last told this box what it holds. This box may still send some of these to it before it is wiped.",
     ]);
     expect(row(xml, 2)).toEqual([
-      ...accountant.invoiceColumns.slice(0, -1),
+      ...INVOICE_LINE_KEYS.map((key) =>
+        key === "voidedAt" ? "Voided at" : accountant.invoiceColumns[key],
+      ),
       accountant.saleDateColumn,
       accountant.paymentOnAccountColumn,
       "Chain",
       "Record number",
       "Record type",
-      "Record created at (UTC)",
+      "Record created at",
       "Filing state with AEAT",
       "Whole chain listed",
     ]);
@@ -182,7 +187,7 @@ describe("the old box's Invoices tab", () => {
       "Box: node-a; System record: sif-3",
       "1",
       words.recordTypes.issue,
-      "2026-11-20T10:00:01Z",
+      "2026-11-20 11:00:01.000+01:00",
       words.notFiled,
       words.yes,
     ]);
@@ -250,14 +255,18 @@ describe("the old box's Invoices tab", () => {
     const chainCell = `${words.chainFields.nodeId}: node-a; ${words.chainFields.sifId}: sif-a`;
 
     expect(unreturned).toHaveBeenCalledWith(expect.anything(), []);
-    expect(row(xml, 1)).toEqual([words.invoiceIntro.replace("{time}", "2026-11-23 09:30 UTC")]);
-    expect(row(xml, 2).slice(0, 3)).toEqual(ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.slice(0, 3));
+    expect(row(xml, 1)).toEqual([words.invoiceIntro.replace("{time}", "2026-11-23 10:30+01:00")]);
+    expect(row(xml, 2).slice(0, 3)).toEqual([
+      ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.id,
+      ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.nodeId,
+      ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.invoiceNumber,
+    ]);
     expect(row(xml, 2).slice(-6)).toEqual(words.recordColumns);
     expect(row(xml, 3).slice(20)).toEqual([
       chainCell,
       "7",
       words.recordTypes.issue,
-      "2026-11-20T10:00:01Z",
+      "2026-11-20 11:00:01.000+01:00",
       words.filingStates.aceptado,
       "No",
     ]);
@@ -266,7 +275,7 @@ describe("the old box's Invoices tab", () => {
       chainCell,
       "8",
       words.recordTypes.cancellation,
-      "2026-11-20T10:05:00Z",
+      "2026-11-20 11:05:00.000+01:00",
       words.filingStates.pendiente,
       "No",
     ]);
@@ -276,7 +285,7 @@ describe("the old box's Invoices tab", () => {
       chainCell,
       "9",
       words.recordTypes.issue,
-      "2026-11-20T10:06:00Z",
+      "2026-11-20 11:06:00.000+01:00",
       "a_later_state",
       "No",
     ]);
@@ -295,6 +304,72 @@ describe("the old box's Invoices tab", () => {
     expect(lock).not.toHaveBeenCalled();
     expect(transaction).not.toHaveBeenCalled();
   });
+
+  it("shows every time in the venue's own zone, each at its own offset, and no UTC", async () => {
+    await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
+    const voided = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-20T10:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedVoid(suite.db, { saleId: voided }, "2026-11-20T23:30:00.000Z");
+    const chain: UnreturnedChain = {
+      ids: { nodeId: "node-a" },
+      whole: true,
+      records: [
+        { saleId: voided, createdAt: "2026-11-23T18:25:00.000Z" },
+        { saleId: randomUUID(), createdAt: "2026-07-01T18:25:00.000Z" },
+        { saleId: randomUUID(), createdAt: "not a time" },
+      ].map((record, index) => ({
+        ...record,
+        number: index + 1,
+        type: "issue",
+        filingState: null,
+      })),
+    };
+    const workbook = async (language: "en" | "es") =>
+      sheet(
+        (
+          await makeOldBoxWorkbook({
+            db: suite.db,
+            modules: [
+              { ...fiscal, handover: { ...VERIFACTU_HANDOVER, unreturned: async () => [chain] } },
+            ],
+            mainHoldings: { holdings: { fiscal: [] }, heardAt: new Date("2026-11-23T18:25:42Z") },
+            madeAt: MADE_AT,
+            language,
+          })
+        ).bytes,
+      );
+    const xml = await workbook("en");
+    const words = OLD_BOX_DATA_WORDS.en;
+
+    expect(row(xml, 1)).toEqual([words.invoiceIntro.replace("{time}", "2026-11-23 19:25+01:00")]);
+    const headings = row(xml, 2);
+    const voidedAt = headings.indexOf("Voided at");
+    const createdAt = headings.indexOf("Record created at");
+    expect(voidedAt).toBe(17);
+    expect(createdAt).toBe(23);
+    expect(row(xml, 3)[voidedAt]).toBe("2026-11-21 00:30:00.000+01:00");
+    expect([3, 4, 5].map((n) => row(xml, n)[createdAt])).toEqual([
+      "2026-11-23 19:25:00.000+01:00",
+      "2026-07-01 20:25:00.000+02:00",
+      "not a time",
+    ]);
+    const spanish = await workbook("es");
+    expect(row(spanish, 2)[voidedAt]).toBe(OLD_BOX_DATA_WORDS.es.voidedAtColumn);
+    expect(row(spanish, 2)[createdAt]).toBe(OLD_BOX_DATA_WORDS.es.recordColumns[3]);
+    expect(xml).not.toContain("UTC");
+    expect(spanish).not.toContain("UTC");
+  });
+
+  it("has no since tabs without a rule", async () => {
+    const files = unzipSync(await build(suite.db, [fiscal]));
+    expect(files["xl/worksheets/sheet1.xml"]).toBeDefined();
+    expect(files["xl/worksheets/sheet2.xml"]).toBeUndefined();
+  });
+
   it("lists the fiscal module's chains whole under the no-comparison first line when there is no main-box summary, and nothing when the summary holds them", async () => {
     const sale = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
@@ -310,7 +385,7 @@ describe("the old box's Invoices tab", () => {
       // The fiscal seat names a chain by box, system record, system and installation, in that order.
       const [box, record, system, installation] = Object.values(words.chainFields);
       expect(row(xml, 1)).toEqual([
-        words.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+        words.uncomparedIntro.replace("{time}", "2026-11-23 10:30+01:00"),
       ]);
       expect([row(xml, 3)[0], row(xml, 3)[2], row(xml, 3)[20], row(xml, 3).at(-1)]).toEqual([
         sale,
@@ -384,19 +459,21 @@ describe("the old box's Invoices tab with the main box's summary from its last a
     const { second, held } = await twoSales();
     for (const language of ["en", "es"] as const) {
       const xml = sheet(
-        await buildOldBoxWorkbook({
-          db: suite.db,
-          modules: [fiscal],
-          mainHoldings: {
-            holdings: { fiscal: held },
-            heardAt: new Date("2026-11-23T08:15:42.000Z"),
-          },
-          madeAt: MADE_AT,
-          language,
-        }),
+        (
+          await makeOldBoxWorkbook({
+            db: suite.db,
+            modules: [fiscal],
+            mainHoldings: {
+              holdings: { fiscal: held },
+              heardAt: new Date("2026-11-23T08:15:42.000Z"),
+            },
+            madeAt: MADE_AT,
+            language,
+          })
+        ).bytes,
       );
       expect(row(xml, 1)).toEqual([
-        OLD_BOX_DATA_WORDS[language].invoiceIntro.replace("{time}", "2026-11-23 08:15 UTC"),
+        OLD_BOX_DATA_WORDS[language].invoiceIntro.replace("{time}", "2026-11-23 09:15+01:00"),
       ]);
       // The summary does not name the other box's chain, so all of it is listed.
       expect([row(xml, 3)[0], row(xml, 3).at(-1)]).toEqual([
@@ -425,7 +502,7 @@ describe("the old box's Invoices tab with the main box's summary from its last a
       ),
     );
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 10:30+01:00"),
     ]);
     expect([row(xml, 3)[0], row(xml, 4)[0]].sort()).toEqual([first, second].sort());
     expect(row(xml, 5)).toEqual([]);
@@ -435,23 +512,25 @@ describe("the old box's Invoices tab with the main box's summary from its last a
   it("says no comparison was made when no summary was heard, even with no module to ask", async () => {
     const xml = sheet(await build(suite.db, [], "en", null));
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 10:30+01:00"),
     ]);
   });
 
   it("lists every record under the no-comparison first line when the module cannot read the summary", async () => {
     const { first, second } = await twoSales();
     const xml = sheet(
-      await buildOldBoxWorkbook({
-        db: suite.db,
-        modules: [fiscal],
-        mainHoldings: { holdings: { fiscal: "not a summary" }, heardAt: MADE_AT },
-        madeAt: MADE_AT,
-        language: "en",
-      }),
+      (
+        await makeOldBoxWorkbook({
+          db: suite.db,
+          modules: [fiscal],
+          mainHoldings: { holdings: { fiscal: "not a summary" }, heardAt: MADE_AT },
+          madeAt: MADE_AT,
+          language: "en",
+        })
+      ).bytes,
     );
     expect(row(xml, 1)).toEqual([
-      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 09:30 UTC"),
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-23 10:30+01:00"),
     ]);
     expect([row(xml, 3)[0], row(xml, 4)[0]].sort()).toEqual([first, second].sort());
     expect(row(xml, 5)).toEqual([]);

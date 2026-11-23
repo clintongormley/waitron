@@ -17,7 +17,12 @@ describe("startRestricted", () => {
       app,
       nodeId: "node-1",
       environment: "preproduction",
-      resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+      resetOrder: {
+        answer: () => null,
+        mainHoldings: () => null,
+        mainCopy: () => null,
+        stop: async () => {},
+      },
       readMembership: () => Promise.resolve(null),
       cors: corsForVenue(() => Promise.resolve(false)),
       routes: [(a) => a.get("/stand-in", (c) => c.text("ok"))],
@@ -56,7 +61,12 @@ describe("startRestricted", () => {
         app,
         nodeId: "old-main",
         environment: "preproduction",
-        resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+        resetOrder: {
+          answer: () => null,
+          mainHoldings: () => null,
+          mainCopy: () => null,
+          stop: async () => {},
+        },
         readMembership: async () => null,
         cors: corsForVenue(async (origin) => origin === "https://new-main.test"),
         routes: [],
@@ -78,13 +88,56 @@ describe("startRestricted", () => {
     },
   );
 
+  it("refuses every dashboard API request with the handover code, and leaves other paths a 404", async () => {
+    const app = new Hono();
+    startRestricted({
+      app,
+      nodeId: "old-main",
+      environment: "preproduction",
+      resetOrder: {
+        answer: () => null,
+        mainHoldings: () => null,
+        mainCopy: () => null,
+        stop: async () => {},
+      },
+      readMembership: async () => null,
+      cors: corsForVenue(async () => false),
+      routes: [],
+      log: () => {},
+      listen: () => ({ health: createHealthState(new Date()), close: async () => {} }),
+    });
+
+    for (const [path, method] of [
+      ["/management-api/session", "POST"],
+      ["/management-api/google/config", "GET"],
+    ] as const) {
+      const response = await app.request(path, {
+        method,
+        ...(method === "POST"
+          ? { headers: { "content-type": "application/json" }, body: "{}" }
+          : {}),
+      });
+      expect(response.status, path).toBe(503);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.stepping_down", params: {} },
+      });
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+    expect((await app.request("/api/unknown")).status).toBe(404);
+  });
+
   it("answers a till on another of the venue's origins, and no stranger", async () => {
     const app = new Hono();
     startRestricted({
       app,
       nodeId: "node-1",
       environment: "preproduction",
-      resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+      resetOrder: {
+        answer: () => null,
+        mainHoldings: () => null,
+        mainCopy: () => null,
+        stop: async () => {},
+      },
       readMembership: () => Promise.resolve(null),
       cors: corsForVenue((origin) => Promise.resolve(origin === "https://m2.test")),
       routes: [(a) => a.post("/api/node/membership", (c) => c.json({ accepted: false }))],
@@ -126,7 +179,12 @@ it("stops the return sender before a restricted server closes its stores", async
     cors: corsForVenue(async () => false),
     routes: [],
     log: () => {},
-    resetOrder: { answer: () => null, mainHoldings: () => null, stop: async () => {} },
+    resetOrder: {
+      answer: () => null,
+      mainHoldings: () => null,
+      mainCopy: () => null,
+      stop: async () => {},
+    },
     returnRecords: {
       state: () => "waiting",
       passNow: async () => "waiting",
@@ -159,6 +217,7 @@ it("stops the reset-order duty before a restricted server closes its stores", as
     resetOrder: {
       answer: () => null,
       mainHoldings: () => null,
+      mainCopy: () => null,
       stop: async () => {
         events.push("reset order stopped");
       },

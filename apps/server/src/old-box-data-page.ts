@@ -7,12 +7,14 @@ import { codeOf } from "@waitron/server-kit";
 import { FALLBACK_LOCALE, hasCode, isAppError, type AppError } from "@waitron/shared";
 import { isSecure } from "./encrypted-connection.js";
 import { resolveLoginLocale } from "./login-locale.js";
-import { buildOldBoxWorkbook } from "./old-box-data-workbook.js";
-import type { HeardHoldings } from "./old-box-holdings.js";
+import { sinceRule, type SinceRule } from "./old-box-data-since.js";
+import { makeOldBoxWorkbook, type OldBoxWorkbook } from "./old-box-data-workbook.js";
+import type { HeardCopy, HeardHoldings } from "./old-box-holdings.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { formBody } from "./recovery-start-again.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import {
+  readPlannedHandover,
   restrictedPageAnswer,
   type OldBoxDownloadRefusal,
   type RestrictedPageDeps,
@@ -27,6 +29,8 @@ export interface OldBoxDataDeps {
   throttle?: PasswordThrottle;
   /** The main box's summary the reset-order duty last heard. */
   mainHoldings?: () => HeardHoldings | null;
+  /** The copy time the reset-order duty last heard; it sets where the "since" tabs start. */
+  mainCopy?: () => HeardCopy | null;
 }
 
 type RefusalStatus = 400 | 401 | 403 | 409 | 429 | 500;
@@ -131,24 +135,35 @@ export function oldBoxDataRoute(deps: OldBoxDataDeps): (app: Hono) => void {
       try {
         const madeAt = new Date();
         const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-        let bytes: Uint8Array<ArrayBuffer>;
+        let made: OldBoxWorkbook;
+        let since: SinceRule | undefined;
         try {
-          bytes = await buildOldBoxWorkbook({
+          // The "since" tabs follow the same rule as the page's emergency sentence.
+          if (!(await readPlannedHandover(deps.page)))
+            since = await sinceRule(deps.page.venue, deps.mainCopy?.() ?? null);
+          made = await makeOldBoxWorkbook({
             db: deps.page.venue,
             modules: deps.modules,
             mainHoldings: deps.mainHoldings?.() ?? null,
             madeAt,
             language: locale === "es-ES" ? "es" : "en",
+            ...(since === undefined ? {} : { since }),
           });
         } catch (error) {
           log("error", "old_box_data.failed", { errorCode: codeOf(error), requestId, personId });
           return refuse(500, "failed", email);
         }
-        log("info", "old_box_data.downloaded", { personId, bytes: bytes.byteLength, requestId });
+        log("info", "old_box_data.downloaded", {
+          personId,
+          bytes: made.bytes.byteLength,
+          ...(since === undefined ? {} : { since: since.kind }),
+          ...made.counts,
+          requestId,
+        });
         return c.body(
-          bytes,
+          made.bytes,
           200,
-          workbookDownloadHeaders(`waitron-old-main-box-${madeAt.toISOString().slice(0, 10)}.xlsx`),
+          workbookDownloadHeaders(`waitron-old-main-box-${made.madeOn}.xlsx`),
         );
       } finally {
         making = false;

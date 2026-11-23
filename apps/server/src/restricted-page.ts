@@ -15,7 +15,7 @@ import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml, httpsLinkLine } from "./html-page.js";
-import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
+import { BOX_FORM_STYLE, boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import { codeInput, emailInput } from "./carry-on.js";
 import { isSecure } from "./encrypted-connection.js";
 import { passwordInput } from "./recovery-start-again.js";
@@ -190,11 +190,9 @@ async function progressPage(
   return await handoverPageOf({ db: deps.venue }, operation);
 }
 
-async function readView(
-  deps: RestrictedPageDeps,
-  requestId: string,
-  download?: OldBoxDownloadState,
-): Promise<RestrictedView> {
+async function readRestriction(
+  deps: Pick<RestrictedPageDeps, "node" | "nodeId">,
+): Promise<{ restriction: HandoverRestriction; operation: HandoverOperation | null }> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
@@ -202,6 +200,24 @@ async function readView(
     restriction.operationId === null
       ? null
       : await readHandoverOperation(deps.node, deps.nodeId, restriction.operationId);
+  return { restriction, operation };
+}
+
+const isPlanned = (operation: HandoverOperation | null) => operation?.scenario === "controlled";
+
+/** Whether this box was replaced by a planned handover rather than an emergency switch. */
+export async function readPlannedHandover(
+  deps: Pick<RestrictedPageDeps, "node" | "nodeId">,
+): Promise<boolean> {
+  return isPlanned((await readRestriction(deps)).operation);
+}
+
+async function readView(
+  deps: RestrictedPageDeps,
+  requestId: string,
+  download?: OldBoxDownloadState,
+): Promise<RestrictedView> {
+  const { restriction, operation } = await readRestriction(deps);
   // The rule the return sender uses to choose the box it sends to (`return-records.ts`).
   const read = await readOrWarn(
     deps,
@@ -222,7 +238,7 @@ async function readView(
             progressPage(deps, operation, restriction, read?.chart, returnState),
           ),
     returnState,
-    planned: operation?.scenario === "controlled",
+    planned: isPlanned(operation),
     reset: await resetLine(deps, requestId),
     ...(download === undefined ? {} : { download }),
   };
@@ -285,7 +301,7 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
       ? ""
       : ` aria-invalid="true" aria-describedby="old-box-data-${field}-error"`;
   const code = shown.askCode
-    ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} *</label></p>
+    ? `<p><label for="old-box-data-totp">${escapeHtml(words.totp)} <span class="required">*</span></label></p>
 <p>${codeInput("old-box-data-totp", invalid("totp"), true)}</p>\n${error("totp")}`
     : "";
   const bottom =
@@ -293,10 +309,10 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
       ? ""
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
   return `<section>
-${heading}${intro}<form method="post" action="/old-box-data">
-<p><label for="old-box-data-email">${escapeHtml(words.email)} *</label></p>
+${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
+<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("old-box-data-email", view.download?.email ?? "", invalid("email"))}</p>
-${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} *</label></p>
+${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
 ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
 </form>
@@ -319,6 +335,7 @@ ${httpsLinkLine(view.successorUrl, text.openDashboard)}
 ${line === undefined ? "" : `<p>${escapeHtml(line)}</p>`}
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${downloadSection(view, locale, secure)}`,
+    BOX_FORM_STYLE,
   );
 }
 

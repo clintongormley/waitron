@@ -101,6 +101,7 @@ async function signedOrder(
   order: { orderId: string; acceptLoss: boolean } | null,
   lacking: Record<string, CanonicalValue[]> = { sample: [] },
   holdings?: CanonicalValue,
+  extra: Record<string, CanonicalValue> = {},
 ) {
   return Response.json(
     await signAsThisBox({ node: suite.node, ring, nodeId: receiver }, "reset-order", {
@@ -109,6 +110,7 @@ async function signedOrder(
       order,
       lacking,
       ...(holdings === undefined ? {} : { holdings }),
+      ...extra,
     }),
   );
 }
@@ -351,6 +353,38 @@ it("keeps a verified answer's summary of the main box with the time its question
     holdings: MAIN_HELD,
     heardAt: new Date("2026-11-22T10:00:00Z"),
   });
+  resume();
+  await duty.stop();
+});
+
+it("keeps the last copy time it heard through a refusal and through a later answer without one", async () => {
+  const first = Date.parse("2026-11-12T09:41:07.123Z");
+  const later = Date.parse("2026-11-12T09:50:00.000Z");
+  const seenCopies: unknown[] = [];
+  const running: { duty?: ReturnType<typeof start>["duty"] } = {};
+  const main = await standIn((seen, index) => {
+    seenCopies.push(running.duty?.mainCopy());
+    if (index === 1) return refused();
+    const extra: Record<string, CanonicalValue> = [
+      { lastChangeAtMs: first },
+      {},
+      {},
+      { lastChangeAtMs: later },
+    ][index]!;
+    return signedOrder(seen, null, { sample: [] }, undefined, extra);
+  });
+  const { time, sleep, resume } = parkedClock(4);
+  const { duty } = start(main.fetch, time);
+  running.duty = duty;
+  await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(4));
+  expect(main.seen).toHaveLength(4);
+  expect(seenCopies).toEqual([
+    null,
+    { lastChangeAtMs: first },
+    { lastChangeAtMs: first },
+    { lastChangeAtMs: first },
+  ]);
+  expect(duty.mainCopy()).toEqual({ lastChangeAtMs: later });
   resume();
   await duty.stop();
 });

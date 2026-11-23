@@ -41,6 +41,7 @@ import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { readBoxAddresses } from "./restricted-page.js";
+import { BOX_FORM_STYLE } from "./guide-pages.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
 
 const NODE_ID = "00000000-0000-4000-8000-0000000000aa";
@@ -1031,6 +1032,35 @@ describe("the waiting start", () => {
       expect(spanish).toContain(
         '<button type="submit" disabled>Seguir como servidor principal</button>',
       );
+    });
+
+    it("draws its administrator form with the box pages' form style", async () => {
+      const blank = await page();
+      expect(blank).toContain(BOX_FORM_STYLE);
+      expect(blank.indexOf(BOX_FORM_STYLE)).toBeLessThan(blank.indexOf("</head>"));
+      expect(blank).toContain(
+        '<form method="post" action="/carry-on" id="carry-on" class="box-form">',
+      );
+      expect(blank).toContain(
+        '<label for="carry-on-email">Email <span class="required">*</span></label>',
+      );
+      expect(blank).toContain(
+        'Nobody is restoring this venue from a backup or switching it to another box right now <span class="required">*</span></label>',
+      );
+    });
+
+    it("draws its whole page in the box pages' typeface and colours", async () => {
+      const head = (await page()).split("</head>")[0]!;
+      const body = /\nbody \{\n([^}]*)\}/.exec(head)?.[1];
+      expect(body).toBeDefined();
+      for (const declaration of [
+        "background: var(--wt-color-bg);",
+        "color: var(--wt-color-text);",
+        "font-family: var(--wt-font-family);",
+        "font-size: var(--wt-font-size-md);",
+        "line-height: 1.5;",
+      ])
+        expect(body!.split("\n")).toContain(declaration);
     });
 
     it("either statement unticked keeps the action disabled", async () => {

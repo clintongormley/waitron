@@ -8,6 +8,8 @@ import {
 import { readHandoverRestriction } from "@waitron/node-db";
 import { checkedPeerAnswer, mainBoxToAsk } from "./main-box-answer.js";
 import { peerKeyOf } from "./handover-signing.js";
+import type { HeardCopy } from "./old-box-holdings.js";
+import { usableCopyTime } from "./old-box-data-since.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { readReturnInventory, returnConfirmed, type ReturnRecordsDeps } from "./return-records.js";
 
@@ -20,12 +22,15 @@ export type ReplacedResetCheck =
       setAside: boolean;
       lacking: Record<string, CanonicalValue[]>;
       holdings?: Record<string, CanonicalValue>;
+      copy?: HeardCopy;
     }
   | {
       outcome: "no-order";
       lacking: Record<string, CanonicalValue[]>;
       /** The main box's own summary; absent when it sent none or sent something else. */
       holdings?: Record<string, CanonicalValue>;
+      /** The copy's latest sale or order time; absent when the main box sent none or something else. */
+      copy?: HeardCopy;
     }
   /** The main box answered `handover.reset_query_refused`. */
   | { outcome: "refused"; reason: unknown }
@@ -88,7 +93,7 @@ export async function replacedResetCheck(
     sent.nonce,
   );
   if (!checked.ok) return failed(checked.check);
-  const { sourceNodeId, order, lacking, holdings } = checked.body;
+  const { sourceNodeId, order, lacking, holdings, lastChangeAtMs } = checked.body;
   if (sourceNodeId !== deps.nodeId) return failed("source");
   if (
     !isRecord(lacking) ||
@@ -102,7 +107,12 @@ export async function replacedResetCheck(
   )
     return failed("answer");
   const lackingChains = lacking as Record<string, CanonicalValue[]>;
-  const heard = isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {};
+  const heard = {
+    ...(isRecord(holdings) ? { holdings: holdings as Record<string, CanonicalValue> } : {}),
+    ...(lastChangeAtMs === null || usableCopyTime(lastChangeAtMs)
+      ? { copy: { lastChangeAtMs } }
+      : {}),
+  };
   if (order === null) return { outcome: "no-order", lacking: lackingChains, ...heard };
 
   const acceptLoss = order.acceptLoss as boolean;

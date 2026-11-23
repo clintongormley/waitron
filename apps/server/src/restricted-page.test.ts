@@ -39,6 +39,7 @@ import {
   RESTRICTED_RETURN_WORDS,
 } from "./i18n/restricted-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
+import { BOX_FORM_STYLE } from "./guide-pages.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -678,7 +679,7 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
   );
 
   it.each(["/api/something-unknown", "/management-api/alerts", "/favicon.ico", "/help/x"])(
-    "leaves %s a 404",
+    "leaves %s a 404 from the page route mounted alone",
     async (path) => {
       await handOver(await seedSuccessor("Counter box"));
       expect((await request("en-GB", suite.db, undefined, path)).status).toBe(404);
@@ -1104,10 +1105,10 @@ describe("the restricted page's download section", () => {
       expect(drawn).toMatch(/<form method="post" action="\/old-box-data"[^>]*>/);
       expect(drawn).not.toContain("enctype");
       expect(drawn).toContain(
-        `<label for="old-box-data-email">${escapeHtml(DOWNLOAD[locale].email)} *</label>`,
+        `<label for="old-box-data-email">${escapeHtml(DOWNLOAD[locale].email)} <span class="required">*</span></label>`,
       );
       expect(drawn).toContain(
-        `<label for="old-box-data-password">${escapeHtml(DOWNLOAD[locale].password)} *</label>`,
+        `<label for="old-box-data-password">${escapeHtml(DOWNLOAD[locale].password)} <span class="required">*</span></label>`,
       );
       expect(drawn).toMatch(
         /<input type="email" id="old-box-data-email" name="email"[^>]* required/,
@@ -1120,6 +1121,8 @@ describe("the restricted page's download section", () => {
         `<button type="submit">${escapeHtml(DOWNLOAD[locale].action)}</button>`,
       );
       expect(drawn).not.toContain('role="alert"');
+      expect(drawn).toContain('<form method="post" action="/old-box-data" class="box-form">');
+      expect(html).toContain(BOX_FORM_STYLE);
       const script = html.slice(html.indexOf("<script>") + 8, html.indexOf("</script>"));
       const hash = createHash("sha256").update(script).digest("base64");
       expect(response.headers.get("content-security-policy")).toBe(
@@ -1206,7 +1209,7 @@ describe("the restricted page's download section", () => {
       const drawn = section(html);
       inOrder(drawn, [
         'name="password"',
-        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
+        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} <span class="required">*</span></label>`,
         `<p id="old-box-data-totp-error">${escapeHtml(DOWNLOAD[locale].totpRequired)}</p>`,
         `<p id="old-box-data-message" role="alert">${escapeHtml(DOWNLOAD[locale].fixFields)}</p>`,
         "<button",
@@ -1244,7 +1247,7 @@ describe("the restricted page's download section", () => {
       const drawn = section(html);
       inOrder(drawn, [
         'name="password"',
-        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} *</label>`,
+        `<label for="old-box-data-totp">${escapeHtml(DOWNLOAD[locale].totp)} <span class="required">*</span></label>`,
         `<p id="old-box-data-message" role="alert">${escapeHtml(message)}</p>`,
         "<button",
       ]);

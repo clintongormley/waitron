@@ -74,7 +74,8 @@ export function createRequest(
     const generation = opts.sessionGeneration?.();
     const current = () => generation === opts.sessionGeneration?.();
     const reportError = (code: string): void => {
-      if (code !== "node.reset" && !current()) return;
+      // Both say the box itself changed, which no later sign-in makes out of date.
+      if (code !== "node.reset" && code !== "handover.stepping_down" && !current()) return;
       if (
         options?.sessionErrors === "caller" &&
         ["management_session.required", "management_session.expired", "person.suspended"].includes(

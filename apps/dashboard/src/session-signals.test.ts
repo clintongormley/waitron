@@ -32,16 +32,18 @@ describe("session signals", () => {
     vi.unstubAllGlobals();
   });
 
-  it.each(["management_session.expired", "management_session.required", "person.suspended"])(
-    "reports %s as an invalid session without asking the box anything",
-    async (code) => {
-      const h = harness();
-      h.signals.reportError(code);
-      await settle();
-      expect(h.invalid).toEqual([{ code }]);
-      expect(fetchSpy).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "management_session.expired",
+    "management_session.required",
+    "person.suspended",
+    "handover.stepping_down",
+  ])("reports %s as an invalid session without asking the box anything", async (code) => {
+    const h = harness();
+    h.signals.reportError(code);
+    await settle();
+    expect(h.invalid).toEqual([{ code }]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it("reports node.reset as an invalid session without asking the box anything", async () => {
     const h = harness();

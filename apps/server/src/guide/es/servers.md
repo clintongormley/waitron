@@ -81,8 +81,7 @@ En el servidor principal, abre **Sistema → Servidores**, abre el menú de la f
 reserva y elige **Retirar del local**. Si ha terminado de unirse, apágalo primero y asegúrate de que nadie está restaurando el local desde una copia de seguridad ni pasándolo a otro servidor; después activa las dos declaraciones. Una vez retirado, el servidor principal
 deja de esperarlo en cada inicio, y puedes guardar tu bucket o añadir otro servidor de reserva. Para
 volver a usar esa máquina, restablécela desde un terminal y añádela como un nuevo servidor de
-reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila una
-vez que ha devuelto sus registros
+reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila
 ([más información](servers.md#old-box-returns)).
 
 ## Iniciar aquí si ha fallado el servidor principal {#emergency}
@@ -181,11 +180,16 @@ solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servido
 traspasar el local ni retirar ese servidor.
 
 Si el servidor anterior no va a volver nunca con sus datos, elige **No volverá** en el menú de su
-fila. Los registros de facturación que hizo después de la copia con la que empezó el nuevo servidor
-principal se quedan solo en él, salvo que se vuelva a encender antes de que lo retires.
+fila.
 
-Cuando haya devuelto sus registros de facturación, el menú de su fila ofrece **Borrar y retirar**.
-El diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no tiene
+Mientras se siguen esperando sus registros de facturación, o después de **No volverá**, el menú de
+su fila ofrece también **Borrar y retirar**. Su diálogo avisa de que el servidor principal anterior
+no ha devuelto todos sus registros de facturación: antes de borrarse, intenta enviarlos una vez
+más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse. Antes de
+confirmar, marca que has descargado sus datos o que lo aceptas.
+
+Cuando haya devuelto sus registros de facturación, **Borrar y retirar** no pide marcar nada. El
+diálogo dice que puede que el servidor principal anterior tenga datos que este servidor no tiene
 e indica la dirección del servidor anterior cuando su fila tiene una: ábrela y
 [descarga esos datos](servers.md#handed-over) antes de confirmar, porque una vez empezado el borrado
 ya no se pueden descargar. Una línea de **ATENCIÓN** en el diálogo indica que los registros
@@ -277,19 +281,23 @@ cuenta con **Gestionar servidores**, tal como estaban cuando este servidor dejó
 y el código del autenticador si la cuenta lo usa; las llaves de acceso y el inicio de sesión con
 Google no funcionan aquí. Elige **Descargar**. La pestaña **Facturas** del archivo lista los
 registros de facturación; su primera línea dice si son solo los que el principal no tenía o todos
-los que tiene este servidor.
+los que tiene este servidor. Tras un [traspaso de emergencia](servers.md#emergency), el archivo tiene
+también las pestañas **Pedidos**, **Pagos y caja**, **Horas de trabajo** y **Actividad**. La primera
+línea de cada pestaña dice qué lista, normalmente desde poco antes de la última venta o pedido de la copia con la que empezó el nuevo servidor principal.
 
-Cuando la devolución esté confirmada, **Borrar y retirar** en el servidor principal pide a este
-servidor que se borre. La página lo indica entonces, y el servidor se reinicia en breve en la primera
+Cuando alguien elige **Borrar y retirar** en el servidor principal, este servidor se borra. La página lo indica entonces, y el servidor se reinicia en breve en la primera
 página de la configuración, listo para [volver a unirse como servidor de
 reserva](servers.md#adding-a-spare). El borrado retira sus datos del local, incluidas las líneas de
 venta y las copias de seguridad locales, que esta devolución no incluye; conserva los datos del
-servidor anterior si los necesitas.
+servidor anterior si los necesitas. Si se eligió Borrar y retirar antes
+de que volvieran todos sus registros de facturación, o al servidor principal le faltan registros de
+facturación que tiene este servidor, aparta sus bases de datos en lugar de borrarlas.
 
 Si la devolución se detiene porque un registro de facturación entra en conflicto con uno del
 servidor principal, sigue usando el principal y conserva los datos del servidor anterior si aún los
-necesitas. La devolución no está confirmada. Puedes borrar el servidor desde un terminal, pero
-eso borra sus datos del local, incluidos los registros que sigan pendientes.
+necesitas. La devolución no está confirmada. Cuando hayas descargado los datos de este servidor,
+puedes elegir igualmente **Borrar y retirar** en el servidor principal: este servidor aparta
+entonces sus bases de datos en lugar de borrarlas, incluidos los registros que no pudo devolver.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora

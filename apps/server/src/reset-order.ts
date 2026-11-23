@@ -1,7 +1,6 @@
 import "./errors.js";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
-  handoverActivations,
   readNodeMembership,
   recordActivity,
   withNodeTransaction,
@@ -20,7 +19,8 @@ import {
 } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { closeAbandonedReturnTx, openFacts, recordReturnAbandonedTx } from "./return-abandoned.js";
-import { holdsCompletedReturnFrom } from "./return-completion.js";
+import { latestTakeoverFrom } from "./handover-intervals.js";
+import { activationsBySource } from "./return-completion.js";
 import { returnDigest } from "./return-records.js";
 
 /**
@@ -123,16 +123,6 @@ export async function readResetOrders(
   return picked;
 }
 
-async function latestActivationFrom(db: Database, sourceNodeId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ operationId: handoverActivations.operationId })
-    .from(handoverActivations)
-    .where(eq(handoverActivations.sourceNodeId, sourceNodeId))
-    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
-    .limit(1);
-  return row?.operationId ?? null;
-}
-
 /**
  * Why this box would refuse to order `targetNodeId` to reset whatever the press, or null: the
  * chart lists the box `sell-only`, this box is its serving primary, the box is the main box whose
@@ -161,6 +151,30 @@ export function resetRefusal(
   return null;
 }
 
+export interface ResetFacts {
+  /** `resetRefusal` refuses whatever the press. */
+  readonly refused: boolean;
+  readonly standing: ResetOrder | null;
+  /** This venue holds a completed return from the box (`activationsBySource`). */
+  readonly returnCompleted: boolean;
+  /** An open takeover here waits for the box's return. */
+  readonly returnOutstanding: boolean;
+  /** This venue recorded a takeover from the box. */
+  readonly activated: boolean;
+}
+
+/**
+ * Whether `orderReset` accepts a plain wipe and one accepting the loss, a standing order being
+ * answered as it stands.
+ */
+export function resetOptions(facts: ResetFacts): { plain: boolean; withLoss: boolean } {
+  if (facts.refused) return { plain: false, withLoss: false };
+  return {
+    plain: facts.standing !== null || facts.returnCompleted,
+    withLoss: facts.standing?.acceptLoss === true || facts.returnOutstanding || facts.activated,
+  };
+}
+
 /**
  * Orders the replaced old main box `targetNodeId` to reset, or returns the order already standing.
  * node.db's lock is held throughout; venue.db's entries commit first under ids derived from the
@@ -185,15 +199,22 @@ export async function orderReset(
     if (refusal !== null) throw refusal;
     const { returnOutstanding } = openFacts(open, targetNodeId);
     const standing = await readResetOrderFor(nodeTx, deps.nodeId, targetNodeId);
+    const activation = (await activationsBySource(deps.db, targetNodeId)).get(targetNodeId);
+    const options = resetOptions({
+      refused: false,
+      standing,
+      returnCompleted: activation?.returnCompleted === true,
+      returnOutstanding,
+      activated: activation !== undefined,
+    });
+    if (!acceptLoss && !options.plain) throw new AppError("handover.reset_loss_unaccepted", {});
+    if (acceptLoss && !options.withLoss) throw new AppError("membership.node_not_replaced", {});
     if (standing !== null && (standing.acceptLoss || !acceptLoss)) return standing;
-    if (!acceptLoss && !(await holdsCompletedReturnFrom(deps.db, targetNodeId))) {
-      throw new AppError("handover.reset_loss_unaccepted", {});
-    }
 
+    // Either option holds only when a takeover waits for the box or this venue recorded one.
     const operationId = returnOutstanding
       ? open!.operationId
-      : await latestActivationFrom(deps.db, targetNodeId);
-    if (operationId === null) throw new AppError("membership.node_not_replaced", {});
+      : (await latestTakeoverFrom(deps.db, targetNodeId))!.operationId;
     const orderId = returnDigest({ kind: "handover.reset_order", operationId, acceptLoss });
     const abandon = acceptLoss && returnOutstanding;
 

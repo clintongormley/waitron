@@ -6,11 +6,17 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  BOX_FORM_HEAD,
+  BOX_FORM_STYLE,
   GUIDE_PAGE_TOKENS,
   GUIDE_THEME_KEY,
   mountGuidePages,
   renderBoxPage,
+  renderLogoBoxPage,
 } from "./guide-pages.js";
+import { renderDocument } from "./html-page.js";
+import { fixedFontValue } from "./html-page-tokens.js";
+import { renderWaitingPage } from "./waiting-page.js";
 import type { Logger } from "./logger.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
@@ -412,4 +418,203 @@ it("standalone guide pages keep fixed type with a larger browser default", async
   } finally {
     await browser.close();
   }
+});
+
+describe("the box pages' form style", () => {
+  const SYSTEM_COLOURS =
+    /\b(?:Canvas|CanvasText|Highlight|HighlightText|GrayText|ButtonText|ButtonFace|LinkText)\b/;
+  const outsideForcedColours = BOX_FORM_STYLE.replace(
+    /@media \(forced-colors: active\) \{[\s\S]*\}\s*$/,
+    "",
+  );
+
+  it("reads every colour, spacing, radius and font from a --wt-* token the page declares", () => {
+    const reads = [...BOX_FORM_STYLE.matchAll(/var\((--wt-[a-z0-9-]+)\)/g)].map((m) => m[1]!);
+    expect(reads.length).toBeGreaterThan(20);
+    for (const name of reads) expect(Object.keys(GUIDE_PAGE_TOKENS), name).toContain(name);
+    const values = [...outsideForcedColours.matchAll(/(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+);/g)];
+    expect(values.length).toBeGreaterThan(20);
+    for (const [, property, value] of values) {
+      const literal = value!.replace(/var\(--wt-[a-z0-9-]+\)/g, "");
+      expect(literal, `${property}: ${value}`).not.toMatch(
+        /#|\b\d*\.?\d+(?:px|rem|em)\b|\b(?:rgb|hsl)a?\(|\b(?:white|black|red|blue|grey|gray)\b/i,
+      );
+      expect(literal, `${property}: ${value}`).not.toMatch(SYSTEM_COLOURS);
+    }
+  });
+
+  it("stays off the box pages that draw no form, and the head handed to a page drawn without one declares its tokens", async () => {
+    expect(renderBoxPage("en", "Title", "<h1>Title</h1>")).not.toContain(".box-form");
+    expect(renderLogoBoxPage("en-GB", "Title", "<h1>Title</h1>")).not.toContain(".box-form");
+    expect(renderBoxPage("en", "Title", "<h1>Title</h1>", BOX_FORM_STYLE)).toContain(
+      BOX_FORM_STYLE,
+    );
+    expect(renderLogoBoxPage("en-GB", "Title", "<h1>Title</h1>", BOX_FORM_STYLE)).toContain(
+      BOX_FORM_STYLE,
+    );
+    const app = new Hono();
+    mountGuidePages(app, {}, vi.fn());
+    for (const path of ["/help/en/table-service", "/help/en/no-such-page"]) {
+      const html = await (await app.request(path)).text();
+      expect(html, path).toContain("<main>");
+      expect(html, path).not.toContain(".box-form");
+    }
+    expect(BOX_FORM_HEAD.startsWith("<style>")).toBe(true);
+    expect(BOX_FORM_HEAD).toContain(BOX_FORM_STYLE);
+    for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(BOX_FORM_HEAD).toContain(`${name}:`);
+  });
+
+  it("draws a page drawn without the box look in the box pages' typeface and colours, form included", async () => {
+    const form = `<form class="box-form" method="post" action="/x">
+<p><label for="f-email">Email <span class="required">*</span></label></p>
+<p><input type="email" id="f-email" name="email"></p>
+</form>`;
+    const browser = await chromium.launch();
+    try {
+      for (const scheme of ["light", "dark"] as const) {
+        const page = await browser.newPage({ colorScheme: scheme });
+        const look = (selector: string) =>
+          page.locator(selector).evaluate((el) => {
+            const s = getComputedStyle(el);
+            return [s.backgroundColor, s.color, s.fontFamily, s.fontSize, s.lineHeight];
+          });
+        await page.setContent(renderBoxPage("en", "Box", "<h1>Box</h1><p>Restarting.</p>"));
+        const boxPage = await look("body");
+        await page.setContent(renderDocument("en-GB", "Next", "<p>Restarting.</p>\n"));
+        expect(await look("body"), scheme).not.toEqual(boxPage);
+        await page.setContent(renderWaitingPage("the other box", "en-GB", form));
+        expect(await look("body"), scheme).toEqual(boxPage);
+        for (const selector of ["h1", "p", "label", "#f-email"])
+          expect(
+            await page
+              .locator(selector)
+              .first()
+              .evaluate((el) => getComputedStyle(el).fontFamily),
+            `${scheme} ${selector}`,
+          ).toBe(boxPage[2]);
+        // The head alone, ahead of no other style, still follows the scheme.
+        await page.setContent(
+          `<!doctype html><html><head>${BOX_FORM_HEAD}</head><body>${form}</body></html>`,
+        );
+        expect(
+          await page.locator("#f-email").evaluate((el) => getComputedStyle(el).backgroundColor),
+          scheme,
+        ).toBe(scheme === "light" ? "rgb(240, 241, 244)" : "rgb(38, 42, 51)");
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("turns each rem length a copied token holds into whole pixels, and refuses a fraction of one", () => {
+    expect(fixedFontValue("--wt-font-size-md", "0.875rem")).toBe("14px");
+    expect(fixedFontValue("--wt-x", "max(1rem, 1em, var(--wt-font-size-md))")).toBe(
+      "max(16px, 1em, var(--wt-font-size-md))",
+    );
+    expect(fixedFontValue("--wt-x", "36rem")).toBe("576px");
+    expect(fixedFontValue("--wt-x", "2px solid var(--wt-color-focus)")).toBe(
+      "2px solid var(--wt-color-focus)",
+    );
+    expect(() => fixedFontValue("--wt-x", "0.3rem")).toThrow("not a whole-pixel rem size: --wt-x");
+  });
+
+  it("turns a signed rem length into signed pixels, and refuses a rem length it cannot read", () => {
+    expect(fixedFontValue("--wt-x", "-0.5rem")).toBe("-8px");
+    expect(fixedFontValue("--wt-x", "calc(100% - -1.5rem) +2REM")).toBe("calc(100% - -24px) +32px");
+    for (const value of ["1e1rem", "var(--wt-gap-1rem)"])
+      expect(() => fixedFontValue("--wt-x", value), value).toThrow(
+        "a rem length left unconverted: --wt-x",
+      );
+  });
+
+  it("keeps the form's typed text and width fixed with a larger browser default", async () => {
+    const browser = await chromium.launch({ args: ["--blink-settings=defaultFontSize=32"] });
+    try {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      const form = `<form class="box-form"><p><input type="email" id="f-email" name="email"></p></form>`;
+      for (const html of [
+        renderBoxPage("en", "Form", form, BOX_FORM_STYLE),
+        `<!doctype html><html><head>${BOX_FORM_HEAD}</head><body>${form}</body></html>`,
+      ]) {
+        await page.setContent(html);
+        expect(await page.locator("#f-email").evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+          "16px",
+        );
+        expect(await page.locator("form").evaluate((el) => getComputedStyle(el).width)).toBe(
+          "576px",
+        );
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("paints a form's fields, errors and action from the tokens, light and dark", async () => {
+    const form = `<form class="box-form" method="post" action="/x">
+<p><label for="f-email">Email <span class="required">*</span></label></p>
+<p><input type="email" id="f-email" name="email" aria-invalid="true" aria-describedby="f-email-error"></p>
+<p id="f-email-error">Enter your email.</p>
+<p><label for="f-password">Password <span class="required">*</span></label></p>
+<p><input type="password" id="f-password" name="password"></p>
+<p><label><input type="checkbox" id="f-tick" name="tick"> I agree <span class="required">*</span></label></p>
+<p id="f-message" role="alert">Correct the highlighted fields to continue.</p>
+<p><button type="submit">Go</button><button type="button" disabled>Off</button></p>
+</form>`;
+    const expected = {
+      light: {
+        fill: "rgb(240, 241, 244)",
+        danger: "rgb(179, 38, 30)",
+        primary: "rgb(0, 115, 146)",
+        onPrimary: "rgb(255, 255, 255)",
+        disabled: "rgb(122, 202, 233)",
+      },
+      dark: {
+        fill: "rgb(38, 42, 51)",
+        danger: "rgb(255, 127, 115)",
+        primary: "rgb(113, 207, 235)",
+        onPrimary: "rgb(0, 16, 22)",
+        disabled: "rgb(22, 53, 62)",
+      },
+    } as const;
+    const browser = await chromium.launch();
+    try {
+      for (const scheme of ["light", "dark"] as const) {
+        const page = await browser.newPage({
+          viewport: { width: 390, height: 844 },
+          colorScheme: scheme,
+        });
+        await page.setContent(renderBoxPage("en", "Form", form, BOX_FORM_STYLE));
+        const style = (selector: string, property: string) =>
+          page
+            .locator(selector)
+            .evaluate((el, name) => getComputedStyle(el).getPropertyValue(name), property);
+        const colours = expected[scheme];
+        expect(await style("#f-password", "background-color"), scheme).toBe(colours.fill);
+        expect(await style("#f-password", "width"), scheme).toBe(await style("form", "width"));
+        expect(await style("#f-email", "box-shadow"), scheme).toContain(colours.danger);
+        expect(await style("#f-email-error", "color"), scheme).toBe(colours.danger);
+        expect(await style("#f-message", "color"), scheme).toBe(colours.danger);
+        expect(await style('label[for="f-email"] .required', "color"), scheme).toBe(colours.danger);
+        expect(await style("#f-tick", "accent-color"), scheme).toBe(colours.primary);
+        expect(await style('button[type="submit"]', "background-color"), scheme).toBe(
+          colours.primary,
+        );
+        expect(await style('button[type="submit"]', "color"), scheme).toBe(colours.onPrimary);
+        expect(await style("button[disabled]", "background-color"), scheme).toBe(colours.disabled);
+        // A keyboard-focused invalid field keeps its red line and adds the focus ring, so focus
+        // stays visible on it; unfocused, it has no ring.
+        expect(await style("#f-email", "outline-style"), scheme).toBe("none");
+        await page.keyboard.press("Tab");
+        expect(await page.evaluate(() => document.activeElement?.id), scheme).toBe("f-email");
+        expect(await style("#f-email", "outline-style"), scheme).toBe("solid");
+        expect(await style("#f-email", "outline-width"), scheme).toBe("2px");
+        expect(await style("#f-email", "outline-color"), scheme).toBe(colours.primary);
+        expect(await style("#f-email", "box-shadow"), scheme).toContain(colours.danger);
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  });
 });

@@ -2,22 +2,27 @@ import { strFromU8, unzipSync } from "fflate";
 import { Hono } from "hono";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { withNodeTransaction } from "@waitron/db";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
+import { recordActivity, withNodeTransaction, withTransaction } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
-import { seedManager } from "@waitron/identity/test/fixtures.js";
+import { seedManager, seedPerson } from "@waitron/identity/test/fixtures.js";
 import { PIN_THROTTLE_FREE_ATTEMPTS } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { AppError } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
+import { appendToChain } from "@waitron/workforce";
 import { OLD_BOX_DATA_WORDS } from "./i18n/old-box-data.js";
+import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import type { PasswordThrottle } from "./password-throttle.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
+import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -64,6 +69,8 @@ function appWith(
     resetOrdered?: () => boolean;
     throttle?: PasswordThrottle;
     mainHoldings?: OldBoxDataDeps["mainHoldings"];
+    mainCopy?: OldBoxDataDeps["mainCopy"];
+    nodeId?: string;
   } = {},
 ) {
   const app = new Hono();
@@ -71,7 +78,7 @@ function appWith(
     page: {
       venue: suite.db,
       node: suite.node,
-      nodeId: NODE_ID,
+      nodeId: options.nodeId ?? NODE_ID,
       log,
       resetOrdered: options.resetOrdered,
     },
@@ -79,6 +86,7 @@ function appWith(
     totpKeyRing: TOTP_KEY_RING,
     throttle: options.throttle,
     mainHoldings: options.mainHoldings,
+    mainCopy: options.mainCopy,
   })(app);
   return app;
 }
@@ -139,6 +147,7 @@ describe("POST /old-box-data on the old box", () => {
 
   it("compares with the main box's summary the reset-order duty last heard, naming when it arrived", async () => {
     await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
     const heardAt = new Date("2026-11-23T08:15:00.000Z");
     const response = await post(
       appWith({ mainHoldings: () => ({ holdings: { fiscal: [] }, heardAt }) }),
@@ -149,7 +158,29 @@ describe("POST /old-box-data on the old box", () => {
       unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
     );
     expect(sheet).toContain(
-      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 08:15 UTC"),
+      OLD_BOX_DATA_WORDS.en.invoiceIntro.replace("{time}", "2026-11-23 09:15+01:00"),
+    );
+  });
+
+  it("dates the file on the venue's calendar at the moment of download", async () => {
+    await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-23T23:30:00.000Z") });
+    let response: Response;
+    try {
+      response = await post(appWith(), signIn);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="waitron-old-main-box-2026-11-24.xlsx"',
+    );
+    const sheet = strFromU8(
+      unzipSync(new Uint8Array(await response.arrayBuffer()))["xl/worksheets/sheet1.xml"]!,
+    );
+    expect(sheet).toContain(
+      OLD_BOX_DATA_WORDS.en.uncomparedIntro.replace("{time}", "2026-11-24 00:30+01:00"),
     );
   });
 
@@ -319,5 +350,136 @@ describe("POST /old-box-data on the old box", () => {
     const written = JSON.stringify(lines).toLowerCase();
     expect(written).not.toContain(EMAIL.toLowerCase());
     expect(written).not.toContain("example.test");
+  });
+});
+
+describe("the since tabs of POST /old-box-data", () => {
+  const COPY_AT = Date.parse("2026-11-20T10:00:00.000Z");
+  const files = async (response: Response) =>
+    unzipSync(new Uint8Array(await response.arrayBuffer()));
+
+  it("after an emergency switch, adds the since tabs with the copy time the duty heard", async () => {
+    await admin();
+    await seedVenue(suite.db, { timeZone: "Europe/Madrid" });
+    const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
+    expect(response.status).toBe(200);
+    const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
+    expect(activity).toBeDefined();
+    expect(row(activity!, 1)).toEqual([
+      OLD_BOX_DATA_WORDS.en.sinceCopyIntro.replace("{time}", "2026-11-20 10:50:00.000+01:00"),
+    ]);
+  });
+
+  it("still gives the file when the copy time heard is not a date", async () => {
+    await admin();
+    const response = await post(
+      appWith({ mainCopy: () => ({ lastChangeAtMs: Number.MAX_SAFE_INTEGER }) }),
+      signIn,
+    );
+    expect(response.status).toBe(200);
+    const activity = sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet);
+    expect(row(activity!, 1)).toEqual([OLD_BOX_DATA_WORDS.en.sinceAllIntro]);
+  });
+
+  it("after a planned handover, gives only the Invoices tab", async () => {
+    await admin();
+    const planned = "00000000-0000-4000-8000-0000000000dd";
+    const operationId = "00000000-0000-4000-8000-0000000000ee";
+    const successor = "00000000-0000-4000-8000-0000000000aa";
+    const deps = { node: suite.node, nodeId: planned };
+    await beginHandover(
+      deps,
+      {
+        operationId,
+        scenario: "controlled",
+        venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+        sourceNodeId: planned,
+        destinationNodeId: successor,
+        membership: { term: 3, digest: "a".repeat(64) },
+      },
+      "source",
+    );
+    await advanceHandover(deps, operationId, "source_stepped_down", {});
+    await withNodeTransaction(suite.node, (tx) =>
+      recordHandoverRestrictionTx(tx, {
+        nodeId: planned,
+        operationId,
+        kind: "handed-over",
+        successorNodeId: successor,
+        membershipTerm: 3,
+      }),
+    );
+    const response = await post(
+      appWith({ nodeId: planned, mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }),
+      signIn,
+    );
+    expect(response.status).toBe(200);
+    const sheets = await files(response);
+    expect(sheets["xl/worksheets/sheet1.xml"]).toBeDefined();
+    expect(sheets["xl/worksheets/sheet2.xml"]).toBeUndefined();
+    const downloaded = lines.find((line) => line.event === "old_box_data.downloaded");
+    expect(downloaded?.fields).not.toHaveProperty("since");
+  });
+
+  it("logs the rule and the counts, never a name", async () => {
+    await admin();
+    const named = await seedPerson(suite.db, "manager");
+    const NAME = "Marta Ruiz Quintana";
+    await suite.db.run(sql`update persons set display_name = ${NAME} where id = ${named}`);
+    await withTransaction(suite.db, (tx) =>
+      recordActivity(tx, {
+        kind: "dashboard.signed_in",
+        subjectId: named,
+        personId: named,
+        data: { method: "password" },
+        at: new Date(COPY_AT),
+      }),
+    );
+    const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
+    expect(response.status).toBe(200);
+    // The control: the name reaches the file, so its absence from the log means something.
+    expect(sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.activitySheet)).toContain(NAME);
+    const downloaded = lines.find((line) => line.event === "old_box_data.downloaded");
+    expect(downloaded?.fields).toMatchObject({
+      since: "copy",
+      invoiceRows: 0,
+      orderRows: 0,
+      paymentRows: 0,
+      activityRows: 1,
+    });
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
+  });
+
+  it("logs the working hours count, never the clocked person's name", async () => {
+    await admin();
+    const named = await seedPerson(suite.db, "manager");
+    const NAME = "Lucy Ferrer Bell";
+    await suite.db.run(sql`update persons set display_name = ${NAME} where id = ${named}`);
+    await seedVenue(suite.db);
+    const nodeId = await seedNode(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      appendToChain(
+        tx,
+        { nodeId },
+        {
+          personId: named,
+          entryKind: "in",
+          eventAt: new Date(COPY_AT).toISOString(),
+          eventOffsetMinutes: 60,
+          recordedByPersonId: named,
+          origin: jobOrigin("dashboard"),
+        },
+        () => new Date(COPY_AT),
+      ),
+    );
+    const response = await post(appWith({ mainCopy: () => ({ lastChangeAtMs: COPY_AT }) }), signIn);
+    expect(response.status).toBe(200);
+    // The control: the name reaches the file, so its absence from the log means something.
+    expect(sheetNamed(await files(response), OLD_BOX_DATA_WORDS.en.hoursSheet)).toContain(NAME);
+    const downloaded = lines.find((line) => line.event === "old_box_data.downloaded");
+    expect(downloaded?.fields).toMatchObject({ since: "copy", hoursRows: 1 });
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(JSON.stringify(line)).not.toContain(NAME);
   });
 });

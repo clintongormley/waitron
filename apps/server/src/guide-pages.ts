@@ -95,6 +95,123 @@ ul { padding-inline-start: var(--wt-space-5); }
 main { padding-inline: var(--wt-space-4); }
 }`;
 
+/** The dashboard's field and button look (design-system.md → Forms) for a box page's server-drawn
+ * `<form class="box-form">`, with its label above the field rather than inside it. */
+export const BOX_FORM_STYLE = `
+.box-form {
+max-width: var(--wt-form-max-width);
+font-size: var(--wt-font-size-md);
+color: var(--wt-color-text);
+}
+.box-form p { margin: 0; }
+.box-form label[for] {
+display: block;
+margin: var(--wt-space-4) 0 var(--wt-space-1);
+font-size: var(--wt-font-size-sm);
+color: var(--wt-color-text-muted);
+}
+/* Matched by the error paragraph an invalid field names, which these forms set only with its
+   invalid mark: the mark's attribute name in a page is what the page tests read as a marked field. */
+.box-form p:has(+ p > [aria-describedby$="-error"]) > label { color: var(--wt-color-danger); }
+.box-form input:not([type="checkbox"], [type="hidden"]) {
+box-sizing: border-box;
+width: 100%;
+min-height: var(--wt-tap-min);
+padding: var(--wt-space-2) var(--wt-space-3);
+border: 0;
+border-start-start-radius: var(--wt-radius-md);
+border-start-end-radius: var(--wt-radius-md);
+background: var(--wt-color-field-fill);
+box-shadow: inset 0 calc(-1 * var(--wt-field-line-width)) 0 var(--wt-color-field-line);
+color: var(--wt-color-field-value);
+font: inherit;
+font-size: var(--wt-text-control-font-size);
+}
+.box-form input:not([type="checkbox"], [type="hidden"]):focus {
+outline: none;
+box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
+}
+.box-form input[aria-describedby$="-error"]:not([type="checkbox"]),
+.box-form input[aria-describedby$="-error"]:not([type="checkbox"]):focus {
+box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-danger);
+}
+/* The red line wins over the focus line, so focus on an invalid field is the ring. */
+.box-form input[aria-describedby$="-error"]:not([type="checkbox"]):focus-visible {
+outline: var(--wt-focus-ring);
+outline-offset: var(--wt-focus-offset);
+}
+.box-form label:has(> input[type="checkbox"]) {
+position: relative;
+display: block;
+min-height: var(--wt-space-5);
+margin-top: var(--wt-space-4);
+padding-inline-start: calc(var(--wt-space-5) + var(--wt-space-2));
+}
+.box-form input[type="checkbox"] {
+position: absolute;
+inset-inline-start: 0;
+top: 0;
+inline-size: var(--wt-space-5);
+block-size: var(--wt-space-5);
+margin: 0;
+accent-color: var(--wt-color-primary);
+}
+.box-form input[type="checkbox"]:focus-visible,
+.box-form button:focus-visible {
+outline: var(--wt-focus-ring);
+outline-offset: var(--wt-focus-offset);
+}
+.box-form .required { color: var(--wt-color-danger); }
+.box-form [id$="-error"],
+.box-form [role="alert"] {
+color: var(--wt-color-danger);
+font-size: var(--wt-font-size-sm);
+overflow-wrap: anywhere;
+}
+.box-form [id$="-error"] { margin-top: var(--wt-space-1); }
+.box-form [role="alert"] { margin-top: var(--wt-space-4); }
+.box-form button {
+min-width: var(--wt-tap-min);
+min-height: var(--wt-tap-min);
+margin-top: var(--wt-space-4);
+padding: var(--wt-space-2) var(--wt-space-4);
+border: 0;
+border-radius: var(--wt-radius-md);
+background: var(--wt-color-primary);
+color: var(--wt-color-on-primary);
+font: inherit;
+font-weight: var(--wt-font-weight-bold);
+cursor: pointer;
+}
+.box-form button:hover:enabled { background: var(--wt-color-primary-hover); }
+.box-form button:disabled {
+background: var(--wt-color-primary-disabled);
+color: var(--wt-color-on-primary-disabled);
+cursor: not-allowed;
+}
+@media (forced-colors: active) {
+.box-form input:not([type="checkbox"], [type="hidden"]) { border-bottom: var(--wt-field-line-width) solid CanvasText; }
+.box-form input[aria-describedby$="-error"]:not([type="checkbox"]) { border-bottom-width: var(--wt-field-line-width-active); }
+.box-form input:not([type="checkbox"], [type="hidden"]):focus,
+.box-form input[aria-describedby$="-error"]:not([type="checkbox"]):focus-visible { outline: var(--wt-field-line-width-active) solid Highlight; }
+.box-form button { border: var(--wt-field-line-width) solid ButtonText; }
+.box-form button:disabled { color: GrayText; border-color: GrayText; }
+}`;
+
+/** `BOX_FORM_STYLE` and the tokens it reads, for a page `renderBoxPage` does not draw; the page's
+ * body takes the box pages' typeface, text colour and background. */
+export const BOX_FORM_HEAD = `<style>:root {
+color-scheme: light dark;
+${tokenDeclarations()}
+}
+body {
+background: var(--wt-color-bg);
+color: var(--wt-color-text);
+font-family: var(--wt-font-family);
+font-size: var(--wt-font-size-md);
+line-height: 1.5;
+}${BOX_FORM_STYLE}</style>\n`;
+
 /** The guides' page look, shared with the `/legal/*` pages. */
 export function renderBoxPage(
   lang: GuideLanguage,
@@ -124,12 +241,17 @@ const LOGO_PAGE_STYLE = `
 p, li { overflow-wrap: anywhere; }`;
 
 /** `renderBoxPage` under the Waitron logo, for a page read in a sign-in locale. */
-export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: string): string {
+export function renderLogoBoxPage(
+  locale: SupportedLocale,
+  title: string,
+  body: string,
+  extraStyle = "",
+): string {
   return renderBoxPage(
     locale.startsWith("es") ? "es" : "en",
     title,
     `<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>\n${body}`,
-    LOGO_PAGE_STYLE,
+    `${LOGO_PAGE_STYLE}${extraStyle}`,
   );
 }
 

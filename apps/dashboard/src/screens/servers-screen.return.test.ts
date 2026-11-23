@@ -23,6 +23,7 @@ const row = (overrides: Partial<ServerRow>): ServerRow => ({
   needsResetStatement: false,
   reset: null,
   canReset: false,
+  canWipeWithLoss: false,
   returnScenario: null,
   recoveredRecordsBackup: null,
   ...overrides,
@@ -276,7 +277,7 @@ describe("Wipe and remove", () => {
     expect(menu(other)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
   });
 
-  it("is not offered while the return is still awaited, beside Will not return", async () => {
+  it("is not offered while the return is awaited unless the server says a wipe accepting the loss can be ordered", async () => {
     const el = await mount(stubApi(waiting));
     expect(menu(el)!.querySelector(`[data-test="abandon-${OLD}"]`)).not.toBeNull();
     expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)).toBeNull();
@@ -477,6 +478,93 @@ describe("Wipe and remove", () => {
     }
     expect(codeMessage("handover.reset_loss_unaccepted", "en")).toContain(
       "then choose Wipe and remove again.",
+    );
+  });
+});
+
+describe("Wipe and remove when the return cannot complete", () => {
+  const losing = listingWith({
+    returnOutstanding: true,
+    canWipeWithLoss: true,
+    returnScenario: "emergency",
+  });
+  const lineIn = (el: ServersScreen, test: string) =>
+    dialog(el, "reset")
+      .querySelector(`[data-test=${test}]`)
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim() ?? null;
+
+  it("is offered beside Will not return when the server says a wipe accepting the loss can be ordered", async () => {
+    const el = await mount(stubApi(losing));
+    expect(menu(el)!.querySelector(`[data-test="abandon-${OLD}"]`)).not.toBeNull();
+    expect(menu(el)!.querySelector(`[data-test="reset-${OLD}"]`)?.textContent?.trim()).toBe(
+      "Wipe and remove",
+    );
+  });
+
+  it("warns what is set aside, shows the download line, no CAUTION line, and stays quiet and disabled until ticked", async () => {
+    const el = await mount(stubApi(losing));
+    await openAction(el, "reset");
+    expect(lineIn(el, "reset-loss-warning")).toBe(
+      "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
+    );
+    expect(lineIn(el, "reset-download")).toBe(
+      "The old main box may hold data that this box does not have. You should download that data from https://old.venue.example before wiping and reusing it.",
+    );
+    const lines = [...dialog(el, "reset").querySelectorAll("[data-test]")].map((node) =>
+      node.getAttribute("data-test"),
+    );
+    expect(lines.indexOf("reset-warning")).toBeLessThan(lines.indexOf("reset-loss-warning"));
+    expect(lines.indexOf("reset-loss-warning")).toBeLessThan(lines.indexOf("reset-download"));
+    expect(lines.indexOf("reset-download")).toBeLessThan(lines.indexOf("reset-loss-confirm"));
+    expect(lineIn(el, "reset-caution")).toBeNull();
+    expect(toggle(el, "reset", "reset-loss-confirm")!.label).toBe(
+      "I have downloaded the old main box's data, or I accept that what it has not returned stays set aside on it and is no longer used. *",
+    );
+    expect(confirmButton(el, "reset").disabled).toBe(true);
+    expect(confirmButton(el, "reset").variant).toBe("secondary");
+    await tick(el, "reset", "reset-loss-confirm");
+    expect(confirmButton(el, "reset").disabled).toBe(false);
+    expect(confirmButton(el, "reset").variant).toBe("danger");
+  });
+
+  it("sends the loss order once ticked, then closes and reads the list again", async () => {
+    const api = stubApi(losing);
+    const el = await mount(api);
+    await openAction(el, "reset");
+    await confirm(el, "reset");
+    expect(api.orderServerReset).not.toHaveBeenCalled();
+    await tick(el, "reset", "reset-loss-confirm");
+    const reads = vi.mocked(api.listServers).mock.calls.length;
+    await confirm(el, "reset");
+    expect(api.orderServerReset).toHaveBeenCalledExactlyOnceWith(OLD, true);
+    expect(dialog(el, "reset").open).toBe(false);
+    expect(vi.mocked(api.listServers).mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("Cancel forgets the tick", async () => {
+    const el = await mount(stubApi(losing));
+    await openAction(el, "reset");
+    await tick(el, "reset", "reset-loss-confirm");
+    dialog(el, "reset")
+      .querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button[data-test=cancel-reset]")!
+      .click();
+    await flush(el);
+    await openAction(el, "reset");
+    expect(toggle(el, "reset", "reset-loss-confirm")!.checked).toBe(false);
+    expect(confirmButton(el, "reset").disabled).toBe(true);
+  });
+
+  it("shows the loss dialog in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(stubApi(losing));
+    await openAction(el, "reset");
+    expect(lineIn(el, "reset-loss-warning")).toBe(es["servers.reset_loss_warning"]);
+    expect(lineIn(el, "reset-download")).toBe(
+      es["servers.reset_download"].replace("{address}", "https://old.venue.example"),
+    );
+    expect(toggle(el, "reset", "reset-loss-confirm")!.label).toBe(
+      `${es["servers.reset_loss_confirm"]} *`,
     );
   });
 });

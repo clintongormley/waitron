@@ -74,7 +74,7 @@ On the main box, open **System → Servers**, open the spare's row menu and choo
 spare that has finished joining, first switch it off and make sure nobody is restoring the venue from a backup or switching it to another box, then turn on both statements. Once it is removed, the main box stops waiting for it at
 each start, and you can save your bucket or add another spare. To use that machine again, reset
 it from a terminal and add it as a new spare. The old main box this one took over from is wiped
-from its row once its records are back ([read more](servers.md#old-box-returns)).
+from its row ([read more](servers.md#old-box-returns)).
 
 ## Start here when the main box has failed {#emergency}
 
@@ -163,10 +163,14 @@ arrive, its row in **System → Servers** on the new main box says **Waiting for
 return its invoice records**, and the venue cannot be handed over again or that box removed.
 
 If the old box will never come back with its data, choose **Will not return** in its row menu.
-Invoice records it made after the copy the new main box started from stay only on it, unless it is
-switched on again before you remove it.
 
-Once its invoice records are back, its row menu offers **Wipe and remove**. The dialog says the old
+While its invoice records are still awaited, or after **Will not return**, its row menu also offers
+**Wipe and remove**. Its dialog warns that the old box has not returned all its invoice records:
+before it wipes itself it tries once more to send them, then its databases are set aside on it
+instead of deleted, and are no longer used. Tick that you have downloaded its data, or that you
+accept this, before you confirm.
+
+Once its invoice records are back, **Wipe and remove** needs no tick. The dialog says the old
 main box may hold data that this box does not have and gives the old box's address when its row
 has one: open it and [download that data](servers.md#handed-over) before you confirm, because once
 the wipe starts it can no longer be downloaded. A **CAUTION** line in the dialog means the recovered
@@ -248,17 +252,23 @@ email and password of an administrator, or of an account with **Manage boxes**, 
 this box stopped running the venue, and the authenticator code if the account uses one; passkeys and
 Google sign-in do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice
 records; its first line says whether they are only those the main box did not have or every one this
-box holds.
+box holds. After an [emergency handover](servers.md#emergency), the file also has **Orders**,
+**Payments and cash**, **Working hours** and **Activity** tabs. Each tab's first line says what it
+lists, normally from shortly before the last sale or order in the copy
+the new main box started from.
 
-Once the return is confirmed, **Wipe and remove** on the main box asks this box to wipe itself. The
+When someone chooses **Wipe and remove** on the main box, this box wipes itself. The
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
 spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
-and local backups, which this return does not carry; keep the old box's data if you need them.
+and local backups, which this return does not carry; keep the old box's data if you need them. If Wipe and remove
+was chosen before its invoice records were all back, or the main box lacks invoice records this
+box holds, it sets its databases aside instead of deleting them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.
-You can still wipe it from a terminal, but that deletes the old box's venue data, including any
-records still waiting.
+Once you have downloaded this box's data, you can still choose **Wipe and remove** on the main box:
+this box then sets its databases aside instead of deleting them, including the records it could
+not return.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
 payment differences can be accepted through the internal API. An administrator can inspect them

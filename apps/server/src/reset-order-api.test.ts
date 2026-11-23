@@ -39,7 +39,11 @@ import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
 import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
-import { earlierBoxChain, lackingChainOf } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
+import {
+  earlierBoxChain,
+  lackingChainOf,
+  oneRecordChainOf,
+} from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
 const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -58,6 +62,7 @@ const modules: WaitronModule[] = [
 
 const MISSING_CHAIN = earlierBoxChain();
 const LACKING_CHAIN = lackingChainOf(MISSING_CHAIN, "record_missing");
+const LAST_CHANGE_MS = Date.parse("2026-11-12T09:41:07.123Z");
 
 let main: string;
 let oldBox: string;
@@ -140,6 +145,10 @@ function app(seats: WaitronModule[] = modules) {
 /** A completed return from the old box to this one, against a closed takeover. */
 async function completedReturn(
   scenario: "controlled" | "emergency" = "emergency",
+  {
+    body = { lastCopy: { lastChangeAtMs: LAST_CHANGE_MS } },
+    activatedAt = "2026-11-12T10:00:00.000Z",
+  }: { body?: Record<string, CanonicalValue>; activatedAt?: string } = {},
 ): Promise<string> {
   const operationId = randomUUID();
   const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
@@ -152,12 +161,12 @@ async function completedReturn(
       scenario,
       evidence: {
         purpose: "waitron.handover.declaration.v1",
-        body: {},
+        body,
         signerNodeId: main,
         signature: "signature",
       },
       personId,
-      activatedAt: "2026-11-12T10:00:00.000Z",
+      activatedAt,
     });
     for (const [index, digest] of digests.entries())
       await recordReturnBatchTx(tx, { operationId, inventory, index, count: 2, digest });
@@ -436,6 +445,7 @@ describe("POST /api/node/reset-order answers", () => {
       order: { orderId: order.orderId, acceptLoss: false },
       lacking: { fiscal: [LACKING_CHAIN] },
       holdings: { fiscal: [] },
+      lastChangeAtMs: LAST_CHANGE_MS,
     });
     expect(events("reset_acknowledged")).toEqual([]);
   });
@@ -491,7 +501,113 @@ describe("POST /api/node/reset-order answers", () => {
   });
 });
 
+describe("POST /api/node/reset-order's copy time", () => {
+  const orderFor = () =>
+    orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: false },
+    );
+
+  it("the copy's latest change after an emergency switch from the asking box, with or without an order", async () => {
+    await completedReturn("emergency");
+    const before = await answerOf(await ask(await queryBody({ nonce: "no-order" })));
+    expect(before?.order).toBeNull();
+    expect(before?.lastChangeAtMs).toBe(LAST_CHANGE_MS);
+
+    await orderFor();
+    const after = await answerOf(await ask(await queryBody({ nonce: "ordered" })));
+    expect(after?.order).not.toBeNull();
+    expect(after?.lastChangeAtMs).toBe(LAST_CHANGE_MS);
+  });
+
+  it("null when the copy held no dated sale or order", async () => {
+    await completedReturn("emergency", { body: { lastCopy: { lastChangeAtMs: null } } });
+    const answer = await answerOf(await ask(await queryBody()));
+    expect(answer).toHaveProperty("lastChangeAtMs", null);
+  });
+
+  it("no lastChangeAtMs after a planned handover, and the latest takeover from the box decides", async () => {
+    await completedReturn("controlled");
+    expect(await answerOf(await ask(await queryBody({ nonce: "planned" })))).not.toHaveProperty(
+      "lastChangeAtMs",
+    );
+
+    await completedReturn("emergency", { activatedAt: "2026-11-11T10:00:00.000Z" });
+    expect(await answerOf(await ask(await queryBody({ nonce: "older" })))).not.toHaveProperty(
+      "lastChangeAtMs",
+    );
+  });
+
+  it("leaves lastChangeAtMs out, with a warning, and still sends the order, when the takeover's declaration has no lastCopy", async () => {
+    await completedReturn("emergency", { body: {} });
+    const order = await orderFor();
+    const res = await ask(await queryBody());
+    expect(res.status).toBe(200);
+    const answer = await answerOf(res);
+    expect(answer?.order).toEqual({ orderId: order.orderId, acceptLoss: false });
+    expect(answer).not.toHaveProperty("lastChangeAtMs");
+    expect(lines.filter((line) => line.event === "reset-order.copy_unread")).toEqual([
+      {
+        level: "warn",
+        event: "reset-order.copy_unread",
+        fields: { nodeId: oldBox, errorCode: "unknown" },
+      },
+    ]);
+  });
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
 describe("an acknowledgement", () => {
+  it("raises no alert when a return that commits while the comparison runs brings the missing record", async () => {
+    await completedReturn();
+    const order = await orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: true },
+    );
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId: main, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId: main, seriesId },
+      reuseExistingParents: true,
+    });
+    const chain = await oneRecordChainOf(suite.db, ids.sifId);
+    const compared = deferred();
+    const holdingLock = deferred();
+    const lacking = vi.fn(
+      async (...args: Parameters<NonNullable<typeof VERIFACTU_HANDOVER.lacking>>) => {
+        const missing = await VERIFACTU_HANDOVER.lacking!(...args);
+        compared.resolve();
+        return missing;
+      },
+    );
+    // A return writes its records under node.db's lock, as /api/node/return-records does.
+    const returned = withNodeTransaction(suite.node, async () => {
+      holdingLock.resolve();
+      await compared.promise;
+      await withTransaction(suite.db, (tx) => insertFiscalRecord(tx, ids));
+    });
+    await holdingLock.promise;
+    const pending = ask(
+      await queryBody({
+        holdings: { fiscal: [chain] },
+        ack: { orderId: order.orderId, setAside: true, lacking: {} },
+      }),
+      oldBox,
+      app([{ ...modules[0]!, handover: { ...VERIFACTU_HANDOVER, lacking } }]),
+    );
+    await returned;
+    const res = await pending;
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await VERIFACTU_HANDOVER.lacking!(liveBackupQuery(suite.db), [chain])).toEqual([]);
+    expect(await incidents()).toEqual([]);
+  });
+
   it("takes the box off the list in the removal's own chart, as Clear from list leaves it", async () => {
     const order = await ordered();
     const before = (await readNodeMembership(suite.db))!.body.term;
@@ -555,12 +671,42 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([]);
   });
 
+  it("raises no alert when the chains the acknowledgement names are held here now, as after a loss order's extra return pass", async () => {
+    const order = await ordered();
+    const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await activities("handover.reset_acknowledged")).toEqual([
+      { subject_id: oldBox, person_id: personId, data: ack },
+    ]);
+    expect(await offTheList()).toBe(true);
+    expect(await incidents()).toEqual([]);
+  });
+
+  it("raises the alert from this box's own comparison of the question's summary", async () => {
+    const order = await ordered();
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId },
+      },
+    ]);
+  });
+
   it("still removes the box and raises the alert after the ordering activity entry was pruned", async () => {
     const order = await ordered();
     await suite.db.run(sql`delete from activity_log where kind = 'handover.reset_ordered'`);
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
 
-    const res = await ask(await queryBody({ ack }));
+    const res = await ask(await queryBody({ holdings, ack }));
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect(await offTheList()).toBe(true);
@@ -573,11 +719,12 @@ describe("an acknowledgement", () => {
   it("a retry after venue.db committed but node.db failed raises no second alert, though the first was handled", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     suite.node.run(
       sql`create trigger refuse_ack before insert on node_handover_events when new.kind = 'reset_acknowledged' begin select raise(abort, 'test node write failed'); end`,
     );
     try {
-      expect((await ask(await queryBody({ ack }))).status).toBe(500);
+      expect((await ask(await queryBody({ holdings, ack }))).status).toBe(500);
     } finally {
       suite.node.run(sql`drop trigger refuse_ack`);
     }
@@ -585,7 +732,7 @@ describe("an acknowledgement", () => {
     expect(await oldStanding()).toBe("sell-only");
     await suite.db.run(sql`update incidents set acknowledged_at = '2026-11-22T10:00:00.000Z'`);
 
-    const retried = await ask(await queryBody({ ack, nonce: "retry" }));
+    const retried = await ask(await queryBody({ holdings, ack, nonce: "retry" }));
 
     expect(retried.status, JSON.stringify(await retried.clone().json())).toBe(200);
     expect(await incidents()).toHaveLength(1);
@@ -597,8 +744,9 @@ describe("an acknowledgement", () => {
   it("with set-aside chains names them, raises one alert, and a repeat records nothing more", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     const hono = app();
-    const res = await ask(await queryBody({ ack }), oldBox, hono);
+    const res = await ask(await queryBody({ holdings, ack }), oldBox, hono);
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect(await activities("handover.reset_acknowledged")).toEqual([
       { subject_id: oldBox, person_id: personId, data: ack },
@@ -612,7 +760,7 @@ describe("an acknowledgement", () => {
     expect(await offTheList()).toBe(true);
 
     // The removed box is refused, so a repeat reaches nothing that writes.
-    const repeat = await ask(await queryBody({ ack, nonce: "again" }), oldBox, hono);
+    const repeat = await ask(await queryBody({ holdings, ack, nonce: "again" }), oldBox, hono);
     expect(await refusalOf(repeat)).toEqual({
       code: "handover.reset_query_refused",
       params: { reason: "signature" },
@@ -641,9 +789,10 @@ describe("an acknowledgement", () => {
       }),
     );
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
+    const holdings = { fiscal: [MISSING_CHAIN] };
     const hono = app();
 
-    const res = await ask(await queryBody({ ack }), oldBox, hono);
+    const res = await ask(await queryBody({ holdings, ack }), oldBox, hono);
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect((await answerOf(res))?.order).toEqual(order);
@@ -659,7 +808,7 @@ describe("an acknowledgement", () => {
 
     // Handled, so the open-incident key no longer absorbs a second raise: only the order does.
     await suite.db.run(sql`update incidents set acknowledged_at = '2026-11-22T10:00:00.000Z'`);
-    const repeat = await ask(await queryBody({ ack, nonce: "again" }), oldBox, hono);
+    const repeat = await ask(await queryBody({ holdings, ack, nonce: "again" }), oldBox, hono);
     expect(repeat.status).toBe(200);
     expect(await incidents()).toHaveLength(1);
     expect(await activities("handover.reset_acknowledged")).toHaveLength(1);
@@ -670,7 +819,7 @@ describe("an acknowledgement", () => {
     suite.node.run(
       sql`update node_handover_operations set state = 'abandoned' where operation_id = ${operationId}`,
     );
-    const cleared = await ask(await queryBody({ ack, nonce: "cleared" }), oldBox, hono);
+    const cleared = await ask(await queryBody({ holdings, ack, nonce: "cleared" }), oldBox, hono);
     expect(cleared.status, JSON.stringify(await cleared.clone().json())).toBe(200);
     expect(await offTheList()).toBe(true);
     expect(await activities("membership.node_removed")).toHaveLength(1);

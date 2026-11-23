@@ -10,7 +10,7 @@ import { signAsThisBox } from "./handover-signing.js";
 import type { Logger } from "./logger.js";
 import { realSleep } from "./loop.js";
 import { mainBoxToAsk } from "./main-box-answer.js";
-import { readHoldings, type HeardHoldings } from "./old-box-holdings.js";
+import { readHoldings, type HeardCopy, type HeardHoldings } from "./old-box-holdings.js";
 import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
 import { replacedResetCheck, type ReplacedResetCheck } from "./replaced-reset-check.js";
 import { writeReplacedResetMarker } from "./replaced-reset.js";
@@ -102,6 +102,8 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   answer(): ResetOrderAnswer | null;
   /** The main box's summary from the latest verified answer; kept through refusals and silence. */
   mainHoldings(): HeardHoldings | null;
+  /** The last copy time any verified answer carried; one takeover's never changes, so kept. */
+  mainCopy(): HeardCopy | null;
   stop(): Promise<void>;
 } {
   const stopping = new AbortController();
@@ -109,10 +111,12 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   const now = deps.now ?? (() => new Date());
   let answer: ResetOrderAnswer | null = null;
   let heard: HeardHoldings | null = null;
+  let heardCopy: HeardCopy | null = null;
   // Stamped with the time the question left: records are only added, so the main box held no
   // less then than the summary it read afterwards.
   const hear = (asked: Extract<ReplacedResetCheck, { lacking: unknown }>, askedAt: Date) => {
     heard = asked.holdings === undefined ? null : { holdings: asked.holdings, heardAt: askedAt };
+    if (asked.copy !== undefined) heardCopy = asked.copy;
   };
   // Each cause is logged once, and again only when it changes.
   let lastCause: string | null = null;
@@ -226,6 +230,7 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   return {
     answer: () => answer,
     mainHoldings: () => heard,
+    mainCopy: () => heardCopy,
     stop: async () => {
       stopping.abort();
       await task;
