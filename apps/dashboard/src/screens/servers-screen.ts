@@ -334,6 +334,11 @@ export class ServersScreen extends LitElement {
   @state() private handoverBusy = false;
   #operationId = "";
   #handoverSent = false;
+  /** While this screen is starting a handover: the box refuses other requests before it answers,
+   * and the answer leads on to the handover page. */
+  get startingHandover(): boolean {
+    return this.handoverBusy;
+  }
   #startRefusal: unknown;
   #openHandover(row: ServerRow): void {
     this.handoverTarget = row;

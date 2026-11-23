@@ -51,6 +51,19 @@ describe("session signals", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("reports handover.stepping_down, from any session generation, without asking the box anything", async () => {
+    const target = new EventTarget();
+    const invalid: unknown[] = [];
+    target.addEventListener("waitron-session-invalid", (event) => {
+      invalid.push((event as CustomEvent<{ code: string }>).detail);
+    });
+    const signals = createSessionSignals({ target, sessionGeneration: () => 2 });
+    signals.reportError("handover.stepping_down", 1);
+    await settle();
+    expect(invalid).toEqual([{ code: "handover.stepping_down", generation: 1 }]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it.each(["server.internal", "product.not_found", "connection.failed"])(
     "reports nothing and asks nothing after %s",
     async (code) => {

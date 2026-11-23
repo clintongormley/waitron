@@ -15,6 +15,7 @@ export interface SessionSignals {
 
 const SESSION_CODES = new Set([
   "authorization.inspection_only",
+  "handover.stepping_down",
   "management_session.expired",
   "management_session.required",
   "node.reset",

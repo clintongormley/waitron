@@ -131,6 +131,7 @@ import "./screens/diagnostics-screen.js";
 import "./screens/box-status-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/servers-screen.js";
+import type { ServersScreen } from "./screens/servers-screen.js";
 import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
 import "./screens/demo-printer-screen.js";
@@ -220,6 +221,11 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 /** A tablet-width window, whose sidebar opens folded while no choice is stored. */
 const FOLDED_BY_DEFAULT = "(48rem < width <= 64rem)";
 const SIDEBAR_FOLDED_KEY = "waitron-dashboard-sidebar-folded";
+/** When this tab last reloaded because its box no longer runs the venue. Such a box serves its own
+ * page at every dashboard address, so a reload that comes back to the dashboard within the window
+ * means something else serves these files, and reloading again would loop. */
+const BOX_REPLACED_RELOAD_KEY = "waitron-box-replaced-reload";
+const BOX_REPLACED_RELOAD_WINDOW_MS = 60_000;
 
 function readStoredFold(): boolean | undefined {
   try {
@@ -1183,9 +1189,41 @@ export class DashboardApp extends LitElement {
   #sessionRead = 0;
   @state() private tradingAdmission: TradingAdmissionView = { state: "ready" };
 
+  /** Set once this page is navigating away, to the handover page or onto the box's own page. */
+  #leaving = false;
+  @state() private reloadingForReplacedBox = false;
+
+  /** Reloads onto the page a box that no longer runs the venue serves in place of the dashboard:
+   * at most once per page, and not again within a minute in this tab. Not while this page is
+   * starting a handover: that makes the box refuse other requests, and its answer leads on to the
+   * handover page. */
+  #reloadForReplacedBox(): void {
+    if (this.#leaving) return;
+    if (
+      this.renderRoot.querySelector<ServersScreen>("dashboard-servers-screen")?.startingHandover ===
+      true
+    )
+      return;
+    const now = Date.now();
+    try {
+      const last = Number(sessionStorage.getItem(BOX_REPLACED_RELOAD_KEY));
+      if (last > 0 && now - last >= 0 && now - last < BOX_REPLACED_RELOAD_WINDOW_MS) return;
+      sessionStorage.setItem(BOX_REPLACED_RELOAD_KEY, String(now));
+    } catch {
+      // Without session storage, `#leaving` still holds this page to one reload.
+    }
+    this.#leaving = true;
+    this.reloadingForReplacedBox = true;
+    this.reload();
+  }
+
   readonly #onSessionInvalid = (event: Event): void => {
     const detail = (event as CustomEvent<{ code?: unknown; generation?: number }>).detail;
     const code = detail?.code;
+    if (code === "handover.stepping_down") {
+      this.#reloadForReplacedBox();
+      return;
+    }
     if (
       code !== "node.reset" &&
       detail?.generation !== undefined &&
@@ -2148,6 +2186,8 @@ export class DashboardApp extends LitElement {
   }
 
   override render(): TemplateResult {
+    // Nothing while the reload runs: a screen would show the refusal the box's own page explains.
+    if (this.reloadingForReplacedBox) return html``;
     return html`${this.leaveConfirmation()} ${this.#permissionDialog()}
       <dashboard-fresh-sign-in-dialog .api=${this.api}></dashboard-fresh-sign-in-dialog>
       <dashboard-about-dialog
@@ -3639,6 +3679,7 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canPromote=${this.#sessionPermissions.includes("node.manage")}
           @handover-open=${(event: CustomEvent<{ url: string }>) => {
+            this.#leaving = true;
             window.location.href = event.detail.url;
           }}
         ></dashboard-servers-screen>`;
