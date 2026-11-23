@@ -25,11 +25,21 @@ export interface CancellationRead {
   saleId?: string;
   refundValue?: { quantity: string; gross: string };
   /** The free items that come back with this dish when every portion it has left is cancelled with
-   * Refund: it is the bill's last paid dish. */
-  withFree?: { lineId: string; name: string; quantity: string; refundAmount: string }[];
+   * Refund: it is the bill's last paid dish. A `served` one cannot come back, so that cancel cannot
+   * give money back. */
+  withFree?: {
+    lineId: string;
+    name: string;
+    quantity: string;
+    refundAmount: string;
+    served?: true;
+  }[];
   /** A dish given free that holds a share of the price paid: it gives money back only with the
    * bill's last paid dish. */
   givenFree?: true;
+  /** On a `givenFree` dish: the paid dishes whose every unserved portion, cancelled with Refund
+   * ticked, brings it back; empty while none can. */
+  comesBackWith?: string[];
 }
 
 export interface RefundLink {

@@ -1,7 +1,7 @@
 import { en, es } from "./strings.js";
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
-import { codeMessage } from "./codes.js";
+import { codeMessage, freeItemAtFinishMessage } from "./codes.js";
 
 it("explains an empty order in English and Spanish", () => {
   expect(codeMessage("sale.empty_basket", "en")).toBe(
@@ -1443,4 +1443,32 @@ it("words tab.free_item_with_dish with an unknown reason as a readable sentence"
     expect(general).not.toBe(codeMessage("unknown", locale));
     expect(general).not.toContain("tab.free_item_with_dish");
   }
+});
+
+it.each([
+  [
+    "free_item",
+    "A dish given free on this bill can no longer come back with the paid dishes ticked here: the bill changed since this window opened. The window now shows it as it is: check the dishes and choose again.",
+    "Un plato por invitación de esta cuenta ya no puede volver con los platos pagados marcados aquí: la cuenta ha cambiado desde que se abrió esta ventana. La ventana ya la muestra como está: revisa los platos y vuelve a elegir.",
+  ],
+  [
+    "not_listed",
+    "A dish given free on this bill now comes back with the paid dishes ticked here: the bill changed since this window opened. The window now shows it as it is: check the amount and choose again.",
+    "Un plato por invitación de esta cuenta ahora vuelve con los platos pagados marcados aquí: la cuenta ha cambiado desde que se abrió esta ventana. La ventana ya la muestra como está: revisa el importe y vuelve a elegir.",
+  ],
+  [
+    "served",
+    "A dish given free on this bill has been served, so the paid dishes cannot all give money back here. Untick Refund on one of them, then give its money back with Correct invoice on the receipt.",
+    "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuelve su dinero con Rectificar factura en el recibo.",
+  ],
+])("words Finish table's tab.free_item_with_dish by its reason %s", (reason, english, spanish) => {
+  expect(freeItemAtFinishMessage(reason, "en")).toBe(english);
+  expect(freeItemAtFinishMessage(reason, "es")).toBe(spanish);
+});
+
+it("words Finish table's tab.free_item_with_dish with an unknown reason as the general sentence", () => {
+  for (const locale of ["en", "es"])
+    expect(freeItemAtFinishMessage("constructor", locale)).toBe(
+      codeMessage("tab.free_item_with_dish", locale),
+    );
 });

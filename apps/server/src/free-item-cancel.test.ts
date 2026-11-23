@@ -218,7 +218,8 @@ describe("a free item holding a share comes back with the last paid dish", () =>
       refundValue: { quantity: "1.000", gross: "8.33" },
       withFree: [{ lineId: water.id, name: "Water", quantity: "1.000", refundAmount: "1.67" }],
     });
-    expect(await consent(t, water)).toMatchObject({ givenFree: true });
+    expect(((await consent(t, salad)).withFree as object[])[0]).not.toHaveProperty("served");
+    expect(await consent(t, water)).toMatchObject({ givenFree: true, comesBackWith: [salad.id] });
 
     const jobsBefore = (await written(t)).jobs;
     const answer = await cancel(t, salad, { withFree: [water.id] });
@@ -290,6 +291,9 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     const t = await ticket(SALAD_AND_WATER);
     const water = dish(t, "Water");
     await serve(t, water);
+    expect(await consent(t, dish(t, "Salad"))).toMatchObject({
+      withFree: [{ lineId: water.id, refundAmount: "1.67", served: true }],
+    });
     await refused(t, () => cancel(t, dish(t, "Salad"), { withFree: [water.id] }), "served");
     await refused(t, () => cancel(t, dish(t, "Salad")), "served");
   });

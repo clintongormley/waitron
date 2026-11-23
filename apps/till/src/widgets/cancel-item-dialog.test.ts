@@ -814,3 +814,43 @@ it("offers no Refund tick for a dish given free", async () => {
   expect(root(el).querySelector('input[name="refund"]')).toBeNull();
   expect(button(el).textContent?.trim()).toBe("Cancel");
 });
+it("says a served free item cannot come back and offers no refund for every portion", async () => {
+  const consent: CancellationRead = {
+    ...withWater(),
+    withFree: [
+      {
+        lineId: "water-1",
+        name: "Water",
+        quantity: "1.000",
+        refundAmount: "1.67",
+        served: true,
+      },
+    ],
+  };
+  const el = await mount({ consent, refundAvailable: true });
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  expect(freeLine(el)).toBeUndefined();
+  expect(root(el).querySelector("[data-free-served]")?.textContent?.trim()).toBe(
+    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+  );
+  expect(button(el).textContent?.trim()).toBe("Cancel");
+  await pickReason(el);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    { lineId: "dish-1", quantity: "3", outcome: "keep_charge", reasonId: "house", consent },
+  ]);
+});
+it("still offers the dish's own refund for fewer portions while a free item is served", async () => {
+  const consent: CancellationRead = {
+    ...withWater(),
+    withFree: [
+      { lineId: "water-1", name: "Water", quantity: "1.000", refundAmount: "1.67", served: true },
+    ],
+  };
+  const el = await mount({ consent, refundAvailable: true });
+  await fill(el, "2");
+  expect(root(el).querySelector("[data-free-served]")).toBeNull();
+  await click(el, 'input[name="refund"]');
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €6.67");
+});

@@ -712,3 +712,30 @@ it("never brings back a free item that follows no paid dish in the list", async 
   await click(el, "[data-confirm]");
   expect(refundOf(calls, "water")).toBeUndefined();
 });
+it("says on a free item's row whether it gives money back, in English and Spanish", async () => {
+  const el = await mountFree();
+  const line = () => root(el).querySelector('[data-dish="water"] [data-free]')?.textContent?.trim();
+  expect(line()).toBe("Given free: refunded with the paid dishes");
+  await click(el, '[data-dish="croquetas"] input[name=refund]');
+  expect(line()).toBe("Given free: no money back");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(line()).toBe(es["finish_table.free_kept"]);
+  await click(el, '[data-dish="croquetas"] input[name=refund]');
+  expect(line()).toBe(es["finish_table.free_refunded"]);
+});
+it("sends a free item's Refund when the money left gave it no amount of its own", async () => {
+  const el = await mountFree({
+    refunds: { flan: "7.00" },
+    freeItems: { water: ["flan"] },
+  });
+  await reason(el);
+  expect(root(el).querySelector('[data-dish="water"] [data-free]')?.textContent?.trim()).toBe(
+    "Given free: refunded with the paid dishes",
+  );
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(refundOf(calls, "water")).toBe(true);
+  expect(refundOf(calls, "flan")).toBe(true);
+});

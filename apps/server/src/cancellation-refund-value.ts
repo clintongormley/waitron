@@ -9,7 +9,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import { readPortionBindings } from "./order-portions.js";
-import { readLineCancellations } from "./line-service-state.js";
+import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 
 type Filed = typeof saleLines.$inferSelect;
 type Stored = typeof workingOrderLines.$inferSelect;
@@ -128,6 +128,18 @@ export function isLastPaidDish(
     paid.some(({ line }) => off.has(line.id)) &&
     paid.every(({ line, cancelled }) => line.quantity - cancelled - (off.get(line.id) ?? 0) === 0)
   );
+}
+
+/** The paid dishes, with their unserved portions (thousandths), whose cancel with Refund ticked
+ * makes the bill's last paid dish; none while a paid dish keeps a served portion. */
+export function lastPaidDishes(paid: readonly ShareHolder[]): Map<string, number> {
+  const off = new Map(
+    paid.flatMap(({ line, cancelled }) => {
+      const { remaining } = serviceQuantities(line.quantity, line.servedQuantity, cancelled);
+      return remaining > 0 ? [[line.id, remaining] as const] : [];
+    }),
+  );
+  return isLastPaidDish(paid, off) ? off : new Map();
 }
 
 /** The free items still holding a portion that is not cancelled: those the last paid dish takes. */

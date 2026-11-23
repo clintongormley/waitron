@@ -23,7 +23,7 @@ import {
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
-import { freeItemsLeft, isLastPaidDish, readShareHolders } from "./cancellation-refund-value.js";
+import { freeItemsLeft, lastPaidDishes, readShareHolders } from "./cancellation-refund-value.js";
 import {
   cancelItem,
   type CancelItemAsk,
@@ -223,9 +223,9 @@ async function finish(
 
 /**
  * The free items holding a share among `dishes` (plan 2026-11-19 §4.3.1), once their Refund ticks
- * are checked over the whole request: a free item's tick stands only when the request brings back
- * its bill's last paid dish with every paid dish of the bill in it ticked, and then every free item
- * of that bill must be ticked and none may have a served portion.
+ * are checked over the whole request: a free item's tick stands only when the request lists and
+ * ticks every one of its bill's {@link lastPaidDishes} (the cancellation read's `comesBackWith`), and
+ * then every free item of that bill must be ticked and none may have a served portion.
  */
 async function checkFreeItemPairing(
   tx: Transaction,
@@ -248,9 +248,10 @@ async function checkFreeItemPairing(
         .filter((dish) => dish.billId === billId)
         .map((dish) => [dish.lineId, decimalToThousandths(decimal(dish.quantity))]),
     );
-    const paidListed = paid.filter(({ line }) => listed.has(line.id));
+    const back = lastPaidDishes(paid);
     const returned =
-      isLastPaidDish(paid, listed) && paidListed.every(({ line }) => ticked(line.id));
+      back.size > 0 &&
+      [...back].every(([lineId, quantity]) => listed.get(lineId) === quantity && ticked(lineId));
     if (returned && freeItemsLeft(free).some(({ line }) => line.servedQuantity > 0))
       throw freeItemRefusal("served");
     for (const { line } of freeItemsLeft(free)) {

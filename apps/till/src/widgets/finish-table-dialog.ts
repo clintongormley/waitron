@@ -291,7 +291,9 @@ export class TillFinishTableDialog extends LitElement {
               expectedBillRevision: dish.billRevision,
               expectedContext: structuredClone(dish.context),
               ...(this.#asks(dish) ? { preparationStarted: choice.preparationStarted! } : {}),
-              ...(this.#refunding(choice) && this.#canRefund(dish) ? { refundHandoff: true } : {}),
+              ...(this.#refunding(choice) && (this.#isFree(dish.lineId) || this.#canRefund(dish))
+                ? { refundHandoff: true }
+                : {}),
               reasonId: this.draft.reasonId,
               ...(this.#reason()?.noteRequired ? { note: this.draft.note.trim() } : {}),
             };
@@ -385,6 +387,13 @@ export class TillFinishTableDialog extends LitElement {
                       t(dish.context.stage === "started" ? "cancel_item.yes" : "cancel_item.no"),
                     )}
                   </p>`
+            }
+            ${
+              this.#isFree(dish.lineId) && choice !== undefined
+                ? html`<p data-free>
+                    ${t(this.#refunding(choice) ? "finish_table.free_refunded" : "finish_table.free_kept")}
+                  </p>`
+                : nothing
             }
             ${
               this.#canRefund(dish) &&

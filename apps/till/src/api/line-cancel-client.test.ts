@@ -169,12 +169,17 @@ describe("the cancellation HTTP client", () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(json(read))
-      .mockResolvedValueOnce(json({ ...read, withFree: undefined, givenFree: true }))
+      .mockResolvedValueOnce(
+        json({ ...read, withFree: undefined, givenFree: true, comesBackWith: ["dish-3"] }),
+      )
       .mockResolvedValueOnce(json({ revision: 9 }));
     const api = new TillApi("", fetcher);
     const consent = await api.getCancellation("party-1", "dish-3");
     expect(consent.withFree).toEqual(read.withFree);
-    expect((await api.getCancellation("party-1", "water-1")).givenFree).toBe(true);
+    expect(await api.getCancellation("party-1", "water-1")).toMatchObject({
+      givenFree: true,
+      comesBackWith: ["dish-3"],
+    });
     const ask: CancelItemRequest = {
       expectedEdit,
       submissionId: "refund-1",

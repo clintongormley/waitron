@@ -27,6 +27,7 @@ import { partyRevision } from "./parties.js";
 import {
   freeItemsLeft,
   isLastPaidDish,
+  lastPaidDishes,
   readBillFiling,
   refundValueIn,
   rowRefundValueIn,
@@ -217,6 +218,7 @@ export function mountLineCancelApi(
                   thousandthsToDecimal(cancelled),
                   thousandthsToDecimal(line.quantity - cancelled),
                 ),
+                ...(line.servedQuantity > 0 ? { served: true } : {}),
               }));
         return {
           context,
@@ -225,7 +227,9 @@ export function mountLineCancelApi(
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
           ...(refundValue === undefined ? {} : { refundValue }),
-          ...(givenFree ? { givenFree: true } : {}),
+          ...(givenFree
+            ? { givenFree: true, comesBackWith: [...lastPaidDishes(holders.paid).keys()] }
+            : {}),
           ...(withFree === undefined || withFree.length === 0 ? {} : { withFree }),
         };
       });

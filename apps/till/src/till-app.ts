@@ -110,7 +110,7 @@ import {
   setLocale,
   t,
 } from "./i18n/t.js";
-import { codeMessage } from "./i18n/codes.js";
+import { codeMessage, freeItemAtFinishMessage } from "./i18n/codes.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import { TillProblemReport } from "./problem-report.js";
@@ -20672,7 +20672,9 @@ export class TillApp extends LitElement {
           choice.quantity !== dish.quantity ||
           choice.expectedBillRevision !== dish.billRevision ||
           !sameFinishContext(choice.expectedContext, dish.context) ||
-          (choice.refundHandoff === true && open.refunds[dish.lineId] === undefined)
+          (choice.refundHandoff === true &&
+            open.refunds[dish.lineId] === undefined &&
+            !Object.hasOwn(open.freeItems, dish.lineId))
         );
       })
     )
@@ -20808,7 +20810,7 @@ export class TillApp extends LitElement {
         if (code === "party.bill_outstanding") this.finishRefused = true;
         else this.errorKey = "table.finish_bill_holds_money";
         await this.#readAfterFinishRefused(asked.visit, true);
-      } else if (code === "party.unserved_dishes") {
+      } else if (code === "party.unserved_dishes" || code === "tab.free_item_with_dish") {
         const opening = { composition: asked, controller: new AbortController() };
         this.#finishOpening = opening;
         this.finishingTable = null;
@@ -20816,11 +20818,19 @@ export class TillApp extends LitElement {
           await this.#readFinishDishes(
             opening,
             open.partyRevision,
-            error as { dishes: UnservedDish[] },
+            code === "party.unserved_dishes"
+              ? (error as { dishes: UnservedDish[] })
+              : { dishes: open.dishes },
           );
         } finally {
           if (this.#finishOpening === opening) this.#finishOpening = undefined;
         }
+        const reread = this.finishingTable as FinishingTable | null;
+        if (code === "tab.free_item_with_dish" && reread?.composition === asked)
+          this.finishingTable = {
+            ...reread,
+            refusal: freeItemAtFinishMessage((error as { reason?: unknown }).reason),
+          };
       } else if (
         code === "authorization.not_permitted" &&
         approver === undefined &&

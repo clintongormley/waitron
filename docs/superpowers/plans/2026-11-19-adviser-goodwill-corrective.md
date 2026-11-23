@@ -482,9 +482,14 @@ paid dishes, and what each has left to cancel):
 3. Every other cancel is as today.
 
 **Consent.** The cancellation read (`apps/server/src/line-cancel-api.ts:150-193`) answers
-`withFree: { lineId, name, quantity, refundAmount }[]` when the dish would be the last paid dish if
-all of its cancellable portions were cancelled, and `givenFree: true` for a free item holding a
-share, so the till can show both before anything is sent.
+`withFree: { lineId, name, quantity, refundAmount, served? }[]` when the dish would be the last paid
+dish if all of its cancellable portions were cancelled, `served: true` marking a free item with a
+served portion (that cancel is refused `served`, so the window says so instead of offering it), and,
+for a free item holding a share, `givenFree: true` with `comesBackWith: string[]`: the paid dishes
+whose every unserved portion, cancelled with Refund ticked, makes the last paid dish
+(`lastPaidDishes` in `apps/server/src/cancellation-refund-value.ts`, the test Finish table's check
+uses too), empty while a paid dish keeps a served portion. So the till can show all of it before
+anything is sent.
 
 **Finish table** (`apps/server/src/finish-party-service.ts:124-207`). Every unserved dish of a
 finished bill is in its request (`:154-169` refuses one that leaves a dish out), so a last paid dish
@@ -515,8 +520,21 @@ back less.
 - `tab.free_item_with_dish` reason `not_listed` re-reads the consent as `tab.cancel_context_changed`
   does (`:17419`), so the window then lists the free items.
 - The Finish table window (refund amounts built per dish at `till-app.ts:20520-20575`): a free item
-  has no tick of its own; it is ticked, and its value counted, exactly when every paid dish of its
-  receipt in the list is ticked and the consent of its ticket's paid dishes names it in `withFree`.
+  has no tick of its own. Its own cancellation read's `comesBackWith` names the paid dishes it
+  follows: when every one of them is in the Finish list, it is refunded, and its value counted,
+  exactly when all of them are ticked; when one is missing (served in full, or a set-menu line,
+  which Finish never lists) or the list is empty, it gives no money back. It is sent with Refund
+  whenever it follows, even when earlier refunds left it no amount of its own (the refund window's
+  amount stays capped by what is left to give back). Its row says which, en "Given free: refunded
+  with the paid dishes" / "Given free: no money back", es "Por invitación: se devuelve con los
+  platos pagados" / "Por invitación: no se devuelve dinero". A `tab.free_item_with_dish` refusal
+  reads the Finish dishes again and shows Finish's own words for its reason
+  (`freeItemAtFinishMessage`, `apps/till/src/i18n/codes.ts`).
+- The Cancel item window: a `served` entry in `withFree` replaces the Refund tick, when the quantity
+  takes every portion, with en "A dish given free with this one has been served, so it cannot come
+  back with it. Cancel this dish here, then give the money back with Correct invoice on the
+  receipt." / es "Un plato por invitación que iba con este ya se ha servido, así que no puede volver
+  con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo."
 - Messages (`apps/till/src/i18n/codes.ts`, a table by reason beside `CORRECTION_NOT_ADMITTED`,
   `:1051`, read in `codeMessage` as at `:1179-1184`):
 
@@ -1156,14 +1174,16 @@ paid in cash, nothing served), cancelling through `cancelItemHttp`
 cancellation or kitchen correction was written:
 
 - **the owner's case:** salad €10.00 and the free water; the cancellation read for the salad answers
-  `withFree` with the water and €1.67, and for the water `givenFree: true`; cancelling the salad with
+  `withFree` with the water and €1.67, and for the water `givenFree: true` and
+  `comesBackWith: [salad]`; cancelling the salad with
   `withFree: [water]` cancels both lines, writes two cancel records with refund values €8.33 and
   €1.67 and answers both refund links; a Refund a payment naming both cancellation ids for €10.00
   is accepted through the real route;
 - the salad alone (no `withFree`): `tab.free_item_with_dish` reason `not_listed`;
 - the water alone with Refund: reason `free_item`; without Refund it is cancelled and no refund link
   is answered; the salad's later cancel then needs no `withFree` and hands back €8.33;
-- the water marked served first: the salad's cancel with Refund, reason `served`;
+- the water marked served first: the salad's read marks the water `served: true`, and its cancel
+  with Refund is refused, reason `served`;
 - **several paid dishes:** salad €10.00, soup €6.00, free water; the salad alone hands back €8.89 with
   no `withFree`; the soup after it is the last paid dish: €5.33 and €1.78 with `withFree: [water]`;
 - a served paid dish stays: salad served, the soup's cancel with Refund is not the last paid dish,
@@ -1178,12 +1198,16 @@ cancellation or kitchen correction was written:
   `seatedTakeaway`, `apps/server/src/testing/advance-bills.ts:85-88`): salad ticked and water not,
   reason `not_listed`; water ticked and salad not, reason `free_item`; both ticked, accepted with
   both refund links; the water fully served, and one of two water lines served, each reason
-  `served` with nothing written.
+  `served` with nothing written; salad, soup and bread with the water: the water's read answers
+  `comesBackWith` [salad, soup, bread] and ticking those with the water is accepted, and with the
+  bread served in full it answers [] and Finish refuses the water's tick (`free_item`) and accepts
+  it unticked.
 
 Run, watch them fail. Then the change: the reader beside `refundValues`, the three rules in
 `cancelItem`, `withFree` on `CancelItemAsk` and its parsing (`apps/server/src/line-cancel-input.ts`),
-the consent fields in `line-cancel-api.ts`, the request-wide check and the loop order in
-`finish-party-service.ts`, the code in `errors.ts` and 409 in `till-api.ts`.
+the consent fields in `line-cancel-api.ts` (`withFree` with `served`, `givenFree` with
+`comesBackWith`), the request-wide check and the loop order in `finish-party-service.ts`, both
+reading `lastPaidDishes`, the code in `errors.ts` and 409 in `till-api.ts`.
 
 ```sh
 pnpm --filter @waitron/server exec vitest run src/free-item-cancel.test.ts src/free-item-share.test.ts src/line-cancel.test.ts src/line-cancel-api.test.ts src/line-cancel-context.test.ts src/finish-party-service.test.ts src/finish-party-collect.test.ts src/tender-refund-links.test.ts
@@ -1197,14 +1221,19 @@ Section 4.3.1, Till. Tests first:
 - `apps/till/src/widgets/cancel-item-dialog.test.ts`: a consent with `withFree` lists the water under
   the Refund tick in English and Spanish, the amount reads €10.00 when the quantity takes every
   portion and the dish's own share otherwise, and `withFree` is sent only in the first case; a
-  `givenFree` consent offers no Refund tick;
+  `givenFree` consent offers no Refund tick; a `served` entry in `withFree` offers no Refund tick
+  for every portion and says why, and still offers the dish's own refund for fewer;
 - `apps/till/src/api/line-cancel-client.test.ts`: `withFree` is sent and the consent fields are read;
 - the refund window filled after the cancel (`till-app.ts:17388`): amount €10.00 and both
   cancellation ids; reason `not_listed` re-reads the consent and shows its message;
 - `apps/till/src/widgets/finish-table-dialog.test.ts`: the water has no tick of its own, follows the
-  bill's paid dishes, and its value is counted only when they are all ticked;
-- `apps/till/src/i18n/codes.test.ts` and `strings.test.ts`: the three messages and the window line,
-  English and Spanish.
+  paid dishes it is given, its value is counted only when they are all ticked, its row says whether
+  it gives money back, and it is sent with Refund when earlier refunds left it no amount;
+- `apps/till/src/till-app-parties.test.ts`: the water follows exactly its read's `comesBackWith`
+  when every one is listed, and nothing when one is missing or none is named; a
+  `tab.free_item_with_dish` refusal reads the dishes again and shows Finish's own words;
+- `apps/till/src/i18n/codes.test.ts` and `strings.test.ts`: the three messages, Finish's three, and
+  the window lines, English and Spanish.
 
 Run, watch them fail; then the change. Check `memory_pressure | grep free` first (real Chromium).
 

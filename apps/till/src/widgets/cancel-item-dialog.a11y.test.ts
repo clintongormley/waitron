@@ -140,6 +140,26 @@ describe.each(["light", "dark"] as const)("Cancel item accessibility (%s)", (the
     );
     await expectNoA11yViolations(host);
   });
+  it("has no violations while it says a free item was served", async () => {
+    const { el, host } = await mount({
+      consent: {
+        ...consent("settled", "not_started"),
+        saleId: "sale",
+        withFree: [
+          {
+            lineId: "water",
+            name: "Agua mineral",
+            quantity: "1.000",
+            refundAmount: "1.67",
+            served: true,
+          },
+        ],
+      },
+      refundAvailable: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-free-served]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
   it("has no violations when a request refusal permits another attempt", async () => {
     const { host } = await mount({ refusal: "No se ha podido cancelar. Vuelve a intentarlo." });
     await expectNoA11yViolations(host);

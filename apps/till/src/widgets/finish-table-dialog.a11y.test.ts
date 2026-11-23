@@ -149,8 +149,13 @@ for (const locale of ["en-GB", "es-ES"]) {
   }
 }
 
-for (const theme of ["light", "dark"] as const) {
-  it(`Finish table with a dish given free is accessible in ${theme}`, async () => {
+for (const [theme, refunded] of [
+  ["light", true],
+  ["light", false],
+  ["dark", true],
+  ["dark", false],
+] as const) {
+  it(`Finish table with a dish given free is accessible in ${theme}, refunded ${refunded}`, async () => {
     setLocale("es-ES");
     const dish = (lineId: string, name: string): UnservedDish => ({
       lineId,
@@ -182,13 +187,18 @@ for (const theme of ["light", "dark"] as const) {
       {
         dishes: [dish("salad", "Ensalada"), dish("water", "Agua mineral")],
         refunds: { salad: "8.33", water: "1.67" },
-        freeItems: { water: ["salad"] },
+        freeItems: { water: refunded ? ["salad"] : [] },
         reasons: [],
       },
       theme,
     );
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll('input[name="refund"]')).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-free]")!.textContent!.trim()).toBe(
+      refunded
+        ? "Por invitación: se devuelve con los platos pagados"
+        : "Por invitación: no se devuelve dinero",
+    );
     await expectNoA11yViolations(host);
   });
 }

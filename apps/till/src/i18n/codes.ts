@@ -1107,6 +1107,31 @@ const FREE_ITEM_WITH_DISH: Record<string, { en: string; es: string }> = {
   },
 };
 
+/** Finish table's words for `tab.free_item_with_dish`, by its `reason`: the window brings a free
+ * item back with the paid dishes its read names, so only a bill changed since it opened, or a free
+ * item already served, is refused. */
+const FREE_ITEM_AT_FINISH: Record<string, { en: string; es: string }> = {
+  free_item: {
+    en: "A dish given free on this bill can no longer come back with the paid dishes ticked here: the bill changed since this window opened. The window now shows it as it is: check the dishes and choose again.",
+    es: "Un plato por invitación de esta cuenta ya no puede volver con los platos pagados marcados aquí: la cuenta ha cambiado desde que se abrió esta ventana. La ventana ya la muestra como está: revisa los platos y vuelve a elegir.",
+  },
+  not_listed: {
+    en: "A dish given free on this bill now comes back with the paid dishes ticked here: the bill changed since this window opened. The window now shows it as it is: check the amount and choose again.",
+    es: "Un plato por invitación de esta cuenta ahora vuelve con los platos pagados marcados aquí: la cuenta ha cambiado desde que se abrió esta ventana. La ventana ya la muestra como está: revisa el importe y vuelve a elegir.",
+  },
+  served: {
+    en: "A dish given free on this bill has been served, so the paid dishes cannot all give money back here. Untick Refund on one of them, then give its money back with Correct invoice on the receipt.",
+    es: "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuelve su dinero con Rectificar factura en el recibo.",
+  },
+};
+
+/** `tab.free_item_with_dish` refusing Finish table, in that window's words. */
+export function freeItemAtFinishMessage(reason: unknown, locale: string = currentLocale()): string {
+  return typeof reason === "string" && Object.hasOwn(FREE_ITEM_AT_FINISH, reason)
+    ? pickLocale(FREE_ITEM_AT_FINISH[reason]!, locale)
+    : codeMessage("tab.free_item_with_dish", locale);
+}
+
 /** `advance.taken_off_final_invoice` once nothing paid on the table's receipt is left to give back. */
 const TAKEN_OFF_NOTHING_LEFT = {
   en: "This payment on account was already taken off the table's receipt{invoiceNumber}, and nothing paid on {it} is left to give back. Choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
@@ -1162,6 +1187,7 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   DEFERRED_INELIGIBLE,
   CORRECTION_NOT_ADMITTED,
   FREE_ITEM_WITH_DISH,
+  FREE_ITEM_AT_FINISH,
   TAKEN_OFF_NOTHING_LEFT,
   TAKEN_OFF_NOT_FULLY_PAID,
   MONEY_SHORT_NOTHING_LEFT,

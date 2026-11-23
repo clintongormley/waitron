@@ -201,7 +201,7 @@ export class TillCancelItemDialog extends LitElement {
       return [];
     if (this.#asksPreparation() && this.draft.preparationStarted === null) return [];
     if (context.billStatus === "settled")
-      return this.#canRefund() ? ["keep_charge", "refund"] : ["keep_charge"];
+      return this.#canRefund() && !this.#freeServed() ? ["keep_charge", "refund"] : ["keep_charge"];
     return this.#started() ? ["keep_charge", "remove_charge"] : ["remove_charge"];
   }
   #canRefund(): boolean {
@@ -230,16 +230,23 @@ export class TillCancelItemDialog extends LitElement {
       currentLocale(),
     );
   }
+  /** Whether the cancel takes every portion the dish has left. */
+  #takesAll(): boolean {
+    return (
+      this.#quantityValid() &&
+      compareDecimal(decimal(quantityValue(this.draft.quantity)), decimal(this.#remaining())) === 0
+    );
+  }
   /** The free items that come back with this cancel: it refunds every portion the bill's last paid
    * dish has left. */
   #freeBack(): NonNullable<CancellationRead["withFree"]> {
     const free = this.consent?.withFree ?? [];
-    return free.length > 0 &&
-      this.draft.outcome === "refund" &&
-      this.#quantityValid() &&
-      compareDecimal(decimal(quantityValue(this.draft.quantity)), decimal(this.#remaining())) === 0
-      ? free
-      : [];
+    return free.length > 0 && this.draft.outcome === "refund" && this.#takesAll() ? free : [];
+  }
+  /** Whether the cancel would have to bring back a free item already served, which cannot come
+   * back, so it gives no money back. */
+  #freeServed(): boolean {
+    return (this.consent?.withFree ?? []).some((item) => item.served === true) && this.#takesAll();
   }
   #asksPreparation(): boolean {
     return (
@@ -269,12 +276,14 @@ export class TillCancelItemDialog extends LitElement {
     const key = this.#currentKey();
     if (key !== this.#key) {
       this.#key = key;
-      this.draft = { ...this.draft, preparationStarted: null };
+      const quantity =
+        this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining();
+      this.draft = { ...this.draft, preparationStarted: null, quantity };
       this.draft = {
         preparationStarted: null,
         reasonId: "",
         note: "",
-        quantity: this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining(),
+        quantity,
         outcome: this.#defaultOutcome(),
       };
       this.#baseline = { ...this.draft };
@@ -536,27 +545,29 @@ export class TillCancelItemDialog extends LitElement {
             : unavailable
               ? html`<p>${t("cancel_item.unavailable")}</p>`
               : this.consent?.context.billStatus === "settled"
-                ? this.#canRefund()
-                  ? html`<label
-                        ><input
-                          type="checkbox"
-                          name="refund"
-                          .checked=${this.draft.outcome === "refund"}
-                          ?disabled=${this.#busy()}
-                          @change=${(event: Event) => this.#set({ outcome: (event.target as HTMLInputElement).checked ? "refund" : "keep_charge" })}
-                        />${t("find_page.refund")}</label
-                      >${
-                        this.#freeBack().length > 0
-                          ? html`<p data-with-free>
-                              ${t("cancel_item.with_free").replace("{dishes}", () =>
-                                this.#freeBack()
-                                  .map((item) => `${quantityText(item.quantity)} × ${item.name}`)
-                                  .join(", "),
-                              )}
-                            </p>`
-                          : nothing
-                      }`
-                  : nothing
+                ? this.#canRefund() && this.#freeServed()
+                  ? html`<p data-free-served>${t("cancel_item.free_served")}</p>`
+                  : this.#canRefund()
+                    ? html`<label
+                          ><input
+                            type="checkbox"
+                            name="refund"
+                            .checked=${this.draft.outcome === "refund"}
+                            ?disabled=${this.#busy()}
+                            @change=${(event: Event) => this.#set({ outcome: (event.target as HTMLInputElement).checked ? "refund" : "keep_charge" })}
+                          />${t("find_page.refund")}</label
+                        >${
+                          this.#freeBack().length > 0
+                            ? html`<p data-with-free>
+                                ${t("cancel_item.with_free").replace("{dishes}", () =>
+                                  this.#freeBack()
+                                    .map((item) => `${quantityText(item.quantity)} × ${item.name}`)
+                                    .join(", "),
+                                )}
+                              </p>`
+                            : nothing
+                        }`
+                    : nothing
                 : html`<fieldset>
                     <legend>
                       ${t("cancel_item.choice")} <span class="required" aria-hidden="true">*</span>

@@ -13915,58 +13915,57 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     row.context.components[0]!.servedQuantity = "0.000";
     return row;
   }
-  const freeWater = (row: Dish): Consent => ({
+  const freeWater = (row: Dish, comesBackWith: string[]): Consent => ({
     ...consent(row),
     refundValue: { quantity: "1.000", gross: "1.67" },
     givenFree: true,
-  });
-  const waterBack = [{ lineId: "line-w", name: "Water", quantity: "1.000", refundAmount: "1.67" }];
-
-  it("has a free item follow every paid dish of its sale in the list", async () => {
-    const rows = [unserved("line-1"), unserved("line-2"), unserved("line-w")];
-    const { el } = await mountFinish({
-      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
-      getCancellation: vi.fn(async (_p: string, id: string) => {
-        const row = rows.find((candidate) => candidate.lineId === id)!;
-        return id === "line-w" ? freeWater(row) : consent(row);
-      }),
-    });
-    const dialog = await openFinish(el);
-    expect(dialog!.freeItems).toEqual({ "line-w": ["line-1", "line-2"] });
-  });
-
-  it("follows no paid dish while one keeps a served portion", async () => {
-    const rows = [unserved("line-1"), dish("line-2"), unserved("line-w")];
-    const { el } = await mountFinish({
-      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
-      getCancellation: vi.fn(async (_p: string, id: string) => {
-        const row = rows.find((candidate) => candidate.lineId === id)!;
-        return id === "line-w" ? freeWater(row) : consent(row);
-      }),
-    });
-    const dialog = await openFinish(el);
-    expect(dialog!.freeItems).toEqual({ "line-w": [] });
+    comesBackWith,
   });
 
   it.each([
-    [true, ["line-1"]],
-    [false, []],
+    ["every paid dish it names is listed", ["line-1", "line-2"], ["line-1", "line-2"]],
+    ["it names a paid dish missing from the list", ["line-1", "line-set"], []],
+    ["it names none", [], []],
   ])(
-    "has a free item follow a sale's one paid dish only when its consent names it (%s)",
-    async (named, follows) => {
-      const rows = [unserved("line-1"), unserved("line-w")];
+    "has a free item follow exactly the paid dishes its read names: %s",
+    async (_, comesBackWith, follows) => {
+      const rows = [unserved("line-1"), unserved("line-2"), unserved("line-w")];
       const { el } = await mountFinish({
         finishTable: vi.fn().mockRejectedValue(refusal(rows)),
         getCancellation: vi.fn(async (_p: string, id: string) => {
           const row = rows.find((candidate) => candidate.lineId === id)!;
-          if (id === "line-w") return freeWater(row);
-          return named ? { ...consent(row), withFree: waterBack } : consent(row);
+          return id === "line-w" ? freeWater(row, comesBackWith) : consent(row);
         }),
       });
       const dialog = await openFinish(el);
       expect(dialog!.freeItems).toEqual({ "line-w": follows });
     },
   );
+
+  it("re-reads the dishes and says in Finish's own words why a free item's refund was refused", async () => {
+    const rows = [unserved("line-1"), unserved("line-w")];
+    const getCancellation = vi.fn(async (_p: string, id: string) => {
+      const row = rows.find((candidate) => candidate.lineId === id)!;
+      return id === "line-w" ? freeWater(row, ["line-1"]) : consent(row);
+    });
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal(rows))
+        .mockRejectedValueOnce({ code: "tab.free_item_with_dish", reason: "free_item" }),
+      getCancellation,
+    });
+    await openFinish(el);
+    expect(getCancellation).toHaveBeenCalledTimes(2);
+    await choose(el, true);
+    await expect
+      .poll(() => finishDialog(el)?.refusal)
+      .toBe(
+        "A dish given free on this bill can no longer come back with the paid dishes ticked here: the bill changed since this window opened. The window now shows it as it is: check the dishes and choose again.",
+      );
+    expect(getCancellation).toHaveBeenCalledTimes(4);
+    expect(finishDialog(el)!.freeItems).toEqual({ "line-w": ["line-1"] });
+  });
 
   describe("each receipt's refund opens filled in", () => {
     // A refund left awaiting its answer is saved for its sale, and would reopen in the next case.
@@ -14072,6 +14071,42 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         }),
       ]);
       expect(sent()[0]).not.toHaveProperty("override");
+    });
+
+    it("sends a free item's Refund with its paid dish when the money left covers only the dish", async () => {
+      const rows = [unserved("line-1"), unserved("line-w")];
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal(rows))
+          .mockResolvedValue({
+            state: "closed",
+            refundLinks: [
+              { lineId: "line-1", adjustmentId: "adj-1" },
+              { lineId: "line-w", adjustmentId: "adj-w" },
+            ],
+          }),
+        getCancellation: vi.fn(async (_p: string, id: string) => {
+          const row = rows.find((candidate) => candidate.lineId === id)!;
+          return id === "line-w"
+            ? freeWater(row, ["line-1"])
+            : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
+        }),
+        getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "7.00" }]),
+        refundTransaction: refundTransaction(),
+      });
+      await openFinish(el);
+      expect(finishDialog(el)!.refunds).toEqual({ "line-1": "7.00" });
+      await choose(el, true);
+      const call = vi.mocked(api.finishTable).mock.calls[1]![3] as {
+        cancellations: { lineId: string; refundHandoff?: boolean }[];
+      };
+      expect(call.cancellations.map((row) => [row.lineId, row.refundHandoff])).toEqual([
+        ["line-1", true],
+        ["line-w", true],
+      ]);
+      const form = await openedRefund(el);
+      expect(form.target).toBe("7.00");
     });
 
     it("fills in the dish's share of a comp on the whole bill", async () => {

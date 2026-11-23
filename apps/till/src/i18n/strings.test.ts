@@ -570,3 +570,24 @@ describe("the Cancel item window's line for free items coming back with the last
     expect(catalogues[locale]?.["cancel_item.with_free"]).toBe(line);
   });
 });
+
+describe("the Finish table and Cancel item lines on a dish given free", () => {
+  it.each([
+    ["en-GB", "finish_table.free_refunded", "Given free: refunded with the paid dishes"],
+    ["en-GB", "finish_table.free_kept", "Given free: no money back"],
+    ["es-ES", "finish_table.free_refunded", "Por invitación: se devuelve con los platos pagados"],
+    ["es-ES", "finish_table.free_kept", "Por invitación: no se devuelve dinero"],
+    [
+      "en-GB",
+      "cancel_item.free_served",
+      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+    ],
+    [
+      "es-ES",
+      "cancel_item.free_served",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
+    ],
+  ])("reads in %s for %s", (locale, key, line) => {
+    expect(catalogues[locale]?.[key as StringKey]).toBe(line);
+  });
+});
