@@ -3788,14 +3788,14 @@ describe("till-table-order-screen", () => {
         (target) => target.dataset.target,
       );
 
-    it("with no party shows Join, Move guests and Merge bills, no Split by item or Transfer items, and a Back control", async () => {
+    it("with no party shows Join and Move guests, no Merge bills, Split by item or Transfer items, and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
       const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
-      for (const verb of ["move", "join", "merge"]) {
+      for (const verb of ["move", "join"]) {
         expect(menu.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
-      for (const verb of ["split", "transfer", "move-dishes"]) {
+      for (const verb of ["merge", "split", "transfer", "move-dishes"]) {
         expect(menu.querySelector(`[data-action="${verb}"]`), verb).toBeNull();
       }
       menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
@@ -5165,15 +5165,11 @@ describe("till-table-order-screen", () => {
       }
     });
 
-    it("offers nothing to merge, under the plain heading, for an order that belongs to no party", async () => {
+    it("offers no Merge bills for an order that belongs to no party", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
-      click(el, '[data-action="merge"]');
-      await el.updateComplete;
 
-      const picker = el.shadowRoot!.querySelector("[data-target-picker]")!;
-      expect(picker.querySelector("h2")!.textContent!.trim()).toBe(t("table.actions_title"));
-      expect(picker.textContent).toContain(t("table.no_other_bills"));
+      expect(el.shadowRoot!.querySelector('[data-action="merge"]')).toBeNull();
     });
 
     it("names the merge verb for bills", async () => {

@@ -218,11 +218,6 @@ Open:
   PF6 Task 9 recorded; that entry, near the top of this file, is done under lane C's W27); with
   the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
   wholly off-screen (fixed by lane C's W27, below).
-- Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
-  a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
-  `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
-  no longer has — the language button now sits in the tab shell's top bar (A187). Removing the
-  space changes the screen's layout, so it is its own change.
 
 ## Task 17 (#991, a bill left unpaid)
 
@@ -2677,7 +2672,7 @@ _Modules, data and code health_. Slice 2, named bills that keep their number at 
 landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
-has landed (#2372); it leaves open A1287, A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
+has landed (#2372); it leaves open A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1359. Remaining: pre-bills through A446, not
 scheduled for the foreseeable future (owner, 2026-11-17). One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
@@ -2707,15 +2702,6 @@ first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
 one item shorter (Move dishes… replaced Split by item and Transfer items). Measured then (slice
 4a's LOOK, list content 647 px): at 1280×900 it fits in English and Spanish (649 px); at 390×844
 it scrolls by 8 px in English and 78 px in Spanish, where the list starts lower.
-
-## A1287. With no party, the ⋮'s Merge bills does nothing
-
-**A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).** A
-bill with no party at a table still offers Merge bills under "Bill", but the panel lists no other
-bill (`#otherBills` answers none without a party, `apps/till/src/screens/till-table-order-screen.ts`)
-and `#onMergeBills` returns without a word when `#billComposition` answers `null`, which it does
-with no party (`apps/till/src/till-app.ts`). By reading, not run. Slice 4a took Split by item and
-Transfer items out of that section for the same reason. Decide whether Merge bills goes too.
 
 ## A1290. The table screen's action panel can put Back and its action half below the window, and "+ New bill" touches Back
 

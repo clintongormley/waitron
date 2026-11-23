@@ -646,10 +646,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A1382, #3605 and #3604; fiscal and invoice wording remains).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
 
-- **A1287. With no party, the ⋮'s Merge bills does nothing (left open by A803 slice 4a, D15).**
-  Decide whether Merge bills goes too.
-  [Detail](backlog/till.md#a1287-with-no-party-the-s-merge-bills-does-nothing)
-
 - **What a row action takes on a grouped row** (bundle of 3, size M, needs the owner). Holds A1193, A1194, A1198. [Detail](backlog/till.md#bundle-what-a-row-action-takes-on-a-grouped-row)
 
 
@@ -736,7 +732,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 - **Loose ends left by service Task 16 (#981, counter handover).**
-  Till-profile defaults and a spare gap in the table-order bottom bar.
+  Till-profile defaults.
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **Loose ends left by service Task 17 (#991, a bill left unpaid).**
