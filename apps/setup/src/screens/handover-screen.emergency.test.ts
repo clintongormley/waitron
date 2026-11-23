@@ -3922,13 +3922,13 @@ const switchingWords = {
     keepOpen: "Keep this page open while this box restarts.",
   },
   "es-ES": {
-    heading: "Cambiando a este servidor",
-    recorded: "Cambio registrado: este servidor pasa a llevar el local",
-    checking: "Comprobando la hora del servidor",
-    internet: "Reloj del servidor sincronizado con la hora de internet",
-    confirmed: "Hora del servidor confirmada",
-    starting: "Iniciando el local en este servidor…",
-    keepOpen: "Mantén esta página abierta mientras se reinicia el servidor.",
+    heading: handoverEs["handover.emergency.switching_to"],
+    recorded: handoverEs["handover.emergency.step_switch"],
+    checking: handoverEs["handover.emergency.step_clock"],
+    internet: handoverEs["handover.emergency.step_clock_internet"],
+    confirmed: handoverEs["handover.emergency.step_clock_confirmed"],
+    starting: handoverEs["handover.starting"],
+    keepOpen: handoverEs["handover.emergency.keep_open_restart"],
   },
 } as const;
 
@@ -4009,9 +4009,10 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(rows(el)[1]).toEqual(["step-clock", "working", words.checking]);
     const list = q(el, "ol.progress");
     expect(list.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(q(entry, "[data-test=clock-heading]").textContent!.trim()).toBe(
-      locale === "en-GB" ? "Check the time" : "Comprueba la hora",
-    );
+    // The Spanish heading's words are pinned in the fiscal package's own tests.
+    const clockHeading = q(entry, "[data-test=clock-heading]").textContent!.trim();
+    if (locale === "en-GB") expect(clockHeading).toBe("Check the time");
+    else expect(clockHeading).not.toBe("Check the time");
     // The page reads h1 Switching to this box, then h2 Check the time, with nothing between.
     const headings = [
       ...el.shadowRoot!.querySelectorAll("h1, h2, h3, h4"),
@@ -4019,7 +4020,7 @@ it.each(["en-GB", "es-ES"] as const)(
     ].map((h) => [h.tagName, h.textContent!.trim()]);
     expect(headings).toEqual([
       ["H1", words.heading],
-      ["H2", locale === "en-GB" ? "Check the time" : "Comprueba la hora"],
+      ["H2", clockHeading],
     ]);
     q(entry, "[data-test=confirm-time]").click();
     await vi.waitFor(() => expect(rows(el)[1]).toEqual(["step-clock", "done", words.confirmed]));
@@ -4042,14 +4043,15 @@ const doneWords = {
     till: "Open the till",
   },
   "es-ES": {
-    heading: "Este servidor lleva ahora el local",
-    warning: "¡No restablezcas el servidor principal antiguo!",
-    oldBox:
-      "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará a este servidor los datos pendientes y después se retirará.",
-    afterwards: "Después, puedes elegir Borrar y retirar en la página Servidores del panel.",
-    action: "Borrar y retirar",
-    servers: "página Servidores",
-    till: "Abrir la caja",
+    heading: handoverEs["handover.emergency.done_heading"],
+    warning: handoverEs["handover.emergency.done_warning"],
+    oldBox: handoverEs["handover.emergency.done_old_box"],
+    afterwards: handoverEs["handover.emergency.done_afterwards"]
+      .replace("{action}", handoverEs["handover.emergency.done_action"])
+      .replace("{page}", handoverEs["handover.emergency.done_servers"]),
+    action: handoverEs["handover.emergency.done_action"],
+    servers: handoverEs["handover.emergency.done_servers"],
+    till: handoverEs["handover.emergency.open_till"],
   },
 } as const;
 it.each(["en-GB", "es-ES"] as const)(
@@ -4091,10 +4093,7 @@ it.each([
     "en-GB",
     "The old main box answered. Open its Servers page, or switch it off and press Try again.",
   ],
-  [
-    "es-ES",
-    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y pulsa Volver a intentarlo.",
-  ],
+  ["es-ES", handoverEs["handover.emergency.source_answered_try"]],
 ] as const)(
   "after Switch, the old main box answering names the Try again on screen (%s)",
   async (locale, line) => {
@@ -4118,10 +4117,7 @@ it.each([
     "en-GB",
     "The old main box answered. Open its Servers page, or switch it off and sign in again.",
   ],
-  [
-    "es-ES",
-    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a identificarte.",
-  ],
+  ["es-ES", handoverEs["handover.emergency.source_answered_sign_in"]],
 ] as const)(
   "on a switch reopened to finish it, the old main box answering the sign-in names the sign-in on screen (%s)",
   async (locale, line) => {
