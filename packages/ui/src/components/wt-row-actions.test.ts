@@ -1634,9 +1634,9 @@ it("keeps a notice's close icon in the ordinary text colour inside an action men
   const toast = el.querySelector("wt-toast")!;
   await toast.updateComplete;
   el.show();
-  expect(getComputedStyle(toast.shadowRoot!.querySelector("wt-icon")!).color).toBe(
-    "rgb(10, 20, 30)",
-  );
+  const icon = getComputedStyle(toast.shadowRoot!.querySelector("wt-icon")!);
+  expect(icon.color).toBe("rgb(10, 20, 30)");
+  expect(icon.flexShrink).toBe("1");
 });
 
 it("paints a direct menu divider and destructive row from their tokens", async () => {

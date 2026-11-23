@@ -2163,7 +2163,7 @@ export class DeviceProfilesScreen extends LitElement {
         variant="danger"
         data-test="confirm-delete"
         @click=${() => this.#confirmDelete()}
-        >${t("device_profiles.delete_confirm")}</wt-button
+        >${t("action.delete")}</wt-button
       >
     </wt-dialog>`;
   }

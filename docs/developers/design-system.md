@@ -6005,16 +6005,17 @@ registered icon for links, at size `lg`. Action rows start with the icon and use
 labels, neutral hover and pressed fills, and the shared focus ring. A checked bill or counter zone
 uses that same icon column for its tick. Keep the bill's label and amount layout inside the row.
 
-Put Delete last with the danger variant. Keep Remove and Disable neutral and after ordinary
-actions. Use `rowActionTail` to add the separator when both groups have rows. Use an ellipsis
+Put Delete last with the danger variant. Disconnect and Unpair also use danger. Keep Remove and
+Disable neutral. Use `rowActionTail` to put these actions after ordinary rows and to add the
+separator when both groups have rows. Use an ellipsis
 when an action opens a dialog that asks for a choice, input or confirmation.
 
 `scripts/action-menu-styles.test.ts` guards literal menu fragments, subclass callers and its named
 helper list. It rejects reserved alignment-property overrides, menu-rooted item CSS, and explicit
 item alignment, size and ghost attributes. It requires an icon attribute on each `wt-button` in the
-fragments it scans. Check icon names, native buttons, links, new detached helpers and class-only CSS
-during review. Rich alerts panels and forms are
-outside it. A link (`<a href>`) slotted directly into the popover uses the same row styling and
+fragments it scans. Check icon names, native buttons, links, dynamic values and
+selectors, new detached helpers and class-only CSS during review. Rich alerts panels and forms
+are outside it. A link (`<a href>`) slotted directly into the popover uses the same row styling and
 keeps its navigation. One marked `aria-disabled="true"` fades and has no hover fill. A click on
 it, a middle-click included, opens nothing and leaves the menu open: `wt-row-actions` cancels both
 before the link's own listeners run.
