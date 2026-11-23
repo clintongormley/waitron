@@ -311,12 +311,12 @@ describe("a box asking to join, on the Servers screen", () => {
       expect(find(el, "join-code")).toBeNull();
       expect(dialogButton(el, "join-add")).toBeNull();
       expect(await message(el)).toBe(
-        "This box is no longer asking to join: it ran out of time, or someone chose No or Start again on it.",
+        "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
       );
       await update();
       expect(api.approveBoxJoin).not.toHaveBeenCalled();
       expect(await message(el)).toBe(
-        "This box is no longer asking to join: it ran out of time, or someone chose No or Start again on it.",
+        "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
       );
     });
 
@@ -699,7 +699,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.join_not_found" },
-    "This box is no longer asking to join: it ran out of time, or someone chose No or Start again on it.",
+    "This box is no longer asking to join: it was added from another page, it ran out of time, or someone chose No or Start again.",
   ],
   [
     "check",
@@ -722,12 +722,12 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
       code: "mirror.clocks_apart",
       params: { primaryAt: "2026-11-21T10:00:00.000Z", standbyAt: "2026-11-21T10:30:00.000Z" },
     },
-    "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Start again on it.",
+    "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). If the new box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose No on it and Join again.",
   ],
   [
     "check",
     { code: "mirror.standby_name_taken" },
-    "Another box here has the same short name as the new box. Choose Start again on the new box; it picks a new name.",
+    "Another box here has the same short name as the new box. Choose No on the new box, then Join again; it picks a new name.",
   ],
   [
     "check",
@@ -737,7 +737,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.standby_removed" },
-    "The new box asked under the name of a box removed from this venue. Choose Start again on the new box; it picks a new name.",
+    "The new box asked under the name of a box removed from this venue. Choose No on the new box, then Join again; it picks a new name.",
   ],
   [
     "check",

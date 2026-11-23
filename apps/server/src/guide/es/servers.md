@@ -53,9 +53,10 @@ En el servidor principal, abre **Sistema → Servidores** (el enlace abre esa p�
 en el servidor nuevo y **Añadir como reserva** en el servidor principal, en cualquier orden. Si los
 códigos no coinciden, elige **No**.
 
-Después, el servidor nuevo recibe su primera copia por la red del local y se reinicia solo como
-servidor de reserva. Vuelve al servidor nuevo: su página te pide guardar la clave del servidor y
-después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en el servidor.
+Deja abierta la página de unión del servidor nuevo. Después, el servidor nuevo recibe su primera
+copia por la red del local y se reinicia como servidor de reserva. Su página te pide guardar la clave
+del servidor y después imprimir su propia [etiqueta de cambio](servers.md#switch-label) y pegarla en
+el servidor.
 
 En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del servidor de reserva en segundos y la **Última copia recibida**.
 Deja ambos servidores encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,

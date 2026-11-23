@@ -491,7 +491,6 @@ describe("setup-connect-screen: No", () => {
 
   it.each([
     ["mirror.join_in_use", WAITING],
-    ["mirror.join_waiting", WAITING],
     ["mirror.join_in_use", CONFIRMED],
   ] as const)(
     "reads the join again, showing no words naming Start again over No, when No is refused with %s",
@@ -586,13 +585,13 @@ describe("setup-connect-screen: Join on the code", () => {
     await press(el, "yes");
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
-        "The main box did not hear this box's Join. Check that the main box is switched on, then choose Join again.",
+        "This box got no usable answer from the main box to its Join. Check that the main box is switched on, then choose Join again.",
       ),
     );
     setLocale("es-ES");
     await vi.waitFor(async () =>
       expect(await bottomOf(el)).toBe(
-        "El servidor principal no ha recibido el Unirse de este servidor. Comprueba que el servidor principal está encendido y vuelve a elegir Unirse.",
+        "Este servidor no ha recibido una respuesta útil del servidor principal a su Unirse. Comprueba que el servidor principal está encendido y vuelve a elegir Unirse.",
       ),
     );
     setLocale("en-GB");
@@ -604,7 +603,7 @@ describe("setup-connect-screen: Join on the code", () => {
     await vi.waitFor(async () => expect(await bottomOf(el)).toBe(""));
   });
 
-  it.each(["mirror.join_in_use", "mirror.join_waiting"])(
+  it.each(["mirror.join_in_use"])(
     "reads the join again, showing no words naming Start again over No and Join, when Join is refused with %s",
     async (code) => {
       const api = stubApi(WAITING);

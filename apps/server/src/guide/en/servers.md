@@ -50,8 +50,8 @@ On the main box, open **System → Servers** (the link opens it) and choose **Ch
 request. If both boxes show the same code, choose **Join** on the new box and **Add as spare** on the
 main box, in either order. If the codes differ, choose **No**.
 
-The new box then takes its first copy over the venue's network and restarts by itself as the spare.
-Go back to the new box: its page asks you to save the box key, then to print its own
+Leave the new box's join page open. The new box then takes its first copy over the venue's network
+and restarts as the spare. Its page asks you to save the box key, then to print its own
 [switch label](servers.md#switch-label) and stick it on the box.
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.

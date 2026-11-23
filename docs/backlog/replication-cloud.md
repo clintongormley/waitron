@@ -219,8 +219,8 @@ credential-free production path. (iii) A cleared machine is refused promotion by
 chart only once that chart contains the clearing. (iv) The primary's join and mint paths refuse
 removed ids and full charts; the credential-free fetch in (ii) does not deliver those changes.
 (v) A receiver with an older chart may accept a removed machine until it learns of the removal.
-(vi) A removal or full-chart refusal of a join is shown to the manager who chooses Check or taps
-the code on the main box (`refuseJoinBeforeApproving`, `apps/server/src/mirror-bundle-api.ts`);
+(vi) A removal or full-chart refusal of a join is shown to the manager who chooses Check or Add as
+spare on the main box (`refuseJoinBeforeApproving`, `apps/server/src/mirror-bundle-api.ts`);
 the request stays waiting and the new box is not told why. (vii) Removing a live standby as though it never
 finished joining could leave its later charts refused as `signer_removed`, logged without an
 alert. That removal/promotion sequence on started boxes remains unmeasured.
