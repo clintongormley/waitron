@@ -63,8 +63,10 @@ export const diningTables = table(
       "dining_tables_off_floor_ck",
       sql`${t.onFloor} = 1 or (${t.todaySeats} is null and ${t.todayFixed} = 0 and ${t.todayX} is null and ${t.todayY} is null and ${t.todayWidth} is null and ${t.todayHeight} is null and ${t.todayShape} is null and ${t.todayRotation} is null and ${t.takenOff} = 0 and ${t.todayName} is null and ${t.mergeId} is null)`,
     ),
+    check("dining_tables_label_ck", sql`trim(${t.label}) <> ''`),
     unique("dining_tables_label_key").on(t.label),
     uniqueIndex("dining_tables_short_name_key_uq").on(t.shortNameKey),
+    uniqueIndex("dining_tables_plan_table_key").on(t.planTableId),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],

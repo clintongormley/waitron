@@ -4,7 +4,13 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { captureError, TRANSITION_REFUSAL, triggerRaised, withTransaction } from "@waitron/db";
+import {
+  captureError,
+  checkFailed,
+  TRANSITION_REFUSAL,
+  triggerRaised,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
@@ -123,6 +129,80 @@ describe("releaseDeliveries", () => {
     const row = await billRow(v, id);
     expect(row.deliveryTableId).not.toBeNull();
     expect(row.deliveryTableLabel).toBeNull();
+  });
+});
+
+describe("a delivery's kept table name", () => {
+  async function refusedBlank(v: PartyVenue, id: string, set: string): Promise<void> {
+    const refusal = await captureError(() =>
+      withTransaction(v.db, (tx) =>
+        tx.run(sql.raw(`update working_orders set ${set} where id = '${id}'`)),
+      ),
+    );
+    expect(checkFailed(refusal, "working_orders_delivery_table_label_ck")).toBe(true);
+    const row = await billRow(v, id);
+    expect(row.deliveryTableId).not.toBeNull();
+    expect(row.deliveryTableLabel).toBeNull();
+  }
+
+  it.each(["", " "])(
+    "refuses the release of a settled order with the blank name %j",
+    async (name) => {
+      const v = await setupPartyVenue(suite.db);
+      const id = await settledDelivery(v, await deliveryTable(v, `T-${randomUUID().slice(0, 8)}`));
+      await refusedBlank(v, id, `delivery_table_id = null, delivery_table_label = '${name}'`);
+    },
+  );
+
+  it("refuses the release of an open order with an empty name", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const table = await deliveryTable(v, `T-${randomUUID().slice(0, 8)}`);
+    const id = randomUUID();
+    await inTx(v, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        null,
+        {
+          deliveryTableId: table,
+          zoneId: v.counter.zoneId,
+        },
+      ),
+    );
+    await refusedBlank(v, id, "delivery_table_id = null, delivery_table_label = ''");
+  });
+
+  it("refuses settling a placed order while releasing it with an empty name", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, async (tx) => {
+      await tx.execute(
+        sql`update floor_zones set paid_when = 'ticket_then_pay' where id = ${v.counter.zoneId}`,
+      );
+    });
+    const table = await deliveryTable(v, `T-${randomUUID().slice(0, 8)}`);
+    const id = randomUUID();
+    await inTx(v, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        null,
+        {
+          deliveryTableId: table,
+          zoneId: v.counter.zoneId,
+        },
+      ),
+    );
+    const deps = { db: v.db, backend: v.backend, clock: v.clock };
+    await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
+    await refusedBlank(
+      v,
+      id,
+      "status = 'settled', settled_at = '2026-10-10T12:00:00.000Z', delivery_table_id = null, delivery_table_label = ''",
+    );
   });
 });
 

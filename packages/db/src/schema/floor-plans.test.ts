@@ -833,6 +833,34 @@ describe("floor plan tables", () => {
     expect(names).toEqual([]);
   });
 
+  it("lets one live table at most follow a master table", async () => {
+    const masterId = await insertPlanTable("M1");
+    await inTx((tx) =>
+      tx.update(diningTables).set({ planTableId: masterId }).where(eq(diningTables.id, TABLE_1)),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.update(diningTables).set({ planTableId: masterId }).where(eq(diningTables.id, TABLE_2)),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "dining_tables", columns: ["plan_table_id"] }),
+    ).toBe(true);
+  });
+
+  it.each(["", " ", "   "])("refuses a blank live or master table name: %j", async (label) => {
+    const live = await captureError(() =>
+      inTx((tx) => tx.update(diningTables).set({ label }).where(eq(diningTables.id, TABLE_1))),
+    );
+    expect(checkFailed(live, "dining_tables_label_ck")).toBe(true);
+    const master = await captureError(() => insertPlanTable(label));
+    expect(checkFailed(master, "floor_plan_tables_label_ck")).toBe(true);
+    await inTx((tx) =>
+      tx.update(diningTables).set({ label: " T1" }).where(eq(diningTables.id, TABLE_1)),
+    );
+    await insertPlanTable(" M1");
+  });
+
   it("keeps one placement per table in a layout", async () => {
     const tableId = await insertPlanTable("P1");
     await inTx((tx) =>

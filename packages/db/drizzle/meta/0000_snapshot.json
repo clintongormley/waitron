@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1d2a74a9-ad6f-4571-963b-4b87b199b8bc",
+  "id": "de36c0b9-24ec-4fae-9f37-6d948d6a88af",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1558,6 +1558,10 @@
           "name": "working_orders_bill_name_ck",
           "value": "\"working_orders\".\"bill_name\" is null or (length(\"working_orders\".\"bill_name\") between 1 and 40 and \"working_orders\".\"bill_name\" = trim(\"working_orders\".\"bill_name\"))"
         },
+        "working_orders_delivery_table_label_ck": {
+          "name": "working_orders_delivery_table_label_ck",
+          "value": "\"working_orders\".\"delivery_table_label\" is null or trim(\"working_orders\".\"delivery_table_label\") <> ''"
+        },
         "working_orders_editor_version_ck": {
           "name": "working_orders_editor_version_ck",
           "value": "\"working_orders\".\"editor_version\" >= 0"
@@ -2378,6 +2382,13 @@
           ],
           "isUnique": true
         },
+        "dining_tables_plan_table_key": {
+          "name": "dining_tables_plan_table_key",
+          "columns": [
+            "plan_table_id"
+          ],
+          "isUnique": true
+        },
         "dining_tables_label_key": {
           "name": "dining_tables_label_key",
           "columns": [
@@ -2481,6 +2492,10 @@
         "dining_tables_off_floor_ck": {
           "name": "dining_tables_off_floor_ck",
           "value": "\"dining_tables\".\"on_floor\" = 1 or (\"dining_tables\".\"today_seats\" is null and \"dining_tables\".\"today_fixed\" = 0 and \"dining_tables\".\"today_x\" is null and \"dining_tables\".\"today_y\" is null and \"dining_tables\".\"today_width\" is null and \"dining_tables\".\"today_height\" is null and \"dining_tables\".\"today_shape\" is null and \"dining_tables\".\"today_rotation\" is null and \"dining_tables\".\"taken_off\" = 0 and \"dining_tables\".\"today_name\" is null and \"dining_tables\".\"merge_id\" is null)"
+        },
+        "dining_tables_label_ck": {
+          "name": "dining_tables_label_ck",
+          "value": "trim(\"dining_tables\".\"label\") <> ''"
         }
       }
     },
@@ -2799,6 +2814,10 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "floor_plan_tables_label_ck": {
+          "name": "floor_plan_tables_label_ck",
+          "value": "trim(\"floor_plan_tables\".\"label\") <> ''"
+        },
         "floor_plan_tables_seats_ck": {
           "name": "floor_plan_tables_seats_ck",
           "value": "\"floor_plan_tables\".\"seats\" is null or \"floor_plan_tables\".\"seats\" between 0 and 999"

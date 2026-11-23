@@ -742,10 +742,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   own booking system, including online booking (A1013), works first. Without it, a venue taking
   bookings in both places can double-book a table. Not started.
 
-- **Loose ends left by A429 slice 1 (#1493).**
-  Two small floor-plan refusals.
-  [Detail](backlog/till.md#loose-ends-left-by-a429-slice-1-1493)
-
 - **One measuring pass over the till at 390 and 1024** (1 entry remains for the owner's floor-map redesign; header observations stay with the top-bar bundle). [Detail](backlog/till.md#bundle-one-measuring-pass-over-the-till-at-390-and-1024)
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**

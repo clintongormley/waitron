@@ -362,6 +362,10 @@ describe("floor hierarchy deletion", () => {
     await inTx(v, async (tx) => {
       await tx
         .update(diningTables)
+        .set({ planTableId: null })
+        .where(eq(diningTables.id, own.live[0]!.id));
+      await tx
+        .update(diningTables)
         .set({ planTableId: own.masters[0]!.id })
         .where(eq(diningTables.id, other.noToday.id));
       await tx
