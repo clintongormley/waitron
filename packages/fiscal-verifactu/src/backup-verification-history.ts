@@ -442,12 +442,8 @@ const LINKS = [
   ["verifactu_submissions", "registro_id", "verifactu_records", "id"],
   ["acks", "registro_id", "verifactu_records", "id"],
   ["fiscal_certificate_reminders", "install_id", "verifactu_certificates", "id"],
-  ["clock_stop_restarts", "node_id", "nodes", "id"],
-  ["clock_stop_restarts", "registro_id", "verifactu_records", "id"],
-  ["clock_confirmations", "node_id", "nodes", "id"],
-  ["clock_confirmations", "registro_id", "verifactu_records", "id"],
-  ["clock_confirmations", "check_id", "clock_checks", "id"],
-  ["clock_checks", "node_id", "nodes", "id"],
+  ["verifactu_history", "node_id", "nodes", "id"],
+  ["verifactu_history", "person_id", "persons", "id"],
 ] as const;
 async function walk(
   query: BackupQuery,

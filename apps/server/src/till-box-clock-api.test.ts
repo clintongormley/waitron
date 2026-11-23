@@ -345,7 +345,7 @@ function count(sqlText: ReturnType<typeof sql>): number {
 
 function written(box: Box) {
   return {
-    rows: count(sql`select count(*) as n from clock_confirmations`),
+    rows: count(sql`select count(*) as n from verifactu_history where kind = 'clock.confirmed'`),
     incidents: count(sql`select count(*) as n from incidents`),
     hostSets: box.host.sets.length,
   };
@@ -359,7 +359,10 @@ function confirmationRow(id: string) {
     step_ms: number;
     proof: string;
   }>(
-    sql`select source, person_id, reason, step_ms, proof from clock_confirmations where id = ${id}`,
+    sql`select person_id, json_extract(data, '$.source') as source,
+      json_extract(data, '$.reason') as reason, json_extract(data, '$.stepMs') as step_ms,
+      json_extract(data, '$.proof') as proof
+      from verifactu_history where kind = 'clock.confirmed' and id = ${id}`,
   );
   return { ...row!, proof: JSON.parse(row!.proof) as Record<string, unknown> };
 }

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type {
   ClockAdminConfirm,
@@ -9,14 +10,12 @@ import type {
   ClockWitness,
   TrustedClock,
 } from "@waitron/fiscal";
-import type { ErrorParams, NodeId, SeriesId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { confirmClockStep } from "./clock-step.js";
-import { recordCorrected } from "./clock-corrected-incident.js";
-import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
@@ -34,6 +33,11 @@ let seriesId: SeriesId;
 
 beforeEach(async () => {
   ({ nodeId, seriesId } = await seedTaxpayerWithSif(suite.db));
+  await seedPerson(suite.db, {
+    id: ANA_ON_A_DEVICE.personId,
+    displayName: ANA_ON_A_DEVICE.personName,
+  });
+  await seedPerson(suite.db, { id: LUIS.personId, displayName: LUIS.personName });
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -56,10 +60,6 @@ function clockAt(ms: number): TrustedClock {
   };
 }
 
-function count(table: string): number {
-  return suite.db.all<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)[0]!.n;
-}
-
 async function sale(ms: number): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, saleInput({ nodeId, seriesId, clock: clockAt(ms) })),
@@ -77,7 +77,22 @@ function device(id: string, boxMs: number, differenceMs: number, address: string
 }
 
 function rows() {
-  return suite.db.select().from(clockConfirmations).orderBy(clockConfirmations.seq);
+  return suite.db
+    .all<{ id: string; personId: string; at: string; data: string }>(
+      sql`
+    select id, person_id as personId, at, data
+    from verifactu_history where kind = 'clock.confirmed' order by seq`,
+    )
+    .map(({ data, ...row }) => ({
+      ...row,
+      ...(JSON.parse(data) as {
+        source: string;
+        reason: string;
+        confirmedAt: string;
+        stepMs: number;
+        proof: unknown;
+      }),
+    }));
 }
 
 function incidentsOf(code: string) {
@@ -137,7 +152,7 @@ describe("who a step of the box's clock names", () => {
     const terraza = { deviceId: "till-2", deviceLabel: "Terraza", address: "10.0.0.2" };
     await step(request(A, { source: "admin", admin: { ...LUIS, device: terraza }, witnesses: [] }));
 
-    const [row] = await rows();
+    const [row] = rows();
     expect(row).toMatchObject({ source: "admin", personId: "person-luis" });
     const proof = row!.proof as Record<string, unknown>;
     expect(proof["admin"]).toEqual(LUIS.reading);
@@ -159,7 +174,7 @@ describe("who a step of the box's clock names", () => {
     await sale(T);
     await step(request(T + 5 * M, { source: "admin", admin: LUIS, witnesses: [] }));
 
-    const [row] = await rows();
+    const [row] = rows();
     const proof = row!.proof as Record<string, unknown>;
     expect(proof["admin"]).toEqual(LUIS.reading);
     expect(proof).not.toHaveProperty("device");
@@ -181,30 +196,39 @@ describe("who a step of the box's clock names", () => {
   ])("refuses %s before writing anything", async (_name, over) => {
     await sale(T);
     await expect(step(request(T + 5 * M, over))).rejects.toThrow(/confirmClockStep/);
-    expect(count("clock_confirmations")).toBe(0);
-    expect(count("clock_checks")).toBe(0);
+    expect(rows()).toHaveLength(0);
     expect(incidentsOf("clock.corrected")).toEqual([]);
   });
 });
 
 describe("a step of the box's clock", () => {
-  it("writes a row naming no check and no record", async () => {
+  it("links a verified step to its evidence in fiscal history", async () => {
     await sale(R - 5 * M);
     const A = R + H;
     const input = request(A);
-    await expect(step(input)).resolves.toMatchObject({
+    const recorded = await step(input);
+    expect(recorded).toMatchObject({
       confirmation: { checkId: null, recordId: null, confirmedAt: iso(A) },
     });
 
-    const [row] = await rows();
-    expect(row).toMatchObject({ checkId: null, registroId: null, reason: "unusable" });
+    const [row] = rows();
+    expect(row).toMatchObject({ id: recorded.confirmation!.id, at: iso(R), reason: "unusable" });
     expect(row!.proof).toEqual({
       devices: [],
       admin: LUIS.reading,
       step: { beforeAt: iso(R), afterAt: iso(A), stepMs: input.stepMs, targetAt: input.targetAt },
     });
-    expect(count("clock_checks")).toBe(0);
     expect(incidentsOf("clock.corrected")).toHaveLength(1);
+  });
+
+  it("rounds the stored step and keeps the measured value in its proof and incident", async () => {
+    const { confirmation } = await step(request(R + 3 * S, { stepMs: 999.6 }));
+    expect(rows()).toMatchObject([
+      { id: confirmation!.id, stepMs: 1000, proof: { step: { stepMs: 999.6 } } },
+    ]);
+    expect(incidentsOf("clock.corrected").map((incident) => incident.params)).toMatchObject([
+      { confirmationId: confirmation!.id, stepMs: 999.6 },
+    ]);
   });
 
   it("writes one row naming the staff member and reason start for a start's step, raising clock.corrected", async () => {
@@ -219,19 +243,24 @@ describe("a step of the box's clock", () => {
       }),
     );
 
-    const stored = await rows();
+    const stored = rows();
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({
       reason: "start",
       source: "staff",
       personId: "person-ana",
-      checkId: null,
-      registroId: null,
-      confirmedAt: new Date(A),
+      confirmedAt: iso(A),
     });
     expect((stored[0]!.proof as { devices: unknown }).devices).toEqual([
       { deviceId: "till-1", address: "10.0.0.1", boxAt: iso(R - S), witnessAt: iso(A - S) },
     ]);
+    expect(stored[0]!.proof).toHaveProperty("staff", {
+      deviceId: "till-1",
+      address: "10.0.0.1",
+      ...ANA_ON_A_DEVICE.reading,
+    });
+    expect(stored[0]!.proof).not.toHaveProperty("admin");
+    expect(stored[0]!.proof).not.toHaveProperty("device");
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: stored[0]!.id },
     ]);
@@ -247,7 +276,7 @@ describe("a step of the box's clock", () => {
     ]);
   });
 
-  it("records an unusable clock's step with no check and no record named", async () => {
+  it("keeps the reading before an unusable clock is corrected", async () => {
     await sale(T);
     const before = Date.parse("2001-01-01T10:00:00.000Z");
     const A = T + 5 * M;
@@ -259,12 +288,10 @@ describe("a step of the box's clock", () => {
       }),
     );
 
-    const [row] = await rows();
+    const [row] = rows();
     expect(row).toMatchObject({
       reason: "unusable",
-      checkId: null,
-      registroId: null,
-      boxClockAt: new Date(before),
+      at: iso(before),
     });
     expect(row!.proof).not.toHaveProperty("closing");
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
@@ -282,8 +309,7 @@ describe("a step that failed verification", () => {
       corrected: expect.anything(),
     });
 
-    expect(count("clock_confirmations")).toBe(0);
-    expect(count("clock_checks")).toBe(0);
+    expect(rows()).toHaveLength(0);
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: null, verified: false, unverified: true, stepMs: A - R - 2 * S },
     ]);
@@ -296,7 +322,7 @@ describe("a step that failed verification", () => {
       corrected: null,
     });
 
-    expect(count("clock_confirmations")).toBe(0);
+    expect(rows()).toHaveLength(0);
     expect(incidentsOf("clock.corrected")).toEqual([]);
   });
 });
@@ -393,7 +419,7 @@ describe("latestClockStep", () => {
     const recorded = await withTransaction(suite.db, (tx) => backend.confirmClockStep(tx, input));
 
     expect(recorded.confirmation).toMatchObject({ source: "admin", confirmedAt: iso(R + H) });
-    expect(await rows()).toHaveLength(1);
+    expect(rows()).toHaveLength(1);
     await expect(latest()).resolves.toEqual({ confirmedAt: iso(R + H), stepMs: input.stepMs });
   });
 
@@ -421,31 +447,11 @@ describe("latestClockStep", () => {
   it("passes over a confirmation that moved nothing", async () => {
     await sale(R - 5 * M);
     await step(request(R + H));
-    await withTransaction(suite.db, async (tx) => {
-      const [{ seq }] = await tx
-        .select({ seq: sql<number>`max(${clockConfirmations.seq})` })
-        .from(clockConfirmations);
-      await tx.insert(clockConfirmations).values({
-        seq: seq + 1,
-        nodeId,
-        boxClockAt: new Date(R + 2 * H),
-        confirmedAt: new Date(R + 2 * H),
-        stepMs: 0,
-        source: "authority",
-        reason: "behind_chain",
-        proof: {},
-      });
-      const { params } = incidentsOf("clock.corrected")[0]!;
-      await recordCorrected(tx, {
-        detectedAt: new Date(R + 2 * H),
-        params: {
-          ...(params as ErrorParams["clock.corrected"]),
-          after: iso(R + 2 * H),
-          stepMs: 0,
-        },
-      });
-    });
+    await step(request(R + 2 * H, { stepMs: 0 }));
 
+    const corrected = incidentsOf("clock.corrected");
+    expect(corrected).toHaveLength(2);
+    expect(corrected[1]!.params).toMatchObject({ stepMs: 0 });
     await expect(latest()).resolves.toEqual({
       confirmedAt: iso(R + H),
       stepMs: request(R + H).stepMs,

@@ -70,9 +70,7 @@
       "verifactu_series_conflicts",
       "fiscal_allocations",
       "fiscal_reservations",
-      "clock_stop_restarts",
-      "clock_checks",
-      "clock_confirmations",
+      "verifactu_history",
       "declaraciones_responsables",
       "verifactu_certificates"
     ]

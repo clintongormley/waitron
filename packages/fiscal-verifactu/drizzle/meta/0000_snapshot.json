@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d57f6bca-6b16-49b7-b10a-a1ddc8288b3d",
+  "id": "dc1c8ff8-8243-4790-88cd-dac1e335d3ce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -67,366 +67,6 @@
           "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
         }
       }
-    },
-    "clock_checks": {
-      "name": "clock_checks",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "seq": {
-          "name": "seq",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "detail": {
-          "name": "detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "clock_checks_seq_uq": {
-          "name": "clock_checks_seq_uq",
-          "columns": [
-            "seq"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "clock_checks_node_id_nodes_id_fk": {
-          "name": "clock_checks_node_id_nodes_id_fk",
-          "tableFrom": "clock_checks",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "clock_checks_reason_ck": {
-          "name": "clock_checks_reason_ck",
-          "value": "\"clock_checks\".\"reason\" in ('start', 'change', 'behind_chain', 'disagrees')"
-        }
-      }
-    },
-    "clock_confirmations": {
-      "name": "clock_confirmations",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "seq": {
-          "name": "seq",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "box_clock_at": {
-          "name": "box_clock_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "confirmed_at": {
-          "name": "confirmed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "step_ms": {
-          "name": "step_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "proof": {
-          "name": "proof",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "check_id": {
-          "name": "check_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "registro_id": {
-          "name": "registro_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "record_at": {
-          "name": "record_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "clock_confirmations_seq_uq": {
-          "name": "clock_confirmations_seq_uq",
-          "columns": [
-            "seq"
-          ],
-          "isUnique": true
-        },
-        "clock_confirmations_check_uq": {
-          "name": "clock_confirmations_check_uq",
-          "columns": [
-            "check_id"
-          ],
-          "isUnique": true
-        },
-        "clock_confirmations_registro_idx": {
-          "name": "clock_confirmations_registro_idx",
-          "columns": [
-            "registro_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "clock_confirmations_node_id_nodes_id_fk": {
-          "name": "clock_confirmations_node_id_nodes_id_fk",
-          "tableFrom": "clock_confirmations",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "clock_confirmations_check_id_clock_checks_id_fk": {
-          "name": "clock_confirmations_check_id_clock_checks_id_fk",
-          "tableFrom": "clock_confirmations",
-          "tableTo": "clock_checks",
-          "columnsFrom": [
-            "check_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "clock_confirmations_registro_id_verifactu_records_id_fk": {
-          "name": "clock_confirmations_registro_id_verifactu_records_id_fk",
-          "tableFrom": "clock_confirmations",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "clock_confirmations_source_ck": {
-          "name": "clock_confirmations_source_ck",
-          "value": "\"clock_confirmations\".\"source\" in ('authority', 'devices', 'admin', 'staff', 'elapsed')"
-        },
-        "clock_confirmations_reason_ck": {
-          "name": "clock_confirmations_reason_ck",
-          "value": "\"clock_confirmations\".\"reason\" in ('start', 'change', 'behind_chain', 'disagrees', 'unusable')"
-        },
-        "clock_confirmations_person_ck": {
-          "name": "clock_confirmations_person_ck",
-          "value": "(\"clock_confirmations\".\"source\" in ('admin', 'staff')) = (\"clock_confirmations\".\"person_id\" is not null) and (\"clock_confirmations\".\"person_id\" is null or length(\"clock_confirmations\".\"person_id\") > 0)"
-        },
-        "clock_confirmations_record_ck": {
-          "name": "clock_confirmations_record_ck",
-          "value": "(\"clock_confirmations\".\"registro_id\" is null) = (\"clock_confirmations\".\"record_at\" is null)"
-        }
-      }
-    },
-    "clock_stop_restarts": {
-      "name": "clock_stop_restarts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "restarted_at": {
-          "name": "restarted_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "clock_at": {
-          "name": "clock_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "registro_id": {
-          "name": "registro_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "record_at": {
-          "name": "record_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "proof": {
-          "name": "proof",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "clock_stop_restarts_registro_uq": {
-          "name": "clock_stop_restarts_registro_uq",
-          "columns": [
-            "registro_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "clock_stop_restarts_node_id_nodes_id_fk": {
-          "name": "clock_stop_restarts_node_id_nodes_id_fk",
-          "tableFrom": "clock_stop_restarts",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "clock_stop_restarts_registro_id_verifactu_records_id_fk": {
-          "name": "clock_stop_restarts_registro_id_verifactu_records_id_fk",
-          "tableFrom": "clock_stop_restarts",
-          "tableTo": "verifactu_records",
-          "columnsFrom": [
-            "registro_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
     "declaraciones_responsables": {
       "name": "declaraciones_responsables",
@@ -1384,6 +1024,125 @@
         "verifactu_certificates_dashboard_ck": {
           "name": "verifactu_certificates_dashboard_ck",
           "value": "\"verifactu_certificates\".\"source\" = 'setup' or (\"verifactu_certificates\".\"person_id\" is not null and \"verifactu_certificates\".\"checked_at\" is not null and \"verifactu_certificates\".\"checked_endpoint\" is not null)"
+        }
+      }
+    },
+    "verifactu_history": {
+      "name": "verifactu_history",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data": {
+          "name": "data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "verifactu_history_seq_uq": {
+          "name": "verifactu_history_seq_uq",
+          "columns": [
+            "seq"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "verifactu_history_node_id_nodes_id_fk": {
+          "name": "verifactu_history_node_id_nodes_id_fk",
+          "tableFrom": "verifactu_history",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "verifactu_history_person_id_persons_id_fk": {
+          "name": "verifactu_history_person_id_persons_id_fk",
+          "tableFrom": "verifactu_history",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "verifactu_history_data_ck": {
+          "name": "verifactu_history_data_ck",
+          "value": "case when json_valid(\"verifactu_history\".\"data\") then json_type(\"verifactu_history\".\"data\") = 'object' else 0 end"
+        },
+        "verifactu_history_kind_ck": {
+          "name": "verifactu_history_kind_ck",
+          "value": "\"verifactu_history\".\"kind\" = 'clock.confirmed'"
+        },
+        "verifactu_history_confirmed_source_ck": {
+          "name": "verifactu_history_confirmed_source_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(json_extract(\"verifactu_history\".\"data\", '$.source') in ('admin', 'staff'), 0)"
+        },
+        "verifactu_history_confirmed_reason_ck": {
+          "name": "verifactu_history_confirmed_reason_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(json_extract(\"verifactu_history\".\"data\", '$.reason') in ('start', 'unusable'), 0)"
+        },
+        "verifactu_history_confirmed_person_ck": {
+          "name": "verifactu_history_confirmed_person_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(length(\"verifactu_history\".\"person_id\") > 0, 0)"
+        },
+        "verifactu_history_confirmed_shape_ck": {
+          "name": "verifactu_history_confirmed_shape_ck",
+          "value": "\"verifactu_history\".\"kind\" <> 'clock.confirmed' or coalesce(\n        json_type(\"verifactu_history\".\"data\", '$.confirmedAt') = 'text'\n        and json_type(\"verifactu_history\".\"data\", '$.stepMs') = 'integer'\n        and json_type(\"verifactu_history\".\"data\", '$.proof') = 'object',\n        0\n      )"
         }
       }
     },
