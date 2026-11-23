@@ -504,11 +504,16 @@ async function startSwitching(el: SetupHandoverScreen) {
 }
 interface SwitchProof {
   cookie: boolean;
-  /** When each challenge was issued; one is live for two minutes, or 15 once given back. */
+  /**
+   * When each challenge was issued; one is live for two minutes, or 15 from when it was last given
+   * back or carried by a catching-up take.
+   */
   issued: Map<string, number>;
   used: Set<string>;
   /** When each challenge refused as unknown was given back. */
   givenBack: Map<string, number>;
+  /** When a catching-up take last carried each challenge while it was live. */
+  keptAlive: Map<string, number>;
   /**
    * Codes the next passkey answers are refused with, in turn, after their challenge is taken:
    * `passkey.verification_failed` as for a wrong key, or `passkey.not_registered` as for a passkey
@@ -522,8 +527,9 @@ const refusal = (code: string, status: number) =>
   new Response(JSON.stringify({ error: { code } }), { status });
 /**
  * The server's switch sign-in: a passkey over a live, unused challenge sets the cookie; no sign-in
- * needs it. A take answers `take`: one still catching up or already taken checks no passkey, and one
- * refused by the copy checks after the early check only checks the challenge is live.
+ * needs it. A take answers `take`: one still catching up keeps a live challenge alive and refuses
+ * nothing, one already taken checks no passkey, and one refused by the copy checks after the early
+ * check only checks the challenge is live.
  */
 function switchSignIn(
   proof: SwitchProof,
@@ -535,19 +541,25 @@ function switchSignIn(
   const passkey = (signIn as { passkey?: { response: { clientDataJSON: string } } } | undefined)
     ?.passkey;
   if (passkey) {
-    if (take === "catching-up" || take === "taken") return undefined;
+    if (take === "taken") return undefined;
     const client = passkey.response.clientDataJSON.replace(/-/g, "+").replace(/_/g, "/");
     const { challenge } = JSON.parse(atob(client)) as { challenge: string };
     const issuedAt = proof.issued.get(challenge);
-    const givenBackAt = proof.givenBack.get(challenge);
-    if (
-      issuedAt === undefined ||
-      proof.used.has(challenge) ||
-      (givenBackAt === undefined
-        ? Date.now() - issuedAt >= 120_000
-        : Date.now() - givenBackAt >= 15 * 60_000)
-    )
-      return refusal("passkey.challenge_expired", 400);
+    const renewedAt = Math.max(
+      proof.givenBack.get(challenge) ?? -Infinity,
+      proof.keptAlive.get(challenge) ?? -Infinity,
+    );
+    const live =
+      issuedAt !== undefined &&
+      !proof.used.has(challenge) &&
+      (renewedAt === -Infinity
+        ? Date.now() - issuedAt < 120_000
+        : Date.now() - renewedAt < 15 * 60_000);
+    if (take === "catching-up") {
+      if (live) proof.keptAlive.set(challenge, Date.now());
+      return undefined;
+    }
+    if (!live) return refusal("passkey.challenge_expired", 400);
     if (take?.includes(".")) return undefined;
     const refused = proof.refusals.shift();
     if (
@@ -569,6 +581,7 @@ const newProof = (): SwitchProof => ({
   issued: new Map(),
   used: new Set(),
   givenBack: new Map(),
+  keptAlive: new Map(),
   refusals: [],
 });
 /**
@@ -3313,6 +3326,34 @@ it("a passkey answer the held copy did not know still signs in after catching up
     await vi.advanceTimersByTimeAsync(2000);
     await vi.waitFor(() => expect(followedTakes(posts)).toBeGreaterThan(sent));
   }
+  vi.useRealTimers();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
+  );
+  expect(actions(el)).not.toContain(t("handover.emergency.passkey_lapsed"));
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it("one passkey prompt covers a catch-up that lasts over 15 minutes with the page open", async () => {
+  const get = stubPasskey();
+  const proof = newProof();
+  proof.refusals = ["passkey.not_registered"];
+  const { el, posts } = await mount({
+    proof,
+    takes: [...Array<string>(4).fill("catching-up"), "restarting"],
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  await choosePasskey(el);
+  await vi.waitFor(() => catchingUp(el));
+  const started = Date.now();
+  // Each later take comes 5 minutes after the one before: 20 minutes in all, under 15 between any two.
+  while (followedTakes(posts) < 5) {
+    const sent = followedTakes(posts);
+    vi.setSystemTime(Date.now() + 5 * 60_000);
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => expect(followedTakes(posts)).toBeGreaterThan(sent));
+  }
+  expect(Date.now() - started).toBeGreaterThan(15 * 60_000);
   vi.useRealTimers();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
