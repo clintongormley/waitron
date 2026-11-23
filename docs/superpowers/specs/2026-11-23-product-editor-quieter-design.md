@@ -68,3 +68,17 @@ The dialog felt noisy even with sections folded:
 ## Out of scope
 
 The variants table, the small variant window (`dashboard-variant-form`), and the unit chooser.
+
+## Owner review of the built editor, 2026-11-23
+
+The owner wrote "i think it needs more spacing between the sections", "when you collapse the
+section, the summary appears, which pushes the form down, then the form rolls up. the change could
+be smoother", and "should the details have different sections on a new line, rather than a single
+line?" To the proposal below, they answered "y":
+
+8. **Details' groups sit 40px apart** (`--wt-space-6` + `--wt-space-2`). A group's label stays
+   close to its own fields.
+9. **A closing section's summary appears only once the body has finished closing,** and then fades
+   in. Under reduced motion, it appears at once. This is in `wt-disclosure`, for every screen.
+10. **Details' closed summary has one row per group that has something set,** each row cut to one
+    line. This replaces the single line cut at two lines.

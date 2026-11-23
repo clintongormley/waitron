@@ -352,6 +352,104 @@ green before the regroup.
   set". The body adds that `summaryRows` is removed from `wt-disclosure` because nothing uses it
   now.
 
+### Task 5: The owner's review of the built editor: space between groups, a smoother close, one summary row per group
+
+Owner, 2026-11-23, looking at the branch's editor:
+- "i think it needs more spacing between the sections"
+- "when you collapse the section, the summary appears, which pushes the form down, then the form
+  rolls up. the change could be smoother"
+- "should the details have different sections on a new line, rather than a single line?"
+
+The controller proposed the following and the owner answered "y".
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-disclosure.ts` (the `summaryRows` shape, the summary's
+  timing on close, and a fade).
+- Modify: `apps/dashboard/src/widgets/product-editor.ts`:
+  - the Details groups' gap
+  - `detailsSummary` becomes rows
+  - drop Task 3's two-line `::part(summary)` cut
+- Test: `packages/ui/src/components/wt-disclosure.test.ts`, `wt-disclosure.a11y.test.ts`,
+  `apps/dashboard/src/widgets/product-editor.test.ts` (and any other file whose tests read the
+  Details summary).
+
+**Interfaces:**
+- `summaryRows` changes shape to `readonly { fields: readonly SummaryField[]; lines: number }[]`.
+  - Each row draws its fields like `summaryFields` does (name, value, `placeholder` italic,
+    `warning` colour, fields joined with " · ").
+  - Each row is cut after its `lines` lines, as rows are today.
+  - Grep first. After Task 2a nothing outside `wt-disclosure`'s own tests and the demo
+    (`packages/ui/demo/main.ts`) passes `summaryRows`; update those.
+- `ProductEditor`'s Details passes `.summaryRows=${this.detailsSummaryRows()}`, and no longer
+  `summaryFields`.
+  - There is one row per group, in group order: kitchen, menu, nutrition, VAT, ordering.
+  - Each row's fields are that group's existing summary method's output (`kitchenSummary()`,
+    `descriptorsSummary()`, `nutritionSummary()`, `takeawayVatSummary()`, `orderingSummary()`).
+  - Each row has `lines: 1`. A group whose method returns no fields gives no row.
+  - Keep `detailsSummary()` only if something still needs the flat list; otherwise delete it.
+
+- [ ] **Step 1: Write the failing tests.**
+  - **wt-disclosure, summary rows.** "summary rows draw each row's fields joined with a middot,
+    one row per entry". Two rows, `[{fields:[{label:"A",value:"1"},{label:"B",value:"2",warning:true}],lines:1},{fields:[{label:"C",value:"3",placeholder:true}],lines:1}]`,
+    give two `.summary-row` elements:
+    - the first's text is "A: 1 · B: 2", with "2" inside `.summary-warning`
+    - the second has "3" inside `.summary-placeholder`
+
+    Convert the existing `summaryRows` tests to the new shape, keeping their assertions.
+  - **wt-disclosure, closing.** "closing waits for the body to finish before showing the summary".
+    Open, then set `open = false`:
+    - while `.body` still has `animating`, the `[part=summary]` element is absent
+    - once the animation is finished (use the test file's existing helper that finishes the body
+      animation), it is present
+  - **wt-disclosure, reduced motion.** "under reduced motion the summary shows as soon as the
+    section closes".
+  - **wt-disclosure, error.** "a section forced open by an error and then closed shows its summary
+    at once" (no animation runs there).
+  - **wt-disclosure, fade.** "the summary fades in", and "under reduced motion it does not fade".
+    Assert the `[part=summary]` element's computed `animationName` is not `"none"` normally and is
+    `"none"` under reduced motion. Use the file's existing reduced-motion emulation.
+  - **product-editor.** "Details shows one summary row per group that has something set":
+    - a product with a prep station name, both customer names, unreviewed allergens and the
+      takeaway VAT gives four rows, in order kitchen, menu, nutrition, VAT
+    - the nutrition row's allergen field carries `warning: true`
+    - each row has `lines: 1`
+
+    Update the `summaryOf(el, "details")` helper to return the rows' fields flattened, so
+    existing value assertions keep passing.
+  - **product-editor, spacing.** Replace Task 3's two-line test with "each Details row is cut to
+    one line at phone width". At 400px, with long names in two languages and a long description,
+    and `line-height: 20px` set on the host:
+    - every `.summary-row` is ≤ 21px tall
+    - the dialog's `scrollWidth` is ≤ its `clientWidth`
+  - **product-editor, gaps.** "Details' groups are spaced apart more than a group's label is from
+    its fields". With `--wt-space-6: 32px` and `--wt-space-2: 8px` set on the host, the computed
+    `rowGap` of the Details body's group container is `"40px"`.
+- [ ] **Step 2: Run them and watch them fail.**
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-disclosure.test.ts src/components/wt-disclosure.a11y.test.ts`
+  and `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-editor.test.ts`.
+- [ ] **Step 3: Implement.**
+  - **The summary's timing.** In `wt-disclosure`, the summary is rendered while closed and not
+    closing. "Closing" is true from the moment a close starts an animation (in `updated`, when
+    `open` turned false and the height animation starts) until `finishAnimation` runs, which then
+    calls `requestUpdate()`. Every path that skips the animation (reduced motion, `has-error`,
+    equal heights, the first render) shows the summary at once.
+  - **The fade.** `[part=summary]` fades in with a keyframe animation lasting
+    `var(--wt-duration-disclosure)`, and has `animation: none` under
+    `prefers-reduced-motion: reduce`.
+  - **Rows.** As in Interfaces. Remove Task 3's
+    `wt-disclosure[data-section="details"]::part(summary)` two-line cut. Rows cut themselves.
+  - **Gaps.** The Details groups' gap is `calc(var(--wt-space-6) + var(--wt-space-2))`. The gap
+    between a group's legend and its first field is unchanged.
+- [ ] **Step 4: Run them and watch them pass.** The same commands, plus every suite that renders a
+  `wt-disclosure`:
+  - `src/widgets/extra-list-form.test.ts` and `src/widgets/theme-advanced.test.ts` in
+    `@waitron/dashboard`
+  - `src/dashboard/prep-stations-screen.test.ts` in `@waitron/venue-service`
+  - `src/dashboard/export-guides-view.test.ts` and `src/dashboard/fiscal-filing-screen.test.ts`
+    in `@waitron/fiscal-verifactu`
+- [ ] **Step 5: Commit.** Message: "Product editor: one summary row per Details group, more room
+  between groups, and a section's summary appears only once it has finished closing".
+
 ### Task 4: Guides and developer docs
 
 **Files:**
@@ -362,8 +460,8 @@ green before the regroup.
   Keep every `{#id}`, and don't add or remove headings.
 - Modify: `docs/developers/design-system.md`:
   - "Fold a long form into collapsible sections with summaries" (4069-4100): the new section
-    list, the summary rule from spec decision 5, and no `summaryRows`
-  - the `wt-disclosure` row near 910: plain-weight names, `warning`, no `summaryRows`
+    list, the summary rule from spec decision 5, and Details' one row per group (Task 5)
+  - the `wt-disclosure` row near 910: plain-weight names, `warning`, `summaryRows` as rows of fields, and the summary appearing only once a close has finished
   - 4106-4108: language codes are no longer bold
   - 4124-4128: an empty Variants line shows nothing
   - the type table's Group label row (4824): `.group-label` is now really used, as a `legend`
