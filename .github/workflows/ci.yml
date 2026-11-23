@@ -2448,8 +2448,11 @@ jobs:
                   fi
                 done
                 if [ -n "$retry_mirror" ]; then
-                  printf 'https://%s/ubuntu/\n' "$retry_mirror" | sudo -n tee "$apt_mirrors"
-                  echo "Retrying WebKit dependency install on Ubuntu mirror $retry_mirror"
+                  if printf 'https://%s/ubuntu/\n' "$retry_mirror" | sudo -n tee "$apt_mirrors"; then
+                    echo "Retrying WebKit dependency install on Ubuntu mirror $retry_mirror"
+                  else
+                    echo "Could not set Ubuntu mirror $retry_mirror; retrying WebKit dependency install" >&2
+                  fi
                 else
                   echo "No distinct Ubuntu mirror available; retrying with the runner's mirror list" >&2
                 fi

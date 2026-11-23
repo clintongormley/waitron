@@ -3339,10 +3339,12 @@ afterwards, and the retry installed the libraries.
 Before that retry, the job switches to an Ubuntu mirror whose hostname is absent from the runner's
 mirror list. If both alternate hosts are already listed or the runner uses a different source file
 layout, the retry uses the runner's sources. In the
-[download stall control](https://github.com/clintongormley/waitron/actions/runs/45270412606/job/138028415541),
-both attempts requested the same font package from a local mirror and failed when it held the
-response open. The [hosted comparison](https://github.com/clintongormley/waitron/actions/runs/45271153603)
-exercises the switch under the outer deadline and also runs the clean path.
+[hosted control](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030991531),
+both attempts hit the 90-second deadline while requesting the same held font package.
+The [patched job](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030992123)
+hit the deadline once, fetched that package from Azure and passed eight WebKit cases per app.
+The [clean job](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030991966)
+installed on the first attempt and passed the same cases.
 
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
