@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleLineClassification } from "@waitron/shared";
-import { seedVenueWithSeries } from "../test/fixtures.js";
+import { seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { at, chain, classified, CUTOVER, rows, sellLines, TZ } from "../test/category-fixtures.js";
 import type { LineSpec } from "../test/category-fixtures.js";
@@ -38,8 +38,8 @@ const dish = (productId: string, net = "0.00", gross = "0.00", id?: string): Lin
 
 /** The plan's bill as filed: 2 Daily at 14.00, 2 Special at 20.00, 4 Soup, Hake, Sea bass and
  * 2 Sirloin, one with a 5.00 supplement; 73.00. A set-menu line records no product. */
-function specSale(sirloinId?: string) {
-  return sellLines(suite.db, venue, at("2026-08-04"), [
+function specSale(sirloinId?: string, day = "2026-08-04") {
+  return sellLines(suite.db, venue, at(day), [
     setMenu("12.73", "14.00"),
     setMenu("12.73", "14.00"),
     setMenu("18.18", "20.00"),
@@ -132,4 +132,24 @@ describe("computeCategorySales with set menus", () => {
       ]);
     },
   );
+
+  it("takes a void of a set-menu sale off the Set menus group, in both modes", async () => {
+    // Sold before the range, voided inside it: only the reversed lines count.
+    const sale = await specSale(undefined, "2026-07-31");
+    await seedVoid(suite.db, { saleId: sale }, at("2026-08-05"));
+
+    for (const mode of ["at_time_of_sale", "current"] as const) {
+      const report = await run(mode);
+
+      expect(
+        rows(report.tree).map(({ path, gross, direct }) => [path, gross, direct]),
+        mode,
+      ).toEqual([
+        ["Mains", "-5.00", "-5.00/-4.55/4"],
+        ["Starters", "0.00", "0.00/0.00/4"],
+        ["(set_menus)", "-68.00", "-68.00/-61.82/4"],
+      ]);
+      expect([report.gross, report.net], mode).toEqual(["-73.00", "-66.37"]);
+    }
+  });
 });
