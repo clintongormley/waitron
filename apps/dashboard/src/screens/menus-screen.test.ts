@@ -1891,7 +1891,7 @@ describe("the menus list's Status column and its changes link", () => {
     expect(opens()).toEqual([]);
   });
 
-  it("says in a set menu's Status, in muted text, that it is published with the menus that offer it", async () => {
+  it("says in a set menu's Status, in muted text, that it goes live with the menus that offer it", async () => {
     for (const [locale, words] of [
       ["en-GB", "Goes live with the menus that offer it"],
       ["es-ES", "Se publica con las cartas que lo ofrecen"],
