@@ -9,6 +9,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
 import { removeSetMenuLines } from "./set-menu-count.js";
+import { moveSetMenuDishes } from "./set-menu-moves.js";
 import { readOrderRevision } from "./working-order.js";
 import { insertPartyBill } from "./parties.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -377,6 +378,46 @@ it("a dish whose extra is comped moves only with its set menu", async () => {
   });
   expect(await specRows(spec, bill.tabId)).toEqual(before.from);
   expect(await specRows(spec, other)).toEqual(before.to);
+});
+
+it("a dish whose extra is comped stays in its set menu on its own bill", async () => {
+  const soupInFirstOfTwo = async () => {
+    const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    const [first, second] = (await setSpecCount(spec, bill.tabId, spec.daily, 2)).setMenus;
+    await sendSpecDishes(spec, bill, [{ dish: "Soup", from: spec.daily, extras: [spec.bread] }]);
+    const rows = await specRows(spec, bill.tabId);
+    const soup = rows.find(({ name }) => name === "Soup")!;
+    expect(soup.setMenuLineId).toBe(first!.lineId);
+    const bread = rows.find(({ parentLineId }) => parentLineId === soup.id)!;
+    const movable = async () =>
+      (await inTx(venue, (tx) => readBillSetMenus(tx, bill.tabId))).dishes.find(
+        ({ lineId }) => lineId === soup.id,
+      )!.movable;
+    const move = () =>
+      inTx(venue, (tx) =>
+        moveSetMenuDishes(tx, venue.cfg, bill.tabId, [
+          { lineId: soup.id, to: { setMenuLineId: second!.lineId, place: soup.setMenuPlace! } },
+        ]),
+      );
+    return { bill, second: second!.lineId, soup, bread, movable, move };
+  };
+
+  const control = await soupInFirstOfTwo();
+  expect(await control.movable()).toBe(true);
+  await control.move();
+  expect(
+    (await specRows(spec, control.bill.tabId)).find(({ id }) => id === control.soup.id),
+  ).toMatchObject({ setMenuLineId: control.second });
+
+  const comped = await soupInFirstOfTwo();
+  await adjust(comped.bill.tabId, comped.bread.id, { action: "comp" });
+  expect(await comped.movable()).toBe(false);
+  const before = await specRows(spec, comped.bill.tabId);
+  await expect(comped.move()).rejects.toMatchObject({
+    code: "set_menu.place_taken",
+    params: { dishName: "Soup" },
+  });
+  expect(await specRows(spec, comped.bill.tabId)).toEqual(before);
 });
 
 it("the same dish moves with its set menu", async () => {

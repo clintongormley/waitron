@@ -257,11 +257,29 @@ export async function readBillsSetMenus(
   );
 }
 
-/** Which of `lineIds` carry a comp or discount. */
-export async function reducedLineIds(
+/** Which of the dishes `lineIds` carry a comp or discount, on the dish or on one of its extras:
+ * such a dish moves only with its set menu (owner, 2026-11-23). */
+export async function adjustedDishIds(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Set<string>> {
+  const extras = await tx
+    .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.parentLineId,
+        sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+      ),
+    );
+  const reduced = await reducedLineIds(tx, [...lineIds, ...extras.map(({ id }) => id)]);
+  const adjusted = new Set(lineIds.filter((id) => reduced.has(id)));
+  for (const extra of extras) if (reduced.has(extra.id)) adjusted.add(extra.parentLineId!);
+  return adjusted;
+}
+
+/** Which of `lineIds` carry a comp or discount. */
+async function reducedLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>> {
   // By the line, not the bill: Split after print copies a comp's rows onto the new lines, and a
   // move leaves them pointing at the moved line, while the comp itself stays on the bill it was
   // made on.
@@ -306,7 +324,7 @@ async function placedSetMenuDishes(
     .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
   const fixed = new Set([
     ...payments.map(({ lineId }) => lineId),
-    ...(await reducedLineIds(
+    ...(await adjustedDishIds(
       tx,
       placed.map(({ id }) => id),
     )),
