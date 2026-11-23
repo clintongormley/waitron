@@ -91,6 +91,8 @@ export interface ErrorParams {
   "shared.invalid_cents": { value: string };
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
+  /** Not a 24-byte key, or not its 41-symbol printed code. Never carries the key or the text. */
+  "shared.invalid_key_code": Record<string, never>;
   "release.version_invalid": Record<string, never>;
   "locale.unsupported": { locale: string };
   /**

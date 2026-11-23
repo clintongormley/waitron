@@ -1,6 +1,8 @@
+import { AppError } from "./errors.js";
+
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 function refuse(): never {
-  throw new Error("Recovery key refused");
+  throw new AppError("shared.invalid_key_code", {});
 }
 function normaliseTyped(text: string): string {
   if (typeof text !== "string" || /[^0-9A-Za-z \t\r\n-]/.test(text)) refuse();

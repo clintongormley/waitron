@@ -18,7 +18,7 @@ it("refuses every single-symbol substitution, including either check symbol", ()
     for (const symbol of alphabet)
       if (symbol !== code[i])
         expect(() => decodeMasterKeyCode(code.slice(0, i) + symbol + code.slice(i + 1))).toThrow(
-          "Recovery key refused",
+          "shared.invalid_key_code",
         );
 });
 it("refuses each swap of unequal adjacent symbols, including the key/check boundary", () => {
@@ -26,18 +26,18 @@ it("refuses each swap of unequal adjacent symbols, including the key/check bound
     if (code[i] !== code[i + 1])
       expect(() =>
         decodeMasterKeyCode(code.slice(0, i) + code[i + 1]! + code[i]! + code.slice(i + 2)),
-      ).toThrow("Recovery key refused");
+      ).toThrow("shared.invalid_key_code");
 });
 it.each(["", "!", code.slice(1), code + "0", code.replace("M", "U"), null, 42])(
   "refuses malformed printed input %#",
   (value) => {
-    expect(() => decodeMasterKeyCode(value as string)).toThrow("Recovery key refused");
+    expect(() => decodeMasterKeyCode(value as string)).toThrow("shared.invalid_key_code");
   },
 );
 it.each(["", "a".repeat(31), "a".repeat(33), "!".repeat(32), null])(
   "refuses malformed raw secrets %#",
   (value) => {
-    expect(() => encodeMasterKeyCode(value as string)).toThrow("Recovery key refused");
+    expect(() => encodeMasterKeyCode(value as string)).toThrow("shared.invalid_key_code");
   },
 );
 it("round-trips zero, high-bit and mixed raw keys without changing their bytes", () => {
@@ -47,7 +47,7 @@ it("round-trips zero, high-bit and mixed raw keys without changing their bytes",
 
 it("refuses nonzero spare key bits even when both check symbols are valid", () => {
   expect(() => decodeMasterKeyCode("000000000000000000000000000000000000001ZT")).toThrow(
-    "Recovery key refused",
+    "shared.invalid_key_code",
   );
 });
 
@@ -61,6 +61,6 @@ it("reads a 1 typed as i or l, and keeps base64url's - and _ through the round t
 
 it("refuses symbols outside the alphabet even when the check symbols balance", () => {
   expect(() => decodeMasterKeyCode("9FXXXES72K7VF3Q07H1UCB12GD0QRN3ETGZ5U6RHD")).toThrow(
-    "Recovery key refused",
+    "shared.invalid_key_code",
   );
 });
