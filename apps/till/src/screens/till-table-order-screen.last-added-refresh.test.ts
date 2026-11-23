@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, browser, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  browser,
+  mount,
+  resized,
+  store,
+  tap,
+} from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
 
@@ -142,4 +149,17 @@ describe("till-table-order-screen: last-added saved-line identity", () => {
     expect(bar(el)).toBeNull();
     expect(draft.lines[0]!.quantity).toBe("1");
   });
+});
+
+describe("till-table-order-screen: the bottom bar's width", () => {
+  for (const width of [390, 1280])
+    it(`the last-added line reaches the bottom bar's end at ${width}px`, async () => {
+      const { el } = await mounted(width);
+      await tap(el, beer.name);
+      const strip = el.shadowRoot!.querySelector<HTMLElement>(".bottom-bar")!;
+      const line = strip.querySelector<HTMLElement>("till-last-added")!;
+      expect(bar(el)?.checkVisibility()).toBe(true);
+      expect(line.getBoundingClientRect().right).toBe(strip.getBoundingClientRect().right);
+      expect(getComputedStyle(strip).paddingInlineEnd).toBe("0px");
+    });
 });

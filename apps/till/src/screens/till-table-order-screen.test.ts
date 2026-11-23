@@ -3788,14 +3788,14 @@ describe("till-table-order-screen", () => {
         (target) => target.dataset.target,
       );
 
-    it("with no party shows Join, Move guests and Merge bills, no Split by item or Transfer items, and a Back control", async () => {
+    it("with no party shows Join and Move guests, no Merge bills, Split by item or Transfer items, and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
       const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
-      for (const verb of ["move", "join", "merge"]) {
+      for (const verb of ["move", "join"]) {
         expect(menu.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
-      for (const verb of ["split", "transfer", "move-dishes"]) {
+      for (const verb of ["merge", "split", "transfer", "move-dishes"]) {
         expect(menu.querySelector(`[data-action="${verb}"]`), verb).toBeNull();
       }
       menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
@@ -5156,24 +5156,13 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("offers no Move dishes…, Split by item or Transfer items for an order that belongs to no party", async () => {
+    it("offers no Move dishes…, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
 
-      for (const verb of ["move-dishes", "split", "transfer"]) {
+      for (const verb of ["move-dishes", "split", "transfer", "merge"]) {
         expect(el.shadowRoot!.querySelector(`[data-action="${verb}"]`), verb).toBeNull();
       }
-    });
-
-    it("offers nothing to merge, under the plain heading, for an order that belongs to no party", async () => {
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
-      await toMenu(el);
-      click(el, '[data-action="merge"]');
-      await el.updateComplete;
-
-      const picker = el.shadowRoot!.querySelector("[data-target-picker]")!;
-      expect(picker.querySelector("h2")!.textContent!.trim()).toBe(t("table.actions_title"));
-      expect(picker.textContent).toContain(t("table.no_other_bills"));
     });
 
     it("names the merge verb for bills", async () => {
@@ -5192,6 +5181,20 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(targetIds(el)).toEqual(["wo-4"]);
+    });
+
+    it("falls back to the plain heading when a bills read stops listing the bill on screen while Merge bills is open", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+
+      el.bills = [];
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.actions_title"),
+      );
     });
 
     it("shows an empty-state when there are no other tables to move to", async () => {

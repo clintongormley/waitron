@@ -251,7 +251,7 @@ describe("A803 move dishes panel", () => {
 
   it("is not offered with no party", async () => {
     const el = await mountScreen({ party: null, bills: [] });
-    expect(menu(el).querySelector('[data-action="merge"]')).not.toBeNull();
+    expect(menu(el).querySelector('[data-action="join"]')).not.toBeNull();
     expect(moveItem(el)).toBeNull();
   });
 

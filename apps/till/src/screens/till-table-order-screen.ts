@@ -1253,7 +1253,6 @@ export class TillTableOrderScreen extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-2);
         padding-block: var(--wt-space-2);
-        padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
         background: var(--wt-color-bg);
       }
 
@@ -6947,11 +6946,7 @@ export class TillTableOrderScreen extends LitElement {
     ];
     const party = this.party;
     if (party === null)
-      return tableMenu({
-        billHeading: t("floor.unsent_bill_unnumbered"),
-        billItems: [merge],
-        tableItems: tableMoves,
-      });
+      return tableMenu({ billHeading: undefined, billItems: [], tableItems: tableMoves });
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     return tableMenu({
       billHeading: shown === undefined ? undefined : billLabel(shown),

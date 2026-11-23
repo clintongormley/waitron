@@ -335,13 +335,11 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(groups(el).map((group) => group.name)).toEqual(["Whole table"]);
   });
 
-  it("with no party: Merge bills under Bill; Join a table and Move guests under Whole table", async () => {
+  it("with no party: no bill group; Join a table and Move guests under Whole table", async () => {
     const el = await mountScreen({ party: null, bills: [], orderId: "wo-9" });
 
-    expect(groups(el)).toEqual([
-      { name: "Bill", items: ["Merge bills"] },
-      { name: "Whole table", items: ["Join a table", "Move guests"] },
-    ]);
+    expect(groups(el)).toEqual([{ name: "Whole table", items: ["Join a table", "Move guests"] }]);
+    expect(item(el, '[data-action="merge"]')).toBeNull();
   });
 
   it("names the groups in Spanish", async () => {
