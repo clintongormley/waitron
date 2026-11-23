@@ -126,6 +126,9 @@ export class TillBoxTimeDialog extends LitElement {
       wt-button[slot="cancel"] {
         white-space: nowrap;
       }
+      wt-button[data-box-time="close"]:not([slot]) {
+        margin-inline-end: auto;
+      }
     `,
   ];
 
@@ -322,6 +325,11 @@ export class TillBoxTimeDialog extends LitElement {
             >${t(label)}</wt-button
           >`;
         const correct = () => this.#correctDevice();
+        // The three choices need the whole row to wrap beside Close.
+        const closeButton =
+          differs && !view.correcting
+            ? choice("close", "box_time.close", "secondary", close)
+            : this.#button("close", "box_time.close", close, "cancel", view.sending !== null);
         return html`<div class="words" data-box-time-words>
             <p>${t("box_time.important")}</p>
             <dl class="clocks">
@@ -345,7 +353,7 @@ export class TillBoxTimeDialog extends LitElement {
             </p>
           </div>
           <wt-form-actions
-            >${this.#button("close", "box_time.close", close, "cancel", view.sending !== null)}${
+            >${closeButton}${
               view.correcting
                 ? nothing
                 : differs

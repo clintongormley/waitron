@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  PHONE_FONT,
+  textRects,
+} from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
@@ -628,28 +634,40 @@ describe("till-box-time-dialog", () => {
     expect(es["box_time.refused.host_unavailable"]).not.toMatch(/confirm/i);
   });
 
-  for (const [language, differs] of [
-    ["es", true],
-    ["es", false],
-    ["en", true],
-    ["en", false],
-  ] as const)
-    it(`keeps each button's label on one line at phone width (${language}, ${differs ? "differs" : "agrees"})`, async () => {
+  it.each([
+    ["es", true, 360],
+    ["es", true, 390],
+    ["es", false, 390],
+    ["en", true, 390],
+    ["en", false, 390],
+  ] as const)(
+    "fits each clock button on one line at phone width (%s, differs %s, %ipx)",
+    async (language, differs, width) => {
       setLocale(language);
-      await page.viewport(390, 844);
+      const font = await loadPhoneFont();
+      await page.viewport(width, 844);
       try {
         const el = await open(fakeApi(differs ? BOX_BEHIND : BOX_AGREES));
-        for (const name of differs ? ["server", "device", "both-wrong"] : ["no", "yes"]) {
+        el.style.setProperty("--wt-font-family", PHONE_FONT);
+        const actions = root(el).querySelector("wt-form-actions")!.getBoundingClientRect();
+        const names = differs
+          ? ["close", "server", "device", "both-wrong"]
+          : ["close", "no", "yes"];
+        for (const name of names) {
           const button = control(el, name)!;
-          const range = document.createRange();
-          range.selectNodeContents(button);
-          const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-          expect(lines.size, `${name}: ${flat(button)}`).toBe(1);
+          const label = `${name}: ${flat(button)}`;
+          const lines = new Set(textRects(button).map((rect) => Math.round(rect.top)));
+          expect(lines.size, label).toBe(1);
+          const bounds = button.getBoundingClientRect();
+          expect(bounds.left, label).toBeGreaterThanOrEqual(actions.left);
+          expect(bounds.right, label).toBeLessThanOrEqual(actions.right);
         }
       } finally {
+        document.fonts.delete(font);
         await page.viewport(1280, 900);
       }
-    });
+    },
+  );
 });
 
 describe("till-box-time-dialog while the server waits for its time to be confirmed", () => {
