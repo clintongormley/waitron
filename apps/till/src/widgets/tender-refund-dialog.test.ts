@@ -147,6 +147,26 @@ it.each([
   },
 );
 
+it("opened for a correction's card refund, offers every reason and starts on a Comp one", async () => {
+  const el = await mount({ correcting: true, startReasonId: "comp" });
+
+  expect(combo(el).value).toBe("comp");
+  expect(combo(el).options.map((option) => option.value)).toEqual([
+    "return",
+    "courtesy",
+    "other",
+    "comp",
+  ]);
+  expect(button(el).variant).toBe("primary");
+});
+
+it("opened for an ordinary refund, offers only Void reasons and does not start on a Comp one", async () => {
+  const el = await mount({ startReasonId: "comp" });
+
+  expect(combo(el).value).toBe("");
+  expect(combo(el).options.map((option) => option.value)).toEqual(["return", "courtesy", "other"]);
+});
+
 it("requires a choice between original tenders and resets amounts and the hand-keyed switch on another choice", async () => {
   const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };
   const el = await mount({ tenders: [manual, card] });

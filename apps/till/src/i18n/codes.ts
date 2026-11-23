@@ -534,8 +534,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Escribe un importe mayor que cero y no superior a lo que queda por rectificar de los platos elegidos.",
   },
   "sale.correction_scope_invalid": {
-    en: "This bill has dishes at more than one VAT rate. Pick the dishes to correct, all at one rate.",
-    es: "Esta cuenta tiene platos con más de un tipo de IVA. Elige los platos que se rectifican, todos del mismo tipo.",
+    en: "The dishes chosen are not on this invoice. Close this window and choose Correct invoice again.",
+    es: "Los platos elegidos no están en esta factura. Cierra esta ventana y vuelve a elegir Rectificar factura.",
   },
   "sale.correction_history_unusable": {
     en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",

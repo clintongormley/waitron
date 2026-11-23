@@ -13,12 +13,20 @@ import {
 } from "./correction-allocation.js";
 
 const d = decimal;
-const line = (id: string, lineNo: number, rate: string, gross: string, base: string) => ({
+const line = (
+  id: string,
+  lineNo: number,
+  rate: string,
+  gross: string,
+  base: string,
+  menu = gross,
+) => ({
   id,
   lineNo,
   rate: d(rate),
   gross: d(gross),
   base: d(base),
+  menu: d(menu),
 });
 const part = (saleLineId: string, rate: string, gross: string, base: string, tax: string) => ({
   saleLineId,
@@ -101,8 +109,8 @@ describe("correction amount allocation", () => {
     expect(allocateCorrectionAmounts(history, { gross: d("2.20") })).toEqual({
       gross: "2.20",
       allocations: [
-        { saleLineId: "dish", rate: "10.00", gross: "0.20", base: "0.18", tax: "0.02" },
-        { saleLineId: "second", rate: "10.00", gross: "2.00", base: "1.82", tax: "0.18" },
+        { saleLineId: "dish", rate: "10.00", gross: "1.10", base: "1.00", tax: "0.10" },
+        { saleLineId: "second", rate: "10.00", gross: "1.10", base: "1.00", tax: "0.10" },
       ],
       vatBreakdown: [{ rate: "10.00", base: "2.00", tax: "0.20" }],
     });
@@ -214,7 +222,6 @@ describe("correction amount allocation", () => {
     [[], "empty"],
     [["missing"], "missing"],
     [["dish", "dish"], "duplicate"],
-    [undefined, "required"],
   ] as const)("refuses an invalid explicit scope %j", (lineIds, reason) => {
     expect(() => allocateCorrectionAmounts(mixedRates(), { gross: d("1"), lineIds })).toThrowError(
       expect.objectContaining({
@@ -415,13 +422,119 @@ describe("correction amount allocation", () => {
     },
   );
 
-  it("weights remaining gross after an earlier return", () => {
+  it("weighs menu price after an earlier return", () => {
     const history = smallBill("0", "10", "10", 2);
     history.consumed.push(part("0", "0", "5", "5", "0"));
     expect(allocateCorrectionAmounts(history, { gross: d("3") }).allocations).toEqual([
-      { saleLineId: "0", rate: "0.00", gross: "1.00", base: "1.00", tax: "0.00" },
-      { saleLineId: "1", rate: "0.00", gross: "2.00", base: "2.00", tax: "0.00" },
+      { saleLineId: "0", rate: "0.00", gross: "1.50", base: "1.50", tax: "0.00" },
+      { saleLineId: "1", rate: "0.00", gross: "1.50", base: "1.50", tax: "0.00" },
     ]);
+  });
+
+  it("shares an amount with no dishes chosen across every rate, as choosing them all does", () => {
+    expect(allocateCorrectionAmounts(mixedRates(), { gross: d("2.00") })).toEqual(
+      allocateCorrectionAmounts(mixedRates(), { gross: d("2.00"), lineIds: ["wine", "dish"] }),
+    );
+    expect(allocateCorrectionAmounts(discountedSalad("5.00"), { gross: d("3.00") })).toEqual(
+      allocateCorrectionAmounts(discountedSalad("5.00"), {
+        gross: d("3.00"),
+        lineIds: ["salad", "water"],
+      }),
+    );
+  });
+
+  it.each([
+    [
+      "7.00",
+      [
+        { saleLineId: "a", rate: "10.00", gross: "5.00", base: "4.55", tax: "0.45" },
+        { saleLineId: "b", rate: "21.00", gross: "2.00", base: "1.65", tax: "0.35" },
+      ],
+    ],
+    [
+      "1.00",
+      [
+        { saleLineId: "a", rate: "10.00", gross: "0.71", base: "0.65", tax: "0.06" },
+        { saleLineId: "b", rate: "21.00", gross: "0.29", base: "0.24", tax: "0.05" },
+      ],
+    ],
+  ])("shares %s across a €10.00 and a €4.00 dish by menu price", (gross, allocations) => {
+    const history: CorrectionAmountHistory = {
+      lines: [line("a", 1, "10", "10.00", "9.09"), line("b", 2, "21", "4.00", "3.31")],
+      vatBreakdown: [
+        { rate: d("10"), base: d("9.09"), tax: d("0.91") },
+        { rate: d("21"), base: d("3.31"), tax: d("0.69") },
+      ],
+      consumed: [],
+    };
+    expect(allocateCorrectionAmounts(history, { gross: d(gross) }).allocations).toEqual(
+      allocations,
+    );
+  });
+
+  it.each([
+    [
+      "a salad discounted to €5.00",
+      discountedSalad("5.00"),
+      [
+        { saleLineId: "salad", rate: "4.00", gross: "2.50", base: "2.40", tax: "0.10" },
+        { saleLineId: "water", rate: "21.00", gross: "0.50", base: "0.41", tax: "0.09" },
+      ],
+    ],
+    [
+      "a salad discounted to €1.00, capped at what is left of it",
+      discountedSalad("1.00"),
+      [
+        { saleLineId: "salad", rate: "4.00", gross: "1.00", base: "0.96", tax: "0.04" },
+        { saleLineId: "water", rate: "21.00", gross: "2.00", base: "1.65", tax: "0.35" },
+      ],
+    ],
+    [
+      "a salad with €8.00 corrected before, capped at what is left of it",
+      correctedSalad(),
+      [
+        { saleLineId: "salad", rate: "4.00", gross: "2.00", base: "1.93", tax: "0.07" },
+        { saleLineId: "water", rate: "21.00", gross: "1.00", base: "0.83", tax: "0.17" },
+      ],
+    ],
+  ])("shares €3.00 by menu price on %s", (_name, history, allocations) => {
+    expect(allocateCorrectionAmounts(history, { gross: d("3.00") }).allocations).toEqual(
+      allocations,
+    );
+  });
+
+  it("caps line after line until no share is more than is left of its dish", () => {
+    const history: CorrectionAmountHistory = {
+      lines: [
+        line("a", 1, "4", "1.00", "0.96", "10.00"),
+        line("b", 2, "10", "2.00", "1.82", "5.00"),
+        line("c", 3, "21", "10.00", "8.26", "5.00"),
+      ],
+      vatBreakdown: [
+        { rate: d("4"), base: d("0.96"), tax: d("0.04") },
+        { rate: d("10"), base: d("1.82"), tax: d("0.18") },
+        { rate: d("21"), base: d("8.26"), tax: d("1.74") },
+      ],
+      consumed: [],
+    };
+    expect(
+      allocateCorrectionAmounts(history, { gross: d("6.00") }).allocations.map((allocation) => [
+        allocation.saleLineId,
+        allocation.gross,
+      ]),
+    ).toEqual([
+      ["a", "1.00"],
+      ["b", "2.00"],
+      ["c", "3.00"],
+    ]);
+  });
+
+  it("refuses menu prices adding up to zero while money is left to share", () => {
+    const history = smallBill("0", "1.00", "1.00", 1);
+    history.lines[0]!.menu = d("0");
+    expect(() => allocateCorrectionAmounts(history, { gross: d("0.50") })).toThrowError(
+      expect.objectContaining({ code: "shared.invalid_decimal" }),
+    );
   });
 
   it("splits a three-cent return across unequal original lines", () => {
@@ -473,6 +586,31 @@ function smallBill(
       },
     ],
     consumed: [],
+  };
+}
+
+/** A salad on the menu at €10.00 (4%) charged `charged`, and a €2.00 water (21%). */
+function discountedSalad(charged: string): CorrectionAmountHistory {
+  const base = charged === "5.00" ? "4.81" : "0.96";
+  return {
+    lines: [line("salad", 1, "4", charged, base, "10.00"), line("water", 2, "21", "2.00", "1.65")],
+    vatBreakdown: [
+      { rate: d("4"), base: d(base), tax: subtractDecimal(d(charged), d(base)) },
+      { rate: d("21"), base: d("1.65"), tax: d("0.35") },
+    ],
+    consumed: [],
+  };
+}
+
+/** A €10.00 salad (4%) with €8.00 of it corrected before, and a €2.00 water (21%). */
+function correctedSalad(): CorrectionAmountHistory {
+  return {
+    lines: [line("salad", 1, "4", "10.00", "9.62"), line("water", 2, "21", "2.00", "1.65")],
+    vatBreakdown: [
+      { rate: d("4"), base: d("9.62"), tax: d("0.38") },
+      { rate: d("21"), base: d("1.65"), tax: d("0.35") },
+    ],
+    consumed: [part("salad", "4", "8.00", "7.69", "0.31")],
   };
 }
 

@@ -49,6 +49,9 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
+/** The starter Comp reason Complaint, by its English or Spanish name. */
+const isComplaint = (reason: { name: string }) => ["Complaint", "Queja"].includes(reason.name);
+
 let venue: BillVenue;
 let reasonId: string;
 let reasons: AdjustmentReason[];
@@ -436,15 +439,16 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     });
   });
 
-  it("refuses a reason that is not a Void reason, and one asking for a note without it, writing nothing", async () => {
+  it("opens with a Comp reason such as Complaint, and refuses one asking for a note without it, writing nothing", async () => {
+    const complaint = reasons.find(isComplaint)!;
+    expect(complaint.kind).toBe("comp");
+    expect(await open(await sold(["10.00"]), body({ reasonId: complaint.id }))).toMatchObject({
+      status: 200,
+      json: { replayed: false, correction: { state: "open", gross: "5.00" } },
+    });
     const saleId = await sold(["10.00"]);
-    const comp = reasons.find((reason) => reason.kind === "comp")!;
     const other = reasons.find((reason) => reason.kind === "void" && reason.noteRequired)!;
     const before = counts();
-    expect(await open(saleId, body({ reasonId: comp.id }))).toEqual({
-      status: 409,
-      json: { code: "adjustment.action_not_allowed", params: {} },
-    });
     expect(await open(saleId, body({ reasonId: other.id, note: null }))).toEqual({
       status: 400,
       json: { code: "adjustment.note_required", params: {} },

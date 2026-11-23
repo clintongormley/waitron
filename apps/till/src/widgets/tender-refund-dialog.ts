@@ -141,11 +141,15 @@ export class TillTenderRefundDialog extends LitElement {
   #selected(): RefundableTender | undefined {
     return this.tenders.find((row) => row.tenderId === this.draft.tenderId && available(row));
   }
+  /** The reasons offered: every one on a correction's card refund, otherwise the Void ones. */
+  #offered(): AdjustmentReason[] {
+    return this.correcting ? (this.reasons ?? []) : voidReasons(this.reasons);
+  }
   #reason(): AdjustmentReason | undefined {
-    return voidReasons(this.reasons).find((reason) => reason.id === this.draft.reasonId);
+    return this.#offered().find((reason) => reason.id === this.draft.reasonId);
   }
   #startReason(): string {
-    return voidReasons(this.reasons).some((reason) => reason.id === this.startReasonId)
+    return this.#offered().some((reason) => reason.id === this.startReasonId)
       ? this.startReasonId
       : "";
   }
@@ -397,6 +401,7 @@ export class TillTenderRefundDialog extends LitElement {
           </p>`
         : nothing;
     return reasonPicker({
+      every: this.correcting,
       reasons: this.reasons,
       reasonsLoading: this.reasonsLoading,
       reasonId: this.draft.reasonId,

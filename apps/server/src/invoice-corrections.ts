@@ -233,7 +233,6 @@ export async function openInvoiceCorrection(
     };
   }
   const reason = await findAdjustmentReason(tx, ask.reasonId);
-  if (reason.kind !== "void") throw new AppError("adjustment.action_not_allowed", {});
   if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
 
   const reading = deps.clock.now();

@@ -928,6 +928,15 @@ it.each([
   expect(codeMessage("deferred_close.ineligible", "es", params)).toBe(spanish);
 });
 
+it("says a dish list that no longer matches the invoice is out of date, in English and Spanish", () => {
+  expect(codeMessage("sale.correction_scope_invalid", "en")).toBe(
+    "The dishes chosen are not on this invoice. Close this window and choose Correct invoice again.",
+  );
+  expect(codeMessage("sale.correction_scope_invalid", "es")).toBe(
+    "Los platos elegidos no están en esta factura. Cierra esta ventana y vuelve a elegir Rectificar factura.",
+  );
+});
+
 it.each([
   "invoice_correction.not_settled",
   "invoice_correction.already_open",

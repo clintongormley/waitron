@@ -22,6 +22,8 @@ export interface CorrectionAmountLine {
   rate: Decimal;
   gross: Decimal;
   base: Decimal;
+  /** What the line cost at menu price: the weight an amount given back is shared by. */
+  menu: Decimal;
 }
 
 export interface CorrectionAmountAllocation {
@@ -54,15 +56,10 @@ export function allocateCorrectionAmounts(
     throw new AppError("sale.correction_amount_invalid", {});
   }
   const scope = selection.lineIds;
-  const refuseScope = (reason: "empty" | "missing" | "duplicate" | "required") => {
+  const refuseScope = (reason: "empty" | "missing" | "duplicate") => {
     throw new AppError("sale.correction_scope_invalid", { reason });
   };
-  if (scope === undefined) {
-    const rates = new Set(
-      remaining.filter((line) => compareDecimal(line.gross, ZERO) > 0).map((line) => line.rate),
-    );
-    if (rates.size > 1) refuseScope("required");
-  } else {
+  if (scope !== undefined) {
     if (scope.length === 0) refuseScope("empty");
     if (new Set(scope).size !== scope.length) refuseScope("duplicate");
     if (scope.some((id) => !remaining.some((line) => line.id === id))) refuseScope("missing");
@@ -71,10 +68,7 @@ export function allocateCorrectionAmounts(
   if (compareDecimal(amount, sumDecimals(lines.map((line) => line.gross))) > 0) {
     throw new AppError("sale.correction_amount_invalid", {});
   }
-  const grossByLine = shareByWeight(
-    amount,
-    lines.map((line) => line.gross),
-  );
+  const grossByLine = shareByMenuPrice(amount, lines);
   const allocations: CorrectionAmountAllocation[] = lines
     .map((line, index) => ({
       saleLineId: line.id,
@@ -116,6 +110,36 @@ export function allocateCorrectionAmounts(
     vatBreakdown.push({ rate, base: toScale(base, 2), tax: toScale(tax, 2) });
   }
   return { gross: toScale(amount, 2), allocations, vatBreakdown };
+}
+
+/**
+ * `amount` shared by menu price over the lines with something left, no line taking more than is
+ * left of it: a line whose share is over takes what is left, and the rest is shared again over the
+ * others, until none is over. `amount` must not exceed what is left of `lines` together.
+ */
+function shareByMenuPrice(amount: Decimal, lines: readonly CorrectionAmountLine[]): Decimal[] {
+  const shares = lines.map(() => ZERO);
+  let open = lines.flatMap((line, index) => (compareDecimal(line.gross, ZERO) > 0 ? [index] : []));
+  let left = amount;
+  while (compareDecimal(left, ZERO) > 0) {
+    const pass = shareByWeight(
+      left,
+      open.map((index) => lines[index]!.menu),
+    );
+    const over = open.filter(
+      (index, position) => compareDecimal(pass[position]!, lines[index]!.gross) > 0,
+    );
+    if (over.length === 0) {
+      for (const [position, index] of open.entries()) shares[index] = pass[position]!;
+      break;
+    }
+    for (const index of over) {
+      shares[index] = lines[index]!.gross;
+      left = subtractDecimal(left, lines[index]!.gross);
+    }
+    open = open.filter((index) => !over.includes(index));
+  }
+  return shares;
 }
 
 /**

@@ -5,12 +5,19 @@ import { readVenueClock, saleLines, sales, workingOrders, type Transaction } fro
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, type AdjustmentAction } from "@waitron/shared";
+import { decimal, saleId as brandSaleId, type AdjustmentAction } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillFiling, refundValueIn, rowRefundValueIn } from "./cancellation-refund-value.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
+import {
+  openInvoiceCorrection,
+  parseInvoiceCorrection,
+  previewInvoiceCorrection,
+} from "./invoice-corrections.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import {
@@ -328,3 +335,120 @@ describe("a free item on a takeaway ticket mixing VAT rates", () => {
     },
   );
 });
+
+describe("an amount given back on Correct invoice with no dishes chosen", () => {
+  it("previews €1.00 on the comped ticket by each dish's share of the price paid", async () => {
+    const billId = await saladWithFreeWater();
+    await pay(billId);
+    const { saleId } = await filed(billId);
+
+    const preview = await inTx(venue, (tx) =>
+      previewInvoiceCorrection(
+        tx,
+        venue.backend,
+        venue.cfg,
+        venue.clock.now(),
+        brandSaleId(saleId),
+        {
+          gross: "1.00",
+        },
+      ),
+    );
+
+    expect(preview.vatBreakdown).toEqual([
+      { rate: "4.00", base: "0.80", tax: "0.03" },
+      { rate: "21.00", base: "0.14", tax: "0.03" },
+    ]);
+  });
+
+  it("files €3.00 on a salad discounted to €5.00 and a €2.00 water by menu price", async () => {
+    await takeawayRates(venue, { Salad: "4.00", Water: "21.00" });
+    const { billId } = await billWith(venue, [{ name: "Salad" }, { name: "Water" }], {
+      dining: "takeaway",
+    });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_amount",
+      amount: "5.00",
+    });
+    await pay(billId);
+    const { saleId } = await filed(billId);
+
+    const corrective = await giveBackInCash(saleId, "3.00");
+
+    expect(corrective.lines).toEqual([
+      { gross: -250, base: -240 },
+      { gross: -50, base: -41 },
+    ]);
+    expect(corrective.vatBreakdown).toEqual([
+      { rate: "4.00", base: "-2.40", tax: "-0.10" },
+      { rate: "21.00", base: "-0.41", tax: "-0.09" },
+    ]);
+    expect(corrective.integrity.issues).toEqual([]);
+  });
+});
+
+/** Opens a correction of `gross` with no dishes chosen, gives it in cash, and answers what it filed. */
+async function giveBackInCash(id: string, gross: string) {
+  const saleId = brandSaleId(id);
+  const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
+  const authorization = {
+    authorizedBy: venue.managerId,
+    permission: "sale.rectify",
+    viaOverride: false,
+  };
+  const sessionId = await openTillSession(venue.db, {
+    deviceId: venue.cfg.origin.deviceId,
+    personId: venue.managerId,
+  });
+  return inTx(venue, async (tx) => {
+    const preview = await previewInvoiceCorrection(
+      tx,
+      venue.backend,
+      venue.cfg,
+      venue.clock.now(),
+      saleId,
+      { gross },
+    );
+    const { correction } = await openInvoiceCorrection(
+      tx,
+      deps,
+      venue.cfg,
+      saleId,
+      parseInvoiceCorrection({
+        submissionId: randomUUID(),
+        gross,
+        reasonId: venue.reasonId.houseVoid,
+        note: null,
+        expectedSplit: preview.vatBreakdown,
+      }),
+      { personId: venue.managerId, authorization },
+    );
+    const given = await giveCorrectionCash(
+      tx,
+      deps,
+      venue.cfg,
+      correction.id,
+      parseCorrectionCash({ submissionId: randomUUID(), amount: gross }),
+      {
+        personId: venue.managerId,
+        authz: { sessionId },
+        authorization: { ...authorization, permission: "sale.refund" },
+      },
+    );
+    const correctiveId = given.correction.correctiveSaleId!;
+    const [sale] = await tx
+      .select({ vatBreakdown: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, correctiveId));
+    return {
+      vatBreakdown: sale!.vatBreakdown,
+      lines: await tx
+        .select({ gross: saleLines.lineGross, base: saleLines.lineTotal })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, correctiveId))
+        .orderBy(asc(saleLines.lineNo)),
+      integrity: await venue.backend.checkIntegrity(tx, venue.cfg.nodeId),
+    };
+  });
+}

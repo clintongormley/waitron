@@ -11,7 +11,7 @@ import type { CorrectionAdmission } from "@waitron/fiscal";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "sale.correction_amount_invalid": Record<string, never>;
-    "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
+    "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" };
     "sale.correction_history_unusable": Record<string, never>;
     "sale.correction_breakdown_invalid": Record<string, never>;
     "sale.correction_approval_invalid": {

@@ -286,9 +286,9 @@ it("reads every invoice line, extras included, its stored split and what earlier
 
   expect(await result()).toEqual({
     lines: [
-      { id: ids[0], lineNo: 1, rate: "10.00", gross: "11.00", base: "10.00" },
-      { id: ids[1], lineNo: 2, rate: "21.00", gross: "12.10", base: "10.00" },
-      { id: ids[2], lineNo: 3, rate: "10.00", gross: "1.10", base: "1.00" },
+      { id: ids[0], lineNo: 1, rate: "10.00", gross: "11.00", base: "10.00", menu: "11.00" },
+      { id: ids[1], lineNo: 2, rate: "21.00", gross: "12.10", base: "10.00", menu: "12.10" },
+      { id: ids[2], lineNo: 3, rate: "10.00", gross: "1.10", base: "1.00", menu: "1.10" },
     ],
     vatBreakdown: BREAKDOWN,
     consumed: [
@@ -296,6 +296,18 @@ it("reads every invoice line, extras included, its stored split and what earlier
       { saleLineId: ids[1], rate: "21.00", gross: "0.44", base: "0.37", tax: "0.07" },
     ],
   });
+});
+
+it("gives each line its filed menu price where one is stored, and its gross otherwise", async () => {
+  const lines = invoiceLines();
+  lines[0]!.listGross = "13.00";
+  const { saleId } = await sell(lines);
+
+  expect((await read(saleId)).lines.map((line) => [line.lineNo, line.gross, line.menu])).toEqual([
+    [1, "11.00", "13.00"],
+    [2, "12.10", "12.10"],
+    [3, "1.10", "1.10"],
+  ]);
 });
 
 const UNUSABLE = "sale.correction_history_unusable";
@@ -857,7 +869,16 @@ it("drops a rate only an advance holds, which must net to nothing, and leaves th
   const rest = await sellRest([["21.00", "66.12", "80.00"]], ["10.00", "9.09", "10.00"], "70.00");
 
   expect(await read(rest.saleId)).toEqual({
-    lines: [{ id: rest.dishIds[0], lineNo: 1, rate: "21.00", gross: "80.00", base: "66.12" }],
+    lines: [
+      {
+        id: rest.dishIds[0],
+        lineNo: 1,
+        rate: "21.00",
+        gross: "80.00",
+        base: "66.12",
+        menu: "80.00",
+      },
+    ],
     vatBreakdown: [{ rate: "21.00", base: "66.12", tax: "13.88" }],
     consumed: [],
   });

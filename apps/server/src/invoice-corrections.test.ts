@@ -67,6 +67,9 @@ import { systemClock } from "./till-backend.js";
 import { overridePinAttempts } from "./till-api.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
+/** The starter Comp reason Complaint, by its English or Spanish name. */
+const isComplaint = (reason: { name: string }) => ["Complaint", "Queja"].includes(reason.name);
+
 let venue: BillVenue;
 let offerOf: (name: string) => string;
 let managerId: string;
@@ -676,6 +679,47 @@ describe("fileCorrectionIn", () => {
     expect(await original(saleId)).toEqual(before);
   });
 
+  it("files a corrective split across both rates when no dishes are chosen", async () => {
+    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"], "0.00", "takeaway");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "8.80" });
+
+    const given = await cash(correction.id, "8.80");
+
+    const [corrective] = await venue.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, given.correction.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -880,
+      vatBreakdown: [
+        { rate: "10.00", base: "-2.50", tax: "-0.25" },
+        { rate: "21.00", base: "-5.00", tax: "-1.05" },
+      ],
+    });
+    const integrity = await inTx(venue, (tx) => venue.backend.checkIntegrity(tx, venue.cfg.nodeId));
+    expect(integrity.issues).toEqual([]);
+  });
+
+  it("files a correction opened with the Comp reason Complaint under that reason's name", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const complaint = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(isComplaint)!;
+    const { correction } = await open(saleId, {
+      submissionId: randomUUID(),
+      gross: "6.05",
+      reasonId: complaint.id,
+      note: null,
+    });
+
+    const given = await cash(correction.id, "6.05");
+
+    expect(given.correction).toMatchObject({ state: "filed", reason: complaint.name });
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "filed",
+      reason: complaint.name,
+    });
+  });
+
   it("refuses a correction already filed, filing nothing more", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
@@ -895,14 +939,18 @@ describe("openInvoiceCorrection refuses", () => {
     }
   });
 
-  it("a reason that is not a Void reason, and opens with a Void reason", async () => {
-    const saleId = await soldForCash("Rib steak", ["12.10"]);
+  it("opens with a Comp reason such as Complaint, and with a Void reason", async () => {
     const reasons = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const comp = reasons.find((reason) => reason.kind === "comp")!;
-    await refusedWithNothingWritten(
-      () => open(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: comp.id }),
-      { code: "adjustment.action_not_allowed" },
-    );
+    const complaint = reasons.find(isComplaint)!;
+    expect(complaint.kind).toBe("comp");
+    await expect(
+      open(await soldForCash("Rib steak", ["12.10"]), {
+        submissionId: randomUUID(),
+        gross: "6.05",
+        reasonId: complaint.id,
+      }),
+    ).resolves.toMatchObject({ correction: { state: "open" } });
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
     const voidReason = reasons.find((reason) => reason.kind === "void" && !reason.noteRequired)!;
     await expect(
       open(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: voidReason.id }),

@@ -23,10 +23,12 @@ export interface ReasonPicker {
   onNote(note: string): void;
   onRetry(): void;
   under?: unknown;
+  /** Offers every reason, Comp ones included, rather than only the Void ones. */
+  every?: boolean;
 }
 
 export function reasonPicker(picker: ReasonPicker) {
-  const offered = voidReasons(picker.reasons);
+  const offered = picker.every ? (picker.reasons ?? []) : voidReasons(picker.reasons);
   const chosen = offered.find((reason) => reason.id === picker.reasonId);
   return html`<wt-combobox
       ?preserve-order=${true /* Preserve configured reason position. */}
