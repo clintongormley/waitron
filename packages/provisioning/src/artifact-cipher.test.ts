@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   artifactHeaderBytes,
@@ -335,6 +335,46 @@ describe("artifact frame version 2, under a backup key", () => {
     ).toThrowError(
       expect.objectContaining({ code: "backup.archive_key_invalid", params: { input } }),
     );
+  });
+
+  // Sealed here rather than by the writer, which refuses N = 0.
+  const sealedUnderKeyNumber = (n: number, plaintext: Buffer) => {
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const number = Buffer.alloc(4);
+    number.writeUInt32BE(n);
+    const header = Buffer.concat([
+      Buffer.from("WBK1"),
+      Buffer.from([2]),
+      masterKeyId,
+      number,
+      salt,
+      iv,
+    ]);
+    const key = Buffer.from(hkdfSync("sha256", backupKey, salt, "waitron.archive.v2", 32));
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    cipher.setAAD(header);
+    const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    return Buffer.concat([header, cipher.getAuthTag(), ct]);
+  };
+
+  it("refuses an authenticated frame naming key number 0 as malformed", () => {
+    const plaintext = randomBytes(32);
+    expect(decryptArtifactUnderBackupKey(sealedUnderKeyNumber(1, plaintext), backupKey)).toEqual(
+      plaintext,
+    );
+    const framed = sealedUnderKeyNumber(0, plaintext);
+    for (const read of [
+      () => decryptArtifactUnderBackupKey(framed, backupKey),
+      () => readArtifactHeader(framed),
+    ]) {
+      expect(read).toThrowError(
+        expect.objectContaining({
+          code: "backup.artifact_invalid",
+          params: { reason: "bad_key_number" },
+        }),
+      );
+    }
   });
 
   it("refuses an opener key that is not 32 bytes before trying it", () => {

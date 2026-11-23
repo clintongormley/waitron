@@ -1,15 +1,20 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { open, unlink, type FileHandle } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
 import {
+  ARTIFACT_TAG_BYTES,
   artifactHeaderBytes,
-  backupKeyFrameHeader,
   backupKeyFrameKey,
   KDF_BY_VERSION,
+  parseArtifactHeader,
   readArtifactHeader,
+  startBackupKeyFrame,
+  startPassphraseFrame,
   VERSION,
   type ArtifactHeader,
   type BackupKeyFrameInput,
+  type FrameStart,
+  type ParsedArtifactHeader,
 } from "./artifact-cipher.js";
 import { FILE_CHUNK_BYTES, readExactly, writeAll } from "./artifact-file-io.js";
 import { deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
@@ -56,10 +61,12 @@ export async function encryptArtifactFile(
   signal?: AbortSignal,
 ): Promise<void> {
   await writeFrameFile(plaintext, outPath, signal, async () => {
-    const salt = randomBytes(16);
-    const iv = randomBytes(12);
-    const header = Buffer.concat([Buffer.from("WBK1"), Buffer.from([VERSION]), salt, iv]);
-    return { header, iv, key: await deriveKeyAsync(passphrase, salt, KDF_BY_VERSION[VERSION]) };
+    const { authenticated, salt, iv } = startPassphraseFrame();
+    return {
+      authenticated,
+      iv,
+      key: await deriveKeyAsync(passphrase, salt, KDF_BY_VERSION[VERSION]),
+    };
   });
 }
 
@@ -69,39 +76,34 @@ export async function encryptArtifactFileUnderBackupKey(
   input: BackupKeyFrameInput,
   signal?: AbortSignal,
 ): Promise<void> {
-  await writeFrameFile(plaintext, outPath, signal, () => {
-    const salt = randomBytes(16);
-    const iv = randomBytes(12);
-    const header = backupKeyFrameHeader(input, salt, iv);
-    return Promise.resolve({ header, iv, key: backupKeyFrameKey(input.backupKey, salt) });
-  });
+  await writeFrameFile(plaintext, outPath, signal, () => startBackupKeyFrame(input));
 }
 
-/** `frame` gives the authenticated prefix (everything before the tag), the IV and the key. */
 async function writeFrameFile(
   plaintext: AsyncIterable<Uint8Array>,
   outPath: string,
   signal: AbortSignal | undefined,
-  frame: () => Promise<{ header: Buffer; iv: Buffer; key: Buffer }>,
+  frame: () => FrameStart | Promise<FrameStart>,
 ): Promise<void> {
   signal?.throwIfAborted();
   const output = await open(outPath, "wx", 0o600);
   try {
-    const { header, iv, key } = await frame();
+    const { authenticated, iv, key } = await frame();
     const cipher = createCipheriv("aes-256-gcm", key, iv);
     key.fill(0);
-    cipher.setAAD(header);
-    await writeAll(output, header);
-    await writeAll(output, Buffer.alloc(16));
+    cipher.setAAD(authenticated);
+    await writeAll(output, authenticated);
+    await writeAll(output, Buffer.alloc(ARTIFACT_TAG_BYTES));
     for await (const bytes of plaintext) {
       for (let offset = 0; offset < bytes.length; offset += FILE_CHUNK_BYTES) {
         signal?.throwIfAborted();
         await writeAll(output, cipher.update(bytes.subarray(offset, offset + FILE_CHUNK_BYTES)));
       }
     }
-    signal?.throwIfAborted();
     await writeAll(output, cipher.final());
-    await writeAll(output, cipher.getAuthTag(), header.length);
+    await writeAll(output, cipher.getAuthTag(), authenticated.length);
+    // After the last write, so an abort at any point leaves no file behind.
+    signal?.throwIfAborted();
   } catch (error) {
     await unlink(outPath);
     throw error;
@@ -116,20 +118,12 @@ export async function decryptArtifactFile(
   passphrase: string,
   keySlot: ArchiveKeySlot = archiveKeySlot,
 ): Promise<string> {
-  const headerBytes = artifactHeaderBytes(1);
   const input = await open(artifactPath, "r");
   try {
     const size = (await input.stat()).size;
-    if (size < headerBytes) throw new AppError("backup.artifact_invalid", { reason: "too_short" });
-    const header = await readExactly(input, headerBytes, 0);
-    if (!header.subarray(0, 4).equals(Buffer.from("WBK1"))) {
-      throw new AppError("backup.artifact_invalid", { reason: "bad_magic" });
-    }
-    const params = KDF_BY_VERSION[header[4]];
-    if (params === undefined)
-      throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
-    const key = await keySlot.derive(passphrase, header.subarray(5, 21), params);
-    return await openFrameFile(input, size, header, header.subarray(21, 33), key, outPath);
+    const header = parseArtifactHeader(await readLongestHeader(input, size), VERSION);
+    const key = await keySlot.derive(passphrase, header.salt, KDF_BY_VERSION[VERSION]);
+    return await openFrameFile(input, size, header, key, outPath);
   } catch (error) {
     keySlot.clear();
     throw error;
@@ -148,13 +142,9 @@ export async function decryptArtifactFileUnderBackupKey(
   const input = await open(artifactPath, "r");
   try {
     const size = (await input.stat()).size;
-    const found = await readHeaderOf(input, size);
-    if (found.parsed.version !== 2) {
-      throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
-    }
-    const header = found.bytes;
-    const key = backupKeyFrameKey(backupKey, header.subarray(17, 33));
-    return await openFrameFile(input, size, header, header.subarray(33, 45), key, outPath);
+    const header = parseArtifactHeader(await readLongestHeader(input, size), 2);
+    const key = backupKeyFrameKey(backupKey, header.salt);
+    return await openFrameFile(input, size, header, key, outPath);
   } finally {
     await input.close();
   }
@@ -164,36 +154,33 @@ export async function decryptArtifactFileUnderBackupKey(
 export async function readArtifactFileHeader(artifactPath: string): Promise<ArtifactHeader> {
   const input = await open(artifactPath, "r");
   try {
-    return (await readHeaderOf(input, (await input.stat()).size)).parsed;
+    return readArtifactHeader(await readLongestHeader(input, (await input.stat()).size));
   } finally {
     await input.close();
   }
 }
 
-async function readHeaderOf(input: FileHandle, size: number) {
-  const bytes = await readExactly(input, Math.min(size, artifactHeaderBytes(2)), 0);
-  const parsed = readArtifactHeader(bytes);
-  return { parsed, bytes: bytes.subarray(0, artifactHeaderBytes(parsed.version)) };
+function readLongestHeader(input: FileHandle, size: number): Promise<Buffer> {
+  return readExactly(input, Math.min(size, artifactHeaderBytes(2)), 0);
 }
 
-/** `header` is the whole header, tag last; the ciphertext follows it to the end of the file. The
- * key is zeroed once the decipher holds it. */
+/** The ciphertext follows `header` to the end of the file. The key is zeroed once the decipher
+ * holds it. */
 async function openFrameFile(
   input: FileHandle,
   size: number,
-  header: Buffer,
-  iv: Buffer,
+  header: ParsedArtifactHeader,
   key: Buffer,
   outPath: string,
 ): Promise<string> {
-  const digest = createHash("sha256").update(header);
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const digest = createHash("sha256").update(header.bytes);
+  const decipher = createDecipheriv("aes-256-gcm", key, header.iv);
   key.fill(0);
-  decipher.setAAD(header.subarray(0, header.length - 16));
-  decipher.setAuthTag(header.subarray(header.length - 16));
+  decipher.setAAD(header.authenticated);
+  decipher.setAuthTag(header.tag);
   const output = await open(outPath, "wx", 0o600);
   try {
-    for (let position = header.length; position < size; position += FILE_CHUNK_BYTES) {
+    for (let position = header.bytes.length; position < size; position += FILE_CHUNK_BYTES) {
       const bytes = await readExactly(input, Math.min(FILE_CHUNK_BYTES, size - position), position);
       digest.update(bytes);
       await writeAll(output, decipher.update(bytes));

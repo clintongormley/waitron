@@ -19,7 +19,7 @@ import {
   createArchiveKeySlot,
   readArtifactFileHeader,
 } from "./artifact-cipher-file.js";
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 const dirs: string[] = [];
 async function scratch() {
   const dir = await mkdtemp(join(tmpdir(), "cipher-file-"));
@@ -123,75 +123,6 @@ describe("file artifact cipher", () => {
       decryptArtifactFile(join(dir, "artifact"), join(dir, "out"), "right"),
     ).rejects.toMatchObject({ code: "backup.artifact_invalid", params: { reason } });
     expect(await readdir(dir)).toEqual(["artifact"]);
-  });
-  it("removes partial ciphertext on iterator failure and never deletes an existing destination", async () => {
-    const dir = await scratch();
-    const path = join(dir, "out");
-    const failure = new Error("reader failed");
-    async function* broken() {
-      yield Buffer.alloc(70000);
-      throw failure;
-    }
-    await expect(encryptArtifactFile(broken(), path, "right")).rejects.toBe(failure);
-    expect(await readdir(dir)).toEqual([]);
-    await writeFile(path, "old");
-    await expect(
-      encryptArtifactFile(chunks(Buffer.from("new")), path, "right"),
-    ).rejects.toMatchObject({ code: "EEXIST" });
-    expect((await readFile(path)).toString()).toBe("old");
-  });
-  it("stops at the next chunk once its signal aborts, and leaves no partial ciphertext", async () => {
-    const dir = await scratch();
-    const path = join(dir, "out");
-    const controller = new AbortController();
-    let pulled = 0;
-    async function* stopsAfterFirst() {
-      pulled += 1;
-      yield Buffer.alloc(70000);
-      controller.abort();
-      pulled += 1;
-      yield Buffer.alloc(70000);
-      pulled += 1;
-      yield Buffer.alloc(70000);
-    }
-    const writes = vi.spyOn(fileIo, "writeAll");
-    await expect(
-      encryptArtifactFile(stopsAfterFirst(), path, "right", controller.signal),
-    ).rejects.toMatchObject({ name: "AbortError" });
-    expect(pulled).toBe(2);
-    // Header, tag placeholder and the first chunk's ciphertext (70000 bytes is two chunks); nothing
-    // after the abort.
-    const written = writes.mock.calls.reduce((sum, [, bytes]) => sum + bytes.length, 0);
-    expect(written).toBe(33 + 16 + 70000);
-    expect(await readdir(dir)).toEqual([]);
-  });
-  it("stops before finishing when its signal aborts after the last chunk, and leaves no ciphertext", async () => {
-    const dir = await scratch();
-    const path = join(dir, "out");
-    const controller = new AbortController();
-    async function* abortsAfterLast() {
-      yield Buffer.alloc(100);
-      controller.abort();
-    }
-    await expect(
-      encryptArtifactFile(abortsAfterLast(), path, "right", controller.signal),
-    ).rejects.toMatchObject({ name: "AbortError" });
-    expect(await readdir(dir)).toEqual([]);
-  });
-  it("pulls no plaintext and leaves no file when its signal is already aborted", async () => {
-    const dir = await scratch();
-    const controller = new AbortController();
-    controller.abort();
-    let pulled = false;
-    async function* plaintext() {
-      pulled = true;
-      yield Buffer.alloc(100);
-    }
-    await expect(
-      encryptArtifactFile(plaintext(), join(dir, "out"), "right", controller.signal),
-    ).rejects.toMatchObject({ name: "AbortError" });
-    expect(pulled).toBe(false);
-    expect(await readdir(dir)).toEqual([]);
   });
   it("cleans partial files on real file read and write refusals without translating I/O errors", async () => {
     const dir = await scratch();
@@ -427,48 +358,38 @@ describe("file artifact cipher, version 2 under a backup key", () => {
     expect(await readdir(dir)).toEqual([]);
   });
 
-  it("stops once its signal aborts and leaves no partial ciphertext", async () => {
+  it("refuses an authenticated file naming key number 0 as malformed, and leaves no plaintext", async () => {
     const dir = await scratch();
-    const controller = new AbortController();
-    async function* stopsAfterFirst() {
-      yield Buffer.alloc(70000);
-      controller.abort();
-      yield Buffer.alloc(70000);
-    }
+    // Sealed here rather than by the writer, which refuses N = 0.
+    const sealedUnderKeyNumber = (n: number) => {
+      const salt = randomBytes(16);
+      const iv = randomBytes(12);
+      const number = Buffer.alloc(4);
+      number.writeUInt32BE(n);
+      const header = Buffer.concat([
+        Buffer.from("WBK1"),
+        Buffer.from([2]),
+        masterKeyId,
+        number,
+        salt,
+        iv,
+      ]);
+      const key = Buffer.from(hkdfSync("sha256", backupKey, salt, "waitron.archive.v2", 32));
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      cipher.setAAD(header);
+      const ct = Buffer.concat([cipher.update("private"), cipher.final()]);
+      return Buffer.concat([header, cipher.getAuthTag(), ct]);
+    };
+    await writeFile(join(dir, "one"), sealedUnderKeyNumber(1));
+    await decryptArtifactFileUnderBackupKey(join(dir, "one"), join(dir, "opened"), backupKey);
+    expect(await readFile(join(dir, "opened"), "utf8")).toBe("private");
+    await writeFile(join(dir, "zero"), sealedUnderKeyNumber(0));
+    const malformed = { code: "backup.artifact_invalid", params: { reason: "bad_key_number" } };
+    await expect(readArtifactFileHeader(join(dir, "zero"))).rejects.toMatchObject(malformed);
     await expect(
-      encryptArtifactFileUnderBackupKey(
-        stopsAfterFirst(),
-        join(dir, "out"),
-        input,
-        controller.signal,
-      ),
-    ).rejects.toMatchObject({ name: "AbortError" });
-    expect(await readdir(dir)).toEqual([]);
-  });
-
-  it("removes partial ciphertext on iterator failure and keeps an existing destination", async () => {
-    const dir = await scratch();
-    const failure = new Error("reader failed");
-    async function* broken() {
-      yield Buffer.alloc(70000);
-      throw failure;
-    }
-    await expect(encryptArtifactFileUnderBackupKey(broken(), join(dir, "out"), input)).rejects.toBe(
-      failure,
-    );
-    expect(await readdir(dir)).toEqual([]);
-    await writeFile(join(dir, "out"), "old");
-    await expect(
-      encryptArtifactFileUnderBackupKey(chunks(Buffer.from("new")), join(dir, "out"), input),
-    ).rejects.toMatchObject({ code: "EEXIST" });
-    await writeFile(
-      join(dir, "artifact"),
-      encryptArtifactUnderBackupKey(Buffer.from("new"), input),
-    );
-    await expect(
-      decryptArtifactFileUnderBackupKey(join(dir, "artifact"), join(dir, "out"), backupKey),
-    ).rejects.toMatchObject({ code: "EEXIST" });
-    expect((await readFile(join(dir, "out"))).toString()).toBe("old");
+      decryptArtifactFileUnderBackupKey(join(dir, "zero"), join(dir, "out"), backupKey),
+    ).rejects.toMatchObject(malformed);
+    expect(await readdir(dir)).toEqual(["one", "opened", "zero"]);
   });
 
   it("opens twice without scrypt or the passphrase key cache", async () => {
@@ -481,5 +402,119 @@ describe("file artifact cipher, version 2 under a backup key", () => {
       expect(await readFile(join(dir, name), "utf8")).toBe("private");
     }
     expect(scrypt).not.toHaveBeenCalled();
+  });
+});
+
+const backupKeyInput = {
+  backupKey: randomBytes(32),
+  keyNumber: 3,
+  masterKeyId: Buffer.from("8899aabbccddeeff", "hex"),
+};
+describe.each([
+  {
+    version: 1,
+    authenticatedBytes: 33,
+    encrypt: (plaintext: AsyncIterable<Uint8Array>, path: string, signal?: AbortSignal) =>
+      encryptArtifactFile(plaintext, path, "right", signal),
+    frame: (plaintext: Buffer) => encryptArtifact(plaintext, "right"),
+    open: (artifact: string, out: string) => decryptArtifactFile(artifact, out, "right"),
+  },
+  {
+    version: 2,
+    authenticatedBytes: 45,
+    encrypt: (plaintext: AsyncIterable<Uint8Array>, path: string, signal?: AbortSignal) =>
+      encryptArtifactFileUnderBackupKey(plaintext, path, backupKeyInput, signal),
+    frame: (plaintext: Buffer) => encryptArtifactUnderBackupKey(plaintext, backupKeyInput),
+    open: (artifact: string, out: string) =>
+      decryptArtifactFileUnderBackupKey(artifact, out, backupKeyInput.backupKey),
+  },
+])("file artifact writer, version $version", ({ authenticatedBytes, encrypt, frame, open }) => {
+  it("removes partial ciphertext on iterator failure and never deletes an existing destination", async () => {
+    const dir = await scratch();
+    const path = join(dir, "out");
+    const failure = new Error("reader failed");
+    async function* broken() {
+      yield Buffer.alloc(70000);
+      throw failure;
+    }
+    await expect(encrypt(broken(), path)).rejects.toBe(failure);
+    expect(await readdir(dir)).toEqual([]);
+    await writeFile(path, "old");
+    await expect(encrypt(chunks(Buffer.from("new")), path)).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    await writeFile(join(dir, "artifact"), frame(Buffer.from("new")));
+    await expect(open(join(dir, "artifact"), path)).rejects.toMatchObject({ code: "EEXIST" });
+    expect((await readFile(path)).toString()).toBe("old");
+  });
+  it("stops at the next chunk once its signal aborts, and leaves no partial ciphertext", async () => {
+    const dir = await scratch();
+    const path = join(dir, "out");
+    const controller = new AbortController();
+    let pulled = 0;
+    async function* stopsAfterFirst() {
+      pulled += 1;
+      yield Buffer.alloc(70000);
+      controller.abort();
+      pulled += 1;
+      yield Buffer.alloc(70000);
+      pulled += 1;
+      yield Buffer.alloc(70000);
+    }
+    const writes = vi.spyOn(fileIo, "writeAll");
+    await expect(encrypt(stopsAfterFirst(), path, controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(pulled).toBe(2);
+    // Header, tag placeholder and the first chunk's ciphertext (70000 bytes is two chunks); nothing
+    // after the abort.
+    const written = writes.mock.calls.reduce((sum, [, bytes]) => sum + bytes.length, 0);
+    expect(written).toBe(authenticatedBytes + 16 + 70000);
+    expect(await readdir(dir)).toEqual([]);
+  });
+  it("stops before finishing when its signal aborts after the last chunk, and leaves no ciphertext", async () => {
+    const dir = await scratch();
+    const controller = new AbortController();
+    async function* abortsAfterLast() {
+      yield Buffer.alloc(100);
+      controller.abort();
+    }
+    await expect(
+      encrypt(abortsAfterLast(), join(dir, "out"), controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(await readdir(dir)).toEqual([]);
+  });
+  it("fails and leaves no ciphertext when its signal aborts during the tag write", async () => {
+    const dir = await scratch();
+    const controller = new AbortController();
+    const real = fileIo.writeAll;
+    const tagWrites: number[] = [];
+    vi.spyOn(fileIo, "writeAll").mockImplementation(async (file, bytes, position) => {
+      await real(file, bytes, position);
+      if (position === authenticatedBytes) {
+        tagWrites.push(bytes.length);
+        controller.abort();
+      }
+    });
+    await expect(
+      encrypt(chunks(Buffer.alloc(100)), join(dir, "out"), controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(tagWrites).toEqual([16]);
+    expect(await readdir(dir)).toEqual([]);
+  });
+  it("pulls no plaintext and leaves no file when its signal is already aborted", async () => {
+    const dir = await scratch();
+    const controller = new AbortController();
+    controller.abort();
+    let pulled = false;
+    async function* plaintext() {
+      pulled = true;
+      yield Buffer.alloc(100);
+    }
+    await expect(encrypt(plaintext(), join(dir, "out"), controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(pulled).toBe(false);
+    expect(await readdir(dir)).toEqual([]);
   });
 });
