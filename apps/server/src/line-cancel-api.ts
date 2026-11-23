@@ -9,9 +9,10 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, cancelRefundShare, thousandthsToDecimal } from "@waitron/shared";
+import { staffPresentationName } from "@waitron/menu";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
-import { parseCancellationContext } from "./line-cancel-input.js";
+import { parseCancellationContext, parseWithFree } from "./line-cancel-input.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import { approverToCheck } from "./adjustments-api.js";
 import { invalid } from "./bill-allocation.js";
@@ -23,7 +24,13 @@ import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
-import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
+import {
+  cancellationRefundValue,
+  freeItemsLeft,
+  isLastPaidDish,
+  readShareHolders,
+  rowRefundValue,
+} from "./cancellation-refund-value.js";
 import {
   overrideToCheck,
   withCheck,
@@ -89,6 +96,7 @@ function parseAsk(body: Record<string, unknown>, counter: boolean): CancelItemAs
   const lineIds = (body.lineIds as string[] | undefined)?.map((id) =>
     requireBodyUuid(id, "lineIds").toLowerCase(),
   );
+  const withFree = parseWithFree(body.withFree);
   const expectedContext = parseCancellationContext(body.expectedContext);
   if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
     throw invalid("refundHandoff");
@@ -115,6 +123,7 @@ function parseAsk(body: Record<string, unknown>, counter: boolean): CancelItemAs
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
     expectedContext,
     ...(lineIds === undefined ? {} : { lineIds }),
+    ...(withFree === undefined ? {} : { withFree }),
     submissionId: submissionIdOf(body),
     reasonId,
     note: body.note as string | undefined,
@@ -179,6 +188,34 @@ export function mountLineCancelApi(
               ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
               : await rowRefundValue(tx, bill!.id, sale.id, lineIds)
             : undefined;
+        const holders =
+          context.billStatus === "settled" && sale !== undefined
+            ? await readShareHolders(tx, bill!.id, sale.id)
+            : { free: [], paid: [] };
+        const subject = lineIds ?? [lineId];
+        const givenFree = holders.free.some(({ line }) => subject.includes(line.id));
+        // Every cancellable portion of the subject: what is neither cancelled nor served.
+        const cancellable = new Map(
+          holders.paid
+            .filter(({ line }) => subject.includes(line.id))
+            .map(({ line, cancelled }) => [
+              line.id,
+              line.quantity - cancelled - line.servedQuantity,
+            ]),
+        );
+        const withFree =
+          givenFree || !isLastPaidDish(holders.paid, cancellable)
+            ? undefined
+            : freeItemsLeft(holders.free).map(({ line, value, cancelled }) => ({
+                lineId: line.id,
+                name: staffPresentationName(line),
+                quantity: thousandthsToDecimal(line.quantity - cancelled),
+                refundValue: cancelRefundShare(
+                  value,
+                  thousandthsToDecimal(cancelled),
+                  thousandthsToDecimal(line.quantity - cancelled),
+                ),
+              }));
         return {
           context,
           revision: counter ? bill!.revision : await partyRevision(tx, id),
@@ -186,6 +223,8 @@ export function mountLineCancelApi(
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
           ...(refundValue === undefined ? {} : { refundValue }),
+          ...(givenFree ? { givenFree: true } : {}),
+          ...(withFree === undefined || withFree.length === 0 ? {} : { withFree }),
         };
       });
       return c.json(answer);

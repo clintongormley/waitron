@@ -1,13 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { saleLineDishes, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
 import {
   addDecimal,
   centsToDecimal,
   decimal,
+  isZeroDecimal,
   sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
 import { readPortionBindings } from "./order-portions.js";
+import { readLineCancellations } from "./line-service-state.js";
 
 type Filed = typeof saleLines.$inferSelect;
 type Stored = typeof workingOrderLines.$inferSelect;
@@ -35,6 +37,73 @@ export async function rowRefundValue(
     quantity: sumDecimals(values.map((value) => decimal(value!.quantity))),
     gross: sumDecimals(values.map((value) => decimal(value!.gross))),
   };
+}
+
+/** A dish line of a settled bill whose filed value is above €0, and its portions cancelled so far. */
+export interface ShareHolder {
+  line: Stored;
+  value: { quantity: string; gross: string };
+  cancelled: number;
+}
+
+/**
+ * The bill's dish lines holding a share of what its sale filed (plan 2026-11-19 §4.3.1): free items,
+ * charged €0 with a menu price above €0, and paid dishes, every other. Neither when no free item
+ * holds a share.
+ */
+export async function readShareHolders(
+  tx: Transaction,
+  billId: string,
+  saleId: string,
+): Promise<{ free: ShareHolder[]; paid: ShareHolder[] }> {
+  const dishes = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+    )
+    .orderBy(workingOrderLines.lineNo);
+  const values = await refundValues(
+    tx,
+    billId,
+    saleId,
+    dishes.map((dish) => dish.id),
+  );
+  const holding = dishes.flatMap((line, i) => {
+    const value = values[i];
+    return value === undefined || isZeroDecimal(decimal(value.gross)) ? [] : [{ line, value }];
+  });
+  const isFree = (line: Stored) => line.lineTotal === 0 && (line.listUnitPriceGross ?? 0) > 0;
+  if (!holding.some(({ line }) => isFree(line))) return { free: [], paid: [] };
+  const cancelled = await readLineCancellations(
+    tx,
+    holding.map(({ line }) => line.id),
+  );
+  const holders = holding.map((holder) => ({
+    ...holder,
+    cancelled: cancelled.get(holder.line.id) ?? 0,
+  }));
+  return {
+    free: holders.filter(({ line }) => isFree(line)),
+    paid: holders.filter(({ line }) => !isFree(line)),
+  };
+}
+
+/** Whether cancelling `off` portions (thousandths, by line id) leaves no paid dish a portion that is
+ * not cancelled; a served portion is not cancelled. */
+export function isLastPaidDish(
+  paid: readonly ShareHolder[],
+  off: ReadonlyMap<string, number>,
+): boolean {
+  return (
+    paid.some(({ line }) => off.has(line.id)) &&
+    paid.every(({ line, cancelled }) => line.quantity - cancelled - (off.get(line.id) ?? 0) === 0)
+  );
+}
+
+/** The free items still holding a portion that is not cancelled: those the last paid dish takes. */
+export function freeItemsLeft(free: readonly ShareHolder[]): ShareHolder[] {
+  return free.filter(({ line, cancelled }) => line.quantity - cancelled > 0);
 }
 
 async function refundValues(

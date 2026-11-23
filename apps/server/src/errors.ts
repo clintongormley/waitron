@@ -1087,6 +1087,12 @@ declare module "@waitron/shared" {
     "tab.not_open": { tabId: string };
     "tab.cancel_context_changed": { context: CancellationContext };
     /**
+     * A dish given free that holds a share of the price paid gives money back only together with
+     * the bill's last paid dish: `free_item`, its own Cancel and refund; `not_listed`, the request's
+     * free items differ from those coming back with the dish; `served`, one of those was served.
+     */
+    "tab.free_item_with_dish": { reason: "not_listed" | "free_item" | "served" };
+    /**
      * No such line on the bill the request names: `lineNo` or `lineId` says how it was named. A
      * party's cancellation address names the party, not a bill, so it answers `partyId`.
      */

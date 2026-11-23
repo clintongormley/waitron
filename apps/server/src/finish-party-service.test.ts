@@ -54,9 +54,11 @@ import {
   placeGrouped,
   provisionAdjustmentVenue,
   rowsOf,
+  takeawayRates,
   type AdjustmentVenue,
   PINS,
 } from "./testing/adjustment-venue.js";
+import { applyAdjustment } from "./adjustments-apply.js";
 
 let venue: AdjustmentVenue;
 useVenueDb({
@@ -938,5 +940,111 @@ describe("whether a party's service can finish, read without writing", () => {
       expect(await ready((await empty()).partyId, { expectedEdits })).toMatchObject({
         thrown: { code: "management.request_invalid", params: { field: "expectedEdits" } },
       });
+  });
+});
+
+describe("a free item holding a share at Finish (plan 2026-11-19 §4.3.1)", () => {
+  /** A paid takeaway table of a Salad (4%) and a comped Water (21%), both held. */
+  async function freeWaterTable() {
+    await takeawayRates(venue, { Salad: "4.00", Water: "21.00" });
+    const p = await billWith(venue, [{ name: "Salad" }, { name: "Water" }], {
+      release: "hold",
+      dining: "takeaway",
+    });
+    const water = (await rowsOf(venue, p.billId))[1]!;
+    await inTx(venue, async (tx) => {
+      const [order] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, p.billId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          admission: testTradingAdmission(),
+          orderId: p.billId,
+          expectedEdit: await readBillEditState(tx, p.billId),
+          submissionId: randomUUID(),
+          expectedRevision: order!.revision,
+          lineId: water.id,
+          action: "comp",
+          reasonId: venue.reasonId.house,
+          note: null,
+          operatorId: venue.staffId,
+        },
+        venue.venueLocale,
+      );
+    });
+    await paySavedBillInCash(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      {
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
+      },
+      p.billId,
+      "100.00",
+    );
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+    return {
+      ...p,
+      lines: await rowsOf(venue, p.billId),
+      body: {
+        expectedPartyRevision: party!.revision,
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, p.billId))],
+        submissionId: randomUUID(),
+      },
+    };
+  }
+
+  async function ticked(p: Fixture, refund: [salad: boolean, water: boolean]) {
+    const body = await confirm(p);
+    return {
+      ...body,
+      cancellations: body.cancellations.map((item, index) =>
+        refund[index] ? { ...item, refundHandoff: true } : item,
+      ),
+    };
+  }
+
+  it.each([
+    ["the salad ticked and the water not", [true, false], "not_listed"],
+    ["the water ticked and the salad not", [false, true], "free_item"],
+  ] as const)("refuses %s", async (_, refund, reason) => {
+    const p = await freeWaterTable();
+    const body = await ticked(p, [...refund]);
+    const before = await snapshot(p);
+    expect(await post(p, body, venue.cookie.manager)).toMatchObject({
+      status: 409,
+      body: { error: { code: "tab.free_item_with_dish", params: { reason } } },
+    });
+    expect(await snapshot(p)).toEqual(before);
+  });
+
+  it("accepts both ticked and answers both refund links", async () => {
+    const p = await freeWaterTable();
+    const answer = await post(p, await ticked(p, [true, true]), venue.cookie.manager);
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    const rows = (await snapshot(p)).adjustments.filter(
+      (row) => row.workingOrderId === p.billId && row.action === "cancel",
+    );
+    const cancelOf = (lineId: string) => rows.find((row) => row.lineId === lineId)!;
+    expect(answer.body).toEqual({
+      state: "closed",
+      refundLinks: [
+        { lineId: p.lines[0]!.id, adjustmentId: cancelOf(p.lines[0]!.id).id },
+        { lineId: p.lines[1]!.id, adjustmentId: cancelOf(p.lines[1]!.id).id },
+      ],
+    });
+    expect(cancelOf(p.lines[0]!.id).refundValue).toBe(833);
+    expect(cancelOf(p.lines[1]!.id).refundValue).toBe(167);
   });
 });
