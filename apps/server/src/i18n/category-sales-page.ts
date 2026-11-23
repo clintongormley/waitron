@@ -50,7 +50,7 @@ export const CATEGORY_SALES_WORDS: Readonly<Record<SupportedLocale, CategorySale
     uncategorised: "Sin categoría",
     notRecorded: "No registrada",
     paymentsOnAccount: "Pagos a cuenta",
-    setMenus: "Cartas a precio fijo",
+    setMenus: "Menús",
     noCategoryRecorded: "Categoría desconocida",
     directlyIn: (name) => `Directamente en ${name}`,
     total: "Total",

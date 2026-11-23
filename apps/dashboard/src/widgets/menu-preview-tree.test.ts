@@ -563,7 +563,7 @@ it.each(
         width,
         language: "es-ES",
         saved: "Se ha vuelto a guardar Special menu",
-        source: "carta a precio fijo",
+        source: "menú",
         added: "Se ha añadido Daily menu en Counter drinks",
         removed: "Se ha quitado Daily menu de Counter cold",
         changed: "Daily menu: platos",

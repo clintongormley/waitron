@@ -1363,7 +1363,7 @@ it.each([
 
 it.each([
   ["en", "Correct the set-menu draft before publishing"],
-  ["es", "Corrige el borrador de la carta a precio fijo antes de publicar"],
+  ["es", "Corrige el borrador del menú antes de publicar"],
 ])(
   "names the set menu, problem count and next action in a publication refusal in %s",
   (locale, action) => {

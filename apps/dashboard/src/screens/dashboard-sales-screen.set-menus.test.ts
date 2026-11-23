@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { CategorySalesDto, DashboardApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { today } from "../date-utils.js";
 import type { SalesScreen } from "./dashboard-sales-screen.js";
 import "./dashboard-sales-screen.js";
@@ -88,7 +89,7 @@ afterEach(() => {
 
 describe("dashboard-sales-screen — set menus", () => {
   it("the sales screen names the Set menus group", async () => {
-    expect(await rowLabels()).toEqual([["Cartas a precio fijo", "set_menus", "null"]]);
+    expect(await rowLabels()).toEqual([[es["sales.set_menus"], "set_menus", "null"]]);
     cleanupWidgets();
     setLocale("en");
     expect(await rowLabels()).toEqual([["Set menus", "set_menus", "null"]]);

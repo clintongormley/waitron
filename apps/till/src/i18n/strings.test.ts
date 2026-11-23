@@ -40,16 +40,23 @@ describe("the permanent-refusal messages", () => {
 });
 
 describe("the Spanish strings call a restaurant menu a carta", () => {
-  // Every "menu" the till's catalogue strings mean is a restaurant menu: no string here calls a
-  // popover a menu, which in the dashboard keeps "menú". Weaker than its name: only the catalogue in
+  // «menú» is kept for a set menu (owner, 2026-11-23); every other "menu" the till's catalogue
+  // strings mean is a restaurant menu, and no string here calls a popover a menu, which in the
+  // dashboard keeps "menú". Weaker than its name: only the catalogue in
   // strings.ts is read, not the Spanish in codes.ts or allergen-names.ts, so a code message saying
   // menú passes.
-  it("has no Spanish catalogue string that says menú", () => {
+  it("has no Spanish catalogue string that says menú, except for set menus", () => {
     const menuWord = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
-    const saysMenu = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
-      menuWord.test(text.replace(/\{[^}]*\}/g, "")),
-    );
-    expect(saysMenu).toEqual([]);
+    const saysMenu = Object.entries(catalogues["es-ES"] ?? {})
+      .filter(([, text]) => menuWord.test(text.replace(/\{[^}]*\}/g, "")))
+      .map(([key]) => key);
+    expect(saysMenu.sort()).toEqual([
+      "set_menu.folders",
+      "set_menu.many",
+      "set_menu.no_place_heading",
+      "set_menu.one",
+      "table.move_dishes_cancelled",
+    ]);
   });
 
   it("names the menu switcher and the zone's menus with carta", () => {

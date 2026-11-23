@@ -356,8 +356,8 @@ describe("formatCategorySalesPage", () => {
       ],
     });
     expect(lineFor(page({ report }), "Set menus")).toMatch(/^Set menus +€68\.00 +€61\.82$/);
-    expect(lineFor(page({ report, locale: "es-ES" }), "Cartas a precio fijo")).toMatch(
-      /^Cartas a precio fijo +68,00 € +61,82 €$/,
+    expect(lineFor(page({ report, locale: "es-ES" }), "Menús")).toMatch(
+      /^Menús +68,00 € +61,82 €$/,
     );
   });
 
