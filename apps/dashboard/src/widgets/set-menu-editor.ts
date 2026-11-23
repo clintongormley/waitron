@@ -164,7 +164,9 @@ export class SetMenuEditor extends LitElement {
   override render() {
     const details = this.details;
     if (details === null)
-      return this.failed ? this.#renderFailure() : html`<p role="status">${t("menus.loading")}</p>`;
+      return this.failed
+        ? this.#renderFailure()
+        : html`<p role="status">${t("menus.set_menu_loading")}</p>`;
     return html`
       <h2>${t("menus.set_menu_terms")}</h2>
       ${

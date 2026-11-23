@@ -577,7 +577,7 @@ para dejar el pedido como estaba. Desde el resumen puedes mover un plato a otro 
 de la misma cuenta o cancelar un menú vacío. Para invitar o hacer un descuento en un menú,
 pulsa **Descuento…** en él dentro del resumen.
 
-Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. Sus
+Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus
 platos se mueven con él. Si eliges un solo plato, comprueba su precio en la otra
 cuenta antes de confirmar. El ticket muestra los menús y lo que cuesta aparte, pero no
 los platos incluidos en el precio.

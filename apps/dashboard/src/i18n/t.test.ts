@@ -96,6 +96,8 @@ it("says menú in Spanish only for an on-screen menu or a set menu, never a rest
     "menus.set_menu_inclusions",
     "menus.set_menu_kind",
     "menus.set_menu_load_error",
+    "menus.set_menu_loading",
+    "menus.set_menu_name_required",
     "menus.set_menu_no_copy_source",
     "menus.set_menu_no_dishes",
     "menus.set_menu_no_lines",
