@@ -104,6 +104,7 @@ categoría superior. También puedes mover el producto a otra categoría en la p
 activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
 en qué estación de preparación recibe un plato, como se explica más abajo.
 
+Para soltar elementos en una subcategoría, abre las categorías superiores antes de empezar a arrastrar.
 Al soltar productos o categorías, se abre la ventana de **Mover a…** con el destino seleccionado.
 Revisa los cambios de estación de preparación, si los hay, y elige **Mover a…** para guardar.
 También puedes soltar los elementos en **Todos los productos** para sacarlos de su categoría.

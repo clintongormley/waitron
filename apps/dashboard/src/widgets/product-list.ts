@@ -60,8 +60,6 @@ import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 
 export const ROOT_KEY = "root";
 
-/** How long a drag must rest on a closed category before it opens. */
-export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
 /** The Course filter's value for a row with no course. Never `""`: a multiple choice's `""` row is
  * its "any" row, and choosing it clears the choice. Course ids are UUIDs, so this is never one. */
@@ -394,7 +392,6 @@ export class ProductList extends LitElement {
   #branchCounts = new WeakMap<readonly ListRow[], ReadonlyMap<string, number>>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #dragged: string[] = [];
-  #hover: { key: string; timer: ReturnType<typeof setTimeout> } | null = null;
   get #pointerDrag() {
     return this.#drag.state;
   }
@@ -419,7 +416,7 @@ export class ProductList extends LitElement {
     },
     targetFor: (_data, over) => this.#dropTargetFor(over),
     sameTarget: (a, b) => a === b,
-    moved: ({ over, changed, target, starting }) => {
+    moved: ({ changed, target, starting }) => {
       if (starting) {
         this.ghost = this.#ghostOf(this.#dragged);
         this.#send("drag-items", { keys: this.#dragged });
@@ -434,14 +431,11 @@ export class ProductList extends LitElement {
       }
       this.#edgeScroll.update(this.#pointer);
       placeDragGhost(this.renderRoot, this.#pointer);
-      this.#hoverOpen(over);
       if (changed || target !== undefined) this.#paint();
     },
     ended: () => {
       this.#edgeScroll.stop();
       this.#edgeOrigin = null;
-      if (this.#hover) clearTimeout(this.#hover.timer);
-      this.#hover = null;
       this.#dragged = [];
       this.ghost = null;
       this.#paint();
@@ -544,28 +538,6 @@ export class ProductList extends LitElement {
     return this.#dragged.some((dragged) => this.#rowByKey.get(dragged)?.parentKey !== target)
       ? target
       : undefined;
-  }
-
-  #hoverOpen(over: string | undefined): void {
-    const table = this.#table();
-    const closed =
-      table !== null &&
-      over !== undefined &&
-      over === this.#target &&
-      over.startsWith("folder:") &&
-      !table.isExpanded(over);
-    if (closed && this.#hover?.key === over) return;
-    if (this.#hover) clearTimeout(this.#hover.timer);
-    this.#hover = null;
-    if (!closed || table === null || over === undefined) return;
-    this.#hover = {
-      key: over,
-      timer: setTimeout(() => {
-        this.#hover = null;
-        if (!this.#pointerDrag?.active) return;
-        table.setExpanded(over, true);
-      }, HOVER_OPEN_MS),
-    };
   }
 
   /** The table re-renders rows in place as a branch opens, so the marks are set again by key. */
