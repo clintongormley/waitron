@@ -102,7 +102,7 @@ async function writeFrameFile(
     }
     await writeAll(output, cipher.final());
     await writeAll(output, cipher.getAuthTag(), authenticated.length);
-    // After the last write, so an abort at any point leaves no file behind.
+    // After the last write, so an abort up to the tag write leaves no file behind.
     signal?.throwIfAborted();
   } catch (error) {
     await unlink(outPath);
