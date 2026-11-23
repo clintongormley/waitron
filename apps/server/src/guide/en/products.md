@@ -12,15 +12,11 @@ summarises what is inside it, so you can see at a glance which sections you have
 by clicking its heading. If a section contains something you need to fix, it opens itself and stays
 open until you have fixed it.
 
-## Choose the VAT class {#vat}
+## How VAT is charged {#vat}
 
-A product's VAT when eaten here starts on the class chosen as **VAT class for new products**, on the
-**Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
-For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
-menu is published again; until then they sell the product at the class the menu was published with.
-To correct the class on the live menu without publishing your other changes to the products, see
-[Patch the live menu in an emergency](products.md#patch-live-menu).
-Eaten here, a line already on an order keeps the class it was added with.
+Everything eaten or drunk here is charged at one rate, shown beside the product's VAT field
+("Eaten here: 10% (all food and drink)"). Waitron updates it when the law changes; there is
+nothing to set.
 
 Where your region taxes takeaway food differently, **VAT when taken away** holds the rate this
 product is charged when it is taken away. Pick it from the list. A new product starts at **New
@@ -167,8 +163,8 @@ The product keeps its own price field, above its VAT. Once the product has an Ac
 field's label starts **Base price**, because a variant you leave without a price of its own sells at
 it. That variant's empty price shows the base price greyed out as a hint, in its window and in its
 row of the table. The **Pricing** section then folds to one line, such as **Base price:** €38.00
-per kg · **VAT:** Reduced (10%); choose the line to open it. It opens by itself when the base price
-or the VAT needs fixing. When you open a product without Active variants, Pricing starts open;
+per kg; choose the line to open it. It opens by itself when the base price or the VAT when taken
+away needs fixing. When you open a product without Active variants, Pricing starts open;
 with Active variants, Pricing starts closed and Variants starts open. You can close either section
 without losing the draft. The unit link in the variants' Price heading opens the same unit dialog
 as the price field's unit button.
@@ -178,7 +174,7 @@ arrow keys. Each row's **Available** switch marks the variant sold out or back o
 offers **Open**, **Edit** and **Archive** (**Remove** for a variant not yet saved). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
 in the table, including the Available switch, are saved when you save the product.
 
-**Open** takes you to the variant's own page, where it can have its own VAT, allergens and the other
+**Open** takes you to the variant's own page, where it can have its own VAT when taken away, allergens and the other
 product details. Its main category and its unit are always its product's: the page shows the
 product's category path as plain text, with no **Change**, and the product's unit as plain text
 beside the price, such as "per kg", or "Each" when the product has none. If one form of a product
@@ -211,7 +207,7 @@ in the product editor, whichever column the list is sorted by; drag them in the 
 Each variant's row shows its photo, its own name, the price it sells at, its availability and its
 row menu. A variant with no photo of its own shows its product's or, when neither has one, the same
 square as its product's row. Choose the photo or square to open the variant's own page at its photo.
-On a phone the photo is hidden. If a variant's VAT differs from its product's, the list notes it
+On a phone the photo is hidden. If a variant's VAT when taken away differs from its product's, the list notes it
 under the variant's price. A variant's row menu offers **Archive** there too, as a product's own row
 does. Turn on **Show archived** to list archived products and variants, then choose **View** for
 one's plain-text details. View has no Save or availability switch; it keeps the retained record
@@ -362,14 +358,14 @@ can publish the menu can patch it. The window lists the items in the live menu, 
 and its extras and options lists under **Extras and options**. Pick an item to see what you can
 change:
 
-- A dish: its name, customer-facing name, prep station name, description, image, price and VAT class.
+- A dish: its name, customer-facing name, prep station name, description, image and price.
 - A variant or an extra: the same, without a description.
 - An options list's choice, and the name of an extras list or an options list: its three names.
 - A section: its internal name, customer-facing name and image.
 
 Customer-facing names and descriptions show a field for each content language. Choose or remove an
 image as you would in the product editor. A dish with variants is charged at each variant's own
-price and VAT class, so correct those on its variants, which its form lists with their price and VAT class; correcting the dish never changes them. A
+price, so correct the price on its variants, which its form lists with their price; correcting the dish never changes them. A
 change to an extra, an options list's choice or a list's name is made everywhere that list appears
 in this menu. A product sold both as a dish and as an extra is corrected in each place separately. A
 section shown inside an included menu's folder keeps any name or picture that folder sets for it,
@@ -391,8 +387,7 @@ remove it.
 value → the new one. Choose **Keep editing** to go back, or **Put live now**. What putting a patch live does:
 
 - It goes live at once as a new version of this menu, under the next number. Lines added to orders
-  from then on use the corrected values. Lines already on open orders keep their old price and VAT
-  class.
+  from then on use the corrected values. Lines already on open orders keep their old price.
 - On a parked counter order, renaming an options list or one of its choices does what it does after
   a publish, as [What the till does with a list](modifiers.md#till) describes: with a new staff name
   the order keeps the answer it holds, and a new customer-facing or prep station name

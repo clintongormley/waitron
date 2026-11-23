@@ -355,10 +355,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
 - **VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68).** Piece A of the
-  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is planned as four pull requests; the first two give each
-  product its own dated takeaway rate, the third files everything eaten here at the one dine-in
-  rate, and the screens and guides for that rate are next
-  ([plan](superpowers/plans/2026-11-22-vat-rates-a.md)). Drinks served
+  [design](superpowers/specs/2026-11-21-vat-rates-design.md) is built: each product has its own dated
+  takeaway rate and everything eaten here files at the one dine-in rate. Left: set menus with no VAT
+  of their own and removing the old VAT classes (piece B), and scheduled and bulk rate changes
+  (piece C). Drinks served
   without food may take 21%: unsettled, and the adviser will come back on it. [Detail](backlog/fiscal.md#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68)
 
 - **Offer 2%, 5% and 7.5% taken away once modelo 303 can report them.** Spain's pick list for a

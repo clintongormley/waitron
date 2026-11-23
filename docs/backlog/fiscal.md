@@ -27,6 +27,13 @@ whole meal free is not this entry: the owner's answer of 18 November (owner, 202
 still to confirm the details) is that it is a self-supply only
 when given in exchange for services, and that it goes on the report for the accountant: the Given
 free sheet of the VAT return screen's corrections workbook.
+Everything eaten here now files at one dine-in rate, so an eaten-in bill's own lines share one
+rate and a free item among them cannot shift VAT between rates (at one rate both methods give the
+same VAT, as the adviser's sheet says). An advance keeps the rate of the day it was paid, so a bill
+whose advance was paid before a dine-in rate change carries two rates; whether this entry needs
+anything for that case is not yet checked. The entry still matters for takeaway bills mixing rates
+(the deli's 4%, 10% and 21%), and would matter for eaten-in bills again only if the adviser rules
+that drinks served without food take 21%.
 Fiscal: the owner lands it.
 
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
@@ -904,12 +911,22 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates). Piece A's plan: [2026-11-22-vat-rates-a.md](../superpowers/plans/2026-11-22-vat-rates-a.md), four pull
-requests; the first, storing each product's takeaway rate, landed as #4047; the second, which files a
-takeaway line at its product's own dated takeaway rate and lets a manager pick that rate as a percentage,
-has landed too; the third files everything eaten here at the one dine-in rate (the owner's
-D10, D11, D17 and D18, answered "yes" on 2026-11-22); PR 3b, its screens and guides, is next;
-pieces B and C have no plan yet. From M7v, owner rulings
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates).
+Piece A ([plan](../superpowers/plans/2026-11-22-vat-rates-a.md)) is built: each product has its own
+dated takeaway rate, picked as a percentage, everything eaten here files at the one dine-in rate,
+and no screen offers an eat-in VAT class. What remains, with no plan yet:
+
+- **Piece B:** set menus with no VAT of their own, and none taken away when their products'
+  takeaway rates differ. Until then a takeaway set-menu line files at its set menu's own takeaway
+  class. Its last pull request (the plan's "PR L") removes the old VAT class labels: the
+  `vat_class` and `takeaway_vat_class` columns on products and order lines, their checks, the
+  hidden `defaultProductVatClass` setting and the shared class table's last readers.
+- **Piece C:** scheduled and bulk rate changes. Today an edit to a product's takeaway rate
+  replaces its one row from the beginning of time. Piece C must date an edit from the moment it is
+  made, so a meal that ended before it keeps the old rate, and must never let a stale editor draft
+  erase a dated rate.
+
+From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines.

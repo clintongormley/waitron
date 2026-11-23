@@ -3963,7 +3963,7 @@ The language-row warning wraps, and the Actions column stays pinned at the end.
 
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's VAT or photo from its parent product, an extra's price from its product's. Such a field is
+variant's takeaway VAT or photo from its parent product, an extra's price from its product's. Such a field is
 **empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
@@ -4020,13 +4020,12 @@ variant describes itself in no language.
   (`packages/ui-core/src/components/wt-input.a11y.test.ts`). A price field that holds its own value
   can say so with `wt-price-input`'s `overriding` state (see its row in the component table), which a
   menu's Price overrides tab uses.
-- **A single-choice `wt-combobox`** (the product editor's VAT and course): its
+- **A single-choice `wt-combobox`** (the product editor's course): its
   first option has an empty value and reads as the fallback value itself, with no "Same as" before
-  it (owner, 2026-10-02: "we just want to show the value"), e.g. "Reduced (10%)"; where the parent
+  it (owner, 2026-10-02: "we just want to show the value"); where the parent
   names nothing it reads as what will be used instead, `modifiers.none_specified` ("None specified") for the course; and
   where the parent names a course the loaded
-  list lacks, it reads `editor.missing_choice` ("Unavailable selection"), while the VAT dropdown
-  shows the class's code. Its placeholder
+  list lacks, it reads `editor.missing_choice` ("Unavailable selection"). Its placeholder
   reads the same, in the combobox's grey italic, and is what it shows while the stored value is
   null; it has no separate hint line. A choice that means "none" on a record of its own
   (`modifiers.none_specified` for the course) is left out where the empty value already means "fall
@@ -4102,7 +4101,7 @@ the allergens, the dietary preferences) shows the parent's value in italic (`pla
 where the parent has none either, “None” for nutritional values and “None specified” for the
 other fields, or “Not yet reviewed” for allergens the parent has not had reviewed. A variant's blank prep station and customer-facing names fall back to its own
 Name, not the parent's, so they read "None specified" as on a product. The Pricing fold still
-leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
+leaves a blank base price, and a takeaway VAT rate the form does not offer, off its line. A names section
 (the Extras editor's "Customer-facing names") puts each language's customer-facing
 name after its upper-case code in bold — "**ES:** ¿Cómo la quiere hecha? · **EN:** How would you
 like it cooked?" — and a blank one, in italic, as the open field hints it while empty: the default
@@ -5852,8 +5851,8 @@ stack where there is no room for both. The tree scrolls inside its own box, at m
 item picked low in it stays in view beside its form. Picking an item also scrolls the dialog to
 the form where that is needed, as it is when the two stack on a short screen; focus stays on the
 item picked. A variant link on a dish's form goes with that form, so following one moves focus to
-the variant form's heading. Each variant link is followed by its price and VAT class, both as putting the patch live would
-leave them, in `--wt-color-text-muted`, wrapping under the link where there
+the variant form's heading. Each variant link is followed by its price, as putting the patch live would
+leave it, in `--wt-color-text-muted`, wrapping under the link where there
 is no room. Until an item is picked, the form's place reads "Pick an
 item to patch." In the tree, an item with a change carries a dot in `--wt-color-primary`, and an
 item with a field to correct a "!" in `--wt-color-danger`; each mark has words for a screen reader.
@@ -6141,7 +6140,7 @@ opens the first visible tab. Venue details holds five cards — Business, Venue,
 Defaults and Privacy — and, with the Veri\*Factu module, a sixth: the AEAT certificate, which needs
 `fiscal.view` to read and `system.manage` to install or replace. The other five cards need
 `venue.view`, and editing them needs `venue.configure`. The Defaults card — the default
-receipt language, the "VAT class for new products" default and, where the venue charges takeaway
+receipt language and, where the venue charges takeaway
 VAT, the "New products start at (VAT when taken away)" default — is shown with `venue.view`, and is
 editable with `venue.configure` and read-only without it. So is the Privacy card — the address of
 the venue's privacy notice web page and its privacy email. Venue settings has no Kitchen tab:

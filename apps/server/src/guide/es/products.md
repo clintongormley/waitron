@@ -12,15 +12,11 @@ resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abr
 encabezado. Si una sección contiene algo que tienes que corregir, se abre sola y sigue abierta hasta
 que lo corriges.
 
-## Elige la clase de IVA {#vat}
+## Cómo se cobra el IVA {#vat}
 
-El IVA de un producto cuando se consume en el local empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
-la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
-forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
-cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
-publicó la carta. Para corregir la clase en la carta publicada sin volver a publicar desde los productos, consulta
-[Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Si se consume en el local, una línea que ya
-está en un pedido conserva la clase con la que se añadió.
+Todo lo que se come o se bebe en el local se cobra con un único tipo, que se muestra junto al campo
+de IVA del producto («Para comer aquí: 10 % (toda la comida y bebida)»). Waitron lo actualiza cuando
+cambia la ley; no hay nada que configurar.
 
 Si tu región grava de otra forma la comida para llevar, **IVA para llevar** guarda el tipo con el
 que se cobra este producto cuando se lo llevan. Elígelo de la lista. Un producto nuevo empieza con
@@ -175,8 +171,8 @@ El producto conserva su propio campo de precio, encima de su IVA. En cuanto el p
 variante activa, la etiqueta del campo empieza por **Precio base**, porque una variante que dejas sin
 precio propio se vende a ese precio. El precio vacío de esa variante muestra el precio base en gris
 como pista, en su ventana y en su fila de la tabla. La sección **Precios** se pliega entonces a una
-línea, por ejemplo **Precio base:** 38,00 € por kg · **IVA:** Reducido (10%); elige la línea para
-abrirla. Se abre sola cuando hay que corregir el precio base o el IVA. Al abrir un producto sin
+línea, por ejemplo **Precio base:** 38,00 € por kg; elige la línea para abrirla. Se abre sola
+cuando hay que corregir el precio base o el IVA para llevar. Al abrir un producto sin
 variantes activas, Precios empieza abierta; con variantes activas, Precios empieza cerrada y Variantes
 empieza abierta. Puedes cerrar cualquiera de las dos sin perder el borrador. El enlace de la unidad en
 el encabezado Precio de las variantes abre la misma ventana de unidades que el botón de unidad del
@@ -189,7 +185,7 @@ guardar). **Editar**, o un clic en la fila de la variante, vuelve a abrir la ven
 cambios que haces en la tabla, incluido el interruptor Disponible, se guardan cuando guardas el
 producto.
 
-**Abrir** te lleva a la página propia de la variante, donde puede tener su propio IVA, sus alérgenos y
+**Abrir** te lleva a la página propia de la variante, donde puede tener su propio IVA para llevar, sus alérgenos y
 los demás datos del producto. Su categoría principal y su unidad son siempre las de su producto: la
 página muestra la ruta de categoría del producto como texto, sin **Cambiar**, y la unidad del producto
 como texto junto al precio, por ejemplo "por kg", o "Unidad" cuando el producto no tiene ninguna. Si
@@ -224,7 +220,7 @@ lista; arrástralas en el editor para cambiarlo. La fila de cada variante muestr
 nombre, el precio al que se vende, su disponibilidad y su menú de fila. Una variante sin foto propia
 muestra la de su producto o, si ninguno tiene, el mismo cuadrado que la fila de su producto. Elige la
 foto o el cuadrado para abrir la página propia de la variante en su foto. En un teléfono la foto no se
-muestra. Si el IVA de una variante es distinto del de su producto, la lista lo indica bajo el precio de
+muestra. Si el IVA para llevar de una variante es distinto del de su producto, la lista lo indica bajo el precio de
 la variante. El menú de fila de una variante también ofrece ahí **Archivar**, como la fila del propio
 producto. Activa **Mostrar archivados** para ver los productos y las variantes archivados, y después
 elige **Ver** en uno para ver sus datos como texto. Ver no tiene Guardar ni interruptor de
@@ -381,8 +377,7 @@ publicada, y puede usarlo cualquiera que pueda publicar la carta. La ventana mue
 de la carta publicada, con un buscador, y sus listas de extras y de opciones bajo **Extras y
 opciones**. Elige un elemento para ver lo que puedes cambiar:
 
-- Un plato: su nombre, nombre para el cliente, nombre de estación de preparación, descripción, imagen, precio y
-  clase de IVA.
+- Un plato: su nombre, nombre para el cliente, nombre de estación de preparación, descripción, imagen y precio.
 - Una variante o un extra: lo mismo, sin descripción.
 - Una opción de una lista de opciones, y el nombre de una lista de extras o de opciones: sus tres
   nombres.
@@ -390,7 +385,7 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
 
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
 Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al
-precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes, que su formulario muestra con su precio y su clase de IVA; corregir el
+precio de cada variante, así que corrige el precio en sus variantes, que su formulario muestra con su precio; corregir el
 plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
 extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
@@ -415,7 +410,7 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 
 - Se publica al momento como una versión nueva de esta carta, con el número siguiente. Las líneas
   que se añaden a los pedidos desde entonces usan los valores corregidos. Las líneas que ya están
-  en pedidos abiertos mantienen su precio y su clase de IVA anteriores.
+  en pedidos abiertos mantienen su precio anterior.
 - En un pedido aparcado de caja, cambiar el nombre de una lista de opciones o de una de sus opciones
   hace lo mismo que después de publicar, como explica
   [Qué hace la caja con una lista](modifiers.md#till): con un nombre del personal nuevo, el pedido

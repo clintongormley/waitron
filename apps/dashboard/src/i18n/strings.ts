@@ -3929,7 +3929,7 @@ export const en = {
   "menus.patch_live": "Patch live menu…",
   "menus.patch_live_help_label": "What a patch changes",
   "menus.patch_live_help":
-    "A patch corrects wording, prices, pictures or VAT classes in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
+    "A patch corrects wording, prices or pictures in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
   "menus.patch_live_help_guide": "More about patching the live menu",
   "menus.changes": "Changes",
   "menus.changes_link": "Unpublished changes",
@@ -8729,7 +8729,7 @@ export const es: Record<StringKey, string> = {
   "menus.patch_live": "Corregir la carta publicada…",
   "menus.patch_live_help_label": "Qué cambia una corrección",
   "menus.patch_live_help":
-    "Una corrección cambia textos, precios, imágenes o clases de IVA en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
+    "Una corrección cambia textos, precios o imágenes en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
   "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
   "menus.changes": "Cambios",
   "menus.changes_link": "Cambios sin publicar",
