@@ -583,3 +583,42 @@ export function readPrinterHoldsForTest(db: Database | Transaction) {
     .where(isNotNull(printers.heldByDeviceId))
     .orderBy(asc(printers.id));
 }
+
+/** Occupy the selected number during insertion so SQLite itself refuses the duplicate. */
+export async function withInvoiceNumberCollision<T>(db: Database, issue: () => Promise<T>) {
+  await db.execute(sql`
+    create trigger invoice_number_collision before insert on sales
+    when new.id <> 'invoice-number-collision-decoy'
+    begin
+      insert into sales (
+        id, source, series_id, node_id, invoice_number, issued_at, issued_offset_minutes,
+        total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
+      ) values (
+        'invoice-number-collision-decoy', 'operator_script', new.series_id, new.node_id,
+        new.invoice_number, new.issued_at, new.issued_offset_minutes, 100,
+        new.vat_breakdown, new.locale, new.invoice_locales, 'none', 'not_applicable'
+      );
+    end
+  `);
+  try {
+    return await issue();
+  } finally {
+    await db.execute(sql`drop trigger invoice_number_collision`);
+  }
+}
+
+/** Lets a corruption fixture supply a series state the write path would refuse. */
+export async function withInvoiceSeriesGuardDropped(
+  db: Database | Transaction,
+  change: () => PromiseLike<unknown>,
+): Promise<void> {
+  const [trigger] = db.all<{ sql: string }>(sql`
+    select sql from sqlite_schema where type = 'trigger' and name = 'invoice_series_guard_update'
+  `);
+  await db.run(sql`drop trigger invoice_series_guard_update`);
+  try {
+    await change();
+  } finally {
+    await db.run(sql.raw(trigger!.sql));
+  }
+}

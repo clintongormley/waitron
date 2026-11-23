@@ -1,4 +1,9 @@
-import { seedPerson, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedPerson,
+  seedVenueSettings,
+  seedBusinessDay,
+  advanceSeriesTo,
+} from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -83,8 +88,8 @@ const suite = useVenueDb({
       id: "30000000-0000-4000-8000-000000000003",
       nodeId: node,
       code: "KEEP",
-      nextNumber: 37,
     });
+    await advanceSeriesTo(db, node, 37);
     await db
       .insert(menus)
       .values({ id: "40000000-0000-4000-8000-000000000004", name: "Captured menu" });
@@ -216,7 +221,11 @@ function readDatabase(path: string) {
       data,
       jobs: db.prepare("select * from content_suggestion_jobs order by id").all(),
       suggestions: db.prepare("select * from content_suggestions order by id").all(),
-      series: db.prepare("select * from invoice_series order by id").all(),
+      series: db
+        .prepare(
+          "select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by id",
+        )
+        .all(),
       nodes: db.prepare("select * from nodes order by id").all(),
       foreignKeys: db.prepare("pragma foreign_key_check").all(),
     };

@@ -1542,7 +1542,7 @@ describe("the membership chart on each record", () => {
       withTransaction(suite.db, async (tx) => {
         const [series] = await tx
           .insert(invoiceSeries)
-          .values({ nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
+          .values({ nodeId, code: "R", purpose: "corrective" })
           .returning({ id: invoiceSeries.id });
         const issuedAt = steadyClock.now().instant;
         const [corrective] = await tx

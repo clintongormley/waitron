@@ -1,3 +1,4 @@
+import { seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { readChainHead } from "./chain.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
@@ -38,15 +39,21 @@ const NODE: ProvisionedNode = {
 const SIF = { nif: "89890001K", idSistemaInformatico: "WT" } as const;
 const NOW = new Date("2026-09-06T10:00:00.000Z");
 
-/** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (corrective). */
-async function seedLiveNode(): Promise<SifRegistration> {
+/** A live node: registered SIF + `FA` (standard, numbered through 4) and `RE` (corrective). */
+async function seedLiveNode(
+  seriesCode: (sif: SifRegistration) => string = () => "FA",
+): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, nodeId: TAXPAYER_A.nodeId }),
   );
-  await db.insert(invoiceSeries).values([
-    { nodeId: TAXPAYER_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
-    { nodeId: TAXPAYER_A.nodeId, code: "RE", purpose: "corrective", nextNumber: 1 },
-  ]);
+  const [standard] = await db
+    .insert(invoiceSeries)
+    .values([
+      { nodeId: TAXPAYER_A.nodeId, code: seriesCode(sif), purpose: "standard" },
+      { nodeId: TAXPAYER_A.nodeId, code: "RE", purpose: "corrective" },
+    ])
+    .returning({ seriesId: invoiceSeries.id, nodeId: invoiceSeries.nodeId });
+  await seedInvoiceNumber(db, standard!, 4);
   return sif;
 }
 
@@ -178,15 +185,11 @@ describe("restoreFiscal", () => {
   });
 
   it("derives from live series only, stripping our own suffixes, and ignores retired ones", async () => {
-    const first = await seedLiveNode();
+    await seedLiveNode((first) => `FA-${first.numeroInstalacion}`);
     await db
       .update(invoiceSeries)
       .set({ retiredAt: new Date() })
       .where(eq(invoiceSeries.code, "RE"));
-    // A previous restore's derived code, live (the unique key is per code, so the rename is allowed).
-    await db.execute(
-      sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`,
-    );
     const fixture = recoveryFixture([{ code: "FA", purpose: "standard" }]);
     const outcome = await fixture.transaction(db, "restore", (tx, operation) =>
       ALLOCATED_FISCAL_RESTORE(tx, NODE, operation),
@@ -198,9 +201,8 @@ describe("restoreFiscal", () => {
   });
 
   it("refuses a base code that cannot carry a suffix within the 60-character invoice-number cap, rolling back the restore", async () => {
-    await seedLiveNode();
     const long = "L".repeat(MAX_BASE_CODE_LENGTH + 1);
-    await db.execute(sql`update invoice_series set code = ${long} where code = 'FA'`);
+    await seedLiveNode(() => long);
     const fixture = recoveryFixture([
       { code: "FA", purpose: "standard" },
       { code: "RE", purpose: "corrective" },

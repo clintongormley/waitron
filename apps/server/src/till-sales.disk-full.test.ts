@@ -84,7 +84,7 @@ function count(table: string, where = sql`1 = 1`): number {
 
 function nextNumbers(): number {
   const [row] = venue.db.all<{ n: number }>(
-    sql`select coalesce(sum(next_number), 0) as n from invoice_series`,
+    sql`select coalesce(sum((select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id)), 0) as n from invoice_series`,
   );
   return row!.n;
 }

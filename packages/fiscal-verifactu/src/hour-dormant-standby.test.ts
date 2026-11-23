@@ -1,3 +1,4 @@
+import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, taxpayer, withTransaction } from "@waitron/db";
@@ -267,10 +268,12 @@ it.each(["sif", "series"])("refuses admitting an already active standby %s", asy
 
 it("refuses a changed primary configuration before establishment", async () => {
   const reserved = await reserve();
-  await suite.db
-    .update(invoiceSeries)
-    .set({ code: "changed" })
-    .where(eq(invoiceSeries.code, "a/B_1.2-3"));
+  await withInvoiceSeriesGuardDropped(suite.db, () =>
+    suite.db
+      .update(invoiceSeries)
+      .set({ code: "changed" })
+      .where(eq(invoiceSeries.code, "a/B_1.2-3")),
+  );
   await expect(establish(reserved.state)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "reservation_mismatch" },

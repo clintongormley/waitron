@@ -300,7 +300,7 @@ that DO carry one were measured against the real opener and are in the table abo
 ## Fiscal invariants this tool is bound by
 
 - **One database per environment.** A pre-production database is never promoted:
-  `invoice_series.next_number` carries across, so pre-production sales would leave a permanent hole
+  The series' recorded invoice numbers carry across, so pre-production sales would leave a permanent hole
   in the production series. `venue` stamps a directory that carries no stamp, from `WAITRON_ENV`,
   and refuses one stamped for the other environment — the refusal is `stampDeployment`'s own, not a
   second copy of the rule written here.

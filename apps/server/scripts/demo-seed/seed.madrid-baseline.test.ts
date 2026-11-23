@@ -262,6 +262,7 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
 };
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  invoice_series: ["next_number"],
   webauthn_credentials: ["name"],
   card_readers: ["active"],
   taxpayer: ["privacy_notice_url", "privacy_email"],
@@ -840,6 +841,13 @@ for (const locale of ["en", "es"] as const) {
       // The fixture keeps the series purpose's old stored word; it is spelled without its quotes
       // so the rename list in the pull request never rewrites it.
       const series = expected[phase].tables.invoice_series!;
+      const sales = Object.values(expected[phase].tables.sales!.rows);
+      for (const row of Object.values(series.rows)) {
+        const numbers = sales
+          .filter((sale) => sale.series_id === row.id)
+          .map((sale) => Number(sale.invoice_number));
+        expect(row.next_number).toBe(Math.max(0, ...numbers) + 1);
+      }
       series.rows = Object.fromEntries(
         Object.entries(series.rows).map(([key, row]) => {
           if (!/^rectificative$/.test(String(row.purpose))) return [key, row];

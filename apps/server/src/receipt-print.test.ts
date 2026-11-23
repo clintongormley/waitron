@@ -2,7 +2,7 @@ import { fillCapturedCard, payments, SimulatorPaymentProvider } from "@waitron/p
 import { seedHeldReader } from "@waitron/payments/test/seed.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { ensureOperator } from "./testing/cancel-line.js";
-import { holdPrinterForTest } from "@waitron/db/testing/seed.js";
+import { holdPrinterForTest, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import {
   seedDeviceProfiles,
@@ -51,6 +51,7 @@ import {
   taxpayer,
   withTransaction,
   floorZones,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertA4Printer, setPrinterListsForTest } from "@waitron/db/testing/printers.js";
@@ -2875,7 +2876,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [operator] = await tx.select({ id: persons.id }).from(persons);
       const [series] = await tx
-        .select()
+        .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, full ? "full" : "standard"));
       const orderId = randomUUID();
@@ -3706,7 +3707,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect((await suite.db.select().from(printJobs)).map((job) => job.kind)).toEqual(["drawer"]);
       expect(await drawerOpensFor()).toHaveLength(1);
       const before = await suite.db
-        .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+        .select({ id: invoiceSeries.id, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
         .from(invoiceSeries);
       const replay = await pay(sold[0]!.workingOrderId!);
       await printSaleReceipt(deps(), cfg, sold[0]!.workingOrderId!, "original");
@@ -3715,7 +3716,7 @@ describe("department receipt presentation on thermal jobs", () => {
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
       expect(
         await suite.db
-          .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+          .select({ id: invoiceSeries.id, nextNumber: nextInvoiceNumberOf(invoiceSeries.id) })
           .from(invoiceSeries),
       ).toEqual(before);
       expect(await drawerOpensFor()).toHaveLength(1);
@@ -3738,7 +3739,7 @@ describe("department receipt presentation on thermal jobs", () => {
       drawer: await suite.db.select().from(drawerOpens),
       jobs: await suite.db.select().from(printJobs),
       tenders: await suite.db.select().from(tenders),
-      series: await suite.db.select().from(invoiceSeries),
+      series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     };
     expect(before.drawer).toHaveLength(1);
     await suite.db
@@ -3763,7 +3764,7 @@ describe("department receipt presentation on thermal jobs", () => {
       drawer: await suite.db.select().from(drawerOpens),
       jobs: await suite.db.select().from(printJobs),
       tenders: await suite.db.select().from(tenders),
-      series: await suite.db.select().from(invoiceSeries),
+      series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     }).toEqual(before);
   });
 

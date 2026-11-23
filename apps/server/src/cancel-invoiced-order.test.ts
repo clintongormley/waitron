@@ -23,6 +23,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import {
   createExtraList,
@@ -325,7 +326,7 @@ function amendmentsOf(billId: string) {
 async function activeCorrective() {
   const [row] = await inTx(venue, (tx) =>
     tx
-      .select({ id: invoiceSeries.id, next: invoiceSeries.nextNumber })
+      .select({ id: invoiceSeries.id, next: nextInvoiceNumberOf(invoiceSeries.id) })
       .from(invoiceSeries)
       .where(
         and(
@@ -347,7 +348,7 @@ function fiscalSnapshot() {
       (select count(*) from sale_settlements) as settlements,
       (select count(*) from verifactu_records) as registros,
       (select count(*) from order_amendments) as amendments,
-      (select group_concat(id || ':' || next_number, ',') from invoice_series) as series,
+      (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series,
       (select group_concat(node_id || ':' || secuencia || ':' || huella, ',')
         from (select node_id, secuencia, huella from verifactu_records order by node_id, secuencia)) as chain
   `)[0];

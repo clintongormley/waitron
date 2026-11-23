@@ -1,3 +1,4 @@
+import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -359,7 +360,9 @@ it("refuses a damaged retained reservation even with fresh valid consumed histor
 });
 it("the venue's complete bases bound unsigned standby reservation", async () => {
   const { eq } = await import("drizzle-orm");
-  await suite.db.update(invoiceSeries).set({ code: "OTHER" }).where(eq(invoiceSeries.code, "A"));
+  await withInvoiceSeriesGuardDropped(suite.db, () =>
+    suite.db.update(invoiceSeries).set({ code: "OTHER" }).where(eq(invoiceSeries.code, "A")),
+  );
   await expect(prepare()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "reservation_mismatch" },

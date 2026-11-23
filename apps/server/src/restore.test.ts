@@ -37,6 +37,7 @@ import {
   openVenueDatabase,
   taxpayer,
   withTransaction,
+  nextInvoiceNumberOf,
 } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -119,21 +120,18 @@ beforeAll(async () => {
   });
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, name: "Node 1" });
-  await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
-  await db
-    .insert(invoiceSeries)
-    .values({ id: T.fullSeriesId, nodeId: T.nodeId, code: "FF", purpose: "full" });
+  await resetSeries();
 });
 
-/** Re-arm the node's standard and full series; remove anything a hook opened. */
+/** Restore each test's two unused series to the starting state. */
 async function resetSeries(): Promise<void> {
-  await suite.db.execute(
-    sql`delete from invoice_series where node_id = ${T.nodeId} and id not in (${T.seriesId}, ${T.fullSeriesId})`,
-  );
-  await suite.db
-    .update(invoiceSeries)
-    .set({ retiredAt: null })
-    .where(sql`${invoiceSeries.id} in (${T.seriesId}, ${T.fullSeriesId})`);
+  await withTransaction(suite.db, async (tx) => {
+    await tx.delete(invoiceSeries).where(eq(invoiceSeries.nodeId, T.nodeId));
+    await tx.insert(invoiceSeries).values([
+      { id: T.seriesId, nodeId: T.nodeId, code: "FA" },
+      { id: T.fullSeriesId, nodeId: T.nodeId, code: "FF", purpose: "full" },
+    ]);
+  });
 }
 
 /** The node's series as the assertions below read them, oldest code first. */
@@ -142,7 +140,7 @@ async function seriesOfNode(): Promise<{ code: string; retired: boolean; next: n
     .select({
       code: invoiceSeries.code,
       retiredAt: invoiceSeries.retiredAt,
-      next: invoiceSeries.nextNumber,
+      next: nextInvoiceNumberOf(invoiceSeries.id),
     })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.nodeId, T.nodeId))

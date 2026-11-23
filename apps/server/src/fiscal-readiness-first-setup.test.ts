@@ -126,7 +126,9 @@ function facts(directory: string) {
         "select event_key, allocation_key, node_id, environment from fiscal_allocations",
       ),
       identities: all("select id, node_id, numero_instalacion from verifactu_identities"),
-      series: all("select id, code, purpose, next_number from invoice_series order by code"),
+      series: all(
+        "select id, code, purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by code",
+      ),
       records: all("select id, entorno, num_serie_factura, huella from verifactu_records"),
       sales: all("select id from sales"),
     };
@@ -206,10 +208,10 @@ it.each([true, false])(
           huella: expect.any(String),
         },
       ]);
-      expect(first.series.map(({ code, next_number }) => ({ code, next_number }))).toEqual([
-        { code: "A-0CNNW", next_number: 2 },
-        { code: "FF-0CNNW", next_number: 1 },
-        { code: "R-0CNNW", next_number: 1 },
+      expect(first.series.map(({ code, nextNumber }) => ({ code, nextNumber }))).toEqual([
+        { code: "A-0CNNW", nextNumber: 2 },
+        { code: "FF-0CNNW", nextNumber: 1 },
+        { code: "R-0CNNW", nextNumber: 1 },
       ]);
       await server.close();
       server = undefined;
@@ -279,7 +281,7 @@ it.each([true, false])(
         ]);
         expect(live.sales).toEqual([]);
         expect(live.records).toEqual([]);
-        expect(live.series.map(({ next_number }) => next_number)).toEqual([1, 1, 1]);
+        expect(live.series.map(({ nextNumber }) => nextNumber)).toEqual([1, 1, 1]);
         for (const identity of live.identities)
           expect(first.identities).not.toContainEqual(identity);
         expect(calls.outside).toHaveBeenCalledTimes(1);

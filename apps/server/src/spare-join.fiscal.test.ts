@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -291,7 +292,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       body: { alreadyPrimary: false },
     });
     const opened = await store.venue
-      .select()
+      .select(seriesWithNextNumber)
       .from(invoiceSeries)
       .where(eq(invoiceSeries.nodeId, standby.nodeId));
     expect(opened.map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber }))).toEqual(

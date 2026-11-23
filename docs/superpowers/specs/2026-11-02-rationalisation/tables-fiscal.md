@@ -835,6 +835,9 @@ How `clock_confirmations`' protections land in `verifactu_history`:
      preceding-record walks used `SEARCH` with the unique position index after removal of the
      duplicate. The 100,000- and 500,000-record timing comparisons remain on the periodic bench
      schedule.
+   - **2026-11-23, fiscal 3:** On the box image's SQLite 3.54.1, the emitted allocation query
+     used the covering index `sales_series_invoice_number_key` on `(series_id, invoice_number)`.
+     The 100,000- and 500,000-sale timing comparisons remain on the periodic bench schedule.
 2. **The case check now reads a table with one row per record.**
    - `readActiveConflicts` runs on every sale (`backend.ts:187`, `conflict-evidence.ts:25`). Today it
      starts from the small `filing_cases` table; in this design it reads `verifactu_submissions`,

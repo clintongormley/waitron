@@ -428,11 +428,13 @@ it.each(["trading", "completion-state"])(
       try {
         expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
         expect(db.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
-        expect(db.prepare("select next_number from invoice_series").all()).toEqual([
-          { next_number: 1 },
-          { next_number: 1 },
-          { next_number: 1 },
-        ]);
+        expect(
+          db
+            .prepare(
+              "select (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series",
+            )
+            .all(),
+        ).toEqual([{ nextNumber: 1 }, { nextNumber: 1 }, { nextNumber: 1 }]);
       } finally {
         db.close();
       }

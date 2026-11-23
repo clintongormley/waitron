@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -200,7 +201,7 @@ describe("new-record fingerprint refusal", () => {
       const previousRecords = before.verifactu_records as unknown[];
       expect(after.verifactu_records).toHaveLength(previousRecords.length + 1);
       expect(after.verifactu_submissions).toHaveLength(previousRecords.length + 1);
-      const counters = await suite.db.select().from(invoiceSeries);
+      const counters = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
       expect(counters.map((row) => row.nextNumber)).toEqual(
         kind === "cancellation"
           ? [2, 1, 1]

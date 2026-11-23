@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -191,7 +192,7 @@ function attempt<T>(
 
 async function liveSeries() {
   return suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
     .orderBy(invoiceSeries.code);
@@ -231,7 +232,7 @@ it.each(["restore"])(
   async (action) => {
     await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
     const oldSif = (await suite.db.select().from(verifactuIdentities))[0]!;
-    await suite.db.update(invoiceSeries).set({ nextNumber: 23 });
+    await advanceSeriesTo(suite.db, node.nodeId, 23);
     const oldSeries = await liveSeries();
     const report = await attempt(action, async (tx, operation) =>
       action === "restore" ? restore(tx, node, operation) : seed.run(tx, node, operation),
@@ -249,7 +250,7 @@ it.each(["restore"])(
     });
     for (const old of oldSeries) {
       const [retained] = await suite.db
-        .select()
+        .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .where(eq(invoiceSeries.id, old.id));
       expect(retained).toEqual({ ...old, retiredAt: expect.any(Date) });
@@ -270,7 +271,7 @@ it("a missing setup approval cannot mint a local identity", async () => {
     refusal("reauthentication_required"),
   );
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
 });
 
 it("a raw uncollected setup approval cannot mint a local identity", async () => {
@@ -294,7 +295,7 @@ it("keeps an absent taxpayer as a corrupt-database failure rather than an operat
   expect(error).not.toBeInstanceOf(AppError);
   expect((error as Error).message).toContain("taxpayer is empty");
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
@@ -316,7 +317,7 @@ it("a later host refusal rolls back the complete seeded set", async () => {
     }),
   ).rejects.toThrow("host-write-refused");
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
@@ -376,15 +377,12 @@ it.each(["setup", "restore"])(
     const run = async (tx: Transaction, operation: ModuleOperationInput) =>
       action === "restore" ? restore(tx, node, operation) : seed.run(tx, node, operation);
     const first = await attempt(action, run);
-    await suite.db
-      .update(invoiceSeries)
-      .set({ nextNumber: 37 })
-      .where(isNull(invoiceSeries.retiredAt));
-    const before = await suite.db.select().from(invoiceSeries);
+    await advanceSeriesTo(suite.db, node.nodeId, 37);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const sifs = await suite.db.select().from(verifactuIdentities);
     const ledger = await suite.db.select().from(fiscalAllocations);
     expect(await attempt(action, run, { priorActivation: "committed" })).toEqual(first);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
   },
@@ -453,7 +451,10 @@ it("promotes a retained dormant reservation once, without resetting counters on 
       .where(eq(verifactuIdentities.nodeId, target.nodeId)),
   ).toEqual([]);
   expect(
-    await suite.db.select().from(invoiceSeries).where(eq(invoiceSeries.nodeId, target.nodeId)),
+    await suite.db
+      .select(seriesWithNextNumber)
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.nodeId, target.nodeId)),
   ).toEqual([]);
   const run = (tx: Transaction, operation: ModuleOperationInput) => promote(tx, target, operation);
   await attempt("promote", run, { target });
@@ -464,7 +465,7 @@ it("promotes a retained dormant reservation once, without resetting counters on 
   expect(targetSifs).toHaveLength(1);
   expect(targetSifs[0]).toMatchObject({ numeroInstalacion: "P000042", revocadoEn: null });
   const active = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(eq(invoiceSeries.nodeId, target.nodeId))
     .orderBy(invoiceSeries.code);
@@ -473,14 +474,11 @@ it("promotes a retained dormant reservation once, without resetting counters on 
     { code: "FF-P000042", purpose: "full", nextNumber: 1 },
     { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
   ]);
-  await suite.db
-    .update(invoiceSeries)
-    .set({ nextNumber: 41 })
-    .where(eq(invoiceSeries.nodeId, target.nodeId));
-  const before = await suite.db.select().from(invoiceSeries);
+  await advanceSeriesTo(suite.db, target.nodeId, 41);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const ledger = await suite.db.select().from(fiscalAllocations);
   await attempt("promote", run, { target, priorActivation: "committed" });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
   expect(await suite.db.select().from(fiscalReservations)).toEqual(reservation);
 });

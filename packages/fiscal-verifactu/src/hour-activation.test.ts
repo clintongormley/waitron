@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -85,7 +86,7 @@ async function activate(f = fixture(), priorActivation: "none" | "committed" = "
 async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     allocations: await suite.db.select().from(fiscalAllocations),
   };
 }
@@ -111,7 +112,7 @@ it.each(["restore"])(
   "retires the old series on %s without changing recovered counters",
   async (action) => {
     await activate();
-    await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+    await advanceSeriesTo(suite.db, node.nodeId, 123);
     const original = await snapshot();
     const result = await activate(fixture(action, "0CNPG", "recovery-hour"));
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
@@ -139,7 +140,7 @@ it.each(["restore"])(
 
 it("replays exactly with fresh authority and leaves all rows and counters unchanged", async () => {
   const first = await activate();
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
   const before = await snapshot();
   expect(await activate(fixture(), "committed")).toEqual(first);
   expect(await snapshot()).toEqual(before);
@@ -446,7 +447,7 @@ it("rolls back activation when hour admission expires during the writer's awaite
   });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
 });
 
 it.each([

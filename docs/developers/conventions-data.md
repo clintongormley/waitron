@@ -6076,7 +6076,7 @@ Cost: #1036 restored two edited files byte for byte.
 
 ### One database per environment
 
-`invoice_series.next_number` carries across and pre-production sales would leave a permanent hole in the production series — which is what Veri\*Factu detects.
+Invoice numbering comes from each series’ sales. Sharing a database would carry pre-production numbering into production and leave holes in the production series.
 
 A box joining another as its spare takes the main box's environment when its own `WAITRON_ENV` is
 unset or empty, and writes it to `trading.env`; when `WAITRON_ENV` is set, the environment it names

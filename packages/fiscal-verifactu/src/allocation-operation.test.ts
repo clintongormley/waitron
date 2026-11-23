@@ -1,3 +1,8 @@
+import {
+  seriesWithNextNumber,
+  advanceSeriesTo,
+  withInvoiceSeriesGuardDropped,
+} from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, expect, it } from "vitest";
@@ -129,7 +134,7 @@ beforeEach(async () => {
 async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     activations: await suite.db.select().from(fiscalAllocations),
     reservations: await suite.db.select().from(fiscalReservations),
   };
@@ -239,7 +244,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
     { code: "FF-S000001", purpose: "full" },
     { code: "R-S000001", purpose: "corrective" },
   ]);
-  expect(await suite.db.select().from(invoiceSeries)).toHaveLength(3);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(3);
   expect((await suite.db.select().from(fiscalAllocations))[0]!.approval.operatorId).toBe(
     "administrator",
   );
@@ -571,7 +576,7 @@ it("activates all purposes from opaque module input with the independently authe
   expect(retained!.allocation).toEqual(input.allocation);
   expect(retained!.bases).toEqual(bases);
   expect(
-    (await suite.db.select().from(invoiceSeries))
+    (await suite.db.select(seriesWithNextNumber).from(invoiceSeries))
       .filter((row) => row.retiredAt === null)
       .map(({ id, code, purpose }) => ({ id, code, purpose }))
       .sort((a, b) => a.code.localeCompare(b.code)),
@@ -599,7 +604,7 @@ async function activateForRead() {
 
 it("reads the actual committed allocation references without resetting series on setup retry", async () => {
   const result = await activateForRead();
-  await suite.db.update(invoiceSeries).set({ nextNumber: 12 });
+  await advanceSeriesTo(suite.db, node.nodeId, 12);
   const before = await snapshot();
   expect(await readAllocated()).toEqual(result.series);
   expect(await readAllocated([...bases].reverse())).toEqual(result.series);
@@ -650,15 +655,17 @@ it.each([
   if (field === "identity")
     await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'P000043'`);
   if (field === "code")
-    await suite.db
-      .update(invoiceSeries)
-      .set({ code: "changed" })
-      .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
+    await withInvoiceSeriesGuardDropped(suite.db, () =>
+      suite.db
+        .update(invoiceSeries)
+        .set({ code: "changed" })
+        .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`),
+    );
   if (field === "retired")
     await suite.db
       .update(invoiceSeries)
       .set({ retiredAt: new Date() })
-      .where(sql`${invoiceSeries.purpose} = 'standard'`);
+      .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
   if (field === "extra")
     await suite.db
       .insert(invoiceSeries)

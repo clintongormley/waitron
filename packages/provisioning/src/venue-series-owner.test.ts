@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, nodes, taxpayer, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seriesWithNextNumber,
+  seedInvoiceNumber,
+  withInvoiceSeriesGuardDropped,
+} from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -88,7 +93,7 @@ async function setup(
   });
 }
 async function rows() {
-  return suite.db.select().from(invoiceSeries).orderBy(invoiceSeries.code);
+  return suite.db.select(seriesWithNextNumber).from(invoiceSeries).orderBy(invoiceSeries.code);
 }
 beforeEach(() => {
   seeded = false;
@@ -114,10 +119,7 @@ describe("the filing module owns initial invoice series", () => {
 
   it("resolves a retry without rerunning activation or resetting the counter", async () => {
     const first = await setup();
-    await suite.db
-      .update(invoiceSeries)
-      .set({ nextNumber: 9 })
-      .where(eq(invoiceSeries.id, allocated[0]!.id));
+    await seedInvoiceNumber(suite.db, { nodeId: first.nodeId, seriesId: allocated[0]!.id }, 8);
     const before = await rows();
     const retry = await setup();
     expect(retry.seriesIds).toEqual(first.seriesIds);
@@ -203,9 +205,9 @@ describe("the filing module owns initial invoice series", () => {
     await expect(
       setup(read, "fiscal-verifactu", async (tx, result) => {
         expect(result.seriesIds).toEqual(allocated.map((row) => row.id));
-        expect((await tx.select().from(invoiceSeries)).map((row) => row.id).sort()).toEqual(
-          [...result.seriesIds].sort(),
-        );
+        expect(
+          (await tx.select(seriesWithNextNumber).from(invoiceSeries)).map((row) => row.id).sort(),
+        ).toEqual([...result.seriesIds].sort());
         throw new Error("settings refused");
       }),
     ).rejects.toThrow("settings refused");
@@ -250,10 +252,9 @@ it("refuses a returned reference moved to a different node", async () => {
     setup(async (tx, node, bases) => {
       const refs = await read(tx, node, bases);
       const other = await seedNode(tx);
-      await tx
-        .update(invoiceSeries)
-        .set({ nodeId: other })
-        .where(eq(invoiceSeries.id, refs[0]!.id));
+      await withInvoiceSeriesGuardDropped(tx, () =>
+        tx.update(invoiceSeries).set({ nodeId: other }).where(eq(invoiceSeries.id, refs[0]!.id)),
+      );
       return refs;
     }),
   ).rejects.toMatchObject({ code: "provisioning.second_venue" });

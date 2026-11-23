@@ -1,3 +1,4 @@
+import { seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { unzipSync } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
@@ -170,12 +171,17 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
         .values([
           { nodeId: venue.cfg.nodeId, code: "F/A", purpose: "full" },
           { nodeId: venue.cfg.nodeId, code: "F_A", purpose: "full" },
-          { nodeId: venue.cfg.nodeId, code: "F_A-1", purpose: "full", nextNumber: 2 },
-          { nodeId: venue.cfg.nodeId, code: "F/A-1", purpose: "full", nextNumber: 2 },
+          { nodeId: venue.cfg.nodeId, code: "F_A-1", purpose: "full" },
+          { nodeId: venue.cfg.nodeId, code: "F/A-1", purpose: "full" },
         ])
         .returning({ id: invoiceSeries.id, code: invoiceSeries.code }),
     );
     const idOf = (code: string) => created.find((row) => row.code === code)!.id;
+    await inTx(venue, async (tx) => {
+      for (const code of ["F_A-1", "F/A-1"]) {
+        await seedInvoiceNumber(tx, { nodeId: venue.cfg.nodeId, seriesId: idOf(code) }, 1);
+      }
+    });
     await jordiInvoiceIn(idOf("F/A"));
     await jordiInvoiceIn(idOf("F_A"));
     await jordiInvoiceIn(idOf("F_A-1"));

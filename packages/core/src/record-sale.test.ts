@@ -35,16 +35,16 @@ import {
   nextInvoiceNumberOf,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seedPerson,
+  seedWorkingOrder,
+  withInvoiceNumberCollision,
+} from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
-import {
-  seedBareSale,
-  seedCorrectiveSeries,
-  seedTaxpayer,
-  withInvoiceNumberCollision,
-} from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;

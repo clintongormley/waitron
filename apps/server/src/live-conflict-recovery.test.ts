@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedLiveConflict } from "@waitron/fiscal-verifactu/test/live-conflict-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -477,7 +478,7 @@ it.each([false, true])(
     const input = await selected(m);
     const before = suite.db.all(sql`select * from verifactu_records`);
     const cases = suite.db.all(sql`select * from filing_cases`);
-    const oldSeries = await suite.db.select().from(invoiceSeries);
+    const oldSeries = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     hold = true;
     const switching = m.send(request({ command: { kind: "activate", input } }));
     await entered.promise;
@@ -489,7 +490,10 @@ it.each([false, true])(
     });
     const sale = withTransaction(suite.db, async (tx) => {
       saleEntered = true;
-      const current = await tx.select().from(invoiceSeries).where(isNull(invoiceSeries.retiredAt));
+      const current = await tx
+        .select(seriesWithNextNumber)
+        .from(invoiceSeries)
+        .where(isNull(invoiceSeries.retiredAt));
       const standard = current.find((row) => row.purpose === "standard")!;
       return recordSale(
         tx,
@@ -515,7 +519,7 @@ it.each([false, true])(
         },
       });
       expect(suite.db.all(sql`select * from verifactu_records`)).toEqual(before);
-      expect(await suite.db.select().from(invoiceSeries)).toEqual(oldSeries);
+      expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(oldSeries);
     } else {
       expect(response.status).toBe(200);
       expect(outcome).toMatchObject({ ok: true });
@@ -527,8 +531,9 @@ it.each([false, true])(
       expect(records[1]!.num_serie_factura).toBe("A-0CNQT/1");
       for (const prior of oldSeries)
         expect(
-          (await suite.db.select().from(invoiceSeries)).find((row) => row.id === prior.id)
-            ?.nextNumber,
+          (await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).find(
+            (row) => row.id === prior.id,
+          )?.nextNumber,
         ).toBe(prior.nextNumber);
     }
   },

@@ -2002,7 +2002,7 @@ declare module "@waitron/shared" {
     /**
      * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the
      * restoring binary's. One database per environment (CLAUDE.md §5): a cross-environment restore
-     * would carry the wrong series' `next_number`, a permanent hole once real sales resume.
+     * would carry the wrong series' recorded numbers into production.
      */
     "restore.environment_mismatch": { backup: string; target: string };
     /**

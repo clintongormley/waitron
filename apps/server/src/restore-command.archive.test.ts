@@ -29,7 +29,7 @@ import { hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin, nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { stampDeployment } from "@waitron/db";
+import { stampDeployment, nextInvoiceNumberOf } from "@waitron/db";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
@@ -134,7 +134,6 @@ beforeAll(async () => {
       nodeId: ids.node,
       code: "FA",
       purpose: "standard",
-      nextNumber: 5,
     });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "RE", purpose: "corrective" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FF", purpose: "full" });
@@ -264,7 +263,7 @@ async function seriesOfNode(
     .select({
       code: invoiceSeries.code,
       retiredAt: invoiceSeries.retiredAt,
-      next: invoiceSeries.nextNumber,
+      next: nextInvoiceNumberOf(invoiceSeries.id),
     })
     .from(invoiceSeries)
     .where(eq(invoiceSeries.nodeId, ids.node))

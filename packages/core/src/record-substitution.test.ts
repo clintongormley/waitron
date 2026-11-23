@@ -1,3 +1,4 @@
+import { withInvoiceNumberCollision } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -35,12 +36,7 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordReplacement } from "./record-replacement.js";
 import { recordVoid } from "./record-void.js";
-import {
-  seedBareSale,
-  seedCorrectiveSeries,
-  seedTaxpayer,
-  withInvoiceNumberCollision,
-} from "../test/fixtures.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;

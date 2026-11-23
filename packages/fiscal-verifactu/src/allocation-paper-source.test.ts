@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,7 +6,6 @@ import { join } from "node:path";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority } from "@waitron/module";
-import { eq } from "drizzle-orm";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
@@ -161,7 +161,7 @@ it("activates only the complete signed allocation confirmed by the separate file
     expect(
       await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
     ).toEqual([{ approval }]);
-    expect(await suite.db.select().from(invoiceSeries)).toHaveLength(6);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(6);
   });
 });
 
@@ -313,11 +313,8 @@ it.each(["currentRegisterConfirmed", "consumptionConfirmed"])(
 it("replays the committed event without recreating series or resetting its counter", async () => {
   await withFiles(async (paths) => {
     const first = await attempt(paths);
-    await suite.db
-      .update(invoiceSeries)
-      .set({ nextNumber: 14 })
-      .where(eq(invoiceSeries.id, first.series[0]!.id));
-    const series = await suite.db.select().from(invoiceSeries);
+    await seedInvoiceNumber(suite.db, { nodeId: node.nodeId, seriesId: first.series[0]!.id }, 13);
+    const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const sifs = await suite.db.select().from(verifactuIdentities);
     const activations = await suite.db.select().from(fiscalAllocations);
     await writeFile(
@@ -325,7 +322,7 @@ it("replays the committed event without recreating series or resetting its count
       JSON.stringify({ ...confirmation, priorActivation: "committed" }),
     );
     expect(await attempt(paths)).toEqual(first);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
     expect(await suite.db.select().from(fiscalAllocations)).toEqual(activations);
   });
@@ -338,7 +335,7 @@ it("cannot free the outside consumed entry when the local caller rolls back", as
       confirmedFingerprint: fingerprint,
     });
     const external = await readFile(paths.confirmationPath, "utf8");
-    const series = await suite.db.select().from(invoiceSeries);
+    const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await expect(
       withOperationAuthority(binding, operatorId, (authority) =>
         withCollectedModuleAllocation({ binding, authority, input }, source, (activate) =>
@@ -351,7 +348,7 @@ it("cannot free the outside consumed entry when the local caller rolls back", as
     ).rejects.toThrow("caller-rollback");
     expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(series);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);
   });
 });

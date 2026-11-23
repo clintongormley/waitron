@@ -374,7 +374,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       deployment: venueDb.db.all(sql`select environment from deployment`),
       allocations: venueDb.db.all(sql`select taxpayer_nif, environment from fiscal_allocations`),
       sif: venueDb.db.all(sql`select numero_instalacion from verifactu_identities`),
-      series: venueDb.db.all(sql`select code, purpose, next_number from invoice_series`),
+      series: venueDb.db.all(
+        sql`select code, purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series`,
+      ),
     };
   }
 

@@ -748,11 +748,15 @@ it("a supplied disposable hour keeps its node and one sample across a readiness 
     expect(sample.prepare("select id from nodes").all()).toEqual([{ id: prepared.initialNodeId }]);
     expect(sample.prepare("select count(*) as n from sales").get()).toEqual({ n: 1 });
     expect(
-      sample.prepare("select purpose, next_number from invoice_series order by purpose").all(),
+      sample
+        .prepare(
+          "select purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose",
+        )
+        .all(),
     ).toEqual([
-      { purpose: "corrective", next_number: 1 },
-      { purpose: "full", next_number: 1 },
-      { purpose: "standard", next_number: 2 },
+      { purpose: "corrective", nextNumber: 1 },
+      { purpose: "full", nextNumber: 1 },
+      { purpose: "standard", nextNumber: 2 },
     ]);
   } finally {
     sample.close();

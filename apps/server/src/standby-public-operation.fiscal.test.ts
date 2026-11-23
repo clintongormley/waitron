@@ -1,5 +1,9 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedVenueSettings,
+  seedBusinessDay,
+  seriesWithNextNumber,
+} from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { Hono } from "hono";
@@ -357,7 +361,7 @@ async function liveTarget(target: string) {
       .from(verifactuIdentities)
       .where(and(eq(verifactuIdentities.nodeId, target), isNull(verifactuIdentities.revocadoEn))),
     series: await spare.db
-      .select()
+      .select(seriesWithNextNumber)
       .from(invoiceSeries)
       .where(and(eq(invoiceSeries.nodeId, target), isNull(invoiceSeries.retiredAt))),
     allocations: await spare.db.select().from(fiscalAllocations),

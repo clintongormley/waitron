@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
@@ -251,7 +252,7 @@ it("refuses a prepared token combined with another live authentication", async (
 });
 
 it("rolls back activation when the later host write refuses", async () => {
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   await expect(
     attempt(async (tx, operation) => {
       await preparation.activatePreparedModuleAllocation(tx, node, operation);
@@ -260,20 +261,20 @@ it("rolls back activation when the later host write refuses", async () => {
   ).rejects.toThrow("later-host-refusal");
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
 });
 
 it("collects outside the write transaction so another writer can commit", async () => {
   let written = false;
   const result = await attempt(undefined, async () => {
-    await withTransaction(suite.db, (tx) => tx.update(invoiceSeries).set({ nextNumber: 7 }));
+    await withTransaction(suite.db, (tx) => advanceSeriesTo(tx, node.nodeId, 7));
     written = true;
     return receipt();
   });
   expect(written).toBe(true);
   expect(result.series).toHaveLength(3);
   const retired = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(isNull(invoiceSeries.retiredAt));
   expect(retired.map((row) => row.nextNumber)).toEqual([1, 1, 1]);

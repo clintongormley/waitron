@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -120,7 +121,7 @@ describe("certificate diagnosis without a sale or install lock", () => {
       const chain = await withTransaction(suite.db, (tx) => readChainHead(tx, nodeId));
       expect(chain).toMatchObject({ ultimoRegistroId: record!.id, ultimaHuella: record!.huella });
       const [series] = await suite.db
-        .select()
+        .select(seriesWithNextNumber)
         .from(invoiceSeries)
         .where(eq(invoiceSeries.id, seriesId));
       expect(series?.nextNumber).toBe(2);

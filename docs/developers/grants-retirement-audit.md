@@ -153,6 +153,10 @@ changing enforcement, keeping each legitimate mutation path.
 | `workforce_chains`       | `DELETE`             | [packages/workforce/src/classification.ts](../../packages/workforce/src/classification.ts)               |
 | `working_order_counters` | `DELETE`             | [packages/db/src/classification.ts](../../packages/db/src/classification.ts)                             |
 
+**2026-11-23:** A1308 fi3 makes series retirement final. The series guard permits setting
+`retired_at` once. Foreign keys from sales and Veri*Factu series conflicts keep referenced series
+from being deleted.
+
 **2026-11-23:** A1308 fi2 removes `cadenas`. The latest fiscal record supplies the chain head.
 
 **2026-11-17:** A1308 os1 deletes `working_order_counters`; the next number comes from the bills.
@@ -165,8 +169,7 @@ changing enforcement, keeping each legitimate mutation path.
 
 **2026-11-10:** A1308 slice 4b dropped `payment_policy`; its row needs no decision.
 
-For `invoice_series`, inspect column-scoped updates and allocation separately; do not infer that
-number allocation should stop updating its counter. For `media_image_data`, deletion through the
+For `media_image_data`, deletion through the
 image's cascading foreign key is intentional (`packages/db/src/schema/media/images.ts`); the old
 no-`UPDATE` restriction still needs a decision. For `incidents`, acknowledge/resolve updates are
 real writes (`packages/core/src/incidents.ts`); the record cannot specify which columns may change.

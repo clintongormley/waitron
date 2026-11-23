@@ -111,9 +111,13 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
       if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot identifier");
       expect(db.prepare(`select count(*) as count from "${table}"`).get()).toEqual({ count: 0 });
     }
-    expect(db.prepare("select distinct next_number from invoice_series").all()).toEqual([
-      { next_number: 1 },
-    ]);
+    expect(
+      db
+        .prepare(
+          "select distinct (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series",
+        )
+        .all(),
+    ).toEqual([{ nextNumber: 1 }]);
   } finally {
     db.close();
   }

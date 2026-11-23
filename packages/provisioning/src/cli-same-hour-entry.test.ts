@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -189,7 +190,7 @@ it("the built command waits and takes its name in the same run, and completes th
   const stored = await openVenueDatabase(target);
   try {
     expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
-    const series = await stored.venue.select().from(invoiceSeries);
+    const series = await stored.venue.select(seriesWithNextNumber).from(invoiceSeries);
     expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
     expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
   } finally {
@@ -224,7 +225,7 @@ it("the built command waits and takes its name in the same run, and a run after 
   try {
     expect(await readTaxpayerIdentities(empty.venue)).toEqual([]);
     expect(await readDeploymentEnvironment(empty.venue)).toBeNull();
-    expect(await empty.venue.select().from(invoiceSeries)).toEqual([]);
+    expect(await empty.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   } finally {
     await empty.close();
   }
@@ -250,7 +251,7 @@ it("the built command waits and takes its name in the same run, and a run after 
   try {
     expect(await readTaxpayerIdentities(stored.venue)).toEqual([]);
     expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
-    expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
+    expect(await stored.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
   } finally {
     await stored.close();
   }

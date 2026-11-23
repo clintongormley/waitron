@@ -50,7 +50,7 @@ function count(table: string): number {
 
 function ledger() {
   const [series] = venue.db.all<{ next: number }>(
-    sql`select next_number as next from invoice_series where id = ${venue.seriesId}`,
+    sql`select (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as next from invoice_series where id = ${venue.seriesId}`,
   );
   return {
     sales: count("sales"),

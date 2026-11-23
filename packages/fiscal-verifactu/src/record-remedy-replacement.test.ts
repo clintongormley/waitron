@@ -1,3 +1,4 @@
+import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -151,7 +152,7 @@ beforeEach(async () => {
     await setFreshManagementSignIn(tx, token);
     const [series] = await tx
       .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective", nextNumber: 1 })
+      .values({ nodeId: node.nodeId, code: "R", purpose: "corrective" })
       .returning();
     correctiveId = series!.id;
   });
@@ -184,7 +185,7 @@ async function snapshot() {
   return {
     records: await suite.db.select().from(verifactuRecords).orderBy(verifactuRecords.secuencia),
     sales: await suite.db.select().from(sales),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };

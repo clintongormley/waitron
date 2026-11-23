@@ -30,13 +30,8 @@ import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import {
-  seedBareSale,
-  seedCorrectiveSeries,
-  seedTaxpayer,
-  withInvoiceNumberCollision,
-} from "../test/fixtures.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
+import { seedDevice, withInvoiceNumberCollision } from "@waitron/db/testing/seed.js";
 
 let deviceId: DeviceId;
 let nodeId: NodeId;

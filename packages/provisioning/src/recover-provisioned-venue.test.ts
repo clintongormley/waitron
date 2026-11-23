@@ -1,5 +1,9 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedVenueSettings,
+  advanceSeriesTo,
+  withInvoiceSeriesGuardDropped,
+} from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
@@ -55,10 +59,12 @@ async function fixture() {
 
 it("recovers the existing venue, node and all three series without allocating replacements", async () => {
   const f = await fixture();
-  await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`update invoice_series set next_number = 47`),
-  );
-  const before = (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows;
+  await withTransaction(suite.db, (tx) => advanceSeriesTo(tx, f.target.nodeId, 47));
+  const before = (
+    await suite.db.execute(
+      sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+    )
+  ).rows;
   expect(
     await recoverProvisionedVenue(
       suite.db,
@@ -70,9 +76,13 @@ it("recovers the existing venue, node and all three series without allocating re
     seriesIds: f.target.seriesIds,
     seeded: [],
   });
-  expect((await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows).toEqual(
-    before,
-  );
+  expect(
+    (
+      await suite.db.execute(
+        sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+      )
+    ).rows,
+  ).toEqual(before);
   const defaulted = { ...venue, fullSeriesCode: undefined };
   expect(await recoverProvisionedVenue(suite.db, { venue: defaulted }, ALL_MODULES)).toEqual({
     nodeId: f.target.nodeId,
@@ -95,7 +105,11 @@ it.each(["name", "fiscalTerritory"] as const)(
     const before = {
       venue: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
-      series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+      series: (
+        await suite.db.execute(
+          sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+        )
+      ).rows,
     };
     await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
       refusal,
@@ -103,7 +117,11 @@ it.each(["name", "fiscalTerritory"] as const)(
     expect({
       venue: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
-      series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+      series: (
+        await suite.db.execute(
+          sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+        )
+      ).rows,
     }).toEqual(before);
   },
 );
@@ -130,8 +148,11 @@ it.each(["malformed", "wrong-node", "missing-administrator"])(
               ? { nodeId: "00000000-0000-4000-8000-000000000000" }
               : { administratorId: "00000000-0000-4000-8000-000000000000" }),
           };
-    const before = (await suite.db.execute(sql`select * from invoice_series order by purpose`))
-      .rows;
+    const before = (
+      await suite.db.execute(
+        sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+      )
+    ).rows;
     await expect(
       recoverProvisionedVenue(
         suite.db,
@@ -140,7 +161,11 @@ it.each(["malformed", "wrong-node", "missing-administrator"])(
       ),
     ).rejects.toMatchObject(refusal);
     expect(
-      (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+      (
+        await suite.db.execute(
+          sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+        )
+      ).rows,
     ).toEqual(before);
   },
 );
@@ -171,20 +196,29 @@ it.each(["missing", "changed"])(
   "refuses %s series rather than reconstructing a partial result",
   async (change) => {
     await fixture();
-    await withTransaction(suite.db, (tx) =>
-      tx.execute(
-        change === "missing"
-          ? sql`delete from invoice_series where purpose = 'full'`
-          : sql`update invoice_series set code = 'DIFFERENT' where purpose = 'full'`,
-      ),
-    );
-    const before = (await suite.db.execute(sql`select * from invoice_series order by purpose`))
-      .rows;
+    await withTransaction(suite.db, async (tx) => {
+      if (change === "missing") {
+        await tx.execute(sql`delete from invoice_series where purpose = 'full'`);
+      } else {
+        await withInvoiceSeriesGuardDropped(tx, () =>
+          tx.execute(sql`update invoice_series set code = 'DIFFERENT' where purpose = 'full'`),
+        );
+      }
+    });
+    const before = (
+      await suite.db.execute(
+        sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+      )
+    ).rows;
     await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
       refusal,
     );
     expect(
-      (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+      (
+        await suite.db.execute(
+          sql`select *, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose`,
+        )
+      ).rows,
     ).toEqual(before);
   },
 );

@@ -1,3 +1,8 @@
+import {
+  seriesWithNextNumber,
+  advanceSeriesTo,
+  withInvoiceSeriesGuardDropped,
+} from "@waitron/db/testing/seed.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { deployment, invoiceSeries, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
@@ -56,7 +61,7 @@ async function seed(configuration = bases, seedParents = seedVenueNodes) {
   await stampDeployment(suite.db, "preproduction");
   const initial = { ...binding, action: "setup", eventId: "first", sourceId: "original" };
   await activate(initial, "0CNNW", "2026-10-16T11:40:00.000Z", configuration);
-  await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
+  await advanceSeriesTo(suite.db, node.nodeId, 123);
 }
 
 async function activate(
@@ -121,15 +126,15 @@ it("recognises a matching committed restore without modifying its retained resul
   await seed();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await activate(binding, "0CNQR", "2026-10-16T12:40:00.000Z");
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   expect((await read()).priorActivation).toBe("committed");
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
 });
 
 it("reads each configured prefix and exact spelling without writing counters", async () => {
   await seed();
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   const facts = await read();
   expect([...facts.bases].sort((a, b) => a.code.localeCompare(b.code))).toEqual(
     [...bases].sort((a, b) => a.code.localeCompare(b.code)),
@@ -149,7 +154,7 @@ it("reads each configured prefix and exact spelling without writing counters", a
     greatestSpentMinute: 415420,
     contradictions: [],
   });
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 
@@ -212,10 +217,12 @@ it("refuses an unstamped recovered database", async () => {
 
 it("refuses a changed active series instead of treating it as newly configured bases", async () => {
   await seed();
-  await suite.db
-    .update(invoiceSeries)
-    .set({ purpose: "corrective" })
-    .where(eq(invoiceSeries.code, "FF-0CNNW"));
+  await withInvoiceSeriesGuardDropped(suite.db, () =>
+    suite.db
+      .update(invoiceSeries)
+      .set({ purpose: "corrective" })
+      .where(eq(invoiceSeries.code, "FF-0CNNW")),
+  );
   await expect(read()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "series_mismatch" },
@@ -242,12 +249,12 @@ it.each(["standard", "full", "corrective"])(
   "refuses recovery with two %s prefixes without changing fiscal rows",
   async (purpose) => {
     await seed([...bases, { code: "second", purpose }]);
-    const before = await suite.db.select().from(invoiceSeries);
+    const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     await expect(read()).rejects.toMatchObject({
       code: "sif.allocation_invalid",
       params: { reason: "series_configuration_unsupported" },
     });
-    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   },
 );
@@ -259,13 +266,13 @@ it("consults an exact committed restore without changing counters or evidence", 
   await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
   const before = {
     allocations: await suite.db.select().from(fiscalAllocations),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
   };
   expect((await read(operation)).priorActivation).toBe("committed");
   expect({
     allocations: await suite.db.select().from(fiscalAllocations),
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
   }).toEqual(before);
   await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
@@ -287,7 +294,7 @@ it("gives a restore's history no time floor", async () => {
     db: suite.db,
   });
   const [standard] = await suite.db
-    .select()
+    .select(seriesWithNextNumber)
     .from(invoiceSeries)
     .where(eq(invoiceSeries.code, "a/b_.--0CNNW"));
   await withTransaction(suite.db, (tx) =>
@@ -312,9 +319,9 @@ it("recognises a matching committed conflict switch and refuses one from another
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   const operation = { ...binding, action: "conflict-switch" };
   await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
-  const before = await suite.db.select().from(invoiceSeries);
+  const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   expect((await read(operation)).priorActivation).toBe("committed");
-  expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+  expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   await expect(read({ ...operation, sourceId: "another-recovery" })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "event_mismatch" },

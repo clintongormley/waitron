@@ -178,7 +178,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
     ]);
     expect(
       suite.db.all(
-        sql`select next_number as number from invoice_series where id = ${venue.seriesId}`,
+        sql`select (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as number from invoice_series where id = ${venue.seriesId}`,
       ),
     ).toEqual([{ number: 2 }]);
     expect(venue.card.collectCalls).toHaveLength(captures);

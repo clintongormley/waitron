@@ -52,7 +52,11 @@ function read(directory: string) {
   try {
     return {
       sales: db.prepare("select total from sales order by invoice_number").all(),
-      counters: db.prepare("select id, code, next_number from invoice_series order by code").all(),
+      counters: db
+        .prepare(
+          "select id, code, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by code",
+        )
+        .all(),
       records: db.prepare("select count(*) as count from verifactu_records").get(),
       outbox: db.prepare("select count(*) as count from verifactu_submissions").get(),
       incidents: db.prepare("select code, sale_id, source from incidents").all(),

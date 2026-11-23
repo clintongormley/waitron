@@ -99,7 +99,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { promoteLocalSecondaryToPrimary } from "./promote.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { seedDevice, seedNode } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, withInvoiceNumberCollision } from "@waitron/db/testing/seed.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
@@ -1190,13 +1190,12 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     const firstOrder = await openOrder(v);
     const first = await strandBillPayment(v, firstOrder, { kind: "captured" });
     expect((await send(v, "POST", billResolvePath(first))).status).toBe(200);
-    await suite.db.execute(sql`
-      update invoice_series set next_number = next_number - 1
-      where id = (select series_id from sales where working_order_id = ${firstOrder})`);
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "captured" });
 
-    const res = await send(v, "POST", billResolvePath(id));
+    const res = await withInvoiceNumberCollision(suite.db, () =>
+      send(v, "POST", billResolvePath(id)),
+    );
 
     expect(res.status).toBe(409);
     expect((await errorOf(res)).code).toBe("sale.number_reused");

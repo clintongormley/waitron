@@ -240,7 +240,7 @@ it.each([
   ],
   [
     "used invoice name",
-    "insert into invoice_series(id, node_id, code, next_number) values ('series', 'node', 'A', 2)",
+    "insert into invoice_series(id, node_id, code) values ('series', 'node', 'A')",
   ],
   [
     "sale",

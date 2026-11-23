@@ -45,9 +45,7 @@ beforeEach(() => {
     db.run(
       sql`insert into nodes (id,name,created_at) values ('source','Source','2026-10-20T08:00:00.000Z')`,
     );
-    db.run(
-      sql`insert into invoice_series (id,node_id,code,next_number) values ('series','source','TEST',2)`,
-    );
+    db.run(sql`insert into invoice_series (id,node_id,code) values ('series','source','TEST')`);
     db.run(
       sql`insert into sales (id,source,series_id,node_id,invoice_number,issued_at,issued_offset_minutes,total,vat_breakdown,locale,invoice_locales,fiscal_backend,fiscal_state) values ('sale','operator_script','series','source',1,'2026-10-20T08:00:00.000Z',0,1000,'[]','en','["en"]','none','not_applicable')`,
     );

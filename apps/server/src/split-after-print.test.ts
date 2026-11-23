@@ -254,7 +254,7 @@ function written() {
       (select count(*) from working_orders) as bills,
       (select count(*) from working_order_lines) as lines,
       (select count(*) from order_amendments) as amendments,
-      (select group_concat(id || ':' || next_number, ',') from invoice_series) as series
+      (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series
   `)[0];
 }
 

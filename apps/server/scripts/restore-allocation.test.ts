@@ -15,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { ALLOCATED_FISCAL_SEED, ALLOCATED_FISCAL_RESTORE } from "@waitron/fiscal-verifactu";
@@ -150,9 +150,8 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
   });
   await suite.db.insert(nodes).values({ id: NODE, name: "Reimaged" });
-  await suite.db
-    .insert(invoiceSeries)
-    .values(bases.map((base) => ({ ...base, nodeId: NODE, nextNumber: 23 })));
+  await suite.db.insert(invoiceSeries).values(bases.map((base) => ({ ...base, nodeId: NODE })));
+  await advanceSeriesTo(suite.db, NODE, 23);
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, { nodeId: NODE, nif: "50000000R", idSistemaInformatico: "W1" }),
   );
@@ -190,7 +189,10 @@ async function rows() {
   try {
     return {
       sifs: await store.venue.select().from(verifactuIdentities),
-      series: await store.venue.select().from(invoiceSeries).orderBy(invoiceSeries.code),
+      series: await store.venue
+        .select(seriesWithNextNumber)
+        .from(invoiceSeries)
+        .orderBy(invoiceSeries.code),
       allocations: await store.venue.select().from(fiscalAllocations),
     };
   } finally {

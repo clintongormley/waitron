@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -142,7 +143,7 @@ async function configurationArtifact() {
     }),
   );
   await withTransaction(source.db, async (tx) => {
-    await tx.update(invoiceSeries).set({ nextNumber: 42 });
+    await advanceSeriesTo(tx, created.nodeId, 42);
     await createProduct(tx, {
       categoryId: null,
       name: "Imported gazpacho",
@@ -152,10 +153,12 @@ async function configurationArtifact() {
     });
   });
   expect(
-    (await source.db.select().from(invoiceSeries)).map(({ code, nextNumber }) => ({
-      code,
-      nextNumber,
-    })),
+    (await source.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
+      ({ code, nextNumber }) => ({
+        code,
+        nextNumber,
+      }),
+    ),
   ).toEqual([
     { code: "A-0CNM2", nextNumber: 42 },
     { code: "FF-0CNM2", nextNumber: 42 },
@@ -331,7 +334,7 @@ it.each([
           expect(
             disk
               .prepare(
-                "select code, purpose, next_number as nextNumber from invoice_series order by purpose",
+                "select code, purpose, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by purpose",
               )
               .all(),
           ).toEqual([

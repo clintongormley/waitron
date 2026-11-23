@@ -179,12 +179,14 @@ it("commits a real prepared hour only after kept consent and publishes its check
     rows: [{ count: 1 }],
   });
   expect(
-    await venue.db.execute("select code, next_number from invoice_series order by code"),
+    await venue.db.execute(
+      "select code, (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id) as nextNumber from invoice_series order by code",
+    ),
   ).toMatchObject({
     rows: [
-      { code: "A-0CNNY", next_number: 1 },
-      { code: "FF-0CNNY", next_number: 1 },
-      { code: "R-0CNNY", next_number: 1 },
+      { code: "A-0CNNY", nextNumber: 1 },
+      { code: "FF-0CNNY", nextNumber: 1 },
+      { code: "R-0CNNY", nextNumber: 1 },
     ],
   });
 });

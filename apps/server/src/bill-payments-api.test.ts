@@ -26,6 +26,7 @@ import {
   seedDeviceProfiles,
   seedNode,
   seedDepartmentReceipt,
+  seriesWithNextNumber,
 } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
@@ -3667,7 +3668,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     async (route) => {
       const { billId, paymentId, amount } = await savedF1WithReceivedMoney(route);
       const before = await paymentRows(billId);
-      const seriesBefore = await inTx((tx) => tx.select().from(invoiceSeries));
+      const seriesBefore = await inTx((tx) => tx.select(seriesWithNextNumber).from(invoiceSeries));
 
       const edited = await reduceToReceivedMoney(billId, route);
 
@@ -3683,7 +3684,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
         counterpartyLegalName: "Cliente SL",
         counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
       });
-      const seriesAfter = await inTx((tx) => tx.select().from(invoiceSeries));
+      const seriesAfter = await inTx((tx) => tx.select(seriesWithNextNumber).from(invoiceSeries));
       const used = seriesAfter.find((series) => series.id === sale!.seriesId)!;
       expect(used.purpose).toBe("full");
       expect(used.nextNumber).toBe(
@@ -3714,7 +3715,9 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       });
       expect(fiscalRecordCount(billId)).toBe(1);
       expect(await paymentRows(billId)).toEqual(before);
-      expect(await inTx((tx) => tx.select().from(invoiceSeries))).toEqual(seriesAfter);
+      expect(await inTx((tx) => tx.select(seriesWithNextNumber).from(invoiceSeries))).toEqual(
+        seriesAfter,
+      );
     },
   );
 
@@ -3737,7 +3740,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
           payments: await tx.select().from(billPayments),
           sales: await tx.select().from(sales),
           tenders: await tx.select().from(tenders),
-          series: await tx.select().from(invoiceSeries),
+          series: await tx.select(seriesWithNextNumber).from(invoiceSeries),
           jobs: await tx.select().from(printJobs),
         }));
       const before = await snapshot();
@@ -6183,7 +6186,7 @@ describe("simplified invoice original HTTP requests", () => {
         const copy = printedLines(copies[0]!.payload).join("\n");
         expect(copy).toContain(marker);
         const [series] = await suite.db
-          .select()
+          .select(seriesWithNextNumber)
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, sale.seriesId));
         expect(copy).toContain(`${series!.code}/${sale.invoiceNumber}`);

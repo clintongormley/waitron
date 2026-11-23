@@ -1,3 +1,4 @@
+import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, taxpayer, stampDeployment, withTransaction } from "@waitron/db";
@@ -52,8 +53,9 @@ beforeEach(async () => {
         { code: `A-${code}`, purpose: "standard" as const },
         { code: `FF-${code}`, purpose: "full" as const },
         { code: `R-${code}`, purpose: "corrective" as const },
-      ].map((value) => ({ ...value, nodeId, nextNumber: 123 })),
+      ].map((value) => ({ ...value, nodeId })),
     );
+    await advanceSeriesTo(suite.db, nodeId, 123);
   }
   await suite.db
     .update(verifactuIdentities)
@@ -66,7 +68,7 @@ beforeEach(async () => {
 });
 async function snapshot() {
   return {
-    series: await suite.db.select().from(invoiceSeries),
+    series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
     records: await suite.db.select().from(verifactuRecords),
     allocations: await suite.db.select().from(fiscalAllocations),

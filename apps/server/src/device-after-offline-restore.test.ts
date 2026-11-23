@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
@@ -151,7 +151,9 @@ it.each([
       expect(await self.json()).toMatchObject({ deviceId, profileId: profile!.id });
       const approved = await send("/api/device/join/status", cookie);
       expect(await approved.json()).toMatchObject({ status: "approved" });
-      expect(await store.venue.select().from(invoiceSeries)).toEqual(recovered.series);
+      expect(await store.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(
+        recovered.series,
+      );
       expect(await store.venue.select().from(fiscalAllocations)).toEqual(recovered.allocations);
       expect(await store.venue.select().from(verifactuIdentities)).toEqual(recovered.registrations);
       expect(restore.journal()).toBe(journal);
@@ -187,7 +189,7 @@ it.each([
         { num_serie_factura: "A-0CNQT/1" },
       ]);
       expect(
-        (await store.venue.select().from(invoiceSeries))
+        (await store.venue.select(seriesWithNextNumber).from(invoiceSeries))
           .filter((row) => row.retiredAt !== null)
           .map((row) => row.nextNumber),
       ).toEqual([123, 123, 123]);
