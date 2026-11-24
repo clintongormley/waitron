@@ -286,8 +286,9 @@ async function checkMoveInvoice(
 /**
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
- * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received. An
- * existing destination may hold payments and owes more afterwards.
+ * paid: a paid dish stays (`bill.line_paid`) and the source keeps at least what it has received,
+ * unless `sourceMayBeOverpaid`. An existing destination may hold payments and owes more afterwards.
+ * `tellKitchen: false` leaves out the MOVED slips and station notices.
  */
 export async function moveDishes(
   tx: Transaction,
@@ -300,6 +301,7 @@ export async function moveDishes(
     admission: TradingAdmission;
     invoiceChoice?: unknown;
   },
+  options: { sourceMayBeOverpaid?: boolean; tellKitchen?: boolean } = {},
 ): Promise<{ billId: string }> {
   await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
@@ -365,8 +367,8 @@ export async function moveDishes(
   await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
   });
-  await assertBillInvariant(tx, [fromBillId]);
-  await enqueueMovedSlips(tx, cfg, before, destinationId);
+  if (options.sourceMayBeOverpaid !== true) await assertBillInvariant(tx, [fromBillId]);
+  if (options.tellKitchen !== false) await enqueueMovedSlips(tx, cfg, before, destinationId);
   return { billId: destinationId };
 }
 

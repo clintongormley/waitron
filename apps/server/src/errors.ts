@@ -910,6 +910,13 @@ declare module "@waitron/shared" {
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
+     * Paying for chosen items would leave the bill owing less than the payments on account it
+     * took off with their own receipts; `advances` is what they credit.
+     */
+    "bill.below_advances": { advances: string };
+    /** Paying for chosen items chose every dish on the bill: that is paying the whole bill. */
+    "bill.all_items_chosen": Record<string, never>;
+    /**
      * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it
      * and another are refused while it has any pending or received bill payment, even one given
