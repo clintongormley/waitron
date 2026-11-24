@@ -2214,6 +2214,11 @@ async function bootServer(
           ...(seams.waitingStart?.secure === undefined
             ? {}
             : { secure: seams.waitingStart.secure }),
+          passkey: {
+            rpId: config.managementRpId,
+            managementOrigin: config.managementOrigin,
+            nodeId: node.nodeId,
+          },
         },
         routes: [
           (waitingApp) =>

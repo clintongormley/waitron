@@ -24,7 +24,9 @@ import {
   finishOwnTotpEnrollment,
   persons,
   startManagementSession,
+  webauthnCredentials,
 } from "@waitron/identity";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -737,7 +739,13 @@ describe("the waiting start", () => {
       h = harness(() => new Promise(() => {}), {
         node: suite.node,
         intervalMs: 60_000,
-        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING, modules: [fiscal] },
+        carryOn: {
+          db: suite.db,
+          credentialKeyRing: TOTP_KEY_RING,
+          modules: [fiscal],
+          // The page is asked at https://box.test, so the passkey answer comes from that origin.
+          passkey: { rpId: "box.test", managementOrigin: "https://box.test", nodeId: NODE_ID },
+        },
       });
     });
     afterEach(async () => {
@@ -1477,20 +1485,84 @@ describe("the waiting start", () => {
         expect(plain).not.toContain('action="/old-box-data"');
       });
 
-      it("offers no passkey sign-in: no passkey form on the page, and no passkey options route", async () => {
-        expect(await page()).not.toContain("old-box-data-passkey");
-        const options = await h.app().request(
-          "https://box.test/old-box-data/passkey-options",
-          {
-            method: "POST",
-            headers: { origin: "https://box.test", "sec-fetch-site": "same-origin" },
-          },
-          tls(),
+      it("offers the passkey sign-in below the password form over HTTPS, and no passkey form over HTTP", async () => {
+        const answer = await h
+          .app()
+          .request("https://box.test/", { headers: { "accept-language": "en-GB" } }, tls());
+        // The page's inline passkey script runs only while no policy blocks it.
+        expect(answer.headers.get("content-security-policy")).toBeNull();
+        const shown = await answer.text();
+        expect(shown).toContain(
+          '<form method="post" action="/old-box-data" class="box-form" id="old-box-data-passkey-form">',
         );
-        expect(options.status).toBe(404);
-        const posted = await download({ passkey: "x" });
-        expect(posted.status).toBe(400);
-        expect(await posted.text()).toContain(escapeHtml(words.emailMissing));
+        expect(shown).toContain(
+          `<button type="button" class="secondary" id="old-box-data-passkey" data-failed="${escapeHtml(words.passkeyCancelled)}" hidden>${escapeHtml(words.passkeyAction)}</button>`,
+        );
+        expect(shown.indexOf('id="old-box-data-password"')).toBeGreaterThan(-1);
+        expect(shown.indexOf('id="old-box-data-password"')).toBeLessThan(
+          shown.indexOf('id="old-box-data-passkey-form"'),
+        );
+        expect(await page(false)).not.toContain("old-box-data-passkey");
+      });
+
+      describe("with a passkey", () => {
+        async function passkeyForAdmin(): Promise<ReturnType<typeof signingPasskey>> {
+          const passkey = signingPasskey("box.test");
+          await withTransaction(suite.db, (tx) =>
+            tx.insert(webauthnCredentials).values({
+              personId: adminId,
+              credentialId: passkey.credentialId,
+              publicKey: passkey.publicKey,
+              counter: 0,
+            }),
+          );
+          return passkey;
+        }
+        async function challenge(): Promise<string> {
+          const options = await h.app().request(
+            "https://box.test/old-box-data/passkey-options",
+            {
+              method: "POST",
+              headers: { origin: "https://box.test", "sec-fetch-site": "same-origin" },
+            },
+            tls(),
+          );
+          expect(options.status).toBe(200);
+          const body = (await options.json()) as { challenge: string; rpId: string };
+          expect(body.rpId).toBe("box.test");
+          expect(body.challenge).toMatch(/^[\w-]{16,}$/);
+          return body.challenge;
+        }
+
+        it("downloads this box's data for an administrator's passkey answer", async () => {
+          const passkey = await passkeyForAdmin();
+          const answer = passkey.assert(await challenge(), "https://box.test");
+          const response = await download({ passkey: JSON.stringify(answer) });
+          expect(response.status).toBe(200);
+          expect(response.headers.get("content-type")).toBe(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          );
+          const sheets = unzipSync(new Uint8Array(await response.arrayBuffer()));
+          expect(sheets["xl/worksheets/sheet1.xml"]).toBeDefined();
+          await stillWaiting();
+        });
+
+        it("a refused passkey answer draws the waiting page with the refusal above the passkey button", async () => {
+          const answer = signingPasskey("box.test").assert(await challenge(), "https://box.test");
+          const response = await download({ passkey: JSON.stringify(answer) });
+          expect(response.status).toBe(401);
+          const html = await response.text();
+          expect(html).toContain("<h1>This box is waiting for Spare</h1>");
+          expect(html).toContain('action="/carry-on"');
+          const section = html
+            .slice(html.indexOf("<section"))
+            .replace(/<script>[\s\S]*?<\/script>/g, "");
+          expect(section).toContain(
+            `<p id="old-box-data-passkey-message" role="alert">${escapeHtml(words.passkeyRefused)}</p>\n<p><button type="button" class="secondary" id="old-box-data-passkey"`,
+          );
+          expect(section).not.toContain("old-box-data-message");
+          await stillWaiting();
+        });
       });
 
       it("draws the carry-on and download blocks in the waiting page's one section, over HTTPS and HTTP", async () => {

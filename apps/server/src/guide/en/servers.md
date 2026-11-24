@@ -357,7 +357,7 @@ If the other box answers first, its answer wins. A box that has already handed o
 on; its page says so instead of showing the form.
 
 Below the form, the page also offers **Download this box's data**, the same download as on
-[a box that no longer runs the venue](servers.md#handed-over), with the email and password sign-in only.
+[a box that no longer runs the venue](servers.md#handed-over).
 
 If the backup confirms that another box has taken over, this box refuses to carry on. Open the
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
