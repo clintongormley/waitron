@@ -359,6 +359,11 @@ once the refund is done. **Download for accountant (XLSX)**, in the dashboard's 
 takings**, lists these refunds on a sheet of their
 own, with the VAT that stays declared because no corrective invoice is filed.
 
+Refund a payment gives money back without correcting the invoice, so it refuses money **Correct
+invoice** can give back, such as for a complaint: use Correct invoice for that. It still gives back
+a tip, what is still owed for dishes cancelled with **Cancel and refund** or **Finish table**, a part
+payment as below, and money on an invoice Correct invoice can never correct.
+
 To give back a part payment that the table's receipt already took off, first use **Correct
 invoice** on the table's receipt. Once that has given back everything paid on it, choose **Refund a
 payment** on the part payment's own receipt for the rest.
@@ -369,8 +374,9 @@ total, the tip is 0.00, the reason is the one you gave for the cancel, and the d
 under it.
 
 You do not need another PIN to refund up to the cancelled dishes' remaining value, with no tip.
-If you raise the amount or add a tip, you need refund permission or a fresh approval PIN. The
-refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
+To give back more than the cancelled dishes' remaining value, use **Correct invoice**. Where it
+can never correct the receipt, raising the amount needs refund permission or a fresh approval PIN, and
+adding a tip always does. The refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
 terminal always asks for a fresh PIN to confirm that the terminal refund was done.
 
 Keep this refund window open to use the cancellation's approval. If you close it before sending
@@ -381,8 +387,7 @@ When the chosen payment holds less than the dishes' total, the amount is what it
 such as **â‚¬2.00 left to refund from another payment** says what remains. It counts from the amount
 in the window, so it also appears, or grows, when you lower the amount. To refund the rest, choose
 **Refund a payment** again and pick a payment. That window is not filled in: enter the amount
-and reason yourself. If you cannot give refunds, it asks for the PIN, and the dishes' entries in the
-report do not show that part. If that payment cannot be refunded on this device, the window tells
+and reason yourself. If you cannot give refunds, it asks for the PIN. If that payment cannot be refunded on this device, the window tells
 you to refund it at a till.
 
 If the card provider cannot refund the payment yet, this attempt returned no money.
@@ -393,13 +398,13 @@ in **Find a bill** and choose **Print**. You can reprint it from the dashboardâ€
 
 ## Correct an invoice {#correct-invoice}
 
-When a paid bill charged too much, correct its invoice: the guest gets the difference back and
+When a paid bill charged too much, or you give money back for a complaint, correct its invoice: the guest gets the difference back and
 Waitron files a corrective invoice for it. On a past receipt, choose **Correct invoice**, beside
 **Refund a payment**. The till cannot correct a full invoice naming a customer.
 
 If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
 otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
-for each rate. Choose a **Reason**, then **Correct and refund**. If you may not correct invoices,
+for each rate. Choose a **Reason**, such as **Complaint**, then **Correct and refund**. If you may not correct invoices,
 someone who may enters their PIN.
 
 When the bill was paid only in cash, the cash drawer opens and the corrective invoice is filed at
@@ -431,8 +436,8 @@ If the window says an earlier request got no answer, choose **Send again**.
 If the till says the box is out of disk space, wait until a manager clears the stop before refunding
 on the terminal: Waitron cannot record the refund while the stop holds.
 
-For a card payment keyed from a separate terminal, Waitron asks you to refund it on that terminal
-first. Complete the terminal's refund before choosing **Refunded on the terminal**. A supervisor
+For a card payment keyed from a separate terminal, refund on that terminal only when the window
+asks you to, and complete that refund before confirming it in the window. A supervisor
 or manager then approves recording it in Waitron with their PIN.
 
 If a refund gets no answer, check the bill's payments before trying again. The first request may

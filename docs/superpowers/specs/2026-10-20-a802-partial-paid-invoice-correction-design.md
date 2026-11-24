@@ -1,5 +1,18 @@
 # A802: Correct part of a paid invoice
 
+> **2026-11-23:** the owner's approval of policy 2 recorded "goodwill refunds stay money-only", and
+> this design says "An ordinary goodwill refund remains a money action" and "a served-dish goodwill
+> return can still use ordinary Refund a payment". That no longer holds: goodwill money goes back
+> through Correct invoice, on the owner's words of 18 and 21 November, and Refund a payment refuses
+> what Correct invoice would give back, the watcher's rule shown to the owner on 23 November without
+> objection
+> ([decision](../../backlog/fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23);
+> [plan](../plans/2026-11-19-adviser-goodwill-corrective.md)). The same work retired three more
+> statements below: Correct invoice no longer needs dishes picked at mixed rates, shares an amount by
+> menu price with each dish capped at what is left of it, and offers every reason, not only Void ones
+> ([sharing](../../backlog/fiscal.md#money-given-back-is-shared-by-menu-price-owner-and-watcher-2026-11-23);
+> [reasons](../../backlog/fiscal.md#correct-invoice-offers-every-reason-complaint-included-owner-2026-11-23)).
+>
 > **2026-11-12:** the owner replaced "file when opened" with "When all money is back"
 > ([decision](../../backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12));
 > the build now follows the [reshape plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a802-reshape.md).

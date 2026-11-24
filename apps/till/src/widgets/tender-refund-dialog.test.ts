@@ -147,6 +147,26 @@ it.each([
   },
 );
 
+it("opened for a correction's card refund, offers every reason and starts on a Comp one", async () => {
+  const el = await mount({ correcting: true, startReasonId: "comp" });
+
+  expect(combo(el).value).toBe("comp");
+  expect(combo(el).options.map((option) => option.value)).toEqual([
+    "return",
+    "courtesy",
+    "other",
+    "comp",
+  ]);
+  expect(button(el).variant).toBe("primary");
+});
+
+it("opened for an ordinary refund, offers only Void reasons and does not start on a Comp one", async () => {
+  const el = await mount({ startReasonId: "comp" });
+
+  expect(combo(el).value).toBe("");
+  expect(combo(el).options.map((option) => option.value)).toEqual(["return", "courtesy", "other"]);
+});
+
 it("requires a choice between original tenders and resets amounts and the hand-keyed switch on another choice", async () => {
   const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };
   const el = await mount({ tenders: [manual, card] });
@@ -284,7 +304,25 @@ it.each(["-1", "0.001", "abc", "", "1,000.00"])(
   },
 );
 
-it("returns tip only with all remaining applied money and refuses a zero total", async () => {
+it("returns a tip on its own or with all remaining applied money, and refuses a zero total", async () => {
+  const alone = await mount();
+  const tipOnly = collect(alone, "tender-refund-submit");
+  await choose(alone, "return");
+  await fill(alone, "appliedAmount", "0");
+  await fill(alone, "tipAmount", "1");
+  await click(alone);
+  expect(field(alone, "tipAmount").error).toBe("");
+  expect(tipOnly).toEqual([
+    {
+      tenderId: "card-1",
+      appliedAmount: "0.00",
+      tipAmount: "1.00",
+      reason: "Return",
+      manualConfirmed: false,
+    },
+  ]);
+  alone.remove();
+
   const el = await mount();
   const asks = collect(el, "tender-refund-submit");
   await choose(el, "return");
@@ -331,6 +369,125 @@ it("requires explicit manual-terminal confirmation before requesting its mandato
       manualConfirmed: true,
     },
   ]);
+});
+
+/** A hand-keyed card payment of €40.00, no tip, of which Refund a payment may give back `limit`. */
+const keyed = (limit: string): RefundableTender => ({
+  ...card,
+  manual: true,
+  tipRemaining: "0.00",
+  plainRefundLimit: limit,
+});
+const bottom = (el: TillTenderRefundDialog) =>
+  root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+function pressEnter(el: TillTenderRefundDialog) {
+  field(el, "appliedAmount")
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  return el.updateComplete;
+}
+
+it.each(["en", "es"] as const)(
+  "in %s, never asks for a hand-keyed payment above what Refund a payment may give back on the terminal, and does at its limit",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount({ tenders: [keyed("39.99")] });
+    const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+    await choose(el, "return");
+    expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction"));
+    expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction", locale));
+    expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
+    expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
+    expect(button(el).disabled).toBe(true);
+    expect(button(el).variant).toBe("secondary");
+    await pressEnter(el);
+    expect(asks).toEqual([]);
+
+    await fill(el, "appliedAmount", "39.99");
+    expect(bottom(el)).toBe("");
+    expect(button(el).variant).toBe("primary");
+    expect(root(el).querySelector("[data-manual-instruction]")!.textContent).toContain(
+      t("tender_refund.manual_instruction"),
+    );
+    await click(el, "wt-switch[name=manualConfirmed]");
+    await click(el);
+    expect(asks).toEqual([
+      {
+        tenderId: "card-1",
+        appliedAmount: "39.99",
+        tipAmount: "0.00",
+        reason: "Return",
+        manualConfirmed: true,
+      },
+    ]);
+  },
+);
+
+it("drops the unticked terminal step's error once the amount goes above the limit", async () => {
+  const el = await mount({ tenders: [keyed("39.99")] });
+  await choose(el, "return");
+  await fill(el, "appliedAmount", "39.99");
+  await click(el);
+  expect(bottom(el)).toBe(t("form.fix_fields"));
+  await fill(el, "appliedAmount", "40.00");
+  expect(bottom(el)).not.toContain(t("form.fix_fields"));
+  expect(bottom(el)).toBe(codeMessage("tender.refund_needs_correction"));
+});
+
+it("asks for a hand-keyed payment's tip alone on the terminal whatever its limit", async () => {
+  const el = await mount({ tenders: [{ ...keyed("0.00"), tipRemaining: "5.00" }] });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await choose(el, "return");
+  await fill(el, "appliedAmount", "0");
+  expect(root(el).querySelector("[data-manual-instruction]")).not.toBeNull();
+  await click(el, "wt-switch[name=manualConfirmed]");
+  await click(el);
+  expect(asks).toMatchObject([{ appliedAmount: "0.00", tipAmount: "5.00", manualConfirmed: true }]);
+});
+
+it.each(["en", "es"] as const)(
+  "in %s, while a correction is open, asks for nothing on the terminal, a tip alone included",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount({
+      tenders: [{ ...keyed("0.00"), tipRemaining: "5.00", correctionOpen: true }],
+    });
+    const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+    await choose(el, "return");
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
+    await fill(el, "appliedAmount", "0");
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open"));
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open", locale));
+    expect(bottom(el)).not.toContain(codeMessage("tender.refund_needs_correction"));
+    expect(root(el).querySelector("[data-manual-instruction]")).toBeNull();
+    expect(root(el).querySelector("wt-switch[name=manualConfirmed]")).toBeNull();
+    expect(button(el).disabled).toBe(true);
+    expect(button(el).variant).toBe("secondary");
+    await pressEnter(el);
+    expect(asks).toEqual([]);
+  },
+);
+
+it("does not limit a correction's card refund of a hand-keyed payment", async () => {
+  const el = await mount({
+    tenders: [{ ...keyed("0.00"), correctionOpen: true }],
+    correcting: true,
+  });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await choose(el, "return");
+  expect(bottom(el)).toBe("");
+  await click(el, "wt-switch[name=manualConfirmed]");
+  await click(el);
+  expect(asks).toMatchObject([{ appliedAmount: "40.00", manualConfirmed: true }]);
+});
+
+it("leaves a cash refund above the limit to the server", async () => {
+  const el = await mount({ tenders: [{ ...cash, plainRefundLimit: "0.00" }] });
+  const asks = collect<TenderRefundAsk>(el, "tender-refund-submit");
+  await choose(el, "return");
+  expect(bottom(el)).toBe("");
+  await click(el);
+  expect(asks).toMatchObject([{ tenderId: "cash-1", appliedAmount: "40.00" }]);
 });
 
 it("offers an existing pending refund for status without offering another refund of that tender", async () => {

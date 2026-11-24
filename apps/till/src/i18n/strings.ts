@@ -159,7 +159,8 @@ export const en = {
   "tender_refund.tip": "Tip to return",
   "tender_refund.amount_invalid":
     "Enter an amount from zero to {amount}; the total returned must be above zero.",
-  "tender_refund.tip_requires_all": "Return a tip only with all the remaining payment amount.",
+  "tender_refund.tip_requires_all":
+    "Return a tip on its own, or with all the remaining payment amount.",
   "tender_refund.manual_confirm": "I have returned this money on the original card terminal",
   "tender_refund.confirm_required": "Confirm that the money has been returned.",
   "tender_refund.manual_instruction":
@@ -175,7 +176,7 @@ export const en = {
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Before starting another refund, open the receipt on another device that takes payments and choose Refund a payment: it lists what is left to refund and any refund still waiting.",
   "invoice_correction.title": "Correct invoice",
-  "invoice_correction.explain": "Correct an overcharge and return the difference.",
+  "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
   "invoice_correction.loading": "Reading the invoice…",
   "invoice_correction.read_failed": "The invoice could not be read. Nothing has changed.",
   "invoice_correction.dishes": "Dishes to correct (optional)",
@@ -2497,7 +2498,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.amount_invalid":
     "Introduce un importe entre cero y {amount}; el total devuelto debe ser mayor que cero.",
   "tender_refund.tip_requires_all":
-    "Devuelve una propina solo junto con todo el importe restante del pago.",
+    "Devuelve una propina sola o junto con todo el importe restante del pago.",
   "tender_refund.manual_confirm": "He devuelto este dinero en el terminal de tarjeta original",
   "tender_refund.confirm_required": "Confirma que has devuelto el dinero.",
   "tender_refund.manual_instruction":
@@ -2514,7 +2515,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Antes de iniciar otra devolución, abre el recibo en otro dispositivo que cobre y elige Devolver un pago: muestra lo que queda por devolver y cualquier devolución pendiente.",
   "invoice_correction.title": "Rectificar factura",
-  "invoice_correction.explain": "Corrige un cobro de más y devuelve la diferencia.",
+  "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
   "invoice_correction.loading": "Consultando la factura…",
   "invoice_correction.read_failed": "No se ha podido leer la factura. No ha cambiado nada.",
   "invoice_correction.dishes": "Platos que se rectifican (opcional)",

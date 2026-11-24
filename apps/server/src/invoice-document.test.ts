@@ -1728,15 +1728,15 @@ describe("a correction's receipts", () => {
       adjustments: line.adjustments?.map(({ kind, amount }) => ({ kind, amount })),
     }));
   const FILED = [
-    { gross: "-2.45", listGross: undefined, adjustments: undefined },
-    { gross: "-0.55", listGross: undefined, adjustments: undefined },
+    { gross: "-2.50", listGross: undefined, adjustments: undefined },
+    { gross: "-0.50", listGross: undefined, adjustments: undefined },
   ];
   // The simplified page's rows: description, quantity, price and amount.
   const itemRows = (document: ReceiptDocumentInput) =>
     pageRows(document).map((cells) => cells.map((cell) => cell.replace(/ €$/u, "")));
 
   // Fails if the corrective's lines take the list prices they copied from the original: the page
-  // then prints the salad at -10,00 and a discount row of 7,55 beneath it.
+  // then prints the salad at -10,00 and a discount row of 7,50 beneath it.
   it("the A4 page of a correction shows the filed figures and no discount", async () => {
     const saleId = await corrected();
     const document = await withTransaction(suite.db, (tx) =>
@@ -1744,8 +1744,8 @@ describe("a correction's receipts", () => {
     );
     expect(shown(document.result.lines)).toEqual(FILED);
     expect(itemRows(document)).toEqual([
-      ["House salad", "-1", "", "-2,45"],
-      ["Mineral water", "-1", "", "-0,55"],
+      ["House salad", "-1", "", "-2,50"],
+      ["Mineral water", "-1", "", "-0,50"],
     ]);
   });
 

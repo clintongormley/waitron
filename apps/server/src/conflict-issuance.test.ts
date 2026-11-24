@@ -8,6 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { refundableCancel } from "./testing/cancel-line.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: BillVenue;
@@ -49,7 +50,7 @@ async function issued() {
     .from(tenders)
     .innerJoin(sales, eq(sales.id, tenders.saleId))
     .where(eq(sales.workingOrderId, billId));
-  return tender!;
+  return { ...tender!, billId };
 }
 const refundBody = () => ({
   submissionId: randomUUID(),
@@ -60,8 +61,12 @@ const refundBody = () => ({
 });
 async function refundable(kind: "bill" | "tender") {
   if (kind === "tender") {
-    const { saleId, tenderId } = await issued();
-    return { path: `/api/transactions/${saleId}/refunds`, body: { ...refundBody(), tenderId } };
+    const { saleId, tenderId, billId } = await issued();
+    const cancellationIds = [await refundableCancel(suite.db, venue.cfg, billId, 1)];
+    return {
+      path: `/api/transactions/${saleId}/refunds`,
+      body: { ...refundBody(), tenderId, cancellationIds },
+    };
   }
   await issued();
   const billId = await tabWith(venue, "Paella");

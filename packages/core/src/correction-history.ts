@@ -260,6 +260,7 @@ async function readHistory(
       rate: basisPointsToDecimal(line.vatRate),
       gross: centsToDecimal(line.lineGross!),
       base: centsToDecimal(line.lineTotal),
+      menu: centsToDecimal(line.listGross ?? line.lineGross!),
     })),
     vatBreakdown,
     consumed: [

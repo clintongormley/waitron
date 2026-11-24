@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
@@ -58,6 +58,7 @@ import {
   parseInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
+  correctableNow,
 } from "./invoice-corrections.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
@@ -66,6 +67,9 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { systemClock } from "./till-backend.js";
 import { overridePinAttempts } from "./till-api.js";
 import { offerProducts } from "./testing/zone-offers.js";
+
+/** The starter Comp reason Complaint, by its English or Spanish name. */
+const isComplaint = (reason: { name: string }) => ["Complaint", "Queja"].includes(reason.name);
 
 let venue: BillVenue;
 let offerOf: (name: string) => string;
@@ -304,6 +308,7 @@ async function giveBack(
       },
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
+      { backend: venue.backend, reading },
     );
     if (!begun.replayed)
       await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, begun.refund);
@@ -676,6 +681,47 @@ describe("fileCorrectionIn", () => {
     expect(await original(saleId)).toEqual(before);
   });
 
+  it("files a corrective split across both rates when no dishes are chosen", async () => {
+    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"], "0.00", "takeaway");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "8.80" });
+
+    const given = await cash(correction.id, "8.80");
+
+    const [corrective] = await venue.db
+      .select()
+      .from(sales)
+      .where(eq(sales.id, given.correction.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -880,
+      vatBreakdown: [
+        { rate: "10.00", base: "-2.50", tax: "-0.25" },
+        { rate: "21.00", base: "-5.00", tax: "-1.05" },
+      ],
+    });
+    const integrity = await inTx(venue, (tx) => venue.backend.checkIntegrity(tx, venue.cfg.nodeId));
+    expect(integrity.issues).toEqual([]);
+  });
+
+  it("files a correction opened with the Comp reason Complaint under that reason's name", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const complaint = (await inTx(venue, (tx) => listAdjustmentReasons(tx))).find(isComplaint)!;
+    const { correction } = await open(saleId, {
+      submissionId: randomUUID(),
+      gross: "6.05",
+      reasonId: complaint.id,
+      note: null,
+    });
+
+    const given = await cash(correction.id, "6.05");
+
+    expect(given.correction).toMatchObject({ state: "filed", reason: complaint.name });
+    expect(await correctionRow(correction.id)).toMatchObject({
+      state: "filed",
+      reason: complaint.name,
+    });
+  });
+
   it("refuses a correction already filed, filing nothing more", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
@@ -714,12 +760,26 @@ describe("fileCorrectionIn", () => {
   });
 });
 
+describe("correctableNow", () => {
+  it("answers 0 for a ticket not yet paid, without asking whether the caller would refuse", async () => {
+    const saleId = await soldForCash("Rib steak", []);
+    const stillRefused = vi.fn(() => true);
+    expect(
+      await inTx(venue, (tx) =>
+        correctableNow(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, stillRefused),
+      ),
+    ).toEqual({ refundable: 0, correctable: 0 });
+    expect(stillRefused).not.toHaveBeenCalled();
+  });
+});
+
 describe("a correction's legs", () => {
   it("refuses an ordinary refund on a ticket with an unfinished correction, and allows it once the correction ends", async () => {
-    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const saleId = await soldForCash("Rib steak", ["12.10"], "3.00");
     const earlier = { submissionId: randomUUID(), amount: "1.00" };
+    // A tip alone: the ordinary refund Correct invoice never takes.
     const ordinary = (submissionId: string, amount: string) =>
-      giveBack(saleId, amount, undefined, { submissionId });
+      giveBack(saleId, "0.00", undefined, { submissionId, tipAmount: amount });
     const first = await ordinary(earlier.submissionId, earlier.amount);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
 
@@ -773,6 +833,7 @@ describe("a correction's legs", () => {
           },
           { requestedBy: managerId, authorizedBy: managerId },
           venue.clock.now().instant.toISOString(),
+          { backend: venue.backend, reading: venue.clock.now() },
         );
       });
     };
@@ -895,14 +956,18 @@ describe("openInvoiceCorrection refuses", () => {
     }
   });
 
-  it("a reason that is not a Void reason, and opens with a Void reason", async () => {
-    const saleId = await soldForCash("Rib steak", ["12.10"]);
+  it("opens with a Comp reason such as Complaint, and with a Void reason", async () => {
     const reasons = await inTx(venue, (tx) => listAdjustmentReasons(tx));
-    const comp = reasons.find((reason) => reason.kind === "comp")!;
-    await refusedWithNothingWritten(
-      () => open(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: comp.id }),
-      { code: "adjustment.action_not_allowed" },
-    );
+    const complaint = reasons.find(isComplaint)!;
+    expect(complaint.kind).toBe("comp");
+    await expect(
+      open(await soldForCash("Rib steak", ["12.10"]), {
+        submissionId: randomUUID(),
+        gross: "6.05",
+        reasonId: complaint.id,
+      }),
+    ).resolves.toMatchObject({ correction: { state: "open" } });
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
     const voidReason = reasons.find((reason) => reason.kind === "void" && !reason.noteRequired)!;
     await expect(
       open(saleId, { submissionId: randomUUID(), gross: "6.05", reasonId: voidReason.id }),
@@ -956,7 +1021,13 @@ describe("openInvoiceCorrection refuses", () => {
 
   it("more than the money left, naming €7.00 after €3.00 of €10.00 went back, and opens €7.00", async () => {
     const saleId = await soldForCash("Rice platter", ["10.00"]);
-    await giveBack(saleId, "3.00");
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "5.00" });
+    await cash(correction.id, "3.00");
+    await close(correction.id, {
+      backend: Object.create(venue.backend, {
+        correctionAdmissionFor: { value: async () => ({ eligible: false, reason: "wrong_node" }) },
+      }) as typeof venue.backend,
+    });
     await refusedWithNothingWritten(
       () => open(saleId, { submissionId: randomUUID(), gross: "10.00" }),
       {

@@ -62,7 +62,7 @@ describe("A803 refund refusal wording", () => {
     ],
     [
       "tender.refund_exceeds_payment",
-      "That is more than can be refunded from this payment. A tip is refunded only with all the remaining payment",
+      "That is more than can be refunded from this payment. A tip is refunded on its own, or with all the remaining payment",
     ],
     [
       "bill.refund_not_whole",

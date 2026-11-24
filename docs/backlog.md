@@ -355,8 +355,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
   A802 slice 5b, #3108).** The correction window ticks whole dishes; an earlier ordinary refund does not
   count towards a correction; a refund of cancelled dishes does not yet file its corrective in the
-  same step (A758 §3.8, owner Q43 e). Money given back as goodwill needs a corrective too (owner,
-  2026-11-18, question 6 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details).
+  same step (A758 §3.8, owner Q43 e).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)
 
 - **A report for the accountant: wrong VAT rates**

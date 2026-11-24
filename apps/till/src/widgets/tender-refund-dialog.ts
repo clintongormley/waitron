@@ -141,11 +141,14 @@ export class TillTenderRefundDialog extends LitElement {
   #selected(): RefundableTender | undefined {
     return this.tenders.find((row) => row.tenderId === this.draft.tenderId && available(row));
   }
+  #offered(): AdjustmentReason[] {
+    return this.correcting ? (this.reasons ?? []) : voidReasons(this.reasons);
+  }
   #reason(): AdjustmentReason | undefined {
-    return voidReasons(this.reasons).find((reason) => reason.id === this.draft.reasonId);
+    return this.#offered().find((reason) => reason.id === this.draft.reasonId);
   }
   #startReason(): string {
-    return voidReasons(this.reasons).some((reason) => reason.id === this.startReasonId)
+    return this.#offered().some((reason) => reason.id === this.startReasonId)
       ? this.startReasonId
       : "";
   }
@@ -250,6 +253,18 @@ export class TillTenderRefundDialog extends LitElement {
   #money(value: string): string {
     return formatMoney(value, currentLocale());
   }
+  /** The refusal the server would give a hand-keyed refund only after staff returned the money on
+   * the terminal, or null. */
+  #blockedBy(row: RefundableTender | undefined): string | null {
+    if (this.correcting || row?.manual !== true) return null;
+    if (row.correctionOpen) return "invoice_correction.already_open";
+    const applied = tenderRefundAmount(this.draft.appliedAmount);
+    return row.plainRefundLimit !== undefined &&
+      applied !== null &&
+      compareDecimal(decimal(applied), decimal(row.plainRefundLimit)) > 0
+      ? "tender.refund_needs_correction"
+      : null;
+  }
   #errors(): Map<Field, string> {
     const errors = new Map<Field, string>();
     const row = this.#selected();
@@ -267,6 +282,7 @@ export class TillTenderRefundDialog extends LitElement {
         errors.set("appliedAmount", invalid(row.appliedRemaining));
       if (
         compareDecimal(decimal(tip), decimal("0")) > 0 &&
+        compareDecimal(decimal(applied), decimal("0")) !== 0 &&
         compareDecimal(decimal(applied), decimal(row.appliedRemaining)) !== 0
       )
         errors.set("tipAmount", t("tender_refund.tip_requires_all"));
@@ -279,7 +295,7 @@ export class TillTenderRefundDialog extends LitElement {
       errors.set("note", t("adjust.note_required"));
     else if (reason.noteRequired && this.draft.note.trim().length > REASON_MAX)
       errors.set("note", t("bill_refund.reason_long"));
-    if (row.manual && !this.draft.manualConfirmed)
+    if (row.manual && this.#blockedBy(row) === null && !this.draft.manualConfirmed)
       errors.set("confirmation", t("tender_refund.confirm_required"));
     return errors;
   }
@@ -397,6 +413,7 @@ export class TillTenderRefundDialog extends LitElement {
           </p>`
         : nothing;
     return reasonPicker({
+      every: this.correcting,
       reasons: this.reasons,
       reasonsLoading: this.reasonsLoading,
       reasonId: this.draft.reasonId,
@@ -413,7 +430,7 @@ export class TillTenderRefundDialog extends LitElement {
     });
   }
   #confirm(row: RefundableTender, error: string) {
-    if (!row.manual) return nothing;
+    if (!row.manual || this.#blockedBy(row) !== null) return nothing;
     return html`<p data-manual-instruction>${t("tender_refund.manual_instruction")}</p>
       <wt-switch
         name="manualConfirmed"
@@ -441,8 +458,11 @@ export class TillTenderRefundDialog extends LitElement {
     const errors = new Map(own);
     const refused = this.#refusalField();
     if (refused !== null) errors.set(refused, this.#refusalText());
+    const blockedBy = this.#locked() ? null : this.#blockedBy(this.#selected());
+    const blocked = blockedBy !== null;
     const message = [
       errors.size > 0 ? t("form.fix_fields") : "",
+      blockedBy === null ? "" : codeMessage(blockedBy),
       refused === null ? this.#refusalText() : "",
     ]
       .filter(Boolean)
@@ -542,10 +562,10 @@ export class TillTenderRefundDialog extends LitElement {
                 >`
             : !locked
               ? html`<wt-button
-                  .variant=${selected && this.#reason() && !this.reasonsLoading ? "primary" : "secondary"}
+                  .variant=${selected && this.#reason() && !this.reasonsLoading && !blocked ? "primary" : "secondary"}
                   data-submit
                   .loading=${this.#busy()}
-                  .disabled=${this.#busy() || !selected || own.size > 0}
+                  .disabled=${this.#busy() || !selected || own.size > 0 || blocked}
                   @click=${() => void this.#submit()}
                   >${t("bill_pay.refund")}</wt-button
                 >`

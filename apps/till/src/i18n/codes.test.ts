@@ -25,6 +25,15 @@ it.each([
   }
 });
 
+it("words a refund Correct invoice must make, saying what each choice does, in both languages", () => {
+  expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
+    "Correct invoice can give this money back, so Refund a payment cannot: it files nothing. Close this window and choose Correct invoice: it gives the money back and files a corrective invoice for it. Refund a payment still gives back a tip, or what is still owed for cancelled dishes.",
+  );
+  expect(codeMessage("tender.refund_needs_correction", "es")).toBe(
+    "Rectificar factura puede devolver este dinero, así que Devolver un pago no puede: no presenta nada. Cierra esta ventana y elige Rectificar factura: devuelve el dinero y presenta una factura rectificativa por él. Devolver un pago sigue devolviendo una propina o lo que falta por devolver de platos cancelados.",
+  );
+});
+
 it("words a refund above its cancelled dishes", () => {
   expect(codeMessage("tender.refund_exceeds_cancelled", "en")).toBe(
     "This refund is more than the cancelled dishes' value",
@@ -927,6 +936,36 @@ it.each([
   expect(codeMessage("deferred_close.ineligible", "en", params)).toBe(english);
   expect(codeMessage("deferred_close.ineligible", "es", params)).toBe(spanish);
 });
+
+it("says a dish list that no longer matches the invoice is out of date, in English and Spanish", () => {
+  expect(codeMessage("sale.correction_scope_invalid", "en")).toBe(
+    "The dishes chosen are not on this invoice. Close this window and choose Correct invoice again.",
+  );
+  expect(codeMessage("sale.correction_scope_invalid", "es")).toBe(
+    "Los platos elegidos no están en esta factura. Cierra esta ventana y vuelve a elegir Rectificar factura.",
+  );
+});
+
+it.each([
+  [
+    "en",
+    en,
+    "A refund of this bill is still waiting for its result. Close this window, open Refund a payment and choose Check pending refund, then try again.",
+  ],
+  [
+    "es",
+    es,
+    "Una devolución de esta cuenta aún espera su resultado. Cierra esta ventana, abre Devolver un pago y elige Consultar devolución pendiente; después vuelve a intentarlo.",
+  ],
+] as const)(
+  "in %s, sends staff to the pending refund's own check from Correct invoice and from Refund a payment",
+  (locale, words, sentence) => {
+    const message = codeMessage("invoice_correction.refund_pending", locale);
+    expect(message).toBe(sentence);
+    expect(message).toContain(words["tender_refund.title"]);
+    expect(message).toContain(words["tender_refund.pending_payment"]);
+  },
+);
 
 it.each([
   "invoice_correction.not_settled",

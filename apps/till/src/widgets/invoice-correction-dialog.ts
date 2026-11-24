@@ -34,7 +34,7 @@ import type {
   InvoiceCorrectionView,
 } from "../api/invoice-correction-types.js";
 import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
-import { reasonPicker, voidReasons } from "./reason-picker.js";
+import { reasonPicker } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
 import { REASON_MAX, refusalOf, typedMoney } from "../state/bill-payment.js";
 import { refundMethodAllowed } from "../state/tender-refund.js";
@@ -358,7 +358,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     return shown !== null && "refusal" in shown && shown.key === this.#key() ? shown.refusal : null;
   }
   #reason(): AdjustmentReason | undefined {
-    return voidReasons(this.reasons).find((reason) => reason.id === this.draft.reasonId);
+    return this.reasons?.find((reason) => reason.id === this.draft.reasonId);
   }
   #money(value: string): string {
     return formatMoney(value, currentLocale());
@@ -574,7 +574,6 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     );
   }
   #lines(loaded: InvoiceCorrectionLines, error: string) {
-    const picked = loaded.lines.find((line) => this.draft.lineIds.includes(line.id));
     return html`<fieldset>
       <legend>${t("invoice_correction.dishes")}</legend>
       <div class="dishes">
@@ -589,11 +588,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
                 t("invoice_correction.left").replace("{amount}", () => this.#money(line.left)),
               ].join(" · ")}
               .checked=${this.draft.lineIds.includes(line.id)}
-              .disabled=${
-                this.busy ||
-                compareDecimal(decimal(line.left), decimal("0")) <= 0 ||
-                (picked !== undefined && picked.rate !== line.rate)
-              }
+              .disabled=${this.busy || compareDecimal(decimal(line.left), decimal("0")) <= 0}
               @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                 event.stopPropagation();
                 const others = this.draft.lineIds.filter((id) => id !== line.id);
@@ -655,6 +650,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
           )}
       </ul>
       ${reasonPicker({
+        every: true,
         reasons: this.reasons,
         reasonsLoading: this.reasonsLoading,
         reasonId: this.draft.reasonId,
@@ -774,7 +770,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     // this window opened with comes first.
     const startReasonId =
       this.#openedReasonId ??
-      voidReasons(this.reasons).find((reason) => reason.name === correction.reason)?.id ??
+      this.reasons?.find((reason) => reason.name === correction.reason)?.id ??
       "";
     const nothingBack = !positive(correction.moneyBack) && !positive(correction.pending);
     return html`<p data-back>

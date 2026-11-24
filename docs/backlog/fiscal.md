@@ -376,10 +376,13 @@ Evidence inspection and persistent-repair policy remain separate A1089 work.
 
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
-`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
-core sale and void writers. It returns 12.10 in cash through the till's refund route before
-voiding the invoice; the refund route deliberately refuses an already voided invoice. The
-filing queue sets the ordinary cancellation aside after the original's definitive rejection.
+`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue. Through the
+till's routes it seats a party, orders a House salad and takes 12.00 in cash; it then cancels the
+dish with Cancel and refund (the Refund tick, `refundableCancel` in
+`apps/server/src/testing/cancel-line.ts`) and returns 12.00 in cash through the till's refund route,
+naming that cancel. Only then does it cancel the invoice, with core's `recordVoid`; the refund route
+deliberately refuses an already voided invoice. The filing queue sets the ordinary cancellation
+aside after the original's definitive rejection.
 An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
 the administrator then releases the same cancellation. Concurrent release and reordered retries
 return the saved decision. A refund retry returns the original completed refund. The checks compare
@@ -393,6 +396,18 @@ correction is accepted, whichever issuing chain the correction is on. The origin
 these cases is synthetic stored evidence; they do not send a real refund or establish a legal
 remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
 owner's fiscal review before landing and separate legal authority before production enablement.
+
+No product path reaches the held-cancellation remedy today: the filing queue setting such a
+cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancellations` in
+`packages/fiscal-verifactu/src/drain.ts`), `releaseHeldCancellation`
+(`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
+held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:181-183`). The
+ordinary cancellation it handles is written only by core's `recordVoid`
+(`packages/core/src/record-void.ts`), which no till screen or server route calls
+(`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
+2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the fiscal
+backends' `recordVoid` methods, which core's calls, and the payments package's `recordVoid` are
+other functions). The code is kept, not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an
 ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
@@ -948,17 +963,8 @@ A802 slice 5b (#3108):
   refunded through the ordinary refund, with no correction of its own. Owner decision (Q43 e,
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
-  −€0.50.
-- **Money given back as goodwill takes a corrective.** Asked whether a €10 goodwill return on a
-  paid €62 ticket needs a corrective, the owner answered "yes" (owner, 2026-11-18, question 6 of the
-  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details); the sheet
-  records as open that the "yes" does not say which of the two choices it answers, and reads it as
-  the corrective being required. On 21 November the owner answered "yes and yes" to whether a goodwill amount
-  on a bill with two VAT rates is split by menu price and whether a corrective is needed, which
-  settles that reading; the adviser is still to confirm. The work stays parked (owner, 19 November). Today a refund files a corrective only when it is a leg of an
-  invoice correction (`refundSettledTender`, `apps/server/src/tender-refunds.ts:144-146`), and the
-  A802 design leaves a served dish's goodwill return to the ordinary **Refund a payment** on purpose
-  (`docs/superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md:301-302`).
+  −€0.50. When this lands, the refund suites whose setups refund a named cancel (Task 7 of the
+  goodwill plan) start filing correctives, so their counts of filed records change.
 
 Also open, from before A802:
 
@@ -1142,6 +1148,44 @@ is refused once the free item was served, pointing staff to Correct invoice, are
 calls ("WATCHER 2026-11-23 15:17"). Question 14 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Goodwill money back goes through Correct invoice (owner and watcher, 2026-11-23)
+
+Money given back as goodwill takes a corrective: the owner's "yes" to question 6 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md) on 18 November, "yes and yes" on 21
+November, and "take this as confirmed" (lane L `questions.md`, "WATCHER 2026-11-21 18:17"). So
+**Refund a payment** refuses the payment money **Correct invoice** would give back now, and Correct
+invoice gives it back with a corrective (`plainRefundLimit`, `apps/server/src/tender-refund-reservation.ts`).
+That rule is the watcher's choice 1: cleared on 19 November at 09:05, parked by the owner at 10:03,
+and built on the owner's word of 21 November 18:17; shown to the owner as replacing the A802
+approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
+A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
+Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
+filing record, a full invoice naming a customer, records that need
+checking), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
+another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
+2026-11-23 14:55"), not the owner's. A refund naming no dishes counts against cancelled dishes still
+owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
+refund of money Correct invoice could give back is refused before the terminal step: the watcher's clearance of the lane's change (2026-11-23 22:51).
+[Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Money given back is shared by menu price (owner and watcher, 2026-11-23)
+
+A correction's amount is shared across the dishes in proportion to their menu prices: the owner's
+words, "its the proportions which matter" (O1, lane L `questions.md`, "WATCHER 2026-11-23 14:15").
+A dish whose share is more than is left of it (after an earlier discount or correction) gives back
+what is left, and the rest is shared over the others in the same proportions: the watcher's build
+rule in that entry, not the owner's words. When staff tick dishes, the same rule runs over the
+ticked dishes, so ticking every dish equals ticking none: the watcher's call (O9, "WATCHER
+2026-11-23 15:17"). Question 14 of the
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
+[Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+
+### Correct invoice offers every reason, Complaint included (owner, 2026-11-23)
+
+Correct invoice, and its card step, offer every adjustment reason, so staff choose **Complaint**
+for goodwill money back: the owner's "Add it" (O6, lane L `questions.md`, "WATCHER 2026-11-23
+14:18").
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 

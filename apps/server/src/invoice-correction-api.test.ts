@@ -6,6 +6,7 @@ import {
   devices,
   floorZones,
   invoiceCorrections,
+  invoiceSeries,
   products,
   readLiveSeriesIdTx,
   sales,
@@ -16,10 +17,17 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
-import { recordReplacement } from "@waitron/core";
+import { recordReplacement, recordSubstitution } from "@waitron/core";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
+import {
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  type SaleId,
+} from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -48,6 +56,9 @@ import {
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
+
+/** The starter Comp reason Complaint, by its English or Spanish name. */
+const isComplaint = (reason: { name: string }) => ["Complaint", "Queja"].includes(reason.name);
 
 let venue: BillVenue;
 let reasonId: string;
@@ -101,11 +112,12 @@ async function serveOnly(zoneId: string) {
   });
 }
 
-/** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty.
- * `where` names another zone and its croquettes offer. */
+/** A €10.00 croquettes order paid through the till in `parts`, each with `tip`; issued unpaid when
+ * `parts` is empty. `where` names another zone and its croquettes offer. */
 async function sold(
   parts: readonly (string | { card: string } | { reader: string })[],
   where?: { zoneId: string; croquettes: string },
+  { tip = "0.00" }: { tip?: string } = {},
 ) {
   const id = randomUUID();
   const deps = {
@@ -123,15 +135,17 @@ async function sold(
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   for (const part of parts) {
     const amount = typeof part === "string" ? part : "card" in part ? part.card : part.reader;
+    const withTip = centsToDecimal(decimalToCents(decimal(amount)) + decimalToCents(decimal(tip)));
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
       amount,
       ...(typeof part === "string"
-        ? { method: "cash", tendered: amount }
+        ? { method: "cash", tendered: withTip }
         : { method: "card", entry: "card" in part ? "manual" : "reader" }),
       applied: amount,
-      tip: "0.00",
+      tip,
+      ...(tip === "0.00" ? {} : { addedTip: tip }),
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
     });
     expect(paid.status).toBe(200);
@@ -436,15 +450,16 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     });
   });
 
-  it("refuses a reason that is not a Void reason, and one asking for a note without it, writing nothing", async () => {
+  it("opens with a Comp reason such as Complaint, and refuses one asking for a note without it, writing nothing", async () => {
+    const complaint = reasons.find(isComplaint)!;
+    expect(complaint.kind).toBe("comp");
+    expect(await open(await sold(["10.00"]), body({ reasonId: complaint.id }))).toMatchObject({
+      status: 200,
+      json: { replayed: false, correction: { state: "open", gross: "5.00" } },
+    });
     const saleId = await sold(["10.00"]);
-    const comp = reasons.find((reason) => reason.kind === "comp")!;
     const other = reasons.find((reason) => reason.kind === "void" && reason.noteRequired)!;
     const before = counts();
-    expect(await open(saleId, body({ reasonId: comp.id }))).toEqual({
-      status: 409,
-      json: { code: "adjustment.action_not_allowed", params: {} },
-    });
     expect(await open(saleId, body({ reasonId: other.id, note: null }))).toEqual({
       status: 400,
       json: { code: "adjustment.note_required", params: {} },
@@ -480,23 +495,21 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     [
       "invoice_correction.money_short",
       async () => {
-        const saleId = await sold(["10.00"]);
-        const [cash] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
-        const goodwill = await send(
-          venue.app,
-          venue.cookie,
-          "POST",
-          `/api/transactions/${saleId}/refunds`,
-          {
-            submissionId: randomUUID(),
-            tenderId: cash!.tenderId,
-            appliedAmount: "3.00",
-            tipAmount: "0.00",
-            reason: "Goodwill",
-            override: supervisor(),
-          },
-        );
-        expect(goodwill.status).toBe(200);
+        const id = await threeBack();
+        const [{ saleId }] = venue.db.all<{ saleId: string }>(
+          sql`select original_sale_id as saleId from invoice_corrections where id = ${id}`,
+        ) as [{ saleId: string }];
+        const takenOver = vi
+          .spyOn(venue.backend, "correctionAdmissionFor")
+          .mockResolvedValue({ eligible: false, reason: "wrong_node" });
+        try {
+          expect(await closeIt(id, { override: supervisor() })).toMatchObject({
+            status: 200,
+            json: { state: "closed", moneyBack: "3.00" },
+          });
+        } finally {
+          takenOver.mockRestore();
+        }
         return { saleId, patch: { gross: "10.00" } };
       },
     ],
@@ -522,27 +535,8 @@ describe("POST /api/transactions/:saleId/corrections", () => {
     [
       "invoice_correction.refund_pending",
       async () => {
-        const saleId = await sold([{ reader: "10.00" }]);
-        const [card] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
-        venue.card.scriptNextRefund({
-          made: false,
-          answer: { kind: "uncertain", reason: "network" },
-        });
-        const goodwill = await send(
-          venue.app,
-          venue.cookie,
-          "POST",
-          `/api/transactions/${saleId}/refunds`,
-          {
-            submissionId: randomUUID(),
-            tenderId: card!.tenderId,
-            appliedAmount: "1.00",
-            tipAmount: "0.00",
-            reason: "Goodwill",
-            override: supervisor(),
-          },
-        );
-        expect(goodwill).toMatchObject({ status: 200, json: { state: "pending" } });
+        const saleId = await sold([{ reader: "10.00" }], undefined, { tip: "1.00" });
+        await pendingTipRefund(saleId);
         return { saleId };
       },
     ],
@@ -1176,4 +1170,232 @@ describe("the corrective invoice's paper", () => {
       expect(copy!.text).toContain(duplicate);
       expect(counts()).toEqual(before);
     }));
+});
+
+/** The tip alone of the sale's card payment, sent to a reader whose answer never comes. */
+async function pendingTipRefund(saleId: string) {
+  const card = (await inTx(venue, (tx) => readRefundableTenders(tx, saleId))).find(
+    (row) => row.method === "card",
+  );
+  venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
+  expect(await plainRefund(saleId, card!.tenderId, "0.00", "1.00")).toMatchObject({
+    status: 200,
+    json: { state: "pending", appliedAmount: "0.00", tipAmount: "1.00" },
+  });
+}
+
+/** Refund a payment, naming no correction and no cancelled dishes. */
+function plainRefund(saleId: string, tenderId: string, appliedAmount: string, tipAmount = "0.00") {
+  return send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/refunds`, {
+    submissionId: randomUUID(),
+    tenderId,
+    appliedAmount,
+    tipAmount,
+    reason: "Goodwill",
+    override: supervisor(),
+  });
+}
+
+async function cashOf(saleId: string) {
+  return (await inTx(venue, (tx) => readRefundableTenders(tx, saleId))).find(
+    (row) => row.method === "cash",
+  )!.tenderId;
+}
+
+/** Answers every admission check as `reason` for the rest of the test. */
+function admittingNot(reason: string) {
+  const spy = vi
+    .spyOn(venue.backend, "correctionAdmissionFor")
+    .mockResolvedValue({ eligible: false, reason } as never);
+  onTestFinished(() => spy.mockRestore());
+}
+
+describe("Refund a payment gives back only what Correct invoice would not take now", () => {
+  async function refusedWithNothingWritten(
+    saleId: string,
+    tenderId: string,
+    appliedAmount: string,
+    json: object,
+    tipAmount = "0.00",
+  ) {
+    const before = counts();
+    expect(await plainRefund(saleId, tenderId, appliedAmount, tipAmount)).toEqual({
+      status: 409,
+      json,
+    });
+    expect(counts()).toEqual(before);
+  }
+
+  it("refuses with 409 a plain cash refund on a ticket Correct invoice can correct, writing nothing", async () => {
+    const saleId = await sold(["10.00"]);
+    const tenderId = await cashOf(saleId);
+    await refusedWithNothingWritten(saleId, tenderId, "10.00", {
+      code: "tender.refund_needs_correction",
+      params: { tenderId },
+    });
+    await refusedWithNothingWritten(saleId, tenderId, "0.01", {
+      code: "tender.refund_needs_correction",
+      params: { tenderId },
+    });
+  });
+
+  it.each(["missing", "wrong_node", "voided"])(
+    "takes it where Correct invoice refuses the ticket for good (%s)",
+    async (reason) => {
+      const saleId = await sold(["10.00"]);
+      admittingNot(reason);
+      expect(await plainRefund(saleId, await cashOf(saleId), "10.00")).toMatchObject({
+        status: 200,
+        json: { state: "completed", appliedAmount: "10.00" },
+      });
+    },
+  );
+
+  it("takes it on a ticket a full invoice replaced", async () => {
+    const saleId = await sold(["10.00"]);
+    const [full] = await venue.db
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.purpose, "full"));
+    await inTx(venue, (tx) =>
+      recordSubstitution(tx, venue.backend, {
+        operationDescription: "Restaurante",
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(full!.id),
+        substitutedSaleIds: [saleId],
+        counterparty: { taxId: "B12345674", legalName: "Customer SL", countryCode: "ES" },
+        total: "10.00",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Croquettes",
+            descriptions: { [venue.cfg.locale]: "Croquettes" },
+            quantity: "1",
+            unitPrice: "9.09",
+            vatRate: "10.00",
+            lineTotal: "9.09",
+          },
+        ],
+        locale: venue.cfg.locale,
+        invoiceLocales: [venue.cfg.locale],
+        clock: venue.clock,
+      }),
+    );
+    expect(await preview(saleId, { gross: "2.00" })).toMatchObject({
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "replaced" } },
+    });
+    expect(await plainRefund(saleId, await cashOf(saleId), "4.00")).toMatchObject({
+      status: 200,
+      json: { state: "completed", appliedAmount: "4.00" },
+    });
+  });
+
+  it("refuses it on a ticket replaced after the tax agency refused it: Correct invoice corrects the replacement", async () => {
+    const saleId = await sold(["10.00"]);
+    await replace(saleId);
+    const tenderId = await cashOf(saleId);
+    await refusedWithNothingWritten(saleId, tenderId, "4.00", {
+      code: "tender.refund_needs_correction",
+      params: { tenderId },
+    });
+  });
+
+  it("waits while the tax agency has refused the ticket's filing", async () => {
+    const saleId = await sold(["10.00"]);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    await refusedWithNothingWritten(saleId, await cashOf(saleId), "10.00", {
+      code: "sale.correction_not_admitted",
+      params: { reason: "filing_refused" },
+    });
+  });
+
+  it("waits while another payment's refund is pending on a ticket Correct invoice can correct", async () => {
+    const saleId = await sold([{ reader: "5.00" }, "5.00"], undefined, { tip: "1.00" });
+    await pendingTipRefund(saleId);
+    await refusedWithNothingWritten(saleId, await cashOf(saleId), "5.00", {
+      code: "invoice_correction.refund_pending",
+      params: { saleId, refundId: expect.any(String) },
+    });
+  });
+
+  it("takes it beside another payment's pending refund on a ticket with no filing record", async () => {
+    const saleId = await sold([{ reader: "5.00" }, "5.00"], undefined, { tip: "1.00" });
+    await pendingTipRefund(saleId);
+    admittingNot("missing");
+    expect(await plainRefund(saleId, await cashOf(saleId), "5.00")).toMatchObject({
+      status: 200,
+      json: { state: "completed", appliedAmount: "5.00" },
+    });
+  });
+
+  /** Each refundable payment's method and what the read says Refund a payment may give back of it. */
+  async function limits(saleId: string) {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/transactions/${saleId}/refundable-tenders`,
+    );
+    expect(answer.status).toBe(200);
+    return (answer.json as unknown as { method: string; plainRefundLimit?: string }[]).map(
+      (row) => [row.method, row.plainRefundLimit ?? null],
+    );
+  }
+
+  it("tells the till a hand-keyed card payment may give back nothing on a ticket Correct invoice can correct", async () => {
+    expect(await limits(await sold([{ card: "6.00" }, "4.00"]))).toEqual([
+      ["card", "0.00"],
+      ["cash", null],
+    ]);
+  });
+
+  it("tells the till a hand-keyed card payment may give back all of it on a ticket Correct invoice cannot correct", async () => {
+    const saleId = await sold([{ card: "6.00" }, "4.00"]);
+    admittingNot("missing");
+    expect(await limits(saleId)).toEqual([
+      ["card", "6.00"],
+      ["cash", null],
+    ]);
+  });
+
+  it("tells the till a hand-keyed card payment may give back nothing while the ticket's filing is refused", async () => {
+    const saleId = await sold([{ card: "6.00" }, "4.00"]);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    expect(await limits(saleId)).toEqual([
+      ["card", "0.00"],
+      ["cash", null],
+    ]);
+  });
+
+  it("gives back a tip alone while payment money is left, and refuses all the money with its tip", async () => {
+    const saleId = await sold(["10.00"], undefined, { tip: "2.00" });
+    const tenderId = await cashOf(saleId);
+    await refusedWithNothingWritten(
+      saleId,
+      tenderId,
+      "10.00",
+      { code: "tender.refund_needs_correction", params: { tenderId } },
+      "2.00",
+    );
+    expect(await plainRefund(saleId, tenderId, "0.00", "0.50")).toMatchObject({
+      status: 200,
+      json: { state: "completed", appliedAmount: "0.00", tipAmount: "0.50" },
+    });
+    expect(await plainRefund(saleId, tenderId, "0.00", "1.50")).toMatchObject({
+      status: 200,
+      json: { state: "completed", tipAmount: "1.50" },
+    });
+    await refusedWithNothingWritten(
+      saleId,
+      tenderId,
+      "0.00",
+      {
+        code: "tender.refund_exceeds_payment",
+        params: { tenderId, applied: "10.00", tip: "0.00" },
+      },
+      "0.01",
+    );
+  });
 });

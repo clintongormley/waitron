@@ -951,6 +951,9 @@ declare module "@waitron/shared" {
     "bill.refund_exceeds_payment": { paymentId: string; applied: string; tip: string };
     "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
     "tender.refund_exceeds_cancelled": { tenderId: string; cancelled: string };
+    /** A refund, outside Correct invoice, of payment money beyond what the cancelled dishes it pays
+     * for still owe and what Correct invoice could not give back now. */
+    "tender.refund_needs_correction": { tenderId: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
      * `invoiceNumber`) took, before an invoice took it off. After, it is refused
      * `advance.taken_off_final_invoice` while that invoice's payments still hold money. */

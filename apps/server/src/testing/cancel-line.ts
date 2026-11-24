@@ -238,6 +238,7 @@ export async function cancelItemForTest(
   quantity?: string,
   operatorId?: string,
   attendance?: OrderAttendance,
+  overrides: Partial<Omit<CancelItemAsk, "approver">> = {},
 ) {
   const { target, lineId, body } = await observedCancelItem(tx, orderId, lineNo, quantity);
   return cancelItem(
@@ -245,7 +246,12 @@ export async function cancelItemForTest(
     cfg,
     target,
     lineId,
-    { ...body, reasonId: await cancelReasonId(tx), admission: testTradingAdmission() },
+    {
+      ...body,
+      reasonId: await cancelReasonId(tx),
+      admission: testTradingAdmission(),
+      ...overrides,
+    },
     await ensureOperator(tx, operatorId ?? OPERATOR),
     attendance,
   );
@@ -287,4 +293,35 @@ export async function cancelItemHttp(
 ) {
   const { path, body } = await cancelItemRequest(db, orderId, lineNo, quantity, overrides);
   return send(app, cookie, "POST", path, body);
+}
+
+/**
+ * Cancels all of line `lineNo` of a settled bill keeping its charge, with the Refund tick, through
+ * {@link cancelItem}, as Cancel and refund does; answers the cancel's id for a refund to name.
+ */
+export async function refundableCancel(
+  db: Database,
+  cfg: TradingContext,
+  orderId: string,
+  lineNo: number,
+  operatorId?: string,
+): Promise<string> {
+  return withTransaction(db, async (tx) => {
+    const answer = await cancelItemForTest(
+      tx,
+      cfg,
+      orderId,
+      lineNo,
+      undefined,
+      operatorId,
+      undefined,
+      {
+        outcome: "keep_charge",
+        refundHandoff: true,
+      },
+    );
+    const linked = answer.refundLinks?.[0]?.adjustmentId;
+    if (linked === undefined) throw new Error(`cancel of line ${lineNo} named no refund link`);
+    return linked;
+  });
 }

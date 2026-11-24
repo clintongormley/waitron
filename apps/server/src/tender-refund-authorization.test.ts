@@ -39,6 +39,7 @@ import { AppError, deviceOrigin } from "@waitron/shared";
 import { departments, setProfileServiceAccess } from "@waitron/venue-service";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import { noRecordFiscal } from "./testing/no-record-fiscal.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import type { TenderRefundRequest } from "./tender-refund-types.js";
@@ -221,6 +222,7 @@ async function reserve(
         req,
         { requestedBy: op.personId, authorizedBy: authorization.authorizedBy },
         AT,
+        noRecordFiscal(store.db, config.origin.deviceId, AT),
       );
       return { ...held, authorization };
     },
@@ -571,6 +573,7 @@ describe("settled-tender refund authorization before reservation", () => {
             request(t.tenderId),
             { requestedBy: personId, authorizedBy: authorization.authorizedBy },
             AT,
+            noRecordFiscal(store.db, cfg.origin.deviceId, AT),
           );
           throw new AppError("payment.provider_unknown", { providerId: "unavailable" });
         },

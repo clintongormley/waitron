@@ -518,8 +518,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El desglose del IVA ha cambiado desde que se mostró. Revisa el nuevo desglose y vuelve a pulsar.",
   },
   "invoice_correction.refund_pending": {
-    en: "A refund of this bill is still waiting for its result. Check it under Refund a payment, then try again.",
-    es: "Una devolución de esta cuenta aún espera su resultado. Consúltala en Devolver un pago y vuelve a intentarlo.",
+    en: "A refund of this bill is still waiting for its result. Close this window, open Refund a payment and choose Check pending refund, then try again.",
+    es: "Una devolución de esta cuenta aún espera su resultado. Cierra esta ventana, abre Devolver un pago y elige Consultar devolución pendiente; después vuelve a intentarlo.",
   },
   "invoice_correction.money_short": {
     en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
@@ -534,8 +534,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Escribe un importe mayor que cero y no superior a lo que queda por rectificar de los platos elegidos.",
   },
   "sale.correction_scope_invalid": {
-    en: "This bill has dishes at more than one VAT rate. Pick the dishes to correct, all at one rate.",
-    es: "Esta cuenta tiene platos con más de un tipo de IVA. Elige los platos que se rectifican, todos del mismo tipo.",
+    en: "The dishes chosen are not on this invoice. Close this window and choose Correct invoice again.",
+    es: "Los platos elegidos no están en esta factura. Cierra esta ventana y vuelve a elegir Rectificar factura.",
   },
   "sale.correction_history_unusable": {
     en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",
@@ -650,12 +650,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con el pago entero",
   },
   "tender.refund_exceeds_payment": {
-    en: "That is more than can be refunded from this payment. A tip is refunded only with all the remaining payment",
-    es: "Es más de lo que se puede devolver de este pago. La propina solo se devuelve con todo lo que queda del pago",
+    en: "That is more than can be refunded from this payment. A tip is refunded on its own, or with all the remaining payment",
+    es: "Es más de lo que se puede devolver de este pago. La propina se devuelve sola o con todo lo que queda del pago",
   },
   "tender.refund_exceeds_cancelled": {
     en: "This refund is more than the cancelled dishes' value",
     es: "Esta devolución supera el valor de los platos cancelados",
+  },
+  "tender.refund_needs_correction": {
+    en: "Correct invoice can give this money back, so Refund a payment cannot: it files nothing. Close this window and choose Correct invoice: it gives the money back and files a corrective invoice for it. Refund a payment still gives back a tip, or what is still owed for cancelled dishes.",
+    es: "Rectificar factura puede devolver este dinero, así que Devolver un pago no puede: no presenta nada. Cierra esta ventana y elige Rectificar factura: devuelve el dinero y presenta una factura rectificativa por él. Devolver un pago sigue devolviendo una propina o lo que falta por devolver de platos cancelados.",
   },
   "advance.full_invoice_unsupported": {
     en: "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",

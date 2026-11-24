@@ -13,10 +13,12 @@ import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
+import { readBillEditState } from "./bill-editing.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { refundableCancel } from "./testing/cancel-line.js";
+import { order, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
 const suite = useVenueDb({
@@ -274,18 +276,36 @@ async function refundRequest(kind: RefundRoute) {
       },
     };
   }
-  const payment = await paymentRequest("bill-counter");
-  const answer = await post(payment.path, `${sessionCookie}; ${deviceCookie}`, payment.body);
+  // A party's bill, settled in full: only a party's bill can still be cancelled once settled, and
+  // a plain refund of a correctable ticket must name such a cancel.
+  const { tabId } = await seat(venue, await venue.table(`Refund ${randomUUID()}`));
+  await order(venue, tabId, "Burger");
+  const answer = await post(
+    `/api/working-orders/${tabId}/payments`,
+    `${sessionCookie}; ${deviceCookie}`,
+    {
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "12.00",
+      applied: "12.00",
+      tip: "0.00",
+      method: "cash",
+      tendered: "12.00",
+    },
+  );
   expect(answer.status).toBe(200);
   await answer.arrayBuffer();
   const [tender] = await suite.db.all<{ tenderId: string; saleId: string }>(sql`
     select t.id as tenderId, t.sale_id as saleId from tenders t
-    join sales s on s.id = t.sale_id where s.working_order_id = ${payment.id}`);
+    join sales s on s.id = t.sale_id where s.working_order_id = ${tabId}`);
+  const cancellationId = await refundableCancel(suite.db, venue.cfg, tabId, 1);
   const request = {
     path: `/api/transactions/${tender!.saleId}/refunds`,
     body: {
       submissionId: randomUUID(),
       tenderId: tender!.tenderId,
+      cancellationIds: [cancellationId],
       appliedAmount: "2.00",
       tipAmount: "0.00",
       reason: "Guest request",

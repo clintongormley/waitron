@@ -53,10 +53,19 @@ const deps = () => ({ backend: v.backend, clock: v.deps.clock, attendance: recor
 const rectify = { authorizedBy: "", permission: "sale.rectify", viaOverride: false };
 
 /** A €24.20 ticket paid €14.20 in cash, then €10.00 on the reader; its sale and card payment. */
-async function cashAndReader() {
+async function cashAndReader(cardTip = "0.00") {
   const id = await v.bill();
   await takeBillPayment(v.deps, v.cfg, id, await v.request(id, "cash", "14.20"), v.operator);
-  await takeReaderBillPayment(v.deps, v.cfg, id, await v.request(id, "card", "10.00"), v.operator);
+  await takeReaderBillPayment(
+    v.deps,
+    v.cfg,
+    id,
+    {
+      ...(await v.request(id, "card", "10.00")),
+      ...(cardTip === "0.00" ? {} : { tip: cardTip, addedTip: cardTip }),
+    },
+    v.operator,
+  );
   const [sale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, id));
   const card = (await v.db.select().from(tenders).where(eq(tenders.saleId, sale!.id))).find(
     (row) => row.method === "card",
@@ -292,9 +301,22 @@ describe("a correction's connected card legs", () => {
   });
 
   it("refuses to open while a refund on the ticket is pending, and opens once it completes", async () => {
-    const t = await cashAndReader();
+    const t = await cashAndReader("1.00");
     loseNextAnswer();
-    const ordinary = await cardRefund(t, "1.00");
+    const ordinary = await refundSettledTender(
+      v.deps,
+      v.cfg,
+      t.saleId,
+      {
+        submissionId: randomUUID(),
+        tenderId: t.cardTenderId,
+        appliedAmount: "0.00",
+        tipAmount: "1.00",
+        reason: "Goodwill",
+      },
+      v.operator,
+    );
+    expect(ordinary).toMatchObject({ state: "pending" });
     const refused = {
       code: "invoice_correction.refund_pending",
       params: { saleId: t.saleId, refundId: ordinary.id },

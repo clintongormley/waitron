@@ -34,6 +34,11 @@ const reason = (id: string, name: string, noteRequired = false) =>
     maxAmount: null,
   }) as AdjustmentReason;
 const REASONS = [reason("overcharged", "Overcharged"), reason("other", "Other", true)];
+const COMPLAINT = {
+  ...reason("complaint", "Complaint"),
+  kind: "comp",
+  actions: ["comp", "discount_percent", "discount_amount"],
+} as AdjustmentReason;
 const LINES: InvoiceCorrectionLines = {
   lines: [
     {
@@ -235,21 +240,20 @@ for (const locale of ["en", "es"]) {
   });
 }
 
-it("previews the picked dishes and stops offering dishes at another VAT rate", async () => {
+it("previews dishes picked at both VAT rates", async () => {
   const { el, api } = await mount();
 
   await pick(el, "steak");
-  expect(dish(el, "rice").disabled).toBe(true);
+  expect(dish(el, "rice").disabled).toBe(false);
   expect(dish(el, "steak").disabled).toBe(false);
+  await pick(el, "rice");
   await type(el, "6.05");
   await vi.waitFor(() =>
     expect(api.previewInvoiceCorrection).toHaveBeenLastCalledWith("sale-1", {
       gross: "6.05",
-      lineIds: ["steak"],
+      lineIds: ["rice", "steak"],
     }),
   );
-  await pick(el, "steak");
-  expect(dish(el, "rice").disabled).toBe(false);
 });
 
 it("explains on opening an invoice the preview would refuse, offering only Cancel", async () => {
@@ -358,7 +362,7 @@ it("shows a refusal of the dishes chosen under the dishes", async () => {
   const api = fakeApi();
   api.previewInvoiceCorrection.mockRejectedValue({
     code: "sale.correction_scope_invalid",
-    reason: "required",
+    reason: "missing",
   });
   const { el } = await mount(api);
 
@@ -603,6 +607,60 @@ describe("sending a correction", () => {
     await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
     expect(api.getInvoiceCorrection).toHaveBeenCalledWith("correction-9", {});
     expect(grossField(el)).toBeNull();
+  });
+
+  it("offers a Comp reason, sends it when chosen, and starts the card step on it", async () => {
+    const api = sendingApi();
+    api.listAdjustmentReasons.mockResolvedValue([...REASONS, COMPLAINT]);
+    api.openInvoiceCorrection.mockResolvedValue({
+      correction: { ...OPEN, reason: "Complaint" },
+      replayed: false,
+    });
+    const { el } = await mountSending(api);
+    const cards: InvoiceCorrectionCardLeg[] = [];
+    el.addEventListener("invoice-correction-card", (event) =>
+      cards.push((event as CustomEvent<InvoiceCorrectionCardLeg>).detail),
+    );
+    expect(
+      root(el)
+        .querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=reason]")!
+        .options.map((option) => option.value),
+    ).toEqual(["overcharged", "other", "complaint"]);
+
+    await type(el, "6.05");
+    await choose(el, "complaint");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-split]")).not.toBeNull());
+    confirm(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-choice=card]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-choice=card]")!.click();
+
+    expect(api.openInvoiceCorrection.mock.calls.map((call) => call[1].reasonId)).toEqual([
+      "complaint",
+    ]);
+    expect(cards.map((card) => card.startReasonId)).toEqual(["complaint"]);
+  });
+
+  it("starts the card step on a Comp reason another device opened the correction with", async () => {
+    const api = sendingApi();
+    api.listAdjustmentReasons.mockResolvedValue([...REASONS, COMPLAINT]);
+    api.openInvoiceCorrection.mockRejectedValue(
+      refused("invoice_correction.already_open", { correctionId: "correction-9" }),
+    );
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      id: "correction-9",
+      reason: "Complaint",
+    });
+    const { el } = await mountSending(api);
+    const cards: InvoiceCorrectionCardLeg[] = [];
+    el.addEventListener("invoice-correction-card", (event) =>
+      cards.push((event as CustomEvent<InvoiceCorrectionCardLeg>).detail),
+    );
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-choice=card]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-choice=card]")!.click();
+    expect(cards.map((card) => card.startReasonId)).toEqual(["complaint"]);
   });
 });
 

@@ -27,6 +27,7 @@ import { deviceOrigin } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import { noRecordFiscal } from "./testing/no-record-fiscal.js";
 
 const AT = "2026-10-16T08:00:00.000Z";
 const ACTOR = {
@@ -176,7 +177,17 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
   };
 }
 const reserve = (saleId: string, req: TenderRefundRequest, config = cfg) =>
-  withTransaction(store.db, (tx) => reserveTenderRefund(tx, config, saleId, req, ACTOR, AT));
+  withTransaction(store.db, (tx) =>
+    reserveTenderRefund(
+      tx,
+      config,
+      saleId,
+      req,
+      ACTOR,
+      AT,
+      noRecordFiscal(store.db, cfg.origin.deviceId, AT),
+    ),
+  );
 const rows = () => store.db.select().from(refunds).where(isNotNull(refunds.saleId));
 async function prior(
   target: Awaited<ReturnType<typeof paid>>,
@@ -388,7 +399,15 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const target = await paid();
     await expect(
       withTransaction(store.db, async (tx) => {
-        await reserveTenderRefund(tx, cfg, target.saleId, request(target.tenderId), ACTOR, AT);
+        await reserveTenderRefund(
+          tx,
+          cfg,
+          target.saleId,
+          request(target.tenderId),
+          ACTOR,
+          AT,
+          noRecordFiscal(store.db, cfg.origin.deviceId, AT),
+        );
         throw new Error("caller failed");
       }),
     ).rejects.toThrow("caller failed");
@@ -736,6 +755,7 @@ describe("cash reservation without the optional payments module", () => {
         request(tender!.id),
         ACTOR,
         AT,
+        noRecordFiscal(db, cfg.origin.deviceId, AT),
       ),
     );
     expect(answer.refund).toMatchObject({
