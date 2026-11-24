@@ -992,6 +992,26 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       expect(counter(el).shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
     });
 
+    it("at the Counter Keep as tip refused because the excess changed says so in its own words", async () => {
+      const el = await leftOverpaid(
+        {
+          keepOverpaidAsTip: vi
+            .fn()
+            .mockRejectedValue({ code: "bill.overpaid_changed", status: 409 }),
+        },
+        ["payment.take"],
+      );
+
+      counter(el)
+        .shadowRoot!.querySelector<HTMLElement>("[data-overpaid] [data-keep-as-tip]")!
+        .click();
+      await flush(el, 6);
+
+      expect(text(el.shadowRoot!.querySelector(".error"))).toBe(
+        codeMessage("bill.overpaid_changed"),
+      );
+    });
+
     it("at the Counter Print payment slip names the bill that received the payment", async () => {
       const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
       const el = await retrieved({

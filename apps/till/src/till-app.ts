@@ -1307,6 +1307,10 @@ const ACTIONABLE_REFUSALS = new Set([
   "station.no_default",
   "order.dining_fixed",
   "order.dining_locked",
+  "bill.not_overpaid",
+  "bill.overpaid_changed",
+  "bill.tip_not_allowed_on_excess",
+  "bill.tip_needs_a_sale",
 ]);
 
 /** A counter basket save refused because it would change, lower or leave out a dish already sent. */
