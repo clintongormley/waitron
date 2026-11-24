@@ -1,0 +1,18 @@
+# Reset a Demo or Preparation box from the dashboard
+
+A Box administrator can open Box status, export the configuration from Backups if they want to keep it, and reset this box by typing the displayed word and confirming. The box restarts into Setup on the same trusted address. This slice covers the dashboard. The recovery page is a separate slice. [Backlog request](../../backlog/box.md#resetting-a-box-without-a-terminal).
+
+The owner chose Box administration (`node.manage`) in the Lane D watcher note of 24 November 2026 at 14:10. Use the existing fresh sign-in check and prompt. Live boxes never offer or accept this action.
+
+## Server and startup
+
+- Add `POST /api/box/reset` to the full trading app in `apps/server/src/box-reset-api.ts` and `boot.ts`, behind the existing origin and read-only checks. Authorize `node.manage` and require fresh sign-in and the exact displayed confirmation word (`RESET` in English, `BORRAR` in Spanish). Require preproduction in both the running configuration and the venue database. Stage the request durably, then return 202 and use `restartAfterResponse` from Box restart.
+- Extend `reset-request.ts` with a distinct dashboard request declared in `packages/store/src/state-layout.ts` and tied to the current `venue.db` using `venueDbIdentity`. In `node-entry.ts`, finish it under the venue lock before setup admission or opening for trade. Recheck the raw configured environment and database stamp before the first deletion. Production, unclear or unreadable environment, or a different database refuses deletion. Keep the matching `venue.db` until the other deletions finish and are durable. Remove the request last. If the database is already gone when startup retries, clear the request without deleting more data.
+- Share the local deletion path from `replaced-reset.ts` and inventory cleanup with `db-wipe.ts`. Clear the active installation and mounted local backup contents, preserving the box’s own TLS certificate, `records/` and lock files. Use existing startup cleanup for scratch and `updateRecoveryState` for any recovery state reset. The adoption request and signed peer wipe keep their own authorization. This action empties app-accessible data and leaves Docker volume management and external backups to their existing tools. See `deploy/compose.yml` and `deploy/waitron.sh`’s `wipe_box`.
+
+## Dashboard and verification
+
+- Use `apps/dashboard/src/screens/box-status-screen.ts`, `dashboard-app.ts`, the dashboard API client and locale strings. Reuse the Box restart dialog pattern and shared input. Say what will be erased, link to Backups, provide Stop and show progress until `/setup-api/status` reports an unprovisioned box, then open Setup. Send English desktop and Spanish phone captures to the watcher, plus the other applicable theme and width checks. Pause after the server half until the watcher relays the screen decision. Update the English and Spanish Box status guides and narrow the backlog entry to the recovery page.
+- Start each change with a focused failing test. `box-reset-api.test.ts` proves the permission, sign-in, confirmation and environment refusals stage nothing, and an accepted reset replies before restart. `reset-request.test.ts` proves a failed or interrupted wipe can resume, a Live or replaced database survives, and the certificate and records survive a successful wipe. Exercise startup into Setup in a disposable box fixture. Box status browser tests cover visibility, Stop, confirmation, and the accepted and refused states.
+
+Estimate 350–450 implementation lines, 250–350 test lines and about 35 guide lines.
