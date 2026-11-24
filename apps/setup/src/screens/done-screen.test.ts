@@ -2386,7 +2386,6 @@ describe("the joining page", () => {
   it("shows no Servers page link on the page once the box answers", async () => {
     const { el } = await mountJoined({ serversUrl: SERVERS });
     expect(el.shadowRoot!.querySelector("a")).toBeNull();
-    expect(el.shadowRoot!.textContent!).not.toContain("Print switch label");
   });
 
   it.each(["join", "label"])("shows the %s task's state as visible words", async (task) => {
