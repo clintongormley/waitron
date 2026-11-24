@@ -211,6 +211,24 @@ export const insertFiscalRecord = insertFiscalRegistro;
 export const insertNumberedFiscalRecord = (db: Database, ids: FiscalIds, invoiceNumber: string) =>
   insertFiscalRegistro(db, ids, { numSerie: invoiceNumber });
 
+/** The record filed for an order: whether it starts its chain (1 or 0), and the producer and
+ * installation it names. */
+export function filedRecordOf(db: Database, workingOrderId: string) {
+  return db.all<{ first: number; producer: string; installation: string }>(sql`
+    select r.primer_registro as first,
+      json_extract(r.sistema_informatico, '$.NIF') as producer,
+      i.numero_instalacion as installation
+    from verifactu_records r
+    join verifactu_identities i on i.id = r.sif_id
+    join sales s on s.id = r.sale_id
+    where s.working_order_id = ${workingOrderId}`)[0]!;
+}
+
+/** Gives a venue's one fixture installation another name, before anything is filed under it. */
+export function renameFixtureInstallation(db: Database, name: string): void {
+  db.run(sql`update verifactu_identities set numero_instalacion = ${name}`);
+}
+
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
   /** Also seed an `verifactu_submissions` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };

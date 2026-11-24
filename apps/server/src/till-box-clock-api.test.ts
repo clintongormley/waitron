@@ -586,6 +586,28 @@ it("confirms a till within a minute while waiting with no set and no row", async
   expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
 });
 
+it.each([
+  ["a keep", 10 * MINUTE, true],
+  ["a till that agrees", 20_000, false],
+] as const)(
+  "changes nothing at %s while a new fiscal installation waits to open, and logs it as unused",
+  async (_label, aheadMs, keep) => {
+    const { box, start } = await waitingBox();
+    start.holdForIdentityChange();
+    const asked = await ask(box, staffCookie);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + aheadMs,
+      ...(keep ? { keep } : {}),
+    });
+    expect(answer.status).toBe(200);
+    expect(start).toMatchObject({ status: "waiting", heldConfirmation: null, mark: null });
+    const events = box.logs.map((line) => line.event);
+    expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
+    expect(events).not.toContain("clock_start.confirmed");
+  },
+);
+
 it("refuses a keep with no stop once the start check turned by the internet after the challenge, and shuts the window", async () => {
   const start = startClockState();
   const box = await stoppedBox(-MINUTE, { start });

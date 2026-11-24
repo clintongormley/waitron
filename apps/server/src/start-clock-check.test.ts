@@ -336,3 +336,133 @@ it("tells its listener each time a wait ends by a confirmation, and at no other 
   );
   expect(onConfirmed).toHaveBeenCalledTimes(2);
 });
+
+describe("holding a confirmation for a new fiscal installation", () => {
+  const LATER: ChainHeads = { "node-a": 9 };
+  const agreeing = () => witnesses(["10.0.0.5", 1_000], ["10.0.0.6", 2_000]);
+
+  it("ends the wait at the internet's confirmation with the hold off, and keeps waiting with it on", () => {
+    const onConfirmed = vi.fn();
+    const free = startClockState(onConfirmed);
+    expect(free.confirm("by_internet", HEADS)).toBe(true);
+    expect(free).toMatchObject({ status: "by_internet", cause: null, heldConfirmation: null });
+    expect(onConfirmed).toHaveBeenCalledOnce();
+
+    onConfirmed.mockClear();
+    const held = startClockState(onConfirmed);
+    expect(held.cause).toBe("start");
+    held.holdForIdentityChange();
+    expect(held.confirm("by_internet", HEADS)).toBe(false);
+    expect(held).toMatchObject({
+      status: "waiting",
+      cause: "identity_change",
+      mark: null,
+      heldConfirmation: { by: "by_internet", heads: HEADS },
+    });
+    expect(held.unconfirmed()).toBe(true);
+    expect(onConfirmed).not.toHaveBeenCalled();
+  });
+
+  it("holds a synchronised time service's answer at each look, and the start's look answers waiting", async () => {
+    const l = look(async () => clockServiceAnswer(true));
+    l.state.holdForIdentityChange();
+    await expect(startClockCheck(l.deps)).resolves.toBe("waiting");
+    await lookAtClockService(l.deps);
+    expect(l.clockStatus).toHaveBeenCalledTimes(2);
+    expect(l.state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
+  });
+
+  it.each(["by_person", "by_devices"] as const)(
+    "takes nothing from a confirmation %s, and leaves one held for the internet",
+    (by) => {
+      const state = startClockState();
+      state.holdForIdentityChange();
+      expect(state.confirm(by, LATER)).toBe(false);
+      expect(state).toMatchObject({
+        status: "waiting",
+        mark: null,
+        heldConfirmation: null,
+        confirmedByPerson: false,
+      });
+      state.confirm("by_internet", HEADS);
+      expect(state.confirm(by, LATER)).toBe(false);
+      expect(state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
+    },
+  );
+
+  it("confirms nothing by two agreeing devices, reading no heads, and does once the hold is released", async () => {
+    const state = startClockState();
+    state.holdForIdentityChange();
+    const heads = vi.fn(async () => HEADS);
+    expect(await state.confirmDevices(agreeing(), heads)).toEqual([]);
+    expect(heads).not.toHaveBeenCalled();
+    expect(state.status).toBe("waiting");
+
+    state.releaseIdentityChange();
+    expect(await state.confirmDevices(agreeing(), heads)).toHaveLength(2);
+    expect(state.status).toBe("by_devices");
+  });
+
+  it("confirms nothing by devices when the hold begins while the heads are read", async () => {
+    const state = startClockState();
+    const heads = async () => {
+      state.holdForIdentityChange();
+      return HEADS;
+    };
+    expect(await state.confirmDevices(agreeing(), heads)).toEqual([]);
+    expect(state.status).toBe("waiting");
+  });
+
+  it.each(["start", "clock_jumped", "future_date_refused"] as const)(
+    "drops a held confirmation when sent back to waiting for %s, twice over",
+    (cause) => {
+      const onConfirmed = vi.fn();
+      const state = startClockState(onConfirmed);
+      state.holdForIdentityChange();
+      for (let time = 0; time < 2; time++) {
+        state.confirm("by_internet", HEADS);
+        expect(state.heldConfirmation).not.toBeNull();
+        state.backToWaiting(cause);
+        expect(state).toMatchObject({ cause: "identity_change", heldConfirmation: null });
+      }
+      state.releaseIdentityChange();
+      expect(state).toMatchObject({ status: "waiting", cause });
+      expect(onConfirmed).not.toHaveBeenCalled();
+    },
+  );
+
+  it("drops a held confirmation when told to", () => {
+    const state = startClockState();
+    state.holdForIdentityChange();
+    state.confirm("by_internet", HEADS);
+    state.dropHeldConfirmation();
+    expect(state.heldConfirmation).toBeNull();
+    state.releaseIdentityChange();
+    expect(state).toMatchObject({ status: "waiting", cause: "start" });
+  });
+
+  it("applies the held confirmation, with the heads it was held with, and tells it once", () => {
+    const onConfirmed = vi.fn();
+    const state = startClockState(onConfirmed);
+    state.holdForIdentityChange();
+    state.confirm("by_internet", HEADS);
+    state.releaseIdentityChange();
+    expect(state).toMatchObject({
+      status: "by_internet",
+      cause: null,
+      mark: HEADS,
+      heldConfirmation: null,
+    });
+    expect(state.unconfirmed()).toBe(false);
+    expect(state.waitsBegun()).toBe(1);
+    state.releaseIdentityChange();
+    expect(onConfirmed).toHaveBeenCalledOnce();
+  });
+
+  it("gives the alert the cause identity_change, with no refused date", () => {
+    const state = startClockState();
+    state.holdForIdentityChange();
+    state.backToWaiting("future_date_refused", "2027-03-15");
+    expect(state).toMatchObject({ cause: "identity_change", refusedOn: null });
+  });
+});

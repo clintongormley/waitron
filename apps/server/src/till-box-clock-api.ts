@@ -268,8 +268,9 @@ export function mountTillBoxClockApi(
         personId: string,
         now: ReturnType<TrustedClock["now"]>,
         heads: ChainHeads,
+        used: boolean,
       ) =>
-        log("info", "clock_start.confirmed", {
+        log("info", used ? "clock_start.confirmed" : "clock_start.confirmation_unused", {
           source: asAdmin ? "admin" : "staff",
           person: personId,
           device: session.deviceId,
@@ -301,12 +302,12 @@ export function mountTillBoxClockApi(
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;
               const heads = await start.heads(tx);
-              start.state.confirm("by_person", heads);
-              return { personId, now, heads };
+              const used = start.state.confirm("by_person", heads);
+              return { personId, now, heads, used };
             }),
           ),
         );
-        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads, confirmed.used);
         return c.json(
           { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,
@@ -329,12 +330,12 @@ export function mountTillBoxClockApi(
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;
               const heads = await start!.heads(tx);
-              start!.state.confirm("by_person", heads);
-              return { personId, now, heads };
+              const used = start!.state.confirm("by_person", heads);
+              return { personId, now, heads, used };
             }),
           ),
         );
-        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads, confirmed.used);
         return c.json(
           { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,

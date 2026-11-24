@@ -299,11 +299,11 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           if (clockUnusableAt(backend, now)) throw refuse("stopped");
           if (start === undefined || start.state.status !== "waiting") throw refuse("not_stopped");
           const heads = await start.heads(tx);
-          start.state.confirm("by_person", heads);
-          return { now, heads };
+          const used = start.state.confirm("by_person", heads);
+          return { now, heads, used };
         }),
       );
-      log("info", "clock_start.confirmed", {
+      log("info", confirmed.used ? "clock_start.confirmed" : "clock_start.confirmation_unused", {
         source: "admin",
         person: authorizedBy,
         boxAt: confirmed.now.instant.toISOString(),

@@ -227,7 +227,8 @@ export function clockCorrection(deps: {
    * it was. */
   async function confirmByPerson(start: NonNullable<typeof deps.start>): Promise<void> {
     try {
-      start.state.confirm("by_person", await deps.read((tx) => start.heads(tx)));
+      if (!start.state.confirm("by_person", await deps.read((tx) => start.heads(tx))))
+        deps.log("info", "clock_start.confirmation_unused", { source: "set" });
     } catch (error) {
       deps.log("warn", "clock_start.mark_failed", { errorCode: codeOf(error) });
     }

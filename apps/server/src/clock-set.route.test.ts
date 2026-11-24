@@ -614,6 +614,20 @@ it("sets a waiting start's clock that reads before 28-10-2024 at the start, conf
   expect(start.status).toBe("by_person");
 });
 
+it("changes nothing as the box's date and time stand while a new fiscal installation waits to open, and logs it as unused", async () => {
+  const start = startClockState();
+  start.holdForIdentityChange();
+  const box = await stoppedBox(0, { start });
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(start).toMatchObject({ status: "waiting", heldConfirmation: null, mark: null });
+  const events = box.logs.map((line) => line.event);
+  expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
+  expect(events).not.toContain("clock_start.confirmed");
+});
+
 it("confirms a waiting start as the box's date and time stand, setting nothing", async () => {
   const start = startClockState();
   const box = await stoppedBox(0, { start });

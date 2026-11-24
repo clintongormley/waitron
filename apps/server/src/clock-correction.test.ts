@@ -1086,6 +1086,17 @@ describe("a set at the start", () => {
     },
   );
 
+  it("sets, and logs the confirmation as unused, while a new fiscal installation waits to open", async () => {
+    const start = waitingStart(() => 0);
+    start.state.holdForIdentityChange();
+    const h = harness({ start });
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(start.state).toMatchObject({ status: "waiting", heldConfirmation: null, mark: null });
+    expect(h.log).toHaveBeenCalledWith("info", "clock_start.confirmation_unused", {
+      source: "set",
+    });
+  });
+
   it("refuses not_stopped once the start is confirmed by the internet, asking the host nothing", async () => {
     const start = waitingStart(() => 0);
     start.state.confirm("by_internet", { "node-1": 3 });

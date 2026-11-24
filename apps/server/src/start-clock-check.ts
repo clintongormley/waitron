@@ -18,14 +18,21 @@ export function startClockAgreed(witnesses: readonly ClockWitness[]): number {
 
 export type StartClockConfirmation = "by_devices" | "by_person" | "by_internet";
 export type StartClockStatus = "waiting" | StartClockConfirmation;
-export type StartClockCause = "start" | "future_date_refused" | "clock_jumped";
+export type StartClockCause = "start" | "future_date_refused" | "clock_jumped" | "identity_change";
 /** Each chain's node and its highest record position, as `recordHeads` reads them. */
 export type ChainHeads = Readonly<Record<string, number>>;
+
+/** A confirmation kept while a new fiscal installation waits to be opened. */
+export interface HeldConfirmation {
+  readonly by: "by_internet";
+  readonly heads: ChainHeads;
+}
 
 /** Held in memory for one process. Only `backToWaiting` moves a box off `by_internet`. */
 export interface StartClockState {
   readonly status: StartClockStatus;
-  /** Why the box waits; null while it does not. */
+  /** Why the box waits; null while it does not. `identity_change` while it holds for one, whatever
+   * else it waits for. */
   readonly cause: StartClockCause | null;
   /** The chain heads at the latest confirmation, or null before the first. */
   readonly mark: ChainHeads | null;
@@ -38,18 +45,29 @@ export interface StartClockState {
   unconfirmed(): boolean;
   /** Grows by one each time a wait begins, the start's included. */
   waitsBegun(): number;
-  confirm(by: StartClockConfirmation, heads: ChainHeads): void;
+  /** Answers false when the box, holding for an identity change, stays waiting: the internet's
+   * confirmation is then held and any other changes nothing. */
+  confirm(by: StartClockConfirmation, heads: ChainHeads): boolean;
   /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. A
-   * box waiting because AEAT refused a sale as dated in the future keeps that cause. */
+   * box waiting because AEAT refused a sale as dated in the future keeps that cause. A held
+   * confirmation is dropped. */
   backToWaiting(cause: StartClockCause, refusedOn?: string): void;
   /** While waiting, confirms by devices when two or more agree within `START_CLOCK_MARGIN_MS`,
    * and answers their readings; otherwise answers none, changes nothing and reads no heads.
-   * Devices never end a wait caused by AEAT refusing a sale as dated in the future. */
+   * Devices never end a wait caused by AEAT refusing a sale as dated in the future, nor one that
+   * holds for an identity change. */
   confirmDevices(
     witnesses: readonly ClockWitness[],
     heads: () => Promise<ChainHeads>,
   ): Promise<ClockWitness[]>;
   noteHost(answers: boolean): void;
+  /** Keeps a waiting box waiting until `releaseIdentityChange`. */
+  holdForIdentityChange(): void;
+  /** The confirmation that ends the wait at `releaseIdentityChange`; null without one. */
+  readonly heldConfirmation: HeldConfirmation | null;
+  dropHeldConfirmation(): void;
+  /** Ends the hold and applies the held confirmation; without one the box waits on as before it. */
+  releaseIdentityChange(): void;
 }
 
 /** `onConfirmed` runs each time a wait ends by a confirmation. */
@@ -61,17 +79,24 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
   let hostAnswers = true;
   let waits = 1;
   let confirmedByPerson = false;
+  let holding = false;
+  let held: HeldConfirmation | null = null;
   const current = (): StartClockStatus => status;
 
-  const confirm = (by: StartClockConfirmation, heads: ChainHeads) => {
+  const confirm = (by: StartClockConfirmation, heads: ChainHeads): boolean => {
+    if (holding) {
+      if (by === "by_internet") held = { by, heads: { ...heads } };
+      return false;
+    }
     if (by === "by_person") confirmedByPerson = true;
-    if (status === "by_internet") return;
+    if (status === "by_internet") return true;
     const ended = status === "waiting";
     status = by;
     cause = null;
     refusedOn = null;
     mark = { ...heads };
     if (ended) onConfirmed();
+    return true;
   };
 
   return {
@@ -79,13 +104,13 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
       return status;
     },
     get cause() {
-      return cause;
+      return holding ? "identity_change" : cause;
     },
     get mark() {
       return mark;
     },
     get refusedOn() {
-      return refusedOn;
+      return holding ? null : refusedOn;
     },
     get hostAnswers() {
       return hostAnswers;
@@ -97,6 +122,7 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
     waitsBegun: () => waits,
     confirm,
     backToWaiting(next, refusedDate) {
+      held = null;
       if (status === "waiting" && cause === "future_date_refused") return;
       if (status !== "waiting") waits++;
       status = "waiting";
@@ -104,17 +130,31 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
       refusedOn = next === "future_date_refused" ? (refusedDate ?? null) : null;
     },
     async confirmDevices(witnesses, heads) {
-      if (status !== "waiting" || cause === "future_date_refused") return [];
+      if (holding || status !== "waiting" || cause === "future_date_refused") return [];
       const group = agreeingDeviceGroup(witnesses, START_CLOCK_MARGIN_MS);
       if (group.length === 0) return [];
       const at = await heads();
       // A person or the internet may have confirmed while the heads were read.
       if (current() !== "waiting") return [];
-      confirm("by_devices", at);
-      return group;
+      return confirm("by_devices", at) ? group : [];
     },
     noteHost(answers) {
       hostAnswers = answers;
+    },
+    holdForIdentityChange() {
+      holding = true;
+    },
+    get heldConfirmation() {
+      return held;
+    },
+    dropHeldConfirmation() {
+      held = null;
+    },
+    releaseIdentityChange() {
+      const kept = held;
+      holding = false;
+      held = null;
+      if (kept !== null) confirm(kept.by, kept.heads);
     },
   };
 }
