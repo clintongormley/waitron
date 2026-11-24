@@ -2812,10 +2812,14 @@ Go can exceed the target while it manages time spent collecting memory. [Go garb
 In the [24 November probe](https://github.com/clintongormley/waitron/actions/runs/45492983300/job/138795935538),
 the previously failing `01ec75f7e0` passed `pnpm typecheck` in 94 seconds, with 123 seconds for the
 job. The runner session peaked at 11.39 GiB on a guest with 15.62 GiB of visible RAM and zero swap.
-Kernel logs and the recorded memory-kill counters showed zero kills. Go's trace reported a Server
-heap peak of 8,155 MB, and Server's check took 30.3 seconds. Recheck the setting as Server's live
-heap grows. The original failures lack kernel logs, and the source of the compiler's memory
-growth is under investigation.
+Kernel logs and the recorded memory-kill counters showed zero kills. `GODEBUG=gctrace=1` reported a
+Server heap peak of 8,155 MB, about 2 GiB above the target. Server's check took 30.3 seconds. The
+guest measurements cover one tuned run. The earlier failures supplied exit logs without peak
+memory or kernel records. Recheck the setting if typecheck exits 137 again or takes over 4m30s.
+
+On a disposable-runner probe, add `GODEBUG=gctrace=1` to `pnpm typecheck`. To capture the runner's
+memory alongside the compiler trace, read `memory.peak` and `memory.events` for the group named by
+`/proc/self/cgroup`, and keep the kernel memory-kill log.
 
 ### A job far over its usual time on unchanged code: read the runner's setup times first
 
