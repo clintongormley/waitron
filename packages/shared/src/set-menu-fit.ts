@@ -1,4 +1,5 @@
 import { AppError, type ErrorParams } from "./errors.js";
+import { solvePlacement } from "./set-menu-placement.js";
 import {
   mixCount,
   searchMixes,
@@ -371,33 +372,46 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
       classes: classes.map(({ dishes, arcs }) => ({ count: dishes.length, arcs })),
     },
   };
-  const offerPlaces = offers.map(({ lines }) => lines.reduce((sum, { count }) => sum + count, 0));
+  const reachablePairs = new Set(classes.flatMap(({ arcs }) => arcs.map(({ pair }) => pair)));
+  const offerPlaces = offers.map(() => 0);
+  let fixedPlaces = 0;
+  for (const pair of reachablePairs) {
+    const { offer, count } = pairs[pair]!;
+    offerPlaces[offer]! += count;
+    fixedPlaces += fixed[offer]! * count - pinnedCounts[pair]!;
+  }
   const mostPlaces = offerPlaces.reduce((most, count) => Math.max(most, count), 0);
-  const billPlaces = fixed.reduce(
-    (total, count, offer) => total + count * offerPlaces[offer]!,
-    unfixed * mostPlaces,
-  );
-  function coverageSearch(count: number): MixSearchResult {
+  const unplacedDishes = dishes.length - placed.size;
+  const billPlaces = fixedPlaces + unfixed * mostPlaces;
+  function uncoveredWith(count: number): number {
+    const coverage = {
+      uncoveredCost: 1,
+      classes: search.placement.classes.map(({ count, arcs }) => ({
+        count,
+        arcs: arcs.map(({ pair }) => ({ pair, cost: 0 })),
+      })),
+    };
+    const counts = offers.map(() => 0);
+    counts[offerPlaces.indexOf(mostPlaces)] = count;
+    const placement = solvePlacement({ ...coverage, capacities: search.capacities(counts) });
+    const leastUncovered = Math.max(0, unplacedDishes - fixedPlaces - count * mostPlaces);
+    // Reaching the capacity bound proves no other mix can cover more dishes.
+    if (placement.uncovered === leastUncovered) return leastUncovered;
+
     return searchMixes({
       ...search,
       unfixed: count,
       mixCost: () => 0,
-      placement: {
-        uncoveredCost: 1,
-        classes: search.placement.classes.map(({ count, arcs }) => ({
-          count,
-          arcs: arcs.map(({ pair }) => ({ pair, cost: 0 })),
-        })),
-      },
-    });
+      placement: coverage,
+    }).placement.uncovered;
   }
   // When the bill has too few places, only the number of unplaced dishes matters.
-  const result = dishes.length > billPlaces ? coverageSearch(unfixed) : searchMixes(search);
-  const missing = result.placement.uncovered;
-  if (missing > 0) {
+  const result = unplacedDishes > billPlaces ? null : searchMixes(search);
+  if (!result || result.placement.uncovered > 0) {
+    const missing = result?.placement.uncovered ?? uncoveredWith(unfixed);
     // A separate new menu for each unplaced dish is sufficient. Adding menus preserves a fit.
     let sufficient = unfixed + missing;
-    let low = unfixed + Math.max(1, Math.ceil((dishes.length - billPlaces) / mostPlaces));
+    let low = unfixed + Math.max(1, Math.ceil((unplacedDishes - billPlaces) / mostPlaces));
     let high = sufficient;
     for (let count = low; low < high; count = Math.floor((low + high) / 2)) {
       const total = menus.length + count - unfixed;
@@ -406,7 +420,7 @@ export function fitSetMenus(input: SetMenuFitInput): SetMenuFit {
         !Number.isSafeInteger(1 + dishes.length + placesPerMenu * total)
       ) {
         high = count;
-      } else if (coverageSearch(count).placement.uncovered === 0) {
+      } else if (uncoveredWith(count) === 0) {
         sufficient = count;
         high = count;
       } else {

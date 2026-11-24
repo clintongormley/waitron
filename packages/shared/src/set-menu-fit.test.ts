@@ -621,6 +621,15 @@ describe("additional set menus", () => {
     const dishes = menus(50).map(({ id }) => dish(id, "soup"));
     expectNeeded(smallBill({ offers, setMenus: menus(46), dishes }), 50);
   });
+
+  it("mixes offers when the menu with most places cannot cover the bill", () => {
+    const offers = [
+      offer("soup menu", 1400, ["soup"], [{ count: 2, courseIds: ["starter"] }]),
+      offer("fish menu", 1400, ["sea bass"], [{ count: 1, courseIds: ["main"] }]),
+    ];
+    const dishes = [dish("soup", "soup"), ...menus(4).map(({ id }) => dish(id, "sea bass"))];
+    expectNeeded(smallBill({ offers, dishes }), 5);
+  });
 });
 
 it("uses the smallest sufficient count when a new menu can take more than one dish", () => {
