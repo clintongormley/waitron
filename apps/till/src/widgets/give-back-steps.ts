@@ -133,7 +133,7 @@ function outcomeLines(
     lines.push(t("give_back.pending").replace("{amount}", () => money(pending)));
   if (outcome.rest !== null && outcome.refusal === null)
     lines.push(
-      t("give_back.rest").replace("{amount}", () =>
+      t(restReady(outcome) ? "give_back.rest_ready" : "give_back.rest").replace("{amount}", () =>
         money(sumOf([outcome.rest!.amount, outcome.rest!.extra])),
       ),
     );
@@ -175,6 +175,11 @@ export function lostStep(
     >`;
 }
 
+/** A rest no card refund waits for any more: it goes when staff press for it. */
+const restReady = (outcome: GiveBackOutcome) =>
+  outcome.rest !== null &&
+  !outcome.parts.some((part) => part.state === "pending" && part.kind !== "correction");
+
 /** Whether a card refund in `outcome` still waits for the card company. */
 export const waitsForCard = (outcome: GiveBackOutcome) =>
   outcome.refusal === null &&
@@ -205,7 +210,7 @@ export function doneStep(
               .loading=${sending}
               .disabled=${sending}
               @click=${on.checkAgain}
-              >${t("give_back.check_again")}</wt-button
+              >${t(restReady(step.outcome) ? "give_back.send_rest" : "give_back.check_again")}</wt-button
             >`
           : nothing
       }</wt-form-actions

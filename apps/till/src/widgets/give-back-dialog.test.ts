@@ -1302,7 +1302,7 @@ describe("sending", () => {
     expect(reopened.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull();
   });
 
-  it("sends a rest with nothing waiting at Check again with fresh ids, also after reopening", async () => {
+  it("says a rest with nothing waiting goes back at a press, and sends it with fresh ids, also after reopening", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
       ...completedFor(body),
@@ -1312,15 +1312,19 @@ describe("sending", () => {
       ],
       rest: restRequest,
     }));
-    await press(api, "card-1");
-    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledOnce());
+    const ready = t("give_back.rest_ready").replace("{amount}", "€3.00");
+    const button = (el: TillGiveBackDialog) =>
+      root(el).querySelector<HTMLElement>("[data-check-again]")!;
+    const live = await press(api, "card-1");
+    await vi.waitFor(() => expect(outcomeText(live)).toContain(ready));
+    expect(outcomeText(live)).not.toContain(t("give_back.rest").replace("{amount}", "€3.00"));
+    expect(text(button(live))).toBe(t("give_back.send_rest"));
     cleanupWidgets();
     const { el } = await mount(api);
-    expect(outcomeText(el)).toContain(
-      "€3.00 has not gone back yet: it follows when the card company answers.",
-    );
-    expect(outcomeText(el)).not.toContain("waiting for the card company");
-    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    expect(outcomeText(el)).toContain(ready);
+    expect(outcomeText(el)).not.toContain("card company");
+    expect(text(button(el))).toBe(t("give_back.send_rest"));
+    button(el).click();
     await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
     expect(api.getTenderRefund).not.toHaveBeenCalled();
     expect(api.previewGiveBack).toHaveBeenLastCalledWith("sale-1", restRequest);

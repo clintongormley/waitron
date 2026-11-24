@@ -577,7 +577,8 @@ export class TillGiveBackDialog extends LitElement {
   #savedPress() {
     try {
       return this.session.read(this.saleId)?.sent ?? null;
-    } catch {
+    } catch (error) {
+      if (!(error instanceof TenderRefundAttemptError)) throw error;
       return null;
     }
   }

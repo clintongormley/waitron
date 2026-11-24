@@ -106,8 +106,9 @@ const waitingKinds = new Set(["refund", "extra"]);
 /**
  * Give money back's saved attempt, in the refund journal so signing out clears it with the rest:
  * each press is saved with its ids before it is sent, so a lost answer is sent again under them and
- * the server answers it from what it stored. A card refund left waiting is saved with any rest; the
- * rest gets ids of its own when first sent. One send at a time.
+ * the server answers it from what it stored. A rest, the part of a card reader's press not yet
+ * sent, is saved whether or not a card refund still waits, and gets ids of its own when first sent.
+ * One send at a time.
  */
 export class GiveBackSession {
   #busy = false;
@@ -292,7 +293,7 @@ export class GiveBackSession {
   ): Promise<GiveBackOutcome> {
     const rest = this.read(saleId)?.rest;
     if (!rest?.request) return Promise.reject(new TenderRefundAttemptError("missing"));
-    // A rest follows a card reader's pending refund; a separate terminal's never waits.
+    // Only a card reader's press leaves a rest: a hand-keyed or cash press writes every part at once.
     const { request, reasonId, note } = rest;
     return this.submit(
       saleId,
