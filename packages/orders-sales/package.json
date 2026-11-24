@@ -12,13 +12,17 @@
     "./invoice-selection.js": "./src/invoice-selection.ts",
     "./invoice-typing.js": "./src/invoice-typing.ts",
     "./receipt-dates.js": "./src/receipt-dates.ts",
+    "./receipt-facts.js": "./src/receipt-facts.ts",
     "./receipt-figures.js": "./src/receipt-figures.ts",
     "./receipt-issuer.js": "./src/receipt-issuer.ts",
     "./receipt-lines.js": "./src/receipt-lines.ts",
     "./receipt-logo.js": "./src/receipt-logo.ts",
     "./receipt-money.js": "./src/receipt-money.ts",
+    "./receipt-sale-types.js": "./src/receipt-sale-types.ts",
     "./receipt-table.js": "./src/receipt-table.ts",
-    "./receipt-tax-table.js": "./src/receipt-tax-table.ts"
+    "./receipt-tax-table.js": "./src/receipt-tax-table.ts",
+    "./testing/full-invoice-fixture.js": "./test/full-invoice-fixture.ts",
+    "./testing/receipt-cases.js": "./test/receipt-cases.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -29,12 +33,14 @@
   },
   "dependencies": {
     "@waitron/core": "workspace:*",
+    "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/media": "workspace:*",
     "@waitron/menu": "workspace:*",
+    "@waitron/payments": "workspace:*",
     "@waitron/printing": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",

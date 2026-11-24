@@ -1,36 +1,17 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { billPayments, tenders, type Transaction } from "@waitron/db";
-import { payments, type CardDetails } from "@waitron/payments";
+import type { BillTenderLine } from "@waitron/orders-sales/receipt-sale-types.js";
+import { payments } from "@waitron/payments";
 import { centsToDecimal, compareDecimal, type Decimal, type SaleId } from "@waitron/shared";
 import { cashChange, money, ZERO } from "./bill-allocation.js";
 import { completedRefundsOf, netOfRefunds, owedOf } from "./bill-payment-money.js";
 import { cardOf, type StoredCard } from "./card-details.js";
-import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
+import { outsideCardDetails } from "./outside-card.js";
 import { readIssuedSales } from "./sale-due.js";
 import { paidNoAdvance } from "./bill-advances.js";
 
-/**
- * One payment of a bill paid in parts, as the ticket lists it. `change` is what
- * the bill payment handed back when it was taken, never derived from the tender, whose amount a
- * refund lowers.
- */
-export type BillTenderLine = (
-  | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | ({
-      method: "card";
-      amount: string;
-      tip: string;
-      reference: string | null;
-      card?: CardDetails;
-    } & OutsideCardDetails)
-) & { refunds: BillTenderRefund[] };
-
-/** Money given back from a bill payment: a `completed` refund, oldest first. */
-export interface BillTenderRefund {
-  amount: string;
-  tip: string;
-}
+export type { BillTenderLine, BillTenderRefund } from "@waitron/orders-sales/receipt-sale-types.js";
 
 const capturedCards = alias(payments, "captured_card");
 
