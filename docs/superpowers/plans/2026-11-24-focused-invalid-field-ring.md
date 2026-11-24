@@ -1,0 +1,10 @@
+# Keyboard focus on invalid fields
+
+When staff Tab to a filled field with an error, they can see which field has focus in either theme. The outline uses the same tokens as the box pages in #4152. The red line, label and message continue to show the error.
+
+- [ ] In `packages/ui-core/src/components/wt-input.test.ts`, add `marks keyboard focus on an invalid field in %s` for light and dark. Mount a field with a value and error so the label already floats. Tab from a preceding button into its native input. Check that the outline appears only with visible focus and that the red underline persists. Keep the existing danger-line and label test. Run `pnpm --filter @waitron/ui-core exec vitest run src/components/wt-input.test.ts -t 'marks keyboard focus'` and see both cases fail on the missing outline.
+- [ ] In `packages/ui-core/src/field-styles.ts`, draw the outline on the invalid `.field` when its `.field-control` matches `:focus-visible`, using `--wt-focus-ring` and `--wt-focus-offset`. Use `:where()` around the `:has()` condition so the later Windows contrast-theme outline keeps precedence. Reuse the current error, focus and disabled rules. The box pages, valid fields, form validation and the dropdown's handling of focus stay outside this change.
+- [ ] Rerun the new test and the existing `field-styles`, `wt-input`, `wt-input.forced-colors` and `wt-textarea` browser files in `@waitron/ui-core`. In `@waitron/ui`, run the existing `wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-address-lookup`, `wt-combobox`, `wt-colour-chooser` and their available forced-colors browser tests. Look at the field before and after Tab in Chromium at phone and desktop widths, in light and dark with English and Spanish labels.
+- [ ] Update the Forms field-box description in `docs/developers/design-system.md`. Remove the finished entry from `docs/backlog/dashboard.md` and its summary phrase from `docs/backlog.md`. Commit the change with `git commit -s`.
+
+Estimate 4–7 lines of CSS and about 20–30 lines of browser test, plus the short documentation edits.
