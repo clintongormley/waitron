@@ -233,7 +233,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/cancel-invoiced-order.test.ts",
   "apps/server/src/category-sales-page.test.ts",
   "apps/server/src/certificate-reminder-mail.test.ts",
-  "apps/server/src/certificate-reminder-worker.test.ts",
   "apps/server/src/chain-height.test.ts",
   "apps/server/src/chain-height.ts",
   "apps/server/src/clock-behind-stop.bills.test.ts",
