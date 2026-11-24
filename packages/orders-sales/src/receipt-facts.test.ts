@@ -493,14 +493,35 @@ describe("receipt figure details", () => {
           setMenuRole: "dish",
         },
       ];
-      expect(receiptFigures(input).sections[0]).toMatchObject({
+      const [section] = receiptFigures(input).sections;
+      expect(section).toMatchObject({
         kind: "withVat",
         group: { item: "Sirloin", surcharge: true, amount: gross },
       });
-      const [section] = receiptFigures(input).sections;
       expect(section?.kind === "withVat" && section.group.perUnit).toEqual(perUnit);
     },
   );
+
+  it.each([
+    ["one charged portion", "1", "5.00", "5.00", false],
+    ["two free portions", "2", "0.00", "0.00", false],
+    ["a credited portion", "-1", "-5.00", "5.00", true],
+  ])("omits the unit price for %s", (_kind, quantity, gross, unitPriceGross, credit) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = "en-GB";
+    input.result.invoiceType = credit ? "R5" : "F2";
+    input.result.total = gross;
+    if (credit)
+      input.result.corrects = { invoiceNumber: "T/37", issuedAt: "2026-08-16T20:00:00.000Z" };
+    input.result.lines = [{ descriptions: { en: "Pie" }, quantity, gross, unitPriceGross }];
+
+    const [section] = receiptFigures(input).sections;
+    expect(section).toMatchObject({
+      kind: "withVat",
+      group: { item: "Pie", quantity, amount: gross },
+    });
+    expect(section?.kind === "withVat" && section.group).not.toHaveProperty("perUnit");
+  });
 
   it("shows how many counted extras each dish has and the measured extra's total quantity", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
@@ -509,6 +530,7 @@ describe("receipt figure details", () => {
     input.result.lines = [
       { descriptions: { en: "Sundae" }, quantity: "2", gross: "8.00" },
       { descriptions: { en: "Wafer" }, quantity: "4", gross: "2.00", parentLineNo: 1 },
+      { descriptions: { en: "Cherry" }, quantity: "2", gross: "1.00", parentLineNo: 1 },
       {
         descriptions: { en: "Berries" },
         quantity: "0.250",
@@ -518,8 +540,10 @@ describe("receipt figure details", () => {
       },
     ];
     const [section] = receiptFigures(input).sections;
+    expect(section?.kind === "withVat" && section.group).not.toHaveProperty("surcharge");
     expect(section?.kind === "withVat" && section.group.options).toEqual([
       { item: "Wafer", quantity: "x2", amount: "2.00", rateLetter: "" },
+      { item: "Cherry", quantity: "", amount: "1.00", rateLetter: "" },
       { item: "Berries", quantity: "0.250 kg", amount: "3.00", rateLetter: "" },
     ]);
   });

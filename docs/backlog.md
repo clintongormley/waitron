@@ -1494,11 +1494,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `receipt-document`, `receipt-document.set-menus`, `invoice-layout`, `invoice-layout.widths`,
   `invoice-document`, `invoice-document.set-menus`, `receipt-ticket`, `invoice-language`,
   `invoice-pdf`, `invoice-raster`, `free-item-share`, `receipt-deferred-payment`,
-  `till-receipt-preview`, `receipt-advances` and `receipt-adjustments` suites. When changing the
-  shared invoice fixture, find its server consumers with
-  `git grep -l -F full-invoice-fixture -- apps/server` and run their suites.
-  The owner lands changes to the facts returned or to any printed or emailed document.
-  [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
+  `till-receipt-preview`, `receipt-advances`, `receipt-adjustments`, `receipt-print`,
+  `receipt-guests.routes`, `receipt-preview-api`, `sample-receipt` and `receipt-language` suites.
+  Include the affected server callers when changing other receipt or invoice flows.
+  When changing a shared fixture, find its server consumers with
+  `git grep -l -F -e full-invoice-fixture -e receipt-cases -- apps/server` and run their suites.
+  Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
+  The [receipt-facts plan](superpowers/plans/2026-11-24-a1308-receipt-facts.md) also sends this slice
+  to the owner to land if it changes the facts returned or a printed or emailed document.
   The Find a bill routes and readers remain in the server. When changing the parser, also run
   the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
   and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
