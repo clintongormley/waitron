@@ -149,6 +149,7 @@ function edit(side: "before" | "after", run: (db: DatabaseSync) => void) {
   const db = new DatabaseSync(join(directory!, `${side}.db`));
   try {
     db.exec("pragma foreign_keys=off; pragma ignore_check_constraints=on");
+    db.exec("begin");
     const triggers = db
       .prepare("select name,sql,tbl_name from sqlite_schema where type='trigger'")
       .all() as { name: string; sql: string; tbl_name: string }[];
@@ -157,6 +158,7 @@ function edit(side: "before" | "after", run: (db: DatabaseSync) => void) {
     for (const t of triggers)
       if (db.prepare("select 1 from sqlite_schema where type='table' and name=?").get(t.tbl_name))
         db.exec(t.sql);
+    db.exec("commit");
   } finally {
     db.close();
   }
