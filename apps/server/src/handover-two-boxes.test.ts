@@ -1462,8 +1462,7 @@ describe("an emergency switch whose return cannot complete, then Wipe and remove
       });
 
       // The return cannot complete: the old box sends its pre-copy record changed, so it clashes.
-      const seat = boxes.main.modules.find((m) => m.handover?.returnRecords !== undefined)!
-        .handover!.returnRecords!;
+      const seat = boxes.main.modules.find((m) => m.fiscal !== undefined)!.handover!.returnRecords!;
       const realRead = seat.read.bind(seat);
       const read = vi.spyOn(seat, "read").mockImplementation(async (db, nodeId) => {
         const chains = await realRead(db, nodeId);

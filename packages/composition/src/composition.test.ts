@@ -49,7 +49,11 @@ import {
   STAFFING_ROUTES,
   describeShifts,
 } from "@waitron/staffing";
-import { WORKFORCE_MIGRATIONS, WORKFORCE_PERSONAL_DATA } from "@waitron/workforce";
+import {
+  WORKFORCE_HANDOVER,
+  WORKFORCE_MIGRATIONS,
+  WORKFORCE_PERSONAL_DATA,
+} from "@waitron/workforce";
 import {
   WORKFORCE_ES_MIGRATIONS,
   WORKFORCE_ES_VOCABULARY,
@@ -340,12 +344,13 @@ describe("ALL_MODULES configuration transfer contribution", () => {
 });
 
 describe("ALL_MODULES handover seat", () => {
-  it("fiscal-verifactu and payments declare their handover contributions, by reference, and no other module does", () => {
+  it("workforce, payments and fiscal-verifactu declare their handover contributions, by reference, and no other module does", () => {
     const declared = ALL_MODULES.filter((m) => m.handover !== undefined).map((m) => [
       m.name,
       m.handover,
     ]);
     expect(declared).toEqual([
+      ["workforce", WORKFORCE_HANDOVER],
       ["payments", PAYMENTS_HANDOVER],
       ["fiscal-verifactu", VERIFACTU_HANDOVER],
     ]);

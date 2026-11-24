@@ -644,9 +644,6 @@ function hoursDestination() {
   const fetch: typeof globalThis.fetch = async (url, init) => {
     const { body } = JSON.parse(String(init?.body)) as { body: { module: string } };
     sentModules.push(body.module);
-    // Until the route maps the working-time codes, a refusal is answered here as the route will.
-    if (body.module === "hours" && hoursRefusal !== null)
-      return Response.json({ error: { code: hoursRefusal } }, { status: 409 });
     return app.request(String(url), init);
   };
   return { sentModules, fetch };
@@ -699,7 +696,7 @@ it.each(workforceCodes)(
       }),
     ).toBe("hours-refused");
     expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
-    expect(received).toEqual(["invoice-1", "invoice-2"]);
+    expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
   },
 );
 

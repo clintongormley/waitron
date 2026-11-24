@@ -41,6 +41,8 @@ export function mountReturnRecordsApi(
       "node.read_only": 409,
       "fiscal.return_clock_ahead": 409,
       "fiscal.return_record_clash": 409,
+      "attendance.return_entry_clash": 409,
+      "attendance.return_entry_invalid": 409,
     },
     "return-records.failed",
   );
