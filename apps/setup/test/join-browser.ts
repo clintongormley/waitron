@@ -28,9 +28,7 @@ export const joinStubs = (): {
   ),
   cancelJoin: vi.fn().mockResolvedValue(undefined),
   confirmJoin: vi.fn().mockResolvedValue(undefined),
-  finishJoin: vi
-    .fn()
-    .mockResolvedValue({ adopted: true, breakGlassSecret: "bg-default", restarting: true }),
+  finishJoin: vi.fn().mockResolvedValue({ adopted: true, restarting: true }),
 });
 
 /** This tab as it is once Join answered for `primaryUrl`. */

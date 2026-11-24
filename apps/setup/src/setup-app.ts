@@ -2250,8 +2250,6 @@ export class SetupApp extends LitElement {
       const serversUrl = this.#joinServersUrl();
       this.#forgetJoin();
       if (!this.isConnected) return;
-      this.breakGlassSecret = outcome.breakGlassSecret;
-      this.breakGlassKeyName = outcome.breakGlassKeyName;
       this.contactUrl = outcome.contactUrl;
       this.primaryServersUrl = serversUrl;
       this.mirrorJoin = true;

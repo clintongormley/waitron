@@ -2156,29 +2156,6 @@ describe("setup-app", () => {
     },
   );
 
-  it("surfaces the break-glass secret and what it is for on the done screen after a successful adopt", async () => {
-    const secret = "bg-secret-once-9f3a";
-    const adopt = vi.fn().mockResolvedValue({
-      adopted: true,
-      breakGlassSecret: secret,
-      restarting: true,
-    });
-    const el = await mountSetupApp(
-      stubApi({ finishJoin: adopt, nodeStanding: vi.fn().mockResolvedValue("serving-secondary") }),
-    );
-    await finishJoining(el);
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
-    await expect
-      .poll(() => screenText(el, "done", "[data-test=break-glass-secret]"), { timeout: 5_000 })
-      .toBe(secret);
-    // Whitespace is collapsed because the rendered copy wraps across lines.
-    const warning = (await screenText(el, "done", "[data-test=key-why]"))
-      ?.toLowerCase()
-      .replace(/\s+/g, " ");
-    expect(warning).toContain("save it as a file or write it down");
-  });
-
   it("hands this box's own address from Finish joining to the done screen's label", async () => {
     const el = await mountSetupApp(
       stubApi({
@@ -2194,26 +2171,6 @@ describe("setup-app", () => {
     const done = (await screenHost(el, "done")) as SetupDoneScreen;
     expect(done.contactUrl).toBe("https://box-41aa.waitron.local");
     expect(done.mirrorJoin).toBe(true);
-  });
-
-  it("passes the adopted recovery key's name to its handover screen", async () => {
-    const el = await mountSetupApp(
-      stubApi({
-        finishJoin: vi.fn().mockResolvedValue({
-          adopted: true,
-          restarting: true,
-          breakGlassSecret: "key-on-paper",
-          breakGlassKeyName: "2026-10-15 · K7QF",
-        }),
-        nodeStanding: vi.fn().mockResolvedValue("serving-secondary"),
-      }),
-    );
-    await finishJoining(el);
-    await flush(el);
-    await expect
-      .poll(() => screenText(el, "done", "[data-test=break-glass-key-name]"), { timeout: 5_000 })
-      .toBe("Box key 15 Oct 2026 · K7QF");
-    expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
   });
 
   it("shows the in-flight provisioning state while the adopt POST is pending", async () => {
@@ -5753,8 +5710,12 @@ describe("an answer that arrives after the element is detached", () => {
       method: "finishJoin",
       fire: (el: SetupApp) => finishJoining(el),
       settle: (d: ReturnType<typeof deferred>) =>
-        d.resolve({ adopted: true, breakGlassSecret: "bg", restarting: true }),
-      unchanged: { screen: "provisioning", breakGlassSecret: undefined, mirrorJoin: false },
+        d.resolve({
+          adopted: true,
+          contactUrl: "https://box-41aa.waitron.local",
+          restarting: true,
+        }),
+      unchanged: { screen: "provisioning", contactUrl: undefined, mirrorJoin: false },
     },
     {
       name: "an adopt refusal",

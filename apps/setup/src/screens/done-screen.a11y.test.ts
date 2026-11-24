@@ -25,47 +25,6 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (theme) => {
-  it("shows the named paper key at phone and desktop widths in both languages", async () => {
-    const { host, el } = await mountWidget<SetupDoneScreen>(
-      "setup-done-screen",
-      {
-        api: {
-          ...apiWith(() => new Promise(() => {})),
-          nodeStanding: () => Promise.resolve("serving-secondary"),
-        } as unknown as SetupApi,
-        startDelayMs: 0,
-        mirrorJoin: true,
-        breakGlassSecret: "synthetic-key-for-visual-check",
-        breakGlassKeyName: "2026-10-15 · K7QF",
-      },
-      theme,
-    );
-    await vi.waitFor(() => expect(q(el, "[data-test=break-glass-key-name]")).not.toBeNull());
-    try {
-      for (const locale of ["en-GB", "es-ES"] as const) {
-        setLocale(locale);
-        await el.updateComplete;
-        for (const width of [390, 1280]) {
-          await page.viewport(width, 1100);
-          expect(window.innerWidth).toBe(width);
-          expect(q(el, "[data-test=break-glass-key-name]")?.textContent?.trim()).toBe(
-            locale === "en-GB"
-              ? "Box key 15 Oct 2026 · K7QF"
-              : "Clave del servidor 15 oct 2026 · K7QF",
-          );
-          await expectNoA11yViolations(host);
-          if (import.meta.env.VITE_W41S_VISUAL === "1") {
-            await page.screenshot({
-              path: `__screenshots__/w41s-key-name-${theme}-${locale}-${width}.png`,
-            });
-          }
-        }
-      }
-    } finally {
-      await page.viewport(1280, 720);
-    }
-  });
-
   it("has no violations showing the Preparation PDF download link", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",
@@ -270,7 +229,7 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
   });
 
   it.each(["en-GB", "es-ES"] as const)(
-    "has no violations on the joining page while copying, after losing the box, at the key task, at the label task and with every task done (%s)",
+    "has no violations on the joining page while copying, after losing the box, at the label task and with every task done (%s)",
     async (locale) => {
       setLocale(locale);
       let answer: "copying" | "lost" | "joined" = "copying";
@@ -309,8 +268,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("true"),
       );
       await expectNoA11yViolations(host);
-      q(el, "[data-test=key-wrote]")!.click();
-      await el.updateComplete;
       const label = q(el, "setup-box-label")!;
       await vi.waitFor(() =>
         expect(label.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
@@ -318,7 +275,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
       await expectNoA11yViolations(host);
       q(el, "[data-test=label-stuck]")!.click();
       await el.updateComplete;
-      expect(q(el, "[data-test=task-key]")!.getAttribute("data-done")).toBe("true");
       expect(q(el, "[data-test=task-label]")!.getAttribute("data-done")).toBe("true");
       await expectNoA11yViolations(host);
     },

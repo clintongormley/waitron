@@ -118,10 +118,6 @@ export const finishEn = {
   "done.task.in_progress": "In progress",
   "done.task.to_do": "To do",
   "done.task.join": "Join the restaurant",
-  "done.task.key": "Download the box key",
-  "done.task.key_why": "Save it as a file or write it down, and keep it off this computer.",
-  "done.task.key_wrote": "I wrote it down",
-  "done.task.key_again": "Show the key again",
   "done.task.label": "Print this box's label",
   "done.task.label_why":
     "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
@@ -256,10 +252,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.in_progress": "En curso",
   "done.task.to_do": "Pendiente",
   "done.task.join": "Unirse al restaurante",
-  "done.task.key": "Descargar la clave del servidor",
-  "done.task.key_why": "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
-  "done.task.key_wrote": "La he anotado",
-  "done.task.key_again": "Mostrar la clave de nuevo",
   "done.task.label": "Imprimir la etiqueta de este servidor",
   "done.task.label_why":
     "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
