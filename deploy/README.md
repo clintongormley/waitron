@@ -901,11 +901,12 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older master keys.** A backup's restore is authorised only by the master key that was
-  current when the backup was made. Keep the older master key until every backup made before its
+  **Keep older master keys.** Restoring a backup that files invoices needs the master key that was
+  current when the backup was made, and the restored box then answers to that key again, not to a
+  master key made after the backup. Keep each older master key until every backup made before its
   replacement has been deleted. When the restored copy contains a key name,
-  `restore.recovery_key_selected` names the master key you need. The master key authorises
-  recovery; the separate recovery key opens the backup file.
+  `restore.recovery_key_selected` names it. The master key authorises recovery; the separate
+  recovery key opens the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that

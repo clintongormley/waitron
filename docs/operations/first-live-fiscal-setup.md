@@ -265,7 +265,7 @@ If you have lost both the administrator password and every recovery pack holding
 it up again (owner, 2026-10-21). Reinstallation loses the box's local data. The new setup starts a
 fresh fiscal identity and chain; it does not reopen the old account or continue its history.
 Keep any separately held archive, bucket or managed Cloud copy: recovering one still requires
-the master key it was made with and the [ordinary restore checks](hour-recovery.md). Reinstalling cannot
+the master key that was current when it was made and the [ordinary restore checks](hour-recovery.md). Reinstalling cannot
 replace that key. This documentation change does not authorise a reset or reinstall now.
 
 ## Use the provisioning command

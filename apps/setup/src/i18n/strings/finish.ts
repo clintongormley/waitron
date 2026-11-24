@@ -87,7 +87,6 @@ export const finishEn = {
   "done.pack.continue": "Continue",
   "done.break_glass.heading": "Save your box key now",
   "done.break_glass.key_name": "Box key {date} · {code}",
-  "done.break_glass.backups": "The backup encryption key opens the copy.",
   "done.break_glass.warning":
     "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
   "done.break_glass.restore":
@@ -225,7 +224,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.pack.continue": "Continuar",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
-  "done.break_glass.backups": "La clave de cifrado de copias abre la copia.",
   "done.break_glass.warning":
     "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.restore":

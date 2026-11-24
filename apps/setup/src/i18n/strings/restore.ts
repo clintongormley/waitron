@@ -30,6 +30,7 @@ export const restoreEn = {
   "restore.preview_node": "Node",
   "restore.preview_no_master_key":
     "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
+  "restore.preview_older_key": "An older backup brings back its older master key.",
   "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
   "restore.preview_key_separate":
     "The backup encryption key opens the copy. The master key authorises recovery.",
@@ -225,6 +226,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_node": "Nodo",
   "restore.preview_no_master_key":
     "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",
+  "restore.preview_older_key": "Una copia antigua recupera la clave maestra de entonces.",
   "restore.preview_keep_keys":
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate":

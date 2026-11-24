@@ -197,7 +197,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(parts.indexOf("conflict")).toBeLessThan(parts.indexOf("progress"));
     const link = notice.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("/recovery/fiscal-conflict");
-    expect(text(screen, "[data-test=conflict]")).toContain("box key");
+    expect(text(screen, "[data-test=conflict]")).toContain("master key");
     const line = text(screen, "[data-test=conflict] li");
     expect(line).toContain("T1/41");
     expect(line).toContain("Correcto");

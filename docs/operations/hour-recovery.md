@@ -12,7 +12,7 @@ old or copied box offline before proceeding; your answers on this page do not st
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
 box over HTTPS. Use the venue's current master key (the field still says **Current box key**). A dashboard sign-in, backup password or
-key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
+older master key does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
 page then shows the box's time and this device's: check that both are right, then choose **Confirm

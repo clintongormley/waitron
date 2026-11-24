@@ -1390,8 +1390,6 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "The backup encryption key opens the copy.",
-      "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
     ]);
@@ -1418,8 +1416,6 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "La clave de cifrado de copias abre la copia.",
-      "",
       "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
       "",
     ]);
@@ -1442,8 +1438,6 @@ describe("saving the server key as a file", () => {
       await userEvent.click(q(el, "[data-test=break-glass-save]")!);
       const text = await saves.blobs[0]!.text();
       expect(text).not.toMatch(claim);
-      const lines = text.split("\n");
-      expect(lines[4]).toBe("The backup encryption key opens the copy.");
     },
   );
 

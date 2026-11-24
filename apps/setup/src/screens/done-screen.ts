@@ -654,7 +654,6 @@ export class SetupDoneScreen extends LitElement {
       "",
       secret,
       "",
-      ...(this.mirrorJoin ? [] : [t("done.break_glass.backups"), ""]),
       t("done.break_glass.file_keep"),
     ];
     const anchor = document.createElement("a");
@@ -718,7 +717,6 @@ export class SetupDoneScreen extends LitElement {
             >`
       }
       ${this.#saveFailed()}
-      <p data-test="break-glass-backup-warning">${t("done.break_glass.backups")}</p>
     </div>`;
   }
 
