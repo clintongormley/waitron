@@ -1495,6 +1495,10 @@ replacing the table with unrelated markup. The Printers screen is the exception:
 lists" alert shows, it leaves out an empty table whose read failed, with the jobs table's hint, so the
 failure is said once (`#unreadTable`, `apps/dashboard/src/screens/printers-screen.ts`). A column can
 supply `sortValue` for a stable sortable header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
+Click anywhere in a sortable heading to sort by that column. Its help badge keeps its own action.
+In a selection column, click anywhere in a cell with a checkbox to tick it, including the
+select-all heading. A drag handle beside the checkbox keeps its own action. You can still use
+Enter on the sort button and Space on a checkbox.
 Text sort values use `compareLabels` from `@waitron/shared` in the page's language, matching the dashboard pickers:
 number runs compare as exact decimals with either comma or point, so "0,25 kg" precedes
 "0,5 kg" and "1.10 Postres" precedes "1.2 Sopas". Number sort values compare numerically;
@@ -1570,6 +1574,10 @@ anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults 
 tree toggle’s reach, leaving vertical and toolbar spacing unchanged and the heading over the root name. The Menus
 list wraps at every width. Products keeps its separately fitted names and default table scrolling. The primitive is checked by the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
+
+Set `denseRows` (the `dense-rows` attribute) to reduce the block padding of body cells. Each side
+uses half of `--wt-space-1` above 440 px of scrolling-box width and half of `--wt-space-2` at or
+below it. Headings and inline padding keep their spacing. A row grows to fit its contents.
 
 A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
 body cells up by the baseline (`vertical-align: baseline`), so on a tall row the drag handle sits on
@@ -1823,9 +1831,9 @@ whole; its focus ring is then drawn inside the button, because a top-level
 one can sit against the scrolling box's edge. The table publishes
 the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
 or its own slots (W85e, owner 2026-10-05). A CSS condition cannot
-read a token, so the table watches a tree's box in code and, a frame after each change to the box's
-width, sets a `narrow` attribute on itself if the box is that narrow and removes it if not; a flat
-table is not watched and carries no `narrow`. A screen may style its cells on
+read a token, so the table watches the box of a tree or a table with `denseRows`. A frame after
+its width changes, the table sets `narrow` at 440 px or less and removes it above that width.
+A screen may style its cells on
 `wt-data-table[narrow]`, as the Products tree does for its category name box.
 
 A tree using `flatTreeSearch` can set `filterCandidates(rows, hasFilters)` to narrow the rows offered to

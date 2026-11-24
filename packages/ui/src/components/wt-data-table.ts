@@ -21,6 +21,7 @@ import "./wt-combobox.js";
 import "./wt-button.js";
 import "./wt-dialog.js";
 import "./wt-help-tooltip.js";
+import { cellControlStyles, forwardCellClick } from "./wt-data-table-cell-controls.js";
 
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
@@ -891,6 +892,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
     `,
     iconButtonStyles,
+    cellControlStyles,
   ];
 
   @property({ attribute: false }) rows: readonly Row[] = [];
@@ -1043,6 +1045,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Lets headings and cell text wrap at spaces so the columns fit the box, which then scrolls
    * sideways only when they cannot. Off, nothing wraps to make room: the box scrolls instead. */
   @property({ type: Boolean, reflect: true, attribute: "wrap-to-fit" }) wrapToFit = false;
+  @property({ type: Boolean, reflect: true, attribute: "dense-rows" }) denseRows = false;
   @state() private sideFilters = false;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key: a string for a single-choice
@@ -1164,9 +1167,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return this.#deliberatelyClosed;
   }
 
-  /** The indent follows the tree's own width, not the window's; a flat table is not watched. */
+  /** Indent and density respond to the scrolling box's own width. */
   #observeScroll(): void {
-    const scroll = this.rowParent ? this.renderRoot.querySelector(".scroll") : null;
+    const scroll =
+      this.rowParent || this.denseRows ? this.renderRoot.querySelector(".scroll") : null;
     if (!scroll) {
       this.#cancelNarrowFrame();
       this.removeAttribute("narrow");
@@ -2687,6 +2691,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   scope="col"
                   role="columnheader"
                   class="select"
+                  ?data-selection-cell=${this.selectable}
+                  @click=${this.selectable ? forwardCellClick : nothing}
                   aria-label=${this.rowControls ? this.rowControlsLabel : nothing}
                 >
                   ${this.rowControls ? html`<span class="visually-hidden">${this.rowControlsLabel}</span>` : nothing}
@@ -2717,6 +2723,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-align=${column.align ?? "start"}
                 data-pinned=${column.pinned ?? nothing}
                 data-actions=${column.key === "actions" ? "" : nothing}
+                @click=${column.sortValue === undefined ? nothing : forwardCellClick}
                 data-filtered=${column.filter && this.#activeValues(column).length > 0 ? "" : nothing}
                 aria-label=${
                   column.filter && this.#activeValues(column).length > 0
@@ -2790,14 +2797,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * where the table's own role is overridden to `treegrid` and every cell needs one. */
   #renderSelectCell(key: string, row: Row, isTree: boolean) {
     if (!this.selectable && !this.rowControls) return nothing;
+    const selectable = this.selectable && this.rowSelectable(row);
     return html`<td
       class="select"
+      ?data-selection-cell=${selectable}
+      @click=${selectable ? forwardCellClick : nothing}
       role=${isTree ? "gridcell" : nothing}
       part=${this.rowCellParts?.(row) || nothing}
     >
       <span class="row-controls">
         ${
-          this.selectable && this.rowSelectable(row)
+          selectable
             ? html`<input
                 type="checkbox"
                 data-test=${`select-${key}`}

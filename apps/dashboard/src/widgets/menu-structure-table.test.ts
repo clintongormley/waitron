@@ -3476,6 +3476,28 @@ describe("search and the Available filter", () => {
   });
 });
 
+it("ticks from padding beside the menu grip and leaves selection alone during a grip drag", async () => {
+  const el = await mount({ selecting: true, reordering: true });
+  const changes = listen(el, "wt-selection-change");
+  const grip = item(el, "drag-m-burger");
+  const cell = grip.closest("td")!;
+  const { left, top } = cell.getBoundingClientRect();
+  const position = { x: 3, y: 3 };
+  expect(table(el).shadowRoot!.elementFromPoint(left + position.x, top + position.y)).toBe(cell);
+  await userEvent.click(cell, { position });
+  expect(changes).toEqual([{ selected: ["m-burger"] }]);
+  await userEvent.click(grip);
+  expect(changes).toEqual([{ selected: ["m-burger"] }]);
+  pointer(grip, "pointerdown");
+  try {
+    await dragOver(el, grip, "m-drinks", "middle");
+    expect(marked(el, "dragging")).toEqual(["m-burger"]);
+    expect(changes).toEqual([{ selected: ["m-burger"] }]);
+  } finally {
+    pointer(grip, "pointercancel");
+  }
+});
+
 describe("Select mode while a search or filter hides rows", () => {
   const boxKeys = (el: MenuStructureTable) =>
     all<HTMLInputElement>(el, 'input[type="checkbox"][data-test^="select-"]')

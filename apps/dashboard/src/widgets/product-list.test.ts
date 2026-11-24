@@ -1617,6 +1617,41 @@ it("ignores a Control-click on a product name, a Mac's context-menu click", asyn
   document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9 }));
 });
 
+it("only the grip starts a drag inside a product's selection cell", async () => {
+  const { el, root } = await mountTree({
+    selecting: true,
+    products: [product({ id: "bun", primaryCategoryId: null })],
+  });
+  const input = root.querySelector('[data-test="select-bun"]')!;
+  const cell = input.closest("td")!;
+  const grip = cell.querySelector(".drag-grip")!;
+  const offered = vi.fn();
+  el.addEventListener("drag-items", offered);
+  const { left, top } = cell.getBoundingClientRect();
+  const padding = root.elementFromPoint(left + 3, top + 3)!;
+  for (const target of [padding, grip]) {
+    const at = target === padding ? { x: left + 3, y: top + 3 } : target.getBoundingClientRect();
+    const init = {
+      bubbles: true,
+      composed: true,
+      pointerType: "mouse",
+      pointerId: 3,
+      buttons: 1,
+      clientX: at.x + (target === grip ? 4 : 0),
+      clientY: at.y + (target === grip ? 4 : 0),
+    };
+    target.dispatchEvent(new PointerEvent("pointerdown", init));
+    try {
+      target.dispatchEvent(
+        new PointerEvent("pointermove", { ...init, clientY: init.clientY + 12 }),
+      );
+      expect(offered).toHaveBeenCalledTimes(target === grip ? 1 : 0);
+    } finally {
+      target.dispatchEvent(new PointerEvent("pointercancel", init));
+    }
+  }
+});
+
 it("does not start the browser's native image drag from a product thumbnail", async () => {
   const { el } = await mountWidget<ProductList>("dashboard-product-list", {
     products: [product({ id: "pictured", image: mediaTestReference("abc123.webp") })],

@@ -241,7 +241,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  test("selectable rows with a select-all and per-row checkboxes", async () => {
+  test.each([false, true])("selectable rows with mixed select-all, dense %s", async (denseRows) => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
       theme,
@@ -255,6 +255,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
       { id: "2", name: "Bea", status: "Inactive" },
     ];
     el.rowKey = (row) => row.id;
+    el.denseRows = denseRows;
     el.selectable = true;
     el.selected = ["1"];
     el.selectionLabel = (row) => `Select ${row.name}`;

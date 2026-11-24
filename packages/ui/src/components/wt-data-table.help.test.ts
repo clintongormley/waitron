@@ -111,6 +111,15 @@ test("a sortable column's badge is beside the sort button, not inside it", async
   await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
   await el.updateComplete;
   expect(th.getAttribute("aria-sort")).toBe(sortBefore);
+  const sort = vi.fn();
+  el.addEventListener("wt-sort-change", sort);
+  await userEvent.click(page.elementLocator(popup));
+  expect(sort).not.toHaveBeenCalled();
+  const { left, top } = th.getBoundingClientRect();
+  const position = { x: 3, y: 3 };
+  expect(el.shadowRoot!.elementFromPoint(left + position.x, top + position.y)).toBe(th);
+  await userEvent.click(th, { position });
+  expect(sort).toHaveBeenCalledTimes(1);
 });
 
 test("with held headings the badge is not cut off", async () => {

@@ -482,6 +482,7 @@ export class ProductList extends LitElement {
     )
       return;
     const grip = path.some((item) => item.classList.contains("drag-grip"));
+    if (!grip && path.some((item) => item.hasAttribute("data-selection-cell"))) return;
     this.#startDrag(event, listed.key, grip);
   };
 
