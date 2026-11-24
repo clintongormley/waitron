@@ -27,7 +27,8 @@ export async function customItemProduct(
     categoryId: null,
     unitId: null,
     unitPrice: "0.00",
-    // The exception to the VAT model: no later dated rate, so the rate staff chose is the one filed.
+    // The exception to the VAT model: no later dated rate, so an item taken away files the rate
+    // staff chose.
     takeawayVatRate: rate,
   });
   if (rate === undefined) await clearTakeawayVatRates(tx, id);

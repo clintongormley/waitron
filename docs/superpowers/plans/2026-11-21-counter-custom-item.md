@@ -221,6 +221,8 @@ test, `packages/menu/src/index.ts`; changed checks below.
   Permission area `"sales"`; label "Add custom items" / "Añadir artículos libres"; help "Ring up
   something that is not on the menu, with a name and price typed at the till. Without this, a person
   who has it can enter their PIN." and its Spanish.
+  As built (2026-11-24): the second sentence reads "Someone without it can ask a person who has it to
+  enter their PIN."
 - [ ] Run the file; `pnpm --filter @waitron/identity exec vitest run`; from the root `pnpm exec vitest run
   scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
   scripts/starting-migrations.test.ts scripts/column-vocabulary.test.ts scripts/classification-complete.test.ts

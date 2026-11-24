@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { eq, isNotNull } from "drizzle-orm";
 import {
+  captureError,
   CORE_MIGRATIONS,
   products,
   productTakeawayVatRates,
+  refusalOn,
+  UNIQUE_VIOLATION,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -76,6 +79,26 @@ describe("customItemProduct", () => {
       { id: first, name: "Custom item", key: "unchosen" },
     ]);
     expect(await app((tx) => ratesOf(tx, first))).toEqual([]);
+  });
+
+  it("a second product with a key a hidden product holds is refused", async () => {
+    await spanishVenue();
+    const held = await app((tx) => customItemProduct(tx, 2100));
+    const { id } = await app((tx) =>
+      createProduct(tx, {
+        name: "Soup",
+        categoryId: null,
+        unitId: null,
+        unitPrice: "1.00",
+      }),
+    );
+    const error = await captureError(() =>
+      app((tx) => tx.update(products).set({ customItemKey: "2100" }).where(eq(products.id, id))),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "products", columns: ["custom_item_key"] }),
+    ).toBe(true);
+    expect(await app(hiddenProducts)).toEqual([{ id: held, name: "Custom item", key: "2100" }]);
   });
 
   it.each([750, 10.5, -2100])("a rate the area does not pick refuses (%s)", async (rate) => {

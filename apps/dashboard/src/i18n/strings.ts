@@ -14,7 +14,7 @@ export const en = {
   "permission.sale.rectify.help":
     "Authorise correcting an issued invoice, including cancelling an invoiced order. Refunding its payment is a separate permission.",
   "permission.order.custom_item.help":
-    "Ring up something that is not on the menu, with a name and price typed at the till. Without this, a person who has it can enter their PIN.",
+    "Ring up something that is not on the menu, with a name and price typed at the till. Someone without it can ask a person who has it to enter their PIN.",
   "permission.cash.drawer.help":
     "Open a cash drawer manually from the till or Printers. Opening the drawer this way records who requested and authorised it. Using Printers also needs Manage devices and printers.",
   "permission.adjustment.apply.help":
@@ -4808,7 +4808,7 @@ export const es: Record<StringKey, string> = {
   "permission.sale.rectify.help":
     "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver su pago requiere un permiso aparte.",
   "permission.order.custom_item.help":
-    "Cobra algo que no está en la carta, con un nombre y un precio escritos en la caja. Sin este permiso, una persona que lo tenga puede introducir su PIN.",
+    "Añade a la venta algo que no está en la carta, con un nombre y un precio escritos en la caja. Quien no tenga este permiso puede pedir a alguien que lo tenga que introduzca su PIN.",
   "permission.cash.drawer.help":
     "Abre un cajón de efectivo manualmente desde la caja o Impresoras. Esta apertura registra quién la pidió y quién la autorizó. Para usar Impresoras también necesitas Gestionar dispositivos e impresoras.",
   "permission.adjustment.apply.help":

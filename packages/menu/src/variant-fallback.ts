@@ -6,7 +6,7 @@ import type { VatClass } from "@waitron/shared";
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
 
-/** Leaves the hidden products out of a list of products. */
+/** Leaves the hidden products behind custom items out of a list of products. */
 export const notCustomItem: SQL = isNull(products.customItemKey);
 
 /**
