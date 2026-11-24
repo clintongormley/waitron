@@ -407,6 +407,9 @@ Payment-clash acceptance is an internal API without a screen. Sale lines, reprin
 qualification remain open. A1342’s marker is now stored and returned invoices are listed. Reports show a general notice, without identifying affected invoices or periods; duplicates are not identified.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
+Before its own records, the old box sends other boxes' invoice records the main box lacks: those
+after the main box's last matching record, or whole chains it holds none of; a chain the two boxes
+disagree on is left to the set-aside.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
 their original capture and its settled-order anchor, without order lines; the new main uses its
 existing recovery worker to check the provider outcome without sending another refund. The old
@@ -607,9 +610,6 @@ Slice 3.
 - **What A1558 left open (23 November 2026).** A replaced main box's own page offers its data for
   download, the new main box's Wipe and remove dialog can fetch it from the old box, and the old
   box's Servers row offers Wipe and remove, also before its records have all come back.
-  Still open, as its own pull request
-  ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)): the old box
-  also returning other boxes' invoice records it holds.
   The new main box's button cannot fetch from an old box on the waiting page, which offers its own
   download instead.
   Chrome and Safari accepting the warning for a box's IP address during a join is not yet tried on
