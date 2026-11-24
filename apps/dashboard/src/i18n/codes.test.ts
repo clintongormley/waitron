@@ -170,6 +170,7 @@ it("words each refusal of the old main box's data download in both languages", (
     "handover.old_box_unreachable",
     "handover.old_box_data_refused",
     "handover.old_box_data_too_large",
+    "handover.old_box_data_busy",
   ]) {
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);

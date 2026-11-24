@@ -1,4 +1,4 @@
-/** One workbook made at a time, shared by the old box's page and its peer route; kept in memory. */
+/** One workbook made, or passed on, at a time; kept in memory. */
 export interface BuildTurn {
   /** The turn's release, or null while another build holds it. */
   take(): (() => void) | null;

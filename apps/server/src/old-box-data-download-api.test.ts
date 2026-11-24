@@ -33,6 +33,7 @@ import {
   type OldBoxDataDownloadDeps,
 } from "./old-box-data-download-api.js";
 import { readHoldings } from "./old-box-holdings.js";
+import { oneBuildAtATime } from "./old-box-data-turn.js";
 import { mountOldBoxDataPeerApi, type OldBoxDataPeerDeps } from "./old-box-data-peer-api.js";
 import { orderReset } from "./reset-order.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -230,13 +231,38 @@ function appWith(over: Partial<OldBoxDataDownloadDeps> = {}): Hono {
   return app;
 }
 
-function download(app: Hono, cookie = adminCookie, nodeId = oldBox): Promise<Response> {
+function download(
+  app: Hono,
+  cookie = adminCookie,
+  nodeId = oldBox,
+  { headers = {}, signal }: { headers?: Record<string, string>; signal?: AbortSignal } = {},
+): Promise<Response> {
   return Promise.resolve(
     app.request(`https://main.test/management-api/servers/${nodeId}/old-box-data`, {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, ...headers },
+      ...(signal === undefined ? {} : { signal }),
     }),
   );
+}
+
+/** A `fetch` through `ex` whose first answer is held in transit until `release` is called. */
+function firstAnswerHeld(ex: Exchange = exchange()) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let arrived!: () => void;
+  const held = new Promise<void>((resolve) => (arrived = resolve));
+  let calls = 0;
+  const fetch = (async (url: string, init: RequestInit) => {
+    const first = calls++ === 0;
+    const answer = await ex.fetch(url, init);
+    if (first) {
+      arrived();
+      await gate;
+    }
+    return answer;
+  }) as typeof globalThis.fetch;
+  return { ex, fetch, held, release };
 }
 
 async function downloads() {
@@ -383,6 +409,16 @@ describe("a node.manage holder with a fresh proof", () => {
     },
   );
 
+  it("asks in the browser's language when the person saved none", async () => {
+    const { cookie } = await sessionFor("admin");
+    const ex = exchange();
+    const res = await download(appWith({ fetch: ex.fetch, venueLocale: "en-GB" }), cookie, oldBox, {
+      headers: { "Accept-Language": "es-ES" },
+    });
+    expect(res.status).toBe(200);
+    expect(ex.sent[0]).toHaveProperty("language", "es");
+  });
+
   it("sends a fresh nonce on every request", async () => {
     const ex = exchange();
     const app = appWith({ fetch: ex.fetch });
@@ -408,6 +444,69 @@ describe("a node.manage holder with a fresh proof", () => {
       data: counts,
     });
     expect(counts.invoiceRows).toBe(1);
+    const logged = lines.find((l) => l.event === "handover.old_box_data_downloaded");
+    expect(logged?.fields).toMatchObject({ nodeId: oldBox, personId: adminId });
+  });
+});
+
+describe("one download at a time", () => {
+  it("a second request while one is running: handover.old_box_data_busy, the old box asked once", async () => {
+    const { ex, fetch, held, release } = firstAnswerHeld();
+    const app = appWith({ fetch });
+    const first = download(app);
+    await held;
+    await expectRefused(await download(app), "handover.old_box_data_busy");
+    expect(ex.sent).toHaveLength(1);
+    release();
+    expect((await first).status).toBe(200);
+    expect((await download(app)).status).toBe(200);
+  });
+
+  it("a failed request gives the turn back", async () => {
+    const ex = exchange();
+    let calls = 0;
+    const fetch = (async (url: string, init: RequestInit) => {
+      if (calls++ === 0) throw new TypeError("fetch failed");
+      return ex.fetch(url, init);
+    }) as typeof globalThis.fetch;
+    const app = appWith({ fetch });
+    await expectRefused(await download(app), "handover.old_box_unreachable");
+    expect((await download(app)).status).toBe(200);
+  });
+
+  it("the old box busy making another workbook: handover.old_box_data_busy", async () => {
+    const turn = oneBuildAtATime();
+    turn.take();
+    const ex = exchange(oldBoxApp({ turn }));
+    await expectRefused(await download(appWith({ fetch: ex.fetch })), "handover.old_box_data_busy");
+    expect(ex.answers).toHaveLength(1);
+  });
+});
+
+describe("while the old box's answer is in transit", () => {
+  it("a wipe ordered meanwhile: handover.old_box_data_wipe_ordered, nothing recorded", async () => {
+    await emergencySwitch(COPY_AT);
+    const { fetch, held, release } = firstAnswerHeld();
+    const pending = download(appWith({ fetch }));
+    await held;
+    await orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId: adminId, acceptLoss: true },
+    );
+    release();
+    await expectRefused(await pending, "handover.old_box_data_wipe_ordered");
+  });
+
+  it("the browser gone meanwhile: nothing recorded", async () => {
+    const { fetch, held, release } = firstAnswerHeld();
+    const abort = new AbortController();
+    const pending = download(appWith({ fetch }), adminCookie, oldBox, { signal: abort.signal });
+    await held;
+    abort.abort();
+    release();
+    await pending;
+    expect(await downloads()).toEqual([]);
+    expect(lines.some((l) => l.event === "handover.old_box_data_downloaded")).toBe(false);
   });
 });
 

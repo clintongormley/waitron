@@ -1760,6 +1760,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "The old main box did not send a file this box could check, so nothing was downloaded. Try again in a minute, or download the data from the old main box's own page, at the address above.",
     es: "El servidor principal anterior no ha enviado un archivo que este servidor pueda comprobar, así que no se ha descargado nada. Vuelve a intentarlo dentro de un minuto o descarga los datos desde la propia página del servidor principal anterior, en la dirección de arriba.",
   },
+  "handover.old_box_data_busy": {
+    en: "Another download of the old main box's data is running, so nothing was downloaded this time. Try again in a minute.",
+    es: "Ya hay otra descarga de los datos del servidor principal anterior en curso, así que esta vez no se ha descargado nada. Vuelve a intentarlo dentro de un minuto.",
+  },
   "handover.old_box_data_too_large": {
     en: "The old main box's file is too large to pass on through this box, so nothing was downloaded. Download it from the old main box's own page, at the address above.",
     es: "El archivo del servidor principal anterior es demasiado grande para pasarlo por este servidor, así que no se ha descargado nada. Descárgalo desde la propia página del servidor principal anterior, en la dirección de arriba.",
