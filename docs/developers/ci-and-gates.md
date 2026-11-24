@@ -6026,3 +6026,27 @@ inert library entered ordinary startup and wrote recovery state. The ahead check
 environment, and requires no output or state files. It then invokes the exported checks against a
 copied venue and packaged migrations. This guards this entry's packaging and invocation; it does
 not qualify the container, a complete upgrade, a test sale or power loss.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### CI scope overview
+
+> Let the normal pre-push hook run the local checks once; scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
+
+### Browser shard coverage
+
+> Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, not the Vitest config.
+
+### Bounded Node setup
+
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
+
+### TypeScript compiler versions
+
+> A package's `tsc` is version 7; the root resolves `typescript` to the version 6 API (binary `tsc6`).
+
+### Name-filtered test runs
+
+> A focused pass proves only those cases; CI supplies package-wide coverage.

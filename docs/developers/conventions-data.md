@@ -7387,3 +7387,57 @@ checks the URL before any lookup, and `openAt` checks each address before it dia
 request to `localhost` goes only to a literal loopback address, whatever the resolver answers. The
 spare's bucket-stream pipe (`apps/server/src/spare-pipe.ts`) does not use `openBoxRequest`; it
 connects with `node:tls`.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Reading live SQLite state
+
+> Guards: the held-reader and two-store checkpoint cases in `packages/store/src/connections.test.ts` and `packages/store/src/index.test.ts`, weaker than the rule: those paths only.
+
+### Personal data in logs
+
+> Guard: `scripts/personal-log-params.test.ts`, weaker than its name: judges field names by a word list and named registry types by their names.
+
+### Incident alert wording
+
+> Guard: `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
+
+### Module boundaries
+
+> Guard: `scripts/module-seams.test.ts`, weaker than its name (it reads text) — shrink its allowlist, never grow it.
+
+### Allowed table write paths
+
+> Guard: `scripts/write-path-tables.test.ts` is the whole of the enforcement, weaker than its name: it reads TEXT and judges a FILE, not a call chain.
+
+### Module settings documents
+
+> Guards: `scripts/settings-not-migrated.test.ts` and the pinned-CHECK case in `packages/db/src/settings.test.ts`, both weaker than the rule: they read text.
+
+### Counting sale correctives
+
+> Guard: `scripts/corrective-sums.test.ts`, weaker than its name: reads lines of text, not queries.
+
+### The till person header
+
+> Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the till, device and schedule mounts' routes.
+
+### HTTPS between boxes
+
+> Guards: the plain-http cases in `apps/server/src/mirror-bundle-fetch.test.ts` and `apps/server/src/box-join-api.test.ts`, weaker than the rule: they cannot see a new request path that skips `openBoxRequest`.
+
+> **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`), except the spare's bucket-stream pipe, which always connects over TLS (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine, in every environment; `parseHello` refuses a joining spare's plain-http contact address off this machine** (the watcher, 2026-11-24, not the owner's).
+
+### Migration-set ownership
+
+> Guard: the eight-sets cases in `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and hosted modules.
+
+### Starting migration rebuilds
+
+> Guard: `scripts/starting-migrations.test.ts`, weaker than its name: trusts drizzle-kit.
+
+### Environment variable inventory
+
+> Guard: `scripts/environment-variables.test.ts`, weaker than its name. It scans tracked text.

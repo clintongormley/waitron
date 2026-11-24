@@ -2721,3 +2721,19 @@ guard and pointer.
 ### Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours, `rem` or `em`
 
 > `scripts/style-token-names.test.ts`, weaker than its name: text match against declarations anywhere.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Dashboard draft scopes
+
+> **A new dashboard dialog or page holding staged input takes a draft scope from `draftScopeFor` (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`.** Nothing checks it across screens.
+
+### Field refusals
+
+> `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE.
+
+### Print-agent confinement
+
+> Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
