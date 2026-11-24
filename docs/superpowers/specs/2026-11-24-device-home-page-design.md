@@ -48,7 +48,8 @@ deciding. The owner chose none, asked about putting sections on a row of their o
 - **One Add shortcuts tile** replaces Add products and Add sections, with products and sections in one
   searchable list. It adds them in the order chosen, as today.
 - **Cancel and Save**, the same fixed bar as Structure's: adding, removing and reordering shortcuts and
-  both settings wait for Save, which sends them together, all or nothing, and replaces what is there.
+  changing what appears first wait for Save, which sends them together, all or nothing, and
+  replaces what is there.
   Removing a shortcut asks nothing. Cancel, and leaving or changing tab with unsaved changes, ask.
   A shortcut whose target was deleted meanwhile is saved as the missing tile it would be today
   (**my call**).

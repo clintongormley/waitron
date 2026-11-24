@@ -135,11 +135,6 @@ export class PhotoFramingDialog extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .previews {
-        display: flex;
-        gap: var(--wt-space-4);
-        flex-wrap: wrap;
-      }
       figure {
         margin: 0;
         width: calc(var(--wt-tap-min) * 3);
@@ -291,18 +286,6 @@ export class PhotoFramingDialog extends LitElement {
     )
       void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
   }
-  #preview(name: "lists" | "till", ratio: number) {
-    return html`<figure>
-      <media-photo-preview
-        data-test=${name}
-        .source=${this.source}
-        .framing=${this.draft}
-        .ratio=${ratio}
-        .label=${t(name === "lists" ? "image.lists" : "image.till_buttons")}
-      ></media-photo-preview>
-      <figcaption>${t(name === "lists" ? "image.lists" : "image.till_buttons")}</figcaption>
-    </figure>`;
-  }
   override render() {
     return html`<wt-modal
       size="standard"
@@ -389,7 +372,15 @@ export class PhotoFramingDialog extends LitElement {
             this.#change({ ...this.draft, zoom: event.detail.value });
           }}
         ></wt-slider>
-        <div class="previews">${this.#preview("lists", 1)} ${this.#preview("till", 4 / 3)}</div>
+        <figure>
+          <media-photo-preview
+            data-test="lists"
+            .source=${this.source}
+            .framing=${this.draft}
+            .label=${t("image.lists")}
+          ></media-photo-preview>
+          <figcaption>${t("image.lists")}</figcaption>
+        </figure>
       </div>
       <wt-form-actions slot="footer"
         ><wt-button

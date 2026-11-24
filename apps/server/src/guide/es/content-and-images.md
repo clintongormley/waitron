@@ -204,10 +204,8 @@ antigua sin nombre de archivo registrado muestra en su lugar su nombre guardado.
 
 Si una miniatura muestra sobre todo la mesa en lugar del plato, elige **Ajustar encuadre** en
 **Editar foto**. Arrastra la foto dentro del cuadrado y usa **Zoom (%)** para acercarte. También
-puedes enfocar el cuadrado y usar las flechas; mantén pulsada Mayús para moverla más. **Listas**
-muestra el recorte cuadrado y **Botones de caja** muestra el recorte 4:3. Comparten un mismo punto
-focal y un mismo zoom, así que ajustas una foto una sola vez para todos los sitios que la usan. El
-visor de foto completa sigue mostrando la imagen actual entera.
+puedes enfocar el cuadrado y usar las flechas. Mantén pulsada Mayús para moverla más. **Listas**
+muestra el recorte cuadrado. El visor de foto completa muestra la imagen actual entera.
 
 **Restablecer** vuelve al centro con un zoom del 100%. **Listo** lleva tu encuadre de vuelta a Editar
 foto; todavía no ha guardado nada. Escape o un clic fuera de Ajustar encuadre descartan solo los

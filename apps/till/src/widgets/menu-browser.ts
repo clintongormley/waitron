@@ -316,8 +316,7 @@ export class TillMenuBrowser extends LitElement {
         text-align: center;
       }
       /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
-       never changes size when its first dish is added and its name stays centred. On a photo the
-       badge covers the photo's corner instead. */
+       never changes size when its first dish is added and its name stays centred. */
       .tile[data-counted]::part(button) {
         padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
       }

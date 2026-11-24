@@ -1210,10 +1210,10 @@ describe("till-menu-browser", () => {
         });
         const dish = entry(el, "structure", "Photo");
         expect(dish.querySelector("img")).toBeNull();
-        expect(dish.querySelector(".nutrition-mark")).toBeNull();
         expect(dish.hasAttribute("data-painted")).toBe(true);
         const section = entry(el, "structure", "Pictured (EN)");
         expect(section.querySelector("img")).toBeNull();
+        expect(section.hasAttribute("data-painted")).toBe(false);
         expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
       });
 

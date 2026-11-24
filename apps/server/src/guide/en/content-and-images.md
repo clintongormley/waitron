@@ -199,9 +199,8 @@ file name shows its stored name instead.
 
 If a thumbnail shows mostly table instead of the dish, choose **Adjust framing** in **Edit photo**.
 Drag the photo inside the square and use **Zoom (%)** to move closer. You can also focus the square
-and use the arrow keys; hold Shift to move farther. **Lists** shows the square crop and
-**Till buttons** shows the 4:3 crop. They share one focal point and zoom, so you adjust a photo once
-for every place that uses it. The full-photo viewer still shows the complete current picture.
+and use the arrow keys. Hold Shift to move farther. **Lists** shows the square crop. The full-photo
+viewer shows the complete current picture.
 
 **Reset** returns to the centre at 100% zoom. **Done** brings your framing back to Edit photo;
 it has not saved anything yet. Escape or a click outside Adjust framing discards only the changes

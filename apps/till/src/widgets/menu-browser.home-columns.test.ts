@@ -159,15 +159,6 @@ it.each(cases)(
         if (tile.dataset.kind === "product") {
           expect(tile.querySelector(".price")!.textContent).toContain("12,50");
           const name = tile.querySelector<HTMLElement>(".name")!;
-          if (name.textContent === measured.name) {
-            const text = document.createRange();
-            text.selectNodeContents(name);
-            for (const line of text.getClientRects()) {
-              expect(
-                Math.abs(line.left + line.width / 2 - (box.left + box.width / 2)),
-              ).toBeLessThan(1);
-            }
-          }
           const canvas = document.createElement("canvas").getContext("2d")!;
           canvas.font = getComputedStyle(name).font;
           const walker = document.createTreeWalker(name, NodeFilter.SHOW_TEXT);
@@ -181,6 +172,19 @@ it.each(cases)(
             }
           }
         }
+      }
+      const measuredName = [...grid.querySelectorAll(".name")].find(
+        (name) => name.textContent === measured.name,
+      )!;
+      const measuredTile = measuredName.closest(".tile")!.getBoundingClientRect();
+      const words = document.createRange();
+      words.selectNodeContents(measuredName);
+      const lines = [...words.getClientRects()];
+      if (handheld && width === 390 && columns === 3) expect(lines.length).toBeGreaterThan(1);
+      for (const line of lines) {
+        expect(
+          Math.abs(line.left + line.width / 2 - (measuredTile.left + measuredTile.width / 2)),
+        ).toBeLessThan(1);
       }
       expect([...grid.querySelectorAll(".price")].map((price) => price.textContent)).toContain(
         "12,50\u00a0€–85,00\u00a0€/kg",

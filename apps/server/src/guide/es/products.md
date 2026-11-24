@@ -355,9 +355,9 @@ posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
 ## Revisa la página de inicio de la carta {#menu-home}
 
-Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos y elegir
-cómo se muestran sus botones. Busca el icono de carpeta para abrir una sección en la vista
-previa. Si un producto muestra un intervalo, son los precios de sus variantes.
+Abre la pestaña **Página de inicio** de una carta para ordenar los accesos directos, elegir cuántas
+columnas se muestran y decidir qué aparece primero. Busca el icono de carpeta para abrir una
+sección en la vista previa. Si un producto muestra un intervalo, son los precios de sus variantes.
 
 Elige **Caja registradora** para consultar la **Vista previa del
 pedido de mesa**: representa una caja tan ancha como el marco y reserva espacio para el pedido.
@@ -514,10 +514,6 @@ Mantén pulsado el botón de un producto para abrir su ventana de información. 
 plato, incluidos sus cereales o frutos de cáscara, y sus etiquetas dietéticas. Un plato sin revisar lo
 indica en la ventana. Elige **Añadir al pedido** para seleccionar el plato, o **Cerrar** para volver
 sin añadirlo.
-
-La pequeña marca nutricional solo aparece cuando el plato tiene alérgenos o etiquetas dietéticas
-declarados. Aun así puedes mantener pulsado un botón sin marca para comprobar su estado de revisión. Un
-toque corto en cualquier parte del botón, incluida la marca, añade el plato como siempre.
 
 Las líneas del pedido muestran iconos nutricionales tras el nombre del plato. Un plato sin revisar no
 muestra iconos; consulta su ventana de información en lugar de tomar la falta de iconos como una

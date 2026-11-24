@@ -335,7 +335,8 @@ set menu to the tills. Each later edit reaches the tills when you publish the fu
 
 ## Check the menu's home page {#menu-home}
 
-Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.
+Open a menu's **Home page** tab to arrange its shortcuts, choose how many columns to show and
+set what appears first.
 Look for the folder icon to open a section in the preview. On a product tile, a range shows the
 prices of its variants.
 Choose **Till** to check the **Table order preview**: it represents a till as wide as the frame,
@@ -481,10 +482,6 @@ shows how many filters are active.
 Hold a product button down to open its information window. You see the dish’s allergens, including
 its cereals or nuts, and its diet labels. An unreviewed dish says so in the window. Choose **Add to
 order** to select the dish, or **Close** to return without adding it.
-
-The small nutrition mark appears only when the dish has declared allergens or diet labels. You
-can still hold an unmarked button to check its review state. A short tap anywhere on the button,
-including the mark, adds the dish as usual.
 
 Order lines show nutrition icons after the dish’s name. An unreviewed dish shows no icons; check its
 information window rather than treating the absence of icons as a declaration. Extras keep their

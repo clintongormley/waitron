@@ -3563,6 +3563,7 @@ export class MenusScreen extends LitElement {
       </div>`;
   }
 
+  // Live values restore the saved controls after a refused change.
   #renderHomeSettings(
     device: HomeDevice,
     display: HomeDisplay,

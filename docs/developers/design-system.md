@@ -3719,9 +3719,8 @@ added on a line that already has one passes.
 To bring an off-centre dish into its thumbnails, open **Edit photo**, then **Adjust framing**.
 The second window owns a separate draft. Drag inside the square, or focus it and use the arrow
 keys to move the focal point by 1% of the source; Shift changes the step to 10%. Zoom runs from
-100% to 400% and redraws during the drag. **Lists** shows the square crop and **Till buttons**
-shows its 4:3 counterpart. Both use the same focal point and zoom. Reset returns to the centre at
-100%; Done accepts that frame into Edit photo, even when you changed nothing. Escape or a
+100% to 400% and redraws during the drag. **Lists** shows the square crop. Reset returns to the
+centre at 100%. Done accepts that frame into Edit photo, even when you changed nothing. Escape or a
 backdrop click discards only the second window's unaccepted changes.
 
 Edit photo shows the framed picture and the upload's basename, falling back to the stored
@@ -7344,12 +7343,9 @@ for the hierarchy's separate immediate cleanup and retained-history limits.
 
 ### Nutrition at the till
 
-A product button uses the shared `allergies` symbol in its top trailing corner when it has declared
-allergens or dietary labels. The name leaves room for the mark. The mark is decorative; a short
-press on any part of the button selects the dish. A held pointer press opens the product information
-window without selecting it. The window shows the published description and current product allergens
-and dietary labels, offers Close and Add to
-order, and remains available on products with no mark.
+A short press anywhere on a product button selects the dish. A held pointer press opens the product
+information window without selecting it. The window shows the published description, current allergens
+and dietary labels, and offers Close and Add to order.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
 Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens

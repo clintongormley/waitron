@@ -362,7 +362,7 @@ The remaining storage, input-validation and shared-form limits.
 ## Menu home preview rendering
 
 - **The dashboard's Home page preview still copies the till's presentation.** Tile and breadcrumb
-  markup, thumbnail/paint helpers, CSS and the table layout values remain separate; grid sizing,
+  markup, paint helpers, CSS and the table layout values remain separate; grid sizing,
   arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
   ordering and dashboard shortcut editing.
   [Detail](menu.md#each-menu-has-one-device-home-page-w93-1287-left-open)
@@ -582,8 +582,11 @@ not change; their presentation resolves the current photo. Already returned rece
 and queued print payloads retain their earlier picture. A photo save refreshes all currently
 matching department receipt rasters in the same transaction, including retained departments.
 
-The grid uses square renditions bounded to 480 pixels; till tiles use 480×360, without enlarging
-tiny inputs. These are bounded in-memory cached responses generated from durable source bytes.
+At implementation the grid used square renditions bounded to 480 pixels and till tiles used
+480×360, without enlarging tiny inputs. These are bounded in-memory cached responses generated from
+durable source bytes. On 2026-11-24 the owner
+[removed photos from till tiles](../superpowers/specs/2026-11-24-device-home-page-design.md#tiles-on-the-till-and-in-the-dashboard).
+Adjust framing now shows only the square Lists preview.
 Recipe URLs include source, framing and algorithm version. A removed recipe version returns 404;
 raw content-hash URLs keep their byte identity. The [implementation plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a652-photo-framing.md)
 records the limits, collision policy, measured large-input byte reduction and tiny-seed counterexample.
