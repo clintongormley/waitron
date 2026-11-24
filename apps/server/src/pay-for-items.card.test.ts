@@ -3,8 +3,10 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
+  billAdvances,
   deviceProfiles,
   devices,
+  invoiceCorrections,
   sales,
   workingOrderLines,
   withTransaction,
@@ -19,6 +21,7 @@ import { AppError, centsToDecimal, decimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { failBillPayment } from "./bill-payments.js";
+import { closeInvoiceCorrection } from "./invoice-corrections.js";
 import {
   cashPayment,
   inTx,
@@ -229,8 +232,9 @@ async function invoiceCount(billId: string): Promise<number> {
   return rows.length;
 }
 
-/** A cash contribution of `amount` to the bill, as the till sends it. */
-async function contribute(billId: string, amount: string) {
+/** A cash contribution of `amount` to the bill, as the till sends it; with `ownReceipt`, a payment
+ * on account with a receipt of its own (an advance). */
+async function contribute(billId: string, amount: string, ownReceipt = false) {
   const path = `/api/working-orders/${billId}/payments`;
   const answer = await send(
     venue.app,
@@ -245,9 +249,45 @@ async function contribute(billId: string, amount: string) {
       tendered: amount,
       applied: amount,
       tip: "0.00",
+      ...(ownReceipt ? { ownReceipt: true } : {}),
     }),
   );
   expect(answer.status).toBe(200);
+}
+
+/** A 3.00 advance on the bill: its sale's id. */
+async function advanceOn(billId: string): Promise<string> {
+  await contribute(billId, "3.00", true);
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({ saleId: billAdvances.advanceSaleId })
+      .from(billAdvances)
+      .where(eq(billAdvances.workingOrderId, billId)),
+  );
+  return row!.saleId;
+}
+
+/** An open correction of the whole of the sale, written as Correct invoice writes one. */
+async function openCorrectionOf(saleId: string): Promise<string> {
+  const id = randomUUID();
+  await inTx(venue, (tx) =>
+    tx.insert(invoiceCorrections).values({
+      id,
+      originalSaleId: saleId,
+      submissionId: randomUUID(),
+      fingerprint: "test",
+      gross: 300,
+      reason: "Paid too much",
+      requestedBy: venue.operatorId,
+      authorizedBy: venue.adminId,
+      viaOverride: false,
+      source: "device",
+      deviceId: venue.deviceId,
+      nodeId: venue.cfg.nodeId,
+      state: "open",
+    }),
+  );
+  return id;
 }
 
 function balance(billId: string) {
@@ -374,6 +414,83 @@ describe("A1515 pay for items on the card reader", () => {
     await settle();
 
     expect(await invoiceCount(newBill)).toBe(1);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("an open correction on an advance of a source the move would leave paid is refused before the reader is asked", async () => {
+    const sourceId = await coffeeAndTarta();
+    const advanceId = await advanceOn(sourceId);
+    await openCorrectionOf(advanceId);
+    const calls = venue.card.collectCalls.length;
+
+    const paid = await payTartaByReader(sourceId);
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(409);
+    expect(paid.json).toMatchObject({
+      code: "advance.correction_open",
+      params: { workingOrderId: sourceId, saleId: advanceId },
+    });
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "18.00"]);
+    const named = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(eq(workingOrders.itemsPaidFrom, sourceId)),
+    );
+    expect(named).toEqual([]);
+  });
+
+  it("an open correction on an advance of a source the move leaves owing does not stop the card", async () => {
+    const sourceId = await coffeeAndTarta();
+    await openCorrectionOf(await advanceOn(sourceId));
+
+    const paid = await sendItemsPayment(sourceId, {
+      ...(await tartaByReaderBody(sourceId)),
+      picks: [{ lineId: await lineIdOf(sourceId, 1) }],
+      applied: "3.00",
+    });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json.payment).toMatchObject({ outcome: "received" });
+    expect(await lineTotals(sourceId)).toEqual(["18.00"]);
+    expect(await statusOf(venue, sourceId)).toBe("open");
+  });
+
+  it("a correction opened on the source's advance while the card is collected makes the source's invoice wait, and closing it issues it once", async () => {
+    const sourceId = await coffeeAndTarta();
+    const advanceId = await advanceOn(sourceId);
+    const { answer, release, newBill } = await heldTartaPayment(sourceId);
+    const correctionId = await openCorrectionOf(advanceId);
+    release();
+
+    const paid = await answer;
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json.payment).toMatchObject({
+      outcome: "received",
+      payment: { state: "received" },
+    });
+    expect(await invoiceCount(newBill)).toBe(1);
+    expect(await invoiceCount(sourceId)).toBe(0);
+    expect(await statusOf(venue, sourceId)).toBe("open");
+
+    await inTx(venue, (tx) =>
+      closeInvoiceCorrection(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        correctionId,
+        { personId: venue.adminId },
+      ),
+    );
+
     expect(await invoiceCount(sourceId)).toBe(1);
     expect(await statusOf(venue, sourceId)).toBe("settled");
   });

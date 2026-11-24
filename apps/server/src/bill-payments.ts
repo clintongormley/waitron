@@ -1427,6 +1427,22 @@ export async function issueHeldBill(
   );
 }
 
+/**
+ * Refuses `advance.correction_open` when the bill's money already covers it and one of its
+ * advances has an open correction, as a payment that covers it is refused: for a bill whose invoice
+ * is held while a card for another bill is collected, before that card is asked.
+ */
+export async function refuseCoveredWhileAdvanceCorrectionOpen(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
+  if (!advances.credits.has(workingOrderId)) return;
+  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
+  if (compareDecimal(addDecimal(funds.received, funds.reserved), funds.total) >= 0)
+    await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+}
+
 interface ItemsDue {
   due: Decimal;
   rows: { lineId: string; quantity: number; amount: number }[];
@@ -2505,10 +2521,7 @@ export async function completeBillPayment(
   if (issued.invoice === null)
     await issueAdvanceIfOwed(tx, deps, takenAt, payment!, printers, issued.figures);
   const sourceId = await itemsPaymentSource(tx, payment!);
-  if (sourceId !== null)
-    await issueIfFullyPaid(tx, deps, takenAt, sourceId, payment!.requestedBy, {
-      ...(datedByLatestAcceptance === undefined ? {} : { datedByLatestAcceptance }),
-    });
+  if (sourceId !== null) await issueHeldSource(tx, deps, takenAt, payment!, sourceId);
   return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
 }
 
@@ -2578,13 +2591,30 @@ async function putItemsBack(
   const sourceId = await itemsPaymentSource(tx, failed);
   if (sourceId === null) return;
   if (!(await movedItemsBack(tx, cfg, failed, sourceId)))
-    await issueHeldBill(
-      tx,
-      deps,
-      { ...cfg, origin: storedDeviceOrigin(failed) },
-      sourceId,
-      failed.requestedBy,
-    );
+    await issueHeldSource(tx, deps, cfg, failed, sourceId);
+}
+
+/**
+ * Issues the bill Pay for items held back for `payment` if its own payments now cover it, the same
+ * way whether that payment was received or failed: as {@link issueHeldBill}, under the source's own
+ * latest payment, whose money its invoice settles, else `payment`'s device and person. With money
+ * moved, so an advance's correction opened while the card was collected makes the invoice wait
+ * (closing it issues the bill) rather than undo a card already captured.
+ */
+async function issueHeldSource(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TradingContext,
+  payment: PaymentRow,
+  sourceId: string,
+): Promise<void> {
+  await issueHeldBill(
+    tx,
+    deps,
+    { ...cfg, origin: storedDeviceOrigin(payment) },
+    sourceId,
+    payment.requestedBy,
+  );
 }
 
 /** {@link putItemsBack}'s move, true when it moved the items. */

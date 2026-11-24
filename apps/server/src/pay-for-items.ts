@@ -38,6 +38,7 @@ import {
   collectBegunReaderPayment,
   diskFullBeforePayment,
   issueIfFullyPaid,
+  refuseCoveredWhileAdvanceCorrectionOpen,
   takeBillPaymentIn,
   type BillPaymentDeps,
   type BillPaymentRequest,
@@ -259,7 +260,10 @@ export async function moveItemsToNewBill(
     .set({ itemsPaidFrom: fromBillId })
     .where(eq(workingOrders.id, billId));
   await refuseBelowAdvances(tx, fromBillId);
-  if (options.holdSourceInvoice === true) return { billId };
+  if (options.holdSourceInvoice === true) {
+    await refuseCoveredWhileAdvanceCorrectionOpen(tx, fromBillId);
+    return { billId };
+  }
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);
   return { billId, ...(invoice === null ? {} : { invoice }) };
 }
