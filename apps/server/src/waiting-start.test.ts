@@ -1477,6 +1477,16 @@ describe("the waiting start", () => {
         expect(plain).not.toContain('action="/old-box-data"');
       });
 
+      it("draws the carry-on and download blocks in the waiting page's one section, over HTTPS and HTTP", async () => {
+        for (const secure of [true, false]) {
+          const shown = await page(secure);
+          expect(shown.match(/<section[\s>]/g), `${secure}`).toHaveLength(1);
+          expect(shown.indexOf("</section>"), `${secure}`).toBeGreaterThan(
+            shown.indexOf(`<h2>${escapeHtml(words.heading)}</h2>`),
+          );
+        }
+      });
+
       it("answers an administrator with a workbook listing every invoice record this box holds, uncompared", async () => {
         const venue = await seedVenueWithSeries(suite.db);
         const saleId = await seedSale(suite.db, venue, {

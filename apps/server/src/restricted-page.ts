@@ -291,17 +291,17 @@ function downloadSection(view: RestrictedView, locale: SupportedLocale, secure: 
     const alert = view.download === undefined ? "" : ' role="alert"';
     return `<section>\n${heading}<p${alert}>${escapeHtml(words.wipeUnderWay)}</p>\n</section>`;
   }
-  return downloadForm(
+  return `<section>\n${downloadForm(
     view.planned ? words.planned : words.emergency,
     locale,
     secure,
     view.download,
-  );
+  )}</section>`;
 }
 
 /**
- * The download section under its heading: `introText`, then the form, or over HTTP why not. The
- * form carries `returnTo` when given.
+ * The download block, unwrapped so the page drawing it chooses its section: its heading,
+ * `introText`, then the form, or over HTTP why not. The form carries `returnTo` when given.
  */
 export function downloadForm(
   introText: string,
@@ -313,8 +313,7 @@ export function downloadForm(
   const words = RESTRICTED_DOWNLOAD_WORDS[locale];
   const heading = `<h2>${escapeHtml(words.heading)}</h2>\n`;
   const intro = `<p>${escapeHtml(introText)}</p>\n`;
-  if (!secure)
-    return `<section>\n${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n</section>`;
+  if (!secure) return `${heading}${intro}<p>${escapeHtml(words.insecure)}</p>\n`;
   const shown = downloadMessages(download, words);
   const error = (field: "email" | "password" | "totp") =>
     shown[field] === undefined
@@ -332,15 +331,14 @@ export function downloadForm(
     shown.message === undefined
       ? ""
       : `<p id="old-box-data-message" role="alert">${escapeHtml(shown.message)}</p>\n`;
-  return `<section>
-${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
+  return `${heading}${intro}<form method="post" action="/old-box-data" class="box-form">
 ${returnTo === undefined ? "" : `<input type="hidden" name="returnTo" value="${escapeHtml(returnTo)}">\n`}<p><label for="old-box-data-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("old-box-data-email", download?.email ?? "", invalid("email"))}</p>
 ${error("email")}<p><label for="old-box-data-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p>${passwordInput(invalid("password"), "old-box-data-password")}</p>
 ${error("password")}${code}${bottom}<p><button type="submit">${escapeHtml(words.action)}</button></p>
 </form>
-</section>`;
+`;
 }
 
 /** The replaced box's page, its download section included. */

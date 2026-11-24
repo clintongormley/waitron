@@ -15,7 +15,8 @@ import {
 } from "./guide-pages.js";
 import { renderDocument } from "./html-page.js";
 import { fixedFontValue } from "./html-page-tokens.js";
-import { renderRestrictedPage } from "./restricted-page.js";
+import { downloadForm, renderRestrictedPage } from "./restricted-page.js";
+import { RESTRICTED_DOWNLOAD_WORDS } from "./i18n/restricted-page.js";
 import { renderWaitingPage } from "./waiting-page.js";
 import type { Logger } from "./logger.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
@@ -547,6 +548,61 @@ describe("the box pages' form style", () => {
           await page.locator("form").evaluate((el) => el.getBoundingClientRect().right),
           `${width}`,
         ).toBeLessThanOrEqual(shown.left + shown.width - parseFloat(shown.paddingRight));
+        await page.close();
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+
+  it("lines the waiting page's download block up with the download page's, in the waiting page's one section", async () => {
+    const carryOn = `<h2>Carry on</h2>
+<p>Only if the other box is switched off.</p>
+<form class="box-form" method="post" action="/carry-on">
+<p><label for="f-email">Email <span class="required">*</span></label></p>
+<p><input type="email" id="f-email" name="email"></p>
+</form>
+`;
+    const downloadPage = renderRestrictedPage(
+      { returnState: "waiting", planned: true },
+      "en-GB",
+      true,
+    );
+    const intro = RESTRICTED_DOWNLOAD_WORDS["en-GB"].waiting;
+    const browser = await chromium.launch();
+    try {
+      for (const width of [1280, 390]) {
+        const page = await browser.newPage({ viewport: { width, height: 800 } });
+        const lefts = (heading: string, form: string) =>
+          Promise.all(
+            [heading, form].map((selector) =>
+              page.locator(selector).evaluate((el) => el.getBoundingClientRect().left),
+            ),
+          );
+        await page.setContent(downloadPage);
+        const expected = await lefts("h2", "form");
+        await page.setContent(
+          renderWaitingPage(
+            "the other box",
+            "en-GB",
+            carryOn + downloadForm(intro, "en-GB", true, undefined, "/"),
+          ),
+        );
+        expect(await page.locator("section section").count(), `${width}`).toBe(0);
+        expect(
+          await lefts("h2 >> nth=1", 'form[action="/old-box-data"]'),
+          `${width} download heading and form`,
+        ).toEqual(expected);
+        expect(await lefts("h2 >> nth=0", 'form[action="/carry-on"]'), `${width}`).toEqual(
+          expected,
+        );
+        const carryOnBottom = await page
+          .locator('form[action="/carry-on"]')
+          .evaluate((el) => el.getBoundingClientRect().bottom);
+        const downloadTop = await page
+          .locator("h2 >> nth=1")
+          .evaluate((el) => el.getBoundingClientRect().top);
+        expect(downloadTop - carryOnBottom, `${width} gap between the blocks`).toBe(32);
         await page.close();
       }
     } finally {

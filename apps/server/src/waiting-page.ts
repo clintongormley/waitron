@@ -81,7 +81,7 @@ export function renderWaitingPage(
     `<h1>${escapeHtml(title)}</h1>
 <p>${escapeHtml(text.body[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(text.body[1])}</p>
 ${section === "" ? "" : `<section>\n${section}</section>\n`}${leaveWhenDone(pageReturnPath(destination))}`,
-    `${BOX_FORM_STYLE}\nh1, h2 { overflow-wrap: anywhere; }`,
+    `${BOX_FORM_STYLE}\nh1, h2 { overflow-wrap: anywhere; }\nsection > h2:not(:first-child) { margin-top: var(--wt-space-6); }`,
   );
 }
 
