@@ -54,11 +54,13 @@ export interface HandoverActivationDeps {
   passwordThrottle?: PasswordThrottle;
   switchSignIn?: SwitchSignIn;
   emergency?: EmergencyHandover;
-  run: (
-    attestation: FenceAttestation,
-    operation: PromotionOperationRunner,
-    beforeRestart: () => Promise<void>,
-  ) => Promise<PromoteRunResult>;
+  run:
+    | ((
+        attestation: FenceAttestation,
+        operation: PromotionOperationRunner,
+        beforeRestart: () => Promise<void>,
+      ) => Promise<PromoteRunResult>)
+    | null;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -109,6 +111,9 @@ async function activate(
     return ALREADY_ANSWER;
   }
   const operation = await readOperationReadyToPromote(deps, operationId);
+  const { run } = deps;
+  if (run === null)
+    throw new AppError("handover.step_out_of_order", { from: operation.state, to: "activated" });
   const moduleOperation = parseStandbyOperationInput(body.moduleOperation);
   if (moduleOperation === null)
     throw new AppError("module.operation_invalid", { module: "unknown" });
@@ -138,7 +143,7 @@ async function activate(
           if (deps.emergency === undefined) throw new AppError("handover.copy_mismatch", {});
           await deps.emergency.assertMayActivate(operation, c.req.raw.signal);
         }
-        return deps.run(
+        return run(
           { oldNodeNeutralised: true },
           (context, consume) =>
             runner(context, async (tx, operations) => {

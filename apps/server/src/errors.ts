@@ -315,7 +315,7 @@ declare module "@waitron/shared" {
     "handover.source_unreachable": Record<string, never>;
     /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
     "handover.not_a_spare": Record<string, never>;
-    /** A handover offer reached a box while an ordinary promotion of it was running. */
+    /** An older peer can send this refusal, and an abandoned handover can replay it. */
     "handover.promotion_running": Record<string, never>;
     /**
      * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
@@ -1447,17 +1447,10 @@ declare module "@waitron/shared" {
     /**
      * A promote was refused because this node's held membership document marks it fenced
      * (`sell-only`/`evicted`). Promoting it would resume fiscal submission on a superseded chain —
-     * two submitters under one NIF (CLAUDE.md §5). Thrown from both promote paths
-     * (`assertNotFenced`, `promote.ts`) before any state change.
+     * two submitters under one NIF (CLAUDE.md §5).
      */
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
-    /**
-     * The break-glass secret for a promote was wrong or absent; refused before any state change. No
-     * params: a wrong credential has nothing to echo safely.
-     */
     "promotion.break_glass_invalid": Record<string, never>;
-    /** A mirror's promotion was asked for by a request not shown to come from the box itself;
-     * refused before the body is read. */
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.

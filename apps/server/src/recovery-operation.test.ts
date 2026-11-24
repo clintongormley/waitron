@@ -30,8 +30,8 @@ const suite = useVenueDb({
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const binding = {
   module: "test-regime",
-  action: "promote",
-  eventId: "takeover-1",
+  action: "restore",
+  eventId: "restore-1",
   sourceId: "archive-1",
   targetNodeId: NODE,
 };
@@ -56,30 +56,22 @@ function perform<T>(
 }
 
 describe("scoped recovery-key authority", () => {
-  it.each(["promote", "restore"])(
-    "authorises %s with only the current node key, creates no session and revokes authority after use",
-    async (action) => {
-      const scope = { ...binding, action };
-      let held: unknown;
-      const current = (await readCurrentMasterKey(suite.db))?.number;
-      const result = await perform(
-        async (authority) => {
-          held = authority;
-          expect(readOperationAuthority(authority, scope)).toEqual({
-            operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "takeover-1" },
-          });
-          expect(await suite.db.select().from(persons)).toEqual([]);
-          expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
-          return "committed";
-        },
-        key,
-        scope,
-      );
-      expect(result).toBe("committed");
-      expect(readOperationAuthority(held, scope)).toBeUndefined();
-      expect((await readCurrentMasterKey(suite.db))?.number).toBe(current);
-    },
-  );
+  it("authorises restore with only the current master key and revokes authority after use", async () => {
+    let held: unknown;
+    const current = (await readCurrentMasterKey(suite.db))?.number;
+    const result = await perform(async (authority) => {
+      held = authority;
+      expect(readOperationAuthority(authority, binding)).toEqual({
+        operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "restore-1" },
+      });
+      expect(await suite.db.select().from(persons)).toEqual([]);
+      expect(await suite.db.select().from(dashboardSessions)).toEqual([]);
+      return "committed";
+    });
+    expect(result).toBe("committed");
+    expect(readOperationAuthority(held, binding)).toBeUndefined();
+    expect((await readCurrentMasterKey(suite.db))?.number).toBe(current);
+  });
 
   it.each([undefined, null, 123, {}, "", "wrong", WRONG_MASTER_KEY])(
     "refuses an invalid key %# without entering the operation",
@@ -196,7 +188,7 @@ describe("scoped recovery-key authority", () => {
         perform(
           async (authority) => {
             expect(readOperationAuthority(authority, binding)).toEqual({
-              operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "takeover-1" },
+              operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "restore-1" },
             });
             expect(readOperationAuthority(authority, scope)).toBeUndefined();
           },

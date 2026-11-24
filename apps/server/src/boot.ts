@@ -190,7 +190,7 @@ import {
 import { refuseUnreleasedBuild } from "./release-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { assertNotFenced, promoteMirrorToPrimary, type PromoteRunResult } from "./promote.js";
+import { promoteMirrorToPrimary, type PromoteRunResult } from "./promote.js";
 import type {
   FenceAttestation,
   MirrorPromotionResult,
@@ -4473,19 +4473,13 @@ async function bootServer(
     return result;
   };
 
-  // After it restarts as primary, a former mirror can still finish recording its handover.
   const promoteRun = async (
     attestation: FenceAttestation,
-    withModuleOperations?: PromotionOperationRunner,
-    beforeRestart?: () => Promise<void>,
+    withModuleOperations: PromotionOperationRunner,
+    beforeRestart: () => Promise<void>,
   ): Promise<PromoteRunResult> => {
-    if (isMirror) {
-      const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
-      return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
-    }
-    const held = await readNodeMembership(db);
-    assertNotFenced(held, tradingContext.nodeId);
-    return { alreadyPrimary: true, restarting: false };
+    const result = await promoteMirrorRun(attestation, withModuleOperations, beforeRestart);
+    return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
   };
 
   const handoverPasswordThrottle = createPasswordThrottle();
@@ -4543,7 +4537,7 @@ async function bootServer(
       nodePreparation,
       passwordThrottle: handoverPasswordThrottle,
       switchSignIn: emergencyHandover.switchSignIn,
-      run: promoteRun,
+      run: isMirror ? promoteRun : null,
       emergency: emergencyHandover,
     },
     log,

@@ -7203,8 +7203,7 @@ gate, and `boot.start-clock-gate.test.ts` sends one correction-record request th
 When you add a box-to-box or handover request route, set a finite incoming byte budget before its
 handler parses the body. Use `peerBodyLimit` in `apps/server/src/peer-route-limits.ts` for new
 routes. Backup settings retain their existing `bodyLimit` and `spare.settings_invalid` response;
-emergency backup uploads retain `readUpload`'s larger budget. In `promote-api.ts`, keep the
-mirror's local-only promotion refusal ahead of body reading.
+emergency backup uploads retain `readUpload`'s larger budget.
 
 Add the route to `apps/server/test/peer-route-inventory.ts`, and add a new mount function to
 `mounted()` in `apps/server/src/peer-route-limits.test.ts`. Use a `null` budget only for a route
