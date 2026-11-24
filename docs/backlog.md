@@ -663,8 +663,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
   a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
-  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). The VAT rates work's piece A lands first, so
-  this plan is refreshed against it at the places its Global Constraints list.
+  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (14 tasks in three pull requests; refreshed on 2026-11-24 against VAT
+  rates piece A, which has landed). Waiting for a fresh read of the plan and the owner's answer to its Decision 2.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
