@@ -340,7 +340,9 @@ describe("seedSales", () => {
       vat_class: string;
       takeaway_vat_class: string;
       unit_price_gross: number;
-    }>(sql`select o.dining, l.name, l.vat_class, l.takeaway_vat_class, l.unit_price_gross
+      a_la_carte_unit_price: number | null;
+    }>(sql`select o.dining, l.name, l.vat_class, l.takeaway_vat_class, l.unit_price_gross,
+                  l.a_la_carte_unit_price
            from working_order_lines l join working_orders o on o.id = l.working_order_id`);
     expect(new Set(stored.map((line) => line.dining))).toEqual(new Set(["eat_in", "takeaway"]));
     const byName = new Map([...PRODUCTS, ...DELI_PRODUCTS].map((p) => [p.name, p]));
@@ -353,6 +355,7 @@ describe("seedSales", () => {
       expect(
         compareDecimal(centsToDecimal(line.unit_price_gross), decimal(product.unitPrice)),
       ).toBe(0);
+      expect(line.a_la_carte_unit_price).toBe(line.unit_price_gross);
     }
   });
 

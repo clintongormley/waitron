@@ -1610,7 +1610,8 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "a_la_carte_unit_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(orderLines.rows)) row.a_la_carte_unit_price = null;
+      for (const row of Object.values(orderLines.rows))
+        row.a_la_carte_unit_price = row.unit_price_gross;
       products.columns = products.columns.filter(
         (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
       );
