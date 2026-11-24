@@ -1109,8 +1109,9 @@ declare module "@waitron/shared" {
     "tab.transfer_self": { tabId: string };
     /**
      * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, with
-     * more integer digits than a quantity holds, or finer than the line's unit counts. `quantity` is
-     * the caller's own text.
+     * more integer digits than a quantity holds, or finer than the line's unit counts; or part of a
+     * line whose part and rest, each priced as its own line, would not add up to the line's price.
+     * `quantity` is the caller's own text.
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
@@ -1129,10 +1130,11 @@ declare module "@waitron/shared" {
      * A transfer would separate a modifier from its dish: an entry names a CHILD modifier line (it
      * moves only with its dish), or a PARTIAL split names a dish that carries modifier children
      * (their quantity would no longer match the dish's). Also a partial split that takes a dish's
-     * extras with it — asked for only by a give-away or a discount of part of a dish — when an extra
-     * is not a whole count for each dish, so its two parts would not add up to it; that path
-     * refuses the same case first as `adjustment.quantity_invalid`. `lineNo` is the offending
-     * source line.
+     * extras with it — asked for by a give-away or a discount of part of a dish, and by Pay for
+     * items — when an extra is not a whole count for each dish, so its two parts would not add up
+     * to it (the give-away and discount path refuses that case first as
+     * `adjustment.quantity_invalid`), or when an extra's two parts, each priced as its own line,
+     * would not add up to its price. `lineNo` is the offending source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**

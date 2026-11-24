@@ -31,13 +31,16 @@ import {
 } from "./testing/party-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { TabRoundLine } from "./working-order.js";
+import { splitLinesWithinOrder, storedOrderTotal, type TabRoundLine } from "./working-order.js";
 import { moveItemsToNewBill, priceItemPicks, type ItemPick } from "./pay-for-items.js";
 import "./errors.js";
 
 let v: PartyVenue;
 let offers: ZoneOffers;
-let ids: Record<"soup" | "hake" | "beer" | "salad" | "burger" | "cheese" | "toppings", string>;
+let ids: Record<
+  "soup" | "hake" | "beer" | "salad" | "burger" | "cheese" | "toppings" | "ham",
+  string
+>;
 let houseReason: string;
 let setMenu: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 
@@ -55,14 +58,18 @@ useVenueDb({
           sql`select category_id as categoryId from products where id = ${v.productId("Burger")}`,
         )
       )[0]!.categoryId;
-      const product = async (name: string, unitPrice: string) =>
+      const product = async (
+        name: string,
+        unitPrice: string,
+        pricingUnit: "each" | "weight" = "each",
+      ) =>
         (
           await createProduct(tx, {
             categoryId: category,
             name,
             customerName: { [v.cfg.locale]: `${name} (customer)` },
             kitchenName: name.toUpperCase(),
-            pricingUnit: "each",
+            pricingUnit,
             unitPrice,
             vatClass: "general",
           })
@@ -72,6 +79,8 @@ useVenueDb({
       const beer = await product("Beer", "2.50");
       const salad = await product("Salad", "10.00");
       const cheese = await product("Cheese", "1.00");
+      // By the kilo: 0.050 kg is 1.01, and either half of it 0.505.
+      const ham = await product("Ham", "20.20", "weight");
       const toppings = (
         await createExtraList(
           tx,
@@ -90,7 +99,7 @@ useVenueDb({
       const burger = v.productId("Burger");
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
       offers = await offerProducts(tx, { zone: "tables" });
-      ids = { soup, hake, beer, salad, burger, cheese, toppings };
+      ids = { soup, hake, beer, salad, burger, cheese, toppings, ham };
       houseReason = (await createAdjustmentReason(tx, REASONS.house)).id;
     });
   },
@@ -254,6 +263,62 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
 
     expect(await dishesOf(moved.billId)).toEqual([["beer", "1.000", "2.50"]]);
     expect(await dishesOf(billId)).toEqual([["beer", "2.000", "5.00"]]);
+  });
+
+  it("moves part of a weighed line, the two parts adding up to the line", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "ham", quantity: "0.050" },
+      { product: "beer" },
+    );
+    const picks = [{ lineId: await lineOf(billId, "ham"), quantity: "0.020" }];
+
+    expect(await inTx(v, (tx) => priceItemPicks(tx, billId, picks))).toBe("0.40");
+    const moved = await payFor(partyId, billId, picks);
+
+    expect(await dishesOf(moved.billId)).toEqual([["ham", "0.020", "0.40"]]);
+    expect(await dishesOf(billId)).toEqual([
+      ["ham", "0.030", "0.61"],
+      ["beer", "1.000", "2.50"],
+    ]);
+    expect(await inTx(v, (tx) => storedOrderTotal(tx, billId))).toBe("3.11");
+    expect(await inTx(v, (tx) => storedOrderTotal(tx, moved.billId))).toBe("0.40");
+  });
+
+  it("refuses part of a weighed line whose two parts would cost more than the line, moving nothing", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "ham", quantity: "0.050" },
+      { product: "beer" },
+    );
+    const before = await rowsOf(billId);
+
+    await expect(
+      payFor(partyId, billId, [{ lineId: await lineOf(billId, "ham"), quantity: "0.025" }]),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+      params: { quantity: "0.025" },
+    });
+
+    expect(await billsNaming(billId)).toEqual([]);
+    expect(await rowsOf(billId)).toEqual(before);
+  });
+
+  it("a split within a bill refuses a part whose price and the rest's would not add up", async () => {
+    const { billId } = await seatedBill({ product: "ham", quantity: "0.050" });
+    const before = await rowsOf(billId);
+
+    await expect(
+      inTx(v, (tx) => splitLinesWithinOrder(tx, v.cfg, billId, [{ lineNo: 1, quantity: "0.025" }])),
+    ).rejects.toMatchObject({ code: "tab.transfer_quantity_invalid" });
+
+    expect(await rowsOf(billId)).toEqual(before);
+    await inTx(v, (tx) =>
+      splitLinesWithinOrder(tx, v.cfg, billId, [{ lineNo: 1, quantity: "0.020" }]),
+    );
+    expect(await dishesOf(billId)).toEqual([
+      ["ham", "0.030", "0.61"],
+      ["ham", "0.020", "0.40"],
+    ]);
+    expect(await inTx(v, (tx) => storedOrderTotal(tx, billId))).toBe("1.01");
   });
 
   it("carries a dish's own comp with it", async () => {

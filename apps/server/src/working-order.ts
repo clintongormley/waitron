@@ -4904,6 +4904,20 @@ function grossLineTotal(grossUnit: string, quantity: string, priceQuantity: stri
 }
 
 /**
+ * Whether `parts` of `row`, each priced as a row of its own, add up to `row` priced whole. A bill is
+ * priced, and filed, row by row from unit price and quantity, never from a stored line total, so a
+ * split whose parts round apart would change what the guest pays.
+ */
+function pricesAddUp(
+  row: { unitPriceGross: Decimal; quantity: Decimal; priceQuantity: Decimal },
+  parts: readonly Decimal[],
+): boolean {
+  const cents = (quantity: Decimal) =>
+    decimalToCents(grossLineTotal(row.unitPriceGross, quantity, row.priceQuantity));
+  return parts.reduce((sum, part) => sum + cents(part), 0) === cents(row.quantity);
+}
+
+/**
  * Refuse a batch naming the same source `line_no` twice: each entry is validated against the line's
  * pre-batch quantity and the split sets the source to `original − q`, so two partial "1"s off a line
  * of 3 would add 2 to the destination while the source dropped by 1.
@@ -5068,6 +5082,10 @@ async function carveLines(
       if (opts.splitIntoUnits) {
         const units = stringToThousandths(line.quantity);
         inRange = inRange && line.unitPrecision === 0 && units >= 2000 && units % 1000 === 0;
+        inRange = inRange && pricesAddUp(line, Array(units / 1000).fill(decimal("1")));
+      } else if (inRange && compareDecimal(decimal(t.quantity), decimal(line.quantity)) < 0) {
+        const moved = decimal(t.quantity);
+        inRange = pricesAddUp(line, [moved, subtractDecimal(decimal(line.quantity), moved)]);
       }
     } catch {
       inRange = false;
@@ -5101,7 +5119,8 @@ async function carveLines(
       if (
         children.some(
           (child) =>
-            compareDecimal(sumDecimals([child.remaining, child.moved]), child.row.quantity) !== 0,
+            compareDecimal(sumDecimals([child.remaining, child.moved]), child.row.quantity) !== 0 ||
+            !pricesAddUp(child.row, [child.remaining, child.moved]),
         )
       ) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });

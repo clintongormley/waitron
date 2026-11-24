@@ -41,6 +41,7 @@ import "./errors.js";
 // card is asked, and go back to the table's bill when it charges nothing.
 let venue: BillVenue;
 let coffee: string;
+let ham: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -63,20 +64,25 @@ useVenueDb({
         .set({ capabilities: [...(profile!.capabilities as string[]), "print-receipt"] })
         .where(eq(deviceProfiles.id, device!.profileId!));
     });
-    coffee = await inTx(venue, async (tx) => {
+    [coffee, ham] = await inTx(venue, async (tx) => {
       const [{ categoryId }] = await tx.all<{ categoryId: string }>(
         sql`select category_id as categoryId from products where name = 'Tarta'`,
       );
-      const product = await createProduct(tx, {
-        categoryId: categoryId!,
-        name: "Coffee",
-        customerName: { es: "Coffee (customer)" },
-        kitchenName: "COFFEE",
-        pricingUnit: "each",
-        unitPrice: "3.00",
-        vatClass: "general",
-      });
-      return (await offerProducts(tx, { zone: "tables" })).offerFor(product.id);
+      const product = (name: string, unitPrice: string, pricingUnit: "each" | "weight") =>
+        createProduct(tx, {
+          categoryId: categoryId!,
+          name,
+          customerName: { es: `${name} (customer)` },
+          kitchenName: name.toUpperCase(),
+          pricingUnit,
+          unitPrice,
+          vatClass: "general",
+        });
+      const coffeeProduct = await product("Coffee", "3.00", "each");
+      // By the kilo: 0.050 kg is 1.01.
+      const hamProduct = await product("Ham", "20.20", "weight");
+      const offers = await offerProducts(tx, { zone: "tables" });
+      return [offers.offerFor(coffeeProduct.id), offers.offerFor(hamProduct.id)];
     });
   },
 });
@@ -97,6 +103,33 @@ const coffeeAndTarta = () =>
     });
     return tabId;
   });
+
+/** A table's bill holding a coffee (3.00) and 0.050 kg of ham (1.01). */
+const coffeeAndHam = () =>
+  withTransaction(venue.db, async (tx) => {
+    const table = await createTable(tx, {
+      label: `M-${randomUUID().slice(0, 8)}`,
+      zoneId: venue.zoneId,
+    });
+    const { tabId } = await openPartyTab(tx, venue.cfg, {
+      tableId: table.id,
+      lines: [
+        { menuItemId: coffee, quantity: "1" },
+        { menuItemId: ham, quantity: "0.050" },
+      ],
+    });
+    return tabId;
+  });
+
+/** Pays for 0.020 kg of the ham (0.40) by reader. */
+async function someHamByReader(sourceId: string) {
+  const body = await tartaByReaderBody(sourceId);
+  return sendItemsPayment(sourceId, {
+    ...body,
+    picks: [{ lineId: await lineIdOf(sourceId, 2), quantity: "0.020" }],
+    applied: "0.40",
+  });
+}
 
 async function lineIdOf(billId: string, lineNo: number): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
@@ -341,6 +374,44 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await invoiceCount(newBill)).toBe(1);
     expect(await invoiceCount(sourceId)).toBe(1);
     expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("a captured card for part of a weighed line charges the part and leaves the source the rest", async () => {
+    const sourceId = await coffeeAndHam();
+
+    const paid = await someHamByReader(sourceId);
+
+    expect(paid.json.payment).toMatchObject({ outcome: "received", invoice: { total: "0.40" } });
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "0.61"]);
+    expect((await balance(sourceId)).json).toMatchObject({ total: "3.61", outstanding: "3.61" });
+  });
+
+  it("a declined card for part of a weighed line leaves the source costing what it did", async () => {
+    const sourceId = await coffeeAndHam();
+    venue.card.failNextCollect();
+
+    const paid = await someHamByReader(sourceId);
+
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect(await lineTotals(sourceId)).toEqual(["3.00", "0.61", "0.40"]);
+    expect((await balance(sourceId)).json).toMatchObject({ total: "4.01", outstanding: "4.01" });
+  });
+
+  it("part of a weighed line whose part and rest would cost more than it is refused", async () => {
+    const sourceId = await coffeeAndHam();
+    const body = await tartaByReaderBody(sourceId);
+    const calls = venue.card.collectCalls.length;
+
+    const paid = await sendItemsPayment(sourceId, {
+      ...body,
+      picks: [{ lineId: await lineIdOf(sourceId, 2), quantity: "0.025" }],
+      applied: "0.51",
+    });
+
+    expect(paid.status).toBe(400);
+    expect(paid.json).toMatchObject({ code: "tab.transfer_quantity_invalid" });
+    expect(venue.card.collectCalls.length).toBe(calls);
+    expect((await balance(sourceId)).json).toMatchObject({ total: "4.01" });
   });
 
   it("a declined card is logged as a failed collection", async () => {
