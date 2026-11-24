@@ -906,6 +906,21 @@ describe("till-app: a bill paid more than it comes to", () => {
     expect(order.overpaidBusy).toBe(false);
   });
 
+  it("Keep as tip refused on a bill that comes to nothing says why in its own words", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([overpaidRow]),
+      getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
+      keepOverpaidAsTip: vi.fn().mockRejectedValue({ code: "bill.tip_needs_a_sale", status: 409 }),
+    });
+    const order = await openTable(el, ["payment.take"]);
+    await flush(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
+    await flush(el, 6);
+
+    expect(text(banner(el))).toContain(codeMessage("bill.tip_needs_a_sale"));
+  });
+
   it("Give back opens the Refund window on the excess", async () => {
     const { el } = await mountApp({
       getPartyBills: vi.fn().mockResolvedValue([overpaidRow]),

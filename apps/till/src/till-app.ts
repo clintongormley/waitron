@@ -924,6 +924,7 @@ const TABLE_REFUSALS = new Set([
   "bill.refund_in_progress",
   "bill.not_overpaid",
   "bill.tip_not_allowed_on_excess",
+  "bill.tip_needs_a_sale",
   "working_order.not_open",
   "storage.disk_full",
   "clock.unconfirmed",

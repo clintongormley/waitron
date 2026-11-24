@@ -927,6 +927,9 @@ declare module "@waitron/shared" {
     /** Print the bill or an unpaid departure on a bill holding more than it comes to: its excess
      * is given back or kept as a tip first. */
     "bill.overpaid": { workingOrderId: string };
+    /** Keep as tip on a bill that comes to nothing: there is no sale to tip on, so its excess can
+     * only be given back. */
+    "bill.tip_needs_a_sale": { workingOrderId: string };
     /** Keep as tip while the venue takes no tips: what the bill is paid over its total can only be
      * given back. */
     "bill.tip_not_allowed_on_excess": { workingOrderId: string };

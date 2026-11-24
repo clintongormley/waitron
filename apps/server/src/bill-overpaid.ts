@@ -10,6 +10,7 @@ import {
   sumDecimals,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { ZERO } from "./bill-allocation.js";
 import {
   findSubmission,
   issueIfFullyPaid,
@@ -58,8 +59,9 @@ export async function refundPermission(
  * first, each giving up no more than its refunds have left of its applied money. A payment that
  * paid an advance, already has a tender, or paid for chosen items keeps its money as it is.
  *
- * `bill.not_overpaid` when nothing is paid over the total; `bill.tip_not_allowed_on_excess` while
- * the venue takes no tips. Nothing records `submissionId`, so a retry after a lost answer is
+ * `bill.not_overpaid` when nothing is paid over the total; `bill.tip_needs_a_sale` when the bill
+ * comes to nothing, as there is no sale to tip on; `bill.tip_not_allowed_on_excess` while the venue
+ * takes no tips. Nothing records `submissionId`, so a retry after a lost answer is
  * refused, as the bill is no longer overpaid or open; it may not be one of the bill's payments' or
  * refunds'.
  */
@@ -88,6 +90,8 @@ export async function keepOverpaidAsTip(
     throw new AppError("submission.id_reused", { submissionId });
   const { excess, held, advances } = await readBillExcess(tx, workingOrderId);
   if (excess === undefined) throw new AppError("bill.not_overpaid", { workingOrderId });
+  if (compareDecimal((await readBillBalance(tx, workingOrderId)).total, ZERO) === 0)
+    throw new AppError("bill.tip_needs_a_sale", { workingOrderId });
   if (!(await readPaymentsSettings(tx)).doc.tipsEnabled)
     throw new AppError("bill.tip_not_allowed_on_excess", { workingOrderId });
 

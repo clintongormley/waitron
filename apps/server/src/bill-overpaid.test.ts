@@ -632,6 +632,36 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
   });
 
+  it("keep as tip is refused on a bill whose total is zero, and writes nothing", async () => {
+    const { billId } = await zeroBillHoldingMoney(venue);
+    const [contribution] = venue.db.all<{ id: string }>(
+      sql`select id from bill_payments where working_order_id = ${billId}`,
+    );
+
+    const kept = await keepAsTip(billId);
+
+    expect(kept).toEqual({
+      status: 409,
+      json: { code: "bill.tip_needs_a_sale", params: { workingOrderId: billId } },
+    });
+    expect(await paymentOf(contribution!.id)).toEqual({ applied: "15.00", tip: "0.00" });
+    expect(await balanceOf(billId)).toMatchObject({
+      status: "open",
+      total: "0.00",
+      overpaid: "15.00",
+    });
+    expect(await invoicesOf(billId)).toEqual([]);
+    const kepts = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(activityLog)
+        .where(
+          and(eq(activityLog.kind, "bill.overpaid_kept_as_tip"), eq(activityLog.subjectId, billId)),
+        ),
+    );
+    expect(kepts).toEqual([]);
+  });
+
   it("keep as tip is refused when nothing is overpaid", async () => {
     const party = await seatedWith(venue, "Croquettes", "Croquettes");
     await take(party.tabId, "cash", "15.00");

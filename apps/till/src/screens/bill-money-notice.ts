@@ -1,10 +1,12 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-button.js";
-import { decimal, formatMoney } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { billNumberLabel } from "../state/bill-state.js";
 import { overpaidOf } from "../state/pay-for-items.js";
+
+const ZERO = decimal("0.00");
 
 /** "Being paid on Bill 3" while the bill's chosen items wait for their card on a bill of their own. */
 export function beingPaidNotice(balance: BillBalance | null): TemplateResult | typeof nothing {
@@ -25,7 +27,7 @@ export interface OverpaidNotice {
 }
 
 /** What the bill was paid over its total, with Give back and, while the venue takes tips, Keep as
- * tip. */
+ * tip. A bill that comes to nothing has no sale to tip on, so it is only given back. */
 export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof nothing {
   const excess = overpaidOf(notice.balance);
   if (excess === null) return nothing;
@@ -42,7 +44,7 @@ export function overpaidNotice(notice: OverpaidNotice): TemplateResult | typeof 
         >${fill(t("table.give_back"), { amount })}</wt-button
       >
       ${
-        notice.tipsEnabled
+        notice.tipsEnabled && compareDecimal(decimal(notice.balance!.total), ZERO) !== 0
           ? html`<wt-button
               variant="secondary"
               size="sm"
