@@ -34,7 +34,8 @@ Archived filter, the read-only view, and copying an archived menu.
   menus tab has no Status filter.
 - Deleting a category says it **deletes** the products inside it, where it says "archives" today.
   With products and categories selected, the bulk action reads Delete in every case.
-- The address of a deleted menu or product opens its list, as an unknown one's does (**my call**).
+- The address of a deleted menu opens the Menus list, and a deleted product's the Products list, as an
+  unknown menu's does today (**my call**).
 - Anywhere else that shows an archived product today (the unit's delete dialog, the image library)
   no longer does.
 
@@ -57,11 +58,15 @@ the menu is published first.
 
 - The record is kept, hidden (`active` false, as today), because past sales and reports point at it.
   Past sales do not change. A deleted record that nothing points at may be kept hidden too.
-- **Units.** A unit that only deleted products use can be deleted. Today `productsUsingUnit` counts
+- **Units and photos are never deleted with a product.** Owner, 2026-11-24: "no need to delete unused
+  photos or units, they can be deleted separately". The next two points make that separate delete
+  work.
+- **Units.** A deleted product does not stop a person deleting its unit on the Units screen. Today `productsUsingUnit` counts
   archived products, `deleteUnit` then refuses, and `reassignProductsToUnit` refuses to move an
   archived product (`packages/menu/src/units.ts`), so such a unit looks impossible to delete. That
   was read, not tried: write the failing test first.
-- **Photos.** The same for a photo that only deleted products or variants use (**my call**). A photo
+- **Photos.** Likewise, a deleted product or variant does not stop a person deleting its photo in the
+  image library (**my call**). A photo
   a published menu holds stays protected, as today.
 - For both, the lane chooses how the deleted record lets go, after tracing every reader that still
   uses a deleted product: open orders, refunds, corrections, reprints, reports.
