@@ -81,7 +81,7 @@ import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import { portionGroups } from "../state/portion-groups.js";
 import { overpaidOf } from "../state/bill-state.js";
-import { itemsChoiceOf } from "../state/pay-for-items.js";
+import { itemsChoiceOf, paysOnNewBill } from "../state/pay-for-items.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -1576,9 +1576,8 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
-  /** Pay for items' preview carries the chosen items' price: they are paid on a bill of their own. */
   #ownBill(): this is { preview: Allocated & { total: string } } {
-    return this.preview?.kind === "allocated" && this.preview.total !== undefined;
+    return paysOnNewBill(this.preview);
   }
 
   /** What the way covers, as far as the dialog knows before the server allocates it. */
@@ -2161,7 +2160,7 @@ export class TillBillPayDialog extends LitElement {
   #guestsShown(preview: Allocated): boolean {
     return (
       this.asksGuests &&
-      preview.total === undefined &&
+      !paysOnNewBill(preview) &&
       this.balance !== null &&
       (this.asked?.choice.kind === "whole" ||
         compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
@@ -2172,7 +2171,7 @@ export class TillBillPayDialog extends LitElement {
   #ownReceiptAsked(preview: Allocated): boolean {
     return (
       this.ownReceiptOffered &&
-      preview.total === undefined &&
+      !paysOnNewBill(preview) &&
       !this.confirmationLocked &&
       this.balance !== null &&
       this.asked !== null &&

@@ -328,6 +328,7 @@ import {
 import {
   itemsAllocatedFrom,
   itemsRefusal,
+  paysOnNewBill,
   previewPayment,
   takePayment,
   withItems,
@@ -23496,7 +23497,7 @@ export class TillApp extends LitElement {
       asked,
       open.expectedEdit,
       open.surface === "table" ? this.#billRevisions() : {},
-      open.preview?.kind !== "allocated" || open.preview.total === undefined,
+      !paysOnNewBill(open.preview),
     );
     // Named now: a tap while the card is out may change the phone's reader before the answer.
     const ready = this.handheldMode
@@ -23795,10 +23796,9 @@ export class TillApp extends LitElement {
       this.billPaying = {
         ...now,
         asked,
-        preview:
-          now.preview?.kind === "allocated" && now.preview.total !== undefined
-            ? itemsAllocatedFrom(preview as AllocationPreview)
-            : (preview as AllocationPreview),
+        preview: paysOnNewBill(now.preview)
+          ? itemsAllocatedFrom(preview as AllocationPreview)
+          : (preview as AllocationPreview),
         refusal: { code: refusal.code },
         busy: false,
       };

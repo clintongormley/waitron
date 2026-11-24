@@ -90,6 +90,14 @@ export function itemsAllocated(
   };
 }
 
+/** Whether `preview` is Pay for items': only it carries the chosen items' price, as they are paid
+ * on a bill of their own. */
+export function paysOnNewBill(
+  preview: AllocationPreview | null,
+): preview is Extract<AllocationPreview, { kind: "allocated" }> & { total: string } {
+  return preview?.kind === "allocated" && preview.total !== undefined;
+}
+
 /** A `bill.allocation_changed` refusal's fresh preview: a whole payment of the would-be new bill,
  * which holds nothing else, so what it applies is the items' total. */
 export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPreview {
@@ -106,16 +114,16 @@ export function itemsRefusal(refusal: PayRefusal): PayRefusal {
   };
 }
 
-/** `confirmation` with its items part, for an items choice on a bill not yet printed; a printed
- * bill's items are still paid where they are. */
+/** `confirmation` with its items part, for an items choice paid on a bill of its own; one whose
+ * items `staysOnBill`, a printed bill's, is still paid where it is. */
 export function withItems(
   confirmation: Confirmation,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
   revisions: BillRevisions,
-  printed: boolean,
+  staysOnBill: boolean,
 ): Confirmation {
-  if (asked.choice.kind !== "items" || printed) return confirmation;
+  if (asked.choice.kind !== "items" || staysOnBill) return confirmation;
   // The route refuses an items payment with no edit state, and a resend would repeat it.
   if (expectedEdit === null) throw new Error("Pay for items needs the bill's edit state");
   return {
@@ -164,16 +172,16 @@ export function itemsRequestOf(
   return body;
 }
 
-/** The preview for `asked`: an items choice on a bill not yet printed through Pay for items, every
- * other through today's bill payment preview. */
+/** The preview for `asked`: an items choice through Pay for items unless its items `staysOnBill`
+ * (a printed bill's), every other through today's bill payment preview. */
 export async function previewPayment(
   api: TillApi,
   billId: string,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
-  printed: boolean,
+  staysOnBill: boolean,
 ): Promise<AllocationPreview> {
-  if (asked.choice.kind === "items" && !printed)
+  if (asked.choice.kind === "items" && !staysOnBill)
     return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
   return api.previewBillPayment(
     billId,
