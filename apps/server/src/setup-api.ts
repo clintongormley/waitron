@@ -849,6 +849,24 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     await deps.writeClockSteps?.();
     return deps.operations!.run(kind, hash, body, holds.get(request));
   };
+  const restartAfterReply = async (
+    c: Context,
+    requestRestart: () => void,
+    handle: (mustRestart: () => void) => Promise<Response>,
+  ): Promise<Response> => {
+    let restart = false;
+    try {
+      return await handle(() => {
+        restart = true;
+      });
+    } finally {
+      if (restart) {
+        const outgoing = outgoingOf(c);
+        // Under `app.request` there is no Node response, so the timer lets the reply return first.
+        setTimeout(() => restartAfterResponse(outgoing, requestRestart, log), 0);
+      }
+    }
+  };
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
@@ -1366,9 +1384,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    // Once the join is written the box must restart, even if saving the setup record then fails.
-    let adopted = false;
-    const run = async (joined: JoinedBox, operation?: ActiveSetupOperation) => {
+    const run = async (
+      joined: JoinedBox,
+      mustRestart: () => void,
+      operation?: ActiveSetupOperation,
+    ) => {
       const secret = await adoptJoined(joined, {
         // Past "started", the store keeps the record, so a different request cannot run over a
         // half-adopted node.
@@ -1380,39 +1400,42 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       });
       // The operator's only chance to record the offline promote fallback. It is NEVER logged.
       const contactUrl = labelContactUrl(deps.advertisedOrigin, joined.identity.nodeId);
-      adopted = true;
+      mustRestart();
       return c.json({ adopted: true, ...secret, restarting: true, ...contactUrl }, 200);
     };
-    return runAdopt(c, log, async () => {
-      let succeeded = false;
-      try {
-        refuseJoinElsewhere(c);
-        if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
-        const joined = joinAttempt.joined();
-        if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
-        const response =
-          deps.operations === undefined
-            ? await run(joined)
-            : await runOperation(c.req.raw, "adopt", JOIN_ADOPT_REQUEST_HASH, async (operation) => {
-                if (operation.phase !== "started") {
-                  throw new AppError("setup.adopt_incomplete", {});
-                }
-                const response = await run(joined, operation);
-                if (response.ok) {
-                  await operation.complete({ adopted: true, restarting: true });
-                }
-                return response;
-              });
-        succeeded = response.ok;
-        return response;
-      } finally {
-        if (!succeeded) provisioning = false;
-        if (adopted) {
-          const outgoing = outgoingOf(c);
-          setTimeout(() => restartAfterResponse(outgoing, requestRestart, log), 0);
+    return runAdopt(c, log, () =>
+      restartAfterReply(c, requestRestart, async (mustRestart) => {
+        let succeeded = false;
+        try {
+          refuseJoinElsewhere(c);
+          if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
+          const joined = joinAttempt.joined();
+          if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
+          const response =
+            deps.operations === undefined
+              ? await run(joined, mustRestart)
+              : await runOperation(
+                  c.req.raw,
+                  "adopt",
+                  JOIN_ADOPT_REQUEST_HASH,
+                  async (operation) => {
+                    if (operation.phase !== "started") {
+                      throw new AppError("setup.adopt_incomplete", {});
+                    }
+                    const response = await run(joined, mustRestart, operation);
+                    if (response.ok) {
+                      await operation.complete({ adopted: true, restarting: true });
+                    }
+                    return response;
+                  },
+                );
+          succeeded = response.ok;
+          return response;
+        } finally {
+          if (!succeeded) provisioning = false;
         }
-      }
-    });
+      }),
+    );
   });
 
   // The wipe happens at the next start, under the venue lock, which refuses a box holding trading
@@ -1461,72 +1484,74 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runRestore(c, log, async () => c.json(await deps.cloudRecovery!.startAgain(), 200));
   });
   app.post("/setup-api/cloud-recovery/restore", async (c) => {
-    if (!deps.cloudRecovery || !deps.stageRestore || !deps.requestRestart)
+    const requestRestart = deps.requestRestart;
+    if (!deps.cloudRecovery || !deps.stageRestore || !requestRestart)
       return directError(c, log, "setup.not_ready", 503);
     if (provisioning || fiscalTesting || configurationStaging || emailTesting())
       return directError(c, log, "setup.already_provisioning", 409);
     provisioning = true;
-    return runRestore(c, log, async () => {
-      try {
-        const body = await readJsonBody<{
-          pointId?: unknown;
-          oldBoxGone?: unknown;
-          recoveryOperation?: unknown;
-          nodeRecoverySecret?: unknown;
-          recoveryContext?: unknown;
-        }>(c);
-        if (
-          typeof body.pointId !== "string" ||
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
-        )
-          invalidRequest("pointId");
-        if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
-          invalidRequest("oldBoxGone");
-        }
-        const credentials = recoveryCredentials(
-          deps.recoveryOperationPath,
-          body.recoveryOperation,
-          body.nodeRecoverySecret,
-          body.recoveryContext,
-        );
-        c.header("Cache-Control", "no-store");
-        const pointId = body.pointId;
-        const oldBoxGone = body.oldBoxGone === true;
-        const binding = await deps.cloudRecovery!.binding();
-        if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
-        const execute = async () => {
-          await deps.cloudRecovery!.restore(
-            (request) => deps.stageRestore!({ ...request, ...credentials }, { oldBoxGone }),
-            pointId,
-          );
-          const response = c.json({ restoreStaged: true, restarting: true }, 202);
-          setTimeout(() => deps.requestRestart!(), 0);
-          return response;
-        };
-        if (!deps.operations) return await execute();
-        const requestHash = createHash("sha256")
-          .update("cloud-recovery:")
-          .update(binding.requestId)
-          .update(":")
-          .update(pointId)
-          .update(oldBoxGone ? ":confirmed" : "")
-          .update("\0")
-          .update(JSON.stringify(credentials))
-          .digest("hex");
-        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
-          if (operation.phase === "complete") {
-            setTimeout(() => deps.requestRestart!(), 0);
-            return c.json({ restoreStaged: true, restarting: true }, 202);
+    return runRestore(c, log, () =>
+      restartAfterReply(c, requestRestart, async (mustRestart) => {
+        try {
+          const body = await readJsonBody<{
+            pointId?: unknown;
+            oldBoxGone?: unknown;
+            recoveryOperation?: unknown;
+            nodeRecoverySecret?: unknown;
+            recoveryContext?: unknown;
+          }>(c);
+          if (
+            typeof body.pointId !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
+          )
+            invalidRequest("pointId");
+          if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
+            invalidRequest("oldBoxGone");
           }
-          const response = await execute();
-          await operation.complete({ restoreStaged: true, restarting: true });
-          return response;
-        });
-      } catch (error) {
-        provisioning = false;
-        throw error;
-      }
-    });
+          const credentials = recoveryCredentials(
+            deps.recoveryOperationPath,
+            body.recoveryOperation,
+            body.nodeRecoverySecret,
+            body.recoveryContext,
+          );
+          c.header("Cache-Control", "no-store");
+          const pointId = body.pointId;
+          const oldBoxGone = body.oldBoxGone === true;
+          const binding = await deps.cloudRecovery!.binding();
+          if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
+          const execute = async () => {
+            await deps.cloudRecovery!.restore(
+              (request) => deps.stageRestore!({ ...request, ...credentials }, { oldBoxGone }),
+              pointId,
+            );
+            mustRestart();
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          };
+          if (!deps.operations) return await execute();
+          const requestHash = createHash("sha256")
+            .update("cloud-recovery:")
+            .update(binding.requestId)
+            .update(":")
+            .update(pointId)
+            .update(oldBoxGone ? ":confirmed" : "")
+            .update("\0")
+            .update(JSON.stringify(credentials))
+            .digest("hex");
+          return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
+            if (operation.phase === "complete") {
+              mustRestart();
+              return c.json({ restoreStaged: true, restarting: true }, 202);
+            }
+            const response = await execute();
+            await operation.complete({ restoreStaged: true, restarting: true });
+            return response;
+          });
+        } catch (error) {
+          provisioning = false;
+          throw error;
+        }
+      }),
+    );
   });
 
   app.post("/setup-api/restore-bucket/preview", async (c) => {
@@ -1635,126 +1660,129 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    return runRestore(c, log, async () => {
-      let upload: ArchiveUpload | undefined;
-      try {
-        const multipart = c.req
-          .header("content-type")
-          ?.toLowerCase()
-          .startsWith("multipart/form-data");
-        if (
-          !multipart &&
-          !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
-        )
-          invalidRequest("artifact");
-        const headerKey = multipart
-          ? undefined
-          : asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
-        const headerEnvironment = c.req.header("x-waitron-restore-environment");
-        if (
-          !multipart &&
-          headerEnvironment !== "production" &&
-          headerEnvironment !== "preproduction"
-        )
-          invalidRequest("environment");
-        if (!multipart && isUnset(deps.recoveryOperationPath)) invalidRequest("recoveryOperation");
-        upload = await deps.receiveArchive!(c.req.raw, {
-          fields: [
-            "recoveryKey",
-            "environment",
-            "oldBoxGone",
-            "recoveryOperation",
-            "nodeRecoverySecret",
-            "recoveryContext",
-          ],
-        });
-        const form = multipart ? upload.fields : undefined;
-        if (form) {
-          const answer = form.get("oldBoxGone");
-          if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
-        }
-        const recoveryKey =
-          form === undefined ? headerKey! : asString(form.get("recoveryKey"), "recoveryKey");
-        const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
-        if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
-          invalidRequest("environment");
-        const oldBoxGone =
-          (form === undefined ? c.req.header("x-waitron-old-box-gone") : form.get("oldBoxGone")) ===
-          "1";
-        let suppliedOperation: unknown;
-        const rawOperation = form?.get("recoveryOperation");
-        if (rawOperation !== undefined && rawOperation !== null) {
-          if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
+    return runRestore(c, log, () =>
+      restartAfterReply(c, requestRestart, async (mustRestart) => {
+        let upload: ArchiveUpload | undefined;
+        try {
+          const multipart = c.req
+            .header("content-type")
+            ?.toLowerCase()
+            .startsWith("multipart/form-data");
+          if (
+            !multipart &&
+            !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
+          )
+            invalidRequest("artifact");
+          const headerKey = multipart
+            ? undefined
+            : asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+          const headerEnvironment = c.req.header("x-waitron-restore-environment");
+          if (
+            !multipart &&
+            headerEnvironment !== "production" &&
+            headerEnvironment !== "preproduction"
+          )
+            invalidRequest("environment");
+          if (!multipart && isUnset(deps.recoveryOperationPath))
             invalidRequest("recoveryOperation");
-          try {
-            suppliedOperation = JSON.parse(rawOperation);
-          } catch {
-            invalidRequest("recoveryOperation");
-          }
-        }
-        const credentials = recoveryCredentials(
-          deps.recoveryOperationPath,
-          suppliedOperation,
-          form?.get("nodeRecoverySecret") ?? undefined,
-          (() => {
-            const raw = form?.get("recoveryContext");
-            if (raw === undefined || raw === null) return undefined;
-            if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
-              invalidRequest("recoveryContext");
-            try {
-              return JSON.parse(raw) as unknown;
-            } catch {
-              return invalidRequest("recoveryContext");
-            }
-          })(),
-        );
-        c.header("Cache-Control", "no-store");
-        const hash = createHash("sha256")
-          .update(rawEnvironment)
-          .update(oldBoxGone ? "\0confirmed\0" : "\0")
-          .update(recoveryKey)
-          .update("\0");
-        for await (const bytes of createReadStream(upload.artifactPath))
-          hash.update(bytes as Buffer);
-        const requestHash = hash.update("\0").update(JSON.stringify(credentials)).digest("hex");
-        const execute = async (): Promise<Response> => {
-          await stageRestore(
-            {
-              kind: "archive-file",
-              artifactPath: upload!.artifactPath,
-              signal: c.req.raw.signal,
-              recoveryKey,
-              environment: rawEnvironment,
-              ...credentials,
-            },
-            { oldBoxGone },
-          );
-          // The restore is already recorded, so it must still answer and restart; the next start
-          // that reaches the server's boot clears the staging folder.
-          await deps.clearStagedRecovery?.().catch(() => {
-            log("warn", "setup.staged_recovery_clear_failed", {});
+          upload = await deps.receiveArchive!(c.req.raw, {
+            fields: [
+              "recoveryKey",
+              "environment",
+              "oldBoxGone",
+              "recoveryOperation",
+              "nodeRecoverySecret",
+              "recoveryContext",
+            ],
           });
-          const response = c.json({ restoreStaged: true, restarting: true }, 202);
-          setTimeout(() => requestRestart(), 0);
-          return response;
-        };
-        // Awaited, so a refused staging reaches the catch below and releases the latch.
-        if (deps.operations === undefined) return await execute();
-        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
-          if (operation.phase === "complete") {
-            return c.json({ restoreStaged: true, restarting: true }, 202);
+          const form = multipart ? upload.fields : undefined;
+          if (form) {
+            const answer = form.get("oldBoxGone");
+            if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
           }
-          const response = await execute();
-          await operation.complete({ restoreStaged: true, restarting: true });
-          return response;
-        });
-      } catch (error) {
-        provisioning = false;
-        throw error;
-      } finally {
-        await upload?.dispose();
-      }
-    });
+          const recoveryKey =
+            form === undefined ? headerKey! : asString(form.get("recoveryKey"), "recoveryKey");
+          const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
+          if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
+            invalidRequest("environment");
+          const oldBoxGone =
+            (form === undefined
+              ? c.req.header("x-waitron-old-box-gone")
+              : form.get("oldBoxGone")) === "1";
+          let suppliedOperation: unknown;
+          const rawOperation = form?.get("recoveryOperation");
+          if (rawOperation !== undefined && rawOperation !== null) {
+            if (typeof rawOperation !== "string" || Buffer.byteLength(rawOperation) > 131072)
+              invalidRequest("recoveryOperation");
+            try {
+              suppliedOperation = JSON.parse(rawOperation);
+            } catch {
+              invalidRequest("recoveryOperation");
+            }
+          }
+          const credentials = recoveryCredentials(
+            deps.recoveryOperationPath,
+            suppliedOperation,
+            form?.get("nodeRecoverySecret") ?? undefined,
+            (() => {
+              const raw = form?.get("recoveryContext");
+              if (raw === undefined || raw === null) return undefined;
+              if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+                invalidRequest("recoveryContext");
+              try {
+                return JSON.parse(raw) as unknown;
+              } catch {
+                return invalidRequest("recoveryContext");
+              }
+            })(),
+          );
+          c.header("Cache-Control", "no-store");
+          const hash = createHash("sha256")
+            .update(rawEnvironment)
+            .update(oldBoxGone ? "\0confirmed\0" : "\0")
+            .update(recoveryKey)
+            .update("\0");
+          for await (const bytes of createReadStream(upload.artifactPath))
+            hash.update(bytes as Buffer);
+          const requestHash = hash.update("\0").update(JSON.stringify(credentials)).digest("hex");
+          const execute = async (): Promise<Response> => {
+            await stageRestore(
+              {
+                kind: "archive-file",
+                artifactPath: upload!.artifactPath,
+                signal: c.req.raw.signal,
+                recoveryKey,
+                environment: rawEnvironment,
+                ...credentials,
+              },
+              { oldBoxGone },
+            );
+            mustRestart();
+            // The restore is already recorded, so it must still answer and restart; the next start
+            // that reaches the server's boot clears the staging folder.
+            await deps.clearStagedRecovery?.().catch(() => {
+              log("warn", "setup.staged_recovery_clear_failed", {});
+            });
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          };
+          // Awaited, so a refused staging reaches the catch below and releases the latch.
+          if (deps.operations === undefined) return await execute();
+          return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
+            if (operation.phase === "complete") {
+              return c.json({ restoreStaged: true, restarting: true }, 202);
+            }
+            const response = await execute();
+            await operation.complete({ restoreStaged: true, restarting: true });
+            return response;
+          });
+        } catch (error) {
+          provisioning = false;
+          throw error;
+        } finally {
+          await upload?.dispose();
+        }
+      }),
+    );
   });
 
   app.post("/setup-api/restore-bucket", async (c) => {
@@ -1768,75 +1796,76 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    return runBucketRestore(c, log, async () => {
-      try {
-        const body = await readJsonBody<{
-          kit?: unknown;
-          environment?: unknown;
-          oldBoxGone?: unknown;
-          venueConfirmed?: unknown;
-          recoveryOperation?: unknown;
-          nodeRecoverySecret?: unknown;
-          recoveryContext?: unknown;
-        }>(c);
-        const kit = asString(body.kit, "kit");
-        if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
-        const environment = body.environment;
-        if (environment !== "production" && environment !== "preproduction") {
-          invalidRequest("environment");
-        }
-        if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
-          invalidRequest("oldBoxGone");
-        }
-        if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
-          invalidRequest("venueConfirmed");
-        }
-        const credentials = recoveryCredentials(
-          deps.recoveryOperationPath,
-          body.recoveryOperation,
-          body.nodeRecoverySecret,
-          body.recoveryContext,
-        );
-        c.header("Cache-Control", "no-store");
-        const input: BucketRestoreInput = {
-          ...credentials,
-          kit,
-          environment,
-          oldBoxGone: body.oldBoxGone === true,
-          venueConfirmed: typeof body.venueConfirmed === "string" ? body.venueConfirmed : null,
-        };
-        const requestHash = createHash("sha256")
-          .update(
-            JSON.stringify([
-              "bucket",
-              environment,
-              input.oldBoxGone,
-              input.venueConfirmed,
-              kit,
-              credentials,
-            ]),
-          )
-          .digest("hex");
-        const execute = async (): Promise<Response> => {
-          await stage(input, c.req.raw.signal);
-          const response = c.json({ restoreStaged: true, restarting: true }, 202);
-          setTimeout(() => requestRestart(), 0);
-          return response;
-        };
-        if (deps.operations === undefined) return await execute();
-        return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
-          if (operation.phase === "complete") {
-            return c.json({ restoreStaged: true, restarting: true }, 202);
+    return runBucketRestore(c, log, () =>
+      restartAfterReply(c, requestRestart, async (mustRestart) => {
+        try {
+          const body = await readJsonBody<{
+            kit?: unknown;
+            environment?: unknown;
+            oldBoxGone?: unknown;
+            venueConfirmed?: unknown;
+            recoveryOperation?: unknown;
+            nodeRecoverySecret?: unknown;
+            recoveryContext?: unknown;
+          }>(c);
+          const kit = asString(body.kit, "kit");
+          if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
+          const environment = body.environment;
+          if (environment !== "production" && environment !== "preproduction") {
+            invalidRequest("environment");
           }
-          const response = await execute();
-          await operation.complete({ restoreStaged: true, restarting: true });
-          return response;
-        });
-      } catch (error) {
-        provisioning = false;
-        throw error;
-      }
-    });
+          if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
+            invalidRequest("oldBoxGone");
+          }
+          if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
+            invalidRequest("venueConfirmed");
+          }
+          const credentials = recoveryCredentials(
+            deps.recoveryOperationPath,
+            body.recoveryOperation,
+            body.nodeRecoverySecret,
+            body.recoveryContext,
+          );
+          c.header("Cache-Control", "no-store");
+          const input: BucketRestoreInput = {
+            ...credentials,
+            kit,
+            environment,
+            oldBoxGone: body.oldBoxGone === true,
+            venueConfirmed: typeof body.venueConfirmed === "string" ? body.venueConfirmed : null,
+          };
+          const requestHash = createHash("sha256")
+            .update(
+              JSON.stringify([
+                "bucket",
+                environment,
+                input.oldBoxGone,
+                input.venueConfirmed,
+                kit,
+                credentials,
+              ]),
+            )
+            .digest("hex");
+          const execute = async (): Promise<Response> => {
+            await stage(input, c.req.raw.signal);
+            mustRestart();
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          };
+          if (deps.operations === undefined) return await execute();
+          return await runOperation(c.req.raw, "restore", requestHash, async (operation) => {
+            if (operation.phase === "complete") {
+              return c.json({ restoreStaged: true, restarting: true }, 202);
+            }
+            const response = await execute();
+            await operation.complete({ restoreStaged: true, restarting: true });
+            return response;
+          });
+        } catch (error) {
+          provisioning = false;
+          throw error;
+        }
+      }),
+    );
   });
 
   app.post("/setup-api/configuration", async (c) => {

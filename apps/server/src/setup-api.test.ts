@@ -2300,16 +2300,21 @@ async function postRestore(
   app: Hono,
   body: Uint8Array,
   environment = "production",
+  env?: Record<string, unknown>,
 ): Promise<Response> {
-  return app.request("/setup-api/restore", {
-    method: "POST",
-    headers: {
-      "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "recovery-secret",
-      "x-waitron-restore-environment": environment,
+  return app.request(
+    "/setup-api/restore",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-recovery-key": "recovery-secret",
+        "x-waitron-restore-environment": environment,
+      },
+      body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
     },
-    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
-  });
+    env,
+  );
 }
 
 async function postConfiguration(app: Hono, body: Uint8Array): Promise<Response> {
@@ -2691,12 +2696,16 @@ describe("POST /setup-api/restore", () => {
   });
 });
 
-async function postBucketRestore(app: Hono, body: unknown): Promise<Response> {
-  return app.request("/setup-api/restore-bucket", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+async function postBucketRestore(
+  app: Hono,
+  body: unknown,
+  env?: Record<string, unknown>,
+): Promise<Response> {
+  return app.request(
+    "/setup-api/restore-bucket",
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+    env,
+  );
 }
 
 describe("POST /setup-api/restore-bucket", () => {
@@ -3094,6 +3103,126 @@ describe("POST /setup-api/restore-bucket", () => {
   });
 });
 
+/** `store`, except that saving an operation as complete fails. */
+function completeFails(store: SetupOperationStore): SetupOperationStore {
+  return {
+    read: () => store.read(),
+    run: (kind, hash, fn, hold) =>
+      store.run(
+        kind,
+        hash,
+        (operation) => fn({ ...operation, complete: () => Promise.reject(new Error("disk gone")) }),
+        hold,
+      ),
+  };
+}
+
+describe("the restore routes restart only once their reply has been written", () => {
+  const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
+  const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+  const routes = [
+    [
+      "archive restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        postRestore(app, Uint8Array.from([1]), "production", env),
+    ],
+    [
+      "bucket restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        postBucketRestore(app, { kit: "k", environment: "production" }, env),
+    ],
+    [
+      "Cloud restore",
+      (app: Hono, env: Record<string, unknown>) =>
+        app.request(
+          "/setup-api/cloud-recovery/restore",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pointId }),
+          },
+          env,
+        ),
+    ],
+  ] as const;
+  const mountRestores = (operations: SetupOperationStore) => {
+    const requestRestart = vi.fn();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        operations,
+        stageRestore: vi.fn(async () => {}),
+        stageBucketRestore: vi.fn(async () => {}),
+        cloudRecovery: {
+          binding: vi.fn(async () => ({ requestId, pointId })),
+          restore: vi.fn(async () => {}),
+        } as unknown as SetupDeps["cloudRecovery"],
+        requestRestart,
+      },
+      noopLog,
+    );
+    return { app, requestRestart };
+  };
+
+  it.each(routes)("%s restarts only once its reply has been written", async (_route, post) => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-written-"));
+    try {
+      const { app, requestRestart } = mountRestores(createSetupOperationStore(dir));
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const response = await post(app, { outgoing });
+      expect(response.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(routes)(
+    "%s still restarts, after the error reply is written, when the restore is staged but its setup record is not",
+    async (_route, post) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-complete-fails-"));
+      try {
+        const { app, requestRestart } = mountRestores(
+          completeFails(createSetupOperationStore(dir)),
+        );
+        const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+        const response = await post(app, { outgoing });
+        expect(response.ok).toBe(false);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
+        outgoing.emit("finish");
+        expect(requestRestart).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("restarts a replayed Cloud restore only once its reply has been written", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-cloud-replay-written-"));
+    try {
+      const [, , [, post]] = routes;
+      expect((await post(mountRestores(createSetupOperationStore(dir)).app, {})).status).toBe(202);
+      await tick();
+      const { app, requestRestart } = mountRestores(createSetupOperationStore(dir));
+      const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+      const replay = await post(app, { outgoing });
+      expect(replay.status).toBe(202);
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+      outgoing.emit("finish");
+      expect(requestRestart).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing provision's latch", () => {
   it("persists adoption completion without retaining the break-glass secret", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-operation-"));
@@ -3123,7 +3252,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
       const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
       const response = await postAdopt(app, { outgoing });
       expect(response.status).toBe(200);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await tick();
       expect(requestRestart).not.toHaveBeenCalled();
       outgoing.emit("finish");
       expect(requestRestart).toHaveBeenCalledTimes(1);
@@ -3135,26 +3264,16 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
   it("still restarts, after the error reply is written, when the join is saved but its setup record is not", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-complete-fails-"));
     try {
-      const store = createSetupOperationStore(dir);
-      const operations: SetupOperationStore = {
-        read: () => store.read(),
-        run: (kind, hash, fn, hold) =>
-          store.run(
-            kind,
-            hash,
-            (operation) =>
-              fn({ ...operation, complete: () => Promise.reject(new Error("disk gone")) }),
-            hold,
-          ),
-      };
       const app = new Hono();
-      const { deps, adopt, requestRestart } = makeAdoptDeps({ operations });
+      const { deps, adopt, requestRestart } = makeAdoptDeps({
+        operations: completeFails(createSetupOperationStore(dir)),
+      });
       mountSetup(app, deps, noopLog);
       const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
       const response = await postAdopt(app, { outgoing });
       expect(adopt).toHaveBeenCalledTimes(1);
       expect(response.ok).toBe(false);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await tick();
       expect(requestRestart).not.toHaveBeenCalled();
       outgoing.emit("finish");
       expect(requestRestart).toHaveBeenCalledTimes(1);
