@@ -109,11 +109,9 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   return { el, entry: entry!, requests, artifact, stages };
 }
 async function fill(entry: LitElement) {
-  const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+  const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
   await key.updateComplete;
-  for (const [name, value] of [
-    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
-  ]) {
+  for (const [name, value] of [["master-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()]]) {
     const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;

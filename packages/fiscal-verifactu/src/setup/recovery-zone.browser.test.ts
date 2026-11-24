@@ -79,11 +79,9 @@ for (const [zoneIndex, savedZone] of ["Not/A_Zone", " Europe/Madrid", "Europe/Ma
             }) as RecoveryHourEntry;
             host.append(el);
             await el.updateComplete;
-            const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+            const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
             await key.updateComplete;
-            const keyField = key.shadowRoot!.querySelector<LitElement>(
-              '[name="printed-recovery-key"]',
-            )!;
+            const keyField = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
             await keyField.updateComplete;
             const keyInput = keyField.shadowRoot!.querySelector<HTMLInputElement>("input")!;
             keyInput.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
@@ -182,9 +180,9 @@ for (const savedZone of ["Not/A_Zone", " Europe/Madrid", "Europe/Madrid "])
     }) as RecoveryHourEntry;
     host.append(el);
     await el.updateComplete;
-    const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+    const key = el.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
     await key.updateComplete;
-    const keyField = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
+    const keyField = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
     await keyField.updateComplete;
     const keyInput = keyField.shadowRoot!.querySelector<HTMLInputElement>("input")!;
     keyInput.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();

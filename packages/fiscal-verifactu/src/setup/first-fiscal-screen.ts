@@ -1,4 +1,3 @@
-import "./recovery-key.js";
 import "./recovery-hour.js";
 import "./first-hour.js";
 import { LitElement, css, html, nothing } from "lit";
@@ -565,12 +564,6 @@ export const FISCAL_SETUP: SetupContribution = {
     const element = document.createElement("vf-recovery-hour");
     element.context = { ...context, mode: "promote" };
     element.locale = context.locale;
-    return element;
-  },
-  createRecoveryKey({ locale, selection }) {
-    const element = document.createElement("vf-recovery-key");
-    element.locale = locale;
-    element.selection = selection;
     return element;
   },
   create({ locale, request, api }) {

@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { LitElement, html } from "lit";
 import { expect } from "vitest";
 import { LeaveController, applyTokens } from "@waitron/ui";
+import { encodeMasterKeyCode } from "@waitron/shared";
 
 export type Theme = "light" | "dark";
 
@@ -155,7 +156,7 @@ export const REVIEWED_CREDENTIALS = {
     },
     input: { allocation: { receipt: "public-signed-reservation" } },
   },
-  nodeRecoverySecret: "reviewed-node-key",
+  nodeRecoverySecret: encodeMasterKeyCode(new Uint8Array(16).fill(9)),
 };
 
 type Updating = HTMLElement & { updateComplete: Promise<unknown> };
@@ -199,6 +200,17 @@ export async function reviewBackup(
   await (screen as Updating).updateComplete;
 }
 
+/** Types `text` into the master-key field drawn in `host`'s shadow root, as a person would. */
+export async function typeMasterKey(host: HTMLElement, text: string): Promise<void> {
+  const key = host.shadowRoot!.querySelector<Updating>("wt-master-key-input")!;
+  await key.updateComplete;
+  const field = key.shadowRoot!.querySelector<Updating>('[name="master-key"]')!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+}
+
 /**
  * Enters `record` and `nodeKey` on a `setup-recovery-allocation` and ticks both of its
  * confirmations.
@@ -218,7 +230,7 @@ export async function enterRecoveryDetails(
     input.dispatchEvent(new Event("change"));
   };
   change("record", JSON.stringify(record));
-  change("node-key", nodeKey);
+  await typeMasterKey(entry, nodeKey);
   tick("isolated");
   tick("retained");
   await (entry as Updating).updateComplete;

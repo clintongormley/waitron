@@ -1,10 +1,17 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  typeMasterKey,
+} from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
 import type { RecoveryBackupPreview } from "../api/client.js";
 
 const nodeId = "00000000-0000-4000-8000-000000000001";
+const SEPARATE_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(3));
 const preview = {
   sourceId: "selected-copy-digest",
   createdAt: "2026-10-01T08:00:00.000Z",
@@ -53,7 +60,7 @@ async function filled(theme: "light" | "dark" = "light") {
     theme,
   );
   change(mounted.el, "record", JSON.stringify(operation));
-  change(mounted.el, "node-key", "separate-node-secret");
+  await typeMasterKey(mounted.el, SEPARATE_KEY);
   tick(mounted.el, "isolated");
   tick(mounted.el, "retained");
   await mounted.el.updateComplete;
@@ -81,7 +88,7 @@ it("downloads the reviewed request and selected backup without the separately en
   expect(review.textContent).toContain("A-P000042");
   expect(review.textContent).toContain("selected-copy-digest");
   expect(review.textContent).toContain("2026-10-01T08:00:00.000Z");
-  expect(review.textContent).not.toContain("separate-node-secret");
+  expect(review.textContent).not.toContain(SEPARATE_KEY);
   expect(review.textContent).toContain("This request does not confirm activation.");
 });
 

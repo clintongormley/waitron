@@ -335,32 +335,41 @@ it.each(["en", "es"] as const)(
         await task.destroy();
       }
       await page.evaluate(
-        ({ selection, locale }) => {
-          const el = document.createElement("vf-recovery-key") as HTMLElement & {
-            selection: unknown;
-            locale: string;
+        async (preview) => {
+          const allocation = document.createElement("setup-recovery-allocation") as HTMLElement & {
+            preview: unknown;
+            updateComplete: Promise<unknown>;
           };
-          el.selection = selection;
-          el.locale = locale;
-          el.addEventListener("recovery-key-change", (event) => {
-            (window as unknown as { recovered?: string }).recovered = (
-              event as CustomEvent<{ secret?: string }>
-            ).detail.secret;
-          });
+          allocation.preview = preview;
           document.querySelector("setup-app")!.remove();
-          document.body.append(el);
+          document.body.append(allocation);
+          await allocation.updateComplete;
+          allocation
+            .shadowRoot!.querySelector("wt-master-key-input")!
+            .addEventListener("wt-master-key-change", (event) => {
+              (window as unknown as { recovered?: string }).recovered = (
+                event as CustomEvent<{ masterKey?: string }>
+              ).detail.masterKey;
+            });
         },
         {
-          selection: {
-            taxId: decoded.scope.taxpayerNif,
-            environment: decoded.scope.environment,
-            nodeId: decoded.nodeKey.nodeId,
-            keyName: masterKeyName,
+          sourceId: "exact-saved-backup",
+          createdAt: "2026-10-17T12:30:00.000Z",
+          environment: decoded.scope.environment,
+          nodeId: decoded.nodeKey.nodeId,
+          nodeRecoveryKeyName: masterKeyName,
+          taxpayer: { legalName: "Synthetic", taxId: decoded.scope.taxpayerNif },
+          venueName: "Synthetic",
+          fiscalSelection: {
+            module: "fiscal-verifactu",
+            country: "ES",
+            fiscalTerritory: "common",
+            timeZone: "Europe/Madrid",
           },
-          locale,
         },
       );
-      const picker = page.locator('vf-recovery-key input[name="recovery-pdf"]');
+      const keyField = "setup-recovery-allocation wt-master-key-input";
+      const picker = page.locator(`${keyField} input[type="file"]`);
       const recovered = () =>
         page.evaluate(() => (window as unknown as { recovered?: string }).recovered);
       await picker.setInputFiles(join(receipt, "wizard-original.pdf"));
@@ -401,18 +410,19 @@ it.each(["en", "es"] as const)(
       await printPage.close();
       await picker.setInputFiles(printedPath);
       await expect
-        .poll(async () => {
-          const message = page.locator("vf-recovery-key wt-file-input [data-error]");
-          return (await message.count()) === 0 ? null : await message.textContent();
-        })
+        .poll(() =>
+          page
+            .locator(`${keyField} wt-input[name="master-key"]`)
+            .evaluate((field) => (field as HTMLElement & { error: string }).error),
+        )
         .toBe(
           locale === "en"
-            ? "Choose a valid recovery PDF, or enter the key below."
-            : "Elige un PDF de recuperación válido, o introduce la clave abajo.",
+            ? "This PDF is not a recovery pack."
+            : "Este PDF no es un paquete de recuperación.",
         );
       expect(await recovered()).toBeUndefined();
       await fill(
-        'vf-recovery-key [name="printed-recovery-key"]',
+        `${keyField} wt-input[name="master-key"]`,
         masterKey.replaceAll(" ", "").toLowerCase(),
       );
       await expect.poll(recovered).toBe(masterKey);

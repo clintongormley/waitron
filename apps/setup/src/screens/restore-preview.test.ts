@@ -227,6 +227,26 @@ it("refuses a filing backup that holds no master key beside the review action, o
     "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",
   );
 });
+it("names the Selected backup's master key in English and Spanish", async () => {
+  const { el } = await mount(
+    async () =>
+      new Response(JSON.stringify({ ...saved, nodeRecoveryKeyName: "2026-10-15 · K7QF" })),
+  );
+  await fill(el);
+  review(el);
+  await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Saved venue"));
+  const row = () => {
+    const copy = child(el)!.shadowRoot!.querySelector("[data-test=selected-copy]")!;
+    const term = [...copy.querySelectorAll("dt")].find(
+      (dt) => dt.nextElementSibling?.textContent === "2026-10-15 · K7QF",
+    );
+    return term?.textContent;
+  };
+  expect(row()).toBe("Master key");
+  setLocale("es-ES");
+  await child(el)!.updateComplete;
+  expect(row()).toBe("Clave maestra");
+});
 it("shows a backup that files nothing and holds no master key without a key row", async () => {
   const { el } = await mount(
     async () => new Response(JSON.stringify({ ...saved, nodeRecoveryKeyName: null })),

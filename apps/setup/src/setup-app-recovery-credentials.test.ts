@@ -377,7 +377,7 @@ it.each(["archive", "bucket", "cloud"])(
       expect(
         (el.shadowRoot!.querySelector(selector) as HTMLElement & { invalidField?: string })
           ?.invalidField,
-      ).toBe("nodeRecoverySecret"),
+      ).toBe("wrongMasterKey"),
     );
   },
 );

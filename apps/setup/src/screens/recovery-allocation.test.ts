@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   enterRecoveryDetails,
   mountWidget,
+  typeMasterKey,
 } from "../widgets/test-helpers.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
@@ -55,6 +56,17 @@ function tick(entry: LitElement, field: string) {
   input.dispatchEvent(new Event("change"));
 }
 const fill = (entry: Entry, record: object = operation) => enterRecoveryDetails(entry, record);
+/** The master-key field's own text field, whose `error` is the line drawn under it. */
+async function keyField(entry: LitElement) {
+  await entry.updateComplete;
+  const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
+  await key.updateComplete;
+  const field = key.shadowRoot!.querySelector<LitElement & { error: string; label: string }>(
+    '[name="master-key"]',
+  )!;
+  await field.updateComplete;
+  return field;
+}
 
 it("pairs the public recovery record with the selected copy's separate node key", async () => {
   const { entry } = await selected();
@@ -66,9 +78,7 @@ it("pairs the public recovery record with the selected copy's separate node key"
   });
   expect(entry.shadowRoot!.textContent).not.toContain(nodeKey);
   expect(entry.outerHTML).not.toContain(nodeKey);
-  const native = entry
-    .shadowRoot!.querySelector("[data-test=node-key]")!
-    .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  const native = (await keyField(entry)).shadowRoot!.querySelector<HTMLInputElement>("input")!;
   expect(native.type).toBe("password");
   expect(native.value).toBe(nodeKey);
 });
@@ -114,10 +124,8 @@ it("requires the node key and both operator confirmations after entering a recor
   change(entry, "record", JSON.stringify(operation));
   expect(entry.readCredentials()).toBeNull();
   await entry.updateComplete;
-  expect(
-    entry.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=node-key]")!.error,
-  ).not.toBe("");
-  change(entry, "node-key", nodeKey);
+  expect((await keyField(entry)).error).not.toBe("");
+  await typeMasterKey(entry, nodeKey);
   tick(entry, "isolated");
   expect(entry.readCredentials()).toBeNull();
   tick(entry, "retained");
@@ -196,12 +204,11 @@ it("shows a request's node-key refusal beside that field and clears it when edit
   });
   await el.updateComplete;
   await entry.updateComplete;
-  const field = entry.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-    "[data-test=node-key]",
-  )!;
+  const field = await keyField(entry);
   await vi.waitFor(() => expect(field.error).toBe("Check the selected backup's node key."));
-  change(entry, "node-key", "another-node-key");
+  await typeMasterKey(entry, "q");
   await entry.updateComplete;
+  await field.updateComplete;
   expect(field.error).toBe("");
 });
 
@@ -261,4 +268,68 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
     recoveryOperation: operation,
     nodeRecoverySecret: nodeKey,
   });
+});
+
+it("allocation draws the master-key field labelled Master key with no hint, and sends its printed key", async () => {
+  const { entry } = await selected();
+  const key = entry.shadowRoot!.querySelector<LitElement & { keyName?: string }>(
+    "wt-master-key-input",
+  );
+  expect(key, "allocation draws the master-key field").not.toBeNull();
+  expect(key!.keyName).toBe(preview.nodeRecoveryKeyName);
+  const field = await keyField(entry);
+  expect(field.label).toBe("Master key");
+  expect(field.shadowRoot!.querySelector("input")!.placeholder).toBe("");
+  expect(key!.shadowRoot!.textContent).toContain("Choose the recovery pack PDF");
+  expect(entry.shadowRoot!.querySelector("[data-test=node-key]")).toBeNull();
+  change(entry, "record", JSON.stringify(operation));
+  tick(entry, "isolated");
+  tick(entry, "retained");
+  await typeMasterKey(entry, nodeKey.replaceAll(" ", "-").toLowerCase());
+  expect(entry.readCredentials()).toEqual({
+    recoveryOperation: operation,
+    nodeRecoverySecret: nodeKey,
+  });
+});
+it("a refused key names the backup's key", async () => {
+  const { el, entry } = await selected();
+  await fill(entry);
+  Object.assign(el, {
+    invalidField: "wrongMasterKey",
+    errorMessage: "Enter the selected backup’s master key.",
+  });
+  await el.updateComplete;
+  const field = await keyField(entry);
+  await vi.waitFor(() =>
+    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
+  );
+  await typeMasterKey(entry, "q");
+  await field.updateComplete;
+  expect(field.error).toBe("");
+});
+it("a key refused twice names the backup's key both times", async () => {
+  const { el, entry } = await selected();
+  await fill(entry);
+  const refuse = async () => {
+    Object.assign(el, {
+      invalidField: "wrongMasterKey",
+      errorMessage: "Enter the selected backup’s master key.",
+      refusal: {},
+    });
+    await el.updateComplete;
+  };
+  await refuse();
+  const field = await keyField(entry);
+  await vi.waitFor(() =>
+    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
+  );
+  await typeMasterKey(entry, nodeKey);
+  await field.updateComplete;
+  expect(field.error).toBe("");
+  Object.assign(el, { invalidField: undefined });
+  await el.updateComplete;
+  await refuse();
+  await vi.waitFor(() =>
+    expect(field.error).toBe("Wrong master key. Use the one dated Amber Hill."),
+  );
 });

@@ -1,13 +1,20 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import type {
-  ModuleRecoveryKeyEntry,
   ModuleRecoveryEntry,
   ModuleRecoveryPreparationRequest,
 } from "@waitron/module/src/setup-contract.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-input.js";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  type DraftScope,
+  type MasterKeyChangeDetail,
+  type MasterKeyInputCopy,
+} from "@waitron/ui";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -16,7 +23,11 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
-export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
+/** `wrongMasterKey`: the box refused the key sent as not the selected backup's. */
+export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret" | "wrongMasterKey";
+
+const readPack = () =>
+  import("@waitron/recovery-pack/src/read-pack-pdf.js").then((m) => m.readRecoveryPackPdf);
 
 interface Draft {
   record: string;
@@ -90,7 +101,6 @@ export class SetupRecoveryAllocation extends LitElement {
   @state() private draft = empty();
   @state() private attempted = false;
   #scope?: DraftScope<Draft>;
-  #keyEntry?: ModuleRecoveryKeyEntry;
   #recoveryEntry?: ModuleRecoveryEntry;
   #review?: { text: string; url: string };
   constructor() {
@@ -128,31 +138,11 @@ export class SetupRecoveryAllocation extends LitElement {
               boxAddress: this.boxAddress,
             })
           : undefined;
-      this.#keyEntry =
-        !this.#recoveryEntry && preview?.fiscalSelection && preview.nodeRecoveryKeyName
-          ? SETUP_MODULES.find(
-              (module) => module.module === preview.fiscalSelection!.module,
-            )?.createRecoveryKey?.({
-              locale: currentLocale() === "es-ES" ? "es" : "en",
-              selection: {
-                taxId: preview.taxpayer.taxId,
-                environment: preview.environment,
-                nodeId: preview.nodeId,
-                keyName: preview.nodeRecoveryKeyName,
-              },
-            })
-          : undefined;
     }
     if (this.#recoveryEntry) {
       this.#recoveryEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
       this.#recoveryEntry.errorMessage = this.errorMessage;
       this.#recoveryEntry.refusedField = this.refusedField;
-    }
-    if (this.#keyEntry) {
-      this.#keyEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
-      this.#keyEntry.errorMessage =
-        this.#refusal("nodeRecoverySecret") ||
-        (this.attempted && this.#keyInvalid ? t("restore.allocation_key_missing") : "");
     }
     this.#reviewRequest();
     this.#registerScope();
@@ -185,7 +175,7 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   #clear(): void {
     this.#releaseReview();
-    this.#keyEntry?.clear();
+    this.shadowRoot?.querySelector("wt-master-key-input")?.clear();
     this.#recoveryEntry?.clear();
     this.draft = empty();
     this.attempted = false;
@@ -199,7 +189,13 @@ export class SetupRecoveryAllocation extends LitElement {
       [key]: value,
     };
     const field =
-      key === "record" ? "recoveryOperation" : key === "nodeKey" ? "nodeRecoverySecret" : undefined;
+      key === "record"
+        ? "recoveryOperation"
+        : key === "nodeKey" && this.refusedField === "wrongMasterKey"
+          ? "wrongMasterKey"
+          : key === "nodeKey"
+            ? "nodeRecoverySecret"
+            : undefined;
     if (field !== undefined && field === this.refusedField) {
       this.refusalDismissed = true;
       this.dispatchEvent(
@@ -300,15 +296,20 @@ export class SetupRecoveryAllocation extends LitElement {
     );
   }
   get #keyInvalid(): boolean {
-    return this.draft.nodeKey === "" || new TextEncoder().encode(this.draft.nodeKey).length > 4096;
+    return this.draft.nodeKey === "";
+  }
+  #refused(field: RecoveryEntryField): boolean {
+    return !this.refusalDismissed && this.refusedField === field;
   }
   #refusal(field: RecoveryEntryField): string {
-    return !this.refusalDismissed && this.refusedField === field ? (this.errorMessage ?? "") : "";
+    return this.#refused(field) ? (this.errorMessage ?? "") : "";
   }
   override render() {
     if (this.#recoveryEntry) return this.#recoveryEntry;
     const recordInvalid = this.attempted && !this.#operation();
     const keyInvalid = this.attempted && this.#keyInvalid;
+    const copy: MasterKeyInputCopy =
+      MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
     const isolatedInvalid = this.attempted && !this.draft.isolated;
     const retainedInvalid = this.attempted && !this.draft.retained;
     return html` <h3>${t("restore.allocation_heading")}</h3>
@@ -328,33 +329,20 @@ export class SetupRecoveryAllocation extends LitElement {
           this.#edit("record", event.detail.value);
         }}
       ></wt-textarea>
-      <div
-        @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
+      <wt-master-key-input
+        class="field"
+        ?required=${this.#hasDraft}
+        .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
+        .copy=${copy}
+        .readPack=${readPack}
+        .wrongKey=${this.#refused("wrongMasterKey")}
+        .attempted=${this.attempted}
+        .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret") || this.#refusal("wrongMasterKey")}
+        @wt-master-key-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
           event.stopPropagation();
-          this.#edit("nodeKey", event.detail.secret ?? "");
+          this.#edit("nodeKey", event.detail.masterKey ?? "");
         }}
-      >
-        ${
-          this.#keyEntry ??
-          html`
-            <wt-input
-              class="field"
-              name="node-recovery-key"
-              type="password"
-              autocomplete="off"
-              label=${t("restore.allocation_node_key")}
-              data-test="node-key"
-              ?required=${this.#hasDraft}
-              .value=${this.draft.nodeKey}
-              .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.#edit("nodeKey", event.detail.value);
-              }}
-            ></wt-input>
-          `
-        }
-      </div>
+      ></wt-master-key-input>
       ${
         this.#review
           ? html`<section
