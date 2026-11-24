@@ -573,19 +573,6 @@ for one.
 
 ## Switch bills {#bill-switcher}
 
-If a payment was partly returned before its invoice was recorded, do not charge again.
-In **Check card payments** under Reporting, check the charged, refunded and still-held amounts. Choose **Retain on this
-bill** to apply the remaining money to the bill. Check the bill amount, any excess kept as a tip,
-and what staff still need to collect before confirming. For example, from €100 charged and €40
-returned, you can keep €60 on the bill and collect only its remainder. Excess money can be kept
-only when tips are enabled.
-
-To return all the money instead, refund the remainder in SumUp, then choose **Confirm full refund**
-in Waitron. This is also the route for a bill payment already marked failed. If SumUp cannot confirm
-the amounts, check its refunds and try again. Once released, reopen the order to continue.
-Review the other payments named by the shared refund
-alert before marking it handled; later payments may not be listed there.
-
 Guests often pay separately: two couples at one table, or one guest who pays for their own drinks.
 Each of them gets a bill of their own at the table. The bill switcher, at the top of the table
 screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 2 · 3 bills · Clint
@@ -725,6 +712,19 @@ For a payment listed under **Bill payments and refunds awaiting a card provider*
 choose **Check with provider** there. Once it is recorded, reopen the bill to see what remains
 to pay. Waitron also retries these payments automatically. If recording keeps failing, keep
 the order and payment details and do not charge again; this is a fault in Waitron or this box.
+
+If a payment was partly returned before its invoice was recorded, do not charge again.
+In **Check card payments** under Reporting, check the charged, refunded and still-held amounts. Choose **Retain on this
+bill** to apply the remaining money to the bill. Check the bill amount, any excess kept as a tip,
+and what staff still need to collect before confirming. For example, from €100 charged and €40
+returned, you can keep €60 on the bill and collect only its remainder. Excess money can be kept
+only when tips are enabled.
+
+To return all the money instead, refund the remainder in SumUp, then choose **Confirm full refund**
+in Waitron. This is also the route for a bill payment already marked failed. If SumUp cannot confirm
+the amounts, check its refunds and try again. Once released, reopen the order to continue.
+Review the other payments named by the shared refund
+alert before marking it handled; later payments may not be listed there.
 
 ## Move dishes to another bill {#move-dishes}
 
