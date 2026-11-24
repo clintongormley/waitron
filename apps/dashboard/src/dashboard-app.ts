@@ -3675,7 +3675,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-box-status-screen
           .api=${this.api}
           .canOpen=${this.#canOpenScreen}
-          .canCheckClock=${this.#sessionPermissions.includes("system.box_admin")}
+          .canCheckClock=${this.#sessionPermissions.includes("node.manage")}
           .canRestart=${this.#sessionPermissions.includes("system.manage")}
           .canManageUpgrades=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}

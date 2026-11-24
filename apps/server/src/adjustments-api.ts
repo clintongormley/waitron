@@ -101,12 +101,12 @@ function lineIdsOf(value: unknown, lineId: string | null): string[] | undefined 
 
 function requireApproverPermission(
   value: string | undefined,
-): "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin" {
+): "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage" {
   if (
     value !== "adjustment.approve" &&
     value !== "sale.refund" &&
     value !== "sale.rectify" &&
-    value !== "system.box_admin"
+    value !== "node.manage"
   )
     throw invalid("permission");
   return value;

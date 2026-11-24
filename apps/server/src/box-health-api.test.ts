@@ -453,7 +453,7 @@ describe("errors other than a full disk", () => {
 });
 
 it.each(["clock-challenge", "clock-set", "clock-confirm"])(
-  "refuses a default Manager at %s with the box administration permission",
+  "refuses a default Manager at %s without Manage boxes",
   async (route) => {
     const { deps } = mount(suite.db);
     const app = new Hono();
@@ -480,7 +480,7 @@ it.each(["clock-challenge", "clock-set", "clock-confirm"])(
     });
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+      error: { code: "authorization.not_permitted", params: { permission: "node.manage" } },
     });
   },
 );

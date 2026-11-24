@@ -1,10 +1,10 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { personRoles, roles, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
@@ -372,7 +372,7 @@ async function confirmAsShown(box: Box, cookie: string | undefined) {
 const realHeads = () =>
   venue.db.withWriteLock(() => venue.backend.recordHeads!(venue.db as unknown as Transaction));
 
-it("lets only an administrator with a management session set the clock", async () => {
+it("requires a management session and Manage boxes to set the clock", async () => {
   const box = await stoppedBox(10 * MINUTE);
   const before = written(box);
   const body = { challengeId: randomUUID(), deviceAt: box.behind + 10 * MINUTE };
@@ -381,7 +381,7 @@ it("lets only an administrator with a management session set the clock", async (
   expect(manager.status).toBe(403);
   expect(manager.json).toEqual({
     code: "authorization.not_permitted",
-    params: { permission: "system.box_admin" },
+    params: { permission: "node.manage" },
   });
   for (const cookie of [undefined, venue.cookie]) {
     const sent = await setWith(box, cookie, body);
@@ -390,6 +390,33 @@ it("lets only an administrator with a management session set the clock", async (
   }
   expect(written(box)).toEqual(before);
   expect(box.host.statusAsks).toBe(0);
+});
+
+it("sets a waiting box's clock for a delegated Manage boxes holder", async () => {
+  const holder = await inTx(venue, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: "Clock operator" });
+    const [role] = await tx
+      .insert(roles)
+      .values({
+        name: "Clock operator",
+        nameFolded: "clock operator",
+        permissions: ["node.manage"],
+      })
+      .returning({ id: roles.id });
+    await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
+    await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
+    const session = await startManagementSession(tx, { personId: person!.id, method: "password" });
+    return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+  });
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const targetMs = boxTime(box) + DAY;
+
+  const answer = await useDevice(box, holder.cookie, DAY);
+
+  expect(answer.status).toBe(200);
+  expect(box.host.sets).toEqual([{ targetMs, requester: { source: "admin", person: holder.id } }]);
+  expect(start.status).toBe("by_person");
 });
 
 it("refuses an administrator on the box itself, asking the host nothing", async () => {

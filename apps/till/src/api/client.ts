@@ -5138,7 +5138,7 @@ export class TillApi {
   }
 
   listApprovers(
-    permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "system.box_admin",
+    permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage",
     options: ReadOptions = {},
   ): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(

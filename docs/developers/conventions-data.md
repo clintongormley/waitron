@@ -4872,7 +4872,7 @@ start is `by_internet`. `keep: true` is refused `stopped` while the clock reads 
 and `not_stopped` once the start is `by_internet`.
 
 **"The date and time are right" on Box status while the start waits**
-(`apps/server/src/box-health-api.ts`). An administrator (`system.box_admin`) asks
+(`apps/server/src/box-health-api.ts`). A person with `node.manage` asks
 `POST /api/box/clock-challenge`, then sends `POST /api/box/clock-confirm` with
 `{ challengeId, asShown: true }`; both are refused `same_machine` from the box's own screen. It
 confirms the box's time as it stands: no host call, no row, state `by_person`, one
@@ -5006,13 +5006,13 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
 `boot.ts`; setup mode builds its own, in the last item):
 
-- an administrator, from their own device, while the clock reads before 28-10-2024 or the start
-  waits for its time: `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `system.box_admin`), after
+- a person with `node.manage`, from their own device, while the clock reads before 28-10-2024 or the start
+  waits for its time, sends `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`), after
   `POST /api/box/clock-challenge`;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
   the start has not been confirmed by the internet (during a stop, or while the start waits) or
-  during the start-up window (below), or an administrator signed in on the till or named with their
+  during the start-up window (below), or a person with `node.manage` signed in on the till or named with their
   PIN, while the start waits or the clock reads before 28-10-2024;
 - the person on the first-setup, restore or handover page, from their own device, when the clocks
   differ and they choose **This device** (**Your device is correct** on the emergency switch) (A1482,
@@ -6862,8 +6862,8 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the chain case covers sales
   only, and the gate covers the money routes `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
-  until the internet confirms that start or during start-up; a Box administration holder's while the
-  start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
+  until the internet confirms that start or during start-up; a **Manage boxes** holder’s while the
+  start waits or the clock reads before 28-10-2024), a **Manage boxes** holder’s own device, the
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
   its recovery key or kit), the done screen or waiting page while that restore's start waits (under
   the backup's master key) or the handover page (signed in as a `node.manage` holder), when that

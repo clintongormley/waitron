@@ -9,11 +9,11 @@ Antes de guardar o quitar el servidor de correo, confirma tu identidad en la ven
 
 ## Configura un servidor de correo {#set-up}
 
-Fuera de Demostración, abre **Sistema → Correo**. Con el permiso de administración del servidor
+Fuera de Demostración, abre **Sistema → Correo**. Con **Gestionar servidores**
 (Admin de forma predeterminada), elige **Configurar servidor de correo** o **Cambiar servidor de
 correo**, introduce los ajustes de tu proveedor y envía una prueba antes de guardar. Introduce
-de nuevo los datos de acceso al cambiar un servidor con autenticación; Waitron nunca muestra la
-contraseña guardada. Los encargados pueden consultar los ajustes, pero no guardarlos ni quitarlos.
+de nuevo los datos de acceso al cambiar un servidor con autenticación. Waitron nunca muestra la
+contraseña guardada. Para consultar los ajustes necesitas **Gestionar el sistema**.
 
 Los mensajes enviados por tu servidor guardado y la prueba de esta página muestran el nombre del
 local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,
@@ -119,7 +119,7 @@ esos ajustes para esa dirección.
 
 ## Quita un servidor de correo {#remove}
 
-Con el permiso de administración del servidor (Admin de forma predeterminada), elige **Quitar servidor de correo** y lee la confirmación. **Parar** conserva
+Con **Gestionar servidores** (Admin de forma predeterminada), elige **Quitar servidor de correo** y lee la confirmación. **Parar** conserva
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 

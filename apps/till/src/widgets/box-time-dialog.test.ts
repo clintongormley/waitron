@@ -500,10 +500,10 @@ describe("till-box-time-dialog", () => {
 
     const override = { personId: ADMIN.personId, pin: "1234" };
 
-    it("lists Box administration holders for the clock and shows both times before sending anything", async () => {
+    it("lists Manage boxes holders for the clock and shows both times before sending anything", async () => {
       const api = fakeApi(BOX_BEHIND, okConfirm(5_000));
       const el = await refusedNotStartUp(api);
-      expect(api.listApprovers).toHaveBeenCalledWith("system.box_admin", {
+      expect(api.listApprovers).toHaveBeenCalledWith("node.manage", {
         signal: expect.any(AbortSignal),
       });
       const dialog = pinDialog(el) as unknown as { authorizers: unknown };
@@ -522,7 +522,7 @@ describe("till-box-time-dialog", () => {
       expect(words(el)).toBe(en["box_time.set_to"].replace("{after}", clockDateTime(TILL_AT)));
     });
 
-    it("gives up reading the Box administration holders at the time limit and says the time could not be checked", async () => {
+    it("gives up reading the Manage boxes holders at the time limit and says the time could not be checked", async () => {
       const api = fakeApi(BOX_BEHIND, okConfirm());
       api.listApprovers.mockImplementationOnce(
         (_permission, options) =>

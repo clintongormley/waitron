@@ -1502,8 +1502,14 @@ describe("what the till reads", () => {
       { personId: venue.supervisorId, displayName: "Sara" },
     ]);
     expect((await approvers("?permission=sale.refund")).json).toEqual(comps.json);
-    expect((await approvers("?permission=system.box_admin")).json).toEqual([comps.json[0]]);
-    for (const query of ["?permission=", "?permission=person.admin", "?roles=manager,admin", ""]) {
+    expect((await approvers("?permission=node.manage")).json).toEqual([comps.json[0]]);
+    for (const query of [
+      "?permission=",
+      "?permission=person.admin",
+      "?permission=system.box_admin",
+      "?roles=manager,admin",
+      "",
+    ]) {
       const refused = await approvers(query);
       expect([query, refused.status, refused.json]).toEqual([
         query,

@@ -148,11 +148,6 @@ export const PERMISSION_TEXT: Readonly<Record<string, PermissionText>> = {
     label: "permission.system.manage",
     help: "permission.system.manage.help",
   },
-  "system.box_admin": {
-    area: "venue",
-    label: "permission.system.box_admin",
-    help: "permission.system.box_admin.help",
-  },
   "node.manage": {
     area: "venue",
     label: "permission.node.manage",

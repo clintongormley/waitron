@@ -256,7 +256,7 @@ give it time to reopen on the old version.
 
 ## Set the clock from your own device {#clock-own-device}
 
-Box administration, held by Admin by default, lets you set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
+With **Manage boxes** (Admin by default), you can set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
 
 If the clock reads a date before 28 October 2024, the tills show **Sales can't be recorded: the
 box's clock is wrong**, and the bell says so too, with the date the box's clock reads.
