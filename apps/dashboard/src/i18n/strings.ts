@@ -1711,7 +1711,7 @@ export const en = {
     "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new master key.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
-  "recovery_pack.reason.key_changed": "The backup encryption key changed on {date}.",
+  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
@@ -1724,11 +1724,11 @@ export const en = {
   "recovery_pack.make_new": "Make a new pack.",
   "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the box key.",
   "recovery_pack.keep_backup_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup encryption key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.keep_old_server_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its box key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup encryption key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.row.server_key": "Box key",
@@ -6550,7 +6550,7 @@ export const es: Record<StringKey, string> = {
     "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea una clave maestra nueva.",
   "recovery_pack.not_received":
     "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
-  "recovery_pack.reason.key_changed": "La clave de cifrado de copias cambió el {date}.",
+  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
   "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
   "recovery_pack.reason.bucket_set_up":
@@ -6566,11 +6566,11 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.keep_server_key":
     "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
   "recovery_pack.keep_backup_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de cifrado de copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.keep_old_server_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de cifrado de copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.row.server_key": "Clave del servidor",

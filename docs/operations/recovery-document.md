@@ -1,10 +1,13 @@
 # Make a new recovery pack
 
-The recovery pack is one PDF holding what you need when the box fails: the restore codes for the
-bucket copy and the archives, and, on a box that files invoices, the box key or the name of the
-pack or sheet that holds it. If the box still runs and you have lost its recovery pack, or an
-older recovery PDF, make a new pack from the dashboard. You need the system-management permission
-and a secure (HTTPS) connection to that box.
+The recovery pack is one PDF holding what you need when the box fails. Its first page holds the
+master key, with its name and QR code, when the pack was made with a new master key; otherwise it
+names the current master key and, when this box made the pack that showed it, that pack. Until later
+changes remove them, the other parts the box has follow, a page each: the restore codes for the
+bucket copy and the archives, the emergency code, and, on a box that files invoices, the box key or
+the name of the pack or sheet that holds it. If the box still runs and you have lost its recovery
+pack, or an older recovery PDF, make a new pack from the dashboard. You need the system-management
+permission and a secure (HTTPS) connection to that box.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
@@ -32,8 +35,9 @@ or stop and change nothing.
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key and a
 new box key together, in a new pack. The dialog then shows the master key with its name: use
-**Download**, **Print** or **Copy**, then **Continue**. It is shown only this once. The button is
-not offered while the box has no box key, since the master key is made with the box key's
+**Download**, **Print** or **Copy**, then **Continue**. It is shown only this once, so **Stop**
+and Escape do nothing while the box is making it. The button is offered only once the card has read
+the box's status and the box has a box key, since the master key is made with the box key's
 replacement until the box key goes.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
