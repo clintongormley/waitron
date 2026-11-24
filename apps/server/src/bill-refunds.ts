@@ -146,12 +146,10 @@ export async function refundTender(
 
 /**
  * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
- * needing from the operator or the override the permission {@link refundPermission} names:
- * `payment.take` when the applied money and tip given back together are no more than what Pay for
- * items left the bill paid over its total, else `sale.refund`; with `payment.take` a hand-keyed
- * card needs no approver's PIN. A completed refund issues the bill if it leaves it paid. A payment
- * gives back up to its net applied money; its tip comes back only with the whole of what is left
- * of it; an item payment only whole, which frees its lines.
+ * needing from the operator or the override the permission {@link refundPermission} names; where
+ * that is `payment.take`, a hand-keyed card needs no approver's PIN. A completed refund issues the
+ * bill if it leaves it paid. A payment gives back up to its net applied money; its tip comes back
+ * only with the whole of what is left of it; an item payment only whole, which frees its lines.
  *
  * Keyed by `submissionId` across the whole bill (design §5.1): the same refund again answers the
  * first and writes nothing, except that a card refund still pending is resumed; the id with another

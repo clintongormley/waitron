@@ -100,7 +100,9 @@ today (`bill.presented`, `refuseClosedBill`, `bill-actions.ts:65`); PR 4 lifts i
   because moving lines needs one (`moveOrderLines`, `working-order.ts:4301-4308`). When the failed
   payment's bill has `items_paid_from`, holds no other payment and its source is still `open`,
   every line of the new bill moves back to the source and the new bill becomes `abandoned`; both
-  bills' and the party's revisions move on. The put-back runs in a savepoint (`tx.transaction(…)`,
+  bills' and the party's revisions move on. _2026-11-24, as built: the put-back acts only when the
+  failed payment is the new bill's earliest and no other payment on it is pending or received._
+  The put-back runs in a savepoint (`tx.transaction(…)`,
   as `apps/server/src/optional-document.ts:39` does; the file is added to
   `scripts/no-bare-transaction.test.ts`'s list with reason `savepoint`) and an `AppError` from it is
   caught: the payment's failure always stands, and a put-back that is refused leaves the items on
