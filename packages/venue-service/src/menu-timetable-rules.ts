@@ -1,5 +1,5 @@
-import { AppError } from "@waitron/shared";
-import type { MenuSlot } from "./menu-timetable-types.js";
+import { AppError, isUuid } from "@waitron/shared";
+import type { LastOrderAdjustment, MenuSlot } from "./menu-timetable-types.js";
 import "./errors.js";
 
 export function invalidTimetable(
@@ -42,4 +42,38 @@ export function parseMenuWeek<T extends MenuSlot>(
 export function menuPeriodName(value: unknown): string {
   if (typeof value !== "string" || value.trim() === "") invalidTimetable("name");
   return value.trim();
+}
+
+export const LAST_ORDER_MINUTES: readonly number[] = [
+  -60, -45, -30, -15, 0, 15, 30, 45, 60, 90, 120,
+];
+
+export function invalidLastOrders(): never {
+  throw new AppError("menu_period.invalid", { field: "lastOrders" });
+}
+
+export function parseLastOrders(value: unknown): LastOrderAdjustment[] {
+  if (!Array.isArray(value)) invalidLastOrders();
+  const targets = new Set<string>();
+  return value.map((entry: unknown) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) invalidLastOrders();
+    const { kind, stationId, minutes, ...other } = entry as Record<string, unknown>;
+    if (
+      Object.keys(other).length ||
+      typeof minutes !== "number" ||
+      !LAST_ORDER_MINUTES.includes(minutes)
+    )
+      invalidLastOrders();
+    if (kind === "no_preparation" && !Object.hasOwn(entry, "stationId")) {
+      if (targets.has(kind)) invalidLastOrders();
+      targets.add(kind);
+      return { kind, minutes };
+    }
+    if (kind !== "station" || typeof stationId !== "string" || !isUuid(stationId))
+      invalidLastOrders();
+    const id = stationId.toLowerCase();
+    if (targets.has(id)) invalidLastOrders();
+    targets.add(id);
+    return { kind, stationId: id, minutes };
+  });
 }

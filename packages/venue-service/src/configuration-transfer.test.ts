@@ -202,7 +202,12 @@ describe("the menu timetable rows of a bundle", () => {
     expect(names.filter((name) => name === "menu_periods")).toHaveLength(1);
     expect(
       VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "menu_periods"),
-    ).toMatchObject({ jsonReferences: [{ column: "staff_menu_ids", paths: [["*"]] }] });
+    ).toMatchObject({
+      jsonReferences: [
+        { column: "staff_menu_ids", paths: [["*"]] },
+        { column: "last_orders", paths: [["*", "stationId"]] },
+      ],
+    });
     expect(at).toBeGreaterThan(names.indexOf("departments"));
   });
 
@@ -1943,4 +1948,34 @@ it.each([
       ],
     }),
   ).toThrowError(refusal("menu_periods.staff_menu_ids"));
+});
+
+it.each([
+  "not JSON",
+  "null",
+  '[{"kind":"station","stationId":null,"minutes":60}]',
+  '[{"kind":"no_preparation","minutes":20}]',
+])("refuses malformed Last orders in a configuration row: %s", (last_orders) => {
+  expect(() =>
+    validateMenuTimetables({
+      departments: [{ id: "department" }],
+      menus: [{ id: "menu" }],
+      menu_periods: [
+        {
+          id: "period",
+          department_id: "department",
+          name: "Lunch",
+          menu_id: "menu",
+          colour: "blue",
+          staff_menu_ids: "[]",
+          last_orders,
+        },
+      ],
+    }),
+  ).toThrow(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "menu_periods.last_orders" },
+    }),
+  );
 });

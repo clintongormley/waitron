@@ -2592,12 +2592,14 @@ CREATE TABLE `menu_periods` (
 	`menu_id` text NOT NULL,
 	`floor_plan_set_id` text,
 	`staff_menu_ids` text DEFAULT '[]' NOT NULL,
+	`last_orders` text DEFAULT '[]' NOT NULL,
 	FOREIGN KEY (`floor_plan_set_id`) REFERENCES `floor_plan_sets`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`menu_id`) REFERENCES `menus`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "menu_periods_name_ck" CHECK(trim("menu_periods"."name") <> ''),
 	CONSTRAINT "menu_periods_colour_ck" CHECK("menu_periods"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')),
-	CONSTRAINT "menu_periods_staff_menu_ids_ck" CHECK(json_valid("menu_periods"."staff_menu_ids") and json_type("menu_periods"."staff_menu_ids") = 'array')
+	CONSTRAINT "menu_periods_staff_menu_ids_ck" CHECK(json_valid("menu_periods"."staff_menu_ids") and json_type("menu_periods"."staff_menu_ids") = 'array'),
+	CONSTRAINT "menu_periods_last_orders_ck" CHECK(json_valid("menu_periods"."last_orders") and json_type("menu_periods"."last_orders") = 'array')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `menu_periods_department_name_key` ON `menu_periods` (`department_id`,`name`);--> statement-breakpoint

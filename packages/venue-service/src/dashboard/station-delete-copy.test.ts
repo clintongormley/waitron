@@ -78,6 +78,11 @@ it.each([
     "Quita 2 reglas de enrutamiento por periodo.",
   ],
   [
+    "station_last_orders",
+    "Remove last orders settings from 2 periods.",
+    "Quita los ajustes de últimos pedidos de 2 periodos.",
+  ],
+  [
     "station_profile_screens",
     "Remove this station from these profiles: Grill, Bar.",
     "Quita esta estación de estos perfiles: Grill, Bar.",
@@ -205,6 +210,12 @@ it.each([
     [],
     "Remove 1 period routing rule.",
     "Quita 1 regla de enrutamiento por periodo.",
+  ],
+  [
+    "station_last_orders",
+    [],
+    "Remove last orders settings from 1 period.",
+    "Quita los ajustes de últimos pedidos de 1 periodo.",
   ],
   [
     "station_profile_screens",

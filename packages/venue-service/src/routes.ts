@@ -75,6 +75,7 @@ import {
   readDepartmentTransferSettings,
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
+import { parseLastOrders } from "./menu-timetable-rules.js";
 import "./errors.js";
 import {
   deleteSpecialDay,
@@ -1125,7 +1126,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "floorPlanSetId"]);
+        onlyKeys(body, [
+          "name",
+          "colour",
+          "menuId",
+          "staffMenuIds",
+          "floorPlanSetId",
+          "lastOrders",
+        ]);
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
         const input = {
@@ -1134,6 +1142,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.colour === undefined ? {} : { colour: requirePeriodColour(body.colour) }),
           staffMenuIds: requireStaffMenuIds(body.staffMenuIds),
           ...floorPlanSetField(body),
+          ...(Object.hasOwn(body, "lastOrders")
+            ? { lastOrders: parseLastOrders(body.lastOrders) }
+            : {}),
         };
         const period = await gated(sessionId, (tx) => saveMenuPeriod(tx, departmentId, input));
         return c.json(period, 201);
@@ -1196,7 +1207,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "floorPlanSetId"]);
+        onlyKeys(body, [
+          "name",
+          "colour",
+          "menuId",
+          "staffMenuIds",
+          "floorPlanSetId",
+          "lastOrders",
+        ]);
         if (Object.keys(body).length === 0)
           throw new AppError("management.request_invalid", { field: "body" });
         const period = {
@@ -1207,6 +1225,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { staffMenuIds: requireStaffMenuIds(body.staffMenuIds) }),
           ...floorPlanSetField(body),
+          ...(Object.hasOwn(body, "lastOrders")
+            ? { lastOrders: parseLastOrders(body.lastOrders) }
+            : {}),
         };
         await gated(sessionId, (tx) => updateMenuPeriod(tx, periodId, period));
         return c.body(null, 204);

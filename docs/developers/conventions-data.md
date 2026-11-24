@@ -2289,6 +2289,10 @@ bundle's `createdAt` (`refuseSkippedPaint`). The menu validator takes only the t
 
 ### Service-period configuration
 
+Configuration format 59 carries a period's nonzero Last orders offsets in `menu_periods.last_orders`.
+The transfer remaps each station ID and keeps the No preparation target. Deleting a station removes
+its offsets in the same transaction. The service-period round trip checks both kinds of target.
+
 (2026-11-16, A1308 mn12: staff-menu ids now live in display order in
 `menu_periods.staff_menu_ids`. Configuration transfer declares those ids through
 `jsonReferences`; `apps/server/src/configuration-transfer.test.ts` checks that a second venue

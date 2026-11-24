@@ -11,6 +11,7 @@ import {
   floorPlanSets,
   departments,
   floorZones,
+  kitchenStations,
   menuPeriods,
   products,
   readVenueClock,
@@ -46,9 +47,15 @@ import {
   type ServiceRange,
 } from "./service-day.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
-import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
+import {
+  invalidLastOrders,
+  invalidTimetable,
+  menuPeriodName,
+  parseMenuWeek,
+} from "./menu-timetable-rules.js";
 import type {
   DepartmentService,
+  LastOrderAdjustment,
   OpeningHoursModel,
   MenuPeriodInput,
   PeriodRoutingUse,
@@ -416,7 +423,16 @@ async function writeMenuPeriod(
       );
     if (own === undefined) throw new AppError("menu_period.invalid", { field: "floorPlanSetId" });
   }
-  const values = { name, menuId: period.menuId, staffMenuIds, colour, floorPlanSetId };
+  const lastOrders =
+    period.lastOrders === undefined ? undefined : await currentLastOrders(tx, period.lastOrders);
+  const values = {
+    name,
+    menuId: period.menuId,
+    staffMenuIds,
+    colour,
+    floorPlanSetId,
+    ...(lastOrders === undefined ? {} : { lastOrders }),
+  };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -428,6 +444,23 @@ async function writeMenuPeriod(
     await tx.update(menuPeriods).set(values).where(eq(menuPeriods.id, periodId));
   }
   return { id: id! };
+}
+
+async function currentLastOrders(tx: Transaction, offsets: readonly LastOrderAdjustment[]) {
+  const ids = offsets.flatMap((entry) => (entry.kind === "station" ? [entry.stationId] : []));
+  const stations =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({ id: kitchenStations.id, active: kitchenStations.active })
+          .from(kitchenStations)
+          .where(inArray(kitchenStations.id, ids));
+  if (stations.length !== ids.length) invalidLastOrders();
+  const active = new Set(stations.filter((station) => station.active).map((station) => station.id));
+  return offsets.filter(
+    (entry) =>
+      entry.minutes !== 0 && (entry.kind === "no_preparation" || active.has(entry.stationId)),
+  );
 }
 
 export async function updateMenuPeriod(
@@ -448,6 +481,7 @@ export async function updateMenuPeriod(
       period.staffMenuIds === undefined ? appearance!.staffMenuIds : period.staffMenuIds,
     floorPlanSetId:
       period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
+    lastOrders: period.lastOrders,
   });
 }
 
@@ -700,6 +734,7 @@ export async function readActivePeriods(tx: Transaction) {
       menuId: menuPeriods.menuId,
       floorPlanSetId: menuPeriods.floorPlanSetId,
       staffMenuIds: menuPeriods.staffMenuIds,
+      lastOrders: menuPeriods.lastOrders,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -753,13 +788,14 @@ export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<
           .map(({ id, name, seasonWeeks }) => ({ id, name, seasonWeeks })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId, floorPlanSetId, staffMenuIds }) => ({
+          .map(({ id, name, colour, menuId, floorPlanSetId, staffMenuIds, lastOrders }) => ({
             id,
             name,
             colour,
             menuId,
             floorPlanSetId,
             staffMenuIds,
+            ...(lastOrders.length ? { lastOrders } : {}),
           })),
         seasonWeeks: weeks.map((entry) => ({
           seasonId: entry.seasonId,

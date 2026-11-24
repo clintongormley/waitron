@@ -138,7 +138,8 @@ describe("deleting a period menu", () => {
     const { Breakfast, Lunch, Dinner } = v.menus;
     const { mornings, supper } = v.periods!;
     await scoped(async (tx) => {
-      await updateMenuPeriod(tx, mornings, { staffMenuIds: [Lunch, Dinner] });
+      const lastOrders = [{ kind: "no_preparation" as const, minutes: 30 }];
+      await updateMenuPeriod(tx, mornings, { staffMenuIds: [Lunch, Dinner], lastOrders });
       await updateMenuPeriod(tx, supper, { staffMenuIds: [Breakfast] });
       await expect(
         replaceDeletedPeriodMenus(tx, Breakfast, { [mornings]: Lunch, [supper]: Lunch }),
@@ -148,7 +149,12 @@ describe("deleting a period menu", () => {
       });
       await replaceDeletedPeriodMenus(tx, Breakfast, { [mornings]: Lunch });
       expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, mornings))).toEqual([
-        expect.objectContaining({ name: "Mornings", menuId: Lunch, staffMenuIds: [Dinner] }),
+        expect.objectContaining({
+          name: "Mornings",
+          menuId: Lunch,
+          staffMenuIds: [Dinner],
+          lastOrders,
+        }),
       ]);
       expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, supper))).toEqual([
         expect.objectContaining({ name: "Supper", menuId: Dinner, staffMenuIds: [] }),

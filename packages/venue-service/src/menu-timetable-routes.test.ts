@@ -567,6 +567,74 @@ describe("the opening-hours period API", () => {
     await answers(await r.send("GET", "/opening-hours", r.staff), 403);
   });
 
+  it("keeps Last orders through an omitted period patch and clears them with an empty list", async () => {
+    const r = await routed();
+    const [bar] = await db.insert(kitchenStations).values({ name: "Bar" }).returning();
+    const lastOrders = [
+      { kind: "station", stationId: bar!.id, minutes: 60 },
+      { kind: "no_preparation", minutes: -15 },
+    ];
+    const response = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Lunch",
+      menuId: r.lunchMenu,
+      staffMenuIds: [],
+      lastOrders,
+    });
+    expect(response.status).toBe(201);
+    const { id } = (await response.json()) as { id: string };
+    const offsets = async () => {
+      const read = await r.send("GET", "/opening-hours", r.manager);
+      expect(read.status).toBe(200);
+      const model = (await read.json()) as OpeningHoursModel;
+      return restaurantOf(model, r).periods.find((entry) => entry.id === id)!.lastOrders ?? [];
+    };
+    expect(await offsets()).toEqual(lastOrders);
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { name: "Weekday Lunch" }),
+      204,
+    );
+    expect(await offsets()).toEqual(lastOrders);
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, {
+        lastOrders: [{ kind: "station", stationId: bar!.id, minutes: 0 }],
+      }),
+      204,
+    );
+    expect(await offsets()).toEqual([]);
+    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { lastOrders }), 204);
+    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { lastOrders: [] }), 204);
+    expect(await offsets()).toEqual([]);
+  });
+
+  it("refuses invalid Last orders and drops a deleted station from a stale save", async () => {
+    const r = await routed();
+    const [bar] = await db
+      .insert(kitchenStations)
+      .values({ name: "Deleted bar", active: false })
+      .returning();
+    const known = { kind: "station", stationId: bar!.id, minutes: 60 };
+    const path = `/menu-periods/${r.morningPeriod}`;
+    for (const lastOrders of [
+      null,
+      [{ ...known, minutes: 40 }],
+      [known, known],
+      [{ ...known, stationId: randomUUID() }],
+    ]) {
+      await answers(await r.send("PATCH", path, r.manager, { lastOrders }), 400, {
+        code: "menu_period.invalid",
+        params: { field: "lastOrders" },
+      });
+    }
+    const noPreparation = { kind: "no_preparation", minutes: -15 };
+    await answers(
+      await r.send("PATCH", path, r.manager, { lastOrders: [known, noPreparation] }),
+      204,
+    );
+    expect(
+      restaurantOf(await r.model(), r).periods.find(({ id }) => id === r.morningPeriod)!.lastOrders,
+    ).toEqual([noPreparation]);
+  });
+
   it("creates colour and ordered staff menus, then updates each without losing omitted fields", async () => {
     const r = await routed();
     const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {

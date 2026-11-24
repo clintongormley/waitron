@@ -478,7 +478,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 58,
+  version: 59,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -6309,7 +6309,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(58);
+  expect(exported.version).toBe(59);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -7255,12 +7255,12 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
     expect(original).not.toContain(id);
 });
 
-it("round-trips service periods with colours, ordered staff menus and remapped business-day ranges", async () => {
+it("round-trips service periods with colours, staff menus, Last orders and business-day ranges", async () => {
   const source = await applyVenue(planVenue(venue("B24681367"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const original = await withTransaction(suite.db, async (tx) => {
+  const { original, stationId } = await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { dayCutover: "04:30:00" });
     const department = await createDepartment(tx, {
       name: "Period transfer",
@@ -7276,11 +7276,16 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       await tx.insert(menus).values(menu);
       await createMenuShell(tx, menu.id);
     }
+    const station = await createStation(tx, { name: "Night Bar" });
     const period = await saveMenuPeriod(tx, department.id, {
       name: "Night transfer",
       colour: "blue",
       menuId: customer.id,
       staffMenuIds: staff.map((menu) => menu.id),
+      lastOrders: [
+        { kind: "station", stationId: station.id, minutes: 60 },
+        { kind: "no_preparation", minutes: -15 },
+      ],
     });
     await replaceMenuWeek(
       tx,
@@ -7292,7 +7297,10 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       new Date("2026-10-07T10:00:00Z"),
       1,
     );
-    return [department.id, customer.id, ...staff.map((menu) => menu.id), period.id];
+    return {
+      original: [department.id, customer.id, ...staff.map((menu) => menu.id), period.id],
+      stationId: station.id,
+    };
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
@@ -7308,6 +7316,10 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     menu_id: original[1],
   });
   expect(JSON.parse(period.staff_menu_ids as string)).toEqual(original.slice(2, 5));
+  expect(JSON.parse(period.last_orders as string)).toEqual([
+    { kind: "station", stationId, minutes: 60 },
+    { kind: "no_preparation", minutes: -15 },
+  ]);
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(bundle, "a strong passphrase"),
     "a strong passphrase",
@@ -7318,8 +7330,8 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const importedStaff = (
-    await targetSuite.db.execute<{ staff_menu_ids: string }>(sql`
-    select staff_menu_ids from menu_periods where name = 'Night transfer'`)
+    await targetSuite.db.execute<{ staff_menu_ids: string; last_orders: string }>(sql`
+    select staff_menu_ids, last_orders from menu_periods where name = 'Night transfer'`)
   ).rows[0]!;
   const importedMenus = (
     await targetSuite.db.execute<{ id: string; name: string }>(sql`
@@ -7330,6 +7342,15 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       (name) => importedMenus.find((menu) => menu.name === name)!.id,
     ),
   );
+  const [importedStation] = await targetSuite.db
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.name, "Night Bar"));
+  expect(importedStation!.id).not.toBe(stationId);
+  expect(JSON.parse(importedStaff.last_orders)).toEqual([
+    { kind: "station", stationId: importedStation!.id, minutes: 60 },
+    { kind: "no_preparation", minutes: -15 },
+  ]);
   const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct x.season_id) as seasons
     from opening_hours x

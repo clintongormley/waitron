@@ -542,8 +542,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   shows a closed venue as open. Needs a design. Not started.
 
 - **A1568. Last orders per prep station** (owner, 24 November). Lunch keeps its hours while each
-  station stops taking its orders before or after the end. Settings, the server’s ordering rule,
-  the till’s ended menus and dish warnings, and the demo remain.
+  station stops taking its orders before or after the end. Period settings are stored and transfer
+  with configuration. The period form and Calendar, the server’s ordering rule, the till’s ended
+  menus and dish warnings, and the demo remain.
   [Design](superpowers/specs/2026-11-24-last-orders-per-station-design.md)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**

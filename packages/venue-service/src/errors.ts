@@ -88,7 +88,7 @@ declare module "@waitron/shared" {
       workingOrderLineIds?: string[];
     };
     "menu_period.invalid": {
-      field: "staffMenuIds" | "colour" | "replacementPeriodId" | "floorPlanSetId";
+      field: "staffMenuIds" | "colour" | "replacementPeriodId" | "floorPlanSetId" | "lastOrders";
     };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };

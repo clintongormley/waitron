@@ -3,12 +3,16 @@ import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 import type { ClosedRange, ServiceRange } from "./service-day.js";
 import type { CalendarColour } from "./hours-types.js";
 import type { Season } from "./season-rules.js";
+import type { RouteTarget } from "./routing.js";
+
+export type LastOrderAdjustment = RouteTarget & { minutes: number };
 
 export interface MenuPeriodInput {
   name: string;
   colour?: CalendarColour;
   menuId: string;
   staffMenuIds: readonly string[];
+  lastOrders?: readonly LastOrderAdjustment[];
   /** Absent keeps the stored set; null empties the field, so the department's default is used. */
   floorPlanSetId?: string | null;
 }
@@ -80,6 +84,7 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
       colour: CalendarColour;
       menuId: string;
       staffMenuIds: readonly string[];
+      lastOrders?: readonly LastOrderAdjustment[];
       /** Null when the field is empty and the department's default set is used. */
       floorPlanSetId: string | null;
     }[];

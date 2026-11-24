@@ -6,7 +6,7 @@ import type { PackLookup } from "./holidays.js";
 import { isLocalDate } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
-import { menuPeriodName } from "./menu-timetable-rules.js";
+import { menuPeriodName, parseLastOrders } from "./menu-timetable-rules.js";
 import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { SERVICE_STEP_STARTS, ZONE_PAINT_KINDS, type Transaction } from "@waitron/db";
@@ -38,8 +38,11 @@ function parsedAs<T>(table: string, parse: () => T): T {
     return parse();
   } catch (error) {
     if (
-      error instanceof AppError &&
-      (error.code === "menu_timetable.invalid" || error.code === "zone_closed_time.invalid")
+      error instanceof SyntaxError ||
+      (error instanceof AppError &&
+        (error.code === "menu_timetable.invalid" ||
+          error.code === "menu_period.invalid" ||
+          error.code === "zone_closed_time.invalid"))
     )
       refuse(table);
     throw error;
@@ -88,6 +91,9 @@ export function validateHolidayConfiguration(
 export function validateMenuTimetables(tables: Tables): void {
   const departments = ids(tables.departments);
   const ordinaryMenuIds = ids(tables.menus?.filter((row) => row.kind !== "set_menu"));
+  const activeStations = ids(
+    tables.kitchen_stations?.filter((row) => isActive(row, "kitchen_stations")),
+  );
   const setDepartment = new Map<unknown, unknown>();
   const setNames = new Set<string>();
   const defaults = new Map<unknown, number>();
@@ -116,6 +122,14 @@ export function validateMenuTimetables(tables: Tables): void {
     names.add(name);
     if (!CALENDAR_COLOURS.includes(row.colour as CalendarColour)) refuse("menu_periods.colour");
     if (!ordinaryMenuIds.has(row.menu_id)) refuse("menu_periods.menu_id");
+    const lastOrdersField = "menu_periods.last_orders";
+    if (row.last_orders !== undefined) {
+      const raw = row.last_orders;
+      if (typeof raw !== "string") refuse(lastOrdersField);
+      const entries = parsedAs(lastOrdersField, () => parseLastOrders(JSON.parse(raw)));
+      if (entries.some((entry) => entry.kind === "station" && !activeStations.has(entry.stationId)))
+        refuse(lastOrdersField);
+    }
     const field = "menu_periods.staff_menu_ids";
     if (typeof row.staff_menu_ids !== "string") refuse(field);
     let staff: unknown;
@@ -690,7 +704,13 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_courses" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells" },
-    { name: "menu_periods", jsonReferences: [{ column: "staff_menu_ids", paths: [["*"]] }] },
+    {
+      name: "menu_periods",
+      jsonReferences: [
+        { column: "staff_menu_ids", paths: [["*"]] },
+        { column: "last_orders", paths: [["*", "stationId"]] },
+      ],
+    },
     { name: "routing_cell_periods" },
     { name: "special_days" },
     { name: "special_day_dates" },

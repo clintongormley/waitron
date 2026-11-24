@@ -56,6 +56,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profiles",
     "routing_cells",
     "routing_cell_periods",
+    "menu_periods",
     "floor_zones",
     "table_merges",
   ],

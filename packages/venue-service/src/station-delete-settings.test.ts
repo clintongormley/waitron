@@ -85,6 +85,36 @@ async function device(tx: Transaction, profileId: string, label: string, active 
   return deviceId;
 }
 
+it("reports and clears only the deleted station's Last orders settings", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const [department] = await tx
+      .insert(departments)
+      .values({ name: "Dining", tradingName: "Dining" })
+      .returning();
+    const [menu] = await tx.insert(menus).values({ name: "Menu" }).returning();
+    const remaining = [
+      { kind: "no_preparation" as const, minutes: 30 },
+      { kind: "station" as const, stationId: f.other, minutes: -15 },
+    ];
+    const [period] = await tx
+      .insert(menuPeriods)
+      .values({
+        departmentId: department!.id,
+        menuId: menu!.id,
+        name: "Lunch",
+        lastOrders: [{ kind: "station", stationId: f.gone, minutes: 60 }, ...remaining],
+      })
+      .returning();
+    expect((await module.readStationDeleteSettings(tx, f.gone)).removes).toEqual([
+      { key: "station_last_orders", count: 1, targets: [] },
+    ]);
+    await module.clearStationDeleteSettings(tx, f.gone);
+    const [record] = await tx.select().from(menuPeriods).where(eq(menuPeriods.id, period!.id));
+    expect(record!.lastOrders).toEqual(remaining);
+  });
+});
+
 it("counts base and child routing rows once and clears only their union", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);

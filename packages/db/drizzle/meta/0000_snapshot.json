@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8a074107-d088-4253-a1f2-47953e7f8097",
+  "id": "4b4906cc-ed50-493b-94a2-977665adfbbd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16948,6 +16948,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[]'"
+        },
+        "last_orders": {
+          "name": "last_orders",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {
@@ -17023,6 +17031,10 @@
         "menu_periods_staff_menu_ids_ck": {
           "name": "menu_periods_staff_menu_ids_ck",
           "value": "json_valid(\"menu_periods\".\"staff_menu_ids\") and json_type(\"menu_periods\".\"staff_menu_ids\") = 'array'"
+        },
+        "menu_periods_last_orders_ck": {
+          "name": "menu_periods_last_orders_ck",
+          "value": "json_valid(\"menu_periods\".\"last_orders\") and json_type(\"menu_periods\".\"last_orders\") = 'array'"
         }
       }
     },
