@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     "./errors.js": "./src/errors.ts",
+    "./find-bill-dates.js": "./src/find-bill-dates.ts",
+    "./find-bill-query.js": "./src/find-bill-query.ts",
+    "./find-bill-types.js": "./src/find-bill-types.ts",
     "./invoice-selection.js": "./src/invoice-selection.ts",
     "./receipt-dates.js": "./src/receipt-dates.ts",
     "./receipt-logo.js": "./src/receipt-logo.ts",
@@ -26,6 +29,7 @@
     "@waitron/layouts": "workspace:*",
     "@waitron/media": "workspace:*",
     "@waitron/printing": "workspace:*",
+    "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.4"
   },

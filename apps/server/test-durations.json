@@ -440,8 +440,6 @@
   "src/fill-template.test.ts": 0.1,
   "src/find-bill-api.test.ts": 8.5,
   "src/find-bill-bills.test.ts": 17.3,
-  "src/find-bill-dates.test.ts": 0.6,
-  "src/find-bill-query.test.ts": 0.7,
   "src/find-bill-transactions.test.ts": 7.7,
   "src/fingerprint-refusal.implicit.test.ts": 7.6,
   "src/fingerprint-refusal.recovery.test.ts": 3.7,

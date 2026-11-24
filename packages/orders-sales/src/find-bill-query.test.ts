@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
-import "./errors.js";
 
 const uuid = "60a3e5fb-8f20-4ed5-a932-145ab46fd7bf";
 

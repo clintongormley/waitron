@@ -1473,10 +1473,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Veri*Factu reads the chain head from the latest fiscal record on the box.
   Fiscal history retains verified clock steps and replaces the three old clock-stop tables.
   Fiscal history also retains conflicts found in AEAT replies and lookups.
-  Orders and sales can run their receipt helper and invoice selection suites independently. Further
-  slices move the server callers and carry their shared code and error declarations with them.
+  Orders and Sales can run the receipt helper, invoice selection and Find a bill search and date
+  suites independently. The Find a bill routes and readers remain in the server. When changing
+  the parser, also run the server's `find-bill-bills`, `find-bill-transactions` and `bill-advances`
+  suites, which exercise it against bill and transaction data. Further slices move server callers
+  with the shared code and error declarations they use.
   [Receipt helpers](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
   [Invoice selection](superpowers/plans/2026-11-23-a1308-invoice-selection.md)
+  [Find a bill query](superpowers/plans/2026-11-24-a1308-find-bill-query.md)
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
