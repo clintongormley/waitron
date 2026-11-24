@@ -6,6 +6,8 @@ Usa **Copias de seguridad** en el panel para elegir dónde guardas las copias y 
 
 Elige **Hacer paquete de recuperación** y completa la identificación que te pida. Usa **Descargar PDF** o **Abrir para imprimir** y guarda el paquete bajo llave, fuera del servidor.
 
+Si la clave maestra se ha perdido o alguien que no debía ha podido verla, elige **Crear una clave maestra nueva** y vuelve a iniciar sesión. Descarga, imprime o copia la clave nueva y elige **Continuar**. Guarda el paquete antiguo hasta la fecha que indica la ventana.
+
 Revisa esta tarjeta después de cambiar los ajustes de las copias o las claves. Sigue sus indicaciones para hacer un paquete nuevo y conserva los anteriores que aún nombre. Si pierdes un paquete o queda expuesto, sigue [Pérdidas habituales](data-protection.md#breach-losses). Para el inicio de emergencia, consulta [Consultar el inicio de emergencia en Cloud](servers.md#cloud-emergency).
 
 ## Exportar la configuración {#configuration-export}

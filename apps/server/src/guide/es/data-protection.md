@@ -615,9 +615,9 @@ proveedor. Mientras las copias programadas están activadas, **Copias de segurid
 seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio y toda la
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
-puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **También crear una
-clave del servidor nueva** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
-necesitando la antigua.
+puede contener la clave del servidor. Para sustituirla, elige **Crear una clave maestra nueva**, que
+también crea una clave del servidor nueva: las copias nuevas usan la clave nueva, y las anteriores
+siguen necesitando la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,

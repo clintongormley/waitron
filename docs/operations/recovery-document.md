@@ -8,17 +8,17 @@ and a secure (HTTPS) connection to that box.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
-2. Tick **Also make a new box key** only if the pack or sheet holding the current key is
-   lost. Without the tick the pack does not change the key: its box key page names the pack or
-   sheet that holds it.
+2. The pack does not change any key: its first page names the pack that holds the current master
+   key, and its box key page names the pack or sheet that holds the box key. If the master key or
+   the pack holding the box key is lost, choose **Make a new master key** instead (below).
 3. Choose **Make pack**. When Waitron asks you to confirm it is you, use your password or
    **Use your passkey**. If your account uses an authenticator app, also enter a code from it or one
    of your recovery codes. This confirmation covers protected actions in this browser for 15 minutes
    or until your session ends.
 4. Choose **Download PDF**, **Open to print**, or both. The box keeps no copy, so save or print the
    pack before you leave the page. Keep it locked away, off the box.
-5. Keep older packs and sheets for older backups. With the tick, new backups use the new box
-   key, and an older backup still needs the key it was made with. A new key cannot unlock an older
+5. Keep older packs and sheets for older backups. After **Make a new master key**, new backups
+   use the new box key, and an older backup still needs the key it was made with. A new key cannot unlock an older
    backup whose matching key you have lost.
 
 For example, keep Monday's pack while you keep Monday's backup, even if you make a new box key
@@ -26,6 +26,15 @@ on Tuesday. Check the key name on the selected copy when you [recover the box](h
 
 If the pack did not reach this browser, the dialog says so and explains each choice: make it again,
 or stop and change nothing.
+
+## Make a new master key
+
+Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
+choose **Make a new master key** and confirm it is you as above. It makes a new master key and a
+new box key together, in a new pack. The dialog then shows the master key with its name: use
+**Download**, **Print** or **Copy**, then **Continue**. It is shown only this once. The button is
+not offered while the box has no box key, since the master key is made with the box key's
+replacement until the box key goes.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
