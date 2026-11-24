@@ -13,6 +13,9 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import * as operations from "./operation-authentication.js";
 import {
   venueAndNodeWritersBesideRequest,
+  watchDerivations,
+  watchedDerivationCount,
+  watchedOrder,
   whileChangingNodeOnLockRequest,
   whileChangingOnLockRequest,
 } from "./testing/watched-scrypt.js";
@@ -132,6 +135,7 @@ describe("scoped recovery-key authority", () => {
   });
 
   it("derives outside the write lock and rolls back a refused operation", async () => {
+    await perform(async () => {});
     const original = await readRecoveryKeyVerifier(suite.node, NODE);
     let held: unknown;
     const observed = await venueAndNodeWritersBesideRequest(suite.db, suite.node, () =>
@@ -164,6 +168,17 @@ describe("scoped recovery-key authority", () => {
     ).rejects.toThrow("write refused");
     expect(await suite.db.select().from(persons)).toEqual([]);
     expect(readOperationAuthority(held, binding)).toBeUndefined();
+  });
+
+  it("derives a warmed recovery key while that secret is watched", async () => {
+    await perform(async () => {});
+    watchDerivations(key);
+    try {
+      await perform(async () => {});
+      expect(watchedDerivationCount()).toBe(1);
+    } finally {
+      await watchedOrder();
+    }
   });
 
   it("keeps a snapshotted scope while a caller changes its input during authentication", async () => {

@@ -80,39 +80,11 @@ import {
 } from "../src/testing/hour-test-clock.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
-const mocked = vi.hoisted(() => ({ internet: vi.fn(), realSecretChecks: vi.fn() }));
+const mocked = vi.hoisted(() => ({ internet: vi.fn() }));
 export const external: { internet: Mock } = mocked;
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
   observeTimeServiceHourClock: mocked.internet,
 }));
-export const realSecretChecks: Mock<(secret: string, stored: string) => Promise<boolean>> =
-  mocked.realSecretChecks;
-/**
- * Remembers every answer for the test file: the same secret against the same stored hash always
- * gives the same answer.
- */
-vi.mock("@waitron/identity", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/identity")>();
-  const answers = new Map<string, Map<string, Promise<boolean>>>();
-  return {
-    ...actual,
-    async verifySecretAsync(secret: string, stored: string): Promise<boolean> {
-      let bySecret = answers.get(stored);
-      if (bySecret === undefined) answers.set(stored, (bySecret = new Map()));
-      const remembered = bySecret.get(secret);
-      if (remembered !== undefined) {
-        // A remembered answer still yields one event-loop turn.
-        await new Promise((resolve) => setImmediate(resolve));
-        return remembered;
-      }
-      mocked.realSecretChecks(secret, stored);
-      const answer = actual.verifySecretAsync(secret, stored);
-      bySecret.set(secret, answer);
-      answer.catch(() => bySecret.delete(secret));
-      return answer;
-    },
-  };
-});
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));

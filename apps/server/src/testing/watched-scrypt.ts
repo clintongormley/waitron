@@ -14,7 +14,6 @@ type Done = (error: Error | null, key: Buffer) => void;
 // derivation outside the write lock lets the action commit first ("writer", "derived"); inside it,
 // the action waits for the lock and "derived" comes first.
 const pins = {
-  pin: null as string | null,
   during: [] as (() => Promise<unknown>)[],
   /** Runs an action in the test's own async context, not the route's: a writer inside the route's
    * context would read as the route asking again for a lock it holds. */
@@ -30,12 +29,21 @@ const pins = {
 // Records each key derivation while a test watches: inside one of the request's transactions in
 // `order`, outside them in `outside`.
 const passwords = {
-  watching: false,
   /** How many of the request's transactions are open, on either file. */
   inRequestTransaction: 0,
   order: [] as string[],
   outside: 0,
 };
+
+// The cache reads the watch settings. Counts and callbacks belong to the crypto mock.
+const watchSlot = Symbol.for("waitron.watchScryptDerivations");
+type WatchState = { all: boolean; secret: string | null };
+const holder = globalThis as typeof globalThis & { [watchSlot]?: WatchState };
+const watchState = (holder[watchSlot] ??= { all: false, secret: null });
+
+export function isWatchingDerivation(secret: string): boolean {
+  return watchState.all || watchState.secret === secret;
+}
 
 let failing: string | null = null;
 
@@ -43,11 +51,11 @@ let failing: string | null = null;
 export function watchedCrypto(actual: Crypto): Crypto {
   const scrypt = (secret: string, salt: Buffer, keyLength: number, done: Done) => {
     if (secret === failing) throw new Error("scrypt failed (test fault)");
-    if (passwords.watching) {
+    if (watchState.all) {
       if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");
       else passwords.outside += 1;
     }
-    const watched = secret === pins.pin;
+    const watched = secret === watchState.secret;
     if (watched) pins.count += 1;
     if (watched && pins.requestHoldsLock > 0) {
       pins.order.push("derived under the request's lock");
@@ -74,7 +82,7 @@ export function watchedCrypto(actual: Crypto): Crypto {
 }
 
 function watchPin(pin: string, during: (() => Promise<unknown>)[]): AsyncResource {
-  pins.pin = pin;
+  watchState.secret = pin;
   pins.during = during;
   pins.count = 0;
   return new AsyncResource("watched derivation");
@@ -126,7 +134,7 @@ export async function watchedOrder(): Promise<string[]> {
   await Promise.all(pins.writes);
   pins.stopWatchingLock();
   const order = pins.order;
-  pins.pin = null;
+  watchState.secret = null;
   pins.during = [];
   pins.order = [];
   pins.writes = [];
@@ -144,12 +152,13 @@ export async function watchingDerivations<T>(
   request: () => Promise<T>,
 ): Promise<{ result: T; order: string[]; outside: number }> {
   const order: string[] = [];
-  Object.assign(passwords, { watching: true, order, outside: 0 });
+  Object.assign(passwords, { order, outside: 0 });
+  watchState.all = true;
   try {
     const result = await request();
     return { result, order, outside: passwords.outside };
   } finally {
-    passwords.watching = false;
+    watchState.all = false;
   }
 }
 

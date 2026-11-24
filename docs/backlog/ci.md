@@ -320,16 +320,11 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 - **`--no-verify`: the docs say "Claude never", the hook says "agents never"** — OWNER'S CALL.
   [Detail](ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never).
 
-## Bundle: apps/server's test speed: restart tests and recovery-key checks
+## The server's fiscal-hour restart tests boot twice
 
-2 entries, size L.
-
-- **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
-  `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
-  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-- **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
-  the remaining wider memo work stays open.
-  [Detail](ci.md#server-test-time-levers-left-after-a1297).
+Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
+`first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice. A938 (#1930) left this open.
+[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 ## Bundle: Vitest settings: remaining measurements
 
@@ -1026,12 +1021,12 @@ No assertion failure was reported; whether this shares the earlier stall's cause
 A1305 owns that investigation in Lane B. Keep the failed run; a passing retry would not establish
 the cause or a repair.
 
-## Server test time levers left after A1297
+## A1297 follow-up: sharing a migrated test database
 
 [PR #2418](https://github.com/clintongormley/waitron/pull/2418) (A1297) remembered recovery-key checks
 within a test file, migrated `heldSetup`'s databases once per file, sealed the test helpers' backups
-under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
-these, which it did not build (local figures, 2 November 2026):
+under one salt per file and split `first-fiscal-hour.e2e.test.ts`. A1443 followed up on the database
+template proposal:
 
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
@@ -1043,9 +1038,6 @@ these, which it did not build (local figures, 2 November 2026):
   recorded, or 0.3%; three times that, for a slower CI machine, is still under 1%. The 5% bar would need
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
-- **Recovery-key checks outside the host and staged-restore fixtures still derive repeatedly.**
-  Moving the memo into wider test setup
-  must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.
 
 
 ## A1252: remaining server job time after the held-setup split
