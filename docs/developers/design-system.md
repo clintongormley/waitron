@@ -3960,13 +3960,14 @@ tree; the same reference inside the shadow root did describe it).
 
 A form that asks for a postal address puts `wt-address-lookup` above its address fields (the owner's ask,
 2026-10-28; this shape is A1171's design, flagged to the owner). The search is hidden until the form is handed an address provider; with none,
-the form is its manual fields alone, and nothing hands one over yet. Choosing a suggestion fills
+the form is its manual fields alone. The dashboard checks Cloud when you open an eligible Spanish
+venue or registered address form. Choosing a suggestion fills
 the form's own fields, which stay editable and keep their checks; the form's Save or Next is the
 confirmation. Address line 2 is replaced only when the chosen address has a second line. An
 address in another country fills nothing, and the form says why on the search's own line. The
 setup venue screen takes the province from the address's area code, else its postcode; the
 dashboard's Venue card never fills the province, which the server keeps, refuses an address whose
-area names another province (other mismatches are refused by the server's postcode check at Save),
+area names another province, comparing the pack’s province codes,
 and offers the search only while the street, line 2, postcode and city can all
 change. The registered business address, on the setup screen and in Venue details' Change
 registered address dialog, is asked for in parts (street, line 2, postcode, city, province) behind

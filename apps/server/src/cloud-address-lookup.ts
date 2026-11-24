@@ -1,27 +1,32 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { CloudInstallationCredentials } from "./cloud-client.js";
+import type { CloudAddressOperation, CloudAddressReply } from "@waitron/country-packs";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import { cloudSignInId } from "./cloud-sign-in.js";
-import { serviceExchange } from "./cloud-translation.js";
+import { refusalOf, serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
 
-type Lookup =
-  | { kind: "suggest"; workflowId: string; query: string; language: "en" | "es" }
-  | { kind: "validate"; workflowId: string; selectedText: string };
+export function readSetupAddressLookup(input: Record<string, unknown>) {
+  const { tab: _tab, ...operation } = input;
+  const lookup = readAddressLookup(operation);
+  return lookup.kind === "available" ? undefined : lookup;
+}
 
-export function readSetupAddressLookup(input: Record<string, unknown>): Lookup | undefined {
-  const { kind, workflowId, query, language, selectedText } = input;
+export function readAddressLookup(input: unknown): CloudAddressOperation {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    throw new AppError("cloud.request_invalid", {});
+  const { kind, workflowId, query, language, selectedText } = input as Record<string, unknown>;
   const keys = Object.keys(input).length;
-  if (kind === "available" && keys === 2) return;
+  if (kind === "available" && keys === 1) return { kind };
   if (cloudSignInId(workflowId)) {
     if (
       kind === "suggest" &&
-      keys === 5 &&
+      keys === 4 &&
       validText(query) &&
       (language === "en" || language === "es")
     )
       return { kind, workflowId, query, language };
-    if (kind === "validate" && keys === 4 && validSelectedText(selectedText))
+    if (kind === "validate" && keys === 3 && validSelectedText(selectedText))
       return { kind, workflowId, selectedText };
   }
   throw new AppError("cloud.request_invalid", {});
@@ -35,26 +40,92 @@ function validSelectedText(value: unknown): value is string {
   return validText(value) && Array.from(value).length <= 278;
 }
 
-export async function fetchSetupAddress(
+export function fetchSetupAddress(
   state: CloudInstallationCredentials,
-  input: Lookup,
+  input: Exclude<CloudAddressOperation, { kind: "available" }>,
   signal?: AbortSignal,
 ) {
-  const reply = await serviceExchange(
+  return exchangeAddress(state, input, signal, async (refusal, usedLease) => {
+    const current = state.lifecycle;
+    if (!current) return;
+    if (refusal === "revoked") current.revoked = true;
+    if (JSON.stringify(current.lease) === usedLease) delete current.lease;
+  });
+}
+
+const addressRefusal = (status: number, value: unknown) =>
+  status === 410 && (value as { error?: unknown } | null)?.error === "expired"
+    ? new AppError("cloud.address_lookup_expired", {})
+    : refusalOf(status, value);
+
+export function registeredAddressLookup(deps: {
+  read: () => Promise<SavedCloudState | undefined>;
+  registrationOf: (state: SavedCloudState | undefined) => string | undefined;
+  leaseState: (signal: AbortSignal) => Promise<SavedCloudState>;
+  recordRefusal: OnRefusal;
+}) {
+  return async (
+    input: CloudAddressOperation,
+    authorize: () => Promise<void>,
+    signal: AbortSignal,
+  ): Promise<CloudAddressReply> => {
+    const registration = deps.registrationOf(await deps.read());
+    if (!registration) {
+      if (input.kind === "available") return { available: false };
+      throw new AppError("cloud.not_configured", {});
+    }
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
+    const current = async () => {
+      await authorize();
+      const state = await deps.read();
+      if (deps.registrationOf(state) !== registration)
+        throw new AppError("cloud.binding_conflict", {});
+      if (deadline.aborted) throw new AppError("cloud.unavailable", {});
+      return state!;
+    };
+    await deps.leaseState(deadline);
+    const state = await current();
+    if (input.kind === "available") {
+      const reply = await exchange(state, input, deadline, deps.recordRefusal).catch(
+        () => undefined,
+      );
+      if (reply === undefined) return { available: false };
+      await current();
+      return { available: true };
+    }
+    const reply = await exchangeAddress(state, input, deadline, deps.recordRefusal, addressRefusal);
+    await current();
+    return reply;
+  };
+}
+
+function exchange(
+  state: CloudInstallationCredentials,
+  input: CloudAddressOperation,
+  signal: AbortSignal | undefined,
+  onRefusal: OnRefusal,
+  refusal?: typeof refusalOf,
+) {
+  return serviceExchange(
     state,
     "address-lookup",
     randomUUID(),
     JSON.stringify({ version: 1, ...input }),
     {},
     signal,
-    async (refusal, usedLease) => {
-      const current = state.lifecycle;
-      if (!current) return;
-      if (refusal === "revoked") current.revoked = true;
-      if (JSON.stringify(current.lease) === usedLease) delete current.lease;
-    },
-    { requireVersion: false },
+    onRefusal,
+    { requireVersion: false, refusal, successStatus: input.kind === "available" ? 200 : undefined },
   );
+}
+
+async function exchangeAddress(
+  state: CloudInstallationCredentials,
+  input: Exclude<CloudAddressOperation, { kind: "available" }>,
+  signal: AbortSignal | undefined,
+  onRefusal: OnRefusal,
+  refusal?: typeof refusalOf,
+): Promise<CloudAddressReply> {
+  const reply = await exchange(state, input, signal, onRefusal, refusal);
   if (reply.workflowId !== input.workflowId || reply.provider !== "google")
     throw new AppError("cloud.unavailable", {});
   if (input.kind === "suggest" && Array.isArray(reply.candidates)) {

@@ -19,6 +19,7 @@ export async function installationFixture(
     staffCertificate?: MachineHandler;
     guestMenu?: MachineHandler;
     ownerRecovery?: MachineHandler;
+    addressLookup?: MachineHandler;
     errorReport?: MachineHandler;
     staffReport?: MachineHandler;
     tunnel?: MachineHandler;
@@ -79,6 +80,10 @@ export async function installationFixture(
   ];
   const f = await cloudFixture(async (values, saved, req, res, sent) => {
     requests.push(values);
+    if (values[2] === "address-lookup" && options.addressLookup) {
+      await options.addressLookup(values, saved, req, res, sent);
+      return;
+    }
     if (String(values[2]).startsWith("owner-recovery-") && options.ownerRecovery) {
       await options.ownerRecovery(values, saved, req, res, sent);
       return;

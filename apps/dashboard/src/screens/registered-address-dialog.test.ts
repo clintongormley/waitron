@@ -834,6 +834,17 @@ async function choose(panel: Panel, address: AddressLookupResult): Promise<void>
   await dialogHost(panel).updateComplete;
 }
 
+it("checks Cloud as the registered address opens and loads the search into that window", async () => {
+  const addressLookup = vi.fn(async () => ({ available: true }));
+  const panel = await mount(Object.assign(stubApi(), { addressLookup }));
+  expect(addressLookup).not.toHaveBeenCalled();
+  await open(panel);
+  await expect
+    .poll(() => dialog(panel).querySelector<WtAddressLookup>("wt-address-lookup")?.hidden)
+    .toBe(false);
+  expect(addressLookup).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
+});
+
 it("puts the address search above the registered address, in the business's country", async () => {
   const panel = await mountSearching(stubApi());
   await open(panel);

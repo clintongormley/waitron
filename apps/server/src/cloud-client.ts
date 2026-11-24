@@ -12,7 +12,7 @@ import {
   type CloudSignInState,
   type PreparedSetupAdmin,
 } from "./cloud-sign-in.js";
-import { fetchSetupAddress } from "./cloud-address-lookup.js";
+import { fetchSetupAddress, registeredAddressLookup } from "./cloud-address-lookup.js";
 import { fetchOwnerRecovery, ownerRecoveryBinding } from "./cloud-owner-recovery.js";
 import {
   fetchCloudEmailGrant,
@@ -817,6 +817,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async setupSignInAvailable() {
       return options.signIn?.setup === true && (await readState())?.version === 4;
     },
+    addressLookup: registeredAddressLookup({ read, registrationOf, leaseState, recordRefusal }),
     async setupAddressLookup(
       binding: CloudSignInBinding,
       input: Parameters<typeof fetchSetupAddress>[1] | undefined,

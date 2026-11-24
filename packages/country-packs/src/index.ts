@@ -5,3 +5,5 @@ export * from "./recipient-address.js";
 export * from "./chosen-address.js";
 export * from "./registered-address.js";
 export * from "./recipient-identifier.js";
+export * from "./cloud-address-provider.js";
+export { findAdministrativeArea } from "@waitron/country";

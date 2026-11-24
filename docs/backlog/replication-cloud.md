@@ -372,21 +372,12 @@ streams to an S3 store that runs on the spare box"). The owner's idea: a till bo
 similar hardware, so it could also be a spare. Needs a design: how a second spare receives the
 stream, which spare takes over, and how alerts and the update order (A950) work with two.
 
-## A1171: the address forms need a provider from the Cloud address-lookup bridge
+## A1171: address search on the till and privacy wording
 
-**2026-11-24:** the [plan to finish it](../superpowers/plans/2026-11-24-address-lookup-finish.md) replaces the Cloud design's confirm
-call, allowance message and session token listed below: saving the form is the confirmation.
-
-Nothing hands
-`wt-address-lookup` a provider yet. Waitron Cloud's proposed design also asks for provider
-attribution beside the list, a confirm call at Save, an allowance message, a province inferred
-from a postcode shown for review, its own session token, and the provider's area codes turned
-into the pack's. When the search first shows, the guides that describe these forms gain a line: the
-till's full-invoice section in `table-service.md`, and the "Full invoices" entry's "Who receives
-it" ("Destinatarios" in es) and the invoice notice in `data-protection.md`, en and es, with the
-emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the provider then
-receives what staff type into the till's address search and which suggestion they pick. Left
-open by A1171.
+Connect the till's full-invoice window to address suggestions. Add Google's name beside the filled
+fields on all four forms, and explain the till search in `table-service.md`, `data-protection.md`
+and `apps/server/src/i18n/invoice-email-notice.ts` in English and Spanish.
+[Finish plan](../superpowers/plans/2026-11-24-address-lookup-finish.md)
 
 ## A1342: return a stopped box's records before reset
 
@@ -640,18 +631,6 @@ Slice 3.
   more boxes, when no key it trusts vouched for that main box; the refusal names no next step.
   Measured at the helper, not end to end.
   [Detail](replication-cloud.md#a1276-after-two-promotions-a-box-can-refuse-the-main-boxs-chart)
-
-## Bundle: Address search provider, province names, guide lines
-
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1171: the address forms need a provider from the Cloud address-lookup bridge.** Nothing hands
-  `wt-address-lookup` a provider yet. Left open by A1171.
-  [Detail](replication-cloud.md#a1171-the-address-forms-need-a-provider-from-the-cloud-address-lookup-bridge)
-- **A1171: the dashboard's Venue card knows a province only by its code and main name.** The server's
-  `provinces` list carries no other names, so a chosen address naming "Alicante" for
-  "Alicante/Alacant" is not recognised there and is left to the server's postcode check at Save.
-  Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 ## Decisions and deliberate limits
 

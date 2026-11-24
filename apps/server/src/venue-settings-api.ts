@@ -45,6 +45,7 @@ import { venueClockPreview } from "./venue-clock-preview.js";
 import { registeredAddressRefusal } from "./registered-address-check.js";
 import { privacyContactRequest } from "./venue-privacy.js";
 import type { VenueClockPreview, VenueDefaults, VenueDetailWrite } from "./venue-detail-types.js";
+import { mountAddressLookupApi, type AddressLookupAccess } from "./address-lookup-api.js";
 import "./errors.js";
 
 const run = createErrorBoundary(
@@ -225,6 +226,7 @@ export function mountVenueSettingsApi(
   deps: {
     db: Database;
     fiscal: FiscalContribution;
+    addressLookup?: AddressLookupAccess;
     now?: () => Date;
     readBackupDeadlines?: () => VenueClockPreview["backupDeadlines"];
   },
@@ -242,6 +244,15 @@ export function mountVenueSettingsApi(
       });
       return fn(tx, authorizedBy);
     });
+  if (deps.addressLookup)
+    mountAddressLookupApi(
+      app,
+      deps.addressLookup,
+      async (sessionId) => {
+        await gated(sessionId, async () => {});
+      },
+      log,
+    );
   app.get("/management-api/venue-details", (c) =>
     run(c, log, async () => {
       const model = await gated(

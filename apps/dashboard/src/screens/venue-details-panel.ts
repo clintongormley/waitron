@@ -18,8 +18,13 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
-import { getCountryPack } from "@waitron/country-packs";
-import { classifySavedTimeZone, foldForSearch, formatIban } from "@waitron/shared";
+import {
+  areaOfChosenAddress,
+  cloudAddressProvider,
+  findAdministrativeArea,
+  getCountryPack,
+} from "@waitron/country-packs";
+import { classifySavedTimeZone, formatIban } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -97,7 +102,6 @@ const SEARCH_FILLS: readonly VenueDetailField[] = [
   "postalCode",
   "city",
 ];
-const provinceKey = (value: string) => foldForSearch(value.trim().replace(/\s+/g, " "));
 
 @customElement("dashboard-venue-details-panel")
 export class VenueDetailsPanel extends LitElement {
@@ -187,6 +191,9 @@ export class VenueDetailsPanel extends LitElement {
   @property({ attribute: false }) readOnly = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  @state() private registeredAddressProvider?: AddressLookupProvider;
+  #registeredAddressLoad?: Promise<AddressLookupProvider | undefined>;
+  @state() private cloudAddressProvider?: AddressLookupProvider;
   @state() private model?: VenueDetailsModel;
   @state() private draft?: VenueDetailValues;
   @state() private submitting = false;
@@ -311,6 +318,24 @@ export class VenueDetailsPanel extends LitElement {
     this.#answeredPlaces[field] = ++this.#places;
     this.model = withTaxpayerField(this.model, model, field);
   }
+  async #loadAddressProvider(): Promise<AddressLookupProvider | undefined> {
+    if (this.model?.issuer.country !== "ES") return;
+    const api = this.api;
+    return cloudAddressProvider(
+      (operation) => api.addressLookup(operation),
+      () => (currentLocale() === "es-ES" ? "es" : "en"),
+    ).catch(() => undefined);
+  }
+  #openRegisteredAddress(stored: string): void {
+    this.renderRoot.querySelector("dashboard-registered-address-dialog")?.show(stored);
+    this.registeredAddressProvider = undefined;
+    const pending = this.addressProvider ? undefined : this.#loadAddressProvider();
+    this.#registeredAddressLoad = pending;
+    void pending?.then((provider) => {
+      if (this.isConnected && this.#registeredAddressLoad === pending)
+        this.registeredAddressProvider = provider;
+    });
+  }
   #begin(): void {
     if (!this.model || this.readOnly) return;
     this.#expected = { ...this.model.details };
@@ -321,6 +346,16 @@ export class VenueDetailsPanel extends LitElement {
     this.actionError = "";
     this.acknowledged = "";
     this.#registerDraft();
+    this.cloudAddressProvider = undefined;
+    if (
+      this.addressProvider ||
+      SEARCH_FILLS.some((field) => this.model!.policy[field].decision === "refuse")
+    )
+      return;
+    const scope = this.#scope;
+    void this.#loadAddressProvider().then((provider) => {
+      if (scope && this.#scope === scope) this.cloudAddressProvider = provider;
+    });
   }
   #registerDraft(): void {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
@@ -513,16 +548,12 @@ export class VenueDetailsPanel extends LitElement {
     event.stopPropagation();
     if (!this.draft || !this.model || this.readOnly || this.submitting) return;
     const address = event.detail.address;
-    const code = address.administrativeAreaCode;
-    const area =
-      code === undefined
-        ? undefined
-        : this.model.provinces.find(
-            ({ code: known, name }) => known === code || provinceKey(name) === provinceKey(code),
-          );
-    if (address.countryCode !== this.model.issuer.country) this.refusedAddress = "country";
-    else if (area !== undefined && area.name !== this.draft.province)
-      this.refusedAddress = "province";
+    const country = this.model.issuer.country;
+    const pack = getCountryPack(country);
+    const chosen = pack && areaOfChosenAddress(pack, address);
+    const current = pack && findAdministrativeArea(pack, this.draft.province ?? "");
+    if (address.countryCode !== country) this.refusedAddress = "country";
+    else if (chosen && chosen.code !== current?.code) this.refusedAddress = "province";
     else {
       this.refusedAddress = undefined;
       const [addressLine1 = "", ...rest] = address.lines;
@@ -728,7 +759,7 @@ export class VenueDetailsPanel extends LitElement {
     return html`<wt-address-lookup
       class="field"
       name="address-search"
-      .provider=${this.addressProvider}
+      .provider=${this.addressProvider ?? this.cloudAddressProvider}
       country-code=${model.issuer.country}
       label=${t("venue_details.address_lookup.label")}
       placeholder=${t("venue_details.address_lookup.placeholder")}
@@ -835,10 +866,7 @@ export class VenueDetailsPanel extends LitElement {
                     )}${this.#changeButton(
                       "change-taxpayer-domicile",
                       "venue_details.change_taxpayer_domicile",
-                      (shown) =>
-                        this.renderRoot
-                          .querySelector("dashboard-registered-address-dialog")
-                          ?.show(shown.taxpayerDomicile ?? ""),
+                      (shown) => this.#openRegisteredAddress(shown.taxpayerDomicile ?? ""),
                       current,
                     )}${this.#changeButton(
                       "change-bank-account",
@@ -896,7 +924,7 @@ export class VenueDetailsPanel extends LitElement {
             ></dashboard-legal-name-dialog>
             <dashboard-registered-address-dialog
               .api=${this.api}
-              .addressProvider=${this.addressProvider}
+              .addressProvider=${this.addressProvider ?? this.registeredAddressProvider}
               .countryCode=${model.issuer.country}
               .venueAddress=${model.details}
               .lateRefusalFor=${this.lateRefusalFor}

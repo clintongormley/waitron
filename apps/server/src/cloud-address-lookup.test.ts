@@ -6,6 +6,7 @@ import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { hashSessionToken } from "@waitron/identity";
+import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountSetupCloudSignIn } from "./setup-cloud-sign-in.js";
@@ -337,6 +338,53 @@ it("keeps manual entry for a Cloud refusal and never calls Cloud for another set
     expect(refused.status).toBe(503);
     expect(await refused.json()).toEqual({ error: { code: "cloud.unavailable", params: {} } });
     expect(f.calls.map((call) => call[2])).toEqual(["renew", "address-lookup"]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("asks Cloud for availability on each opening and recognises an expired search", async () => {
+  let availableStatus = 503;
+  const f = await installationFixture(undefined, {
+    addressLookup: async (values, _saved, _req, res) => {
+      const { kind } = JSON.parse(String(values[7]));
+      if (kind === "available") {
+        res.writeHead(availableStatus);
+        res.end(
+          availableStatus === 503 ? '{"error":"temporarily_unavailable"}' : '{"available":true}',
+        );
+      } else {
+        res.writeHead(410);
+        res.end('{"error":"expired"}');
+      }
+    },
+  });
+  try {
+    const lookup = (
+      operation:
+        | { kind: "available" }
+        | { kind: "suggest"; workflowId: string; query: string; language: "en" },
+    ) => f.client.addressLookup(operation, async () => {}, new AbortController().signal);
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: false });
+    availableStatus = 201;
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: false });
+    availableStatus = 200;
+    await expect(lookup({ kind: "available" })).resolves.toEqual({ available: true });
+    const suggest = {
+      kind: "suggest",
+      workflowId: randomUUID(),
+      query: "Main Street",
+      language: "en",
+    } as const;
+    await expect(lookup(suggest)).rejects.toMatchObject({ code: "cloud.address_lookup_expired" });
+    const calls = f.requests.filter((call) => call[2] === "address-lookup");
+    expect(calls.map((call) => JSON.parse(String(call[7])))).toEqual([
+      { version: 1, kind: "available" },
+      { version: 1, kind: "available" },
+      { version: 1, kind: "available" },
+      { version: 1, ...suggest },
+    ]);
+    expect(new Set(calls.map((call) => call[4])).size).toBe(4);
   } finally {
     await f.close();
   }

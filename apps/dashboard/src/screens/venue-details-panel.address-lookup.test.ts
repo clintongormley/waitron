@@ -95,6 +95,45 @@ it("shows no address search without a provider", async () => {
   expect(lookup(el)!.getBoundingClientRect().height).toBe(0);
 });
 
+it("checks Cloud on each opening and keeps manual entry while a reply is pending", async () => {
+  let answer!: (value: { available: boolean }) => void;
+  const addressLookup = vi
+    .fn()
+    .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    .mockResolvedValueOnce({ available: false });
+  const el = await editing(Object.assign(apiFor(), { addressLookup }), null);
+  expect(field(el, "addressLine1").value).toBe("Calle Mayor 1");
+  expect(lookup(el)!.hidden).toBe(true);
+  expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }]]);
+  answer({ available: true });
+  await expect.poll(() => lookup(el)!.hidden).toBe(false);
+  await click(el, "[data-test=cancel]");
+  await click(el, "[data-test=edit]");
+  expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }], [{ kind: "available" }]]);
+  expect(lookup(el)!.hidden).toBe(true);
+});
+
+it.each(["Alicante", "03"])(
+  "accepts a suggestion in the venue's stored province %s",
+  async (province) => {
+    const el = await editing(
+      apiFor({
+        ...venueDetailsFixture({ province }),
+        provinces: [{ code: "03", name: "Alicante/Alacant" }],
+      }),
+    );
+    await choose(el, {
+      ...MADRID,
+      lines: ["New Street 2"],
+      locality: "Alicante",
+      administrativeAreaCode: "03",
+      postalCode: "03001",
+    });
+    expect(field(el, "addressLine1").value).toBe("New Street 2");
+    expect(lookup(el)!.message).toBe("");
+  },
+);
+
 it("puts the address search above the street address, in the venue's country", async () => {
   const el = await editing(apiFor());
   const search = lookup(el)!;
