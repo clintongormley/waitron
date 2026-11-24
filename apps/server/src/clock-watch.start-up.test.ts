@@ -32,7 +32,7 @@ function harness(
     /** Whether the box files records, asked at each look; it does unless this answers otherwise. */
     filesRecords?: () => boolean;
     /** Hands the start an identity change's opening, as boot does while one waits. */
-    attemptIdentityChange?: (state: StartClockState) => Promise<void>;
+    attemptIdentityChange?: (state: StartClockState, stopped: () => boolean) => Promise<void>;
   } = {},
 ) {
   let wallMs = options.startMs ?? START_MS;
@@ -128,9 +128,9 @@ function harness(
             ...(attemptIdentityChange === undefined
               ? {}
               : {
-                  attemptIdentityChange: async () => {
+                  attemptIdentityChange: async (stopped: () => boolean) => {
                     attemptsInTurn.push(inTurnNow);
-                    await attemptIdentityChange(startState);
+                    await attemptIdentityChange(startState, stopped);
                   },
                 }),
           },
@@ -495,6 +495,24 @@ describe("the clock watch and an identity change's opening", () => {
         },
       },
     ]);
+  });
+
+  it("tells an attempt under way whether the stepdown has stopped the job", async () => {
+    const stop = new AbortController();
+    const seen: boolean[] = [];
+    const h = harness({
+      host: async () => SYNCHRONISED,
+      startState: holding(),
+      attemptIdentityChange: async (_state, stopped) => {
+        seen.push(stopped());
+        stop.abort();
+        seen.push(stopped());
+      },
+    });
+    const job = clockWatchJob(h.watch, CLOCK_WATCH_MS);
+    await job.pass({ signal: stop.signal, now: new Date(h.wall()) });
+    expect(seen).toEqual([false, true]);
+    expect(h.attemptsInTurn).toEqual([true]);
   });
 
   it("runs no attempt queued behind another turn once the stepdown has stopped the job", async () => {

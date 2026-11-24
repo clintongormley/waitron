@@ -147,7 +147,7 @@ export function clockCorrection(deps: {
   let turn: Promise<unknown> = Promise.resolve();
 
   function inTurn<T>(fn: () => Promise<T>): Promise<T> {
-    const result = turn.then(fn);
+    const result = turn.then(() => fn());
     turn = result.catch(() => {});
     return result;
   }

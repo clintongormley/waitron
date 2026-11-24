@@ -1204,7 +1204,8 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
   transaction covers a stepdown that has already happened, and the clock watch stops at a
   stepdown; a stepdown that starts during the transaction itself was read, not run (the stepdown
   aborts duties and then closes them, `handover-stepdown.ts:181-213`; I did not find whether it
-  waits for `venue.db`'s write lock). Task 5b's stepdown case covers only an attempt not yet begun.
+  waits for `venue.db`'s write lock). Task 5b's stepdown cases cover an attempt not yet begun and, by
+  halting the watch, one still reading the time service.
 - A history that stays broken (`history_invalid`) has no way out an operator can take: Restart the
   box only tries again. Restore and promotion refuse the same history. I did not design one; the
   owner may want one before go-live.

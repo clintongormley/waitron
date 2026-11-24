@@ -612,6 +612,73 @@ describe("a chart that changes while the box waits to open its new installation"
   );
 });
 
+describe("a clock watch halted while the opening reads the time service", () => {
+  it.each([
+    ["opens nothing, and keeps the note and the confirmation without an alert", true, 26],
+    ["opens and trades when it is not halted, the control", false, 28],
+  ])("%s", async (_label, halts, minute) => {
+    inMinute(minute);
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    const before = installations();
+    const records = fiscalRecordCount(venue);
+    const pass: string[] = [];
+    let synchronised = false;
+    const host: BoxHostClient = {
+      ...synchronisedBoxHost(),
+      clockStatus: async () => {
+        if (synchronised) {
+          const inOpening = opening.attempts === 1 && built.start!.heldConfirmation !== null;
+          pass.push(inOpening ? "the opening's" : "the look's");
+          if (inOpening && halts) built.watch!.halt();
+        }
+        return clockServiceAnswer(synchronised);
+      },
+    };
+    const seen = await serving({ producer, host, stateDir }, async () => {
+      opening.attempts = 0;
+      synchronised = true;
+      await built.watch!.check();
+      return {
+        pass: [...pass],
+        attempts: opening.attempts,
+        status: built.start!.status,
+        held: built.start!.heldConfirmation?.by,
+        sale: (await sell()).status,
+        alerts: await clockAlerts(),
+        records: fiscalRecordCount(venue) - records,
+        opened: installations() - before,
+        note: await noteExists(stateDir),
+      };
+    });
+
+    const reads = { pass: ["the look's", "the opening's"], attempts: 1 };
+    expect(seen).toEqual(
+      halts
+        ? {
+            ...reads,
+            status: "waiting",
+            held: "by_internet",
+            sale: 409,
+            alerts: ["clock.unconfirmed"],
+            records: 0,
+            opened: 0,
+            note: true,
+          }
+        : {
+            ...reads,
+            status: "by_internet",
+            held: undefined,
+            sale: 200,
+            alerts: [],
+            records: 1,
+            opened: 1,
+            note: false,
+          },
+    );
+  });
+});
+
 async function post(path: string, cookie: string, body: unknown) {
   const answer = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
     method: "POST",

@@ -16,6 +16,7 @@ const NOTE = {
   fromProducerTaxId: "00000000T",
 };
 const HEADS = { [NODE]: 7 };
+const TX = { fake: "tx" } as unknown as Transaction;
 type Open = NonNullable<FiscalBackend["openIdentityChange"]>;
 
 const refusedFor = (reason: string) => new AppError("sif.identity_change_waiting", { reason });
@@ -71,7 +72,12 @@ describe("attemptIdentityChange", () => {
     const o = opening(async () => "opened");
     await o.attemptIdentityChange();
     const [asked, note, clock, mayOpen] = o.openIdentityChange.mock.calls[0]!;
-    expect([asked, note, mayOpen]).toEqual([NODE, NOTE, o.mayOpen]);
+    expect([asked, note]).toEqual([NODE, NOTE]);
+    for (const answer of [true, false]) {
+      o.mayOpen.mockResolvedValueOnce(answer);
+      expect(await mayOpen(TX)).toBe(answer);
+    }
+    expect(o.mayOpen.mock.calls).toEqual([[TX], [TX]]);
     expect(clock).toEqual({ kind: "time-service", read: o.synchronised });
   });
 
@@ -276,6 +282,77 @@ describe("attemptIdentityChange", () => {
         { kind: "retry", reason: "minute_in_use" },
       ].map((fields) => ["warn", "identity_change.refused", fields]),
     );
+  });
+
+  /** The seat's transaction check, after `reads` have run. */
+  function seatAsking(reads: () => void = () => {}): Open {
+    return async (_node, _note, _clock, mayOpen) => {
+      reads();
+      if (!(await mayOpen(TX))) throw refusedFor("not_sole_primary");
+      return "opened";
+    };
+  }
+
+  it.each([
+    ["asked with no stop", undefined],
+    ["not stopped", () => false],
+  ])("opens as the caller's mayOpen allows when %s", async (_label, stopped) => {
+    const o = opening(async () => "opened");
+    o.openIdentityChange.mockImplementation(seatAsking());
+    o.mayOpen.mockResolvedValueOnce(false);
+    await o.attemptIdentityChange(stopped);
+    expect(o.latestRefusal()).toEqual({ kind: "blocked", reason: "not_sole_primary" });
+    expect(o.log).toHaveBeenCalledExactlyOnceWith("warn", "identity_change.refused", {
+      kind: "blocked",
+      reason: "not_sole_primary",
+    });
+    expect(o.state.status).toBe("waiting");
+
+    await o.attemptIdentityChange(stopped);
+    expect(o.mayOpen.mock.calls).toEqual([[TX], [TX]]);
+    expect(o.state.status).toBe("by_internet");
+  });
+
+  it("opens nothing when stopped while the seat reads, and refuses, logs, deletes and drops nothing", async () => {
+    const o = opening(async () => "opened");
+    let stopped = false;
+    o.openIdentityChange.mockImplementation(
+      seatAsking(() => {
+        stopped = true;
+      }),
+    );
+    await o.attemptIdentityChange(() => stopped);
+    expect(o.openIdentityChange).toHaveBeenCalledOnce();
+    expect(o.mayOpen).not.toHaveBeenCalled();
+    expect(o.state).toMatchObject({
+      status: "waiting",
+      cause: "identity_change",
+      heldConfirmation: { heads: HEADS },
+    });
+    expect(o.latestRefusal()).toBeNull();
+    expect(o.log).not.toHaveBeenCalled();
+    expect(o.deleteNote).not.toHaveBeenCalled();
+    expect(o.onConfirmed).not.toHaveBeenCalled();
+  });
+
+  it("keeps an earlier refusal when a later attempt is stopped", async () => {
+    const o = opening(async () => "opened");
+    o.openIdentityChange.mockRejectedValueOnce(refusedFor("history_invalid"));
+    await o.attemptIdentityChange(() => false);
+    o.openIdentityChange.mockImplementation(seatAsking());
+    await o.attemptIdentityChange(() => true);
+    expect(o.latestRefusal()).toEqual({ kind: "blocked", reason: "history_invalid" });
+    expect(o.log).toHaveBeenCalledOnce();
+  });
+
+  it("keeps and logs a refusal the seat makes before asking, though stopped by then", async () => {
+    const o = opening(() => Promise.reject(refusedFor("history_invalid")));
+    await o.attemptIdentityChange(() => true);
+    expect(o.latestRefusal()).toEqual({ kind: "blocked", reason: "history_invalid" });
+    expect(o.log).toHaveBeenCalledExactlyOnceWith("warn", "identity_change.refused", {
+      kind: "blocked",
+      reason: "history_invalid",
+    });
   });
 
   it("forgets a refusal once a later attempt opens", async () => {

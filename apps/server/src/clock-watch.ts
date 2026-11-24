@@ -51,8 +51,8 @@ export function createClockWatch(deps: {
     heads: (tx: Transaction) => Promise<ChainHeads>;
     /** While a new fiscal installation waits to open: asked in the correction's turn at each look
      * until the internet confirms, after the look at the time service. It opens nothing while no
-     * confirmation is held. */
-    attemptIdentityChange?: () => Promise<void>;
+     * confirmation is held. `stopped` answers whether this watch has been halted. */
+    attemptIdentityChange?: (stopped: () => boolean) => Promise<void>;
     /** This box's chain and the latest sale on it above a position that AEAT refused as dated in
      * the future. At each look, whatever the status, such a refusal of a sale recorded since the
      * latest confirmation, and above any refusal an earlier look found while the time service was
@@ -103,7 +103,7 @@ export function createClockWatch(deps: {
     if (stopped) return;
     const attempt = start.attemptIdentityChange;
     if (attempt !== undefined) {
-      await inTurn(async () => (stopped ? undefined : attempt()));
+      await inTurn(async () => (stopped ? undefined : attempt(() => stopped)));
     }
     if (byInternet()) {
       deps.log("info", "clock_start.confirmed", {

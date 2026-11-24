@@ -901,6 +901,14 @@ describe("one set at a time", () => {
     expect(order).toEqual(["set", "other"]);
   });
 
+  it("hands a turn nothing of the one before it", async () => {
+    const h = harness();
+    await h.correction.inTurn(async () => "earlier");
+    const turn = vi.fn(async () => {});
+    await h.correction.inTurn(turn);
+    expect(turn.mock.calls).toEqual([[]]);
+  });
+
   it("runs the next turn after one that threw", async () => {
     const h = harness();
     await expect(

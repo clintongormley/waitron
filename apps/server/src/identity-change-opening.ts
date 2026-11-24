@@ -88,8 +88,9 @@ export function identityChangeOpening(
     readonly mayOpen: (tx: Transaction) => Promise<boolean>;
   },
 ): {
-  /** Never throws. Called in the clock correction's turn, never inside a transaction. */
-  attemptIdentityChange(): Promise<void>;
+  /** Never throws. Called in the clock correction's turn, never inside a transaction. Opens nothing
+   * once `stopped` answers true as the transaction is admitted; that is no refusal. */
+  attemptIdentityChange(stopped?: () => boolean): Promise<void>;
   latestRefusal(): IdentityChangeRefusal | null;
 } {
   let latest: IdentityChangeRefusal | null = null;
@@ -106,9 +107,10 @@ export function identityChangeOpening(
 
   return {
     latestRefusal: () => latest,
-    async attemptIdentityChange() {
+    async attemptIdentityChange(stopped) {
       const held = deps.state.heldConfirmation;
       if (held === null) return;
+      let refusedByStop = false;
       try {
         const outcome = await deps.backend.openIdentityChange?.(
           deps.nodeId,
@@ -116,7 +118,10 @@ export function identityChangeOpening(
           held.by === "by_person"
             ? { kind: "confirmed-start", standing: held.standing }
             : { kind: "time-service", read: deps.synchronised },
-          deps.mayOpen,
+          async (tx) => {
+            refusedByStop = stopped?.() ?? false;
+            return !refusedByStop && deps.mayOpen(tx);
+          },
         );
         if (outcome === undefined || outcome === "not-named") {
           refuse({ refusal: { kind: "blocked", reason: "not_named" } });
@@ -127,7 +132,7 @@ export function identityChangeOpening(
         await deleteNote(deps);
         deps.state.releaseIdentityChange();
       } catch (error) {
-        refuse(refusalOf(error));
+        if (!refusedByStop) refuse(refusalOf(error));
       }
     },
   };
