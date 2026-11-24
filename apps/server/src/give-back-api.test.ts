@@ -12,7 +12,7 @@ import {
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
-import type { GiveBackView } from "./give-back.js";
+import type { GiveBackView } from "./give-back-read.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
