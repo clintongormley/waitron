@@ -270,7 +270,7 @@ it.each([
             WAITRON_VENUE_DIR: venueDir,
             WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
             WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-            WAITRON_NODE_RECOVERY_KEY: "rebuilt-baseline-node-key",
+            WAITRON_MASTER_KEY: "rebuilt-baseline-node-key",
             WAITRON_MIGRATIONS_DIR: shippedRoot,
           },
           out: (line) => out.push(line),

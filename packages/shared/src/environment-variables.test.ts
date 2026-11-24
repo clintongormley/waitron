@@ -29,10 +29,9 @@ describe("the environment list", () => {
     });
   });
 
-  it("lists the node recovery key and operation file as restore command and startup inputs", () => {
-    const { WAITRON_NODE_RECOVERY_KEY, WAITRON_RECOVERY_OPERATION_FILE } =
-      shared.ENVIRONMENT_VARIABLES;
-    for (const spec of [WAITRON_NODE_RECOVERY_KEY, WAITRON_RECOVERY_OPERATION_FILE]) {
+  it("lists the master key and operation file as restore command and startup inputs", () => {
+    const { WAITRON_MASTER_KEY, WAITRON_RECOVERY_OPERATION_FILE } = shared.ENVIRONMENT_VARIABLES;
+    for (const spec of [WAITRON_MASTER_KEY, WAITRON_RECOVERY_OPERATION_FILE]) {
       expect(spec.source).toBe("command or start input");
       expect(spec.readers).toEqual(["server", "restore"]);
     }

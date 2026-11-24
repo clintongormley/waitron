@@ -477,7 +477,7 @@ export WAITRON_RECOVERY_OPERATION_FILE="$PWD/recovery-operation.json"
 ```
 
 Use `re-register` for `register-till`, and `restore` for either `waitron-restore` source.
-Supply the node key through `WAITRON_NODE_RECOVERY_KEY`, never a command argument or either JSON
+Supply the master key through `WAITRON_MASTER_KEY`, never a command argument or either JSON
 file. The command reads at most 128 KiB of operation input. An unreadable, malformed or oversized
 file returns `server.config_invalid` with the variable name and `invalid_operation`; its contents
 are not included in that refusal.

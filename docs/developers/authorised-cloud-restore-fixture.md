@@ -39,8 +39,8 @@ comes from the existing fiscal test seed; it is not Cloud's `Cloud Test Venue` f
 
 Build the fixture through its existing setup and helpers:
 
-1. The helper's setup seeds the disposable database and calls `mintBreakGlassKey` for its
-   node. Retain the returned `key.secret` privately for this run. The archive password is
+1. The helper's setup seeds the disposable database and calls `mintMasterKey` for it. The
+   returned `key.secret` is the venue's master key; retain it privately for this run. The archive password is
    a different secret. Initial setup goes through `createHourPreparation` and
    `activatePreparedModuleAllocation`; the test then sets the recovered counters to 123.
 2. `archiveHost()` archives that database, builds and encrypts its archive, then calls
@@ -51,7 +51,7 @@ Build the fixture through its existing setup and helpers:
 3. Keep `f.outcome.input`, `f.options.binding`, `f.roots` and the preparation journal together.
    `archiveCommand(f)` writes the encrypted artifact and the operation JSON, constructs the
    migrations directory and supplies `WAITRON_RECOVERY_OPERATION_FILE`,
-   `WAITRON_NODE_RECOVERY_KEY`, `WAITRON_BACKUP_RECOVERY_KEY`, the owned state and venue paths,
+   `WAITRON_MASTER_KEY`, `WAITRON_BACKUP_RECOVERY_KEY`, the owned state and venue paths,
    and both `--confirm-old-box-gone` and `--confirm-sole-recovery`.
 4. Follow the existing case **“the default archive command reconstructs selected-hour
    preparation with explicit isolation”** in

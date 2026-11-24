@@ -817,7 +817,7 @@ async function runAdmittedEntry(
             venueDir: deps.venueDir,
             migrationsRoot,
             log: deps.log,
-            recoverySecret: readVariable(deps.baseEnv, "WAITRON_NODE_RECOVERY_KEY"),
+            recoverySecret: readVariable(deps.baseEnv, "WAITRON_MASTER_KEY"),
             recoveryOperationPath: readVariable(deps.baseEnv, "WAITRON_RECOVERY_OPERATION_FILE"),
             onManagedCloudRestored: async (binding) => {
               if (recoveryOrigin)

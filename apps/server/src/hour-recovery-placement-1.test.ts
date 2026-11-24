@@ -82,7 +82,7 @@ describe("selected-hour admission before archive placement", () => {
           WAITRON_VENUE_DIR: f.roots.venueDir,
           WAITRON_BACKUP_RECOVERY_KEY: "archive password",
           WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-          WAITRON_NODE_RECOVERY_KEY: "wrong node key",
+          WAITRON_MASTER_KEY: "wrong node key",
         },
         out: (line) => output.push(line),
         restore: (request) => restoreFromArtifactFile({ ...request, migrationsRoot: null }),
@@ -657,7 +657,7 @@ describe("selected-hour admission before archive placement", () => {
       deps.argv = deps.argv.filter((arg) => arg !== "--confirm-old-box-gone");
     if (reason === "missing sole confirmation")
       deps.argv = deps.argv.filter((arg) => arg !== "--confirm-sole-recovery");
-    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong node key") command.env.WAITRON_MASTER_KEY = "wrong node key";
     if (reason === "wrong bucket password")
       await writeFile(kitPath, encodeRecoveryKit({ ...kit, recoveryKey: "wrong bucket password" }));
     if (reason === "unconfirmed venue")

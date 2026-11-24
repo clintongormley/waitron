@@ -391,7 +391,7 @@ export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>)
       WAITRON_MIGRATIONS_DIR: migrationRoot,
       WAITRON_BACKUP_RECOVERY_KEY: "archive password",
       WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-      WAITRON_NODE_RECOVERY_KEY: key.secret,
+      WAITRON_MASTER_KEY: key.secret,
     },
     readBoot,
   };

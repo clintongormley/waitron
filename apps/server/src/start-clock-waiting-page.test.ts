@@ -4,20 +4,21 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type Page } from "playwright";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
+import { authorityKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import { createStartClockWaiting } from "./start-clock-waiting.js";
 
-// The secret the printed key decodes to: what the restore page stages.
-const KEY = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+const KEY = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => i * 13 + 5));
 let browser: Browser | undefined;
 let stateDir: string;
 beforeAll(async () => {
   stateDir = await mkdtemp(join(tmpdir(), "waitron-start-clock-page-"));
   const path = attachmentPath(stateDir, "node-key");
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, KEY);
+  // What the restore page stages: the master key's authority key, as hex.
+  await writeFile(path, authorityKey(decodeMasterKeyCode(KEY)).toString("hex"));
   browser = await chromium.launch({ headless: true });
 });
 afterAll(async () => {
@@ -192,10 +193,10 @@ it("with the key, shows the done screen's step with both times and their dates",
     expect(await page.getByRole("button", { name: words.thisDevice }).isVisible()).toBe(true);
   }));
 
-it("takes the box key as printed on the recovery pack, typed in lower case", () =>
+it("takes the master key as printed on the recovery pack, typed in lower case without spaces", () =>
   withPage("en-GB", async (page) => {
     await open(page, 0);
-    await enterKey(page, encodeRecoveryKey(KEY).toLowerCase());
+    await enterKey(page, KEY.replaceAll(" ", "").toLowerCase());
     await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
     expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
   }));

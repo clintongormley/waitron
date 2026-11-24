@@ -173,7 +173,7 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_BACKUP_KEY_ROTATED_AT: variable("backup.env", "text", server),
   WAITRON_BREAKGLASS_PASSWORD: variable("command", "text", ["break-glass"], secret),
   WAITRON_BREAKGLASS_PIN: variable("command", "text", ["break-glass"], secret),
-  WAITRON_NODE_RECOVERY_KEY: variable("command or start input", "key", ["server", "restore"]),
+  WAITRON_MASTER_KEY: variable("command or start input", "key", ["server", "restore"]),
   WAITRON_RECOVERY_OPERATION_FILE: variable("command or start input", "path", [
     "server",
     "restore",

@@ -7,8 +7,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { masterKeyAuthorising } from "./operation-authentication.js";
+import * as operations from "./recovery-module-operation.js";
 import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { ALL_MODULES } from "./modules.js";
 import { firstStartPending } from "./restore-flow.js";
 import { emptyScratch } from "./scratch.js";
@@ -16,7 +22,10 @@ import { writeValidated } from "./restore.js";
 
 const dirs: string[] = [];
 const NODE_KEY_FILE = "flows/restore/node-key";
-const secret = "synthetic node credential";
+const masterKey = makeMasterKey();
+const secret = encodeMasterKeyCode(masterKey);
+const STAGED = authorityKey(decodeMasterKeyCode(secret)).toString("hex");
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 /** What placement reads before it moves anything: a database with no migration journal. */
 const EMPTY_DATABASE = (() => {
   const empty = new DatabaseSync(":memory:");
@@ -115,7 +124,7 @@ it.each(["archive", "stream"])(
       };
     }
     await stageRestoreRequest(stateDir, request);
-    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
     expect((await stat(join(stateDir, NODE_KEY_FILE))).mode & 0o777).toBe(0o600);
     const marker = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
     expect(marker).not.toContain(secret);
@@ -143,10 +152,71 @@ it.each(["", " ", null, 42, "x".repeat(4097)])(
       } as unknown as RestoreRequest),
     ).rejects.toMatchObject({
       code: "server.config_invalid",
-      params: { variable: "WAITRON_NODE_RECOVERY_KEY", reason: "invalid_credential" },
+      params: { variable: "WAITRON_MASTER_KEY", reason: "invalid_credential" },
     });
     expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
-    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
+  },
+);
+
+it.each(["archive", "stream"])(
+  "the staged restore file holds the authority key and not the typed text (%s)",
+  async (kind) => {
+    const stateDir = await fresh();
+    const typed = secret.toLowerCase();
+    let request: RestoreRequest = { ...archive(), nodeRecoverySecret: typed };
+    if (kind === "stream") {
+      const databasePath = join(stateDir, "download.db");
+      await writeFile(databasePath, "database");
+      request = {
+        kind: "stream",
+        databasePath,
+        entries: [],
+        environment: "preproduction",
+        recoveryOperation: {
+          ...operation,
+          binding: {
+            ...operation.binding,
+            sourceId:
+              "stream-sha256:54b2b3d6fbc5b6f8bd2e4e71d9eb088ca223ce356df90279aaba7eeb0fb6fbc9",
+          },
+        },
+        nodeRecoverySecret: typed,
+      };
+    }
+    await stageRestoreRequest(stateDir, request);
+    const staged = await readFile(join(stateDir, NODE_KEY_FILE), "utf8");
+    expect(staged).toBe(authorityKey(decodeMasterKeyCode(secret)).toString("hex"));
+    expect(staged).toMatch(/^[0-9a-f]{64}$/);
+    for (const text of [secret, secret.replaceAll(" ", "")])
+      for (const form of [text, text.toLowerCase()]) expect(staged).not.toContain(form);
+    expect((await stat(join(stateDir, NODE_KEY_FILE))).mode & 0o777).toBe(0o600);
+
+    await mintMasterKey(suite.db, { bytes: masterKey });
+    const runner = vi.spyOn(operations, "createRecoveryRestoreRunner");
+    syncBuiltinESMExports();
+    const restore = async () => {};
+    await expect(runStagedRestore(deps(stateDir), restore, restore)).resolves.toBe(true);
+    expect(runner).toHaveBeenCalledOnce();
+    const handed = runner.mock.calls[0]![2];
+    expect(typeof handed).not.toBe("string");
+    expect(await masterKeyAuthorising(suite.db, handed)).toMatchObject({ number: 1 });
+  },
+);
+
+it.each(["synthetic node credential", "AbCd EfGh JkMn PqRs TuVw XyZ2 3456 789A BcDe F"])(
+  "refuses to stage a key that is not a master key (%s)",
+  async (nodeRecoverySecret) => {
+    const stateDir = await fresh();
+    await expect(
+      stageRestoreRequest(stateDir, { ...archive(), nodeRecoverySecret }),
+    ).rejects.toMatchObject({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_MASTER_KEY", reason: "invalid_credential" },
+    });
+    await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   },
 );
 
@@ -176,7 +246,7 @@ it.each(["success", "refusal"])(
         code: "ENOENT",
       });
     else {
-      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
       expect(
         JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
       ).toHaveProperty("phase", "placing");
@@ -228,7 +298,7 @@ it("retains an unmarked request when secrets staging fails before any database m
   };
   await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(writeFailure);
   expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
 });
 
 it("durably marks placement before moving a database", async () => {
@@ -279,7 +349,7 @@ it("keeps the node credential when the venue lock refuses before placement", asy
       throw new AppError("provisioning.database_in_use", { database: "venue" });
     }),
   ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
   expect(
     JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request,
   ).toHaveProperty("nodeRecoveryKey", true);
@@ -324,22 +394,32 @@ it("a failed replacement keeps its original request and node credential", async 
     "injected key write failure",
   );
   expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
 });
 
-it.each(["missing", "empty", "oversized"])(
+const handWritten: Record<string, string> = {
+  empty: "",
+  oversized: "x".repeat(4097),
+  printed: secret,
+  "upper-case": STAGED.toUpperCase(),
+  short: STAGED.slice(1),
+  long: `${STAGED}0`,
+  "line-ended": `${STAGED}\n`,
+};
+
+it.each(["missing", ...Object.keys(handWritten)])(
   "refuses a %s staged key without restoring or falling back to the environment",
   async (kind) => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, archive());
     if (kind === "missing") await rm(join(stateDir, NODE_KEY_FILE), { force: true });
-    else await writeFile(join(stateDir, NODE_KEY_FILE), kind === "empty" ? "" : "x".repeat(4097));
+    else await writeFile(join(stateDir, NODE_KEY_FILE), handWritten[kind]!);
     const restore = vi.fn(async () => {});
     await expect(
       runStagedRestore({ ...deps(stateDir), recoverySecret: "environment fallback" }, restore),
     ).rejects.toMatchObject({
       code: "server.config_invalid",
-      params: { variable: "WAITRON_NODE_RECOVERY_KEY", reason: "invalid_credential" },
+      params: { variable: "WAITRON_MASTER_KEY", reason: "invalid_credential" },
     });
     expect(restore).not.toHaveBeenCalled();
     expect(
@@ -392,13 +472,13 @@ it.each(["marker-json", "marker-shape", "operation", "archive-key", "stream-entr
       await expect(firstStartPending(stateDir)).rejects.toMatchObject({
         code: "restore.flow_unreadable",
       });
-      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
       expect(restore).not.toHaveBeenCalled();
       return;
     }
     await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toThrow();
     expect(restore).not.toHaveBeenCalled();
-    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
     expect(
       JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
     ).toHaveProperty("request");
@@ -429,7 +509,7 @@ it("refuses another backup's allocation source before replacing an existing stag
     params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "source_mismatch" },
   });
   expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
 });
 
 it("refuses changed archive bytes before invoking the restarted restore", async () => {
@@ -442,7 +522,7 @@ it("refuses changed archive bytes before invoking the restarted restore", async 
     params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "source_mismatch" },
   });
   expect(restore).not.toHaveBeenCalled();
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
 });
 
 it.each(["staging", "restart-db", "restart-entries"])(
@@ -492,7 +572,7 @@ it.each(["staging", "restart-db", "restart-entries"])(
       params: { reason: "source_mismatch" },
     });
     expect(restore).not.toHaveBeenCalled();
-    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+    expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
   },
 );
 
@@ -509,5 +589,5 @@ it("an unreadable restart record refuses start and retains the key for discard",
     code: "restore.flow_unreadable",
   });
   expect(restore).not.toHaveBeenCalled();
-  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(STAGED);
 });

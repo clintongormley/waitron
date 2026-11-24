@@ -309,7 +309,7 @@ async function resolveRestoreTarget(
       withModuleOperations = createRecoveryRestoreRunner(
         ALL_MODULES,
         await readRecoveryOperationFile(path),
-        readVariable(deps.env, "WAITRON_NODE_RECOVERY_KEY"),
+        readVariable(deps.env, "WAITRON_MASTER_KEY"),
       );
     }
   } catch (err) {
@@ -400,7 +400,7 @@ async function selectedRecoveryRunner(
     ...target,
     copy,
     operation,
-    secret: readVariable(deps.env, "WAITRON_NODE_RECOVERY_KEY"),
+    secret: readVariable(deps.env, "WAITRON_MASTER_KEY"),
     context: { selectedSourceId: sourceId, oldBoxGone, soleRecovery: true },
     readBoot: deps.readBoot,
   });

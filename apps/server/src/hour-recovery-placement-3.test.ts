@@ -20,7 +20,7 @@ import {
 } from "../test/hour-recovery-host.js";
 import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, makeMasterKey } from "@waitron/credentials";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { startServer, type StartedServer } from "./boot.js";
@@ -28,6 +28,7 @@ import { freePorts } from "./testing/free-ports.js";
 import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { invoiceSeries, nodes, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -54,6 +55,9 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+
+// A master key that decodes but is not the venue's.
+const WRONG_KEY = encodeMasterKeyCode(makeMasterKey());
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "file"])(
@@ -130,7 +134,7 @@ describe("selected-hour admission before archive placement", () => {
               recoveryKey: "archive password",
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+              nodeRecoverySecret: refusal === "key" ? WRONG_KEY : key.secret,
             }
           : {
               kind: "stream",
@@ -138,7 +142,7 @@ describe("selected-hour admission before archive placement", () => {
               entries: f.entries,
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+              nodeRecoverySecret: refusal === "key" ? WRONG_KEY : key.secret,
             },
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
@@ -171,7 +175,7 @@ describe("selected-hour admission before archive placement", () => {
       const credentials = {
         environment: "preproduction" as const,
         recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
-        nodeRecoverySecret: "wrong node key",
+        nodeRecoverySecret: WRONG_KEY,
       };
       await stageRestoreRequest(
         f.roots.stateDir,
@@ -501,7 +505,7 @@ describe("selected-hour admission before archive placement", () => {
       command.argv = command.argv.filter((arg) => arg !== "--confirm-old-box-gone");
     if (reason === "missing sole confirmation")
       command.argv = command.argv.filter((arg) => arg !== "--confirm-sole-recovery");
-    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong node key") command.env.WAITRON_MASTER_KEY = "wrong node key";
     if (reason === "wrong archive password")
       command.env.WAITRON_BACKUP_RECOVERY_KEY = "wrong archive password";
     if (reason === "wrong source")
