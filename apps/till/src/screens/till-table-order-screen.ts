@@ -135,6 +135,7 @@ import {
   billLabel,
   billName,
   billNumberLabel,
+  overpaidOf,
   owing,
   paidInPart,
   printBillOffered,
@@ -245,7 +246,6 @@ import {
   finishOverpaidRefusal,
   overpaidNotice,
 } from "./bill-money-notice.js";
-import { overpaidOf } from "../state/pay-for-items.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the order show side by side.
  * Narrower, a Menu / Order switch shows one at a time. */

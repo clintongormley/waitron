@@ -3,8 +3,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, PartyBill } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import { billNumberLabel } from "../state/bill-state.js";
-import { overpaidOf } from "../state/pay-for-items.js";
+import { billNumberLabel, overpaidOf } from "../state/bill-state.js";
 
 const ZERO = decimal("0.00");
 

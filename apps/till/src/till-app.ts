@@ -326,10 +326,8 @@ import {
   type Submission,
 } from "./state/bill-payment.js";
 import {
-  givesBackOverpaid,
   itemsAllocatedFrom,
   itemsRefusal,
-  overpaidOf,
   previewPayment,
   takePayment,
   withItems,
@@ -374,6 +372,8 @@ import {
   billName,
   billNumberLabel,
   billToShow,
+  givesBackOverpaid,
+  overpaidOf,
   owing,
   paidInPart,
   printBillOffered,

@@ -80,7 +80,8 @@ import {
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import { portionGroups } from "../state/portion-groups.js";
-import { itemsChoiceOf, overpaidOf } from "../state/pay-for-items.js";
+import { overpaidOf } from "../state/bill-state.js";
+import { itemsChoiceOf } from "../state/pay-for-items.js";
 import {
   heldForEquipment,
   payRowWantsOpen,

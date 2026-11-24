@@ -1,7 +1,27 @@
 import { MONEY_SCALE, compareDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
-import type { PartyBill } from "../api/client.js";
+import type { BillBalance, PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
-import { overpaidOf } from "./pay-for-items.js";
+import { moneyPlus, type RefundAsk } from "./bill-payment.js";
+
+/** What an open or placed bill was paid over its total, or null when nothing is over. */
+export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): string | null {
+  const over = balance?.overpaid;
+  return over === undefined || compareDecimal(decimal(over), decimal("0")) <= 0 ? null : over;
+}
+
+/** Whether `asked` gives back no more than `balance` was paid over its total: money just taken on
+ * this bill, which the server gives back with no approver's PIN unless tips it gave back earlier
+ * used up the excess (`refundPermission`, apps/server/src/bill-overpaid.ts). */
+export function givesBackOverpaid(
+  balance: Pick<BillBalance, "overpaid"> | null,
+  asked: Pick<RefundAsk, "appliedAmount" | "tipAmount">,
+): boolean {
+  const over = overpaidOf(balance);
+  return (
+    over !== null &&
+    compareDecimal(moneyPlus(asked.appliedAmount, asked.tipAmount), decimal(over)) <= 0
+  );
+}
 
 /** Open or placed; unlike `stillToPay`, counts an open bill with nothing outstanding. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
