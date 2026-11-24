@@ -46,7 +46,7 @@ import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifa
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintBreakGlassKey } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -192,7 +192,7 @@ beforeEach(async () => {
   await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
-  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
+  key = await mintMasterKey(suite.db);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {

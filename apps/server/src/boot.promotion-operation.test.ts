@@ -17,7 +17,7 @@ import { AppError } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { freePorts } from "./testing/free-ports.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -137,7 +137,7 @@ it.each(["account", "key"])(
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE) };
+        : { breakGlass: (await mintMasterKey(suite.db)).secret };
     const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-promotion-operation-"));
     let server: StartedServer | undefined;
     restartAsked.mockReset();

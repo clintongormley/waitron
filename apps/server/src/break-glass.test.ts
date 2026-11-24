@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { NODE_MIGRATIONS, readRecoveryKeyVerifier } from "@waitron/node-db";
-import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { masterKeyAuthorising } from "./operation-authentication.js";
+import { boxKeyStored } from "./testing/box-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const hashing = vi.hoisted(() => ({ underNodeLock: false, seen: [] as boolean[] }));
 
@@ -38,15 +43,15 @@ describe("break-glass mint + verify", () => {
     expect(stored).not.toBeNull();
     expect(stored).not.toContain(secret);
     expect(stored!.startsWith("scrypt$")).toBe(true);
-    expect(await verifyBreakGlass(suite.node, NODE, secret)).toBe(true);
-    expect(await verifyBreakGlass(suite.node, NODE, "wrong")).toBe(false);
+    expect(await boxKeyStored(suite.node, NODE, secret)).toBe(true);
+    expect(await boxKeyStored(suite.node, NODE, "wrong")).toBe(false);
   });
 
   it("re-minting invalidates the previous secret", async () => {
     const first = await mintBreakGlassSecret(handles(), NODE);
     const second = await mintBreakGlassSecret(handles(), NODE);
-    expect(await verifyBreakGlass(suite.node, NODE, first)).toBe(false);
-    expect(await verifyBreakGlass(suite.node, NODE, second)).toBe(true);
+    expect(await boxKeyStored(suite.node, NODE, first)).toBe(false);
+    expect(await boxKeyStored(suite.node, NODE, second)).toBe(true);
   });
 
   it("lets the event loop keep turning while it checks the secret", async () => {
@@ -60,7 +65,7 @@ describe("break-glass mint + verify", () => {
     };
     setImmediate(tick);
     try {
-      expect(await verifyBreakGlass(suite.node, NODE, secret)).toBe(true);
+      expect(await boxKeyStored(suite.node, NODE, secret)).toBe(true);
     } finally {
       done = true;
     }
@@ -83,11 +88,11 @@ describe("break-glass mint + verify", () => {
     hashing.seen = [];
     const secret = await mintBreakGlassSecret(handles(), NODE);
     expect(hashing.seen).toEqual([false]);
-    expect(await verifyBreakGlass(suite.node, NODE, secret)).toBe(true);
+    expect(await boxKeyStored(suite.node, NODE, secret)).toBe(true);
   });
 
   it("verify returns false when no verifier is set", async () => {
-    expect(await verifyBreakGlass(suite.node, NODE, "anything")).toBe(false);
+    expect(await boxKeyStored(suite.node, NODE, "anything")).toBe(false);
   });
 
   it("refuses an unstamped venue database and writes no key", async () => {
@@ -96,5 +101,21 @@ describe("break-glass mint + verify", () => {
       code: "deployment.not_stamped",
     });
     expect(await readRecoveryKeyVerifier(suite.node, NODE)).toBeNull();
+  });
+});
+
+describe("masterKeyAuthorising", () => {
+  it("authorises the venue's current master key, and neither an older one nor any key before the venue has one", async () => {
+    const bytes = makeMasterKey();
+    expect(await masterKeyAuthorising(suite.db, encodeMasterKeyCode(bytes))).toBeNull();
+    const boxKey = await mintBreakGlassSecret(handles(), NODE);
+    const older = await mintMasterKey(suite.db, { bytes });
+    expect(older.secret).toBe(encodeMasterKeyCode(bytes));
+    expect(await masterKeyAuthorising(suite.db, older.secret)).not.toBeNull();
+    const newer = await mintMasterKey(suite.db);
+    expect(await masterKeyAuthorising(suite.db, older.secret)).toBeNull();
+    expect(await masterKeyAuthorising(suite.db, newer.secret)).not.toBeNull();
+    for (const garbage of [undefined, null, "", "wrong", { secret: newer.secret }, boxKey])
+      expect(await masterKeyAuthorising(suite.db, garbage)).toBeNull();
   });
 });

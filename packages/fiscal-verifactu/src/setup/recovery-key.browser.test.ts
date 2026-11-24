@@ -8,13 +8,15 @@ import {
   fileControl,
   fileError,
 } from "@waitron/ui/src/test-helpers.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { LitElement, html } from "lit";
 import "./first-fiscal-screen.js";
 import { renderRecoveryPdf } from "../recovery-pdf.js";
-import { openRecoveryPdf } from "../recovery-reader.js";
 import type { RecoveryDocument } from "../recovery-document.js";
 import type { RecoveryKeyEntry } from "./recovery-key.js";
 
+const masterKey = encodeMasterKeyCode(new Uint8Array(16).fill(7));
+const masterKeyName = "2026-10-17 · K7QX";
 const saved: RecoveryDocument = {
   kind: "waitron-recovery-document",
   version: 1,
@@ -28,7 +30,7 @@ const selection: import("@waitron/module/src/setup-contract.js").RecoveryKeySele
   taxId: "B12345674",
   environment: "production",
   nodeId: "node-1",
-  keyName: "Caja principal",
+  keyName: masterKeyName,
 };
 const hosts: HTMLElement[] = [];
 afterEach(() => hosts.splice(0).forEach((host) => host.remove()));
@@ -53,36 +55,89 @@ function type(el: LitElement, name: string, value: string) {
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
-async function printed() {
-  const bytes = await renderRecoveryPdf(saved, "en", "Europe/Madrid");
-  const task = openRecoveryPdf(bytes);
-  try {
-    const pdf = await task.promise;
-    const text = (await (await pdf.getPage(1)).getTextContent()).items
-      .map((i) => ("str" in i ? i.str : ""))
-      .join(" ");
-    return { value: text.match(/Key: ([0-9A-Z ]{51})/)![1]!.trim() };
-  } finally {
-    await task.destroy();
-  }
+function secrets(el: LitElement): (string | undefined)[] {
+  const seen: (string | undefined)[] = [];
+  el.addEventListener("recovery-key-change", (event) =>
+    seen.push((event as CustomEvent<{ secret?: string }>).detail.secret),
+  );
+  return seen;
 }
-it("decodes rendered grouped, lowercase and look-alike fields without changing the secret", async () => {
+function keyError(el: LitElement): string {
+  return el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+    '[name="printed-recovery-key"]',
+  )!.error;
+}
+function withSymbol(key: string, index: number, symbol: string): string {
+  return key.slice(0, index) + symbol + key.slice(index + 1);
+}
+it("the key field takes the 28-symbol form and refuses the 41-symbol one", async () => {
   const el = await mount();
-  const events: Array<{ secret?: string }> = [];
-  el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
-  const fields = await printed();
+  const seen = secrets(el);
+  type(el, "printed-recovery-key", masterKey.replaceAll(" ", "").toLowerCase());
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
+  await vi.waitFor(() => expect(native(el, "printed-recovery-key").value).toBe(masterKey));
+  expect(keyError(el)).toBe("");
+  expect(el.shadowRoot!.querySelector('[name="printed-recovery-check"]')).toBeNull();
+  expect(native(el, "printed-recovery-key").type).toBe("password");
+  expect(el.outerHTML).not.toContain(masterKey);
+  expect(el.shadowRoot!.textContent).not.toContain(masterKey);
+
+  type(el, "printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c");
+  await vi.waitFor(() => expect(keyError(el)).toBe("Check the key from your recovery pack."));
+  expect(seen.at(-1)).toBeUndefined();
+  expect(seen.filter((secret) => secret !== undefined)).toEqual([masterKey]);
+
+  const changed = withSymbol(masterKey, 0, masterKey[0] === "2" ? "3" : "2");
+  type(el, "printed-recovery-key", changed);
+  await vi.waitFor(() => expect(keyError(el)).not.toBe(""));
+  expect(seen.at(-1)).toBeUndefined();
+});
+it.each(["O", "0", "I", "1", "L", "o", "i", "l"])(
+  "refuses %s, which is not one of the key's symbols",
+  async (symbol) => {
+    const el = await mount();
+    const seen = secrets(el);
+    type(el, "printed-recovery-key", withSymbol(masterKey, 5, symbol));
+    await vi.waitFor(() => expect(keyError(el)).not.toBe(""));
+    expect(native(el, "printed-recovery-key").value.slice(5, 6)).toBe(symbol.toUpperCase());
+    expect(seen.every((secret) => secret === undefined)).toBe(true);
+  },
+);
+it("refuses ſ in place of the key's S, though it upper-cases to S", async () => {
+  const at = masterKey.indexOf("S");
+  expect(at).toBeGreaterThanOrEqual(0);
+  const el = await mount();
+  const seen = secrets(el);
+  type(el, "printed-recovery-key", masterKey.toLowerCase());
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
+  type(el, "printed-recovery-key", withSymbol(masterKey.toLowerCase(), at, "ſ"));
+  await vi.waitFor(() => expect(keyError(el)).not.toBe(""));
+  expect(native(el, "printed-recovery-key").value[at]).toBe("ſ");
+  expect(seen.at(-1)).toBeUndefined();
+  expect(seen.filter((secret) => secret !== undefined)).toEqual([masterKey]);
+});
+it("reads a key typed with dashes, tabs and line breaks", async () => {
+  const el = await mount();
+  const seen = secrets(el);
+  const groups = masterKey.toLowerCase().split(" ");
   type(
     el,
     "printed-recovery-key",
-    fields.value.toLowerCase().replaceAll("0", "o").replaceAll("1", "l"),
+    `${groups.slice(0, 3).join("-")}\n${groups.slice(3, 5).join("\t")}\r\n${groups.slice(5).join(" - ")}`,
   );
-  await vi.waitFor(() =>
-    expect(events.at(-1)).toEqual({ secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" }),
-  );
-  expect(el.shadowRoot!.querySelector('[name="printed-recovery-check"]')).toBeNull();
-  expect(native(el, "printed-recovery-key").type).toBe("password");
-  expect(el.outerHTML).not.toContain(saved.nodeKey.secret);
-  expect(el.shadowRoot!.textContent).not.toContain(saved.nodeKey.secret);
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
+  await vi.waitFor(() => expect(native(el, "printed-recovery-key").value).toBe(masterKey));
+  expect(keyError(el)).toBe("");
+});
+it("accepts U, which is one of the key's symbols", async () => {
+  const withU = Array.from({ length: 256 }, (_, n) =>
+    encodeMasterKeyCode(new Uint8Array(16).fill(n)),
+  ).find((key) => key.includes("U"))!;
+  const el = await mount();
+  const seen = secrets(el);
+  type(el, "printed-recovery-key", withU.toLowerCase());
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(withU));
+  expect(keyError(el)).toBe("");
 });
 async function upload(el: LitElement, bytes: Uint8Array<ArrayBuffer>) {
   const picker = el.shadowRoot!.querySelector("wt-file-input");
@@ -98,59 +153,63 @@ async function upload(el: LitElement, bytes: Uint8Array<ArrayBuffer>) {
     read.mockRestore();
   }
 }
-it("imports the saved key-only PDF for the matching selected backup", async () => {
+it("choosing a pack PDF fills the key field from the pack's masterKey", async () => {
   const el = await mount();
-  const events: Array<{ secret?: string }> = [];
-  el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
-  await upload(el, await renderRecoveryPdf(saved, "es", "Europe/Madrid"));
-  await vi.waitFor(() =>
-    expect(events.at(-1)).toEqual({ secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" }),
-  );
+  const seen = secrets(el);
+  await upload(el, await recoveryPack({}));
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
   expect(el.shadowRoot!.textContent).toContain("Key loaded");
+  expect(native(el, "printed-recovery-key").value).toBe("");
+  expect(native(el, "printed-recovery-key").required).toBe(false);
+  expect(el.outerHTML).not.toContain(masterKey);
+  expect(el.shadowRoot!.textContent).not.toContain(masterKey);
 });
 
-it.each(["taxpayer", "environment", "software", "node", "name"])(
-  "refuses a PDF for another %s",
-  async (fault) => {
-    const el = await mount();
-    const events: Array<{ secret?: string }> = [];
-    el.addEventListener("recovery-key-change", (event) =>
-      events.push((event as CustomEvent).detail),
-    );
-    const wrong = structuredClone(saved);
-    if (fault === "taxpayer") wrong.scope = { ...wrong.scope, taxpayerNif: "B87654321" };
-    if (fault === "environment") wrong.scope = { ...wrong.scope, environment: "preproduction" };
-    if (fault === "software") wrong.scope = { ...wrong.scope, softwareId: "W2" };
-    if (fault === "node") wrong.nodeKey = { ...wrong.nodeKey, nodeId: "node-2" };
-    if (fault === "name") wrong.nodeKey = { ...wrong.nodeKey, name: "Earlier key" };
-    await upload(el, await renderRecoveryPdf(wrong, "en", "Europe/Madrid"));
-    await vi.waitFor(() =>
-      expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toContain(
-        "this backup's named key",
-      ),
-    );
-    expect(events.every((event) => event.secret === undefined)).toBe(true);
-  },
-);
-it("offers manual fields when a printed PDF has no attachment", async () => {
+// A pack carries no tax id, environment, software id or node id, so only the key name is checked.
+it.each([
+  ["holds", {}],
+  ["does not hold", { masterKey: null, masterKeyHeldBy: 1 }],
+] as const)("refuses a pack that %s another master key", async (_, held) => {
   const el = await mount();
-  const stripped = await PDFDocument.create();
-  stripped.addPage();
-  await upload(el, new Uint8Array(await stripped.save()));
+  const seen = secrets(el);
+  await upload(el, await recoveryPack({ ...held, masterKeyName: "2026-09-02 · ABCD" }));
   await vi.waitFor(() =>
     expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(
-      "Enter the key from the recovery pack or older sheet below.",
+      "Choose the recovery PDF for this backup's named key.",
     ),
   );
+  expect(seen.every((secret) => secret === undefined)).toBe(true);
+  expect(el.shadowRoot!.textContent).not.toContain("Key loaded");
+});
+it.each([
+  [
+    "a PDF with no attached file",
+    async () => {
+      const stripped = await PDFDocument.create();
+      stripped.addPage();
+      return new Uint8Array(await stripped.save());
+    },
+  ],
+  ["the fiscal module's old key PDF", () => renderRecoveryPdf(saved, "en", "Europe/Madrid")],
+] as const)("refuses %s as not a recovery pack", async (_, bytes) => {
+  const el = await mount();
+  const seen = secrets(el);
+  await upload(el, await bytes());
+  await vi.waitFor(() =>
+    expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(
+      "Choose a valid recovery PDF, or enter the key below.",
+    ),
+  );
+  expect(seen.every((secret) => secret === undefined)).toBe(true);
   expect(native(el, "printed-recovery-key").disabled).toBe(false);
 });
 it("clears a decoded key immediately when the printed key changes", async () => {
   const el = await mount();
-  const fields = await printed();
+  const fields = { value: masterKey };
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
   type(el, "printed-recovery-key", fields.value);
-  await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(saved.nodeKey.secret));
+  await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(masterKey));
   type(el, "printed-recovery-key", "BAD");
   expect(events.at(-1)).toEqual({});
   await vi.waitFor(() =>
@@ -163,11 +222,11 @@ it("clears a decoded key immediately when the printed key changes", async () => 
 });
 it("clears manual entry on selected-backup change and on removal", async () => {
   const el = await mount();
-  const fields = await printed();
+  const fields = { value: masterKey };
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
   type(el, "printed-recovery-key", fields.value);
-  await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(saved.nodeKey.secret));
+  await vi.waitFor(() => expect(events.at(-1)?.secret).toBe(masterKey));
   el.selection = { ...selection, keyName: "Earlier key" };
   await el.updateComplete;
   await vi.waitFor(() => expect(native(el, "printed-recovery-key").value).toBe(""));
@@ -180,7 +239,7 @@ it("clears manual entry on selected-backup change and on removal", async () => {
 });
 it.each(["selection", "remove", "edit"])("ignores an old PDF read after %s", async (fault) => {
   const el = await mount();
-  const bytes = await renderRecoveryPdf(saved, "en", "Europe/Madrid");
+  const bytes = await recoveryPack({});
   let release!: (bytes: ArrayBuffer) => void;
   const held = new Promise<ArrayBuffer>((resolve) => {
     release = resolve;
@@ -225,7 +284,7 @@ it("refuses an oversized PDF before reading its bytes", async () => {
 it("clears the PDF picker when its backup selection changes", async () => {
   const el = await mount();
   const picker = el.shadowRoot!.querySelector<WtFileInput>("wt-file-input")!;
-  await upload(el, await renderRecoveryPdf(saved, "en", "Europe/Madrid"));
+  await upload(el, await recoveryPack({}));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Key loaded"));
   expect(picker.files).toHaveLength(1);
   expect(drawnFileName(picker)).toBe("recovery.pdf");
@@ -312,7 +371,7 @@ it("tracks the first native edit immediately after the fields are reattached", a
 
 it("groups pasted and middle-edited key text while preserving the native selection", async () => {
   const el = await mount();
-  const fields = await printed();
+  const fields = { value: masterKey };
   type(el, "printed-recovery-key", fields.value.replaceAll(" ", "").toLowerCase());
   await el.updateComplete;
   const input = native(el, "printed-recovery-key");
@@ -323,14 +382,14 @@ it("groups pasted and middle-edited key text while preserving the native selecti
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
   await el.shadowRoot!.querySelector<LitElement>("wt-input")!.updateComplete;
-  expect(input.value.slice(5, 9)).toBe("TXFH");
+  expect(input.value.slice(5, 9)).toBe(`${fields.value[5]}X${fields.value.slice(7, 9)}`);
   expect(input.selectionStart).toBe(7);
   expect(input.selectionEnd).toBe(7);
 });
 
 it.each([
-  ["en", "Check the key from your recovery pack or older sheet."],
-  ["es", "Revisa la clave de tu paquete de recuperación o de la hoja antigua."],
+  ["en", "Check the key from your recovery pack."],
+  ["es", "Revisa la clave de tu paquete de recuperación."],
 ] as const)("shows a malformed key refusal once beside the %s field", async (locale, error) => {
   const el = await mount();
   el.locale = locale;
@@ -353,8 +412,8 @@ it.each(["en", "es"] as const)(
     el.addEventListener("recovery-key-change", (event) =>
       secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
     );
-    await upload(el, await renderRecoveryPdf(saved, locale, "Europe/Madrid"));
-    expect(secrets.at(-1)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    await upload(el, await recoveryPack({}));
+    expect(secrets.at(-1)).toBe(masterKey);
     expect(drawnFileName(el.shadowRoot!.querySelector("wt-file-input")!)).toBe("recovery.pdf");
     expect(
       el
@@ -392,85 +451,45 @@ async function recoveryPack(
       serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(saved))),
       serverKeyName: saved.nodeKey.name,
       serverKeyHeldBy: null,
-      masterKey: null,
-      masterKeyName: null,
+      masterKey,
+      masterKeyName,
       masterKeyHeldBy: null,
       ...file,
     },
   });
 }
-it("loads the server key from a recovery pack that holds it", async () => {
-  const el = await mount();
-  const secrets: (string | undefined)[] = [];
-  el.addEventListener("recovery-key-change", (event) =>
-    secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
-  );
-  await upload(el, await recoveryPack({}));
-  expect(secrets.at(-1)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
-  expect(el.shadowRoot!.textContent).toContain("Key loaded");
-});
 it.each([
   [
     "en",
-    { number: 1, madeOn: "2026-09-02", received: true },
-    "Caja principal",
-    "This recovery pack does not hold the box key. It is on recovery pack 1, made on 2 September 2026: choose that pack, or type the key from it.",
+    1,
+    "This recovery pack does not hold the master key. It is on recovery pack 1: choose that pack, or type the key from it.",
   ],
   [
     "es",
-    { number: 1, madeOn: "2026-09-02", received: true },
-    "Caja principal",
-    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 1, hecho el 2 de septiembre de 2026: elige ese paquete o introduce su clave.",
-  ],
-  [
-    "en",
-    { number: 2, madeOn: "2026-09-12", received: false },
-    "Caja principal",
-    "This recovery pack does not hold the box key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. When this pack was made, the box that made it had not been told that pack 2 arrived: if you do not have it, the key cannot be read from any pack.",
-  ],
-  [
-    "es",
-    { number: 2, madeOn: "2026-09-12", received: false },
-    "Caja principal",
-    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. Cuando se hizo este paquete, el servidor que lo hizo no había recibido la confirmación de que el paquete 2 había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.",
+    1,
+    "Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación 1: elige ese paquete o introduce su clave.",
   ],
   [
     "en",
     null,
-    "Caja principal",
-    "This recovery pack does not hold the box key: choose the pack or sheet whose key name is Caja principal.",
+    "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it.",
   ],
   [
     "es",
     null,
-    "Caja principal",
-    "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja cuyo nombre de clave es Caja principal.",
-  ],
-  [
-    "en",
-    null,
-    null,
-    "This recovery pack does not hold the box key: choose the pack or sheet that holds it, or type the key from it.",
-  ],
-  [
-    "es",
-    null,
-    null,
-    "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.",
+    "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.",
   ],
 ] as const)(
-  "says where the key is when a pack does not hold it (%s, %o, %s)",
-  async (locale, serverKeyHeldBy, serverKeyName, message) => {
+  "says where the master key is when a pack does not hold it (%s, pack %s)",
+  async (locale, masterKeyHeldBy, message) => {
     const el = await mount();
     el.locale = locale;
     await el.updateComplete;
-    const secrets: (string | undefined)[] = [];
-    el.addEventListener("recovery-key-change", (event) =>
-      secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
-    );
-    await upload(el, await recoveryPack({ serverKey: null, serverKeyHeldBy, serverKeyName }));
+    const seen = secrets(el);
+    await upload(el, await recoveryPack({ masterKey: null, masterKeyHeldBy }));
     expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(message);
-    expect(secrets.every((secret) => secret === undefined)).toBe(true);
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(message);
+    expect(seen.every((secret) => secret === undefined)).toBe(true);
     expect(native(el, "printed-recovery-key").disabled).toBe(false);
   },
 );

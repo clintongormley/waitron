@@ -12,11 +12,17 @@ import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
-import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
+import { encodeRecoveryKey } from "@waitron/fiscal-verifactu";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { mintBreakGlassSecret } from "./break-glass.js";
 import {
+  masterKeyAuthorising,
+  stagedAuthorityKey,
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
 } from "./operation-authentication.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { personHolding } from "./testing/session-holding.js";
 import { whileChangingOnLockRequest, writerBesideRequest } from "./testing/watched-scrypt.js";
@@ -291,8 +297,89 @@ describe("a recovery key's authority", () => {
 
   beforeEach(() => stampDeployment(suite.db, "preproduction"));
 
+  async function authorised(secret: unknown): Promise<{ result?: string; code?: string }> {
+    let entered = false;
+    try {
+      const result = await withRecoveryKeyOperation(
+        { db: suite.db, node: suite.node, nodeId: NODE },
+        recovery,
+        secret,
+        async () => {
+          entered = true;
+          return "committed";
+        },
+      );
+      return { result };
+    } catch (error) {
+      expect(entered).toBe(false);
+      return { code: (error as { code?: string }).code };
+    }
+  }
+
+  function changeOneSymbol(secret: string): string {
+    const at = secret.indexOf(" ") + 1;
+    const swapped = secret[at] === "2" ? "3" : "2";
+    return secret.slice(0, at) + swapped + secret.slice(at + 1);
+  }
+
+  it("a wrong key is refused with `promotion.break_glass_invalid`", async () => {
+    const own = await mintMasterKey(suite.db);
+    const boxKey = await mintBreakGlassSecret(handles(), NODE);
+    const printedBoxKey = encodeRecoveryKey(boxKey);
+    expect(printedBoxKey.replaceAll(" ", "")).toHaveLength(41);
+    for (const secret of [
+      encodeMasterKeyCode(makeMasterKey()),
+      changeOneSymbol(own.secret),
+      boxKey,
+      printedBoxKey,
+    ])
+      expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
+  });
+
+  it("the venue's current master key authorises, typed in lower case with dashes", async () => {
+    const own = await mintMasterKey(suite.db);
+    expect(await authorised(own.secret.toLowerCase().replaceAll(" ", "-"))).toEqual({
+      result: "committed",
+    });
+  });
+
+  it("an older master key of the venue is refused once a newer one exists", async () => {
+    const older = await mintMasterKey(suite.db);
+    const newer = await mintMasterKey(suite.db);
+    expect(await authorised(older.secret)).toEqual({ code: "promotion.break_glass_invalid" });
+    expect(await authorised(newer.secret)).toEqual({ result: "committed" });
+  });
+
+  it("a venue with no master_keys row refuses every key", async () => {
+    const bytes = makeMasterKey();
+    for (const secret of [encodeMasterKeyCode(bytes), stagedAuthorityKey(authorityKey(bytes))])
+      expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
+  });
+
+  it("a staged authority key authorises; a plain object or a hex string of the same bytes does not", async () => {
+    const own = await mintMasterKey(suite.db);
+    const authority = authorityKey(decodeMasterKeyCode(own.secret));
+    for (const forged of [
+      { bytes: authority },
+      Object.freeze({ bytes: authority }),
+      authority,
+      authority.toString("hex"),
+    ])
+      expect(await authorised(forged)).toEqual({ code: "promotion.break_glass_invalid" });
+    expect(await authorised(stagedAuthorityKey(authority))).toEqual({ result: "committed" });
+  });
+
+  it("a staged authority key keeps its own copy of the bytes", async () => {
+    const own = await mintMasterKey(suite.db);
+    const authority = authorityKey(decodeMasterKeyCode(own.secret));
+    const staged = stagedAuthorityKey(authority);
+    expect(Reflect.ownKeys(staged)).toEqual([]);
+    authority.fill(0);
+    expect(await authorised(staged)).toEqual({ result: "committed" });
+  });
+
   async function waitingWrite(replace: boolean): Promise<string> {
-    const secret = await mintBreakGlassSecret(handles(), NODE);
+    const { secret } = await mintMasterKey(suite.db);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let arrived!: () => void;
@@ -309,12 +396,12 @@ describe("a recovery key's authority", () => {
       },
     );
     await waiting;
-    if (replace) await mintBreakGlassSecret(handles(), NODE);
+    if (replace) await mintMasterKey(suite.db);
     release();
     return result;
   }
 
-  it("a recovery key replaced while an authorised write waits is refused", async () => {
+  it("a master key made while an authorised write waits is refused", async () => {
     await expect(waitingWrite(true)).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
@@ -324,13 +411,18 @@ describe("a recovery key's authority", () => {
     expect(await waitingWrite(false)).toBe("committed");
   });
 
-  it("holds node.db's lock until the authorised write commits, so a key replacement waits for it", async () => {
-    const secret = await mintBreakGlassSecret(handles(), NODE);
+  it("holds the venue write turn until the authorised write commits, so a new master key waits for it", async () => {
+    const { secret } = await mintMasterKey(suite.db);
     const order: string[] = [];
+    let replacing = false;
+    let asked!: () => void;
+    const lockRequested = new Promise<void>((resolve) => (asked = resolve));
     const original = suite.db.withWriteLock;
     const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation(async (body) => {
+      const mine = replacing;
+      if (mine) asked();
       const value = await original(body);
-      order.push("venue write committed");
+      if (!mine) order.push("venue write committed");
       return value;
     });
     onTestFinished(() => spy.mockRestore());
@@ -349,25 +441,18 @@ describe("a recovery key's authority", () => {
       },
     );
     await inside;
-    let asked!: () => void;
-    const lockRequested = new Promise<void>((resolve) => (asked = resolve));
-    const nodeLock = suite.node.withWriteLock;
-    const nodeSpy = vi.spyOn(suite.node, "withWriteLock").mockImplementation((body) => {
-      asked();
-      return nodeLock(body);
-    });
-    onTestFinished(() => nodeSpy.mockRestore());
-    const replacement = mintBreakGlassSecret(handles(), NODE).then((replaced) => {
+    replacing = true;
+    const replacement = mintMasterKey(suite.db).then((replaced) => {
       order.push("key replaced");
       return replaced;
     });
-    // Once the replacement asks for node.db's lock, room for it to finish if nothing holds it back.
+    // Once the new key asks for the venue write turn, room for it to finish if nothing holds it back.
     await lockRequested;
     await Promise.race([replacement, new Promise((resolve) => setTimeout(resolve, 100))]);
     release();
     expect(await result).toBe("committed");
     const replaced = await replacement;
     expect(order).toEqual(["venue write committed", "key replaced"]);
-    expect(await verifyBreakGlass(suite.node, NODE, replaced)).toBe(true);
+    expect(await masterKeyAuthorising(suite.db, replaced.secret)).not.toBeNull();
   });
 });

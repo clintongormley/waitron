@@ -30,7 +30,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError, jobOrigin, nodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { stampDeployment, nextInvoiceNumberOf } from "@waitron/db";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
 import { appendToChain, readChain, readChainHead } from "@waitron/workforce";
@@ -148,7 +148,7 @@ beforeAll(async () => {
     personId = person!.id;
   });
   await stampDeployment(suite.db, "preproduction");
-  nodeSecret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, ids.node);
+  nodeSecret = (await mintMasterKey(suite.db)).secret;
   await seedFiscalRecord(suite.db);
   for (const at of ["2026-10-01T09:00:00Z", "2026-10-01T13:00:00Z"]) {
     await suite.db.transaction((tx) =>

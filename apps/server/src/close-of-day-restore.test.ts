@@ -16,7 +16,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { closeOfDayJob } from "./close-of-day.js";
 import { withRecoveryModuleOperation } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
@@ -153,7 +153,7 @@ async function restoreThroughFiscalHook() {
       JSON.stringify({ custodianId: "external-custodian", publicKey, fingerprint }),
     );
     await writeFile(confirmationPath, JSON.stringify(confirmation));
-    const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, nodeId);
+    const secret = (await mintMasterKey(suite.db)).secret;
     const module = {
       ...fakeModule(binding.module, {
         operations: fiscal.createPaperAllocationPreparation({

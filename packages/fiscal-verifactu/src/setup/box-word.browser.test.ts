@@ -1,17 +1,17 @@
 import { expect, it } from "vitest";
 import { serverKeyPageWords } from "../server-key-page.js";
-import { RecoveryPackWithoutKeyError } from "../recovery-document.js";
 import { checkVenueStrings } from "./check-venue.js";
 import { clockWaitStrings } from "./clock-wait.js";
 import { firstHourStrings } from "./first-hour.js";
 import { promotionWords, recoveryHourStrings } from "./recovery-hour.js";
-import { keyElsewhere } from "./recovery-key.js";
+import { masterKeyElsewhere } from "./recovery-key.js";
 import { fiscalSetupStrings } from "./strings.js";
 
 // The Waitron machine is "the box" in English and "servidor" in Spanish, never "equipo" (owner,
-// 2026-11-22). Weaker than its name: reads only the tables below and the sentences `keyElsewhere`
-// builds, not words written inside a component (the recovery-key field's label among them), the
-// series register PDF's inline sentences, or the emergency record's printout.
+// 2026-11-22). Weaker than its name: reads only the tables below and the sentences
+// `masterKeyElsewhere` builds, not words written inside a component (the recovery-key field's
+// label among them), the series register PDF's inline sentences, or the emergency record's
+// printout.
 const OTHER_SERVERS = [/\btime[- ]servers?\b/gi];
 
 function collect(value: unknown, path: string, out: [string, string][]): void {
@@ -35,18 +35,9 @@ function texts(): [string, string][] {
   collect(recoveryHourStrings, "recoveryHour", out);
   collect(promotionWords, "promotion", out);
   collect(fiscalSetupStrings, "fiscalSetup", out);
-  const held = { number: 2, madeOn: "2026-09-12", received: false };
   for (const en of [true, false])
-    for (const [heldBy, name] of [
-      [held, null],
-      [{ ...held, received: true }, null],
-      [null, "Caja principal"],
-      [null, null],
-    ] as const)
-      out.push([
-        `keyElsewhere(${en},${JSON.stringify(heldBy)},${name})`,
-        keyElsewhere(new RecoveryPackWithoutKeyError(name, heldBy), en),
-      ]);
+    for (const heldBy of [2, null])
+      out.push([`masterKeyElsewhere(${en},${heldBy})`, masterKeyElsewhere(heldBy, en)]);
   return out;
 }
 
@@ -65,7 +56,7 @@ it("reads every table", () => {
     "firstHour.en.packLead",
     "recoveryHour.en.heading",
     "promotion.emergency.en.secondClockDo",
-    "keyElsewhere(true,null,null)",
+    "masterKeyElsewhere(false,2)",
   ])
     expect(paths).toContain(expected);
 });

@@ -5,10 +5,7 @@ import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { nodes, withTransaction } from "@waitron/db";
-import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret } from "@waitron/identity";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
@@ -20,6 +17,7 @@ import { TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -58,10 +56,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
   await withTransaction(suite.db, async (tx) => {
     await tx.delete(nodes).where(eq(nodes.id, TAXPAYER_B.nodeId));
   });
-  const key = "synthetic-boot-current-recovery-key";
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, liveConflictNode.nodeId, hashSecret(key), "boot-key-1", null),
-  );
+  const { secret: key } = await mintMasterKey(suite.db);
   const scratch = await mkdtemp(join(tmpdir(), "conflict-boot-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));
   await copyMigrationsRoot(join(scratch, "migrations"));
@@ -122,7 +117,7 @@ it("serves the cold recovery URL and authenticates its enabled module route at r
         command: { kind: "status" },
       }),
     });
-  const refused = await inspect("wrong-key");
+  const refused = await inspect(WRONG_MASTER_KEY);
   expect(refused.status).toBe(401);
   expect(await refused.json()).toMatchObject({ error: { code: "promotion.break_glass_invalid" } });
   const response = await inspect(key);

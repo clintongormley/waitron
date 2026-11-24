@@ -159,7 +159,7 @@ const en = {
   "fiscal_filing.awaiting_certificate":
     "Nothing can be sent until the tax agency's certificate is installed.",
   "fiscal_filing.conflict.stopped":
-    "This box has stopped issuing invoices because of an identity conflict. Recovering needs the box key.",
+    "This box has stopped issuing invoices because of an identity conflict. Recovering needs the master key.",
   "fiscal_filing.conflict.open": "Open conflict recovery",
   "fiscal_filing.conflict.reply.fiscal.huella_divergente":
     "AEAT already holds a different record for invoice {number}, so it refused this box's record.",
@@ -547,7 +547,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.awaiting_certificate":
     "No se puede enviar nada hasta que se instale el certificado de la AEAT.",
   "fiscal_filing.conflict.stopped":
-    "Este servidor ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave del servidor.",
+    "Este servidor ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave maestra.",
   "fiscal_filing.conflict.open": "Abrir la recuperación del conflicto",
   "fiscal_filing.conflict.reply.fiscal.huella_divergente":
     "La AEAT ya tiene otro registro para la factura {number}, así que rechazó el de este servidor.",

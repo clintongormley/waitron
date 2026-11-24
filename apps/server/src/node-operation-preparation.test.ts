@@ -3,11 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, stampDeployment, withNodeTransaction } from "@waitron/db";
-import { setNodeModeTx, setRecoveryKeyTx, NODE_MIGRATIONS } from "@waitron/node-db";
-import * as nodeApi from "@waitron/node-db";
+import * as db from "@waitron/db";
+import { setNodeModeTx, NODE_MIGRATIONS } from "@waitron/node-db";
 import * as provisioning from "@waitron/provisioning";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashSecret } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -17,6 +17,7 @@ import { nodeId } from "@waitron/shared";
 import type { ClockSetAnswer, ClockSetInput } from "./clock-correction.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const node = {
@@ -29,16 +30,15 @@ const promote = {
   sourceId: "promotion-1",
   targetNodeId: node.nodeId,
 };
-const secret = "paper-key";
+let secret: string;
+let keyName: string;
 const ADMIN = "e1000000-0000-4000-8000-000000000004";
 const PASSWORD = "synthetic-clock-password";
 let root: string | undefined;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "node-operation-preparation-"));
   await stampDeployment(suite.db, "preproduction");
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, node.nodeId, hashSecret(secret), "paper-1", null),
-  );
+  ({ secret, name: keyName } = await mintMasterKey(suite.db));
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -49,6 +49,7 @@ function service(
   hooks: {
     readState?(): Promise<void>;
     facts?(): void;
+    beforeFacts?(): Promise<void>;
     clockCorrection?: Parameters<typeof createNodeOperationPreparation>[0]["clockCorrection"];
     signIn?: boolean;
   } = {},
@@ -66,6 +67,7 @@ function service(
             measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
             reading: { boxAt: "2026-10-16T12:40:00.000Z", witnessAt: "", uncertaintyMs: 0 },
           });
+        await hooks.beforeFacts?.();
         const facts = await host.readRecoveryFacts!(operation.binding);
         hooks.facts?.();
         return facts;
@@ -229,9 +231,7 @@ it.each([
   const afterRead = async (step: string) => {
     seen.push(step);
     if (rotateAfter === step) {
-      await withNodeTransaction(suite.node, (tx) =>
-        setRecoveryKeyTx(tx, node.nodeId, hashSecret("replacement"), "paper-2", null),
-      );
+      await mintMasterKey(suite.db);
     }
   };
   const readHistory = provisioning.readModulePreparationHistory;
@@ -240,10 +240,13 @@ it.each([
     await afterRead("history");
     return result;
   });
-  const readKey = nodeApi.readRecoveryKeyName;
-  vi.spyOn(nodeApi, "readRecoveryKeyName").mockImplementation(async (...args) => {
+  // After the state read, the first master-key read is the re-check and the second supplies the
+  // context key's name.
+  const readKey = db.readCurrentMasterKey;
+  let readsAfterState = 0;
+  vi.spyOn(db, "readCurrentMasterKey").mockImplementation(async (...args) => {
     const result = await readKey(...args);
-    await afterRead("key");
+    if (seen.at(-1) === "state" && ++readsAfterState === 2) await afterRead("key");
     return result;
   });
   const preparation = service({
@@ -261,7 +264,7 @@ it.each([
 
   if (rotateAfter === "none") {
     await expect(result).resolves.toMatchObject({
-      contextKey: expect.stringContaining("paper-1"),
+      contextKey: expect.stringContaining(keyName),
     });
   } else {
     await expect(result).rejects.toMatchObject({
@@ -270,6 +273,25 @@ it.each([
     await expect(result).rejects.toHaveProperty("params", {});
   }
   expect(seen).toEqual(steps);
+});
+
+it("a new master key made between preparation and run refuses the run", async () => {
+  const delivered = vi.fn();
+  const preparation = service({
+    beforeFacts: async () => {
+      await mintMasterKey(suite.db);
+    },
+    facts: delivered,
+  });
+  const result = preparation.prepare(
+    promote,
+    { breakGlass: secret },
+    { oldNodeNeutralised: true, noParallelRecovery: true },
+    {},
+    { onBox: false },
+  );
+  await expect(result).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+  expect(delivered).not.toHaveBeenCalled();
 });
 
 it.each([

@@ -798,14 +798,14 @@ describe("backup membership private/public identity", () => {
       );
     }
   }
-  const verify = (key: string | null = privateKey, nodeCopyHoldsSource = false) =>
+  const verify = (key: string | null = privateKey, copyHoldsSource = false) =>
     queries(before.db, after.db, (a, b) =>
       verifyBackupMembershipIdentity({
         before: a,
         after: b,
         nodeId: "source",
         privateKey: key,
-        nodeCopyHoldsSource,
+        copyHoldsSource,
       }),
     );
 
@@ -976,7 +976,7 @@ describe("backup membership private/public identity", () => {
           after: b,
           nodeId: "unrecorded",
           privateKey,
-          nodeCopyHoldsSource: false,
+          copyHoldsSource: false,
         }),
       ),
     ).toBe(false);
@@ -1005,7 +1005,7 @@ describe("membership source with no captured table or optional membership state"
             after,
             nodeId: "source",
             privateKey: null,
-            nodeCopyHoldsSource: false,
+            copyHoldsSource: false,
           }),
         ),
       ).toBe(false);
@@ -1019,7 +1019,7 @@ describe("membership source with no captured table or optional membership state"
           after,
           nodeId: "source",
           privateKey: null,
-          nodeCopyHoldsSource: false,
+          copyHoldsSource: false,
         }),
       ),
     ).toBe(true);

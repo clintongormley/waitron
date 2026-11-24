@@ -5,6 +5,9 @@ import { applyTokens } from "@waitron/ui";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 import type { RecoveryHourEntry } from "./recovery-hour.js";
 import type { LitElement } from "lit";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 const hosts: HTMLElement[] = [];
 const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
 afterEach(() => {
@@ -156,7 +159,7 @@ for (const theme of ["light", "dark"] as const)
               const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
               await key.updateComplete;
               for (const [name, value] of [
-                ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
+                ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
               ]) {
                 const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
                 await field.updateComplete;

@@ -8,7 +8,7 @@ export const restoreEn = {
   "restore.allocation_placeholder": "Paste the recovery record from your custodian or phone.",
   "restore.allocation_node_key": "Selected backup’s box key",
   "restore.allocation_invalid": "Check the recovery record and its selected backup.",
-  "restore.allocation_key_missing": "Enter the selected backup’s box key.",
+  "restore.allocation_key_missing": "Enter the selected backup’s master key.",
   "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
   "restore.allocation_isolation_missing": "Confirm that this is the only recovery.",
   "restore.allocation_retained": "I have kept this request with the outside recovery records.",
@@ -28,11 +28,12 @@ export const restoreEn = {
   "restore.preview_date": "Backup date",
   "restore.preview_node_key": "Box key",
   "restore.preview_node": "Node",
-  "restore.preview_unnamed": "This backup's box key has no stored name.",
-  "restore.preview_older_key": "An older backup reinstates its older box key.",
-  "restore.preview_keep_keys": "Keep older box keys until no older backup remains.",
+  "restore.preview_no_master_key":
+    "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
+  "restore.preview_older_key": "An older backup brings back its older master key.",
+  "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
   "restore.preview_key_separate":
-    "The backup encryption key opens the copy. The box key authorises recovery.",
+    "The backup encryption key opens the copy. The master key authorises recovery.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
   "restore.preview_key_error": "Check the backup encryption key.",
   "restore.preview_environment_error": "Check the backup environment.",
@@ -201,7 +202,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.allocation_placeholder": "Pega el registro de recuperación de tu custodio o teléfono.",
   "restore.allocation_node_key": "Clave del servidor de la copia elegida",
   "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
-  "restore.allocation_key_missing": "Introduce la clave del servidor de la copia elegida.",
+  "restore.allocation_key_missing": "Introduce la clave maestra de la copia elegida.",
   "restore.allocation_isolated":
     "El servidor anterior está desconectado y no hay otra recuperación en curso.",
   "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
@@ -223,12 +224,13 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_date": "Fecha de la copia",
   "restore.preview_node_key": "Clave del servidor",
   "restore.preview_node": "Nodo",
-  "restore.preview_unnamed": "La clave del servidor de esta copia no tiene nombre guardado.",
-  "restore.preview_older_key": "Una copia antigua restablece la clave del servidor de entonces.",
+  "restore.preview_no_master_key":
+    "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",
+  "restore.preview_older_key": "Una copia antigua recupera la clave maestra de entonces.",
   "restore.preview_keep_keys":
-    "Conserva las claves del servidor antiguas mientras queden copias que las necesiten.",
+    "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate":
-    "La clave de cifrado de copias abre la copia. La clave del servidor autoriza la restauración.",
+    "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore.preview_key_error": "Revisa la clave de cifrado de copias.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",

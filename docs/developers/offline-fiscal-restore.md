@@ -7,6 +7,10 @@
 > [recovering a box](../operations/hour-recovery.md). Cloud accounts, backup
 > transport and recovery authentication remain separate from naming authority.
 
+> **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key,
+> checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
+> `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
+
 # Recover a filing box from an old backup
 
 An archive gives you the venue's saved history. It cannot tell you which installation names

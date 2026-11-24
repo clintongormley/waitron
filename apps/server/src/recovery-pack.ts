@@ -1,14 +1,14 @@
 import {
+  readCurrentMasterKey,
   withVenueAndNodeTransaction,
   type Database,
   type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
-import { readRecoveryKey, readRecoveryKeyVerifier } from "@waitron/node-db";
-import { verifySecretAsync } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
+import { masterKeyAuthorising } from "./operation-authentication.js";
 
 export interface RecoveryPack {
   readonly version: 1;
@@ -57,20 +57,20 @@ export async function createRecoveryPack(
     throw new AppError("promotion.break_glass_invalid", {});
   };
   if (typeof secret !== "string" || secret.length === 0) return invalidKey();
-  const verifier = await readRecoveryKeyVerifier(deps.nodeDb, node.nodeId);
-  if (verifier === null || !(await verifySecretAsync(secret, verifier))) return invalidKey();
+  const checked = await masterKeyAuthorising(deps.db, secret);
+  if (checked === null) return invalidKey();
   for (const name of Object.keys(inputs)) {
     if (!modules.some((module) => module.name === name && module.backup?.recoveryPack))
       return refuse("module_unsupported");
   }
-  // node.db's lock is held across the venue commit, and every key write takes it, so the key
-  // cannot change while the pack is made.
-  return withVenueAndNodeTransaction(deps.db, deps.nodeDb, async (tx, nodeTx) => {
+  // A new master key is a venue.db write, so it cannot land between the re-read below and the
+  // commit that holds the venue write turn.
+  return withVenueAndNodeTransaction(deps.db, deps.nodeDb, async (tx) => {
     await deps.authorize?.(tx);
-    const key = await readRecoveryKey(nodeTx, node.nodeId);
-    if (key?.verifier !== verifier) return invalidKey();
-    const name = key.keyName;
-    if (name === null) return refuse("key_name_missing");
+    const key = await readCurrentMasterKey(tx);
+    if (key?.number !== checked.number) return invalidKey();
+    const name = key.name;
+    if (name.trim() === "") return refuse("key_name_missing");
     const snapshots: Record<string, unknown> = {};
     for (const module of modules) {
       const contribution = module.backup?.recoveryPack;
@@ -78,7 +78,7 @@ export async function createRecoveryPack(
       if (!Object.hasOwn(inputs, module.name)) return refuse("module_input_missing");
       snapshots[module.name] = await contribution(tx, node, inputs[module.name]);
     }
-    if ((await readRecoveryKeyVerifier(nodeTx, node.nodeId)) !== verifier) return invalidKey();
+    if ((await readCurrentMasterKey(tx))?.number !== checked.number) return invalidKey();
     return {
       version: 1,
       kind: "node-recovery-pack",

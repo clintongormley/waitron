@@ -9,6 +9,8 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
@@ -16,6 +18,8 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+
+const PAPER_KEY = encodeMasterKeyCode(makeMasterKey());
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -134,7 +138,7 @@ it.each(["archive", "bucket"])(
       form.set("environment", "preproduction");
       form.set("oldBoxGone", "1");
       form.set("recoveryOperation", JSON.stringify(operation));
-      form.set("nodeRecoverySecret", "paper-node-key");
+      form.set("nodeRecoverySecret", PAPER_KEY);
       const kit = encodeRecoveryKit({
         version: 2 as const,
         streamId: LOCATION,
@@ -163,7 +167,7 @@ it.each(["archive", "bucket"])(
                   oldBoxGone: true,
                   venueConfirmed: "89890001K",
                   recoveryOperation: operation,
-                  nodeRecoverySecret: "paper-node-key",
+                  nodeRecoverySecret: PAPER_KEY,
                 }),
         },
       );
@@ -178,12 +182,12 @@ it.each(["archive", "bucket"])(
         recoveryOperation: operation,
         nodeRecoveryKey: true,
       });
-      expect(marker).not.toContain("paper-node-key");
+      expect(marker).not.toContain(PAPER_KEY);
       expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
-        "paper-node-key",
+        authorityKey(decodeMasterKeyCode(PAPER_KEY)).toString("hex"),
       );
       const logs = await readFile(join(scratch, "logs/waitron.log"), "utf8");
-      expect(logs).not.toContain("paper-node-key");
+      expect(logs).not.toContain(PAPER_KEY);
       expect(logs).not.toContain("archive-key");
       await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
     } finally {

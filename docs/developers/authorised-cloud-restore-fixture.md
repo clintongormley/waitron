@@ -35,6 +35,9 @@ comes from the existing fiscal test seed; it is not Cloud's `Cloud Test Venue` f
 
 **2026-11-22, A1308 fiscal 1.** The current seed exports this taxpayer as `TAXPAYER_A`.
 
+**2026-11-24, A1323 PR 2b:** the current helper seeds with `mintMasterKey` in place of
+`mintBreakGlassKey`, and `archiveCommand` supplies `WAITRON_MASTER_KEY`.
+
 ## Keep the authority attached to its own archive
 
 Build the fixture through its existing setup and helpers:

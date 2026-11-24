@@ -16,11 +16,11 @@ import {
 } from "../test/hour-recovery-host.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { invoiceSeries, stampDeployment, withNodeTransaction, withTransaction } from "@waitron/db";
-import { readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+import { invoiceSeries, openVenueDatabase, stampDeployment, withTransaction } from "@waitron/db";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -36,9 +36,9 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { seriesId } from "@waitron/shared";
+import { decodeMasterKeyCode, seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import {
   saleInput,
@@ -179,7 +179,7 @@ it("sets the box's clock from this device only under the backup's key, naming no
     );
   await expect(
     setClock(
-      createSelectedRecoveryPreparation({ ...f.options, secret: "wrong-key", setBoxClock }),
+      createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY, setBoxClock }),
       "any",
     ),
   ).rejects.toMatchObject({
@@ -197,10 +197,37 @@ it("sets the box's clock from this device only under the backup's key, naming no
 
 it("requires the backup's actual key before selecting or writing preparation history", async () => {
   const f = await host();
-  await expect(f.prepare({ action: "clock-challenge" }, "wrong-key")).rejects.toMatchObject({
+  await expect(f.prepare({ action: "clock-challenge" }, WRONG_MASTER_KEY)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+});
+
+it("a restore is authorised by the master key in the copy's master_keys", async () => {
+  const f = await host();
+  const folder = join(root, "copy");
+  await mkdir(folder);
+  await suite.db.archiveTo(join(folder, "venue.db"));
+  const copy = await openVenueDatabase(folder);
+  try {
+    const newer = await mintMasterKey(suite.db);
+    const options = { ...f.options, database: () => copy.venue };
+    await expect(
+      createSelectedRecoveryPreparation({ ...options, secret: newer.secret }).prepare(
+        { action: "clock-challenge" },
+        { onBox: true },
+      ),
+    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+    await expect(
+      createSelectedRecoveryPreparation(options).prepare(
+        { action: "clock-challenge" },
+        { onBox: true },
+      ),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+  } finally {
+    await copy.close();
+  }
 });
 
 it.each([
@@ -367,10 +394,12 @@ it("refuses unknown selected filing evidence before exposing clock or hour actio
 
 it("refuses a selected backup whose named key no longer matches the database", async () => {
   const f = await host();
-  const service = createSelectedRecoveryPreparation({
-    ...f.options,
-    selected: { ...f.selected, nodeRecoveryKeyName: "another retained key" },
+  const renamed = await mintMasterKey(suite.db, {
+    bytes: decodeMasterKeyCode(key.secret),
+    madeAt: new Date("2026-01-01T00:00:00Z"),
   });
+  expect(renamed.name).not.toBe(key.name);
+  const service = createSelectedRecoveryPreparation(f.options);
   await expect(
     service.prepare({ action: "clock-challenge" }, { onBox: true }),
   ).rejects.toMatchObject({
@@ -511,10 +540,11 @@ describe("the database supplied by the placement runner", () => {
     const selected = (await f.selectPastWaits()) as { input: unknown };
     await seedTaxpayers(placed.db);
     await stampDeployment(placed.db, "preproduction");
-    const verifier = await readRecoveryKeyVerifier(suite.node, node.nodeId);
-    await withNodeTransaction(placed.node, (tx) =>
-      setRecoveryKeyTx(tx, node.nodeId, verifier!, "different-copy-key", null),
-    );
+    const renamed = await mintMasterKey(placed.db, {
+      bytes: decodeMasterKeyCode(key.secret),
+      madeAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    expect(renamed.name).not.toBe(key.name);
     await expect(
       runRestoreHooks({
         db: placed.db,
@@ -561,9 +591,8 @@ it("refuses a selected module that has no configured recovery contribution", asy
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("refuses an unnamed recovery verifier even when its secret matches", async () => {
+it("refuses a selection naming no master key even when its secret matches", async () => {
   const f = await host();
-  suite.node.run(sql`update box set recovery_key_name = '' where node_id = ${node.nodeId}`);
   const service = createSelectedRecoveryPreparation({
     ...f.options,
     selected: { ...f.selected, nodeRecoveryKeyName: null },

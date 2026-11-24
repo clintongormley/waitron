@@ -8,18 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  readTaxpayer,
-  stampDeployment,
-  withNodeTransaction,
-  withTransaction,
-  writeNodeMembership,
-} from "@waitron/db";
+import { readTaxpayer, stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { sha256Hex, signEnvelope, type HandoverBinding } from "@waitron/handover";
-import { hashSecret, dashboardSessions } from "@waitron/identity";
+import { dashboardSessions } from "@waitron/identity";
 import {
   canonicalize,
   endorseKey,
@@ -37,7 +31,6 @@ import {
   nodeHandoverOperations,
   readNodeMode,
   setNodeMode,
-  setRecoveryKeyTx,
 } from "@waitron/node-db";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { AppError, nodeId } from "@waitron/shared";
@@ -48,6 +41,7 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 // The promote routes beside the offer route on one real database: the real sign-ins and the real
@@ -101,7 +95,7 @@ const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNodeKeyPair() };
 const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PASSWORD = "promotePass123";
-const KEY = "paper-key";
+let KEY: string;
 const RESTARTING: PromoteRunResult = { alreadyPrimary: false, restarting: true };
 
 const suite = useVenueDb({
@@ -152,9 +146,7 @@ beforeEach(async () => {
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, self);
   await setNodeMode({ venue: suite.db, node: suite.node }, self, "mirror", "adopt");
   await pinMainBoxKey(suite.node, self, { nodeId: SOURCE.nodeId, publicKey: SOURCE.publicKey });
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, self, hashSecret(KEY), "paper-1", null),
-  );
+  ({ secret: KEY } = await mintMasterKey(suite.db));
   const selfKey = await readNodeIdentityKey(suite.node, RING, self);
   const body: MembershipDocumentBody = {
     term: 3,
@@ -399,7 +391,7 @@ describe("the open-operation refusal comes after the sign-in", () => {
     const before = await recorded();
     const wrongPassword = { personId, password: "wrong" };
     const unknownPerson = { personId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", password: PASSWORD };
-    const wrongKey = { breakGlass: "not-the-key" };
+    const wrongKey = { breakGlass: WRONG_MASTER_KEY };
     const module = { moduleOperation: moduleOperation(), oldNodeNeutralised: true };
     const operation = { moduleOperation: moduleOperation(), ...answers };
     const usual = refusal(401, "password.invalid");

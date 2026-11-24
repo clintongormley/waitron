@@ -27,7 +27,7 @@ import { NODE_FILE, VENUE_FILE } from "@waitron/store";
 import { FISCAL_SERVER_KEY_AS_TYPED } from "@waitron/fiscal-verifactu";
 import { readRecoveryKeyName } from "@waitron/node-db";
 import { buildManifest } from "./backup-manifest.js";
-import { verifyBreakGlass } from "./break-glass.js";
+import { boxKeyStored } from "./testing/box-key.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -685,7 +685,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(typeof breakGlassKeyName).toBe("string");
     const secret = FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret);
     expect(typeof secret).toBe("string");
-    expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+    expect(await boxKeyStored(venueDb.node, id, secret!)).toBe(true);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(recoveryPackPdf).toEqual(expect.any(String));
     const pdf = await readRecoveryPackPdf(Buffer.from(recoveryPackPdf, "base64"));
@@ -731,7 +731,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         { modules: ALL_MODULES, migrationsRoot: null },
       ),
     ).toMatchObject({
-      nodeRecoveryKeyName: breakGlassKeyName,
+      nodeRecoveryKeyName: shownMasterKeyName,
       fiscalSelection: {
         country: "ES",
         fiscalTerritory: "ES-common",
@@ -772,7 +772,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       expect(await readRecoveryPacks(venueDb.db, id)).toEqual([]);
       const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
       expect(typeof secret).toBe("string");
-      expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+      expect(await boxKeyStored(venueDb.node, id, secret!)).toBe(true);
       expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
         reason: "recovery.pack_invalid",
       });
@@ -796,7 +796,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await readRecoveryPacks(venueDb.db, id)).toEqual([]);
     const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
     expect(typeof secret).toBe("string");
-    expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+    expect(await boxKeyStored(venueDb.node, id, secret!)).toBe(true);
     expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
       reason: "unexpected",
     });
@@ -843,7 +843,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     });
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     expect(
-      await verifyBreakGlass(venueDb.node, id, FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret)!),
+      await boxKeyStored(venueDb.node, id, FISCAL_SERVER_KEY_AS_TYPED(breakGlassSecret)!),
     ).toBe(true);
   });
 

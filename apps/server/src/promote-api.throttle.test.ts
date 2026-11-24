@@ -6,9 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx } from "@waitron/node-db";
-import { makeBreakGlassSecret } from "./break-glass.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword } from "@waitron/identity";
@@ -18,6 +15,7 @@ import { createNodeOperationPreparation } from "./node-operation-preparation.js"
 import { mountPromoteApi } from "./promote-api.js";
 import { nodeId } from "@waitron/shared";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const ADMIN = "11111111-1111-4111-8111-111111111111";
@@ -155,10 +153,7 @@ it("shares the failure budget across preparation and promotion", async () => {
 it.each(["legacy", "module", "preparation"])(
   "keeps the real recovery key usable after wrong guesses on %s",
   async (kind) => {
-    const made = await makeBreakGlassSecret();
-    await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, made.verifier, "test-key", null),
-    );
+    const made = await mintMasterKey(suite.db);
     const service = app();
     const request = (breakGlass: string) =>
       kind === "legacy" ? { breakGlass, oldNodeNeutralised: true } : { ...body(), breakGlass };

@@ -76,7 +76,7 @@ WireGuard installation, production recovery, hardware replacement, browser trust
 new operator screen was exercised. The HTTP restore test uses the real restore route mounted on
 its test app; it does not establish the setup boot's complete browser journey.
 
-Use [recovery with a recovery sheet](../operations/hour-recovery.md) for the current fiscal
+Use [recovery with a recovery pack](../operations/hour-recovery.md) for the current fiscal
 procedure and [the disposable authorised fixture](authorised-cloud-restore-fixture.md) for Cloud's
 separate ordinary-restore exercise. This audit grants no recovery authority and changes no
 fiscal rule.

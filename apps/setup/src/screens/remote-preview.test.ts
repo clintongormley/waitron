@@ -67,7 +67,15 @@ it.each(["bucket", "cloud"])(
     const transport = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
       void _url;
       void _init;
-      return Response.json(saved);
+      return Response.json({
+        ...saved,
+        fiscalSelection: {
+          module: "fiscal-verifactu",
+          country: "ES",
+          fiscalTerritory: "common",
+          timeZone: "Europe/Madrid",
+        },
+      });
     });
     const { el } = await mount(kind, transport);
     click(el);
@@ -75,7 +83,7 @@ it.each(["bucket", "cloud"])(
     expect(child(el).shadowRoot!.textContent).toContain("2026-10-01");
     expect(child(el).shadowRoot!.textContent).toContain("Saved venue");
     expect(child(el).shadowRoot!.textContent).toContain(
-      "Keep older box keys until no older backup remains.",
+      "Keep older master keys until no older backup remains.",
     );
     expect(child(el).shadowRoot!.textContent).not.toContain("private-kit");
     expect(transport.mock.calls.map(([url]) => String(url))).toEqual([

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import * as masterKeyModule from "./master-key.js";
 import {
   authorityKey,
+  authorityKeyMatches,
   makeMasterKey,
   masterKeyCheckValue,
   masterKeyId,
@@ -79,6 +80,7 @@ describe("making a master key", () => {
   it("never hands out the sealing private key", () => {
     expect(Object.keys(masterKeyModule).sort()).toEqual([
       "authorityKey",
+      "authorityKeyMatches",
       "makeMasterKey",
       "masterKeyCheckValue",
       "masterKeyId",
@@ -107,6 +109,37 @@ describe("checking a typed master key", () => {
   ])("does not match %s", (_label, checkValue) => {
     expect(masterKeyMatches(fixedKey, checkValue)).toBe(false);
   });
+});
+
+describe("checking a staged authority key", () => {
+  const stored = masterKeyCheckValue(fixedKey);
+
+  it("an authority key matches the check value of its master key, and another key's does not", () => {
+    const authority = Buffer.from(
+      "c31f1f410d875eb410aeb5848d18b7de40e24b308aa540c8f3252e9b5e0b7bce",
+      "hex",
+    );
+    expect(authorityKeyMatches(authority, stored)).toBe(true);
+    expect(authorityKeyMatches(authority, masterKeyCheckValue(makeMasterKey()))).toBe(false);
+    expect(authorityKeyMatches(authorityKey(makeMasterKey()), stored)).toBe(false);
+  });
+
+  it.each([
+    ["upper-case hex", stored.toUpperCase()],
+    ["a short value", stored.slice(2)],
+    ["a long value", `${stored}0`],
+    ["a non-hex value", `${stored.slice(1)}g`],
+    ["empty text", ""],
+  ])("does not match %s", (_label, checkValue) => {
+    expect(authorityKeyMatches(authorityKey(fixedKey), checkValue)).toBe(false);
+  });
+
+  it.each([Buffer.alloc(31), Buffer.alloc(33), Buffer.alloc(0), fixedKey])(
+    "does not match an authority key that is not 32 bytes %#",
+    (authority) => {
+      expect(authorityKeyMatches(authority, stored)).toBe(false);
+    },
+  );
 });
 
 describe("the master key's name", () => {

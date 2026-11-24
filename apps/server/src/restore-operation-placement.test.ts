@@ -24,7 +24,7 @@ import {
 } from "@waitron/module";
 import { fakeModule, fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { ALL_MODULES } from "./modules.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
@@ -65,7 +65,7 @@ beforeEach(async () => {
     { nodeId: NODE, code: "FF", purpose: "full" },
     { nodeId: NODE, code: "R", purpose: "corrective" },
   ]);
-  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  nodeKey = (await mintMasterKey(suite.db)).secret;
 });
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
@@ -180,7 +180,7 @@ it("the admission check's folder holds the backup's node copy, not an empty node
   }
 });
 
-it("refuses a wrong node key before hooks or restored identity are published", async () => {
+it("refuses a wrong master key before hooks or restored identity are published", async () => {
   let entered = false;
   const f = await fixture(
     regime(async () => {
@@ -188,7 +188,7 @@ it("refuses a wrong node key before hooks or restored identity are published", a
       return { report: "unexpected" };
     }),
   );
-  nodeKey = "wrong";
+  nodeKey = WRONG_MASTER_KEY;
   await expect(writeValidated(f.validated, f.deps)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
@@ -200,10 +200,17 @@ it("refuses a wrong node key before hooks or restored identity are published", a
 
 it("identifies the chosen backup's paper key before authentication can refuse it", async () => {
   const f = await fixture(regime(async () => ({ report: "restored" })));
-  const archivedName = await suite.node.execute<Record<string, unknown>>(
-    sql`select * from box where node_id = ${NODE}`,
-  );
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  const archived = new DatabaseSync(f.validated.databasePath, { readOnly: true });
+  let archivedName: unknown;
+  try {
+    archivedName = archived
+      .prepare("select name from master_keys order by number desc limit 1")
+      .get()?.name;
+  } finally {
+    archived.close();
+  }
+  expect(archivedName).toEqual(expect.any(String));
+  await mintMasterKey(suite.db);
   const entries: { code: string; params: Record<string, unknown> | undefined }[] = [];
   f.deps = {
     ...f.deps,
@@ -211,13 +218,13 @@ it("identifies the chosen backup's paper key before authentication can refuse it
       entries.push({ code, params });
     },
   };
-  nodeKey = "wrong";
+  nodeKey = WRONG_MASTER_KEY;
   await expect(writeValidated(f.validated, f.deps)).rejects.toMatchObject({
     code: "promotion.break_glass_invalid",
   });
   expect(entries).toContainEqual({
     code: "restore.recovery_key_selected",
-    params: { name: archivedName.rows[0]!.recovery_key_name },
+    params: { name: archivedName },
   });
   expect(JSON.stringify(entries)).not.toContain(nodeKey);
 });

@@ -14,7 +14,9 @@ import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import { ALL_MODULES } from "./modules.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
+import { authorityKey } from "@waitron/credentials";
+import { decodeMasterKeyCode } from "@waitron/shared";
 import { writeAllocationInput } from "./testing/allocation-input.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
@@ -49,7 +51,7 @@ beforeEach(async () => {
       numeroInstalacion: "P000001",
     }),
   );
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  secret = (await mintMasterKey(suite.db)).secret;
 });
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -194,7 +196,10 @@ it.each(["archive", "stream"] as const)(
         "existing trading identity",
       );
       expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(marker);
-      expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(secret);
+      const staged = await readFile(join(stateDir, "flows/restore/node-key"), "utf8");
+      expect(staged).toBe(authorityKey(decodeMasterKeyCode(secret)).toString("hex"));
+      expect(staged).not.toContain(secret);
+      expect(marker).not.toContain(secret);
       expect(await readFile(currentPath, "utf8")).toBe(current);
       expect(await readdir(outside)).toEqual(["current.json"]);
       expect(await rows()).toEqual(before);

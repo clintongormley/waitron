@@ -4,12 +4,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { isDeepStrictEqual as equal } from "node:util";
 import {
   lockVenueDatabase,
+  readCurrentMasterKey,
   type Database,
   type NodeDatabase,
   type Transaction,
   withTransaction,
 } from "@waitron/db";
-import { readNodeMode, readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
+import { readNodeMode } from "@waitron/node-db";
 
 import {
   configureModuleOperations,
@@ -56,7 +57,6 @@ export function createNodeOperationPreparation(options: {
   stateDir: string;
   venueDir: string;
   db: Database;
-  /** This box's node.db, which holds the recovery-key check. */
   nodeDb: NodeDatabase;
   node: ProvisionedNode;
   modules: readonly WaitronModule[];
@@ -73,12 +73,13 @@ export function createNodeOperationPreparation(options: {
   const scopes = new AsyncLocalStorage<{
     binding: OperationBinding;
     authority: OperationAuthority;
-    verifier: string | null | undefined;
+    keyNumber: number | null | undefined;
     isolation?: Readonly<{ oldMachineOffline: boolean; noParallelRecovery: boolean }>;
     // Kept apart from `isolation`: isolation makes `authorize` require a live primary, which a
     // mirror being promoted never is.
     promotion?: Readonly<{ oldMachineRelinquished: boolean }>;
   }>();
+  const currentKeyNumber = async () => (await readCurrentMasterKey(options.db))?.number ?? null;
   const invalid = (binding: OperationBinding): never => {
     throw new AppError("module.operation_invalid", { module: binding.module });
   };
@@ -99,10 +100,7 @@ export function createNodeOperationPreparation(options: {
       readOperationAuthority(scope.authority, binding) === undefined
     )
       return invalid(binding);
-    if (
-      scope.verifier !== undefined &&
-      (await readRecoveryKeyVerifier(options.nodeDb, node.nodeId)) !== scope.verifier
-    )
+    if (scope.keyNumber !== undefined && (await currentKeyNumber()) !== scope.keyNumber)
       throw new AppError("promotion.break_glass_invalid", {});
     if (scope.isolation !== undefined) await assertLive();
   };
@@ -126,7 +124,7 @@ export function createNodeOperationPreparation(options: {
       const current = await reader(options.db, node, binding, history);
       await authorize(binding);
       check();
-      const keyName = await readRecoveryKeyName(options.nodeDb, node.nodeId);
+      const keyName = (await readCurrentMasterKey(options.db))?.name ?? null;
       await authorize(binding);
       const { isolation, promotion } = scopes.getStore() ?? {};
       const relinquished = promotion?.oldMachineRelinquished ?? false;
@@ -225,9 +223,9 @@ export function createNodeOperationPreparation(options: {
       typeof heldCredentials === "object" &&
       heldCredentials !== null &&
       "breakGlass" in heldCredentials;
-    const verifier = key ? await readRecoveryKeyVerifier(options.nodeDb, node.nodeId) : undefined;
+    const keyNumber = key ? await currentKeyNumber() : undefined;
     const authenticated = async (authority: OperationAuthority, commit: Commit) => {
-      return scopes.run({ binding, authority, verifier, promotion }, () => run(authority, commit));
+      return scopes.run({ binding, authority, keyNumber, promotion }, () => run(authority, commit));
     };
     if (
       typeof heldCredentials === "object" &&
@@ -291,7 +289,7 @@ export function createNodeOperationPreparation(options: {
     ): Promise<T> => {
       const binding = Object.freeze({ ...promote, action });
       return withOperationAuthority(binding, operatorId, (stepAuthority) =>
-        scopes.run({ binding, authority: stepAuthority, verifier: undefined }, () =>
+        scopes.run({ binding, authority: stepAuthority, keyNumber: undefined }, () =>
           withPreparedModuleOperations(
             modules,
             new Map([[promote.module, { binding, authority: stepAuthority, input }]]),
@@ -367,13 +365,13 @@ export function createNodeOperationPreparation(options: {
       )
         return invalid(binding);
       await assertLive();
-      const verifier = await readRecoveryKeyVerifier(options.nodeDb, node.nodeId);
+      const keyNumber = await currentKeyNumber();
       return withRecoveryKeyAuthority(
         { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
         binding,
         key,
         (authority, commit) =>
-          scopes.run({ binding, authority, verifier, isolation: answers }, async () => {
+          scopes.run({ binding, authority, keyNumber, isolation: answers }, async () => {
             await authorize(binding);
             return run({
               binding,

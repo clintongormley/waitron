@@ -25,7 +25,8 @@ const CHALLENGES = 64;
 const RETRY_AFTER_SECONDS = "60";
 
 export interface StartClockWaitingOptions {
-  /** The state folder holding the staged node recovery key every clock route is checked against. */
+  /** The state folder holding the staged authority key every clock route's master key is checked
+   * against. */
   stateDir: string;
   /** The restore page's setter (`createSetupClockSet`), so a step is noted and alerted as there. */
   setBoxClock: SetupClockSetter;
@@ -51,7 +52,7 @@ export interface StartClockWaiting {
 /**
  * What the box's usual address answers while a restore's start waits to confirm its time: the
  * waiting page for every page, `server.waiting_for_clock` for everything else, and the clock
- * routes, which take nothing from a request without the staged node recovery key.
+ * routes, which take nothing from a request without the master key whose authority key is staged.
  */
 export function createStartClockWaiting(options: StartClockWaitingOptions): StartClockWaiting {
   const wall = options.clock?.wall ?? Date.now;

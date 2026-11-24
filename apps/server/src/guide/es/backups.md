@@ -30,7 +30,7 @@ Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación*
 
 ## Guarda tus claves {#keys}
 
-La **Clave de cifrado de copias** abre las copias cifradas. La **Clave del servidor** autoriza la restauración o el traspaso a otro servidor. Conserva el paquete con la clave del servidor aunque el último paquete contenga la clave de cifrado de copias.
+La **Clave de cifrado de copias** abre las copias cifradas. La clave maestra, en la primera página de tu paquete de recuperación, autoriza la restauración o el traspaso a otro servidor. Conserva el paquete con la clave maestra que necesita cada copia.
 
 Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de cifrado de copias en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.
 

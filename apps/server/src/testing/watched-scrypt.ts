@@ -45,16 +45,21 @@ export function isWatchingDerivation(secret: string): boolean {
   return watchState.all || watchState.secret === secret;
 }
 
+/** Records one key derivation for `watchingDerivations`, inside or outside the request's
+ * transactions. */
+export function recordDerivation(): void {
+  if (!watchState.all) return;
+  if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");
+  else passwords.outside += 1;
+}
+
 let failing: string | null = null;
 
 /** `node:crypto` with a `scrypt` that the watchers below can see; otherwise the real `scrypt`. */
 export function watchedCrypto(actual: Crypto): Crypto {
   const scrypt = (secret: string, salt: Buffer, keyLength: number, done: Done) => {
     if (secret === failing) throw new Error("scrypt failed (test fault)");
-    if (watchState.all) {
-      if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");
-      else passwords.outside += 1;
-    }
+    recordDerivation();
     const watched = secret === watchState.secret;
     if (watched) pins.count += 1;
     if (watched && pins.requestHoldsLock > 0) {

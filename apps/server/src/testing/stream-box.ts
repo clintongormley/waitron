@@ -25,8 +25,8 @@ import {
 } from "@waitron/provisioning";
 import type { WaitronModule } from "@waitron/module";
 import type { BucketConfig } from "@waitron/stream";
-import { mintBreakGlassSecret } from "../break-glass.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
+import { mintMasterKey } from "./master-key.js";
 import { formatEnvFile, parseEnvFile } from "../env-file.js";
 import { seedTermZeroMembership } from "../membership-seed.js";
 import { establishNodeIdentity } from "../node-identity.js";
@@ -114,10 +114,7 @@ export async function provisionStreamBox(options: {
       { db: seeding.venue, modules },
     );
     const streamId = await withTransaction(seeding.venue, ensureStreamId);
-    const nodeSecret = await mintBreakGlassSecret(
-      { venue: seeding.venue, node: seeding.node },
-      venue.nodeId,
-    );
+    const nodeSecret = (await mintMasterKey(seeding.venue)).secret;
     await establishNodeIdentity({ ownerDb: seeding.venue, node: seeding.node, ring }, venue.nodeId);
     await seedTermZeroMembership(
       { db: seeding.venue, node: seeding.node, ring },

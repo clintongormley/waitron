@@ -10,6 +10,10 @@
 > **File layout update, 2026-11-11:** the staged node credential now lives at
 > `flows/restore/node-key`; `flows/restore/record.json` holds the request and its phase.
 
+> **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key,
+> checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
+> `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one

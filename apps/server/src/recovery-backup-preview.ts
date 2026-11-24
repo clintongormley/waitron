@@ -1,6 +1,11 @@
 import { dirname } from "node:path";
-import { openVenueDatabase, readTaxpayer, readVenue, readSettings } from "@waitron/db";
-import { readRecoveryKeyName } from "@waitron/node-db";
+import {
+  openVenueDatabase,
+  readCurrentMasterKey,
+  readTaxpayer,
+  readVenue,
+  readSettings,
+} from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, modulesSettings } from "@waitron/module";
@@ -98,7 +103,7 @@ export async function readRecoveryCopyPreview(
       createdAt: copy.manifest.createdAt,
       environment: copy.manifest.environment,
       nodeId: node.nodeId,
-      nodeRecoveryKeyName: await readRecoveryKeyName(store.node, node.nodeId),
+      nodeRecoveryKeyName: (await readCurrentMasterKey(store.venue))?.name ?? null,
       taxpayer: { legalName: taxpayer.legalName, taxId: taxpayer.taxId },
       venueName: venue.name,
     };

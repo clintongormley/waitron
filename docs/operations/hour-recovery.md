@@ -1,8 +1,8 @@
-# Recover a box with its recovery pack or older sheet
+# Recover a box with its recovery pack
 
-Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack or older sheet whose
-key name matches that copy. A newer pack may contain a replacement key that an older backup
-does not accept. Keep the archive password or Cloud login separate from the box key.
+Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack that
+holds that copy's master key. A pack made with a newer master key does not open an older
+backup. Keep the archive password or Cloud login separate from the master key.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -11,8 +11,8 @@ collections or refunds stop. Money already captured remains recorded for later c
 old or copied box offline before proceeding; your answers on this page do not stop that other box.
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
-box over HTTPS. Use the box key of the current live box. A dashboard sign-in, backup password or
-key from an older backup does not replace it. Enter the key and choose **Check conflict** to inspect
+box over HTTPS. Use the venue's current master key (the field still says **Current box key**). A dashboard sign-in, backup password or
+older master key does not replace it. Enter the key and choose **Check conflict** to inspect
 the affected invoice and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
 page then shows the box's time and this device's: check that both are right, then choose **Confirm
@@ -25,7 +25,7 @@ the internet, the page asks you to confirm the time again: press **Confirm the t
 choose **Switch identity** explicitly. No countdown or background task activates it for you.
 
 The request limit is shared by everyone using this box's recovery route: 60 admitted requests
-per fixed one-minute window, with at most two requests running. The box key does not bypass
+per fixed one-minute window, with at most two requests running. The key does not bypass
 that limit. Invalid TLS, origin or site checks are refused before this budget is used. Other devices can keep recovery unavailable by sending accepted HTTPS requests or holding their
 bodies open. Close other recovery pages and stop those requests, or isolate untrusted devices on the
 venue network, before retrying. **Stop** ends this page's work; it does not clear the box's shared
@@ -57,9 +57,9 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Use a saved PDF through the recovery
-picker or enter its grouped key. There is no installation code to type: the form has no field for
-one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
+and key name. Keep production and preproduction separate. Choose the recovery pack that holds
+this backup's master key in the recovery picker, or type the master key. There is no
+installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
 authenticate the selected backup; its short typing check is not authentication.
 
@@ -114,7 +114,7 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation while the internet time service vouches for the clock"). Enter the box key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box; while the button reads **Proceed** it says "Waitron will start new invoice series for this box." (the same
@@ -254,17 +254,17 @@ page's own `/restore-clock/` routes, with 503 `server.waiting_for_clock`
 asking for the key" and "answers %s %s with server.waiting_for_clock"). The listener serving it
 answers `/legal/*`, `/ca.crt` and `/setup/trust` ahead of it (`apps/server/src/recovery-listener.ts`),
 and with box TLS that is not usable serves none of it. The setup page where
-the restore was started keeps the node recovery key it sent in its memory, never in storage, and
+the restore was started keeps the key it sent in its memory, never in storage, and
 shows both times on the same page, with **Confirm the time** and **This device**
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "asks for the time on the screen itself when the restore's start waits for it"). If that page was
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
-node recovery key (the box key): the waiting page then shows the same step
+selected backup's master key: the waiting page then shows the same step
 (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
 with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
-secret the setup page sends (the same file's "takes the box key as printed on the recovery pack,
-typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves the staged key
+secret the setup page sends (the same file's "takes the master key as printed on the recovery pack,
+typed in lower case without spaces"; `start-clock-waiting.test.ts`, "the clock page accepts the master key
 typed %s"). Every clock route refuses a missing or wrong key
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
 setting nothing"), and a request from another site's page (`restore.clock_origin_refused`, the same
@@ -300,7 +300,7 @@ After the restore, follow the guide's
 [After a recovery](../../apps/server/src/guide/en/backup-recovery.md#after-recovery).
 
 Ordinary reboot and exact completion keep the current activation.
-They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
+They do not take another name. Keep the recovery pack that holds the
 key each retained backup needs, and check the restored box's outcome before using the till. The
 pack setup makes holds the master key on its first page, then the box key
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack

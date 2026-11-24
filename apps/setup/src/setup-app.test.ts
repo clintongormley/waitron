@@ -38,6 +38,9 @@ import {
   joinScreen,
   joinStubs,
 } from "../test/join-browser.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 
 const mounted: HTMLElement[] = [];
 
@@ -1453,7 +1456,7 @@ describe("setup-app", () => {
     );
     expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
     expect(await screenText(el, "done", "[data-test=break-glass-warning]")).toContain(
-      "restore this venue from its bucket",
+      "The recovery pack contains the box key. Keep it away from this box.",
     );
   });
 
@@ -2173,7 +2176,7 @@ describe("setup-app", () => {
     const warning = (await screenText(el, "done", "[data-test=key-why]"))
       ?.toLowerCase()
       .replace(/\s+/g, " ");
-    expect(warning).toContain("if this box ever has to take over from the main box");
+    expect(warning).toContain("save it as a file or write it down");
   });
 
   it("hands this box's own address from Finish joining to the done screen's label", async () => {
@@ -6514,7 +6517,7 @@ describe("a recovery request refused because another setup holds the server", ()
     const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c";
+    input.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     for (const name of [
       "recovery-old-box-stopped",

@@ -45,9 +45,23 @@ beforeEach(() => {
   for (const suite of [before, after]) {
     for (const table of tables) suite.db.run(sql.raw(`drop table if exists ${table}`));
     suite.db.run(sql`drop table if exists nodes`);
+    suite.db.run(sql`drop table if exists master_keys`);
     suite.db.run(sql`create table nodes (id text, public_key text, endorsement text)`);
   }
 });
+
+function createMasterKeys(suite: typeof before) {
+  suite.db.run(
+    sql`create table master_keys (number integer primary key, name text not null, check_value text not null, public_key blob not null, made_at text not null, made_by text)`,
+  );
+}
+
+function seedMasterKey(suite: typeof before) {
+  createMasterKeys(suite);
+  suite.db.run(
+    sql`insert into master_keys (number, name, check_value, public_key, made_at) values (1, 'Key 1', 'check', ${Buffer.alloc(4, 1)}, '2026-10-31T08:00:00Z')`,
+  );
+}
 
 async function sourceCopy(): Promise<Uint8Array> {
   const scratch = await mkdtemp(join(tmpdir(), "a947-node-backup-"));
@@ -231,12 +245,24 @@ describe("node.db's backup verification", () => {
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
 
-  it("marks invalid a key-less source whose node copy still holds its recovery key", async () => {
+  it.each([
+    ["original", before],
+    ["restored", after],
+  ])(
+    "backup verification counts a copy with a master_keys row as holding the source (%s copy)",
+    async (_name, suite) => {
+      seedSourceNode(null);
+      seedMasterKey(suite);
+      await expect(run()).resolves.toEqual(result("passed", "invalid"));
+    },
+  );
+
+  it("a key-less source passes when neither venue copy has a master_keys table, or the table is empty", async () => {
     seedSourceNode(null);
-    source.node.run(
-      sql`insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values (${SOURCE}, 'recovery_key_verifier', 'Key 1', '2026-10-31T08:00:00Z')`,
-    );
-    await expect(run()).resolves.toEqual(result("passed", "invalid"));
+    await expect(run()).resolves.toEqual(result("passed", "passed"));
+    createMasterKeys(before);
+    createMasterKeys(after);
+    await expect(run()).resolves.toEqual(result("passed", "passed"));
   });
 
   it("marks invalid a key-less source whose node copy still holds its role", async () => {
@@ -251,9 +277,6 @@ describe("node.db's backup verification", () => {
     seedSourceNode(null);
     source.node.run(
       sql`insert into box (node_id, mode, singleton_role, role_changed_at) values (${OTHER}, 'primary', 'primary', '2026-10-31T08:00:00Z')`,
-    );
-    source.node.run(
-      sql`update box set recovery_key_verifier='verifier', recovery_key_name='Key 1', recovery_key_changed_at='2026-10-31T08:00:00Z' where node_id=${OTHER}`,
     );
     await expect(run()).resolves.toEqual(result("passed", "passed"));
   });

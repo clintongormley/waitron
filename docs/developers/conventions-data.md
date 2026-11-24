@@ -1774,7 +1774,7 @@ queues (`packages/store/src/index.ts`):
   (`packages/provisioning/src/first-setup-node-key.ts`). The last two hold the node lock around
   the venue save; promotion takes the two one after the other. A signing key is the stated exception: it is sealed in `node.db` before its public
   half reaches `venue.db`, because a public key with no private half could never sign as the box.
-  Until A1323 PR 2b, a new master key's `master_keys` row is the other exception: setup
+  Until A1323 PR 3b, a new master key's `master_keys` row is the other exception: setup
   (`apps/server/src/setup-api.ts`) and Make a new master key (`backup-recovery-pack-api.ts`) save it
   as the request's last venue.db write, after node.db's box-key save where there is one, so a
   failure before it leaves no row.
@@ -4594,8 +4594,8 @@ before, and so does a wait whose page cannot be served (`apps/server/src/node-en
 refusal waits: %s" and "counts a wait whose page cannot be served, so the box can still reach the
 start-failure page").
 
-**The node recovery key confirms the time while the start waits (D-key).** After a successful
-restore the setup page keeps the node recovery key it sent, in memory only, and its done
+**The master key confirms the time while the start waits (D-key).** After a successful
+restore the setup page keeps the key it sent, in memory only, and its done
 screen drops it once the server answers ready or the screen leaves the page
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
@@ -4603,13 +4603,12 @@ screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/s
 leaves the page"). The waiting app's clock routes take the key in the body, and compare it with the staged key file,
 refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
-setting nothing"); a key typed as printed on the recovery pack is first turned into its secret by
-the fiscal module's `serverKeyAsTyped`. The done screen shows both times with **Confirm the time** and **This device**;
+setting nothing"). The done screen shows both times with **Confirm the time** and **This device**;
 a browser that lost the key types it on the waiting page, as printed or as the secret, which
 shows the same step (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the
-done screen's step with both times and their dates" and "takes the box key as printed on the
-recovery pack, typed in lower case"; `start-clock-waiting.test.ts`, "/restore-clock/challenge serves
-the staged key typed %s"). A confirmation is kept only when the times agree within 30
+done screen's step with both times and their dates" and "takes the master key as printed on the
+recovery pack, typed in lower case without spaces"; `start-clock-waiting.test.ts`, "the clock page accepts
+the master key typed %s"). A confirmation is kept only when the times agree within 30
 seconds, with the box's boot reading, and has no time limit (`start-clock-waiting.test.ts`,
 "confirm within 5 seconds that agrees is kept with the box's boot reading" and "keeps the
 confirmation however long the start takes to ask for it"); **This device** sets the box's clock
@@ -4641,8 +4640,8 @@ has restore cases (refused at a minute in use, and selected beside later names) 
 no setup case, and a reference clock more
 than 15 seconds wrong can still repeat a name (its ±45.5 s control).
 
-Cold restore checks the key saved in the selected backup; live takeover checks the live
-verifier. Keep older named paper keys while their backups remain. The archive password is
+Cold restore checks the master key recorded in the selected backup's venue.db; live takeover checks
+the live venue.db's current master key. Keep older named paper keys while their backups remain. The archive password is
 separate. Name selection does not discover names made after the backup or by a box this one
 never saw, and does not stop a returning old seller. Archive and bucket input remain mutually
 exclusive.
@@ -6867,7 +6866,7 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   start waits or the clock reads before 28-10-2024), a Box administration holder's own device, the
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
   its recovery key or kit), the done screen or waiting page while that restore's start waits (under
-  the node recovery key) or the handover page (signed in as a `node.manage` holder), when that
+  the backup's master key) or the handover page (signed in as a `node.manage` holder), when that
   person chooses **This device** (**Your device is correct** on the emergency switch) (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
   #2693 now") — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
@@ -6889,17 +6888,17 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
   on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
   2026-11-13: "b", AEAT no longer counts); another machine's clock counts only once the person
-  proved on that page (the setup password on setup, the backup's node recovery key on restore, a
-  `node.manage` sign-in on promotion, the box's current recovery key on the conflict switch) confirms
+  proved on that page (the setup password on setup, the backup's master key on restore, a
+  `node.manage` sign-in on promotion, the venue's current master key on the conflict switch) confirms
   both times or sets the box's clock from that machine (owner, 2026-11-13: "we should never just
   accept another device's match automatically. instead, we should always ask for confirmation, and
   that confirmation should be protected"; This device and the list of proofs follow the watcher's
   09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
-  switch, which it gave as an administrator sign-in and whose page checks the box's current
-  recovery key, a choice that is not owner-approved); a restore's start uses the restore page's
+  switch, which it gave as an administrator sign-in and whose page checks the venue's current
+  master key, a choice that is not owner-approved); a restore's start uses the restore page's
   choice while the box's boot id is unchanged and its clock has not been stepped since
   ([detail](#a-restore-names-a-fresh-minute-the-working-time-chain-continues)), and otherwise waits until
-  the time service synchronises or the node recovery key confirms again, held by the browser that
+  the time service synchronises or the master key confirms again, held by the browser that
   pressed Restore backup or typed on the waiting page; first setup's Provision takes its own fresh
   reading and, on the setup page without the time service, uses a device time the person confirmed
   on that page while the box has not rebooted, the server has not restarted and its clock has not been

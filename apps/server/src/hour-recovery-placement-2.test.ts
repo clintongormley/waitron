@@ -1,4 +1,5 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import {
   external,
@@ -44,7 +45,7 @@ import { encodeRecoveryKit } from "@waitron/stream";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
-    "the default staged %s restore refuses a wrong node key before replacing the destination",
+    "the default staged %s restore refuses a wrong master key before replacing the destination",
     async (kind) => {
       const f = await archiveHost(kind);
       const recoveryOperation = { binding: f.options.binding, input: f.outcome.input };
@@ -56,7 +57,7 @@ describe("selected-hour admission before archive placement", () => {
               recoveryKey: "archive password",
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: "wrong node key",
+              nodeRecoverySecret: WRONG_MASTER_KEY,
             }
           : {
               kind: "stream",
@@ -64,7 +65,7 @@ describe("selected-hour admission before archive placement", () => {
               entries: f.entries,
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: "wrong node key",
+              nodeRecoverySecret: WRONG_MASTER_KEY,
             },
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
@@ -88,7 +89,7 @@ describe("selected-hour admission before archive placement", () => {
       recoveryKey: "archive password",
       environment: "preproduction",
     });
-    const wrong = createSelectedRecoveryPreparation({ ...f.options, secret: "wrong node key" });
+    const wrong = createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY });
     await expect(
       runStagedRestore({ ...f.restore, withModuleOperations: wrong.runner(f.outcome.input) }),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
@@ -511,7 +512,7 @@ describe("selected-hour admission before archive placement", () => {
       const credentials = {
         environment: "preproduction" as const,
         recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
-        nodeRecoverySecret: reason === "wrong key" ? "wrong node key" : key.secret,
+        nodeRecoverySecret: reason === "wrong key" ? WRONG_MASTER_KEY : key.secret,
         recoveryContext: {
           selectedSourceId: f.options.selected.sourceId,
           oldBoxGone: reason !== "old seller",

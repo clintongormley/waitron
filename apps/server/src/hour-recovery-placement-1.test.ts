@@ -1,4 +1,5 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import {
   seriesWithNextNumber,
   advanceSeriesTo,
@@ -61,7 +62,7 @@ import { encodeRecoveryKit } from "@waitron/stream";
 import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
-  it("the default restore command refuses a wrong node key before replacing the destination", async () => {
+  it("the default restore command refuses a wrong master key before replacing the destination", async () => {
     const f = await archiveHost();
     const artifactPath = join(root, "command.backup.enc");
     const operationPath = join(root, "command-operation.json");
@@ -82,7 +83,7 @@ describe("selected-hour admission before archive placement", () => {
           WAITRON_VENUE_DIR: f.roots.venueDir,
           WAITRON_BACKUP_RECOVERY_KEY: "archive password",
           WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-          WAITRON_NODE_RECOVERY_KEY: "wrong node key",
+          WAITRON_MASTER_KEY: WRONG_MASTER_KEY,
         },
         out: (line) => output.push(line),
         restore: (request) => restoreFromArtifactFile({ ...request, migrationsRoot: null }),
@@ -630,7 +631,7 @@ describe("selected-hour admission before archive placement", () => {
     ["disagreement", "sif.allocation_invalid"],
     ["old seller", "sif.allocation_invalid"],
     ["missing sole confirmation", "sif.allocation_invalid"],
-    ["wrong node key", "promotion.break_glass_invalid"],
+    ["wrong master key", "promotion.break_glass_invalid"],
     ["wrong bucket password", "recovery.passphrase_invalid"],
     ["changed point", "module.operation_invalid"],
     ["unconfirmed venue", "restore.stream_venue_unconfirmed"],
@@ -657,7 +658,7 @@ describe("selected-hour admission before archive placement", () => {
       deps.argv = deps.argv.filter((arg) => arg !== "--confirm-old-box-gone");
     if (reason === "missing sole confirmation")
       deps.argv = deps.argv.filter((arg) => arg !== "--confirm-sole-recovery");
-    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong master key") command.env.WAITRON_MASTER_KEY = WRONG_MASTER_KEY;
     if (reason === "wrong bucket password")
       await writeFile(kitPath, encodeRecoveryKit({ ...kit, recoveryKey: "wrong bucket password" }));
     if (reason === "unconfirmed venue")
@@ -996,7 +997,7 @@ describe("selected-hour admission before archive placement", () => {
     const f = await interactiveHost();
     await f.compare();
     const history = await readModulePreparationHistory(f.roots, binding.module);
-    await expect(f.select({ nodeRecoverySecret: "wrong" })).rejects.toMatchObject({
+    await expect(f.select({ nodeRecoverySecret: WRONG_MASTER_KEY })).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
     expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);

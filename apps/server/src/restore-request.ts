@@ -32,7 +32,9 @@ import {
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { join } from "node:path";
-import { AppError } from "@waitron/shared";
+import { authorityKey } from "@waitron/credentials";
+import { AppError, decodeMasterKeyCode } from "@waitron/shared";
+import { stagedAuthorityKey, type StagedAuthorityKey } from "./operation-authentication.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
@@ -109,6 +111,7 @@ const STREAM_PLACEMENT = "placement.db";
 const SETUP_OPERATION = SETUP_OPERATION_FILE;
 const NODE_KEY = "node-key";
 const MAX_NODE_KEY_BYTES = 4096;
+const STAGED_KEY_LENGTH = 64;
 
 async function flushPath(path: string): Promise<void> {
   const file = await open(path, "r");
@@ -121,7 +124,7 @@ async function flushPath(path: string): Promise<void> {
 
 function invalidNodeKey(): never {
   throw new AppError("server.config_invalid", {
-    variable: "WAITRON_NODE_RECOVERY_KEY",
+    variable: "WAITRON_MASTER_KEY",
     reason: "invalid_credential",
   });
 }
@@ -134,14 +137,15 @@ function assertSource(operation: RecoveryOperationInput, sourceId: string): void
     });
 }
 
-function nodeKey(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    Buffer.byteLength(value) > MAX_NODE_KEY_BYTES
-  )
+/** The authority key of a typed master key, as staged: lower-case hex of its 32 bytes. */
+function stagedForm(value: unknown): string {
+  if (typeof value !== "string" || Buffer.byteLength(value) > MAX_NODE_KEY_BYTES)
     return invalidNodeKey();
-  return value;
+  try {
+    return authorityKey(decodeMasterKeyCode(value)).toString("hex");
+  } catch {
+    return invalidNodeKey();
+  }
 }
 
 function recoveryContext(value: unknown): RecoveryEntryContext | undefined {
@@ -156,20 +160,20 @@ function invalidRecoveryContext(): never {
   });
 }
 
-async function readStagedNodeKey(stateDir: string): Promise<string> {
+async function readStagedHex(stateDir: string): Promise<string> {
   let file;
   try {
     file = await open(attachmentPath(stateDir, NODE_KEY), "r");
     if (!(await file.stat()).isFile()) return invalidNodeKey();
-    const buffer = Buffer.alloc(MAX_NODE_KEY_BYTES + 1);
+    const buffer = Buffer.alloc(STAGED_KEY_LENGTH + 1);
     let count = 0;
     while (count < buffer.length) {
       const { bytesRead } = await file.read(buffer, count, buffer.length - count, null);
       if (bytesRead === 0) break;
       count += bytesRead;
     }
-    if (count > MAX_NODE_KEY_BYTES) return invalidNodeKey();
-    return nodeKey(buffer.subarray(0, count).toString("utf8"));
+    const text = buffer.subarray(0, count).toString("latin1");
+    return /^[0-9a-f]{64}$/.test(text) ? text : invalidNodeKey();
   } catch {
     return invalidNodeKey();
   } finally {
@@ -177,26 +181,22 @@ async function readStagedNodeKey(stateDir: string): Promise<string> {
   }
 }
 
-function secretFor(sent: string): string {
-  for (const module of ALL_MODULES) {
-    const secret = module.backup?.serverKeyAsTyped?.(sent);
-    if (secret !== undefined) return secret;
-  }
-  return sent;
+async function readStagedNodeKey(stateDir: string): Promise<StagedAuthorityKey> {
+  return stagedAuthorityKey(Buffer.from(await readStagedHex(stateDir), "hex"));
 }
 
-/** Whether `sent`, as printed on a module's recovery pack or as the secret itself, is the staged
- * node recovery key; with none staged, or none readable, nothing is. */
+/** Whether `sent`, a typed master key, is the one whose authority key is staged; with none
+ * staged, or none readable, nothing is. */
 export async function matchesStagedNodeKey(stateDir: string, sent: unknown): Promise<boolean> {
-  let held: string;
   let given: string;
+  let held: string;
   try {
-    given = secretFor(nodeKey(sent));
-    held = await readStagedNodeKey(stateDir);
+    given = stagedForm(sent);
+    held = await readStagedHex(stateDir);
   } catch {
     return false;
   }
-  const digest = (value: string) => createHash("sha256").update(value).digest();
+  const digest = (hex: string) => createHash("sha256").update(Buffer.from(hex, "hex")).digest();
   return timingSafeEqual(digest(given), digest(held));
 }
 
@@ -281,7 +281,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       reason: "invalid_operation",
     });
   const secret =
-    request.nodeRecoverySecret === undefined ? undefined : nodeKey(request.nodeRecoverySecret);
+    request.nodeRecoverySecret === undefined ? undefined : stagedForm(request.nodeRecoverySecret);
   if (secret !== undefined && recoveryOperation === undefined) invalidNodeKey();
   const context = recoveryContext(request.recoveryContext);
   if (context !== undefined && (secret === undefined || recoveryOperation === undefined))

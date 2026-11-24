@@ -41,7 +41,7 @@ import {
 } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { FISCAL_RESTORE, currentSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
@@ -1034,7 +1034,7 @@ describe("restore hooks (identity phase)", () => {
       ]);
     });
     await stampDeployment(suite.db, "preproduction");
-    const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, T.nodeId);
+    const secret = (await mintMasterKey(suite.db)).secret;
     const fixture = allocationFixture({
       node: { nodeId: brandNodeId(T.nodeId) },
       identity: "P000042",

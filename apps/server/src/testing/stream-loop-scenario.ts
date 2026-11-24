@@ -11,18 +11,27 @@ import { setTimeout as delay } from "node:timers/promises";
 import { connect as tlsConnect } from "node:tls";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
-import { loadKeyRing, nodeSigningPublicKey, readNodeSigningKey } from "@waitron/credentials";
-import { nodeSealedState, nodes, openVenueDatabase, readStandardSeriesId } from "@waitron/db";
+import {
+  loadKeyRing,
+  masterKeyMatches,
+  nodeSigningPublicKey,
+  readNodeSigningKey,
+} from "@waitron/credentials";
+import {
+  nodeSealedState,
+  nodes,
+  openVenueDatabase,
+  readCurrentMasterKey,
+  readStandardSeriesId,
+} from "@waitron/db";
 import {
   createPaperAllocationPreparation,
   verifactuIdentities,
   verifactuRecords,
 } from "@waitron/fiscal-verifactu";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
-import { verifySecretAsync } from "@waitron/identity";
-import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { nodeId } from "@waitron/shared";
+import { decodeMasterKeyCode, nodeId } from "@waitron/shared";
 import { quoteIdent, type VenueRequest } from "@waitron/provisioning";
 import { applyWithFirstSetup } from "./minute-first-setup.js";
 import {
@@ -327,32 +336,19 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         try {
           if (db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined)
             return undefined;
-          if (serverSecret === undefined) return true;
-          const row = db
-            .prepare("select sealed from node_sealed_state where node_id = ?")
-            .get(a.nodeId) as { sealed: Uint8Array } | undefined;
-          if (row === undefined) return undefined;
-          const nodeCopy = unsealNodeState(row.sealed, recoveryKey).find(
-            (entry) => entry.name === "node.dump",
-          );
-          if (nodeCopy === undefined) return undefined;
-          const nodePath = join(folder, "node.db");
-          await writeFile(nodePath, nodeCopy.bytes);
-          const node = new DatabaseSync(nodePath, { readOnly: true });
-          try {
-            const held = node
-              .prepare(
-                "select recovery_key_verifier as verifier from box where node_id = ? and recovery_key_verifier is not null",
-              )
-              .get(a.nodeId) as { verifier: string } | undefined;
-            return held !== undefined && (await verifySecretAsync(serverSecret, held.verifier))
-              ? true
-              : undefined;
-          } finally {
-            node.close();
-          }
         } finally {
           db.close();
+        }
+        if (serverSecret === undefined) return true;
+        const restored = await openVenueDatabase(folder, { exclusive: false });
+        try {
+          const current = await readCurrentMasterKey(restored.venue);
+          return current !== null &&
+            masterKeyMatches(decodeMasterKeyCode(serverSecret), current.checkValue)
+            ? true
+            : undefined;
+        } finally {
+          await restored.close();
         }
       } finally {
         await rm(folder, { recursive: true, force: true });
@@ -468,9 +464,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         const pdf = new Uint8Array(await made.arrayBuffer());
         const pack = await readRecoveryPackPdf(pdf);
         expect(parseRecoveryKit(pack.bucketCode!).recoveryKey === recoveryKey).toBe(true);
-        nodeSecret = (pack.serverKey as { nodeKey: { secret: string } }).nodeKey.secret;
+        nodeSecret = pack.masterKey!;
         await writeFile(kitPath, pdf);
-        await waitFor("the PDF's server key to reach the bucket", UPLOAD_WAIT_MS, () =>
+        await waitFor("the PDF's master key to reach the bucket", UPLOAD_WAIT_MS, () =>
           saleInGeneration(pointerA.pointer.body.generation, saleA.saleId, nodeSecret),
         );
       } finally {
@@ -542,7 +538,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       ],
       env: {
         ...paperEnv,
-        WAITRON_NODE_RECOVERY_KEY: nodeSecret!,
+        WAITRON_MASTER_KEY: nodeSecret!,
         WAITRON_STATE_DIR: dirsB.state,
         WAITRON_VENUE_DIR: dirsB.venue,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -628,8 +624,10 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         .from(nodes)
         .where(eq(nodes.id, a.nodeId));
       expect(nodeRow!.publicKey).toBe(a.publicKey);
-      const verifier = await readRecoveryKeyVerifier(sealedB.node, a.nodeId);
-      expect(await verifySecretAsync(nodeSecret!, verifier!)).toBe(true);
+      const restoredKey = await readCurrentMasterKey(sealedB.venue);
+      expect(masterKeyMatches(decodeMasterKeyCode(nodeSecret!), restoredKey!.checkValue)).toBe(
+        true,
+      );
     } finally {
       await sealedB.close();
     }

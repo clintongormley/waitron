@@ -43,7 +43,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -301,7 +301,7 @@ beforeAll(async () => {
       envelope: null,
     }),
   );
-  const breakGlass = await mintBreakGlassSecret({ venue: hDb, node: hNode }, hId);
+  const breakGlass = (await mintMasterKey(hDb)).secret;
   midHandover = { dir: hDir, nodeId: hId, node: hNode, breakGlass };
 
   // A second mirror with no open operation, holding a chart that names the main box.

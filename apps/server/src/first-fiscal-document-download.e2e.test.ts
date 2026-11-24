@@ -1,3 +1,4 @@
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { execFileSync } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -294,31 +295,38 @@ it.each(["en", "es"] as const)(
         nodeKey: { nodeId: string; name: string; secret: string };
         scope: { taxpayerNif: string; environment: string };
       };
-      let keyText: string;
+      let masterKey: string;
+      let masterKeyName: string;
       let pagePng: Buffer;
       try {
         const pdf = await task.promise;
         attachment = (await pdf.getAttachmentContent(PACK_ATTACHMENT))!;
         expect(attachment).toBeInstanceOf(Uint8Array);
-        decoded = parseRecoveryPackFile(attachment).serverKey as typeof decoded;
+        const packFile = parseRecoveryPackFile(attachment);
+        decoded = packFile.serverKey as typeof decoded;
+        expect(packFile.masterKey).toMatch(/^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/);
+        masterKey = packFile.masterKey!;
+        masterKeyName = packFile.masterKeyName!;
         expect(decoded.scope).toMatchObject({
           taxpayerNif: "50000000R",
           environment: "production",
         });
         const keyPages: { page: Awaited<ReturnType<typeof pdf.getPage>>; key: string }[] = [];
+        let printedText = "";
         for (let n = 1; n <= pdf.numPages; n++) {
           const candidate = await pdf.getPage(n);
           const text = (await candidate.getTextContent()).items
             .map((item) => ("str" in item ? item.str : ""))
             .join(" ");
+          printedText += ` ${text}`;
           const key = text.match(
             /(?:Key|Clave)\s+([0-9A-Z]{4}(?:\s+[0-9A-Z]{4}){9}\s+[0-9A-Z])(?![0-9A-Z])/,
           )?.[1];
           if (key) keyPages.push({ page: candidate, key: key.split(/\s+/).join(" ") });
         }
+        expect(printedText.replace(/\s+/g, " ")).toContain(masterKey);
         expect(keyPages).toHaveLength(1);
         const sheet = keyPages[0]!.page;
-        keyText = keyPages[0]!.key;
         const viewport = sheet.getViewport({ scale: 1.5 });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         await sheet.render({ canvas: canvas as unknown as HTMLCanvasElement, viewport }).promise;
@@ -347,7 +355,7 @@ it.each(["en", "es"] as const)(
             taxId: decoded.scope.taxpayerNif,
             environment: decoded.scope.environment,
             nodeId: decoded.nodeKey.nodeId,
-            keyName: decoded.nodeKey.name,
+            keyName: masterKeyName,
           },
           locale,
         },
@@ -356,7 +364,7 @@ it.each(["en", "es"] as const)(
       const recovered = () =>
         page.evaluate(() => (window as unknown as { recovered?: string }).recovered);
       await picker.setInputFiles(join(receipt, "wizard-original.pdf"));
-      await expect.poll(recovered).toBe(decoded.nodeKey.secret);
+      await expect.poll(recovered).toBe(masterKey);
       const reprint = await PDFDocument.load(original);
       reprint.getPages()[0]!.drawText("SYNTHETIC ANNOTATION", { x: 42, y: 24, size: 8 });
       const annotated = await reprint.save();
@@ -380,7 +388,7 @@ it.each(["en", "es"] as const)(
         await annotatedTask.destroy();
       }
       await picker.setInputFiles(annotatedPath);
-      await expect.poll(recovered).toBe(decoded.nodeKey.secret);
+      await expect.poll(recovered).toBe(masterKey);
       const printPage = await context.newPage();
       await printPage.setContent(
         `<img src="data:image/png;base64,${pagePng.toString("base64")}" style="width:100%">`,
@@ -399,15 +407,15 @@ it.each(["en", "es"] as const)(
         })
         .toBe(
           locale === "en"
-            ? "Enter the key from the recovery pack or older sheet below."
-            : "Introduce abajo la clave del paquete de recuperación o de la hoja antigua.",
+            ? "Choose a valid recovery PDF, or enter the key below."
+            : "Elige un PDF de recuperación válido, o introduce la clave abajo.",
         );
       expect(await recovered()).toBeUndefined();
       await fill(
         'vf-recovery-key [name="printed-recovery-key"]',
-        keyText.toLowerCase().replaceAll("0", "o").replaceAll("1", "l"),
+        masterKey.replaceAll(" ", "").toLowerCase(),
       );
-      await expect.poll(recovered).toBe(decoded.nodeKey.secret);
+      await expect.poll(recovered).toBe(masterKey);
       await server.close();
       server = undefined;
       const source = await openVenueDatabase(venueDir);
@@ -432,7 +440,7 @@ it.each(["en", "es"] as const)(
           withRecoveryKeyAuthority(
             { db: selected.venue, node: selected.node, nodeId: decoded.nodeKey.nodeId },
             binding,
-            "wrong-key",
+            WRONG_MASTER_KEY,
             async () => true,
           ),
         ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });

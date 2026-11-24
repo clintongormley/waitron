@@ -47,6 +47,7 @@ describe("the public surface", () => {
         "setPairLinkStateTx",
         "writePairLinkTx",
         "authorityKey",
+        "authorityKeyMatches",
         "makeMasterKey",
         "masterKeyCheckValue",
         "masterKeyId",

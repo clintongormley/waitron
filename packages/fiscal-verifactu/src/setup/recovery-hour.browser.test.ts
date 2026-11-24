@@ -9,6 +9,9 @@ import type {
 } from "@waitron/module/src/setup-contract.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 import { recoveryHourStrings } from "./recovery-hour.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
+
+const MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 
 const binding = {
   module: "fiscal-verifactu",
@@ -102,7 +105,7 @@ async function enterKey(el: Entry) {
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   await key.updateComplete;
   for (const [name, value] of [
-    ["printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c"],
+    ["printed-recovery-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()],
   ]) {
     const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
     await field.updateComplete;
@@ -210,7 +213,7 @@ it("decodes the printed key and sends independent recovery declarations before s
   expect(requests[0]).toEqual({
     binding,
     context: { selectedSourceId: selection.sourceId, oldBoxGone: true, soleRecovery: true },
-    nodeRecoverySecret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    nodeRecoverySecret: MASTER_KEY,
     proposal: { action: "clock-challenge" },
   });
   expect(requests[1]).toMatchObject({
@@ -222,7 +225,7 @@ it("decodes the printed key and sends independent recovery declarations before s
   await vi.waitFor(() =>
     expect(el.readCredentials()).toEqual({
       recoveryOperation: { binding, input: selected.input },
-      nodeRecoverySecret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+      nodeRecoverySecret: MASTER_KEY,
       recoveryContext: {
         selectedSourceId: selection.sourceId,
         oldBoxGone: true,
@@ -235,7 +238,7 @@ it("decodes the printed key and sends independent recovery declarations before s
     comparisonId: "comparison",
   });
   expect(el.shadowRoot!.textContent).toContain("0CSQW");
-  expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(el.shadowRoot!.textContent).not.toContain(MASTER_KEY);
 });
 it.each([
   ["the old box has stopped", "recovery-old-box-stopped", "recovery-sole-operation"],
@@ -1638,7 +1641,7 @@ it("shows the returning device's old-series observation without sending it as re
   await vi.waitFor(() => expect(text(el)).toContain("0CSQW"));
   expect(el.readCredentials()).toEqual({
     recoveryOperation: { binding, input: selected.input },
-    nodeRecoverySecret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    nodeRecoverySecret: MASTER_KEY,
     recoveryContext: { selectedSourceId: selection.sourceId, oldBoxGone: true, soleRecovery: true },
   });
   expect(JSON.stringify(prepare.mock.calls)).not.toContain("9007199254740993");

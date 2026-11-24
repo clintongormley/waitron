@@ -593,7 +593,7 @@ lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplic
 autenticación** y lo vuelve a configurar.
 
 **Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración contiene
-la clave maestra y la clave del servidor. Una recuperación necesita la clave del servidor junto con
+la clave maestra y la clave del servidor. Una recuperación necesita la clave maestra junto con
 el acceso a una copia; para sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia en el bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de cifrado de copias, así que quien lo tenga puede leer toda la copia de la base de datos de tu
@@ -616,8 +616,8 @@ seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del c
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
 puede contener la clave del servidor. Para sustituirla, elige **Crear una clave maestra nueva**, que
-también crea una clave del servidor nueva: las copias nuevas usan la clave nueva, y las anteriores
-siguen necesitando la antigua.
+también crea una clave del servidor nueva: en un local que emite facturas, para restaurar una copia
+hecha después hace falta la clave maestra nueva, y para restaurar una anterior sigue haciendo falta la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,

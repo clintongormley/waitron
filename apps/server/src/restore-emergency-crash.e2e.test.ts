@@ -176,7 +176,7 @@ import { writeSync } from "node:fs";
 import { runStagedRestore, stageRestoreRequest } from ${JSON.stringify(resolve("src/restore-request.ts"))};
 import { endRestoreFlow } from ${JSON.stringify(resolve("src/restore-flow.ts"))};
 import { lockRestoreTarget } from ${JSON.stringify(resolve("src/restore.ts"))};
-const [stateDir, venueDir, migrationsRoot, phase] = process.argv.slice(2);
+const [stateDir, venueDir, migrationsRoot, phase, nodeRecoverySecret] = process.argv.slice(2);
 const wait = async () => { console.log("RECOVERY_CRASH_GATE"); await new Promise(() => { setInterval(() => {}, 1000); }); };
 if (phase === "staged" || phase === "hour-selected") await wait();
 const original = nativeFs.rename;
@@ -211,7 +211,6 @@ if (phase === "after-publish" || phase === "staging-artifact") {
   const record = JSON.parse(await nativeFs.readFile(join(stateDir, "flows/restore/record.json"), "utf8"));
   const artifact = await nativeFs.readFile(join(stateDir, "flows/restore/artifact"));
   const recoveryKey = await nativeFs.readFile(join(stateDir, "flows/restore/key"), "utf8");
-  const nodeRecoverySecret = await nativeFs.readFile(join(stateDir, "flows/restore/node-key"), "utf8");
   const hold = await lockRestoreTarget(venueDir);
   try { if (phase === "staging-artifact") await endRestoreFlow(stateDir); await stageRestoreRequest(stateDir, { ...record.request, artifact, recoveryKey, nodeRecoverySecret }); } finally { hold.release(); }
 }
@@ -233,7 +232,7 @@ bundle([{ entry: ${JSON.stringify(entry)}, outfile: ${JSON.stringify(binary)} }]
   expect(built.status, built.stderr).toBe(0);
   const child = spawn(
     process.execPath,
-    ["--import", preload, binary, f.stateDir, f.venueDir, migrationsRoot, phase],
+    ["--import", preload, binary, f.stateDir, f.venueDir, migrationsRoot, phase, f.key.secret],
     { env: process.env, stdio: ["ignore", "pipe", "pipe"] },
   );
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(

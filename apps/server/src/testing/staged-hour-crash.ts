@@ -11,6 +11,7 @@ import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-pat
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import {
   invoiceSeries,
+  masterKeys,
   readStandardSeriesId,
   openVenueDatabase,
   stampDeployment,
@@ -30,7 +31,7 @@ import {
   VerifactuBackend,
 } from "@waitron/fiscal-verifactu";
 import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { mintBreakGlassKey } from "../break-glass.js";
+import { mintMasterKey } from "./master-key.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
 import { packArchive } from "../backup-archive.js";
@@ -39,7 +40,6 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
-import { box } from "@waitron/node-db";
 import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -82,7 +82,7 @@ export async function stagedHourCrash(
   try {
     await seedVenueNodes(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TAXPAYER_A.nodeId);
+    const key = await mintMasterKey(db);
     const node = { nodeId: TAXPAYER_A.nodeId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",
@@ -258,7 +258,7 @@ export async function stagedHourCrash(
       try {
         return {
           submissions: await copy.venue.select().from(verifactuSubmissions),
-          nodeKeys: await copy.node.select().from(box),
+          masterKeys: await copy.venue.select().from(masterKeys),
           allocations: await allocationRows(copy.venue),
           registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select(seriesWithNextNumber).from(invoiceSeries),

@@ -32,7 +32,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seriesId } from "@waitron/shared";
-import { mintBreakGlassKey } from "../src/break-glass.js";
+import { mintMasterKey } from "../src/testing/master-key.js";
 import "../src/recovery-module-operation.js";
 import { validateArtifact } from "../src/restore.js";
 import {
@@ -126,7 +126,7 @@ beforeEach(async () => {
   }));
   await seedVenueNodes(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, node.nodeId);
+  key = await mintMasterKey(suite.db);
   value = null;
   const first = { ...binding, action: "setup", eventId: "original" };
   const setup = createHourPreparation({
@@ -391,7 +391,7 @@ export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>)
       WAITRON_MIGRATIONS_DIR: migrationRoot,
       WAITRON_BACKUP_RECOVERY_KEY: "archive password",
       WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-      WAITRON_NODE_RECOVERY_KEY: key.secret,
+      WAITRON_MASTER_KEY: key.secret,
     },
     readBoot,
   };

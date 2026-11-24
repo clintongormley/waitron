@@ -1,5 +1,5 @@
 import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
-import { hashSecretAsync, verifySecretAsync } from "@waitron/identity";
+import { hashSecretAsync } from "@waitron/identity";
 import {
   readRecoveryPacks,
   requireStamp,
@@ -10,12 +10,7 @@ import {
   type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
-import {
-  readRecoveryKeyName,
-  readRecoveryKeyVerifier,
-  setRecoveryKeyTx,
-  type VenueAndNodeHandles,
-} from "@waitron/node-db";
+import { readRecoveryKeyName, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 
 /**
  * Stores only the secret's verifier and returns the RAW secret, which is never stored or logged.
@@ -90,14 +85,4 @@ export async function mintBreakGlassKey(
   return withNodeTransaction(handles.node, (tx) =>
     mintBreakGlassKeyTx(handles.venue, tx, nodeId, made),
   );
-}
-
-/** `false`, never a throw, for a node with no verifier. */
-export async function verifyBreakGlass(
-  node: NodeDatabase,
-  nodeId: string,
-  secret: string,
-): Promise<boolean> {
-  const verifier = await readRecoveryKeyVerifier(node, nodeId);
-  return verifier !== null && (await verifySecretAsync(secret, verifier));
 }

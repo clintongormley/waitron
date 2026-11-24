@@ -18,7 +18,6 @@ import type { PromotionOperationRunner } from "./promote.js";
 export async function withPromotionModuleOperation<T>(
   deps: {
     readonly db: Database;
-    /** This box's node.db, which holds the recovery-key check. */
     readonly node: NodeDatabase;
     readonly nodeId: string;
     readonly credentialKeyRing: KeyRing;

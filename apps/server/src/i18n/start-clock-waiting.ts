@@ -25,9 +25,9 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
 > = {
   "en-GB": {
     title: "The box is restoring your backup and is waiting to confirm its time.",
-    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's box key below to confirm the time from this device.",
+    why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
     keyLabel: "Selected backup’s box key",
-    keyRefused: "Enter the selected backup’s box key.",
+    keyRefused: "Enter the selected backup’s master key.",
     keyContinue: "Continue",
     waitingForClock:
       "Before it creates the new invoice series, the box needs you to confirm its time again. Check that both times below are right, then press Confirm the time. If the box's time is wrong, press This device to set it from this device's time.",
@@ -43,9 +43,9 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
   },
   "es-ES": {
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
-    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, introduce abajo la clave del servidor de la copia para confirmar la hora desde este dispositivo.",
+    why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, introduce abajo la clave maestra de la copia para confirmar la hora desde este dispositivo.",
     keyLabel: "Clave del servidor de la copia elegida",
-    keyRefused: "Introduce la clave del servidor de la copia elegida.",
+    keyRefused: "Introduce la clave maestra de la copia elegida.",
     keyContinue: "Continuar",
     waitingForClock:
       "Antes de crear las series de facturas nuevas, el servidor necesita que vuelvas a confirmar su hora. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. Si la hora del servidor está mal, pulsa Este dispositivo para ponerla con la hora de este dispositivo.",

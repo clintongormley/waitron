@@ -21,9 +21,10 @@ import {
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encodeRecoveryKit } from "@waitron/stream";
-import { AppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode } from "@waitron/shared";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { authorityKey } from "@waitron/credentials";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { runEntry } from "./node-entry.js";
@@ -104,7 +105,7 @@ beforeEach(async () => {
     { nodeId: NODE, code: "A", purpose: "standard" },
     { nodeId: NODE, code: "FF", purpose: "full" },
   ]);
-  nodeKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  nodeKey = (await mintMasterKey(suite.db)).secret;
   root = await mkdtemp(join(tmpdir(), "restore-public-input-"));
   stateDir = join(root, "state");
   await mkdir(stateDir);
@@ -185,7 +186,7 @@ it("constructs a detached restore runner and authenticates only against the plac
   const runner = pending.createRecoveryRestoreRunner(modules, submitted, nodeKey);
   submitted.binding.eventId = "changed";
   submitted.input.signed = "changed";
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  await mintMasterKey(suite.db);
   await restoreFromArtifactFile({
     ...target(),
     artifactPath: archivePath,
@@ -207,7 +208,7 @@ it.each(["archive", "bucket"])(
         WAITRON_VENUE_DIR: join(root, "venue"),
         WAITRON_BACKUP_RECOVERY_KEY: kit.recoveryKey,
         WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-        WAITRON_NODE_RECOVERY_KEY: nodeKey,
+        WAITRON_MASTER_KEY: nodeKey,
       },
       out: (line) => {
         lines.push(line);
@@ -237,7 +238,7 @@ it.each(["archive", "bucket"])(
   },
 );
 it.each(["archive", "bucket"])(
-  "refuses a wrong node key through the %s command before outside collection or secrets publication",
+  "refuses a wrong master key through the %s command before outside collection or secrets publication",
   async (kind) => {
     const file = kind === "archive" ? archivePath : join(root, "kit");
     if (kind === "bucket") await writeFile(file, encodeRecoveryKit(kit));
@@ -248,7 +249,7 @@ it.each(["archive", "bucket"])(
         WAITRON_STATE_DIR: stateDir,
         WAITRON_BACKUP_RECOVERY_KEY: kit.recoveryKey,
         WAITRON_RECOVERY_OPERATION_FILE: operationPath,
-        WAITRON_NODE_RECOVERY_KEY: "wrong",
+        WAITRON_MASTER_KEY: WRONG_MASTER_KEY,
       },
       out: (line) => {
         lines.push(line);
@@ -347,7 +348,7 @@ it.each(["marker", "file"])(
     const entry = runEntry({
       args: [],
       baseEnv: {
-        WAITRON_NODE_RECOVERY_KEY: nodeKey,
+        WAITRON_MASTER_KEY: nodeKey,
         ...(source === "file" ? { WAITRON_RECOVERY_OPERATION_FILE: operationPath } : {}),
       },
       stateDir,
@@ -488,7 +489,7 @@ it.each(["archive", "stream"] as const)(
             nodeRecoverySecret: nodeKey,
           },
     );
-    const replacementKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+    const replacementKey = (await mintMasterKey(suite.db)).secret;
     const log = vi.fn();
     await expect(
       runStagedRestore(
@@ -529,7 +530,7 @@ it.each(["wrong", "outside-refusal"])(
       recoveryKey: kit.recoveryKey,
       environment: "preproduction",
       recoveryOperation: request,
-      nodeRecoverySecret: mode === "wrong" ? "wrong-node-key" : nodeKey,
+      nodeRecoverySecret: mode === "wrong" ? WRONG_MASTER_KEY : nodeKey,
     });
     const stagedRequest = await readFile(join(stateDir, "flows/restore/record.json"));
     if (mode === "outside-refusal")
@@ -557,7 +558,9 @@ it.each(["wrong", "outside-refusal"])(
     expect(hookEntered).toBe(false);
     await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
-      mode === "wrong" ? "wrong-node-key" : nodeKey,
+      authorityKey(decodeMasterKeyCode(mode === "wrong" ? WRONG_MASTER_KEY : nodeKey)).toString(
+        "hex",
+      ),
     );
     expect(await readFile(join(stateDir, "flows/restore/record.json"))).toEqual(stagedRequest);
   },

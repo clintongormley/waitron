@@ -1,4 +1,5 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import {
   external,
@@ -62,7 +63,7 @@ describe("selected-hour admission before archive placement", () => {
       const f = await archiveHost();
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
       await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
-      const wrong = createSelectedRecoveryPreparation({ ...f.options, secret: "wrong node key" });
+      const wrong = createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY });
       const withModuleOperations = wrong.runner(f.outcome.input);
       const attempt =
         kind === "archive"
@@ -130,7 +131,7 @@ describe("selected-hour admission before archive placement", () => {
               recoveryKey: "archive password",
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+              nodeRecoverySecret: refusal === "key" ? WRONG_MASTER_KEY : key.secret,
             }
           : {
               kind: "stream",
@@ -138,7 +139,7 @@ describe("selected-hour admission before archive placement", () => {
               entries: f.entries,
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: refusal === "key" ? "wrong node key" : key.secret,
+              nodeRecoverySecret: refusal === "key" ? WRONG_MASTER_KEY : key.secret,
             },
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
@@ -171,7 +172,7 @@ describe("selected-hour admission before archive placement", () => {
       const credentials = {
         environment: "preproduction" as const,
         recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
-        nodeRecoverySecret: "wrong node key",
+        nodeRecoverySecret: WRONG_MASTER_KEY,
       };
       await stageRestoreRequest(
         f.roots.stateDir,
@@ -322,7 +323,7 @@ describe("selected-hour admission before archive placement", () => {
       await writeFile(join(f.roots.venueDir, "venue.db"), original);
       const service =
         refusal === "key"
-          ? createSelectedRecoveryPreparation({ ...f.options, secret: "wrong key" })
+          ? createSelectedRecoveryPreparation({ ...f.options, secret: WRONG_MASTER_KEY })
           : f.service;
       if (refusal === "seller") f.isolation.oldMachineOffline = false;
       const entries =
@@ -475,7 +476,7 @@ describe("selected-hour admission before archive placement", () => {
     "offline",
     "disagreement",
     "old seller",
-    "wrong node key",
+    "wrong master key",
     "wrong archive password",
     "wrong source",
     "missing sole confirmation",
@@ -501,7 +502,7 @@ describe("selected-hour admission before archive placement", () => {
       command.argv = command.argv.filter((arg) => arg !== "--confirm-old-box-gone");
     if (reason === "missing sole confirmation")
       command.argv = command.argv.filter((arg) => arg !== "--confirm-sole-recovery");
-    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong master key") command.env.WAITRON_MASTER_KEY = WRONG_MASTER_KEY;
     if (reason === "wrong archive password")
       command.env.WAITRON_BACKUP_RECOVERY_KEY = "wrong archive password";
     if (reason === "wrong source")

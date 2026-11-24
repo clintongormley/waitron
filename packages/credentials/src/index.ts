@@ -70,6 +70,7 @@ export {
 
 export {
   authorityKey,
+  authorityKeyMatches,
   makeMasterKey,
   masterKeyCheckValue,
   masterKeyId,

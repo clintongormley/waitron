@@ -34,7 +34,7 @@ import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifa
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintBreakGlassKey } from "./break-glass.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
@@ -190,7 +190,7 @@ beforeEach(async () => {
   await advanceSeriesTo(suite.db, primary.nodeId, 123);
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, standby.nodeId);
   await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "mirror", "adopt");
-  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
+  key = await mintMasterKey(suite.db);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
 });
 afterEach(async () => {
@@ -379,7 +379,7 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
     await expect(
       s.prepare(
         held,
-        { breakGlass: fault === "key" ? "wrong" : key.secret },
+        { breakGlass: fault === "key" ? WRONG_MASTER_KEY : key.secret },
         {
           ...context,
           ...(fault === "isolation" ? { oldNodeNeutralised: false } : {}),
@@ -798,7 +798,7 @@ it("invalidates an earlier comparison when the named recovery key changes", asyn
   const s = await service();
   await admit(s);
   await compare(s);
-  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
+  key = await mintMasterKey(suite.db);
   await expect(
     s.prepare(
       binding,
@@ -1357,7 +1357,7 @@ it("refuses a recovery key rotated while a comparison is in flight", async () =>
   const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
   const pending = compare(s);
   await started;
-  key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, standby.nodeId);
+  key = await mintMasterKey(suite.db);
   const refused = expect(pending).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   release();
   await refused;

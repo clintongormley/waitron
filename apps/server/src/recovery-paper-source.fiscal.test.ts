@@ -17,7 +17,7 @@ import {
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { readOperationAuthority } from "@waitron/module";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
@@ -136,7 +136,7 @@ beforeEach(async () => {
   await suite.db
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, nodeId: node.nodeId })));
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  secret = (await mintMasterKey(suite.db)).secret;
 });
 
 async function recover(paths: { custodianPath: string; confirmationPath: string }, rotate = false) {
@@ -160,8 +160,7 @@ async function recover(paths: { custodianPath: string; confirmationPath: string 
         { binding, authority, input },
         async (request) => {
           const receipt = await source(request);
-          if (rotate)
-            await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+          if (rotate) await mintMasterKey(suite.db);
           else
             await withTransaction(suite.db, (tx) =>
               tx.update(deployment).set({ environment: "preproduction" }),

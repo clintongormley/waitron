@@ -4,7 +4,8 @@ import { CORE_MIGRATIONS, insertRecoveryPack, stampDeployment, withTransaction }
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { newBreakGlassKeyName } from "@waitron/provisioning";
-import { mintBreakGlassKey, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassKey } from "./break-glass.js";
+import { boxKeyStored } from "./testing/box-key.js";
 
 vi.mock("node:crypto", async (original) => {
   const actual = await original<typeof import("node:crypto")>();
@@ -34,8 +35,8 @@ it("stores the UTC issue day and a four-character code independently of the secr
   const key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(key.name).toMatch(/^2026-10-15 · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
   expect(await readRecoveryKeyName(suite.node, NODE)).toBe(key.name);
-  expect(await verifyBreakGlass(suite.node, NODE, key.secret)).toBe(true);
-  expect(await verifyBreakGlass(suite.node, NODE, key.name)).toBe(false);
+  expect(await boxKeyStored(suite.node, NODE, key.secret)).toBe(true);
+  expect(await boxKeyStored(suite.node, NODE, key.name)).toBe(false);
 });
 
 it("uses the next issue day across midnight without changing a previously stored name", async () => {
@@ -65,8 +66,8 @@ it("draws another code when a replacement would reuse the current paper name", a
   const replacement = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
   expect(replacement.name).toBe("2026-10-15 · 4444");
   expect(await readRecoveryKeyName(suite.node, NODE)).toBe(replacement.name);
-  expect(await verifyBreakGlass(suite.node, NODE, original.secret)).toBe(false);
-  expect(await verifyBreakGlass(suite.node, NODE, replacement.secret)).toBe(true);
+  expect(await boxKeyStored(suite.node, NODE, original.secret)).toBe(false);
+  expect(await boxKeyStored(suite.node, NODE, replacement.secret)).toBe(true);
 });
 
 it("draws another code when a new key would reuse a name this node's packs recorded", async () => {

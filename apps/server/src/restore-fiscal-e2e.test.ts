@@ -40,7 +40,7 @@ import {
 import { modulesWithSets, type WaitronModule } from "@waitron/module";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { ALL_MODULES } from "./modules.js";
 import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
@@ -237,10 +237,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
   const store = await openVenueDatabase(baselineDir);
   try {
     await seedFiscalRecord(store.venue);
-    artifactSecrets.set(
-      artifact,
-      await mintBreakGlassSecret({ venue: store.venue, node: store.node }, F.nodeId),
-    );
+    artifactSecrets.set(artifact, (await mintMasterKey(store.venue)).secret);
     await seedImage(store.venue);
     const head = await withTransaction(store.venue, (tx) => readChainHead(tx, nodeId(F.nodeId)));
     expect(head).toMatchObject({ secuencia: 1, ultimaHuella: HUELLA });

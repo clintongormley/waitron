@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
+import { authorityKey } from "@waitron/credentials";
 import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { escapeHtml } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
@@ -11,15 +13,16 @@ import type { SetupClockPerson } from "./setup-clock-set.js";
 import { createStartClockWaiting, type StartClockWaitingOptions } from "./start-clock-waiting.js";
 
 const BOX_MS = Date.parse("2026-11-13T10:00:00.000Z");
-// The secret the printed key decodes to: what the restore page stages.
-const KEY = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+const KEY = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => i * 13 + 5));
+// What the restore page stages: the master key's authority key, as hex.
+const STAGED = authorityKey(decodeMasterKeyCode(KEY)).toString("hex");
 
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** A state folder holding `key` as the staged node recovery key, or none when `key` is null. */
+/** A state folder holding `key` as the staged authority key, or none when `key` is null. */
 async function stateWith(key: string | null): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "waitron-start-clock-waiting-"));
   dirs.push(dir);
@@ -45,7 +48,7 @@ async function waiting(
 ) {
   const clock = { wall: BOX_MS, monotonic: 1_000 };
   const sets: SetCall[] = [];
-  const { fromBox = false, staged = KEY, setAnswer = { status: "set" }, ...rest } = options;
+  const { fromBox = false, staged = STAGED, setAnswer = { status: "set" }, ...rest } = options;
   const subject = createStartClockWaiting({
     stateDir: await stateWith(staged),
     clock: { wall: () => clock.wall, monotonic: () => clock.monotonic },
@@ -99,7 +102,7 @@ describe("the restore's waiting app: pages", () => {
       );
       expect(body).toContain(
         escapeHtml(
-          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's box key below to confirm the time from this device.",
+          "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, enter the backup's master key below to confirm the time from this device.",
         ),
       );
       expect(body).toContain(escapeHtml("Selected backup’s box key"));
@@ -276,28 +279,35 @@ describe("the restore's waiting app: the node recovery key", () => {
   );
 });
 
-describe("the restore's waiting app: the key as printed on the recovery pack", () => {
-  const PRINTED = encodeRecoveryKey(KEY);
-
+describe("the restore's waiting app: the master key as printed on the recovery pack", () => {
   it.each([
-    ["as printed", PRINTED],
-    ["in lower case", PRINTED.toLowerCase()],
-    ["without spaces", PRINTED.replaceAll(" ", "")],
-    ["with extra spaces", `  ${PRINTED.replaceAll(" ", "   ")} `],
-    ["as the decoded secret the done screen sends", KEY],
-  ])("/restore-clock/challenge serves the staged key typed %s", async (_name, key) => {
+    ["as printed", KEY],
+    ["in lower case", KEY.toLowerCase()],
+    ["without spaces", KEY.replaceAll(" ", "")],
+    ["in lower case without spaces", KEY.replaceAll(" ", "").toLowerCase()],
+    ["with extra spaces", `  ${KEY.replaceAll(" ", "   ")} `],
+  ])("the clock page accepts the master key typed %s", async (_name, key) => {
     const w = await waiting();
     const res = await w.post("challenge", { key });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: expect.any(String) });
   });
 
+  it("the clock page refuses the 41-symbol box key and the staged authority key itself", async () => {
+    const w = await waiting();
+    for (const key of [encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345"), STAGED]) {
+      const res = await w.post("challenge", { key });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual(refused);
+    }
+  });
+
   it("refuses another venue's printed key and a mistyped one", async () => {
     const w = await waiting();
-    const symbols = PRINTED.replaceAll(" ", "");
+    const symbols = KEY.replaceAll(" ", "");
     const swapped = symbols[0] === "Z" ? "Y" : "Z";
     for (const key of [
-      encodeRecoveryKey("ZyXwVuTsRqPoNmLkJiHgFeDcBa987654"),
+      encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i)),
       swapped + symbols.slice(1),
       symbols.slice(0, -1),
     ]) {
@@ -547,7 +557,7 @@ describe("the restore's waiting app: with the key", () => {
 
   it("measures by the process's own clocks and boot when none is given", async () => {
     const subject = createStartClockWaiting({
-      stateDir: await stateWith(KEY),
+      stateDir: await stateWith(STAGED),
       requestFromBox: () => false,
       setBoxClock: () => Promise.resolve({ status: "set" }),
     });
@@ -566,7 +576,7 @@ describe("the restore's waiting app: with the key", () => {
   it("takes the request's source from requestFromBox when no check is given", async () => {
     // `app.request` has no socket, which requestFromBox counts as the box's own.
     const subject = createStartClockWaiting({
-      stateDir: await stateWith(KEY),
+      stateDir: await stateWith(STAGED),
       setBoxClock: () => Promise.resolve({ status: "set" }),
     });
     const post = (path: string, body: unknown) =>

@@ -29,7 +29,7 @@ import {
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import { nodeId } from "@waitron/shared";
-import { mintBreakGlassSecret } from "../src/break-glass.js";
+import { mintMasterKey } from "../src/testing/master-key.js";
 import { runRestore } from "../src/restore-command.js";
 import { restoreFromArtifactFile } from "../src/restore.js";
 import { writeStreamRestore } from "../src/restore-stream.js";
@@ -155,7 +155,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) =>
     registerSif(tx, { nodeId: NODE, nif: "50000000R", idSistemaInformatico: "W1" }),
   );
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  secret = (await mintMasterKey(suite.db)).secret;
   root = await mkdtemp(join(tmpdir(), "restore-allocation-"));
   venueDir = join(root, "venue");
   await mkdir(venueDir);
@@ -181,7 +181,7 @@ function env() {
   return {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_RECOVERY_OPERATION_FILE: file,
-    WAITRON_NODE_RECOVERY_KEY: secret,
+    WAITRON_MASTER_KEY: secret,
   };
 }
 async function rows() {

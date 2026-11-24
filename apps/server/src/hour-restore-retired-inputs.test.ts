@@ -13,6 +13,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { recordSale } from "@waitron/core";
 import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -271,7 +272,11 @@ it("requires the selected copy's node key even when a valid consumed Cloud recei
   Reflect.deleteProperty(marker.request, "recoveryContext");
   marker.request.recoveryOperation = { binding: f.binding, input: signedCloudInput(f) };
   await writeFile(markerPath, JSON.stringify(marker));
-  await writeFile(join(f.stateDir, "flows/restore/node-key"), "wrong node recovery key");
+  // A well-formed staged authority key that is not the copy's master key's.
+  await writeFile(
+    join(f.stateDir, "flows/restore/node-key"),
+    authorityKey(makeMasterKey()).toString("hex"),
+  );
   const retained = f.journal();
   await expect(f.run()).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);
