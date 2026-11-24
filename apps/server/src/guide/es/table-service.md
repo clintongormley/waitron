@@ -1028,8 +1028,9 @@ personas quedan por pagar, incluida esta. Para artículos, elige los platos y aj
 si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
 tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
 toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
-cuenta, salvo que entretanto se haya impreso o pagado del todo: entonces se quedan en su propia
-cuenta, que aparece en el selector de cuentas, para cobrarlos allí. Mientras su tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
+cuenta. Si no pueden volver, se quedan en una cuenta propia, para cobrarlos allí: en una mesa
+aparece en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
+tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, los artículos se
 siguen cobrando en esa misma cuenta. Una cuenta impresa ofrece estas opciones para cobrar lo que
 queda. Si la cuenta está presentada para su cobro y aún no se ha emitido su factura, elige

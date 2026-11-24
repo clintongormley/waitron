@@ -514,7 +514,9 @@ controls or the "No place" question.
 - **PR2-D8. Give back** reuses the existing `refund-excess` event and handler
   (`#onRefundExcess`/`#openRefund`, `till-app.ts:22852-22886`): the Pay window opens over the bill
   and, when one payment can be refunded, its Refund window opens on the excess. With several, staff
-  choose **Refund** beside one.
+  choose **Refund** beside one. Added 2026-11-25: the Counter shows the same overpaid notice in place
+  of Pay, its amount read from the order's bill balance, and a give-back or Keep as tip that settles
+  a Counter order prints its receipt and starts a new sale.
 - **PR2-D9. No PIN to give back money just taken** (owner, watcher note 2026-11-24 10:42; built in
   PR 1, `bill-refunds.ts`'s `refundPermission`). Traced: a refund is sent in the operator's own name
   and the PIN is asked only on `authorization.not_permitted` (`till-app.ts:24090-24100`), so cash and
@@ -535,6 +537,8 @@ controls or the "No place" question.
 - **PR2-D11. An overpaid bill offers no Pay, and no pay-section Full invoice.** The three pay gates
   (`till-table-order-screen.ts:3299,3306,3308,3317`) also require `overpaid` to be zero; `#chargeable`
   is left alone because Move a bill uses it too (`:7111`). Full invoice stays in the table ⋮.
+  Added 2026-11-25: when Finish table is refused for an overpaid bill, the refusal names that bill
+  and its excess with **Go to Bill N** (no button for the bill on screen) instead of Take payment.
 - **PR2-D12. Refusals speak to the Pay window.** `refusalOf` (`state/bill-payment.ts:282-326`) and
   `PayRefusal` (`widgets/pay-refusal.ts:9-39`) carry `advances` and `dishName`, and `refusalText`
   passes the refusal to `codeMessage` as params (`pay-refusal.ts:99` passes none today), so

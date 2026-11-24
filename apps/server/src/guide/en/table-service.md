@@ -961,8 +961,9 @@ particular dishes. For an equal share, enter how many people are still to pay, i
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
 on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
-**Cancel payment**, the dishes go back to this bill, unless it was printed or paid in full in the
-meantime: then they stay on their own bill, listed in the bill switcher, to be paid there. While their card is still out, the till that
+**Cancel payment**, the dishes go back to this bill. If they cannot go back, they stay on a bill of
+their own, to be paid there: at a table it is listed in the bill switcher, and at the Counter under
+**Parked orders**. While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, items are still paid on that bill. A printed bill offers these choices for what
 it still owes. If the bill is presented for collection and its invoice has yet to be issued,

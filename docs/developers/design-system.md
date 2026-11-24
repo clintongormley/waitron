@@ -1242,7 +1242,9 @@ Tab button and no side drawer.
   take-over was refused after the panel closed under its dialog. A refusal arriving after the waiter has left the party or the table says nothing.
 - **The foot**, in order: the Finish table refusal, only after Finish table was refused
   (`role="alert"`, with Take payment, Print the bill where that bill can be printed, and a line
-  pointing to Record unpaid departure, brought into view at 1024×768 and at 390×844); Print the
+  pointing to Record unpaid departure, brought into view at 1024×768 and at 390×844; when what stops
+  it is a bill paid over its total, it says so with that bill's name and excess, with Go to Bill N,
+  or no button when that bill is on screen, and no unpaid-departure line); Print the
   bill's answer, either a `role="status"` "Bill issued" line or the not-served list
   (`role="alert"`, with Mark served where it applies, Cancel and Print anyway, brought into view
   the same way); `screens/bill-money-notice.ts`'s `role="status"` notices: "Being paid on Bill 3"
@@ -6516,7 +6518,9 @@ is picked.
   until the order is next read.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
   `aria-describedby`: "Has a payment" / "Tiene un pago" for a dish with any quantity covered by a
-  pending or received payment, and "Payments keep {amount} on this bill: move fewer dishes" when one more would leave the bill's total below what it has
+  pending or received payment for chosen items on this bill (the till now takes those only on a
+  printed bill, but the server still accepts one on an open bill, as a till from before Pay for
+  items sends it), and "Payments keep {amount} on this bill: move fewer dishes" when one more would leave the bill's total below what it has
   received or reserved. A row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
   widget, because the browser's own disabled box is too faint on the light page.
 - **The destinations** follow under "Move to": the party's other open bills, a part-paid one included,
