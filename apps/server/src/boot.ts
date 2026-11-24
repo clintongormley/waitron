@@ -403,6 +403,7 @@ import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-
 import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
+import { mountOldBoxDataDownloadApi } from "./old-box-data-download-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
@@ -4206,6 +4207,21 @@ async function bootServer(
       readBackup: () =>
         backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
+    },
+    log,
+  );
+  mountOldBoxDataDownloadApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      modules: enabledAtStart,
+      now,
+      stateDir: config.stateDir,
+      lookup: seams.boxLookup,
+      venueLocale,
     },
     log,
   );

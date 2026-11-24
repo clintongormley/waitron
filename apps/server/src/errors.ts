@@ -48,6 +48,13 @@ declare module "@waitron/shared" {
     "handover.reset_loss_unaccepted": Record<string, never>;
     "handover.reset_query_refused": { reason: string };
     "handover.old_box_data_query_refused": { reason: string };
+    /** The download route's target is no longer the replaced old main box this box may ask. */
+    "handover.old_box_data_unavailable": Record<string, never>;
+    "handover.old_box_data_wipe_ordered": Record<string, never>;
+    "handover.old_box_unreachable": Record<string, never>;
+    /** Every failure after reaching the old box; the cause is the error's log-only `reason`. */
+    "handover.old_box_data_refused": Record<string, never>;
+    "handover.old_box_data_too_large": Record<string, never>;
     /**
      * A reset was ordered for a former main box other than the one whose key this box pinned when
      * it joined: the peer route answers no other old box's questions, so it would never collect it.

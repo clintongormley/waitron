@@ -117,6 +117,15 @@ export interface ActivityKindData {
     readonly setAside: boolean;
     readonly lacking: Readonly<Record<string, readonly unknown[]>>;
   };
+  /** The subject is the replaced old main box whose data workbook was downloaded through this box;
+   * the workbook's row counts per tab, never a row. */
+  readonly "handover.old_box_data_downloaded": {
+    readonly invoiceRows: number;
+    readonly orderRows?: number;
+    readonly paymentRows?: number;
+    readonly hoursRows?: number;
+    readonly activityRows?: number;
+  };
 
   /** Who saved which document and its new revision; never a document value. */
   readonly "settings.saved": { readonly revision: number };
@@ -182,6 +191,7 @@ export const ACTIVITY_KINDS = {
   "handover.return_abandoned": { subject: "node" },
   "handover.reset_ordered": { subject: "node" },
   "handover.reset_acknowledged": { subject: "node" },
+  "handover.old_box_data_downloaded": { subject: "node" },
   "settings.saved": { subject: "settings" },
   "venue.bank_account_changed": { subject: "settings" },
   "membership.node_removed": { subject: "node" },

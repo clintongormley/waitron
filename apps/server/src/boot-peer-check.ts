@@ -363,6 +363,11 @@ export function boxRefusal(text: string): { code: string; params: unknown } | nu
 
 class PeerSilenceUnestablished extends Error {}
 
+/** Whether `postToBox` failed after reaching the box (or, with a `fetch` stand-in, timed out). */
+export function isSilenceAfterConnecting(error: unknown): boolean {
+  return error instanceof PeerSilenceUnestablished;
+}
+
 class PeerCertificateRefused extends Error {}
 
 /** Whether `postToBox` refused the box's certificate, or had no authority to check it under. */
