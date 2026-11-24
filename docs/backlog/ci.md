@@ -309,6 +309,11 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
   - Image guest: one separately cleared disposable-guest image-smoke run passes the Bluetooth check and full smoke. Retained runs 42550200310 and 42525659420 stop at `dbus_unreachable`; keep image smoke hosted meanwhile (watcher, 2026-11-09 08:20).
   - Remaining workflows: retain a real selected run for each still-unqualified workflow with source, runner, selected checks and aggregate; a CI-only record cannot qualify other workflows.
   - Full-day capacity/queue target: one full-day ordinary-traffic measurement must account for waits and available capacity throughout; no single isolated CI run or episodic status sample can close it. A1461's smaller run sizes do not replace this measurement.
+    On 24 November at 08:15:19 CET, the planner assigned 11 jobs to the server using all 11 free slots
+    in its snapshot. All 11 passed, and the server controller recorded the last completion at 08:21:47.
+    At 08:32, 38 of the 66 jobs assigned to GitHub in the same batch were still waiting. The owner kept
+    the one-time split on 20 November. Count this interval in the full-day measurement.
+    [Run 45346409984, attempt 1](https://github.com/clintongormley/waitron/actions/runs/45346409984/attempts/1).
   - Historical planner 43278084012: recover that run's contemporaneous admission/recovery logs; a new run cannot establish why its untouched planner waited 32 minutes without running the ratio.
 
 - **A935: setup action-download bound.** One separately cleared, selectively stalled action-transfer run on a single owned runner must retain the successful-download control, actual version/action/source/job limit, listener cancellation and worker-exit logs, with an independent safety stop and cleanup. Keep control traffic reachable. Fast refusal or manual cancellation does not qualify the job limit. The [experiment proposal](../superpowers/plans/2026-11-16-a935-action-download-experiment-proposal.md) is parked until a natural setup-download stall is captured (watcher, 16 November 14:56); build no guest setup hook or two-job lease reuse merely to stage it. [Source trace and limits](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
