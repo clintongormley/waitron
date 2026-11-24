@@ -209,8 +209,9 @@ export async function refundBillPayment(
             provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
           );
           const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
-          // A resent refund writes nothing its first answer did not authorise, so it needs only
-          // what every give-back needs: what the bill is overpaid by has changed since.
+          // A resend repeats a refund its first request was already authorised for, and what the
+          // bill is overpaid by may have changed since, so it needs only what every give-back
+          // needs.
           const permission =
             earlier.refund?.fingerprint === print
               ? "payment.take"
