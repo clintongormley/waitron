@@ -3,6 +3,7 @@ import { refunds as refundRows, type billPayments, type Transaction } from "@wai
 import {
   MONEY_SCALE,
   compareDecimal,
+  decimalToCents,
   negateDecimal,
   subtractDecimal,
   sumDecimals,
@@ -77,4 +78,15 @@ export function overpaidBy(outstanding: Decimal): Decimal | undefined {
  * applied money. */
 export function owedOf(amountDue: Decimal, keptApplied: readonly Decimal[]): Decimal {
   return outstandingOf(amountDue, sumDecimals(keptApplied));
+}
+
+/** Where an issued bill with `owed` left of `amountDue` stands: paid over it, owing nothing on an
+ * amount due other than zero, or owing; a bill due nothing and owing nothing counts as owing. */
+export function issuedBillStanding(
+  amountDue: Decimal,
+  owed: Decimal,
+): "overpaid" | "nothing_owed" | "owes" {
+  if (decimalToCents(owed) < 0) return "overpaid";
+  if (decimalToCents(amountDue) !== 0 && decimalToCents(owed) === 0) return "nothing_owed";
+  return "owes";
 }
