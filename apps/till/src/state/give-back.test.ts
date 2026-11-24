@@ -56,6 +56,8 @@ const restPreview: GiveBackPreview = {
   manual: false,
 };
 
+const sent = (api: ReturnType<typeof fakeApi>, index: number) => api.giveBack.mock.calls[index]![1];
+
 function fakeApi() {
   const sent: GiveBackWrite[] = [];
   return {
@@ -78,7 +80,13 @@ it("saves the request and its ids before sending, and keeps no PIN", async () =>
   const api = fakeApi();
   api.giveBack.mockImplementationOnce(async (_saleId, body) => {
     const saved = new GiveBackSession(scope, api).read("sale-1")!;
-    expect(saved.sent).toEqual({ ...ask, submissionIds: body.submissionIds });
+    expect(saved.sent).toEqual({
+      ...ask,
+      submissionIds: body.submissionIds,
+      needs: [],
+      firstSendRefused: false,
+      refusal: null,
+    });
     expect(JSON.stringify(localStorage)).not.toContain("1234");
     throw new TypeError("lost answer");
   });
@@ -183,6 +191,8 @@ it("keeps a rest after a pending part, and sends it with fresh ids once the card
     reasonId: "reason-1",
     note: null,
     waitFor: "refund-1",
+    amount: "8.00",
+    way: "card-1",
   });
 
   const checked = await session.checkRest("sale-1");
@@ -228,7 +238,14 @@ it("keeps the rest when its send is refused as changed", async () => {
   expect(session.read("sale-1")).toEqual({
     saleId: "sale-1",
     sent: null,
-    rest: { request: rest, reasonId: "reason-1", note: null, waitFor: "refund-1" },
+    rest: {
+      request: rest,
+      reasonId: "reason-1",
+      note: null,
+      waitFor: "refund-1",
+      amount: "8.00",
+      way: "card-1",
+    },
   });
 });
 
@@ -312,4 +329,113 @@ it("refuses a saved press written for another receipt or in another shape", asyn
     JSON.stringify({ version: 2, saleId: "sale-1", sent: null, rest: null }),
   );
   expect(() => session.read("sale-1")).toThrow(expect.objectContaining({ kind: "storage" }));
+});
+
+it("keeps a lost press whose resend is refused before the server looks its ids up", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce(new TypeError("lost answer"));
+  api.giveBack.mockRejectedValueOnce({ code: "venue.time_zone_not_ready", status: 409 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toThrow();
+  await expect(session.resend("sale-1")).rejects.toMatchObject({
+    code: "venue.time_zone_not_ready",
+  });
+  expect(session.read("sale-1")?.sent?.submissionIds).toEqual(sent(api, 0).submissionIds);
+  await session.resend("sale-1");
+  expect(sent(api, 2).submissionIds).toEqual(sent(api, 0).submissionIds);
+});
+
+it("keeps a card refund left waiting with nothing to follow, and forgets it once it is through", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(
+    outcome({
+      parts: [
+        { kind: "refund", amount: "8.00", state: "pending", refundId: "refund-1" },
+        { kind: "correction", amount: "12.00", state: "pending", correctionId: "c-1" },
+      ],
+    }),
+  );
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  expect(new GiveBackSession(scope, api).read("sale-1")?.rest).toEqual({
+    request: null,
+    reasonId: "reason-1",
+    note: null,
+    waitFor: "refund-1",
+    amount: "8.00",
+    way: "card-1",
+  });
+  expect(await session.checkRest("sale-1")).toEqual({ state: "completed", preview: null });
+  expect(api.previewGiveBack).not.toHaveBeenCalled();
+  expect(session.read("sale-1")).toBeNull();
+});
+
+it("records a first send's PIN refusal with the press, so a new session may forget it", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+  await expect(
+    new GiveBackSession(scope, api).submit("sale-1", ask, { personId: "boss", pin: "0000" }),
+  ).rejects.toMatchObject({ code: "pin.invalid" });
+  const reopened = new GiveBackSession(scope, api);
+  expect(reopened.read("sale-1")?.sent).toMatchObject({
+    firstSendRefused: true,
+    refusal: { code: "pin.invalid", params: {} },
+  });
+  reopened.abandon("sale-1");
+  expect(reopened.read("sale-1")).toBeNull();
+});
+
+it("keeps a press refused for another reason, with that refusal, even when asked to forget it", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({
+    code: "tender.refund_exceeds_payment",
+    tenderId: "card-1",
+    status: 409,
+  });
+  await expect(new GiveBackSession(scope, api).submit("sale-1", ask)).rejects.toMatchObject({
+    code: "tender.refund_exceeds_payment",
+  });
+  const reopened = new GiveBackSession(scope, api);
+  reopened.abandon("sale-1");
+  expect(reopened.read("sale-1")?.sent).toMatchObject({
+    firstSendRefused: false,
+    refusal: { code: "tender.refund_exceeds_payment", params: { tenderId: "card-1" } },
+  });
+});
+
+it("saves the preview's rights with the press", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce(new TypeError("lost answer"));
+  const session = new GiveBackSession(scope, api);
+  await expect(
+    session.submit("sale-1", ask, undefined, ["sale.refund", "sale.rectify"]),
+  ).rejects.toThrow();
+  expect(session.read("sale-1")?.sent?.needs).toEqual(["sale.refund", "sale.rectify"]);
+  expect(sent(api, 0)).not.toHaveProperty("needs");
+});
+
+it("hands back the answer even when it cannot be saved afterwards", async () => {
+  const api = fakeApi();
+  api.giveBack.mockImplementationOnce(async () => {
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("full");
+    });
+    return outcome();
+  });
+  expect(await new GiveBackSession(scope, api).submit("sale-1", ask)).toEqual(outcome());
+});
+
+it("keeps a press whose answer has every part still to start, as its first send is still writing", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(
+    outcome({
+      parts: [
+        { kind: "refund", amount: "8.00", state: "not_started" },
+        { kind: "correction", amount: "12.00", state: "not_started" },
+      ],
+    }),
+  );
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  expect(session.read("sale-1")?.sent?.request).toEqual(request);
 });

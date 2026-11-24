@@ -50,7 +50,6 @@ import type {
   GiveBackView,
   GiveBackWrite,
 } from "./give-back-types.js";
-type ApproverRight = "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
   ItemPaymentAsk,
@@ -318,6 +317,8 @@ export interface VatBreakdownEntry {
 
 export type { ContainsTag, DietLabel, DietOverride, DietProfile } from "@waitron/shared";
 import type { DietOverride, DietProfile } from "@waitron/shared";
+
+type ApproverRight = "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage";
 
 /**
  * One sellable product as the till's widgets consume it, built from exactly two payloads:

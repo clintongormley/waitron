@@ -11,13 +11,15 @@ import type {
 } from "../api/give-back-types.js";
 
 export type Override = OverrideConfirmDetail;
-/** One send: the rights an approver must hold for it, and the payment the outcome names. */
+/** One send: the rights an approver must hold before it goes, the rights to ask for if the write
+ * then wants an approver, and the payment the outcome names. */
 export interface Sending {
   send: (override?: Override) => Promise<GiveBackOutcome>;
   rights: GiveBackRight[];
+  needs: GiveBackRight[];
   way: string;
 }
-export const PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
+export const APPROVER_PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 export const NEEDS_APPROVER = new Set([
   "authorization.not_permitted",
   "tender.manual_refund_pin_required",
@@ -32,7 +34,13 @@ export type Step =
       confirmed: boolean;
       attempted: boolean;
     }
-  | { kind: "lost"; way: string }
+  | {
+      kind: "lost";
+      way: string;
+      needs: GiveBackRight[];
+      /** What the server answered last, when it answered. */
+      refusal: { code: string; params: Record<string, unknown> } | null;
+    }
   | { kind: "done"; outcome: GiveBackOutcome; way: string; notice: string | null };
 
 const money = (value: string) => formatMoney(value, currentLocale());
@@ -92,10 +100,15 @@ function outcomeLines(
   way: GiveBackWay | undefined,
   notice: string | null,
 ) {
-  const amounts = (state: string) =>
-    sumOf(outcome.parts.filter((part) => part.state === state).map((part) => part.amount));
-  const back = amounts("completed");
-  const pending = amounts("pending");
+  const amounts = (state: string, kinds: readonly string[]) =>
+    sumOf(
+      outcome.parts
+        .filter((part) => part.state === state && kinds.includes(part.kind))
+        .map((part) => part.amount),
+    );
+  const back = amounts("completed", ["refund", "extra", "correction"]);
+  // An open correction's money is not with the card company: only refunds wait for it.
+  const pending = amounts("pending", ["refund", "extra"]);
   const card = way?.last4 ? `···${way.last4}` : "";
   const lines: string[] = [];
   if (positive(back))
@@ -104,10 +117,11 @@ function outcomeLines(
         ? t("give_back.done_cash").replace("{amount}", () => money(back))
         : way?.manual
           ? t("give_back.done_terminal").replace("{amount}", () => money(back))
-          : t("give_back.done_card")
-              .replace("{amount}", () => money(back))
-              .replace("{card}", () => card)
-              .replace(/\s+\./, "."),
+          : card === ""
+            ? t("give_back.done_card_any").replace("{amount}", () => money(back))
+            : t("give_back.done_card")
+                .replace("{amount}", () => money(back))
+                .replace("{card}", () => card),
     );
   if (
     way?.way !== "cash" &&
@@ -136,8 +150,16 @@ function outcomeLines(
 }
 
 /** A press whose answer was lost: sending it again reuses its ids, so nothing goes back twice. */
-export function lostStep(sending: boolean, on: { close: () => void; resend: () => void }) {
-  return html`<p data-lost role="status">${t("give_back.lost")}</p>
+export function lostStep(
+  step: Extract<Step, { kind: "lost" }>,
+  sending: boolean,
+  on: { close: () => void; resend: () => void },
+) {
+  const said =
+    step.refusal === null
+      ? t("give_back.lost")
+      : codeMessage(step.refusal.code, currentLocale(), step.refusal.params);
+  return html`<p data-lost role="status">${said}</p>
     <wt-form-actions
       ><wt-button slot="cancel" variant="secondary" data-close @click=${on.close}
         >${t("action.cancel")}</wt-button
@@ -152,14 +174,20 @@ export function lostStep(sending: boolean, on: { close: () => void; resend: () =
     >`;
 }
 
-/** The outcome, with Check again while a rest waits for the card company. */
+/** Whether a card refund in `outcome` still waits for the card company. */
+export const waitsForCard = (outcome: GiveBackOutcome) =>
+  outcome.refusal === null &&
+  (outcome.rest !== null ||
+    outcome.parts.some((part) => part.state === "pending" && part.kind !== "correction"));
+
+/** The outcome, with Check again while a card refund waits for the card company. */
 export function doneStep(
   step: Extract<Step, { kind: "done" }>,
   way: GiveBackWay | undefined,
   sending: boolean,
   on: { close: () => void; checkAgain: () => void },
 ) {
-  const waits = step.outcome.rest !== null && step.outcome.refusal === null;
+  const waits = waitsForCard(step.outcome);
   return html`${outcomeLines(step.outcome, way, step.notice)}
     <wt-form-actions
       ><wt-button
@@ -181,4 +209,28 @@ export function doneStep(
           : nothing
       }</wt-form-actions
     >`;
+}
+
+/** The outcome once Check again read the card refund it waits for: still waiting, failed (the
+ * rest is dropped), or through. */
+export function afterCheck(
+  step: Extract<Step, { kind: "done" }>,
+  state: "pending" | "failed" | "completed",
+): Extract<Step, { kind: "done" }> {
+  const { outcome } = step;
+  if (state === "pending") return { ...step, notice: t("give_back.still_waiting") };
+  const parts = outcome.parts.map((part) =>
+    part.state === "pending" && part.kind !== "correction"
+      ? { ...part, state: state === "failed" ? ("failed" as const) : ("completed" as const) }
+      : part,
+  );
+  if (state === "completed") return { ...step, notice: null, outcome: { ...outcome, parts } };
+  return {
+    ...step,
+    notice:
+      outcome.rest === null
+        ? codeMessage("give_back.refund_failed", currentLocale())
+        : t("give_back.rest_failed"),
+    outcome: { ...outcome, parts, rest: null },
+  };
 }

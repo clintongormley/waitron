@@ -46,7 +46,8 @@ import {
 } from "./supervisor-override-dialog.js";
 import {
   NEEDS_APPROVER,
-  PIN_REFUSALS,
+  APPROVER_PIN_REFUSALS,
+  afterCheck,
   doneStep,
   lostStep,
   terminalStep,
@@ -471,9 +472,6 @@ export class TillGiveBackDialog extends LitElement {
       note: reason.noteRequired ? this.draft.note.trim() : null,
       expected: answer.parts,
     };
-    this.dispatchEvent(
-      new CustomEvent("give-back-submit", { detail: ask, bubbles: true, composed: true }),
-    );
     if (answer.manual) {
       this.step = {
         kind: "terminal",
@@ -484,11 +482,13 @@ export class TillGiveBackDialog extends LitElement {
       };
       return;
     }
-    await this.#authorized({ ...this.#submitting(ask), rights: answer.needs });
+    await this.#authorized(this.#submitting(ask, answer.needs));
   }
-  #submitting(ask: GiveBackAsk): Omit<Sending, "rights"> {
+  #submitting(ask: GiveBackAsk, needs: GiveBackRight[]): Sending {
     return {
-      send: (override) => this.session.submit(this.saleId, ask, override),
+      send: (override) => this.session.submit(this.saleId, ask, override, needs),
+      rights: needs,
+      needs,
       way: ask.request.way,
     };
   }
@@ -496,18 +496,24 @@ export class TillGiveBackDialog extends LitElement {
   #restore(): void {
     let saved: ReturnType<GiveBackSession["read"]> = null;
     try {
+      this.session.abandon(this.saleId);
       saved = this.session.read(this.saleId);
-    } catch {
+    } catch (error) {
       // Unreadable storage refuses the next press, which says so.
+      if (!(error instanceof TenderRefundAttemptError)) throw error;
     }
-    if (saved?.sent) this.step = { kind: "lost", way: saved.sent.request.way };
-    else if (saved?.rest)
+    const { sent, rest } = saved ?? { sent: null, rest: null };
+    if (sent)
+      this.step = { kind: "lost", way: sent.request.way, needs: sent.needs, refusal: sent.refusal };
+    else if (rest) {
+      const waiting = { kind: "refund" as const, amount: rest.amount, state: "pending" as const };
       this.step = {
         kind: "done",
-        outcome: { parts: [], refusal: null, underWay: null, rest: saved.rest.request },
-        way: saved.rest.request.way,
+        outcome: { parts: [waiting], refusal: null, underWay: null, rest: rest.request },
+        way: rest.way,
         notice: null,
       };
+    }
   }
   async #record(step: Extract<Step, { kind: "terminal" }>): Promise<void> {
     if (!step.confirmed) {
@@ -517,7 +523,7 @@ export class TillGiveBackDialog extends LitElement {
     const ask = { ...step.ask, manualConfirmed: true };
     // The separate terminal's refund is always confirmed with a PIN (plan 5.4).
     const rights = [...new Set<GiveBackRight>([...step.needs, "sale.refund"])];
-    await this.#askApprover({ ...this.#submitting(ask), rights });
+    await this.#askApprover(this.#submitting(ask, rights));
   }
   async #authorized(sending: Sending): Promise<void> {
     if (sending.rights.length === 0) await this.#send(sending);
@@ -555,13 +561,16 @@ export class TillGiveBackDialog extends LitElement {
     if (refusal.code === "network") {
       this.approvers = null;
       this.#approval = undefined;
-      this.step = { kind: "lost", way: sending.way };
-    } else if (override !== undefined && PIN_REFUSALS.has(refusal.code))
+      this.step = { kind: "lost", way: sending.way, needs: sending.needs, refusal: null };
+    } else if (override !== undefined && APPROVER_PIN_REFUSALS.has(refusal.code))
       this.pinError = approverRefusal(error, override.personId);
     else if (override === undefined && NEEDS_APPROVER.has(refusal.code))
       void this.#askApprover({
         ...sending,
-        rights: [refusal.permission === "sale.rectify" ? "sale.rectify" : "sale.refund"],
+        rights:
+          sending.needs.length > 0
+            ? sending.needs
+            : [refusal.permission === "sale.rectify" ? "sale.rectify" : "sale.refund"],
       });
     else this.#refused(refusal);
   }
@@ -584,7 +593,7 @@ export class TillGiveBackDialog extends LitElement {
     if (refusal.code === "storage") return t("give_back.storage");
     return this.#refusalText(refusal, "give_back.preview_failed");
   }
-  async #checkAgain(step: Extract<Step, { kind: "done" }>, rest: GiveBackRequest): Promise<void> {
+  async #checkAgain(step: Extract<Step, { kind: "done" }>): Promise<void> {
     this.sending = true;
     let check: Awaited<ReturnType<GiveBackSession["checkRest"]>>;
     try {
@@ -595,20 +604,14 @@ export class TillGiveBackDialog extends LitElement {
     } finally {
       this.sending = false;
     }
-    if (check.state !== "completed") {
-      const failed = check.state === "failed";
-      this.step = {
-        ...step,
-        notice: t(failed ? "give_back.rest_failed" : "give_back.still_waiting"),
-        outcome: failed ? { ...step.outcome, rest: null } : step.outcome,
-      };
-      return;
-    }
+    this.step = afterCheck(step, check.state);
+    if (check.state !== "completed" || check.preview === null) return;
     const { preview } = check;
     await this.#authorized({
       send: (override) => this.session.sendRest(this.saleId, preview, override),
       rights: preview.needs,
-      way: rest.way,
+      needs: preview.needs,
+      way: step.way,
     });
   }
 
@@ -887,12 +890,13 @@ export class TillGiveBackDialog extends LitElement {
     const close = () =>
       void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
     if (step.kind === "lost")
-      return lostStep(this.sending, {
+      return lostStep(step, this.sending, {
         close,
         resend: () =>
           void this.#send({
             send: (override) => this.session.resend(this.saleId, override),
             rights: [],
+            needs: step.needs,
             way: step.way,
           }),
       });
@@ -913,7 +917,7 @@ export class TillGiveBackDialog extends LitElement {
     const way = this.view!.ways.find((row) => row.way === step.way);
     return doneStep(step, way, this.sending, {
       close,
-      checkAgain: () => void this.#checkAgain(step, step.outcome.rest!),
+      checkAgain: () => void this.#checkAgain(step),
     });
   }
   #body() {
@@ -961,6 +965,12 @@ export class TillGiveBackDialog extends LitElement {
                 if (this.sending) return;
                 this.approvers = null;
                 this.#approval = undefined;
+                // A first send refused for its PIN wrote nothing, so cancelling forgets it.
+                try {
+                  this.session.abandon(this.saleId);
+                } catch {
+                  // The next press reads the storage again and says if it cannot.
+                }
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
                 event.stopPropagation();

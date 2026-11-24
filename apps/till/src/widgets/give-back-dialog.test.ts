@@ -3,6 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
+import { formatMoney } from "@waitron/shared";
 import type {
   GiveBackPreview,
   GiveBackRequest,
@@ -21,7 +23,7 @@ import {
   previewFor,
 } from "./give-back-dialog.test-helpers.js";
 import "./give-back-dialog.js";
-import type { GiveBackAsk, TillGiveBackDialog } from "./give-back-dialog.js";
+import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -42,6 +44,14 @@ async function mount(api = fakeGiveBackApi()) {
   await el.updateComplete;
   return { el, api };
 }
+/** What each give-back the window sent asked for, less its ids. */
+const asksOf = (el: TillGiveBackDialog) =>
+  (el.api as ReturnType<typeof fakeGiveBackApi>).giveBack.mock.calls.map(([, body]) => ({
+    request: body.request,
+    reasonId: body.reasonId,
+    note: body.note,
+    expected: body.expected,
+  }));
 const withView = (over: Partial<GiveBackView>) => fakeGiveBackApi({ ...VIEW, ...over });
 
 const root = (el: TillGiveBackDialog) => el.shadowRoot!;
@@ -314,10 +324,6 @@ describe("How it goes back", () => {
 
   it("treats a payment this device does not take as held, and picks the next", async () => {
     const { el } = await mount(withView({ ways: [{ ...CASH, allowedHere: false }, CARD] }));
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "goodwill");
     expect(way(el, "cash")!.disabled).toBe(true);
     expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
@@ -328,8 +334,8 @@ describe("How it goes back", () => {
     await type(el, "5");
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.request.way).toBe("card-1");
+    await vi.waitFor(() => expect(asksOf(el)).toHaveLength(1));
+    expect(asksOf(el)[0]!.request.way).toBe("card-1");
   });
 });
 
@@ -462,17 +468,13 @@ describe("Give back", () => {
 
   it("hands on what was previewed when pressed", async () => {
     const { el } = await mount();
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "dishes");
     await tick(el, "paella");
     await reason(el, "complaint");
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]).toEqual({
+    await vi.waitFor(() => expect(asksOf(el)).toHaveLength(1));
+    expect(asksOf(el)[0]).toEqual({
       request: {
         purpose: "dishes",
         lineIds: ["paella"],
@@ -497,10 +499,6 @@ describe("Give back", () => {
       parts,
     }));
     const { el } = await mount(api);
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "dishes");
     await tick(el, "paella");
     await tick(el, "croquetas");
@@ -508,8 +506,8 @@ describe("Give back", () => {
     await reason(el, "complaint");
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.expected).toEqual(parts);
+    await vi.waitFor(() => expect(asksOf(el)).toHaveLength(1));
+    expect(asksOf(el)[0]!.expected).toEqual(parts);
   });
 });
 
@@ -517,37 +515,43 @@ describe("in Spanish", () => {
   beforeEach(() => setLocale("es-ES"));
 
   it("words the choice, a dish and the extra from the approved screens", async () => {
+    const said = (key: keyof typeof es, amount = "", card = "") =>
+      es[key]
+        .replace("{amount}", () => formatMoney(amount, "es-ES"))
+        .replace("{card}", () => card)
+        .replace(/\s+/g, " ")
+        .trim();
     const { el } = await mount();
-    expect(text(root(el).querySelector("[data-what-for]"))).toBe("¿Por qué se devuelve?");
+    expect(text(root(el).querySelector("[data-what-for]"))).toBe(said("give_back.what_for"));
     expect([...root(el).querySelectorAll("wt-choice-row")].map((row) => row.heading)).toEqual([
-      "Un plato",
-      "Cortesía o queja",
-      "Lo pagado de más",
+      said("give_back.dishes"),
+      said("give_back.goodwill"),
+      said("give_back.extra"),
     ]);
-    expect(text(choice(el, "extra"))).toBe(
-      "Devuelve una parte o todos los 3,00 € pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
-    );
+    expect(text(choice(el, "extra"))).toBe(said("give_back.extra_hint", "3.00"));
     await choose(el, "dishes");
-    expect(text(root(el).querySelector("[data-which]"))).toBe("¿Qué platos?");
-    expect(dish(el, "paella")!.description).toBe("Cancelado, no servido");
-    expect(dish(el, "salad")!.description).toBe("Cancelado, dinero devuelto");
-    expect(text(root(el).querySelector("[data-free=cake]"))).toContain("Por invitación");
-    expect(amountField(el).label).toBe("Dinero a devolver");
-    expect(text(way(el, "cash")!.closest("label"))).toBe("Efectivo · hasta 30,00 €");
+    expect(text(root(el).querySelector("[data-which]"))).toBe(said("give_back.which"));
+    expect(dish(el, "paella")!.description).toBe(said("give_back.cancelled_owed"));
+    expect(dish(el, "salad")!.description).toBe(said("give_back.cancelled_back"));
+    expect(text(root(el).querySelector("[data-free=cake]"))).toContain(
+      said("give_back.given_free"),
+    );
+    expect(amountField(el).label).toBe(said("give_back.amount"));
+    expect(text(way(el, "cash")!.closest("label"))).toBe(said("give_back.way_cash", "30.00"));
     way(el, "card-1")!.click();
     await el.updateComplete;
     expect(
       root(el)
         .querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch[name=extra]")!
-        .label.replace(/\s/g, " "),
-    ).toBe("Devolver también lo pagado de más (3,00 €)");
+        .label.replace(/\s+/g, " "),
+    ).toBe(said("give_back.extra_too", "3.00"));
     await tick(el, "croquetas");
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-        "Se devuelven 8,00 € a la tarjeta ···4242 por el lector de tarjetas.",
+        said("give_back.summary_card", "8.00", "···4242"),
       ),
     );
-    expect(text(submit(el))).toBe("Devolver 8,00 €");
+    expect(text(submit(el))).toBe(said("give_back.submit", "8.00"));
   });
 });
 
@@ -650,10 +654,6 @@ describe("choosing and changing", () => {
 describe("the reason", () => {
   it("asks for a note where the reason needs one, and hands it on trimmed", async () => {
     const { el } = await mount();
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "goodwill");
     await type(el, "5");
     await reason(el, "other");
@@ -673,9 +673,9 @@ describe("the reason", () => {
     await vi.waitFor(() => expect(submit(el).disabled).toBe(false));
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.note).toBe("Spilt wine");
-    expect(asks[0]!.reasonId).toBe("other");
+    await vi.waitFor(() => expect(asksOf(el)).toHaveLength(1));
+    expect(asksOf(el)[0]!.note).toBe("Spilt wine");
+    expect(asksOf(el)[0]!.reasonId).toBe("other");
   });
 
   it("reads the reasons again when they could not be read", async () => {
@@ -704,27 +704,19 @@ describe("pressing before the preview answered", () => {
   it("waits for it, then hands on what it answered", async () => {
     const { api, pending } = slowApi();
     const { el } = await mount(api);
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "goodwill");
     await reason(el, "complaint");
     await type(el, "6");
     submit(el).click();
     await vi.waitFor(() => expect(pending.length).toBeGreaterThanOrEqual(2));
     pending.forEach((answer) => answer());
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.request.amount).toBe("6.00");
+    await vi.waitFor(() => expect(asksOf(el)).toHaveLength(1));
+    expect(asksOf(el)[0]!.request.amount).toBe("6.00");
   });
 
   it("hands nothing on when the form changed meanwhile, and says so", async () => {
     const { api, pending } = slowApi();
     const { el } = await mount(api);
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "goodwill");
     await reason(el, "complaint");
     await type(el, "6");
@@ -733,24 +725,20 @@ describe("pressing before the preview answered", () => {
     await type(el, "7");
     pending.forEach((answer) => answer());
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.changed_while_checking")));
-    expect(asks).toEqual([]);
+    expect(asksOf(el)).toEqual([]);
   });
 
   it("hands nothing on when the preview refuses", async () => {
     const api = fakeGiveBackApi();
     api.previewGiveBack.mockRejectedValue({ code: "invoice_correction.refund_pending" });
     const { el } = await mount(api);
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
     await choose(el, "goodwill");
     await reason(el, "complaint");
     await type(el, "6");
     submit(el).click();
     await vi.waitFor(() => expect(api.previewGiveBack).toHaveBeenCalledTimes(2));
     await el.updateComplete;
-    expect(asks).toEqual([]);
+    expect(asksOf(el)).toEqual([]);
     expect(bottom(el)).toBe(codeMessage("invoice_correction.refund_pending", "en"));
   });
 
@@ -831,7 +819,9 @@ describe("sending", () => {
   it("gives cash back with no PIN, under saved ids, and says it is back", async () => {
     const api = fakeGiveBackApi();
     const el = await press(api);
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
     expect(api.giveBack).toHaveBeenCalledOnce();
     expect(sent(api)).toMatchObject({
       request: { purpose: "goodwill", amount: "5.00", extra: "0.00", way: "cash" },
@@ -859,7 +849,9 @@ describe("sending", () => {
     const cash = fakeGiveBackApi();
     answering(cash, { parts: parts("cash") });
     const inCash = await press(cash);
-    await vi.waitFor(() => expect(outcomeText(inCash)).toContain("€5.00 is back in cash."));
+    await vi.waitFor(() =>
+      expect(outcomeText(inCash)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
     expect(outcomeText(inCash)).not.toContain(t("give_back.print_later"));
   });
 
@@ -872,7 +864,9 @@ describe("sending", () => {
     expect(approval(el)!.authorizers).toEqual([{ personId: "boss", displayName: "Boss" }]);
     expect(api.giveBack).not.toHaveBeenCalled();
     await approve(el);
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
     expect(sent(api).override).toEqual({ personId: "boss", pin: "1234" });
     expect(approval(el)).toBeNull();
   });
@@ -888,7 +882,9 @@ describe("sending", () => {
     );
     expect(root(el).querySelector("[data-outcome]")).toBeNull();
     await approve(el, "1234");
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
 
@@ -902,7 +898,9 @@ describe("sending", () => {
       api.giveBack.mockRejectedValueOnce({ ...refusal, status: 403 });
       const el = await press(api);
       await approve(el);
-      await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+      );
       expect(api.listApprovers).toHaveBeenCalledWith([right]);
       expect(sent(api, 1).override).toEqual({ personId: "boss", pin: "1234" });
     },
@@ -1004,17 +1002,116 @@ describe("sending", () => {
     });
   });
 
-  it("says a card refund waits for the card company", async () => {
+  it("offers Check again for a card refund left waiting, and says once it is back", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
       ...completedFor(body),
       parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
     }));
+    api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
     const el = await press(api, "card-1");
     await vi.waitFor(() =>
       expect(outcomeText(el)).toContain("€5.00 is waiting for the card company's answer."),
     );
+    const again = () => root(el).querySelector<HTMLElement>("[data-check-again]");
+    again()!.click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.still_waiting")));
+    cleanupWidgets();
+    const { el: reopened } = await mount(api);
+    expect(outcomeText(reopened)).toContain("€5.00 is waiting for the card company's answer.");
+    reopened.shadowRoot!.querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(reopened)).toContain("€5.00 is back on card ···4242."),
+    );
+    expect(api.getTenderRefund).toHaveBeenLastCalledWith("refund-1", {});
+    expect(reopened.shadowRoot!.querySelector("[data-check-again]")).toBeNull();
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("says a card refund left waiting failed when the card company did not make it", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
+    }));
+    api.getTenderRefund.mockResolvedValueOnce({ state: "failed" });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain(codeMessage("give_back.refund_failed", "en")),
+    );
+    expect(outcomeText(el)).not.toContain("waiting");
+  });
+
+  it("names no card number in the outcome when the card has none", async () => {
+    const api = fakeGiveBackApi({ ...VIEW, ways: [CASH, { ...CARD, last4: null }] });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back on the card."));
+  });
+
+  it("counts an open correction as under way, not as waiting for the card company", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [
+        { kind: "refund", amount: "2.00", state: "completed", refundId: "refund-1" },
+        { kind: "correction", amount: "3.00", state: "pending", correctionId: "c-1" },
+      ],
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is back on card ···4242."));
+    expect(outcomeText(el)).not.toContain("waiting");
     expect(root(el).querySelector("[data-check-again]")).toBeNull();
+  });
+
+  it("forgets a first send refused for its PIN when the approver step is cancelled", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+    const el = await press(api);
+    await approve(el, "0000");
+    await vi.waitFor(() => expect(approval(el)!.error).not.toBeNull());
+    approval(el)!.dispatchEvent(new CustomEvent("override-cancel"));
+    await el.updateComplete;
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+    cleanupWidgets();
+    const { el: reopened } = await mount(api);
+    expect(reopened.shadowRoot!.querySelector("[data-lost]")).toBeNull();
+    expect(choice(reopened, "dishes")).not.toBeNull();
+  });
+
+  it("opens on a refused press saying what the box answered, not that it did not answer", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({
+      code: "tender.refund_exceeds_payment",
+      tenderId: "card-1",
+      status: 409,
+    });
+    await press(api);
+    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledOnce());
+    cleanupWidgets();
+    const { el } = await mount(api);
+    expect(text(root(el).querySelector("[data-lost]"))).toBe(
+      codeMessage("tender.refund_exceeds_payment", "en", { tenderId: "card-1" } as never),
+    );
+  });
+
+  it("sending a lost press again asks for every right the preview named", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund", "sale.rectify"] });
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+    const el = await press(api);
+    await approve(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-lost]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await approve(el);
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
+    expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"]);
   });
 
   const restRequest: GiveBackRequest = {
@@ -1158,7 +1255,9 @@ describe("sending", () => {
       expect(text(root(el).querySelector("[data-lost]"))).toContain(t("give_back.lost")),
     );
     root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
-    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
     expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
   });
 

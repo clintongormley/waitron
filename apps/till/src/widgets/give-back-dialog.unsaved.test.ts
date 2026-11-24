@@ -7,14 +7,13 @@ import { setLocale, t } from "../i18n/t.js";
 import { SCOPE, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
-import type { GiveBackAsk, TillGiveBackDialog } from "./give-back-dialog.js";
+import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
 class GiveBackLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = fakeGiveBackApi();
   readonly session = new GiveBackSession(SCOPE, this.api);
   closes = 0;
-  asks: GiveBackAsk[] = [];
   override render() {
     return html`<till-give-back-dialog
         .api=${this.api}
@@ -23,7 +22,6 @@ class GiveBackLeaveApp extends LitElement {
         .invoiceNumber=${"A/1042"}
         .namesLocale=${"en"}
         @give-back-close=${() => this.closes++}
-        @give-back-submit=${(e: CustomEvent<GiveBackAsk>) => this.asks.push(e.detail)}
       ></till-give-back-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -88,7 +86,7 @@ it("Escape with a typed amount asks first, keeps it on Keep and gives nothing ba
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await closed;
   expect(app.closes).toBe(1);
-  expect(app.asks).toEqual([]);
+  expect(app.api.giveBack).not.toHaveBeenCalled();
   expect(unload()).toBe(false);
 });
 
