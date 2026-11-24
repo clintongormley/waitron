@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { activityLog, billPayments, sales } from "@waitron/db";
+import { activityLog, billPayments, sales, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct } from "@waitron/menu";
 import { centsToDecimal } from "@waitron/shared";
-import type { RefundAnswer } from "@waitron/payments";
+import { payments, type RefundAnswer } from "@waitron/payments";
+import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { clockAtIso, filedFor } from "./testing/later-sale-date-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
@@ -595,35 +596,34 @@ describe("A1515 a bill left owing less than it was paid", () => {
 
   it("a card give-back completed by a recovery pass a day later files the day the payments were taken", async () => {
     const { billId, paymentId } = await overpaidBill("card");
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: "2026-11-24T23:00:00.000Z" })
+        .where(eq(workingOrders.id, billId));
+      await liftPaymentGuard(tx, () =>
+        tx
+          .update(payments)
+          .set({ settledAt: "2026-11-24T23:03:00.000Z" })
+          .where(eq(payments.billPaymentId, paymentId)),
+      );
+    });
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });
     const asked = await giveBack(billId, paymentId, "5.00");
     expect(asked.json).toMatchObject({ refund: { state: "pending" } });
-    const [paid] = await inTx(venue, (tx) =>
-      tx
-        .select({ receivedAt: billPayments.receivedAt })
-        .from(billPayments)
-        .where(eq(billPayments.id, paymentId)),
-    );
-    const takenAt = Date.parse(paid!.receivedAt!);
-    const nextDay = new Date(takenAt + 24 * 60 * 60 * 1000).toISOString();
 
     await recoverTenderRefunds({
       admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,
-      clock: clockAtIso(nextDay),
+      clock: clockAtIso("2026-11-25T23:03:00.000Z"),
       cfg: venue.cfg,
       refundProviderFor: (name) => venue.pool.get(name),
     });
 
     expect(await statusOf(venue, billId)).toBe("settled");
-    // The venue's business day in Madrid, which turns at 05:00.
-    const madridDay = (at: number) =>
-      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(
-        new Date(at - 5 * 60 * 60 * 1000),
-      );
     const { supplyDay, record } = await filedFor(venue, billId);
-    expect(supplyDay).toBe(madridDay(takenAt));
-    expect(record.operationDate).toBe(madridDay(takenAt));
+    expect(supplyDay).toBe("2026-11-25");
+    expect(record).toEqual({ operationDate: "2026-11-25", issueDate: "2026-11-26" });
   });
 });
