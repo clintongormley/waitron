@@ -267,6 +267,17 @@ describe("otherChainsToReturn", () => {
     ]);
   });
 
+  it("answers null without a summary while it holds another box's record, and [] when it holds none", async () => {
+    const sender = await seedNode(suite.db, "Sender");
+    const main = await seedNode(suite.db, "Main");
+    await append(sender, 1);
+    await append(main, 101);
+    expect(await others(undefined, sender.nodeId, main.nodeId)).toEqual([]);
+
+    await append(await seedNode(suite.db, "Earlier"), 201);
+    expect(await others(undefined, sender.nodeId, main.nodeId)).toBeNull();
+  });
+
   it("throws MalformedHoldingsError on a summary that is not a list", async () => {
     const earlier = await seedNode(suite.db, "Earlier");
     await append(earlier, 1);

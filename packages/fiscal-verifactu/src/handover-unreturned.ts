@@ -101,14 +101,23 @@ export type ChainRange = {
 /**
  * The chains of boxes other than the two named that this database can extend on the main box: from
  * position 0 when the main box holds none of the chain, or past its matching last record. A chain
- * the two disagree on is left out. Reads only.
+ * the two disagree on is left out. Without the main box's summary: `null` while this database holds
+ * a record of another box, else none. Reads only.
  */
 export async function otherChainsToReturn(
   query: BackupQuery,
-  mainHoldings: CanonicalValue,
+  mainHoldings: CanonicalValue | undefined,
   sourceNodeId: string,
   destinationNodeId: string,
-): Promise<ChainRange[]> {
+): Promise<ChainRange[] | null> {
+  if (mainHoldings === undefined) {
+    for await (const _ of query.rows(
+      `select 1 from verifactu_records where node_id not in (?, ?) limit 1`,
+      [sourceNodeId, destinationNodeId],
+    ))
+      return null;
+    return [];
+  }
   const ranges: ChainRange[] = [];
   for await (const { head, after } of chainsPastMain(
     query,

@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import { absentInvoiceIds, markReturnedInvoices } from "./returned-invoices.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import { createHash } from "node:crypto";
@@ -103,18 +102,13 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
     read: async (tx, source) =>
       makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],
     readOthers: async (tx, source, destination, mainHoldings) => {
-      if (mainHoldings === undefined) {
-        const held = tx.get(sql`select 1 from verifactu_records
-          where node_id not in (${source}, ${destination}) limit 1`);
-        return held === undefined ? [] : null;
-      }
       const ranges = await otherChainsToReturn(
         liveBackupQuery(tx),
         mainHoldings,
         source,
         destination,
       );
-      if (ranges.length === 0) return [];
+      if (ranges === null || ranges.length === 0) return ranges;
       return makeReturnedBatches(
         await readReturnedOriginals(tx, ranges),
       ) as unknown as CanonicalValue[];
