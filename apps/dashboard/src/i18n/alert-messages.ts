@@ -286,6 +286,10 @@ export const ALERT_MESSAGES: Readonly<
       },
     },
   },
+  "sif.identity_change_blocked": {
+    en: "The box could not open its new fiscal installation for the new software producer, so it is not taking payments. It keeps trying. If this stays, open Box status and press Restart the box.",
+    es: "El servidor no ha podido abrir su nueva instalación fiscal para el productor del software nuevo, así que no acepta cobros. Lo sigue intentando. Si sigue así, abre Estado del servidor y pulsa Reiniciar el servidor.",
+  },
   "clock.sync_off": {
     en: "{reason:clock_sync_off}",
     es: "{reason:clock_sync_off}",

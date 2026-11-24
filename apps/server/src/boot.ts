@@ -477,8 +477,13 @@ import { sharedClockServiceReading, timeServiceReader } from "./clock-service-re
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import {
+  identityChangeBlocked,
+  identityChangeBlockedAlertSource,
+} from "./identity-change-alert.js";
+import {
   deleteLeftoverIdentityChangeNote,
   identityChangeOpening,
+  servesAlone,
 } from "./identity-change-opening.js";
 import { deleteIdentityChangeNote, readIdentityChangeNote } from "./identity-change-note.js";
 import { startClockCheck, startClockState } from "./start-clock-check.js";
@@ -3900,19 +3905,24 @@ async function bootServer(
     clockStatus: readClockService,
     heads: () => db.withWriteLock(() => recordHeads(db)),
   });
-  if (waitingIdentityChange !== null) {
-    const opening = identityChangeOpening({
-      backend: nodeBackend,
-      nodeId: node.nodeId,
-      note: waitingIdentityChange,
-      state: startClock,
-      synchronised: timeServiceSynchronised,
-      mayOpen: async () => filesRecords() && !isReadOnly(),
-      deleteNote: () => deleteIdentityChangeNote(config.stateDir),
-      log,
-    });
-    await correction.inTurn(opening.attemptIdentityChange);
-  }
+  const identityChange =
+    waitingIdentityChange === null
+      ? null
+      : identityChangeOpening({
+          backend: nodeBackend,
+          nodeId: node.nodeId,
+          note: waitingIdentityChange,
+          state: startClock,
+          synchronised: timeServiceSynchronised,
+          mayOpen: async (tx) =>
+            filesRecords() && !isReadOnly() && (await servesAlone(tx, node.nodeId)),
+          deleteNote: () => deleteIdentityChangeNote(config.stateDir),
+          log,
+        });
+  if (identityChange !== null) await correction.inTurn(identityChange.attemptIdentityChange);
+  const identityChangeIsBlocked = () =>
+    identityChange !== null &&
+    identityChangeBlocked({ state: startClock, latestRefusal: identityChange.latestRefusal });
   if (startClock.status === "by_internet")
     log("info", "clock_start.confirmed", {
       source: "internet",
@@ -3951,6 +3961,9 @@ async function bootServer(
       },
       filesRecords,
       heads: recordHeads,
+      ...(identityChange === null
+        ? {}
+        : { attemptIdentityChange: identityChange.attemptIdentityChange }),
       retryTimeService: timeServiceRetry({
         host: boxHost,
         state: startClock,
@@ -3996,7 +4009,8 @@ async function bootServer(
       readClockService,
       async () => (await spareFollow?.facts())?.clock ?? null,
     ),
-    clockUnconfirmedAlertSource(startClockWaits),
+    clockUnconfirmedAlertSource(() => (identityChangeIsBlocked() ? null : startClockWaits())),
+    identityChangeBlockedAlertSource(identityChangeIsBlocked),
     printingAlertSource(tradingContext.nodeId),
     drawerCloseAlertSource(),
     contentSuggestionsAlertSource(translationContext),

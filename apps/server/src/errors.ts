@@ -1931,6 +1931,9 @@ declare module "@waitron/shared" {
      * read of the box's clock service went unanswered, and, for `future_date_refused`, `refusedOn`,
      * the refused sale's issue date. */
     "clock.unconfirmed": { agreed?: number; hostSilent?: boolean };
+    /** The box's time is confirmed, but the opening of its new fiscal installation is refused or
+     * fails for something else. Raised as an alert only. */
+    "sif.identity_change_blocked": Record<string, never>;
     /** The box's host service cannot take this request: `missing`, no connection to its socket
      * was made (`detail` is the connection error's code); `unsupported`, the host does not take the
      * request (`detail` is the host's word). */

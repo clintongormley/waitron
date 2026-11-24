@@ -4,7 +4,7 @@ import type { ClockServiceStatus, TimeServiceOnAnswer } from "./box-host-client.
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
-import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, clockWatchJob, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { timeServiceRetry } from "./time-service-retry.js";
@@ -29,6 +29,8 @@ function harness(
     restartAnswer?: () => Promise<TimeServiceOnAnswer>;
     /** Whether the box files records, asked at each look; it does unless this answers otherwise. */
     filesRecords?: () => boolean;
+    /** Hands the start an identity change's opening, as boot does while one waits. */
+    attemptIdentityChange?: (state: StartClockState) => Promise<void>;
   } = {},
 ) {
   let wallMs = options.startMs ?? START_MS;
@@ -98,6 +100,8 @@ function harness(
         })
       : undefined;
   const heads = vi.fn(options.heads ?? (async () => ({ "node-1": 7 })));
+  const attemptsInTurn: boolean[] = [];
+  const { attemptIdentityChange } = options;
   const transaction = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const watch = createClockWatch({
     backend: backend as unknown as Parameters<typeof createClockWatch>[0]["backend"],
@@ -119,6 +123,14 @@ function harness(
             filesRecords: options.filesRecords ?? (() => true),
             heads,
             ...(retryTimeService === undefined ? {} : { retryTimeService }),
+            ...(attemptIdentityChange === undefined
+              ? {}
+              : {
+                  attemptIdentityChange: async () => {
+                    attemptsInTurn.push(inTurnNow);
+                    await attemptIdentityChange(startState);
+                  },
+                }),
           },
         }),
     ...(readTimeService === undefined ? {} : { readTimeService }),
@@ -160,6 +172,8 @@ function harness(
     tick,
     host,
     halt: () => watch.halt(),
+    watch,
+    attemptsInTurn,
     writePending: correction.writePending,
     hostReadsInTurn,
     restartsInTurn,
@@ -430,6 +444,89 @@ describe("the clock watch restarting the time service while the start waits", ()
     expect(p.startState.status).toBe("waiting");
     for (let look = 0; look < 4; look++) await p.tick();
     expect(p.restartsInTurn).toEqual([]);
+  });
+});
+
+describe("the clock watch and an identity change's opening", () => {
+  function holding(): StartClockState {
+    const state = startClockState();
+    state.holdForIdentityChange();
+    return state;
+  }
+
+  it("attempts the opening at each look, in the correction's turn, after its look at the time service", async () => {
+    const held: boolean[] = [];
+    const h = harness({
+      host: async () => SYNCHRONISED,
+      startState: holding(),
+      attemptIdentityChange: async (state) => {
+        held.push(state.heldConfirmation !== null);
+      },
+    });
+    await h.tick();
+    await h.tick();
+    expect(held).toEqual([true, true]);
+    expect(h.attemptsInTurn).toEqual([true, true]);
+    expect(startLogs(h)).toEqual([]);
+  });
+
+  it("logs the start confirmed by the internet once an attempt opens, and attempts no more", async () => {
+    let attempts = 0;
+    const h = harness({
+      host: async () => SYNCHRONISED,
+      startState: holding(),
+      attemptIdentityChange: async (state) => {
+        attempts++;
+        if (attempts === 2) state.releaseIdentityChange();
+      },
+    });
+    for (let look = 0; look < 4; look++) await h.tick();
+    expect(attempts).toBe(2);
+    expect(h.startState.status).toBe("by_internet");
+    expect(startLogs(h)).toEqual([
+      {
+        event: "clock_start.confirmed",
+        fields: {
+          source: "internet",
+          boxAt: new Date(h.wall() - 2 * CLOCK_WATCH_MS).toISOString(),
+          heads: { "node-1": 7 },
+        },
+      },
+    ]);
+  });
+
+  it("restarts no time service while the confirmation is held", async () => {
+    const h = harness({
+      host: async () => SYNCHRONISED,
+      startState: holding(),
+      restarts: true,
+      attemptIdentityChange: async () => {},
+    });
+    for (let look = 0; look < 4; look++) await h.tick();
+    expect(h.attemptsInTurn).toHaveLength(4);
+    expect(h.restartsInTurn).toEqual([]);
+  });
+
+  it("runs no attempt queued behind another turn once the stepdown has stopped the job", async () => {
+    const h = harness({
+      host: async () => SYNCHRONISED,
+      startState: holding(),
+      attemptIdentityChange: async () => {},
+    });
+    const job = clockWatchJob(h.watch, CLOCK_WATCH_MS);
+    const stop = new AbortController();
+    await job.pass({ signal: stop.signal, now: new Date(h.wall()) });
+    expect(h.attemptsInTurn).toHaveLength(1);
+
+    const release = h.holdTurn(1);
+    const asked = h.turnsAsked();
+    const pass = job.pass({ signal: stop.signal, now: new Date(h.wall()) });
+    await vi.waitFor(() => expect(h.turnsAsked()).toBe(asked + 1), { timeout: 500 });
+    stop.abort();
+    release();
+    await pass;
+    expect(h.startState.heldConfirmation).not.toBeNull();
+    expect(h.attemptsInTurn).toHaveLength(1);
   });
 });
 

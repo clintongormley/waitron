@@ -200,6 +200,48 @@ describe("attemptIdentityChange", () => {
     expect(o.deleteNote).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["the opening's own refusal", () => refusedFor("not_sole_primary")],
+    ["an unexpected error", () => new Error("broken")],
+  ])("logs %s once while it repeats", async (_label, error) => {
+    const o = opening(() => Promise.reject(error()));
+    for (let look = 0; look < 3; look++) await o.attemptIdentityChange();
+    expect(o.openIdentityChange).toHaveBeenCalledTimes(3);
+    expect(o.log).toHaveBeenCalledOnce();
+  });
+
+  it("logs a refusal for the clock once, though the confirmation is dropped and held again between attempts", async () => {
+    const o = opening(() => Promise.reject(refusedFor("second_clock_missing")));
+    for (let look = 0; look < 3; look++) {
+      await o.attemptIdentityChange();
+      o.state.confirm("by_internet", HEADS);
+    }
+    expect(o.openIdentityChange).toHaveBeenCalledTimes(3);
+    expect(o.log).toHaveBeenCalledOnce();
+  });
+
+  it("logs each change of refusal, and one seen before that comes back", async () => {
+    const errors: unknown[] = [
+      refusedFor("minute_in_use"),
+      refusedFor("history_invalid"),
+      refusedFor("history_invalid"),
+      new TypeError("broken"),
+      new RangeError("broken"),
+      refusedFor("minute_in_use"),
+    ];
+    const o = opening(() => Promise.reject(errors.shift()));
+    for (let look = 0; look < 6; look++) await o.attemptIdentityChange();
+    expect(o.log.mock.calls).toEqual(
+      [
+        { kind: "retry", reason: "minute_in_use" },
+        { kind: "blocked", reason: "history_invalid" },
+        { kind: "blocked", reason: "unknown", errorClass: "TypeError", errno: null },
+        { kind: "blocked", reason: "unknown", errorClass: "RangeError", errno: null },
+        { kind: "retry", reason: "minute_in_use" },
+      ].map((fields) => ["warn", "identity_change.refused", fields]),
+    );
+  });
+
   it("forgets a refusal once a later attempt opens", async () => {
     let refuse = true;
     const o = opening(async () => {

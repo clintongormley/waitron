@@ -5,25 +5,35 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stampDeployment, withTransaction } from "@waitron/db";
+import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { softwareVersion } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { startManagementSession } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import type { MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setSingletonRole } from "@waitron/node-db";
-import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { isAppError } from "@waitron/shared";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { ClockWatch } from "./clock-watch.js";
 import type { StartClockState } from "./start-clock-check.js";
-import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing/bill-venue.js";
+import {
+  applyVenueUnderInstallation,
+  fiscalRecordCount,
+  provisionBillVenue,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { filedRecordOf, renameFixtureInstallation } from "./testing/fiscal-fixtures.js";
+import {
+  filedRecordOf,
+  lastFiledProducer,
+  renameFixtureInstallation,
+} from "./testing/fiscal-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { listener } from "./testing/ephemeral-listener.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { useTestProducer } from "./testing/test-producer.js";
@@ -80,6 +90,20 @@ vi.mock("./clock-watch.js", async (original) => {
   };
 });
 
+const opening = vi.hoisted(() => ({ attempts: 0, failure: null as Error | null }));
+vi.mock("@waitron/fiscal-verifactu/src/identity-change.js", async (original) => {
+  const actual =
+    await original<typeof import("@waitron/fiscal-verifactu/src/identity-change.js")>();
+  return {
+    ...actual,
+    openIdentityChange: async (...args: Parameters<typeof actual.openIdentityChange>) => {
+      opening.attempts++;
+      if (opening.failure !== null) throw opening.failure;
+      return actual.openIdentityChange(...args);
+    },
+  };
+});
+
 // One production venue whose chain is filed under FIRST, started in turn with a producer it has not
 // filed under. The cases run in order: the first opening leaves the chain under SECOND.
 const FIRST = "00000000T";
@@ -96,26 +120,32 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     // The opening reads a history of minute names, which the fixture's own identity is not.
-    venue = await provisionBillVenue(db, {
-      apply: (actions, deps) =>
-        applyHistoricalTestVenue(
-          actions.map((action) =>
-            action.kind === "create-series"
-              ? { ...action, code: `${action.code}-${INSTALLATION}` }
-              : action,
-          ),
-          deps,
-        ),
-    });
+    venue = await provisionBillVenue(db, { apply: applyVenueUnderInstallation(INSTALLATION) });
     counter = await offerProducts(db, venue.cfg, { zone: "counter", orderStart: "counter" });
     renameFixtureInstallation(db, INSTALLATION);
     await stampDeployment(db, "production");
     await seedModuleSettings(db, { "fiscal-none": false });
+    await holdChart(db, 0, "serving-primary", []);
   },
 });
 
+type Standing = MembershipNode["standing"];
+/** Saves a chart giving this venue's box `own` standing, beside `others`. */
+function holdChart(db: typeof suite.db, term: number, own: Standing, others: MembershipNode[]) {
+  const { nodeId } = venue.cfg;
+  return writeNodeMembership(
+    db,
+    signedMembershipDoc(term, {
+      signerNodeId: nodeId,
+      nodes: [{ nodeId, contactUrl: "", standing: own }, ...others],
+    }),
+  );
+}
+
 const scratches: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
+  opening.failure = null;
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -225,7 +255,7 @@ const installations = () =>
 
 async function alerts(): Promise<{ code: string; params: Record<string, unknown> }[]> {
   const [admin] = await seedPersons(suite.db, {
-    displayName: "Alerts administrator",
+    displayName: `Alerts administrator ${randomUUID()}`,
     role: "admin",
     status: "active",
   });
@@ -395,4 +425,159 @@ describe("a production start whose chain is filed under another producer", () =>
     const sale = await serving({ producer: SECOND, host: synchronisedBoxHost(), stateDir }, sell);
     expect(sale.status, sale.body).toBe(200);
   });
+});
+
+/** Puts the box's clock in the middle of the `nth` minute after this file's first, where no two
+ * cases open an installation on the same one. The steady clock is left alone. */
+const firstMinute = Math.floor(Date.now() / 60_000);
+function inMinute(nth: number): void {
+  vi.restoreAllMocks();
+  const real = Date.now;
+  const offset = (firstMinute + nth) * 60_000 + 30_000 - real();
+  vi.spyOn(Date, "now").mockImplementation(() => real() + offset);
+}
+
+const producerAtHead = () => lastFiledProducer(venue.db);
+
+/** A start of a release that files under the other producer, with the note naming the change. */
+async function noteTheOtherProducer(stateDir: string): Promise<string> {
+  const from = producerAtHead();
+  const to = from === FIRST ? SECOND : FIRST;
+  await writeNote(stateDir, { producerTaxId: to, fromProducerTaxId: from });
+  return to;
+}
+
+const clockAlerts = async () =>
+  (await alerts())
+    .map(({ code }) => code)
+    .filter((code) => code === "clock.unconfirmed" || code === "sif.identity_change_blocked");
+
+const refusedUnconfirmed = { error: { code: "clock.unconfirmed", params: {} } };
+
+describe("an opening refused at the start", () => {
+  it("on a minute already used, keeps refusing sales, and opens at the clock watch's look in the next minute", async () => {
+    inMinute(2);
+    const earlier = await newStateDir();
+    const before = installations();
+    const first = await serving(
+      {
+        producer: await noteTheOtherProducer(earlier),
+        host: synchronisedBoxHost(),
+        stateDir: earlier,
+      },
+      sell,
+    );
+    expect(first.status, first.body).toBe(200);
+    expect(installations()).toBe(before + 1);
+
+    inMinute(2);
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    const seen = await serving({ producer, host: synchronisedBoxHost(), stateDir }, async () => {
+      const refused = await sell();
+      const waiting = { alerts: await clockAlerts(), note: await noteExists(stateDir) };
+      inMinute(3);
+      await built.watch!.check();
+      return { refused, waiting, sale: await sell(), alerts: await clockAlerts() };
+    });
+
+    expect(seen.refused.status, seen.refused.body).toBe(409);
+    expect(JSON.parse(seen.refused.body)).toEqual(refusedUnconfirmed);
+    expect(seen.waiting).toEqual({ alerts: ["clock.unconfirmed"], note: true });
+    expect(seen.sale.status, seen.sale.body).toBe(200);
+    expect(recordOf(seen.sale.workingOrderId)).toMatchObject({ first: 1, producer });
+    expect(seen.alerts).toEqual([]);
+    expect(await noteExists(stateDir)).toBe(false);
+  });
+
+  it("by an error, finishes the start, alerts, keeps Check the time open, and opens at the look after the error ends", async () => {
+    inMinute(4);
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    opening.failure = Object.assign(new Error("disk I/O error"), { code: "EIO" });
+    const before = installations();
+    const seen = await serving({ producer, host: synchronisedBoxHost(), stateDir }, async () => {
+      const refused = await sell();
+      const started = await clockAlerts();
+      opening.attempts = 0;
+      await built.watch!.check();
+      const challenge = await fetch(`http://127.0.0.1:${httpPort()}/api/box-clock/challenge`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: venue.cookie },
+        body: "{}",
+      });
+      const waiting = {
+        attempts: opening.attempts,
+        alerts: await clockAlerts(),
+        installations: installations(),
+        challenge: { status: challenge.status, body: await challenge.json() },
+      };
+      opening.failure = null;
+      await built.watch!.check();
+      return { refused, started, waiting, sale: await sell(), alerts: await clockAlerts() };
+    });
+
+    expect(seen.refused.status, seen.refused.body).toBe(409);
+    expect(JSON.parse(seen.refused.body)).toEqual(refusedUnconfirmed);
+    expect(seen.started).toEqual(["sif.identity_change_blocked"]);
+    expect(seen.waiting).toEqual({
+      attempts: 1,
+      alerts: ["sif.identity_change_blocked"],
+      installations: before,
+      challenge: {
+        status: 200,
+        body: expect.objectContaining({ challengeId: expect.any(String) }),
+      },
+    });
+    expect(seen.sale.status, seen.sale.body).toBe(200);
+    expect(recordOf(seen.sale.workingOrderId)).toMatchObject({ first: 1, producer });
+    expect(seen.alerts).toEqual([]);
+  });
+});
+
+describe("a chart that changes while the box waits to open its new installation", () => {
+  it.each<[string, Standing, Standing, number]>([
+    ["lists a spare that joined", "serving-primary", "serving-secondary", 6],
+    ["lists a main box it replaced, not yet removed", "serving-primary", "sell-only", 8],
+    ["evicts it in favour of another", "evicted", "serving-primary", 10],
+  ])(
+    "keeps it from opening, with an alert, while the chart %s, and lets it open once it serves alone",
+    async (_label, own, other, minute) => {
+      inMinute(minute);
+      const stateDir = await newStateDir();
+      const producer = await noteTheOtherProducer(stateDir);
+      const box = { nodeId: randomUUID(), contactUrl: "https://spare.example.com" };
+      const before = installations();
+      let synchronised = false;
+      const host: BoxHostClient = {
+        ...synchronisedBoxHost(),
+        clockStatus: async () => clockServiceAnswer(synchronised),
+      };
+      const seen = await serving({ producer, host, stateDir }, async () => {
+        await holdChart(suite.db, 1, own, [{ ...box, standing: other }]);
+        synchronised = true;
+        await built.watch!.check();
+        const blocked = {
+          sale: (await sell()).status,
+          alerts: await clockAlerts(),
+          installations: installations(),
+          note: await noteExists(stateDir),
+        };
+        await holdChart(suite.db, 2, "serving-primary", [{ ...box, standing: "evicted" }]);
+        await built.watch!.check();
+        return { blocked, sale: await sell(), alerts: await clockAlerts() };
+      });
+
+      expect(seen.blocked).toEqual({
+        sale: 409,
+        alerts: ["sif.identity_change_blocked"],
+        installations: before,
+        note: true,
+      });
+      expect(seen.sale.status, seen.sale.body).toBe(200);
+      expect(recordOf(seen.sale.workingOrderId)).toMatchObject({ first: 1, producer });
+      expect(installations()).toBe(before + 1);
+      expect(seen.alerts).toEqual([]);
+    },
+  );
 });

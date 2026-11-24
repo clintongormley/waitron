@@ -224,6 +224,18 @@ export function filedRecordOf(db: Database, workingOrderId: string) {
     where s.working_order_id = ${workingOrderId}`)[0]!;
 }
 
+/** The producer the latest record filed names. */
+export function lastFiledProducer(db: Database): string {
+  return db.all<{ producer: string }>(sql`
+    select json_extract(sistema_informatico, '$.NIF') as producer from verifactu_records
+    order by rowid desc limit 1`)[0]!.producer;
+}
+
+/** Marks every record filed so far as accepted by the tax agency. */
+export function acceptFiledRecords(db: Database): void {
+  db.run(sql`update verifactu_submissions set estado = 'aceptado'`);
+}
+
 /** Gives a venue's one fixture installation another name, before anything is filed under it. */
 export function renameFixtureInstallation(db: Database, name: string): void {
   db.run(sql`update verifactu_identities set numero_instalacion = ${name}`);

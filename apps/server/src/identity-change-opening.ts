@@ -1,9 +1,10 @@
-import type { Transaction } from "@waitron/db";
+import { readNodeMembership, type Transaction } from "@waitron/db";
 import type {
   FiscalBackend,
   IdentityChangeNote,
   IdentityChangeRefusalReason,
 } from "@waitron/fiscal";
+import { servingPrimaryNodeId } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { firstCodeInCauseChain, isAppError, type NodeId } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
@@ -68,6 +69,14 @@ async function deleteNote(deps: Pick<NoteDeps, "deleteNote" | "log">): Promise<b
   }
 }
 
+/** Whether the saved chart names this box the venue's serving primary and lists no other box that
+ * has not been evicted. A box that holds no chart does not serve alone. */
+export async function servesAlone(tx: Transaction, nodeId: NodeId): Promise<boolean> {
+  const held = await readNodeMembership(tx);
+  if (held === null || servingPrimaryNodeId(held) !== nodeId) return false;
+  return held.body.nodes.filter(({ standing }) => standing !== "evicted").length === 1;
+}
+
 /** Opens the installation a note names once a confirmation of the box's time is held. */
 export function identityChangeOpening(
   deps: NoteDeps & {
@@ -84,11 +93,15 @@ export function identityChangeOpening(
   latestRefusal(): IdentityChangeRefusal | null;
 } {
   let latest: IdentityChangeRefusal | null = null;
+  let lastLogged: string | undefined;
 
   function refuse({ refusal, logged }: ReturnType<typeof refusalOf>): void {
     latest = refusal;
     if (refusal.kind === "clock") deps.state.dropHeldConfirmation();
-    deps.log("warn", "identity_change.refused", { ...refusal, ...logged });
+    const fields = { ...refusal, ...logged };
+    const failure = JSON.stringify(fields);
+    if (failure !== lastLogged) deps.log("warn", "identity_change.refused", fields);
+    lastLogged = failure;
   }
 
   return {
