@@ -1,8 +1,7 @@
 import { outsideCardDetails } from "./outside-card.js";
-import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { ReceiptAdjustment, TillSaleLine } from "./receipt-lines.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
-import { readReceiptIssuer } from "./receipt-issuer.js";
+import { readReceiptIssuer, type ReceiptIssuerFacts } from "./receipt-issuer.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
@@ -99,34 +98,13 @@ export type TenderBlock =
       card?: CardDetails;
     };
 
-export interface TillSaleResult extends ReceiptPresentation {
+export interface TillSaleResult extends ReceiptPresentation, ReceiptIssuerFacts {
   /** `venueAddressLine` of the venue read for `venueAddress`. */
   venueAddressLine: string;
   /** The payer asked for a payment slip and none could be queued. */
   slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment: boolean;
-  invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
-  issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2" | "R4" | "R5";
-  /** On a corrective invoice (R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
-  corrects?: {
-    invoiceNumber: string;
-    issuedAt: string;
-    issuedOffsetMinutes?: number;
-    inFull?: true;
-  };
-  /** The real day (`YYYY-MM-DD`) of the sale, when it is not its issue day: an F1/F2 issued on a later day, or a replacement. */
-  saleDay?: string;
-  issuer?: { venueName: string; nif: string; domicile?: string };
-  recipient?: {
-    taxId: string;
-    legalName: string;
-    countryCode: string;
-    address: string;
-    identifierType?: RecipientIdentifierType;
-    identifierCountryCode?: string;
-  };
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
