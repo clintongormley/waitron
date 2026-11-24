@@ -8,6 +8,7 @@ import { authorityKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import { createStartClockWaiting } from "./start-clock-waiting.js";
@@ -246,6 +247,13 @@ it("says what is wrong with a chosen PDF that is not a pack, damaged, or without
     expect(await page.getByLabel(field.button).getAttribute("aria-invalid")).toBeNull();
   });
 });
+
+it("says a chosen PDF over the size limit is not a recovery pack", () =>
+  withPage("en-GB", async (page) => {
+    await open(page, 0);
+    await choosePack(page, new Uint8Array(MAX_PACK_PDF + 1));
+    await expect.poll(() => page.locator("#clock-pack-error").innerText()).toBe(field.notPack);
+  }));
 
 it("refuses a chosen pack holding another master key with the key's refusal", () =>
   withPage("en-GB", async (page) => {

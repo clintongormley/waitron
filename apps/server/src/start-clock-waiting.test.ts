@@ -460,6 +460,7 @@ describe("the restore's waiting app: the recovery pack PDF", () => {
     const w = await waiting();
     const res = await sendPack(w, new Uint8Array(MAX_PACK_PDF + 1));
     expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ result: "not_a_pack" });
   });
 
   /** A body sent in 1 MiB pieces, `total` bytes in all, counting what the route has taken. */
@@ -488,6 +489,7 @@ describe("the restore's waiting app: the recovery pack PDF", () => {
       duplex: "half",
     } as RequestInit);
     expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ result: "not_a_pack" });
     // No more than the limit and the piece that crossed it, with one piece read ahead.
     expect(unsized.taken.bytes).toBeLessThanOrEqual(MAX_PACK_PDF + 2 * 1024 * 1024);
 
@@ -499,6 +501,7 @@ describe("the restore's waiting app: the recovery pack PDF", () => {
       duplex: "half",
     } as RequestInit);
     expect(declared.status).toBe(413);
+    expect(await declared.json()).toEqual({ result: "not_a_pack" });
     expect(sized.taken.bytes).toBeLessThanOrEqual(2 * 1024 * 1024);
   });
 

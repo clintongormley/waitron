@@ -112,7 +112,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   app.post("/restore-clock/pack", async (c) => {
     c.header("Cache-Control", "no-store");
     if (!sentFromThisOrigin(c)) return refuseOrigin(c);
-    const tooLarge = () => c.text("Payload Too Large", 413);
+    const tooLarge = () => c.json({ result: "not_a_pack" }, 413);
     if (Number(c.req.header("content-length") ?? 0) > MAX_PACK_PDF) return tooLarge();
     const read = packTurn.then(async () => {
       const bytes = await readUpTo(c.req.raw.body, MAX_PACK_PDF);
@@ -375,7 +375,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
         headers: { "content-type": "application/pdf" },
         body: file,
       });
-      answer = response.status === 413 ? { result: "not_a_pack" } : await response.json();
+      answer = await response.json();
     } catch {
       answer = { result: "failed" };
     } finally {
