@@ -285,6 +285,7 @@ describe("a spare holding a copy of a Veri*Factu venue", () => {
       action: "compare-clocks",
       browser: { challengeId: challenge.id, instantMs: Date.now() },
     })) as { id: string };
+    expect((await preparationHistory())[0]).toMatchObject({ dormant: [{ binding: admission }] });
     const selected = (await prepare({ action: "select", comparisonId: compared.id })) as {
       identity: string;
       input: unknown;

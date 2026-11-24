@@ -69,7 +69,6 @@ import { createNodeOperationPreparation } from "./node-operation-preparation.js"
 import { establishNodeIdentity } from "./node-identity.js";
 import { startClockState } from "./start-clock-check.js";
 import { promoteMirrorToPrimary } from "./promote.js";
-import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
@@ -1336,54 +1335,17 @@ describe("setting the spare's clock from this device", () => {
     expect(box.set).not.toHaveBeenCalled();
   });
 
-  it("on a box that is now primary, the older promote preparation route refuses not_mirror and never asks the setter", async () => {
+  it("a box that is now primary refuses to set the clock and never asks the setter", async () => {
     const box = setter();
     const s = service(fiscalModules, box.correction);
-    // The setup a join wrote while this box was a mirror stays in its state folder once promoted.
     await setupFromAJoin(s);
+    await controlledAtFilingAssumed();
     await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary", "promote");
-    const app = new Hono();
-    mountPromoteApi(app, {
-      appDb: suite.db,
-      nodeDb: suite.node,
-      nodeId: standby.nodeId,
-      credentialKeyRing: TOTP_KEY_RING,
-      nodePreparation: s,
-      requestFromBox: () => false,
-      isMirror: false,
-      run: async () => {
-        throw new Error("not promoting");
-      },
+    const answer = await setFrom(route(s), 45_000);
+    expect(answer).toMatchObject({
+      status: 200,
+      body: { status: "refused", reason: "not_mirror" },
     });
-    const socket = new TLSSocket(new Socket());
-    sockets.push(socket);
-    const send = async (proposal: unknown) => {
-      const response = await app.request(
-        "https://box.test/management-api/promote/preparation",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            oldNodeNeutralised: true,
-            noParallelRecovery: true,
-            ...credentials,
-            moduleOperation: { binding, input: null },
-            proposal,
-          }),
-        },
-        { incoming: { socket } },
-      );
-      const value = (await response.json()) as { id: string };
-      expect(response.status, JSON.stringify(value)).toBe(200);
-      return value;
-    };
-    const challenge = await send({ action: "clock-challenge" });
-    expect(
-      await send({
-        action: "set-clock",
-        browser: { challengeId: challenge.id, instantMs: Date.now() + 45_000 },
-      }),
-    ).toEqual({ status: "refused", reason: "not_mirror" });
     expect(box.set).not.toHaveBeenCalled();
     expect(box.hostSets).toEqual([]);
   });

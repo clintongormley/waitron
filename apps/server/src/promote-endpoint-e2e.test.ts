@@ -355,7 +355,7 @@ async function readSubmissions(
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("a promoted spare's pending submissions", () => {
+describe("a spare promoted through the signed-in runner or the old HTTP route", () => {
   it("leaves a new primary submission waiting for a certificate", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main);

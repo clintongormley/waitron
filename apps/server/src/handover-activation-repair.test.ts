@@ -296,7 +296,7 @@ describe("a box killed while activating, then a real start with its old box swit
     expect(operationStateOnDisk()).toBe("activated");
   }, 180_000);
 
-  it("an unfinished operation on a primary with no committed activation refuses a repeat", async () => {
+  it("a primary without a committed activation refuses a repeat and stays unactivated", async () => {
     await killedActivating("venue-commit");
     const venue = new DatabaseSync(join(dirs().spareVenue, "venue.db"));
     try {

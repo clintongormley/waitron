@@ -225,13 +225,9 @@ async function admit(s: Awaited<ReturnType<typeof service>>) {
   );
   return state;
 }
-async function compare(
-  s: Awaited<ReturnType<typeof service>>,
-  auth: unknown = credentials,
-  held = binding,
-) {
+async function compare(s: Awaited<ReturnType<typeof service>>, auth: unknown = credentials) {
   const challenge = (await s.prepareWithDormantSetup(
-    held,
+    binding,
     auth,
     context,
     { action: "clock-challenge" },
@@ -240,7 +236,7 @@ async function compare(
     id: string;
   };
   const compared = (await s.prepareWithDormantSetup(
-    held,
+    binding,
     auth,
     context,
     {
@@ -259,12 +255,8 @@ async function rows() {
     sif: await suite.db.select().from(verifactuIdentities),
   };
 }
-async function promote(
-  s: Awaited<ReturnType<typeof service>>,
-  input: unknown,
-  auth: unknown = credentials,
-) {
-  return s.withPromotion({ binding, input }, auth, context, (modules, runner) =>
+async function promote(s: Awaited<ReturnType<typeof service>>, input: unknown) {
+  return s.withPromotion({ binding, input }, credentials, context, (modules, runner) =>
     promoteMirrorToPrimary(
       {
         db: suite.db,
@@ -284,17 +276,15 @@ async function promote(
 it("a signed-in manager selects and activates a promotion after dormant admission", async () => {
   const s = await service();
   const before = await rows();
-  await admit(s);
+  const admission = await admit(s);
   expect(await rows()).toEqual(before);
+  await compare(s);
   expect(
     await readModulePreparationHistory(
       { stateDir: join(root, "state"), venueDir: join(root, "venue") },
       binding.module,
     ),
-  ).toEqual([
-    expect.objectContaining({ entries: [], dormant: [expect.objectContaining({ bases })] }),
-  ]);
-  await compare(s);
+  ).toEqual([expect.objectContaining({ entries: [], dormant: [admission] })]);
   const selected = (await s.prepareWithDormantSetup(
     binding,
     credentials,
@@ -307,6 +297,7 @@ it("a signed-in manager selects and activates a promotion after dormant admissio
   )) as { input: unknown };
   expect(selected).toMatchObject({ status: "selected", identity: "0CNQR", bases });
   expect(await rows()).toEqual(before);
+  await compare(s);
   expect(await promote(s, selected.input)).toMatchObject({ alreadyPrimary: false });
   const after = await rows();
   expect(after.allocations).toHaveLength(2);
@@ -336,10 +327,11 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
       ...(fault === "node" ? { targetNodeId: primary.nodeId } : {}),
     };
     const before = await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8");
+    const prepare = fault === "key" ? s.prepare : s.prepareWithDormantSetup;
     await expect(
-      s.prepare(
+      prepare(
         held,
-        { breakGlass: fault === "key" ? WRONG_MASTER_KEY : key.secret },
+        fault === "key" ? { breakGlass: WRONG_MASTER_KEY } : credentials,
         {
           ...context,
           ...(fault === "isolation" ? { oldNodeNeutralised: false } : {}),
@@ -352,13 +344,9 @@ it.each(["key", "isolation", "parallel", "source", "node"])(
       code:
         fault === "key"
           ? "promotion.break_glass_invalid"
-          : fault === "node"
-            ? "module.operation_invalid"
-            : fault === "isolation"
-              ? "promotion.fence_not_attested"
-              : fault === "parallel"
-                ? "module.operation_invalid"
-                : "sif.allocation_invalid",
+          : fault === "isolation"
+            ? "promotion.fence_not_attested"
+            : "module.operation_invalid",
     });
     expect(await readFile(join(root, "state/module-records/fiscal-verifactu.json"), "utf8")).toBe(
       before,
@@ -442,13 +430,11 @@ it("a promotion beside a leftover start-again note file is not held back by the 
       module: binding.module,
     }),
   );
-  const recovery = binding;
-  const auth = credentials;
-  await compare(s, auth, recovery);
+  await compare(s);
   expect(
     await s.prepareWithDormantSetup(
-      recovery,
-      auth,
+      binding,
+      credentials,
       context,
       { action: "select", comparisonId },
       { onBox: true },

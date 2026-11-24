@@ -626,14 +626,14 @@ describe("activating on a real placed copy", () => {
     const credentials = { personId: ADMIN, password: PASSWORD };
     const client = { onBox: false };
     await selectName(app); // Writes the dormant setup; its name is not used.
-    const challenge = (await service.prepare(
+    const challenge = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
       { action: "clock-challenge" },
       client,
     )) as { id: string };
-    const compared = (await service.prepare(
+    const compared = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
@@ -643,7 +643,7 @@ describe("activating on a real placed copy", () => {
       },
       client,
     )) as { id: string };
-    const { input } = (await service.prepare(
+    const { input } = (await service.prepareWithDormantSetup(
       binding,
       credentials,
       other,
@@ -952,21 +952,25 @@ describe("a chart that no longer has the old box as the main box", () => {
     60_000,
   );
 
-  it("a chart fencing this box itself answers the promotion's own refusal", async () => {
-    const store = await placedSpare();
-    const { app } = spareOn(store);
-    const { input } = await selectName(app);
-    await chartMovesOn(
-      store,
-      [node(primary.nodeId, "serving-primary"), node(standby.nodeId, "sell-only")],
-      4,
-    );
-    expect(await activate(app, input)).toMatchObject({
-      status: 409,
-      body: { error: { code: "promotion.node_fenced" } },
-    });
-    expect(await activations(store)).toEqual([]);
-  }, 60_000);
+  it.each(["planned handover", "emergency switch"] as const)(
+    "a chart fencing the mirror refuses activation for %s",
+    async (scenario) => {
+      const emergency = scenario === "emergency switch" ? await emergencySpare() : undefined;
+      const store = emergency?.store ?? (await placedSpare());
+      const app = emergency?.app ?? spareOn(store).app;
+      const { input } = await selectName(app);
+      const fenced = store.chart.body.nodes.map((entry) =>
+        entry.nodeId === standby.nodeId ? { ...entry, standing: "sell-only" as const } : entry,
+      );
+      await chartMovesOn(store, fenced, 4);
+      expect(await activate(app, input)).toMatchObject({
+        status: 409,
+        body: { error: { code: "promotion.node_fenced" } },
+      });
+      expect(await activations(store)).toEqual([]);
+    },
+    60_000,
+  );
 
   it("no chart at all is refused the same way", async () => {
     const store = await placedSpare();
