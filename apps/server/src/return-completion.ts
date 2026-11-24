@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import {
   handoverActivations,
   handoverReturnBatches,
@@ -161,13 +161,33 @@ export async function returnsCompletedAt(
   return bySource;
 }
 
-/** Whether every batch of one inventory recorded for `operationId` is accounted. */
-export async function returnCompletedFor(tx: Transaction, operationId: string): Promise<boolean> {
+/**
+ * Whether every batch of `inventory` is recorded for `operationId` and their digests make it up.
+ * Counts the inventory's index entries first, so a partial inventory, asked after each batch, reads
+ * none of its rows.
+ */
+export async function returnCompletedFor(
+  tx: Transaction,
+  operationId: string,
+  inventory: string,
+): Promise<boolean> {
+  const scope = and(
+    eq(handoverReturnBatches.operationId, operationId),
+    eq(handoverReturnBatches.inventory, inventory),
+  );
+  const [first] = await tx
+    .select({ count: handoverReturnBatches.batchCount })
+    .from(handoverReturnBatches)
+    .where(scope)
+    .limit(1);
+  if (!first) return false;
+  const [recorded] = await tx.select({ n: count() }).from(handoverReturnBatches).where(scope);
+  if (recorded?.n !== first.count) return false;
   const rows = await tx
     .select()
     .from(handoverReturnBatches)
-    .where(eq(handoverReturnBatches.operationId, operationId))
-    .orderBy(asc(handoverReturnBatches.inventory), asc(handoverReturnBatches.batchIndex));
+    .where(scope)
+    .orderBy(asc(handoverReturnBatches.batchIndex));
   return completedIn(rows).has(operationId);
 }
 

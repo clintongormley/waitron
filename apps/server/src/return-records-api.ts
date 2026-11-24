@@ -92,7 +92,9 @@ export function mountReturnRecordsApi(
             complete,
             takeover,
             open: open !== undefined,
-            returned: takeover !== undefined && (await returnCompletedFor(tx, takeover)),
+            returned:
+              takeover !== undefined &&
+              (await returnCompletedFor(tx, takeover, body.inventory as string)),
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
           };
         });
