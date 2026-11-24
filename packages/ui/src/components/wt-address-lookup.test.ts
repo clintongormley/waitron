@@ -170,19 +170,59 @@ test("after five automatic searches, Enter searches the edited text without subm
   field.dispatchEvent(composing);
   expect(provider.calls.suggest).toHaveLength(5);
 
+  let complete!: (suggestions: readonly AddressLookupSuggestion[]) => void;
+  const pending = new Promise<readonly AddressLookupSuggestion[]>(
+    (resolve) => (complete = resolve),
+  );
+  const suggest = provider.suggest;
+  vi.spyOn(provider, "suggest").mockImplementationOnce((request) => {
+    void suggest(request);
+    return pending;
+  });
   const enter = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
   field.dispatchEvent(enter);
   expect(enter.defaultPrevented).toBe(true);
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
   expect(provider.calls.suggest.map(({ query }) => query)).toEqual([
     ...automatic,
     "Main Street 12",
   ]);
   expect(field.getAttribute("enterkeyhint")).toBe("search");
+  complete([MAYOR]);
+  await pending;
+  await el.updateComplete;
+  expect(options(el)).toHaveLength(1);
 
   type(el, "Mai");
   field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
   vi.advanceTimersByTime(600);
   expect(provider.calls.suggest).toHaveLength(6);
+});
+
+test("Enter can search again after a chosen suggestion fails to resolve at the limit", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider([MAYOR], {
+    resolve: async () => {
+      throw new Error("unavailable");
+    },
+  });
+  const el = await mountLookup(provider);
+  for (const query of ["Main", "Main S", "Main St", "Main Street", "Main Street 1"]) {
+    type(el, query);
+    await vi.advanceTimersByTimeAsync(600);
+  }
+  const key = (name: string) =>
+    input(el).dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true }));
+  key("ArrowDown");
+  key("Enter");
+  await Promise.resolve();
+  await el.updateComplete;
+  expect(status(el)).toBe("Suggestions are not available.");
+  key("Enter");
+  await Promise.resolve();
+  await el.updateComplete;
+  expect(provider.calls.suggest).toHaveLength(6);
+  expect(options(el)).toHaveLength(1);
 });
 
 test("lists each suggestion with its second line and opens the field", async () => {

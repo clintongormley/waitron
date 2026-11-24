@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { endManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
@@ -59,4 +61,17 @@ it("checks venue permission, the primary and the exact body before calling Cloud
   const steppedDown = await post(available);
   expect(steppedDown.status).toBe(409);
   expect(await steppedDown.json()).toEqual({ error: { code: "cloud.not_primary", params: {} } });
+
+  primary = true;
+  addressLookup.mockImplementationOnce(async (_input, authorize) => {
+    const token = managerCookie.split("=")[1]!;
+    await withTransaction(venue.db, (tx) => endManagementSession(tx, token, "signed_out"));
+    await authorize();
+    return { available: true };
+  });
+  const signedOut = await post(available);
+  expect(signedOut.status).toBe(401);
+  expect(await signedOut.json()).toEqual({
+    error: { code: "management_session.required", params: {} },
+  });
 });

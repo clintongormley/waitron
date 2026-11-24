@@ -133,6 +133,7 @@ export class WtAddressLookup extends LitElement {
   @state() private notice: "" | "none" | "unavailable" = "";
 
   #generation = 0;
+  #searching?: number;
   /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
   #resolving?: number;
   #messageCurrent = true;
@@ -196,6 +197,7 @@ export class WtAddressLookup extends LitElement {
   async #ask(generation: number): Promise<void> {
     const provider = this.provider;
     if (provider === undefined) return;
+    this.#searching = generation;
     let found: readonly AddressLookupSuggestion[];
     try {
       found = await provider.suggest({
@@ -206,6 +208,8 @@ export class WtAddressLookup extends LitElement {
     } catch {
       if (generation === this.#generation) this.notice = "unavailable";
       return;
+    } finally {
+      if (this.#searching === generation) this.#searching = undefined;
     }
     if (generation !== this.#generation) return;
     this.suggestions = found;
@@ -228,6 +232,8 @@ export class WtAddressLookup extends LitElement {
     } catch {
       if (generation === this.#generation) this.notice = "unavailable";
       return;
+    } finally {
+      if (this.#resolving === generation) this.#resolving = undefined;
     }
     if (generation !== this.#generation) return;
     this.#session = sessionToken();
@@ -261,6 +267,7 @@ export class WtAddressLookup extends LitElement {
         !event.repeat &&
         count === 0 &&
         this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT &&
+        this.#searching !== this.#generation &&
         this.#resolving !== this.#generation &&
         this.#canSearch()
       ) {

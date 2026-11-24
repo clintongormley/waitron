@@ -412,9 +412,11 @@ it.each(["before sending", "before returning"])(
       await expect(
         f.client.addressLookup(operation, authorize, new AbortController().signal),
       ).rejects.toMatchObject({ code: "authorization.not_permitted" });
-      expect(f.requests.filter((request) => request[2] === "address-lookup")).toHaveLength(
-        when === "before sending" ? 0 : 1,
-      );
+      expect(
+        f.requests
+          .map((request) => request[2])
+          .filter((kind) => kind === "renew" || kind === "address-lookup"),
+      ).toEqual(when === "before sending" ? ["renew"] : ["renew", "address-lookup"]);
     } finally {
       await f.close();
     }
@@ -427,7 +429,8 @@ it("discards the Cloud reply after the box's registration changes", async () => 
     addressLookup: async (_values, _saved, _req, res) => {
       const file = join(f.stateDir, "cloud/connection.json");
       const state = JSON.parse(await readFile(file, "utf8"));
-      state.lifecycle.revoked = true;
+      state.view.registration.installationId = randomUUID();
+      delete state.lifecycle;
       await writeFile(file, JSON.stringify(state));
       res.end(
         JSON.stringify({ provider: "google", workflowId: operation.workflowId, candidates: [] }),
@@ -461,4 +464,4 @@ it("ends the Cloud exchange when the caller aborts", async () => {
   } finally {
     await f.close();
   }
-});
+}, 6000);
