@@ -51,7 +51,7 @@ import type { TradingContext } from "./trading-context.js";
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: bill payment files from the tab's
 // STORED locked lines. Two tabs built from the IDENTICAL basket, one with every line served and one
-// with none, must file registros with the IDENTICAL huella — each a genuine chained record filed
+// with none, must file records with the IDENTICAL huella — each a genuine chained record filed
 // through the real pay path.
 const LOCALE = "es-ES";
 
@@ -226,7 +226,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
 
 /**
  * Open the identical two-line tab, optionally serve EVERY line, then pay it through the real pay
- * path with the FROZEN clock, returning the filed huella (registro #1 at secuencia 1).
+ * path with the FROZEN clock, returning the filed huella (record #1 at sequence 1).
  */
 async function openServeAndPay(
   shop: Shop,
@@ -269,7 +269,7 @@ async function openServeAndPay(
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });
@@ -317,7 +317,7 @@ describe("served_at is not part of the huella", () => {
 /**
  * Open the identical two-line tab, fire its lines to the kitchen, advance every item to `ready`,
  * stamp the order's `collected_at`, then pay it through the real pay path with the FROZEN clock,
- * returning the filed huella (registro #1 at secuencia 1).
+ * returning the filed huella (record #1 at sequence 1).
  *
  * `collected_at` is stamped by a direct UPDATE. This case files through bill payment, as in the
  * sibling tests.
@@ -379,7 +379,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });
@@ -493,7 +493,7 @@ async function attachExtra(
 /**
  * Open a two-line tab — `water` WITH the extra picked (a parent row + one child row) plus a plain
  * `coffee` — then pay it through the real pay path with the FROZEN clock, returning the filed huella
- * (registro #1 at secuencia 1).
+ * (record #1 at sequence 1).
  */
 async function openWithExtraAndPay(
   shop: Shop,
@@ -528,7 +528,7 @@ async function openWithExtraAndPay(
       .select({ huella: verifactuRecords.huella, secuencia: verifactuRecords.secuencia })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.nodeId, cfg.nodeId));
-    expect(rows).toHaveLength(1); // exactly registro #1 on this shop's fresh chain
+    expect(rows).toHaveLength(1); // exactly record #1 on this shop's fresh chain
     expect(rows[0]!.secuencia).toBe(1);
     return rows[0]!.huella;
   });

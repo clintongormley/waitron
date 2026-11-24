@@ -241,10 +241,10 @@ async function fileFullComps(db: Database) {
         ) as unknown,
       }));
     const [row] = db.all<RegistroRow>(sql`select * from verifactu_records`);
-    const cabecera: Cabecera = {
+    const filingHeader: Cabecera = {
       ObligadoEmision: { NombreRazon: row!.nombre_razon_emisor, NIF: row!.id_emisor_factura },
     };
-    const xml = serializeEnvio(cabecera, [
+    const xml = serializeEnvio(filingHeader, [
       { RegistroAlta: fromRegistroRow(decodeRegistroRow(row!)) as RegistroAlta },
     ]);
     return { header, records, lines, xml, printed };

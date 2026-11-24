@@ -1,5 +1,7 @@
 # A1154 changed test checks
 
+_2026-11-24, A974: `served-at-huella.test.ts` moved to `served-at-fiscal-hash.test.ts`. The row below keeps the historical name and links to its current location._
+
 _2026-11-07, A1422: `scripts/fiscal-allocation-migration.test.ts` and `scripts/fiscal-certificate-migration.test.ts` were deleted with the frozen migration history on the owner's word; they are readable at commit f519799de0._
 
 _2026-11-01, A1008: the one-sale operator command and its command-only tests are retired by owner decision. References below describe the earlier tree. Stream and fingerprint-refusal assertions remain, using an open-database preproduction fixture._
