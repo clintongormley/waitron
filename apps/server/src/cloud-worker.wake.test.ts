@@ -44,18 +44,6 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-it("a wake brings the next refresh to two seconds after the pass, not before", async () => {
-  start(async () => active);
-  await advance(0);
-  expect(refreshes).toEqual([0]);
-  await advance(1_000);
-  runner.wake("cloud.connection");
-  await advance(999);
-  expect(refreshes).toEqual([0]);
-  await advance(1);
-  expect(refreshes).toEqual([0, 2_000]);
-});
-
 it("without a wake the next refresh waits the full minute", async () => {
   start(async () => active);
   await advance(59_999);

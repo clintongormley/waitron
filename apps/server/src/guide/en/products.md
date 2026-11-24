@@ -76,8 +76,8 @@ Two optional names sit in **Details**:
   what a diner reads: the receipt and the invoice. A receipt and an invoice show the default
   language's customer-facing name whatever language they print in, or the staff name when you leave
   that default name blank. A regional field such as **English (United States)** is optional:
-  leave it blank to use English, or enter only the wording that differs.
-  Regional names do not replace the default name on a receipt.
+  leave it blank to use English, or enter only the wording that differs. Check regional names in
+  the menu’s **Preview** tab. Regional names do not replace the default name on a receipt.
 - A **prep station name**, under **Prep station**. This is what the station ticket prints and what the station
   screens show. It is useful when the short label a cook needs differs from the name you sell under.
   Leave it blank and the station sees the staff name instead.

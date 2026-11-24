@@ -80,8 +80,9 @@ Dos nombres opcionales están en **Detalles**:
   que lee el comensal: el ticket y la factura. Un ticket y una factura muestran el nombre para el cliente
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
   dejas ese nombre predeterminado en blanco. Un campo regional como **Inglés (Estados Unidos)**
-  es opcional. Déjalo vacío para usar el inglés o escribe solo las palabras que cambian.
-  Los nombres regionales no sustituyen al nombre predeterminado en el ticket.
+  es opcional. Déjalo vacío para usar el inglés o escribe solo las palabras que cambian. Revisa
+  los nombres regionales en la pestaña **Vista previa** de la carta. Los nombres regionales no
+  sustituyen al nombre predeterminado en el ticket.
 - Un **nombre de estación de preparación**, en **Estación de preparación**. Es lo que imprime la comanda de estación y lo que muestran las
   pantallas de estación. Es útil cuando la etiqueta corta que necesita un cocinero no es el nombre con el
   que vendes. Déjalo en blanco y la estación verá el nombre del personal.

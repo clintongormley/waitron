@@ -22,7 +22,7 @@ Four groups, and none comes before the others (owner, 2026-11-22):
 - **Whoever installs the box.** The owner or someone acting for them, on the setup page, bringing a
   new box up, restoring one, or joining a spare box to it.
 
-Diners read receipts and invoices in their own language where the venue offers it.
+Diners read Waitron’s receipts and invoices.
 
 ## Product Purpose
 
