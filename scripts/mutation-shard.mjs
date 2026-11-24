@@ -30,6 +30,8 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * ui-core: no file split. At 4 shards, timed locally on 2026-10-20 at `--concurrency 2`, shard 1
  * (derive.ts and colour.ts among its 544 mutants) took 643 s and shard 4 (contrast-rules.ts among
  * its 448) 468 s.
+ * shared: the grouping file uses dedicated ranges because many of its mutations rerun the large
+ * set-menu bills. See the Shared mutation section in docs/developers/ci-and-gates.md.
  *
  * @type {Record<string, Record<string, number>>}
  */
@@ -43,7 +45,7 @@ export const HEAVY_FILES = {
     "src/components/wt-icon.ts": 2,
   },
   "ui-core": {},
-  shared: {},
+  shared: { "src/set-menu-grouping.ts": 2 },
 };
 
 /**
