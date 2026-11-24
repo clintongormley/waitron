@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { readHistoryNodes, type Transaction } from "@waitron/db";
+import { enqueueMail, readHistoryNodes, type Transaction } from "@waitron/db";
 import type { FiscalCertificateReminder } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
 import {
@@ -7,9 +7,11 @@ import {
   certificateStage,
   localDate,
   nextLocalMidnight,
+  reminderPeriod,
+  type CertificateStage,
 } from "./certificate-dates.js";
 import { venueTimeZone } from "./certificate-install.js";
-import { latestInstallAmong } from "./certificate-record.js";
+import { latestInstall, latestInstallAmong } from "./certificate-record.js";
 import { fiscalCertificateReminders } from "./schema/certificate-reminders.js";
 
 type Language = "en" | "es";
@@ -55,6 +57,65 @@ function wording(
         subject: `AEAT certificate expires on ${date}`,
         text: `The AEAT certificate expires on ${date}, in ${days} day(s). Install the new one in Venue settings before then, or fiscal records will wait.`,
       };
+}
+
+export async function queueReminders(
+  tx: Transaction,
+  { nodeId }: { nodeId: string },
+  personIds: readonly string[],
+  now: Date,
+): Promise<number> {
+  const install = await latestInstall(tx, nodeId);
+  if (install === null) return 0;
+  const timeZone = await venueTimeZone(tx);
+  const schedule = reminderPeriod(install.kind, now, install.validUntil, timeZone);
+  if (schedule === null) return 0;
+
+  const { stage, period, endsAt } = schedule;
+  const params = { stage, validUntil: install.validUntil.toISOString(), timeZone };
+  const notAfter = new Date(endsAt);
+  let queued = 0;
+  for (const personId of [...personIds].sort()) {
+    const result = await enqueueMail(tx, {
+      kind: "certificate_reminder",
+      dedupeKey: `certificate:${install.id}:${period}:${personId}`,
+      subjectId: install.id,
+      personId,
+      params,
+      notAfter,
+      now,
+    });
+    if (result.queued) queued++;
+  }
+  return queued;
+}
+
+export function wordReminder({
+  params,
+  language,
+  now,
+}: {
+  params: { stage: CertificateStage; validUntil: string; timeZone: string };
+  language: Language;
+  now: Date;
+}): Omit<FiscalCertificateReminder, "id" | "recipient"> {
+  const { stage, timeZone } = params;
+  const validUntil = new Date(params.validUntil);
+  const date = localDate(validUntil, timeZone);
+  const days = calendarDaysLeft(now, validUntil, timeZone);
+  const expired = stage === "expired";
+  const deadline = expired
+    ? now.getTime() + RETRY_AFTER_MS
+    : Math.min(validUntil.getTime(), Date.parse(nextLocalMidnight(now, timeZone)));
+  return {
+    ...wording(language, expired, formatDay(date, language), days),
+    notice: {
+      language,
+      timeZone,
+      expiresAt: new Date(deadline).toISOString(),
+      facts: expired ? { stage: "expired", date } : { stage: "due", date, daysLeft: days },
+    },
+  };
 }
 
 /** Claims the next expiry email due for the certificate `latestInstall` finds, or `null`. A
@@ -127,22 +188,14 @@ export async function claimReminder(
         .returning({ id: fiscalCertificateReminders.id });
     }
     if (claimed === undefined) continue;
-    const date = localDate(install.validUntil, timeZone);
-    const days = calendarDaysLeft(now, install.validUntil, timeZone);
-    const expired = stage === "expired";
-    const deadline = expired
-      ? now.getTime() + RETRY_AFTER_MS
-      : Math.min(install.validUntil.getTime(), Date.parse(nextLocalMidnight(now, timeZone)));
     return {
       id: claimed.id,
       recipient: recipient.email,
-      ...wording(recipient.language, expired, formatDay(date, recipient.language), days),
-      notice: {
+      ...wordReminder({
+        params: { stage, validUntil: install.validUntil.toISOString(), timeZone },
         language: recipient.language,
-        timeZone,
-        expiresAt: new Date(deadline).toISOString(),
-        facts: expired ? { stage: "expired", date } : { stage: "due", date, daysLeft: days },
-      },
+        now,
+      }),
     };
   }
   return null;

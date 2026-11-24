@@ -65,3 +65,35 @@ export function stageSince(
   const day = shiftDay(localDate(validUntil, timeZone), -CERTIFICATE_THRESHOLDS[kind][stage]);
   return localMidnight(day, timeZone);
 }
+
+export function reminderPeriod(
+  kind: CertKind,
+  now: Date,
+  validUntil: Date,
+  timeZone: string,
+): { stage: CertificateStage; period: string; endsAt: string } | null {
+  const stage = certificateStage(kind, now, validUntil, timeZone);
+  if (stage === null) return null;
+
+  if (stage === "warning") {
+    const warningDays = CERTIFICATE_THRESHOLDS[kind].warning;
+    const week = Math.floor((warningDays - calendarDaysLeft(now, validUntil, timeZone)) / 7);
+    const weekEnd = shiftDay(localDate(validUntil, timeZone), -warningDays + 7 * (week + 1));
+    const weekEndsAt = localMidnight(weekEnd, timeZone);
+    const urgentStartsAt = stageSince(kind, "urgent", validUntil, timeZone);
+    return {
+      stage,
+      period: `warning:w${week}`,
+      endsAt: weekEndsAt < urgentStartsAt ? weekEndsAt : urgentStartsAt,
+    };
+  }
+
+  const day = localDate(now, timeZone);
+  const dayEndsAt = localMidnight(shiftDay(day, 1), timeZone);
+  const expiry = validUntil.toISOString();
+  return {
+    stage,
+    period: `${stage}:${day}`,
+    endsAt: stage === "urgent" && expiry < dayEndsAt ? expiry : dayEndsAt,
+  };
+}

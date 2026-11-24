@@ -61,10 +61,11 @@ Read from [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09
    claim are never sent again; a row past `not_after` is `expired`. So today's rule, "a failed one is
    retried once its report is a day old; claimed or unknown never again"
    (`certificate-reminders.ts:55-58`, `RETRY_AFTER_MS` `:13`), becomes `retryDelaysMs` = six entries of 86,400,000 ms
-   and `longestWaitMs` 86,400,000. A reminder's `not_after` is the end of its period (below), never
-   more than 3a-ii's seven days, so a weekly reminder the server keeps refusing is retried daily for
-   its week (the owner confirmed this on 2026-11-09), and a daily one gets one try a day: the next
-   day's reminder is a new row.
+   and `longestWaitMs` 86,400,000. A reminder's `not_after` is the end of its period (below). A
+   warning week follows seven local dates, including when the autumn clock change gives it an
+   extra hour (watcher, 2026-11-24). A weekly reminder the server keeps refusing is retried daily
+   for its week (owner, 2026-11-09), and a daily one gets one try a day. The next day's reminder is
+   a new row.
 4. **Unconfigured email** — the sender leaves due rows untouched while email is unconfigured (3a-ii
    decision A), but it still expires every waiting row past `not_after` in the same pass, before it
    looks at the delivery (3a-ii "One pass", step 3, first two bullets). The deciding pass keeps
