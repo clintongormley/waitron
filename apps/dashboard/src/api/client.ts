@@ -2034,7 +2034,7 @@ export interface ServerRow {
   canClear: boolean;
   /** A spare that finished joining: Remove must send both declarations. */
   requiresRetirementConfirmation: boolean;
-  /** A handover here still waits for this old main box to return its invoice records. */
+  /** A handover here still waits for this old main box to return its records. */
   returnOutstanding: boolean;
   /** Remove of this former main box is refused unless it sends `resetStatement`. */
   needsResetStatement: boolean;

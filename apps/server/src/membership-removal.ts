@@ -54,7 +54,7 @@ export type ClearanceVerdict =
 
 /** What removing a box depends on beyond the chart. */
 export interface RemovalFacts {
-  /** An open takeover here still waits for this box to return its invoice records. */
+  /** An open takeover here still waits for this box to return its records. */
   readonly returnOutstanding: boolean;
   /** This box's open handover operation names this box, as its source or its destination. */
   readonly inOpenOperation: boolean;

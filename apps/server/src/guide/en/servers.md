@@ -162,7 +162,8 @@ Switch the old box on and keep it connected: it returns its invoice records and 
 itself. Until they arrive, its row in **System → Servers** on the new main box says **Waiting for
 the old main box to return its invoice records and working hours**, and the venue cannot be handed over again or that box removed.
 
-A person added on the old box after the copy comes back disabled, with their hours:
+A person added on the old box after the copy comes back disabled, with their hours but no email
+address: add their email address with **Edit…**, then
 [re-enable their account](staff.md#account-access) rather than adding them again. If you already
 added them again, leave the returned account disabled: Waitron refuses to re-enable it while
 another account has the same name. The working-time export lists both accounts' hours under that
@@ -281,8 +282,9 @@ not return.
 
 If the page says the main box could not store some of this box's working hours, its invoice
 records are back. Download this box's data before anyone chooses **Wipe and remove** on the main
-box: after an emergency switch, the file's **Working hours** tab lists them. The wipe then sets this
-box's databases aside instead of deleting them.
+box: after an emergency switch, the file's **Working hours** tab lists this box's hours from the
+time its first line gives. Restarting this box does not help. The wipe then sets this
+box's databases aside instead of deleting them, so hours from before that time are kept there too.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
 payment differences can be accepted through the internal API. An administrator can inspect them
@@ -311,7 +313,8 @@ Use **Refresh intervals** to check the inventory receipt. **Inventory receipt co
 the new box accounted for all batches in an inventory advertised by the old box. It does not
 confirm missing activity or amounts, or reconstruct cash-ups. An unconfirmed receipt needs a
 complete return; if the old box already stopped sending, restart it while it remains restricted
-to resend.
+to resend. If the old box's page says the main box could not store some of its working hours,
+restarting does not help: download its data instead ([how](servers.md#handed-over)).
 
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
 box, generating installation, original issue date and recorded amounts. Invoice rows show a

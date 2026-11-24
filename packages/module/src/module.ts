@@ -1589,7 +1589,10 @@ export interface WaitronModule {
   readonly operations?: ModuleOperationPreparation;
   /** The module's contribution to the fiscal slot — `fiscalSlot` selects exactly one. */
   readonly fiscal?: FiscalContribution;
-  /** What this module vouches for, and checks, in the copy a handover sends to the next box. */
+  /**
+   * What a module vouches for and checks in a copy handed to another box, and the records an old
+   * main box returns to the new one.
+   */
   readonly handover?: ModuleHandoverContribution;
   readonly routes?: ModuleRoutes;
   readonly timeRecordExport?: ModuleTimeRecordExport;

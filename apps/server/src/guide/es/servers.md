@@ -181,7 +181,8 @@ facturación y horas trabajadas**, y no se puede volver a
 traspasar el local ni retirar ese servidor.
 
 Una persona añadida en el servidor anterior después de la copia vuelve deshabilitada, con sus
-horas: [vuelve a habilitar su cuenta](staff.md#account-access) en lugar de añadirla de nuevo. Si ya
+horas pero sin correo electrónico: añade su correo con **Editar…** y luego
+[vuelve a habilitar su cuenta](staff.md#account-access) en lugar de añadirla de nuevo. Si ya
 la habías añadido de nuevo, deja deshabilitada la cuenta devuelta: Waitron no permite volver a
 habilitarla mientras otra cuenta tenga el mismo nombre. La exportación del registro de jornada
 lista las horas de las dos cuentas con ese nombre.
@@ -314,8 +315,10 @@ entonces sus bases de datos en lugar de borrarlas, incluidos los registros que n
 Si la página indica que el servidor principal no ha podido guardar algunas de las horas trabajadas
 de este servidor, sus registros de facturación ya han llegado. Descarga los datos de este servidor
 antes de que nadie elija **Borrar y retirar** en el servidor principal: tras un cambio de
-emergencia, la pestaña **Horas de trabajo** del archivo las lista. El borrado aparta entonces las
-bases de datos de este servidor en lugar de borrarlas.
+emergencia, la pestaña **Horas de trabajo** del archivo lista las horas de este servidor desde la
+hora que indica su primera línea. Reiniciar este servidor no sirve. El borrado aparta
+entonces las bases de datos de este servidor en lugar de borrarlas, así que las horas anteriores a
+esa hora también se conservan en ellas.
 
 Si otros datos devueltos difieren, mantén ambos servidores encendidos y conserva sus datos. Solo se
 pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
@@ -349,7 +352,9 @@ Pulsa **Actualizar intervalos** para comprobar la recepción del inventario. **R
 confirmada** significa que el nuevo servidor ha contabilizado todos los lotes de un inventario anunciado
 por el anterior. No confirma la actividad que falte ni los importes, ni reconstruye los arqueos. Una
 recepción sin confirmar necesita una devolución completa; si el servidor anterior ya dejó de enviar,
-reinícialo mientras sigue restringido para que reenvíe los datos.
+reinícialo mientras sigue restringido para que reenvíe los datos. Si la página del servidor anterior
+dice que el servidor principal no ha podido guardar algunas de sus horas trabajadas, reiniciarlo no
+sirve: descarga sus datos ([cómo](servers.md#handed-over)).
 
 Debajo de los intervalos, **Facturas devueltas** muestra cada factura recibida por primera vez
 con el servidor de origen, la instalación que la generó, la fecha de expedición original y los
