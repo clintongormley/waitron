@@ -29,6 +29,8 @@ import {
   seedVenue,
 } from "@waitron/db/testing/seed.js";
 import { seedFiredOrder } from "@waitron/reporting/test/fixtures.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { readChain, verifyChain, WorkforceBackend, WORKFORCE_HANDOVER } from "@waitron/workforce";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
 import { endorseKey, routableServers } from "@waitron/membership";
@@ -36,7 +38,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, type WaitronModule } from "@waitron/module";
 import { readHandoverOperation, readHandoverRestriction, readNodeMode } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { nodeId as asNodeId } from "@waitron/shared";
+import { nodeId as asNodeId, jobOrigin } from "@waitron/shared";
 import { MODULE_RECORDS_DIR, REPLACED_RESET_FILE } from "@waitron/store";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -1274,6 +1276,32 @@ describe("a confirmed return after an emergency switch, then Wipe and remove", (
       const { mainId, spareId } = boxes;
       const { b, modules } = await emergencySwitch(boxes, waitUntil, opened);
 
+      // After the copy: the old box clocks a person in and out, and the new main box one of its own.
+      const [worker] = await seedPersons(mainBox.db, { displayName: "Ana" });
+      const [ownWorker] = await seedPersons(b.venue, { displayName: "Bea" });
+      const clock = (
+        db: typeof mainBox.db,
+        nodeId: string,
+        personId: string,
+        step: "clockIn" | "clockOut",
+      ) =>
+        withTransaction(db, (tx) =>
+          new WorkforceBackend()[step](tx, {
+            nodeId,
+            personId,
+            at: new Date().toISOString(),
+            offsetMinutes: 0,
+            origin: jobOrigin("dashboard"),
+          }),
+        );
+      vi.advanceTimersByTime(60_000);
+      await clock(mainBox.db, mainId, worker!.id, "clockIn");
+      await clock(b.venue, spareId, ownWorker!.id, "clockIn");
+      vi.advanceTimersByTime(60_000);
+      await clock(mainBox.db, mainId, worker!.id, "clockOut");
+      const oldHours = await readChain(mainBox.db, { nodeId: mainId });
+      expect(oldHours.map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+
       const { newMain, serversRequest } = await oldBoxBackRestricted(boxes, b, modules);
       const listed = async () =>
         (await listServers(b.venue, b.node, spareId)).nodes.find((n) => n.nodeId === mainId);
@@ -1284,10 +1312,38 @@ describe("a confirmed return after an emergency switch, then Wipe and remove", (
         canReset: false,
       });
 
+      // Invoice records alone do not complete the return: the main box refuses the hours once.
+      const hoursSeat = vi
+        .spyOn(WORKFORCE_HANDOVER.returnRecords!, "receive")
+        .mockResolvedValueOnce({ refusal: "attendance.return_entry_clash" });
+      try {
+        expect(await oldBoxReturnPass(boxes, newMain)).toBe("hours-refused");
+      } finally {
+        hoursSeat.mockRestore();
+      }
+      expect(await readChain(b.venue, { nodeId: mainId })).toEqual([]);
+      expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
+        "return_pending",
+      );
+
       expect(await oldBoxReturnPass(boxes, newMain)).toBe("confirmed");
       expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
         "return_complete",
       );
+      const returned = await readChain(b.venue, { nodeId: mainId });
+      expect(returned).toEqual(oldHours);
+      expect(verifyChain(returned)).toEqual({ ok: true });
+      // The new main box's own next clock-in continues its own chain, not the returned one.
+      await clock(b.venue, spareId, ownWorker!.id, "clockOut");
+      await clock(b.venue, spareId, worker!.id, "clockIn");
+      const own = await readChain(b.venue, { nodeId: spareId });
+      expect(own.map((entry) => [entry.sequenceNo, entry.personId, entry.entryKind])).toEqual([
+        [1, ownWorker!.id, "in"],
+        [2, ownWorker!.id, "out"],
+        [3, worker!.id, "in"],
+      ]);
+      expect(verifyChain(own)).toEqual({ ok: true });
+      expect(await readChain(b.venue, { nodeId: mainId })).toEqual(oldHours);
       expect(await listed()).toMatchObject({ canReset: true, returnScenario: "emergency" });
       // The return's real `return_complete` step is what a backup starting after it is compared with.
       const backupStarted = (at: number) => async () => ({
