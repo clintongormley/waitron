@@ -1403,16 +1403,16 @@ describe("departmental tab transfers", () => {
       return row!.dining;
     }
 
-    it("makes an unsent takeaway counter order eaten here in a department that sells only eaten here", async () => {
+    it("keeps an unsent takeaway counter order takeaway in a department that sells only eaten here", async () => {
       const v = await deliOrder("takeaway", { dining: "eat_in", orderStart: "counter" });
       await accept(v);
-      expect(await diningOf(v.tab)).toBe("eat_in");
+      expect(await diningOf(v.tab)).toBe("takeaway");
     });
 
-    it("makes an unsent counter order eaten here takeaway in a department that sells only takeaway", async () => {
+    it("keeps an unsent counter order eaten here in a department that sells only takeaway", async () => {
       const v = await deliOrder("eat_in", { dining: "takeaway", orderStart: "counter" });
       await accept(v);
-      expect(await diningOf(v.tab)).toBe("takeaway");
+      expect(await diningOf(v.tab)).toBe("eat_in");
     });
 
     it.each(["eat_in", "takeaway"] as const)(
@@ -1444,17 +1444,6 @@ describe("departmental tab transfers", () => {
         expect(await diningOf(v.tab)).toBe("takeaway");
       },
     );
-
-    it("leaves an unsent order's way alone in a region without takeaway VAT", async () => {
-      const v = await deliOrder("takeaway", { dining: "eat_in", orderStart: "counter" });
-      await suite.db.run(sql`update taxpayer set country = 'GB'`);
-      try {
-        await accept(v);
-      } finally {
-        await suite.db.run(sql`update taxpayer set country = 'ES'`);
-      }
-      expect(await diningOf(v.tab)).toBe("takeaway");
-    });
   });
 });
 

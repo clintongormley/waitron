@@ -3,13 +3,11 @@ import { chargesTakeawayVat } from "@waitron/country-packs";
 import {
   departments,
   floorZones,
-  orderDiningLocked,
   readTaxpayer,
   readVenueSettings,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import type { ServiceMode } from "@waitron/module";
 import { AppError, type Dining, type DiningPolicy, type DiningStart } from "@waitron/shared";
 import "./errors.js";
 
@@ -113,29 +111,4 @@ export async function resolveOrderDining(
     return fixed;
   }
   return requested ?? start!.startsAs;
-}
-
-/**
- * The way an existing order sells once its department becomes `to.departmentId` (A1522, Decision 6).
- * An order whose way is fixed (sent or paid) keeps it, and a takeaway order moved to a table stays
- * takeaway. Otherwise a department fixed one way gives the order that way, and a till-choice
- * department leaves it for staff to switch. A region without takeaway VAT changes nothing.
- * Called when an order's department changes or is first set.
- */
-export async function applyDepartmentDining(
-  tx: Transaction,
-  workingOrderId: string,
-  to: { departmentId: string; serviceMode: ServiceMode },
-): Promise<void> {
-  if (!(await venueChargesTakeawayVat(tx))) return;
-  if ((await orderDiningLocked(tx, workingOrderId)) !== null) return;
-  const [order] = await tx
-    .select({ dining: workingOrders.dining })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, workingOrderId));
-  if (order === undefined) throw new AppError("working_order.not_found", { workingOrderId });
-  if (order.dining === "takeaway" && to.serviceMode === "table_tab") return;
-  const { dining } = await departmentDining(tx, to.departmentId);
-  if (dining === "till_choice" || dining === order.dining) return;
-  await tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, workingOrderId));
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orderDiningLocked } from "@waitron/db";
+import { captureError, orderDiningLocked } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining } from "@waitron/shared";
@@ -21,14 +21,16 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { moveGuests } from "./testing/table-action-fixture.js";
+import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
-// A whole table moved into another department: a sent bill keeps its way, and a takeaway bill moved
-// to a table stays takeaway, even where the department sells only eaten here (A1522, Decision 6).
+// A whole table moved into another department: every bill keeps its way, whatever the department
+// sells (the owner, 2026-11-24).
 let venue: BillVenue;
 /** A table zone of a department that sells only eaten here. */
 let eatInZone: string;
+/** A table zone of a department that sells only takeaway. */
+let takeawayZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -47,6 +49,15 @@ useVenueDb({
       });
       eatInZone = (await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" }))
         .zoneId;
+      const shop = await createDepartment(tx, { name: "Takeaway shop", orderStart: "table" });
+      await setDepartmentSalePolicyField(tx, shop.id, "dining", "takeaway");
+      const shopZone = await createServiceZone(tx, {
+        name: "Takeaway shop",
+        departmentId: shop.id,
+      });
+      takeawayZone = (
+        await offerProducts(tx, { zone: { zoneId: shopZone.id }, orderStart: "table" })
+      ).zoneId;
     });
   },
 });
@@ -107,5 +118,71 @@ describe("a whole table moved into another department", () => {
     expect(zoneOf(unsent)).toBe(eatInZone);
     expect(diningOf(seated.tabId)).toBe("takeaway");
     expect(diningOf(unsent)).toBe("takeaway");
+  });
+});
+
+describe("an eaten-in bill whose table moves into a takeaway-only department", () => {
+  async function eatenInParty() {
+    const seated = await seatedWith(venue);
+    venue.db.run(sql`update working_orders set dining = 'eat_in' where id = ${seated.tabId}`);
+    expect(await inTx(venue, (tx) => orderDiningLocked(tx, seated.tabId))).toBeNull();
+    return seated;
+  }
+  const shopTable = () =>
+    inTx(venue, (tx) =>
+      createTable(tx, { label: `Shop ${randomUUID().slice(0, 8)}`, zoneId: takeawayZone }),
+    );
+
+  it("stays eaten in when its guests move to a free table there", async () => {
+    const seated = await eatenInParty();
+    const table = await shopTable();
+
+    await inTx(venue, (tx) =>
+      moveGuests(tx, venue.cfg, seated.partyId, table.id, {
+        expectedPartyRevision: revisionOf(seated.partyId),
+        operatorId: venue.operatorId,
+      }),
+    );
+
+    expect(zoneOf(seated.tabId)).toBe(takeawayZone);
+    expect(diningOf(seated.tabId)).toBe("eat_in");
+  });
+
+  it("stays eaten in when its guests move onto a table another party holds there", async () => {
+    const seated = await eatenInParty();
+    const table = await shopTable();
+    const held = await send(venue.app, venue.cookie, "POST", `/api/tables/${table.id}/seat`, {});
+    expect(held.status).toBe(200);
+    const holder = held.json.partyId as string;
+
+    await inTx(venue, (tx) =>
+      moveGuests(tx, venue.cfg, seated.partyId, table.id, {
+        expectedPartyRevision: revisionOf(seated.partyId),
+        otherPartyId: holder,
+        expectedOtherPartyRevision: revisionOf(holder),
+        operatorId: venue.operatorId,
+      }),
+    );
+
+    expect(zoneOf(seated.tabId)).toBe(takeawayZone);
+    expect(diningOf(seated.tabId)).toBe("eat_in");
+  });
+
+  it("is refused joining a table there, and stays eaten in", async () => {
+    const seated = await eatenInParty();
+    const table = await shopTable();
+
+    const error = await captureError(() =>
+      inTx(venue, (tx) =>
+        joinTables(tx, venue.cfg, seated.partyId, table.id, {
+          expectedPartyRevision: revisionOf(seated.partyId),
+          operatorId: venue.operatorId,
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({ code: "service_zone.join_mismatch" });
+    expect(zoneOf(seated.tabId)).toBe(venue.zoneId);
+    expect(diningOf(seated.tabId)).toBe("eat_in");
   });
 });

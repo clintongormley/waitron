@@ -625,11 +625,6 @@ async function adoptZone(
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, zoneId, new Date());
   if (previous === null) {
     await VENUE_SERVICE.recordOrderContext(tx, billId, zoneId);
-    await VENUE_SERVICE.applyDepartmentDining(
-      tx,
-      billId,
-      await VENUE_SERVICE.resolveZoneContext(tx, zoneId),
-    );
   } else {
     await VENUE_SERVICE.retargetOrderContext(tx, billId, zoneId);
   }

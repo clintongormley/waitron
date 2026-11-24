@@ -951,13 +951,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  /** An existing order's way once its department becomes `to.departmentId`; called when an order's
-   *  department changes or is first set. */
-  applyDepartmentDining(
-    tx: Transaction,
-    workingOrderId: string,
-    to: { departmentId: string; serviceMode: ServiceMode },
-  ): Promise<void>;
   saleReceiptHeader(
     tx: Transaction,
     zoneId: string | null,

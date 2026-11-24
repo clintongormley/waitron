@@ -11,14 +11,32 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { saveSetMenuDishCourse, updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  createDepartment,
+  createServiceZone,
+  setDepartmentSalePolicyField,
+} from "@waitron/venue-service";
 import { insertPartyBill } from "./parties.js";
 import { cancelItem } from "./line-cancel.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
+import { setSetMenuCount } from "./set-menu-count.js";
 import { advanceTicketItem, moveOrderLines, storedOrderTotal } from "./working-order.js";
 import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
 import { cancelReasonId, observedCancelItem } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { commandFor, counterOrder, inTx, seatWithNoAllergies } from "./testing/party-venue.js";
+import {
+  billRow,
+  commandFor,
+  counterOrder,
+  inTx,
+  OPERATOR,
+  pay,
+  revisionOf,
+  seatWithNoAllergies,
+  zoneOf,
+} from "./testing/party-venue.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   saveSetMenuDraft,
@@ -304,4 +322,37 @@ it("keeps a cancelled dish fixed at its charged price after moving its menu", as
   expect(state.dishes).toMatchObject([
     { lineId: source.dishId, setMenuLineId: source.menuLineId, movable: false, priceCents: 500 },
   ]);
+});
+
+it("keeps an unsent eaten-in bill eaten in when its guests move to a table of a takeaway-only department, so a set menu ordered there is paid", async () => {
+  const { venue, copy } = fixture;
+  const { partyId, tabId: billId } = await seatWithNoAllergies(
+    venue,
+    await venue.table(crypto.randomUUID()),
+  );
+  expect((await billRow(venue, billId)).dining).toBe("eat_in");
+  const shopZone = await inTx(venue, async (tx) => {
+    const shop = await createDepartment(tx, {
+      name: `Takeaway shop ${crypto.randomUUID()}`,
+      orderStart: "table",
+    });
+    await setDepartmentSalePolicyField(tx, shop.id, "dining", "takeaway");
+    const zone = await createServiceZone(tx, {
+      name: `Takeaway shop ${crypto.randomUUID()}`,
+      departmentId: shop.id,
+    });
+    return (await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" })).zoneId;
+  });
+  const table = await venue.table(crypto.randomUUID(), shopZone);
+  const expectedPartyRevision = await revisionOf(venue, partyId);
+
+  await inTx(venue, (tx) =>
+    moveGuests(tx, venue.cfg, partyId, table, { expectedPartyRevision, operatorId: OPERATOR }),
+  );
+  expect(await zoneOf(venue, billId)).toBe(shopZone);
+  expect((await billRow(venue, billId)).dining).toBe("eat_in");
+  await inTx(venue, (tx) => setSetMenuCount(tx, venue.cfg, billId, copy.menuId, 1, OPERATOR));
+
+  await pay(venue, billId, "20.00");
+  expect((await billRow(venue, billId)).status).toBe("settled");
 });
