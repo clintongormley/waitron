@@ -16,7 +16,7 @@ import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { SECTION_NAME } from "./sections.js";
 import { duplicateMenu } from "./menu-copy.js";
-import { createMenu, createProduct, updateMenuItem } from "./operations.js";
+import { createMenu, createProduct, deactivateMenu, updateMenuItem } from "./operations.js";
 import { addShortcut, readMenuHome, setHomeDisplay } from "./menu-home.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
@@ -476,10 +476,9 @@ describe("duplicateMenu", () => {
       expect(await rowsOf(f.desserts)).toEqual(other);
     },
   );
-  it("compares an inactive menu's composed name without removing accents", async () => {
+  it("reserves the composed name of an active menu until archive", async () => {
     const f = await fixture();
     const held = await app((tx) => createMenu(tx, { name: "Caf\u00e9" }));
-    await app((tx) => tx.update(menus).set({ active: false }).where(eq(menus.id, held.id)));
     const before = await fx.db.select().from(menus);
     await expect(app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).rejects.toMatchObject({
       code: "menu.name_taken",
@@ -488,5 +487,9 @@ describe("duplicateMenu", () => {
     expect(await fx.db.select().from(menus)).toEqual(before);
     const distinct = await app((tx) => duplicateMenu(tx, f.lunch, "Cafe"));
     expect(distinct.name).toBe("Cafe");
+    await app((tx) => deactivateMenu(tx, held.id));
+    const copied = await app((tx) => duplicateMenu(tx, held.id, "  CAFE\u0301  "));
+    expect(copied.id).not.toBe(held.id);
+    expect(copied).toMatchObject({ active: true, name: "CAFE\u0301" });
   });
 });
