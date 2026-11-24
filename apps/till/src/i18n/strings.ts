@@ -2031,6 +2031,8 @@ export const en = {
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
     "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, it can be cleared in the dashboard, under Check card payments.",
+  "bill_pay.card_pending_items":
+    "The card payment is still in progress, so {amount} is held, with the items it pays for, on a bill of their own until it finishes. If it does not finish, it can be cleared in the dashboard, under Check card payments.",
   "bill_pay.uncertain_title": "We don't know yet whether it was charged",
   "bill_pay.uncertain":
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
@@ -4361,6 +4363,8 @@ export const es: Record<StringKey, string> = {
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
     "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
+  "bill_pay.card_pending_items":
+    "El pago con tarjeta sigue en curso, así que se reservan {amount}, con los platos que paga, en una cuenta aparte hasta que termine. Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
   "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
   "bill_pay.uncertain":
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",

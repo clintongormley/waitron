@@ -1286,6 +1286,19 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(actions(el).error).toBe(t("bill_pay.card_declined"));
   });
 
+  it("keeps a declined item chosen when it comes back to the bill under a new line number", async () => {
+    const el = await mount();
+    await pick(el, "line", "3");
+
+    el.lines = [mainDish, beers, { ...tiramisu, lineNo: 4 }];
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    const box = root(el).querySelector<HTMLInputElement>('input[name="line"][value="4"]')!;
+    expect(box.checked).toBe(true);
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+  });
+
   it("says a reader that could not reach the card network took nothing", async () => {
     const el = await mount({ refusal: { code: "card_network" } });
     expect(actions(el).error).toBe(t("bill_pay.card_unreachable"));
@@ -1295,6 +1308,48 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     const el = await mount({ taken: { change: null, pending: "40.00" } });
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
       t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+    );
+  });
+
+  /** Continue and Take payment, answered with a card still in progress, as the app answers it. */
+  async function pendingAfter(el: TillBillPayDialog, pending: string): Promise<PayRequest> {
+    await pick(el, "method", "card");
+    const asked = await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: pending,
+      tip: "0.00",
+      change: null,
+      charged: pending,
+    });
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ beingPaidOn: { billId: "bill-3", billNumber: 3 } });
+    el.taken = { change: null, pending };
+    await el.updateComplete;
+    return asked;
+  }
+
+  it.each(["en", "es"] as const)(
+    "in %s, says a card still in progress for chosen items holds its amount on a bill of their own",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      await pick(el, "line", "3");
+      expect((await pendingAfter(el, "6.00")).choice.kind).toBe("items");
+      expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+        fill(t("bill_pay.card_pending_items"), { amount: money("6.00") }).replace(/\s+/g, " "),
+      );
+      expect(t("bill_pay.card_pending_items")).not.toBe(t("bill_pay.card_pending"));
+    },
+  );
+
+  it("says a card in progress for every item is held on this bill, as the whole bill it pays", async () => {
+    const el = await mount({ lines: [tiramisu] });
+    await pick(el, "line", "3");
+    expect((await pendingAfter(el, "6.00")).choice).toEqual({ kind: "whole" });
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("6.00")),
     );
   });
 });
