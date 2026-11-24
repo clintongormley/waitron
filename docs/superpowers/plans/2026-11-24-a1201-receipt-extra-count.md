@@ -1,35 +1,29 @@
 # A1201 receipt extra count
 
-On 58 mm and 80 mm printed simplified receipts, a grouped dish's counted extra starts with its
-own total count. For two portions of Pollo asado con patatas, the indented extra reads
-`2 Pimientos de Padrón` and still shows `4,00`. The owner picked “Yes, show its total
-(Recommended)” on 24 November 2026 at 22:06, in the watcher's small-questions answers, item 10.
-The queue says “Paper only.” The watcher will settle whether that includes the till's preview.
+On 58 mm and 80 mm simplified receipts and the till preview, show the total count of a grouped
+dish's counted extra. For two Pollo asado con patatas, the indented extra reads
+`2  Pimientos de Padrón` beside `4,00`. The owner picked “Yes, show its total (Recommended)” on
+24 November 2026 at 22:06, in the watcher's small-questions answers, item 10. The watcher cleared
+the shared preview at 23:45 and named portions and dish-row spacing at 23:47.
 
-1. In `apps/server/src/receipt-ticket.test.ts`, format two identical one-portion dish and extra
-   pairs priced at `9,50` and `2,00` each. Decode both widths and assert the indented caption
-   `2 Pimientos de Padrón`, the extra amount `4,00` and the receipt total `23,00`. Update the
-   existing three-dish print case to use the stored Each shape (`unitName: { es: "ud" }` and
-   `soldInEach: true`). Assert the exact extra captions `6 Extra queso` and `3 Sin cebolla` at
-   their existing amounts. Run the new expectations before the fix and watch the captions fail.
-2. In `packages/orders-sales/src/receipt-facts.ts`, add the localised combined count to
-   `WithVatOption` for counted extras on simplified receipts. Require a positive whole dish count
-   above one and reuse the existing check that the dish's printed quantity carries no unit name.
-   Take the extra count from the stored or merged quantity. Extend the existing exact assertions in
-   `receipt-facts.test.ts` for `Wafer` and `Cherry`, leaving the measured `Berries` row as the control.
-3. In `apps/server/src/receipt-document.ts`, print that count before the indented name in place of
-   the `xN` suffix, if present. For the recommended paper scope, add an explicit `groupedExtraCounts`
-   render option set only by `drawReceipt` in `receipt-ticket.ts` and assert the existing per-dish
-   caption through `till-receipt-preview.test.ts`. If the watcher includes the till preview, use the
-   shared document layout directly and update the grouped Burger case in `receipt-document.test.ts`.
-   The existing measured-dish tests keep their exact captions. Single dishes, measured extras,
-   negative corrective quantities, full invoices, filed amounts, VAT and QR data use their existing paths.
-4. Run the changed test files, the receipt document and A4 `invoice-layout.test.ts` suites, and
-   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
-   Keep the existing full-invoice 58 mm and 80 mm golden files. Use a temporary copy beside
-   `apps/server/scripts/receipt-look.ts` to inspect both printed widths, including a single dish with
-   `x2` and a long extra at 58 mm. Remove the copy and keep the samples outside Git. Obtain the owner's
-   OK on the paper before landing. Close A1201 in `docs/backlog.md` and `docs/backlog/{printers,till}.md`
-   and redirect the old A960/A961 plan's A1201 link here.
+1. In `packages/orders-sales/src/receipt-facts.ts`, add the localised count to `WithVatOption`
+   for a counted extra on a simplified receipt when its dish has a whole quantity of at least
+   two. Keep the existing quantity text for the A4 renderer. `receipt-facts.test.ts` checks the
+   rule for Each, named portions, a single dish, a measured extra and a negative corrective.
+2. In `apps/server/src/receipt-document.ts`, put the count before the indented name, with two
+   spaces as on a dish row. Continue a wrapped name under its first letter. The till preview
+   uses the same layout. The grouped Burger assertion in `receipt-document.test.ts` checks the
+   caption. Full invoices keep their current layout.
+3. In `receipt-ticket.test.ts`, decode both widths for two chicken dishes and their extras.
+   Check the count and amount on the short extra, the long extra's continuation and the total.
+   Update the existing Spanish and Catalan expectations for the counted extra under a dish
+   sold in named slices, keeping the language assertions. Watch these expectations fail before
+   the fix.
+4. Run the three changed test files, the till preview and A4 layout suites, and the unedited
+   `write-path.e2e.test.ts` and `inmutabilidad.test.ts` in fiscal-verifactu. Keep the full-invoice
+   58 mm and 80 mm golden files. Render both widths with a temporary copy of `receipt-look.ts`,
+   including a single dish with `x2` and a wrapped extra. Keep the samples outside Git and get
+   the owner's OK before landing. Close A1201 in `docs/backlog.md` and
+   `docs/backlog/{printers,till}.md`. Redirect the old A960/A961 plan's link here.
 
-Expected size is about 20 production lines and 60 test lines, plus the backlog and link edits.
+Expected size is about 20 production lines and 80 test lines, plus the backlog and link edits.
