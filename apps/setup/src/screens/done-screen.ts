@@ -654,15 +654,7 @@ export class SetupDoneScreen extends LitElement {
       "",
       secret,
       "",
-      t(
-        this.#preparation()
-          ? "done.break_glass.file_purpose"
-          : this.mirrorJoin
-            ? "done.task.key_file_purpose"
-            : "done.break_glass.promote",
-      ),
-      ...(this.mirrorJoin ? [] : [t("done.break_glass.backups")]),
-      "",
+      ...(this.mirrorJoin ? [] : [t("done.break_glass.backups"), ""]),
       t("done.break_glass.file_keep"),
     ];
     const anchor = document.createElement("a");
@@ -703,7 +695,7 @@ export class SetupDoneScreen extends LitElement {
                   ? "done.break_glass.restore"
                   : "done.break_glass.pack_keep",
               )
-            : html`${t("done.break_glass.warning")} ${t("done.break_glass.promote")}`
+            : t("done.break_glass.warning")
         }
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}

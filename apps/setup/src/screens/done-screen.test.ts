@@ -1243,11 +1243,13 @@ describe("setup-done-screen", () => {
     expect(getComputedStyle(secret).fontFamily).toBe("serif");
   });
 
-  it("tells the operator what the break-glass secret is for on a trading server", async () => {
+  it("tells the operator how to keep the break-glass secret on a trading server", async () => {
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning).toContain("You need it to promote this box if the primary is unreachable.");
+    expect(warning.trim()).toBe(
+      "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
+    );
   });
 
   it("shows the finished setup in Spanish", async () => {
@@ -1324,14 +1326,13 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=status]")).toBeNull();
   });
 
-  it("tells a trading server's operator in Spanish what the break-glass code is for", async () => {
+  it("tells a trading server's operator in Spanish how to keep the break-glass code", async () => {
     setLocale("es-ES");
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
-    expect(warning).toContain(
-      "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+    expect(warning.trim()).toBe(
+      "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
     );
-    expect(warning).not.toContain("sustituir al principal");
   });
 
   it("redraws in Spanish on a live language switch", async () => {
@@ -1372,7 +1373,7 @@ describe("saving the server key as a file", () => {
     return { blobs, urls, names, hrefs, revoke };
   }
 
-  it("saves the key, its name and what it is for as one text file, and keeps the key on screen", async () => {
+  it("saves the key and its name as one text file, and keeps the key on screen", async () => {
     const saves = captureSaves();
     const el = await mountDone(() => new Promise(() => {}), {
       breakGlassSecret: "key-on-paper",
@@ -1389,7 +1390,6 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "You need it to promote this box if the primary is unreachable.",
       "The backup encryption key opens the copy.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
@@ -1418,7 +1418,6 @@ describe("saving the server key as a file", () => {
       "",
       "key-on-paper",
       "",
-      "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
       "La clave de cifrado de copias abre la copia.",
       "",
       "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
@@ -1428,29 +1427,23 @@ describe("saving the server key as a file", () => {
   });
 
   it.each([
-    [
-      "a Preparation setup",
-      { onboardingIntent: "prepare" },
-      "You need it to restore this venue from its bucket.",
-    ],
-    [
-      "a Live setup",
-      { onboardingIntent: "live" },
-      "You need it to promote this box if the primary is unreachable.",
-    ],
+    ["a Preparation setup", { onboardingIntent: "prepare" }],
+    ["a Live setup", { onboardingIntent: "live" }],
   ] as const)(
-    "says in the file of %s what the screen says the key is for",
-    async (_, extra, use) => {
+    "claims in neither the screen nor the file of %s that the key restores or promotes",
+    async (_, extra) => {
       const saves = captureSaves();
       const el = await mountDone(() => new Promise(() => {}), {
         ...extra,
         breakGlassSecret: "key-on-paper",
       });
-      expect(q(el, "[data-test=break-glass-warning]")!.textContent).toContain(use);
+      const claim = /need it|promot|restor/i;
+      expect(q(el, "[data-test=break-glass-warning]")!.textContent).not.toMatch(claim);
       await userEvent.click(q(el, "[data-test=break-glass-save]")!);
-      const lines = (await saves.blobs[0]!.text()).split("\n");
-      expect(lines[4]).toBe(use);
-      expect(lines[5]).toBe("The backup encryption key opens the copy.");
+      const text = await saves.blobs[0]!.text();
+      expect(text).not.toMatch(claim);
+      const lines = text.split("\n");
+      expect(lines[4]).toBe("The backup encryption key opens the copy.");
     },
   );
 
@@ -2328,8 +2321,6 @@ describe("the joining page", () => {
       "Waitron box key",
       "",
       "key-on-paper",
-      "",
-      "You will need it if this box ever has to take over from the main box.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",

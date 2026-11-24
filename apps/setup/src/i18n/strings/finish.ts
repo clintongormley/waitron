@@ -90,16 +90,14 @@ export const finishEn = {
   "done.break_glass.backups": "The backup encryption key opens the copy.",
   "done.break_glass.warning":
     "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
-  "done.break_glass.promote": "You need it to promote this box if the primary is unreachable.",
   "done.break_glass.restore":
-    "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+    "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once.",
   "done.break_glass.save": "Save as a file",
   "done.break_glass.download_pack": "Download recovery pack (PDF)",
   "done.break_glass.pack_keep":
     "The recovery pack contains the box key. Keep it away from this box.",
   "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
   "done.break_glass.file_title": "Waitron box key",
-  "done.break_glass.file_purpose": "You need it to restore this venue from its bucket.",
   "done.break_glass.file_keep":
     "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
@@ -124,8 +122,6 @@ export const finishEn = {
   "done.task.key": "Download the box key",
   "done.task.key_why": "Save it as a file or write it down, and keep it off this computer.",
   "done.task.key_wrote": "I wrote it down",
-  "done.task.key_file_purpose":
-    "You will need it if this box ever has to take over from the main box.",
   "done.task.key_again": "Show the key again",
   "done.task.label": "Print this box's label",
   "done.task.label_why":
@@ -232,17 +228,14 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.backups": "La clave de cifrado de copias abre la copia.",
   "done.break_glass.warning":
     "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
-  "done.break_glass.promote":
-    "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
   "done.break_glass.restore":
-    "Guarda el nombre y la clave en un archivo o anótalos en papel, y guárdalos con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+    "Guarda el nombre y la clave en un archivo o anótalos en papel, y guárdalos con tu paquete de recuperación. La clave se muestra una sola vez.",
   "done.break_glass.save": "Guardar en un archivo",
   "done.break_glass.download_pack": "Descargar paquete de recuperación (PDF)",
   "done.break_glass.pack_keep":
     "El paquete de recuperación contiene la clave del servidor. Guárdalo fuera de este servidor.",
   "done.break_glass.save_failed": "No se pudo guardar el archivo. Anota la clave.",
   "done.break_glass.file_title": "Clave del servidor de Waitron",
-  "done.break_glass.file_purpose": "La necesitas para restaurar este local desde su bucket.",
   "done.break_glass.file_keep":
     "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
   "done.break_glass.replacement":
@@ -268,8 +261,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.key": "Descargar la clave del servidor",
   "done.task.key_why": "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
   "done.task.key_wrote": "La he anotado",
-  "done.task.key_file_purpose":
-    "La necesitarás si algún día este servidor tiene que sustituir al servidor principal.",
   "done.task.key_again": "Mostrar la clave de nuevo",
   "done.task.label": "Imprimir la etiqueta de este servidor",
   "done.task.label_why":
