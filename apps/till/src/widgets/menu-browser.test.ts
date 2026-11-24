@@ -319,11 +319,15 @@ describe("set-menu folders", () => {
     expect(root(el).querySelector("till-set-menu-folder")).toHaveProperty("copy", daily);
   });
 
-  it("keeps a bill's recorded folder after it disappears from the served menu", async () => {
+  it("keeps a bill's recorded folder while the picker waits for a menu choice", async () => {
     const { el } = await mount({
       setMenuCopies: [{ copy: daily, versionId: "lunch" }],
       setMenuBill,
     });
+    el.hasMenuPicker = true;
+    el.menu = undefined;
+    await el.updateComplete;
+    expect(root(el).querySelector('slot[name="menu-picker"]')).not.toBeNull();
     await tap(el, entry(el, "structure", "Set menus"));
     await tap(el, entry(el, "section", daily.name));
     const folder = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
@@ -4084,8 +4088,9 @@ describe("typing a weighed dish's weight with a keyboard", () => {
     expect(selected).toEqual([ham]);
   });
 
-  it("removes the weight pad when only the menu picker remains", async () => {
+  it("removes an old weight pad when an unrecorded set menu is still on sale", async () => {
     const { el, store } = await weighHam();
+    el.setMenuCopies = [{ copy: daily, versionId: "lunch" }];
     el.hasMenuPicker = true;
     el.menu = undefined;
     await el.updateComplete;
@@ -4097,7 +4102,11 @@ describe("typing a weighed dish's weight with a keyboard", () => {
 
   it("clears an old search when the browser waits for a new menu choice", async () => {
     const menu = lunch();
-    const { el } = await mount({ menu, hasMenuPicker: true });
+    const { el } = await mount({
+      menu,
+      hasMenuPicker: true,
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+    });
     await search(el, "zzz");
     expect(root(el).querySelector("[data-region=results]")).not.toBeNull();
     el.menu = undefined;
@@ -4106,6 +4115,17 @@ describe("typing a weighed dish's weight with a keyboard", () => {
     await el.updateComplete;
     expect(root(el).querySelector("[data-region=results]")).toBeNull();
     expect(root(el).querySelector("[data-region=structure] .tile")).not.toBeNull();
+  });
+
+  it("removes the weight pad when only the menu picker remains", async () => {
+    const { el, store } = await weighHam();
+    el.hasMenuPicker = true;
+    el.menu = undefined;
+    await el.updateComplete;
+    await blurAll();
+    await userEvent.keyboard("0.25{Enter}");
+    expect(store.lines).toEqual([]);
+    expect(root(el).querySelector("till-tender-pay")).toBeNull();
   });
 
   it("while the order is sending and the menu is inert, typing does not change the weight", async () => {

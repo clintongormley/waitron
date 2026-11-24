@@ -503,8 +503,8 @@ export class TillMenuBrowser extends LitElement {
    * pay widget does not take the dish. */
   @property({ type: Boolean }) weighs = false;
 
-  #pickerOnly(): boolean {
-    return this.hasMenuPicker && this.menu === undefined && this.setMenuCopies.length === 0;
+  #waitingForMenu(): boolean {
+    return this.hasMenuPicker && this.menu === undefined;
   }
 
   /** The open section's path, as {@link sectionTrail} reads it. Empty is home. */
@@ -609,15 +609,19 @@ export class TillMenuBrowser extends LitElement {
       if (id !== undefined && !this.setMenuCopies.some(({ copy }) => copy.menuId === id))
         this.setMenuFolder = undefined;
     }
-    if (this.#pickerOnly()) {
-      if (changed.has("menu") || changed.has("setMenuCopies")) {
-        this.#pendingSection = undefined;
-        this.query = "";
-        this.#open([]);
-        this.infoProduct = undefined;
+    if (this.#waitingForMenu()) {
+      this.#pendingSection = undefined;
+      this.query = "";
+      this.path = [];
+      this.notFound = false;
+      this.infoProduct = undefined;
+      if (this.#pickerSetMenu === undefined || this.setMenuCopies.length === 0) {
         this.pickerProduct = undefined;
         this.#pickerSetMenu = undefined;
         this.#replaceAfterPick = undefined;
+      }
+      if (this.setMenuCopies.length === 0) {
+        this.setMenuFolder = undefined;
         this.placeRequest = undefined;
         this.setMenuError = "";
       }
@@ -1359,7 +1363,8 @@ export class TillMenuBrowser extends LitElement {
         ${this.#grid([this.#setMenuTile(undefined, true)], display)}
       </section>`;
     }
-    if (view === nothing && this.placeRequest === undefined && !this.hasMenuPicker) return nothing;
+    const showContent = view !== nothing || this.placeRequest !== undefined;
+    if (!showContent && !this.hasMenuPicker) return nothing;
     return html`
       ${
         menu === undefined && !this.hasMenuPicker
@@ -1387,9 +1392,9 @@ export class TillMenuBrowser extends LitElement {
             </div>`
       }
       ${
-        this.#pickerOnly()
-          ? nothing
-          : html`<div data-menu-content ?inert=${this.locked}>${this.#menuContent(view)}</div>`
+        showContent
+          ? html`<div data-menu-content ?inert=${this.locked}>${this.#menuContent(view)}</div>`
+          : nothing
       }
     `;
   }
@@ -1449,7 +1454,7 @@ export class TillMenuBrowser extends LitElement {
           : nothing
       }
       ${
-        this.weighs
+        this.weighs && !this.#waitingForMenu()
           ? html`<till-tender-pay
               class="weigh"
               weighOnly
