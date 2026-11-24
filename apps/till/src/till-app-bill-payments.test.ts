@@ -4869,41 +4869,6 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([1, 2, 3, 4]);
   });
 
-  // Task 2b moves the Counter's Items to Pay for items; until then it stays on today's route.
-  it("pays for chosen items at the Counter through today's bill payment", async () => {
-    const takeBillPayment = vi
-      .fn()
-      .mockResolvedValue(
-        takenOf(
-          { kind: "items", applied: "40.00", tendered: "50.00", change: "10.00" },
-          { workingOrderId: "wo-1", received: "90.00", outstanding: "30.00" },
-        ),
-      );
-    const el = await retrieved({
-      previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
-      takeBillPayment,
-    });
-    emit(counter(el), "counter-bill-pay", {});
-    await flush(el);
-    await press(el, 'input[name="way"][value="items"]');
-    const first = dialog(el)!.lines[0]!;
-    await press(el, `input[name="line"][value="${first.lineNo}"]`);
-    await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
-    expect(api.previewBillPayment).toHaveBeenCalledWith(
-      "wo-1",
-      expect.objectContaining({ kind: "items", lines: [{ lineNo: first.lineNo }] }),
-    );
-    expect(takeBillPayment).toHaveBeenCalledWith(
-      "wo-1",
-      expect.objectContaining({ kind: "items", applied: "40.00" }),
-      expect.anything(),
-    );
-    expect(api.previewItemPayment).not.toHaveBeenCalled();
-    expect(api.payForItems).not.toHaveBeenCalled();
-  });
-
   it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {
     const takeBillPayment = vi.fn().mockResolvedValue(
       takenOf(

@@ -7,13 +7,18 @@ import {
   dialog,
   flush,
   emit,
+  equipmentWith,
+  heldTable,
   inDialog,
   invoiceOf,
+  lock,
   money,
   openDialog,
   openTable,
+  paymentOf,
   press,
   resetBillPayDrafts,
+  SECOND_READER,
   stubApi,
   takenOf,
   tableOrder,
@@ -26,8 +31,13 @@ import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.te
 import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
 import { fill, setLocale, t } from "./i18n/t.js";
-import type { TillApi } from "./api/client.js";
-import type { ItemPaymentPreview, ItemPaymentResult } from "./api/item-payment-types.js";
+import type { BillBalance, BillPaymentResult, BillPaymentView, TillApi } from "./api/client.js";
+import type {
+  ItemPaymentPreview,
+  ItemPaymentRequest,
+  ItemPaymentResult,
+} from "./api/item-payment-types.js";
+import type { CapabilityFlag } from "./layout.js";
 
 let api: TillApi;
 
@@ -352,5 +362,419 @@ describe("till-app: Pay for items on a bill of their own", () => {
       fill(t("bill_pay.scope_items"), { items: "Tarta, Vino", amount: money("31.00") }),
     );
     expect(inDialog(el, "[data-pay-own-receipt]")).toBeNull();
+  });
+});
+
+describe("till-app: Pay for items by card reader, after no answer, and at the Counter", () => {
+  const readers = [
+    { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra" },
+    { id: "5b1c3a52-0000-4000-8000-000000000002", name: "Terraza" },
+  ];
+  const withReader = (provider: "stripe_terminal" | "sumup_cloud" = "stripe_terminal") => ({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: provider,
+      capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+      activeReaders: readers.map((reader) => ({ ...reader, provider })),
+      defaultReaderId: readers[0]!.id,
+    }),
+  });
+  /** The reader's answer for the new bill `wo-9`, with `wo-9`'s balance. */
+  const onWo9 = (
+    outcome: BillPaymentResult["outcome"],
+    state: BillPaymentView["state"],
+    balance: Partial<BillBalance> = {},
+  ): ItemPaymentResult => ({
+    billId: "wo-9",
+    payment: {
+      ...takenOf(
+        { method: "card", entry: "reader", applied: "30.00", tendered: null, change: null, state },
+        { workingOrderId: "wo-9", total: "30.00", outstanding: "30.00", ...balance },
+      ),
+      outcome,
+    },
+  });
+  const itemsSent = () =>
+    vi.mocked(api.payForItems).mock.calls.map(([, request]) => request as ItemPaymentRequest);
+
+  async function confirmOnReader(el: TillApp): Promise<void> {
+    await chooseItems(el, [4, 5]);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("a declined reader card leaves the table's bill as it was", async () => {
+    const { el } = await mountApp({
+      ...withReader(),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn().mockResolvedValue(onWo9("declined", "failed")),
+    });
+    await chooseItems(el, [4, 5]);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+
+    expect(api.payForItems).toHaveBeenCalledOnce();
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(vi.mocked(api.getTabLines).mock.calls.slice(lineReads)).toContainEqual(["wo-4"]);
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+  });
+
+  it("Cancel payment stops the reader under the table's bill", async () => {
+    let settle!: (result: ItemPaymentResult) => void;
+    const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });
+    const { el } = await mountApp({
+      ...withReader("sumup_cloud"),
+      cancelBillReaderPayment,
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(
+        () =>
+          new Promise<ItemPaymentResult>((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    });
+    await confirmOnReader(el);
+    try {
+      await press(el, "[data-pay-cancel-reader]");
+      expect(cancelBillReaderPayment).toHaveBeenCalledWith(
+        "wo-4",
+        itemsSent()[0]!.submissionId,
+        expect.anything(),
+      );
+    } finally {
+      settle(onWo9("declined", "failed"));
+      await flush(el);
+    }
+    expect(formError(el)).toBe(t("bill_pay.no_payment_taken"));
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+  });
+
+  it("no answer resends the same body under the same submission id", async () => {
+    let party = 3;
+    const payForItems = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => [heldTable({ revision: party })]),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+      payForItems,
+    });
+    await chooseItems(el, [4, 5]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    party = 4;
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => formError(el) ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    expect(
+      (el as unknown as { orderParty: { revision: number } | null }).orderParty?.revision,
+    ).toBe(4);
+    const first = payForItems.mock.calls.length;
+    payForItems.mockResolvedValueOnce(paidOnWo9());
+    await press(el, "[data-pay-confirm]");
+
+    await expect.poll(() => payForItems.mock.calls.length).toBe(first + 1);
+    const bodies = itemsSent();
+    expect(bodies[0]).toMatchObject({ expectedPartyRevision: 3, partyId: "v1" });
+    for (const body of bodies) expect(body).toEqual(bodies[0]);
+  });
+
+  it("a stale party revision asks again with a fresh id", async () => {
+    let party = 3;
+    const payForItems = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "party.out_of_date", status: 409 })
+      .mockResolvedValueOnce(paidOnWo9());
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => [heldTable({ revision: party })]),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+      payForItems,
+    });
+    await chooseItems(el, [4, 5]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    party = 4;
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(payForItems).toHaveBeenCalledTimes(2);
+    const [first, second] = itemsSent();
+    expect(first!.expectedPartyRevision).toBe(3);
+    expect(second!.expectedPartyRevision).toBe(4);
+    expect(second!.submissionId).not.toBe(first!.submissionId);
+  });
+
+  it("a card still pending on a till shows the payment in progress and reads the table's bill", async () => {
+    const { el } = await mountApp({
+      ...withReader(),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi
+        .fn()
+        .mockResolvedValue(onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" })),
+    });
+    await chooseItems(el, [4, 5]);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    // A failed read keeps what the window showed, so it must not show the new bill's.
+    vi.mocked(api.getBillBalance).mockRejectedValue(new TypeError("Failed to fetch"));
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("30.00")),
+    );
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
+    expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toContainEqual(["wo-4"]);
+    expect(vi.mocked(api.getTabLines).mock.calls.length).toBeGreaterThan(lineReads);
+  });
+
+  it("a card still pending on a handheld is read on its own bill until it is taken", async () => {
+    const pendingOn9 = balanceOf({
+      workingOrderId: "wo-9",
+      total: "30.00",
+      reserved: "30.00",
+      outstanding: "0.00",
+      payments: [paymentOf({ id: "pay-1", method: "card", entry: "reader", state: "pending" })],
+    });
+    const getBillBalance = vi.fn(async (billId: string) =>
+      billId === "wo-9" ? pendingOn9 : balanceOf(),
+    );
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: "phone-portrait",
+        capabilities: ["print-receipt", "integrated-card-payment", "take-cash"],
+        cardProvider: "sumup_cloud",
+        activeReaders: [{ id: "r2", name: "Lector 2", provider: "sumup_cloud" }],
+        defaultReaderId: "r2",
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", name: "Móvil", formFactor: "phone-portrait" }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(SECOND_READER)),
+      getBillBalance,
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi
+        .fn()
+        .mockResolvedValue(onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" })),
+    });
+    const order = await openTable(el);
+    emit(order, "bill-pay", {
+      way: "items",
+      lines: bill120.map((dish) => ({
+        lineNo: dish.lineNo,
+        lineId: dish.id,
+        name: dish.name,
+        quantity: "1",
+        total: dish.unitPriceGross,
+        unitTotal: null,
+      })),
+    });
+    await flush(el);
+    await press(el, 'input[name="line"][value="4"]');
+    await press(el, 'input[name="line"][value="5"]');
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
+    await flush(el);
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+    getBillBalance.mockClear();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flush(el);
+    expect(getBillBalance).toHaveBeenCalledWith("wo-9", expect.anything());
+    expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
+
+    getBillBalance.mockImplementation(async (billId: string) =>
+      billId === "wo-9"
+        ? {
+            ...pendingOn9,
+            status: "settled",
+            reserved: "0.00",
+            received: "30.00",
+            payments: [{ ...pendingOn9.payments[0]!, state: "received" }],
+          }
+        : balanceOf(),
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flush(el);
+    expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+    expect(getBillBalance).toHaveBeenCalledWith("wo-4");
+  });
+
+  describe("at the Counter", () => {
+    const counterEdit = { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null };
+    const counter = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-counter-screen"]>(
+        "till-counter-screen",
+      )!;
+
+    /** Signed in at the counter with the held order `wo-1` retrieved, its edit state as each
+     * read in `edits` gives it (the last one repeating). */
+    async function retrieved(
+      overrides: Record<string, unknown>,
+      edits: (typeof counterEdit | null)[] = [counterEdit],
+    ): Promise<TillApp> {
+      let reads = 0;
+      const { el } = await mountApp({
+        listWorkingOrders: vi.fn().mockResolvedValue([
+          {
+            zoneId: null,
+            items: [],
+            id: "wo-1",
+            orderNumber: 5,
+            label: "Ana",
+            counts: { ordered: 5, unsent: 0, held: 0, waiting: 0, ready: 0 },
+            total: "120.00",
+            outstanding: "120.00",
+            hasPayments: false,
+            partyId: null,
+            billNumber: null,
+            billName: null,
+            openedAt: "2026-09-30T19:00:00.000Z",
+            signals: [],
+          },
+        ]),
+        retrieveWorkingOrder: vi.fn(async () => ({
+          zoneId: null,
+          kitchenNote: {
+            scope: { workingOrderId: "wo-1" },
+            note: null,
+            revision: 0,
+            ownerRevision: 3,
+          },
+          id: "wo-1",
+          orderNumber: 5,
+          label: "Ana",
+          revision: 3,
+          expectedEdit: edits[Math.min(reads++, edits.length - 1)],
+          lines: [
+            {
+              workingOrderLineId: "counter-dish",
+              menuItemId: "offer-meal",
+              quantity: "1.000",
+              product: {
+                id: "meal",
+                menuItemId: "offer-meal",
+                menuId: "cat-default",
+                name: "Meal",
+                pricingUnit: "each",
+                unitPrice: "120.00",
+                vatClass: "general",
+                category: null,
+                allergens: null,
+              },
+            },
+          ],
+        })),
+        getBillBalance: vi.fn().mockResolvedValue(balanceOf({ workingOrderId: "wo-1" })),
+        ...overrides,
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      emit(counter(el), "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      return el;
+    }
+
+    async function chooseFirst(el: TillApp): Promise<string> {
+      emit(counter(el), "counter-bill-pay", {});
+      await flush(el);
+      await press(el, 'input[name="way"][value="items"]');
+      const first = dialog(el)!.lines[0]!;
+      await press(el, `input[name="line"][value="${first.lineNo}"]`);
+      await type(el, "tendered", "50");
+      return first.lineId;
+    }
+
+    it("at the Counter the window stays, says the payment was taken, and reads the order again", async () => {
+      const payForItems = vi.fn().mockResolvedValue(paidOnWo9());
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        payForItems,
+      });
+      const lineId = await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+      const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+
+      expect(api.previewItemPayment).toHaveBeenCalledWith("wo-1", {
+        picks: [{ lineId }],
+        method: "cash",
+        tendered: "50",
+      });
+      expect(payForItems).toHaveBeenCalledWith(
+        "wo-1",
+        {
+          submissionId: expect.any(String),
+          picks: [{ lineId }],
+          expectedEdits: [counterEdit],
+          method: "cash",
+          tendered: "50",
+          applied: "30.00",
+          tip: "0.00",
+        },
+        expect.anything(),
+      );
+      expect(api.previewBillPayment).not.toHaveBeenCalled();
+      expect(api.takeBillPayment).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+      expect(dialog(el)).not.toBeNull();
+      expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+        t("bill_pay.taken_change").replace("{amount}", money("20.00")),
+      );
+      expect(dialog(el)!.balance?.workingOrderId).toBe("wo-1");
+      expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toContainEqual(["wo-1"]);
+      expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(orderReads);
+    });
+
+    it("at the Counter with no edit state the order is read again before items are paid", async () => {
+      const el = await retrieved(
+        { previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()) },
+        [null, counterEdit],
+      );
+      await chooseFirst(el);
+      const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+
+      expect(api.previewItemPayment).not.toHaveBeenCalled();
+      expect(api.previewBillPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+      expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(orderReads);
+
+      await press(el, "[data-pay-continue]");
+      expect(api.previewItemPayment).toHaveBeenCalledOnce();
+      expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    });
   });
 });

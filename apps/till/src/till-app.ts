@@ -1628,6 +1628,8 @@ interface PendingBillPayment extends Submission {
  * with the `taken` that showed it in progress, and whether a tick is out. */
 interface PendingReread {
   dialogId: number;
+  /** The bill read when it is not the dialog's: Pay for items' new bill. */
+  billId?: string;
   pending: Map<string, PayTaken>;
   timer: ReturnType<typeof setInterval>;
   out: boolean;
@@ -12784,15 +12786,10 @@ export class TillApp extends LitElement {
       ${this.#renderBillRefunding()}`;
   }
 
-  /** Items still paid where they are: on a printed bill (PR2-D13), and at the Counter until it
-   * handles the new bill's receipt. */
+  /** Items still paid where they are: on a printed bill (PR2-D13). */
   #itemsStayOnBill(open: BillPaying): boolean {
     const row = this.partyBills.find((bill) => bill.workingOrderId === open.billId);
-    return (
-      open.surface === "counter" ||
-      open.printed === true ||
-      (open.balance?.status ?? row?.status) === "placed"
-    );
+    return open.printed === true || (open.balance?.status ?? row?.status) === "placed";
   }
 
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
@@ -23033,16 +23030,17 @@ export class TillApp extends LitElement {
 
   /** On a handheld, the bill is read again every few seconds while any card payment dialog
    * `dialogId` sent is pending; `paymentId` is the one it now shows as `taken`. */
-  #startPendingReread(dialogId: number, paymentId: string, taken: PayTaken): void {
+  #startPendingReread(dialogId: number, paymentId: string, taken: PayTaken, billId?: string): void {
     if (!this.handheldMode) return;
     const running = this.#pendingReread;
-    if (running?.dialogId === dialogId) {
+    if (running?.dialogId === dialogId && running.billId === billId) {
       running.pending.set(paymentId, taken);
       return;
     }
     this.#stopPendingReread();
     const reread: PendingReread = {
       dialogId,
+      ...(billId === undefined ? {} : { billId }),
       pending: new Map([[paymentId, taken]]),
       out: false,
       timer: setInterval(() => void this.#pendingTick(reread), PENDING_REREAD_MS),
@@ -23071,7 +23069,7 @@ export class TillApp extends LitElement {
     }
     reread.out = true;
     try {
-      await this.#pendingRead(reread, open.billId);
+      await this.#pendingRead(reread, reread.billId ?? open.billId);
     } finally {
       reread.out = false;
     }
@@ -23095,13 +23093,19 @@ export class TillApp extends LitElement {
       sentAt <= (this.#sendEndedAt.get(billId) ?? 0)
     )
       return;
-    await this.#showBillPayingBalance(reread.dialogId, billId, balance, sentAt);
+    if (reread.billId === undefined)
+      await this.#showBillPayingBalance(reread.dialogId, billId, balance, sentAt);
+    let ended = false;
     for (const [id, taken] of [...reread.pending]) {
       const payment = balance.payments.find((shown) => shown.id === id);
       if (payment?.state === "pending") continue;
-      if (payment === undefined || (await this.#onPendingEnded(reread, taken, payment, balance)))
+      if (payment === undefined || (await this.#onPendingEnded(reread, taken, payment, balance))) {
         reread.pending.delete(id);
+        ended = true;
+      }
     }
+    const open = this.#billPayingNow(reread.dialogId);
+    if (ended && reread.billId !== undefined && open !== null) await this.#rereadAfterPaid(open);
   }
 
   /**
@@ -23123,7 +23127,12 @@ export class TillApp extends LitElement {
       return now?.taken === taken && dialog()?.showsTaken !== false ? now : null;
     };
     const before = own();
-    if (before !== null && payment.state === "received" && balance.status === "settled") {
+    if (
+      before !== null &&
+      reread.billId === undefined &&
+      payment.state === "received" &&
+      balance.status === "settled"
+    ) {
       let ticket: TillSaleResult;
       try {
         ticket = await this.api.getFiledTicket(before.billId);
@@ -23318,7 +23327,12 @@ export class TillApp extends LitElement {
           : open.surface === "counter"
             ? this.#counterExpectedEdit(open.billId)
             : this.#draftSync?.expectedEditFor(open.billId);
-      if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
+      if (
+        expectedEdit === undefined ||
+        (expectedEdit === null &&
+          (open.surface === "table" ||
+            (asked.choice.kind === "items" && !this.#itemsStayOnBill(open))))
+      )
         throw { code: "draft.out_of_date" };
       const api = this.api;
       const session = this.#operatorSession;
@@ -23541,11 +23555,13 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The server's answer to a payment. When it issued the bill's invoice, the dialog closes and the
-   * ticket shows. A card the reader did not charge records nothing: the confirmation stays, saying
-   * so, to be tried again as a new payment. Otherwise the dialog says the payment was taken, or for
-   * a card still at the reader that it is in progress, with the bill's new balance, and the bill is
-   * read again. An answer after a logout has closed the dialog changes nothing.
+   * The server's answer to a payment. When it issued an invoice, the dialog closes and the ticket
+   * shows, except for Pay for items at the Counter. A card the reader did not charge records
+   * nothing: the confirmation stays, saying so, to be tried again as a new payment (for Pay for
+   * items, the form). Otherwise the dialog says the payment was taken, or for a card still at the
+   * reader that it is in progress, and the bill is read again. Pay for items answers the new bill's
+   * balance, which is never shown as the paid-from bill's. An answer after a logout has closed the
+   * dialog changes nothing.
    */
   async #onBillPaid(
     open: BillPaying,
@@ -23557,25 +23573,27 @@ export class TillApp extends LitElement {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
     // Pay for items answers the new bill's balance, never the table's.
-    if (this.activeTabId === open.billId && result.paidOn === undefined)
-      this.billBalance = result.balance;
+    const own = result.paidOn === undefined ? result.balance : undefined;
+    const shown = own === undefined ? {} : { balance: own };
+    if (this.activeTabId === open.billId && own !== undefined) this.billBalance = own;
     const held = this.#unansweredPayments.get(open.billId);
     if (result.payment.state === "pending" && held?.pendingRefusal !== undefined) {
       this.billPaying = {
         ...now,
         ...held.shown,
-        balance: result.balance,
+        ...shown,
         refusal: held.pendingRefusal,
         taken: null,
         busy: false,
       };
-      await this.#rereadPayingOrder(open, result.balance);
+      await this.#rereadAfterPaid(open, own);
       return;
     }
     if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
+      // The put-back moved the table's bill's revisions, so its confirmation could only be refused.
       this.billPaying = {
         ...now,
-        balance: result.balance,
+        ...(own === undefined ? { asked: null, preview: null } : shown),
         refusal: cancelled
           ? { code: "payment_failed", text: t("bill_pay.no_payment_taken") }
           : {
@@ -23588,18 +23606,20 @@ export class TillApp extends LitElement {
             },
         busy: false,
       };
+      if (own === undefined) await this.#rereadAfterPaid(open);
       return;
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     const slipPaymentId = readerMakesSlip ? undefined : result.payment.id;
-    if (result.invoice !== undefined) {
+    // At the Counter the new bill's receipt window would start a new sale and drop the order.
+    if (result.invoice !== undefined && (own !== undefined || open.surface === "table")) {
       this.captureWarning = result.balance.captureWarning ?? null;
       await this.#showPaidTicket(
         open,
         result.invoice,
         result.payment.change,
         slipPaymentId,
-        open.surface === "table" ? result.paidOn : undefined,
+        result.paidOn,
       );
       return;
     }
@@ -23618,7 +23638,7 @@ export class TillApp extends LitElement {
           };
     this.billPaying = {
       ...now,
-      balance: result.balance,
+      ...shown,
       asked: null,
       preview: null,
       refusal: null,
@@ -23626,8 +23646,17 @@ export class TillApp extends LitElement {
       busy: false,
     };
     if (result.payment.state === "pending")
-      this.#startPendingReread(open.id, result.payment.id, taken);
-    await this.#rereadPayingOrder(open, result.balance);
+      this.#startPendingReread(open.id, result.payment.id, taken, result.paidOn);
+    await this.#rereadAfterPaid(open, own);
+  }
+
+  /** The order read again after an answer, on `balance` when it is the bill's own; otherwise the
+   * dialog's bill is read first. */
+  async #rereadAfterPaid(open: BillPaying, balance?: BillBalance): Promise<void> {
+    await this.#rereadPayingOrder(
+      open,
+      balance ?? (await this.#rereadBillPaying(open.id, open.billId)),
+    );
   }
 
   async #showPaidTicket(
