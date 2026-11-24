@@ -575,13 +575,13 @@ describe("menu-screen", () => {
     [
       "en-GB",
       "Delete Croquettes",
-      "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
+      "This can't be undone. The till stops selling the product, and it comes off the extras lists that offer it. Its past sales are kept, and a new product can take its name.",
       "Delete",
     ],
     [
       "es",
       "Eliminar Croquettes",
-      "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
+      "No se puede deshacer. La caja deja de vender el producto y este sale de las listas de extras que lo ofrecen. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
       "Eliminar",
     ],
   ])("in %s, asks to delete a product permanently", async (locale, heading, body, action) => {
@@ -709,7 +709,7 @@ describe("menu-screen", () => {
 
   describe("the Archive confirmation names the menus the product comes off", () => {
     const warning =
-      "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.";
+      "This can't be undone. The till stops selling the product, and it comes off the extras lists that offer it. Its past sales are kept, and a new product can take its name.";
     const deferred = <T>() => {
       let resolve!: (value: T) => void;
       let reject!: (reason: unknown) => void;
@@ -758,7 +758,7 @@ describe("menu-screen", () => {
         "es",
       );
       expect(bodyOf(el)).toBe(
-        "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre. Sale de las 3 cartas en las que está.",
+        "No se puede deshacer. La caja deja de vender el producto y este sale de las listas de extras que lo ofrecen. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre. Sale de las 3 cartas en las que está.",
       );
     });
 
@@ -2963,7 +2963,7 @@ describe("menu-screen", () => {
       try {
         expect(dialog.getAttribute("heading")).toBe("Delete Half portion");
         expect(dialog.textContent).toContain(
-          "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
+          "This can't be undone. The till stops offering the variant. Its past sales are kept.",
         );
         expect(
           el
@@ -2975,7 +2975,7 @@ describe("menu-screen", () => {
         await el.updateComplete;
         expect(dialog.getAttribute("heading")).toBe("Eliminar Half portion");
         expect(dialog.textContent).toContain(
-          "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
+          "No se puede deshacer. La caja deja de ofrecer la variante. Sus ventas pasadas se conservan.",
         );
       } finally {
         setLocale(before);
@@ -3010,7 +3010,7 @@ describe("menu-screen", () => {
       expect(api.countProductMenus).toHaveBeenCalledWith(["v1"]);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
       expect(dialog.querySelector("p")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept. It comes off the 2 menus it is on.",
+        "This can't be undone. The till stops offering the variant. Its past sales are kept. It comes off the 2 menus it is on.",
       );
     });
 

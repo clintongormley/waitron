@@ -3378,7 +3378,7 @@ it.each([1, 2])(
     expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");
     expect(el.shadowRoot!.textContent).toContain("past sales");
     expect(el.shadowRoot!.textContent).toContain(
-      "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.",
+      "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.",
     );
     expect(el.shadowRoot!.textContent).not.toContain("inactive");
     expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
@@ -3395,7 +3395,7 @@ it.each([1, 2])(
   },
 );
 const ARCHIVE_PRODUCTS =
-  "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.";
+  "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.";
 const archiveBody = (el: ProductBrowser) =>
   dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
 async function openArchiveProducts(keys: string[], menus: () => Promise<number>) {
@@ -3423,7 +3423,7 @@ it.each([
 it("says the menus one selected product comes off with the product as the subject", async () => {
   const el = await openArchiveProducts(["bread"], () => Promise.resolve(2));
   expect(archiveBody(el)).toBe(
-    "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept. It comes off the 2 menus it is on.",
+    "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept. It comes off the 2 menus it is on.",
   );
 });
 it("says every menu while the products' count loads and when it cannot be read, and Archive still works", async () => {
@@ -3488,7 +3488,7 @@ it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
   const el = await openArchiveProducts(["bread", "cola"], () => Promise.resolve(2));
   expect(archiveBody(el)).toBe(
-    "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan. Salen de las 2 cartas en las que están.",
+    "No se puede deshacer. La caja deja de vender los productos y estos salen de las listas de extras que los ofrecen. Sus ventas pasadas se conservan. Salen de las 2 cartas en las que están.",
   );
 });
 it("counts menus reached by active products in a category and its nested subfolders", async () => {
@@ -3603,7 +3603,7 @@ it("says Delete for products alone and with categories in Spanish", async () => 
   await press(el, "delete");
   expect(dialog(el)!.heading).toBe("¿Eliminar 2 productos?");
   expect(el.shadowRoot!.textContent).toContain(
-    "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan.",
+    "No se puede deshacer. La caja deja de vender los productos y estos salen de las listas de extras que los ofrecen. Sus ventas pasadas se conservan.",
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
     "Eliminar",

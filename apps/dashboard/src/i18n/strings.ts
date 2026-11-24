@@ -578,7 +578,7 @@ export const en = {
   "folders.archive_products_heading": "Delete {count} products?",
   "folders.archive_products_heading_one": "Delete 1 product?",
   "folders.archive_products_body":
-    "This can't be undone. The till stops selling the products, they come off the extras lists that offer them, and they cannot be brought back. Their past sales are kept.",
+    "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.",
   "folders.off_menus": "They come off the {count} menus they are on.",
   "folders.off_menus_one": "They come off the one menu they are on.",
   "folders.off_menus_unknown": "They come off every menu they are on.",
@@ -2986,9 +2986,9 @@ export const en = {
   "product.archive_named": "Delete {name}",
   "product.archive_variant_named": "Delete {name}",
   "product.archive_warning":
-    "This can't be undone. The till stops selling the product, it comes off the extras lists that offer it, and it cannot be brought back. Its past sales are kept, and a new product can take its name.",
+    "This can't be undone. The till stops selling the product, and it comes off the extras lists that offer it. Its past sales are kept, and a new product can take its name.",
   "product.archive_variant_warning":
-    "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
+    "This can't be undone. The till stops offering the variant. Its past sales are kept.",
   "product.archived_badge": "Deleted",
   "product.variant_archive_pending_badge": "Deleted when saved",
   "product.keep_variant": "Keep",
@@ -5405,7 +5405,7 @@ export const es: Record<StringKey, string> = {
   "folders.archive_products_heading": "¿Eliminar {count} productos?",
   "folders.archive_products_heading_one": "¿Eliminar 1 producto?",
   "folders.archive_products_body":
-    "No se puede deshacer. La caja deja de vender los productos, salen de las listas de extras que los ofrecen y no se pueden recuperar. Sus ventas pasadas se conservan.",
+    "No se puede deshacer. La caja deja de vender los productos y estos salen de las listas de extras que los ofrecen. Sus ventas pasadas se conservan.",
   "folders.off_menus": "Salen de las {count} cartas en las que están.",
   "folders.off_menus_one": "Salen de la carta en la que están.",
   "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
@@ -7879,9 +7879,9 @@ export const es: Record<StringKey, string> = {
   "product.archive_named": "Eliminar {name}",
   "product.archive_variant_named": "Eliminar {name}",
   "product.archive_warning":
-    "No se puede deshacer. La caja deja de vender el producto, sale de las listas de extras que lo ofrecen y no se puede recuperar. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
+    "No se puede deshacer. La caja deja de vender el producto y este sale de las listas de extras que lo ofrecen. Sus ventas pasadas se conservan y un producto nuevo puede usar su nombre.",
   "product.archive_variant_warning":
-    "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
+    "No se puede deshacer. La caja deja de ofrecer la variante. Sus ventas pasadas se conservan.",
   "product.archived_badge": "Eliminado",
   "product.variant_archive_pending_badge": "Se elimina al guardar",
   "product.keep_variant": "Conservar",
