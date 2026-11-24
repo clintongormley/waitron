@@ -863,9 +863,9 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 ### A1515. Set menus
 
-_2026-11-24: The Menus list is to have a tab for menus and a tab for set menus, approved by the owner: [spec](../superpowers/specs/2026-11-24-menus-list-tabs-design.md)._
+_2026-11-24: Set menus are to have a page of their own beside Menus, approved by the owner: [spec](../superpowers/specs/2026-11-24-menus-list-tabs-design.md)._
 
-_2026-11-24: Before those tabs, menus, set menus, products and variants are to say Delete, not Archive, and a deleted one is listed nowhere, approved by the owner: [spec](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
+_2026-11-24: Before that page, menus, set menus, products and variants are to say Delete, not Archive, and a deleted one is listed nowhere, approved by the owner: [spec](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
 _2026-11-24: The owner reworked set menus: [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes; the bill groups them into set menus at the cheapest price on every change; a set menu no longer changes a dish's course; paying for items moves them to a bill of their own. Its six pieces replace the counts, the no-place question and the per-set-menu course described below. Plans to follow._
 

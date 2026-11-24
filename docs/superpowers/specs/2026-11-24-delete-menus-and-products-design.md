@@ -4,7 +4,7 @@ Status: approved by the owner, 2026-11-24 (interactive design session, quoted be
 
 ## Why
 
-Owner, 2026-11-24, after approving the [Menus and Set menus tabs](2026-11-24-menus-list-tabs-design.md):
+Owner, 2026-11-24, after approving the [Menus and Set menus lists](2026-11-24-menus-list-tabs-design.md):
 "i do wonder if we need archived or we should just call it "delete" and not let them come back, both
 for menus and for products". Told what would change and what would be lost, and asked whether to go
 ahead "with seasonal menus simply staying in the list": "y".
@@ -31,7 +31,7 @@ Archived filter, the read-only view, and copying an archived menu.
   list's **Archived** filter choice, its read-only view, and **Copy…** on an archived menu. Copy
   stays on every other menu.
 - Menus' Status filter becomes All, Published and Requiring attention, starting on All. The Set
-  menus tab has no Status filter.
+  menus page has no Status filter.
 - Deleting a category says it **deletes** the products inside it, where it says "archives" today.
   With products and categories selected, the bulk action reads Delete in every case.
 - The address of a deleted menu opens the Menus list, and a deleted product's the Products list, as an
@@ -86,7 +86,7 @@ not a section.
 
 ## Delivery
 
-Lane D, **before** the Menus and Set menus tabs, whose spec is adjusted to match. The lane splits it
+Lane D, **before** the Menus and Set menus pages, whose spec is adjusted to match. The lane splits it
 if it is large; a split must not leave one screen saying both words. The configuration export is a
 cross-package contract, so the whole takes the full review weight. Screenshots for the owner before
 landing: the delete windows for a menu, a set menu, a product, a variant and a category, and the

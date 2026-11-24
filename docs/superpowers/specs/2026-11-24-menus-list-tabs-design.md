@@ -1,8 +1,10 @@
-# Menus list: one tab for menus, one for set menus
+# Set menus: a page of their own, beside Menus
 
 Status: approved by the owner, 2026-11-24 (interactive design session, choices quoted below). Later the
 same day the owner replaced Archive with Delete
 ([spec](2026-11-24-delete-menus-and-products-design.md)), which lands first; the filters below follow it.
+Then the owner replaced the two tabs with two pages (below). The file keeps its first name so that
+links to it work.
 
 ## Why
 
@@ -24,27 +26,33 @@ price under the name and set menus last; C, two tabs, as on Modifiers. Owner: "c
 the look of both tabs on a desktop and a phone was right, with the behaviour below listed beside
 the pictures: "y".
 
-### The tabs
+### Two pages, not two tabs
 
-- The Menus screen's list has two tabs, **Menus** and **Set menus** (_Cartas_ and _Menús_), built as
-  Modifiers' Extras and Options tabs are (`apps/dashboard/src/screens/modifiers-screen.ts`). Both
-  always show, even when one is empty; an empty tab's table offers its own Add button. The page
-  heading stays **Menus**.
-- The address holds the tab, so reload, Back and bookmarks keep it. `/menus` alone opens Menus.
-  `#checkAddress` in `menus-screen.ts` currently clears a `view` when no menu is open.
-- The Add button sits in the tab row's actions slot and changes with the tab: **Add menu** or **Add
-  set menu**. The window that asks "Menu or Set menu?" (`menu-kind-choice`) goes.
-- An open set menu's trail link reads **Set menus** and returns to that tab, whether it was opened
-  from the tab, a link or a bookmark.
-- Each tab's table has its own remembered sort and column choices (`viewKey`), as Modifiers' have.
-  Search covers the open tab only.
+The owner then asked "should menu and set menus be tabs, or two separate pages in the main nav bar?"
+and answered "y" to two pages, for these reasons: a menu is what the till opens on in a period and a
+set menu is something sold at a price inside one; in Spanish the tab _Menús_ would have sat under the
+page heading _Cartas_; and Set menus becomes a screen of its own rather than more of
+`menus-screen.ts`. The cost, one more sidebar line for every venue, was stated.
 
-### The Menus tab
+- The sidebar's **Products and menus** group lists Products, Menus, **Set menus** (_Menús_),
+  Modifiers, Courses, Units. Set menus needs `menu.manage`, as Menus does, and shows even with no set
+  menus. Page search finds it.
+- Set menus is a new screen with its own address (`/set-menus`), in files of its own; an open set
+  menu's address is under it. Links to a set menu elsewhere (a menu's Preview, its publish problems,
+  search, the image library, help) go there. `/menus/menu/<id>` naming a set menu opens its Set menus
+  address (**my call**).
+- The heading is **Set menus**, with **Add set menu** beside it, as Menus has **Add menu**. With no
+  set menus, the table offers Add set menu and the heading does not, as on Menus. The window that asks
+  "Menu or Set menu?" (`menu-kind-choice`) goes.
+- An open set menu's trail link reads **Set menus** and opens that page.
+- Each page's table has its own remembered sort and column choices (`viewKey`) and its own search.
+
+### The Menus page
 
 Name, Status, Main menu, Staff menus and the row menu, as today, with no Kind column and no set
 menus. The Status filter offers All, Published and Requiring attention, starting on All.
 
-### The Set menus tab
+### The Set menus page
 
 - Columns: **Name**, **Price**, **Offered on** and the row menu. No Status column, so "Goes live with
   the menus that offer it" goes from the list.
@@ -61,7 +69,7 @@ menus. The Status filter offers All, Published and Requiring attention, starting
 
 ### On a phone
 
-Each tab keeps one column beside the row menu. On Set menus, the price, then "Offered on" in the
+Each page keeps one column beside the row menu. On Set menus, the price, then "Offered on" in the
 small muted label Main menu uses, with the links under it, stack under the name; with none, "Not on
 any menu" alone.
 
@@ -69,14 +77,14 @@ any menu" alone.
 
 The demo's ordinary menu called "Set menus" (`setMenuHolderName`,
 `packages/country-es/src/demo/casa-delgado-es.ts`) becomes "Lunch menus" in English, with a matching
-name in each of its other languages, so a menu is no longer named after the other tab. Suggested:
+name in each of its other languages, so a menu is no longer named after the other page. Suggested:
 "Menús de mediodía" in Spanish; the lane checks each language's name. The guide's demo paragraphs
 name it too.
 
 ### The guide
 
 The Menus and Set menus sections of `apps/server/src/guide/{en,es}/products.md` change with the
-screen, keeping to what the reader does: set menus are under their own tab, made with **Add set
+screen, keeping to what the reader does: set menus are on their own page, made with **Add set
 menu**, and **Offered on** shows the menus that sell them. The sentence about where the filters show
 set menus goes.
 
@@ -84,7 +92,8 @@ set menus goes.
 
 Not committed (the mock-ups rule). On the owner's machine, in the main checkout:
 `.impeccable/shots/menus-list-tabs-desktop.png` and `.impeccable/shots/menus-list-tabs-phone.png`.
-They are drawn, not screenshots: where they differ from a shared `wt-*` component, the component
+They show the two tabs: read each as its page, with Add beside the heading. They are drawn, not
+screenshots: where they differ from a shared `wt-*` component, the component
 wins. "Christmas lunch" is an invented row.
 
 ## Not in this work
@@ -98,4 +107,4 @@ page. Both are in lane D, one after the other.
 One pull request, lane D. Nothing here touches fiscal code, migrations or permissions; the menus
 list read gains a field both the server and the dashboard use. Update
 `docs/developers/design-system.md`'s Menus list paragraphs in the same change. Screenshots for the
-owner before landing: both tabs, desktop and phone width, light and dark, English and Spanish.
+owner before landing: both pages and the sidebar, desktop and phone width, light and dark, English and Spanish.
