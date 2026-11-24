@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
  * and a local `pnpm --filter <package> mutation` measure the same files. The unit of a slice is
  * usually a whole file; HEAVY_FILES names the files cut into Stryker `file.ts:startLine-endLine`
  * ranges by `splitRanges`. The whole files are packed by `packages/<package>/mutation-costs.json`
- * where the package has one, and by bytes where it has none. `mutation-costs.mjs` is db-calibrated;
- * refresh ui and ui-core by the recorded-duration recipes in docs/developers/ci-and-gates.md instead.
+ * where the package has one, and by bytes where it has none. Use `mutation-costs.mjs` for db.
+ * Refresh shared, ui and ui-core by the recorded-duration recipes in docs/developers/ci-and-gates.md.
  */
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");

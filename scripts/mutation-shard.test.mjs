@@ -503,7 +503,7 @@ for (const pkg of mutationCallers(
   });
 }
 
-describe.each(["db", "ui", "ui-core"])("%s's committed cost table", (pkg) => {
+describe.each(["db", "shared", "ui", "ui-core"])("%s's committed cost table", (pkg) => {
   const tablePath = join(packageDir(pkg), "mutation-costs.json");
 
   it("exists, so its shards are packed by estimated seconds rather than bytes", () => {

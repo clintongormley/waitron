@@ -1158,7 +1158,8 @@ Its job timestamps span 900 seconds even though its configured limit was ten min
 
 `mutation-shared` uses `scripts/mutation-shard.mjs` to partition the package's `mutate` list.
 The first two jobs each take one range of `set-menu-grouping.ts`. The other two pack the remaining
-source files whole. A mutation spanning the grouping boundary appears in neither report. In PR #4224,
+source files whole using [Shared's recorded file weights](#dbs-mutation-shards-are-packed-by-estimated-cost).
+A mutation spanning the grouping boundary appears in neither report. In PR #4224,
 run `45394392127` instrumented 1,929 mutants in the old first job and reached 1,237 before the job
 limit. Each job still has ten minutes. The package leaves `*.fixtures.ts` out of mutation because
 those files construct inputs for tests. Local `pnpm --filter @waitron/shared mutation` mutates the
@@ -1355,8 +1356,7 @@ list.
 
 `scripts/mutation-shard.mjs` packs every file selected for db mutation testing into sixteen nightly shards by `packages/db/mutation-costs.json`, a table of
 estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
-table's own seconds per byte. `ui-core` and `ui` use their own recorded-duration tables (below);
-`shared` has no table and is still packed by bytes.
+table's own seconds per byte. `shared`, `ui-core` and `ui` use their own recorded-duration tables below.
 
 **ui-core, 16 November 2026.** Run [43808061319](https://github.com/clintongormley/waitron/actions/runs/43808061319)
 packed `derive.ts` and `colour.ts` together by bytes; that shard reached its 25-minute limit.
@@ -1387,6 +1387,32 @@ for (let n = 1; n <= 4; n++) {
 writeFileSync("packages/ui-core/mutation-costs.json", JSON.stringify(
   Object.fromEntries(Object.entries(costs).sort(([a], [b]) => a.localeCompare(b))), null, 2) + "\n");
 ```
+
+**Shared, 25 November 2026.** Byte packing put set-menu placement and search in job 3. The
+[first hosted job](https://github.com/clintongormley/waitron/actions/runs/45492938933/job/138796586068)
+finished mutation testing in 9m27s and uploaded its report before cancellation at 10m02s.
+The [next job](https://github.com/clintongormley/waitron/actions/runs/45502466146/job/138830289600)
+was cut off during mutation testing, and its retry also reached the deadline.
+`packages/shared/mutation-costs.json` uses jobs 3 and 4 of self-hosted
+[run 45489322541](https://github.com/clintongormley/waitron/actions/runs/45489322541).
+Eight slow mutations marked `Timeout` accounted for about 520 of the two jobs' 969.5 recorded
+seconds before rounding and the 0.1 minimum. Forty cases covered all eight, including the two
+16-diner cases and a 21-diner case. One
+mutation took 65.6 seconds to reach Stryker's execution-count limit. Packing with the new table
+puts placement in job 3 and search in job 4, with 486.6 weight seconds each, compared with
+847.2 and 126.0 by bytes. The weights rank work. Job time includes setup and concurrent tests.
+
+To refresh `packages/shared/mutation-costs.json`, apply the ui-core recipe to completed Shared jobs
+3 and 4. The reports expire after one day. Prefer jobs with the `ubuntu-latest` runner label.
+Use `mutation-report-shared-shard-3` and
+`mutation-report-shared-shard-4`. Take each report's file list from `config.mutate`, so a file
+absent from `files` still gets a weight of 0.1.
+Sum `duration ?? 0` for `Killed`, `Survived` and `Timeout`, then round to tenths of a second with
+a minimum weight of 0.1. Remove or rename the corresponding key when a listed source file goes
+away or moves. `scripts/mutation-shard.test.mjs` checks the table's file names against the mutation
+selection. Use this recorded-duration recipe for Shared because the reports from Stryker 10.1.1
+include time spent on timeouts, including mutations stopped by the execution-count limit. Reserve
+`scripts/mutation-costs.mjs` for db, where the generator adds a fixed 82.2 seconds per timeout.
 
 **ui, 17 November 2026.** Scheduled run [44021607120](https://github.com/clintongormley/waitron/actions/runs/44021607120)
 cancelled `mutation-ui` shards 23 and 30 at their 50-minute limit. Packed by bytes, those two shards
