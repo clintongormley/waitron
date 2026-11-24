@@ -1,6 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { mkdtemp, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,8 +10,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import * as diagnosis from "./fiscal-certificate-diagnosis-runner.js";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -123,22 +123,16 @@ async function prepared(posture: "primary" | "mirror" | "fenced" = "primary", fi
   }
   const scratch = await mkdtemp(join(tmpdir(), "diagnosis-boot-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));
-  await copyMigrationsRoot(join(scratch, "migrations"));
+  const migrationsRoot = join(scratch, "migrations");
+  await copyMigrationsRoot(migrationsRoot);
   await seedModuleSettings(suite.db, { "fiscal-none": false });
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const trading = tradingBootEnv(suite.db, scratch, venue.cfg.nodeId, migrationsRoot);
   const [port] = await freePorts(1);
   return {
     venue,
     env: {
-      WAITRON_HTTP_LANDING_PORT: "0",
+      ...trading,
       WAITRON_HTTP_PORT: String(port),
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_NODE_ID: venue.cfg.nodeId,
-      WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
-      WAITRON_ENV: "preproduction",
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
       ...(filing ? { WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" } : {}),
     },
   };

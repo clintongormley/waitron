@@ -1,5 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { ensureStreamId } from "@waitron/db";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { gunzipSync } from "node:zlib";
 import { DatabaseSync } from "node:sqlite";
@@ -7,7 +8,7 @@ import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +32,6 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing/bill-venue.js";
 import {
-  copyMigrationsRoot,
   fetchHealthOk,
   httpsVia,
   waitForEvent,
@@ -194,20 +194,13 @@ async function tradingEnv(): Promise<{ env: Record<string, string>; scratch: str
   // file before it reaches a destination, and the leaf makes the trading listener HTTPS.
   await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
   await writeFile(join(scratch, "trading.env"), "");
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const trading = tradingBootEnv(suite.db, scratch, venue.cfg.nodeId, migrationsRoot);
   const [port] = await freePorts(1);
   return {
     scratch,
     env: {
-      WAITRON_HTTP_LANDING_PORT: "0",
+      ...trading,
       WAITRON_HTTP_PORT: String(port),
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_NODE_ID: venue.cfg.nodeId,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     },

@@ -1,8 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stampDeployment, writeNodeMembership } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -11,6 +10,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BackupSupervisorDeps } from "./backup-supervisor.js";
 import type { BoxHealth } from "./box-health.js";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { awaitListening } from "./testing/boot-harness.js";
@@ -80,29 +80,18 @@ async function start(
   const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-health-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));
   const migrationsRoot = join(scratch, "migrations");
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
-  }
+  await copyMigrationsRoot(migrationsRoot);
   await seedModuleSettings(suite.db, { "fiscal-none": false });
   const logDir = join(scratch, "logs");
   await mkdir(logDir);
   await writeFile(join(logDir, "waitron.log.3"), Buffer.alloc(1500, 1));
   await writeFile(join(logDir, "waitron.log.1"), Buffer.alloc(100, 1));
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const trading = tradingBootEnv(suite.db, scratch, venue.cfg.nodeId, migrationsRoot);
   const [port] = await freePorts(1);
   const env = {
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...trading,
     WAITRON_HTTP_PORT: String(port),
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_STATE_DIR: scratch,
-    WAITRON_VENUE_DIR: dirname(database),
     WAITRON_LOG_DIR: logDir,
-    WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
     ...(await extraEnv(scratch)),
   };
   // A stand-in clock service, so a host where `waitron.sh install` has run answers the same.

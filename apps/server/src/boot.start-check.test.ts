@@ -3,11 +3,16 @@ import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 import { saveVenueFields } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import {
+  copyMigrationsRoot,
+  TRADING_BOOT_KEY_ENV as KEY_ENV,
+  tradingBootEnv,
+} from "./testing/boot-trading-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
@@ -101,10 +106,6 @@ vi.mock("./modules.js", async (importOriginal) => {
 });
 
 const migrations = migrationOptionsFor(manifestSets(), null);
-const KEY_ENV = {
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-};
 const OWN_URL = "https://box.example";
 const SPARE = { nodeId: "00000000-0000-4000-8000-0000000000cc", ...generateNodeKeyPair() };
 
@@ -212,22 +213,11 @@ async function boot(
   const dir = await mkdtemp(join(tmpdir(), "waitron-boot-start-check-"));
   scratch.push(dir);
   const migrationsRoot = join(dir, "migrations");
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
-  }
+  await copyMigrationsRoot(migrationsRoot);
   await seedModuleSettings(suite.db, { "fiscal-none": false });
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
-    ...KEY_ENV,
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...tradingBootEnv(suite.db, dir, nodeId, migrationsRoot),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
-    WAITRON_STATE_DIR: dir,
-    WAITRON_VENUE_DIR: dirname(database),
-    WAITRON_NODE_ID: nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),

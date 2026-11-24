@@ -1,5 +1,6 @@
 import { PAYMENTS_SETTINGS } from "@waitron/payments";
 import { saveSettings } from "@waitron/db";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { seedModuleSettings } from "../test/module-settings.js";
@@ -10,7 +11,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
@@ -32,7 +33,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartServerSeams, StartedServer } from "./boot.js";
 import type { BoxHostRequests, HostUnavailable } from "./box-host-client.js";
-import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -126,17 +126,9 @@ async function withServer(
     const migrationsRoot = join(scratch, "migrations");
     await copyMigrationsRoot(migrationsRoot);
     await seedModuleSettings(suite.db, { "fiscal-none": false });
-    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     const full = {
-      WAITRON_HTTP_LANDING_PORT: "0",
+      ...tradingBootEnv(suite.db, scratch, venue.cfg.nodeId, migrationsRoot),
       WAITRON_HTTP_PORT: String(port),
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_NODE_ID: venue.cfg.nodeId,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
       WAITRON_MANAGEMENT_ORIGIN: TRUSTED,
       ...env,
     };

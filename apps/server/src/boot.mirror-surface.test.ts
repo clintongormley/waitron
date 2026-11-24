@@ -2,10 +2,10 @@ import { seedModuleSettings } from "../test/module-settings.js";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,11 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer, StartServerSeams } from "./boot.js";
+import {
+  copyMigrationsRoot,
+  TRADING_BOOT_KEY_ENV as KEY_ENV,
+  tradingBootEnv,
+} from "./testing/boot-trading-fixture.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
@@ -71,19 +76,11 @@ const MADE_UP = "b8000000-0000-4000-8000-0000000000ff";
 const HTTP_PORT = 18443;
 const LANDING_PORT = 18080;
 
-const KEY_ENV = {
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-};
-
 let migrationsRoot: string;
 
 beforeAll(async () => {
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-surface-migrations-"));
-  for (const [index, set] of manifestSets().entries())
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
+  await copyMigrationsRoot(migrationsRoot);
 });
 
 afterAll(async () => {
@@ -178,7 +175,7 @@ async function startOn(
   options: { landing?: boolean; fromBox?: { current: boolean }; silentMain?: boolean },
 ): Promise<{ server: StartedServer; app: Hono }> {
   const setupApp = join(stateDir, "setup");
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const trading = tradingBootEnv(suite.db, stateDir, NODE, migrationsRoot);
   let app: Hono | undefined;
   const mdns = fakeMdnsSocket();
   const seams: StartServerSeams = {
@@ -203,16 +200,11 @@ async function startOn(
   served.splice(0);
   const server = await startServer(
     {
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_STATE_DIR: stateDir,
+      ...trading,
       WAITRON_LOG_DIR: join(stateDir, "logs"),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_HTTP_HOST: "0.0.0.0",
       WAITRON_HTTP_PORT: String(HTTP_PORT),
       WAITRON_HTTP_LANDING_PORT: options.landing === true ? String(LANDING_PORT) : "0",
-      WAITRON_NODE_ID: NODE,
-      ...KEY_ENV,
-      WAITRON_ENV: "preproduction",
       WAITRON_SETUP_APP_DIR: setupApp,
     },
     {},

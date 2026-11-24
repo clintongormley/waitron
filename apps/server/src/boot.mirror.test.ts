@@ -34,6 +34,7 @@ import {
 } from "@waitron/identity";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { poll } from "./testing/boot-poll.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
@@ -364,16 +365,6 @@ function scriptedMainBox() {
     return Promise.resolve(main.result);
   };
   return { main, seam: { mainSilence: { intervalMs: 20, silentAfterMs: 0, ask } } };
-}
-
-/** Poll `predicate` up to ~10s for its first defined value. */
-async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
-  for (let i = 0; i < 200; i += 1) {
-    const value = predicate();
-    if (value !== undefined) return value;
-    await delay(50);
-  }
-  return undefined;
 }
 
 describe("mirror-mode boot (box.mode = 'mirror')", () => {

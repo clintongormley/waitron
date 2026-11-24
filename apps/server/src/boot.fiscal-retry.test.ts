@@ -1,8 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveCloudVenueId, withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
@@ -13,6 +13,7 @@ import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import * as returnRecordsApi from "./return-records-api.js";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -146,24 +147,12 @@ async function boot(options: {
   const [port] = await freePorts(1);
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-fiscal-retry-"));
   const migrationsRoot = join(scratch, "migrations");
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
-  }
+  await copyMigrationsRoot(migrationsRoot);
   await seedModuleSettings(suite.db, options.modules);
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...tradingBootEnv(suite.db, scratch, venue.cfg.nodeId, migrationsRoot),
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_STATE_DIR: scratch,
-    WAITRON_VENUE_DIR: dirname(database),
-    WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     ...(options.testSubmissions ? { WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" } : {}),
   };

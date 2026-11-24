@@ -1,20 +1,18 @@
-import { seedModuleSettings } from "../test/module-settings.js";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
-import { dirname, join } from "node:path";
-import { tmpdir } from "node:os";
 import type { serve } from "@hono/node-server";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { StartServerSeams, StartedServer } from "./boot.js";
+import type { StartServerSeams } from "./boot.js";
 import type { BoxHostRequests, HostUnavailable, NetworkSnapshot } from "./box-host-client.js";
-import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import {
+  ephemeralServerFixture,
+  withTradingBootServer,
+} from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
-import { freePorts } from "./testing/free-ports.js";
 
 const served = vi.hoisted(() => ({
   fetch: undefined as
@@ -78,39 +76,16 @@ async function withServer(
     .from(persons)
     .where(eq(persons.displayName, "The Manager"))
     .all();
-  const [port] = await freePorts(1);
-  let scratch: string | undefined;
-  let server: StartedServer | undefined;
-  try {
-    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-host-"));
-    const migrationsRoot = join(scratch, "migrations");
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
-    await seedModuleSettings(suite.db, { "fiscal-none": false });
-    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const env = {
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_NODE_ID: venue.cfg.nodeId,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
-    };
-    server = await startServer(env, env, seams);
-    await vi.waitFor(async () => {
-      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-    });
-    await body(venue, manager!.id);
-  } finally {
-    if (server !== undefined) await server.close();
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
-  }
+  await withTradingBootServer(
+    {
+      db: suite.db,
+      nodeId: venue.cfg.nodeId,
+      scratchPrefix: "waitron-boot-box-host-",
+      start: (env) => startServer(env, env, seams),
+      httpPort,
+    },
+    () => body(venue, manager!.id),
+  );
 }
 
 const url = (path: string) => `http://127.0.0.1:${httpPort()}${path}`;

@@ -1,5 +1,5 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { AddressInfo } from "node:net";
@@ -48,6 +48,11 @@ import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
+import {
+  copyMigrationsRoot,
+  TRADING_BOOT_KEY_ENV as KEY_ENV,
+  tradingBootEnv,
+} from "./testing/boot-trading-fixture.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -76,10 +81,6 @@ const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const MAIN_BOX = { nodeId: "00000000-0000-4000-8000-0000000000bb", ...generateNodeKeyPair() };
-const KEY_ENV = {
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-};
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const LATER_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AUTHORISER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -265,23 +266,12 @@ async function boot(
 
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-destination-"));
   const migrationsRoot = join(scratch, "migrations");
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
-  }
+  await copyMigrationsRoot(migrationsRoot);
   await seedModuleSettings(suite.db, { "fiscal-none": false });
   const extraEnvironment = await inStateFolder(scratch);
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
-    ...KEY_ENV,
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...tradingBootEnv(suite.db, scratch, nodeId, migrationsRoot),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
-    WAITRON_STATE_DIR: scratch,
-    WAITRON_VENUE_DIR: dirname(database),
-    WAITRON_NODE_ID: nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     ...extraEnvironment,
   };
