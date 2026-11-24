@@ -44,26 +44,55 @@ call; the owner's answers are still wanted where the last section says so.
 
 | Piece | Where | What it delivers |
 | --- | --- | --- |
-| ADDRESS-TRIAL | Cloud, lane G | Real Google on the Amazon test Cloud for the test box, and about 40 real-looking public addresses (restaurants, shops, flats, rural, Canaries, Ceuta, with and without a postcode) tried through the box's signed route. Report: how many fill every field right, what is wrong with the rest, calls and billed type per address. Fix the mapping faults it finds, such as the missing street lines. |
-| ADDRESS-SERVICE | Cloud, lane G, after ADDRESS-TRIAL | The route as a normal service: any connected box in good standing, the two caps, a stop switch, Google's key from the same place Cloud keeps its other keys. The trial's one-box list and its counted-abandonment exception go: only a chosen address counts. Off in production until the owner turns it on. Privacy notice, processor list and subprocessor wording name Google. |
+| ADDRESS-TRIAL | Cloud, lane J | Real Google on the Amazon test Cloud for the test box, and about 40 real-looking public addresses (restaurants, shops, flats, rural, Canaries, Ceuta, with and without a postcode) tried through the box's signed route. Report: how many fill every field right, what is wrong with the rest, calls and billed type per address. Fix the mapping faults it finds, such as the missing street lines. |
+| ADDRESS-SERVICE | Cloud, lane J, after ADDRESS-TRIAL | The route as a normal service: any connected box in good standing, the two caps, a stop switch, Google's key from the same place Cloud keeps its other keys. The trial's one-box list and its counted-abandonment exception go: every call counts, as "Keeping it from being abused" says. Off in production until the owner turns it on. Privacy notice, processor list and subprocessor wording name Google. |
 | ADDRESS-BOX | Waitron, lane E | The box asks Cloud with its own signed connection: one server function, a dashboard route and a till route (each needs the form's own permission). The dashboard's two forms get the supplier. Hidden when the box is not connected or Cloud says unavailable. The dashboard recognises a province by its other official names (A1171's second point). |
 | ADDRESS-TILL | Waitron, lane E, after ADDRESS-BOX | The till's full-invoice window gets the supplier. |
 | ADDRESS-WORDS | Waitron, lane E, with ADDRESS-TILL | Google's name on all four forms; the guide lines and the privacy notices A1171 lists (`table-service.md`, `data-protection.md`, `invoice-email-notice.ts`, EN and ES), since Google then receives what is typed into the search. |
-| ADDRESS-PROOF | Lanes G and E together | On the test box against the Amazon test Cloud: all four forms, EN and ES, with the search on, off, over its cap and with Cloud unreachable. |
-| ADDRESS-FALLBACK | not queued | Geoapify when Google fails. Waits for the owner's answer below. |
+| ADDRESS-PROOF | Lanes J and E together | On the test box against the Amazon test Cloud: all four forms, EN and ES, with the search on, off, over its cap and with Cloud unreachable. |
 
 ADDRESS-TRIAL and ADDRESS-BOX start side by side: the signed request and reply already exist
 (Cloud's `docs/address-lookup-trial.md`), so neither waits for the other. Any change the trial forces in
 that request is agreed in both lanes' questions files first.
 
+## Keeping it from being abused
+
+Owner, 24 November 2026: "Could anybody abuse our service the way we set it up? Potentially?" Read in
+Cloud's code that day (`packages/account-http/src/address-lookup.ts`,
+`packages/registration/src/billing-allowances.ts`); nothing was run.
+
+What already holds: Google's key stays on Cloud; a request must be signed by a registered box whose
+owner has a confirmed email; a revoked or replaced box is refused; a free account is counted per
+account, so more venues give it no more; a box is limited to 30 requests a minute.
+
+What ADDRESS-SERVICE adds, the watcher's choices:
+
+1. **Every call to Google counts.** The trial counts a lookup once it starts, chosen or not, with up
+   to eight searches in it. An earlier draft of this plan would have counted only a chosen address,
+   which leaves searches uncounted. Instead a chosen address counts as one, and searches have their
+   own limit of five for each address of the venue's limit; Cloud's total counts both at Google's prices.
+2. **Free accounts get less, and share a part.** An account is free to open, so a person could open
+   many: 20 addresses a month each instead of 100, and all free accounts together at most a third of
+   Cloud's total. A venue on a trial with no payment card counts as free: today a trial venue has a
+   limit of its own. Invented accounts can then use up that third, never what paying venues need.
+3. **The total is also a daily one**: at most a tenth of the month's total in a day, so a bad day costs
+   a day of suggestions, not the month.
+4. **No single slot.** Today one lookup runs at a time for all of Cloud and any other is refused; one
+   busy box would turn the others away. Limit each box to one at a time instead.
+5. **Turn one venue off** from the operator screen, and tell the operator once when a venue or the
+   total reaches its limit.
+6. **Google's side:** the key works only from Cloud's own server address and only for the two
+   services, and Google's daily caps stay as the last stop.
+
+What is left: someone with a free account can get 20 Spanish addresses checked a month for another
+use, and people filling a real form may have to type an address for a day. No money passes the total.
+
 ## The owner's part
 
 - **How many per venue:** 100 chosen addresses a month, and a total for Cloud that cannot cost over
-  about EUR 10 a month (the watcher's numbers, for the owner to change). ADDRESS-SERVICE builds them as
-  settings.
-- **Geoapify:** the owner preferred Google with Geoapify behind it (October). The watcher now
-  recommends leaving it out: when Google fails people type the address, which must work anyway, and
-  it was the weaker of the two. Not queued until answered.
+  about EUR 10 a month (the watcher's numbers, for the owner to change), shared as the section above
+  says. ADDRESS-SERVICE builds them as settings.
+- **Geoapify:** left out (owner, 24 November: "agree"). When Google fails people type the address.
 - **Before 14 January 2027**, when Google's trial ends: upgrade the billing account, then set a daily
   cap on each of the two services and a EUR 10 budget alert before anything else uses the key.
 - **Turning it on in production**, when there is a production Cloud.
