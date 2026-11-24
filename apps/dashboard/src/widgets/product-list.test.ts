@@ -5933,7 +5933,15 @@ describe("product-list filters (A463)", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "plain", name: "A plain" }),
-        product({ id: "bun", name: "B bun", variants: [bunVariant] }),
+        product({
+          id: "bun",
+          name: "B bun",
+          variants: [
+            { ...bunVariant, id: "old-small", active: false },
+            bunVariant,
+            { ...bunVariant, id: "old-large", active: false },
+          ],
+        }),
         product({
           id: "archived-only",
           name: "C archived-only",
@@ -5951,6 +5959,7 @@ describe("product-list filters (A463)", () => {
       ["none", "No variants"],
     ]);
     await choose(el, "name", "has");
+    expect(rowKeys(root)).toEqual(["bun"]);
     root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
