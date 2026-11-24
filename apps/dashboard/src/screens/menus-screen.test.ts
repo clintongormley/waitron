@@ -13698,6 +13698,7 @@ it("marks Delete as destructive and removes the chosen menu after confirmation",
     }),
   });
   const el = await mount(client);
+  await table(el).updateComplete;
   const deleteAction = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
     '[data-test="delete-menu-lunch"]',
   )!;

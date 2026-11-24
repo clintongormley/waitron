@@ -356,7 +356,7 @@ describe("publishedMenusHolding", () => {
     expect(await menuIds(f.burger, new Date(later.getTime() + 60_000))).toBeUndefined();
   });
 
-  it("does not count a deleted menu's live version", async () => {
+  it("does not count an inactive menu's live version", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
     await app((tx) => deactivateMenu(tx, f.dinner));
@@ -365,7 +365,7 @@ describe("publishedMenusHolding", () => {
 });
 
 it.each([T0, later, new Date(later.getTime() + 60_000)])(
-  "does not count a deleted menu's queued version at %s",
+  "does not count an inactive menu's queued version at %s",
   async (at) => {
     const f = await menusFixture(fx.db);
     await queue(f.dinner, later);

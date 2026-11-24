@@ -2085,7 +2085,7 @@ it("frees a deleted menu’s name and leaves only the replacement in the list", 
   });
 });
 
-it("clears an archived menu's default and refuses to set it again", async () => {
+it("clears an inactive menu's default and refuses to set it again", async () => {
   await withTransaction(fx.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Winter" });
     await setVenueDefaultMenu(tx, menu.id);
@@ -2097,7 +2097,7 @@ it("clears an archived menu's default and refuses to set it again", async () => 
   });
 });
 
-it("refuses edits to archived menu details", async () => {
+it("refuses edits to inactive menu details", async () => {
   await withTransaction(fx.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Winter" });
     await deactivateMenu(tx, menu.id);
@@ -2107,9 +2107,9 @@ it("refuses edits to archived menu details", async () => {
   });
 });
 
-it("records an archived menu once with its name and the given person", async () => {
+it("records menu deletion once with the name and the given person", async () => {
   const personId = await seedPerson(fx.db);
-  const menu = await withTransaction(fx.db, (tx) => createMenu(tx, { name: "Archive menu" }));
+  const menu = await withTransaction(fx.db, (tx) => createMenu(tx, { name: "Winter lunch" }));
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   const entries = await readActivityForSubject(fx.db, { kind: "menu", id: menu.id });
   expect(entries).toHaveLength(1);
@@ -2118,7 +2118,7 @@ it("records an archived menu once with its name and the given person", async () 
     subjectKind: "menu",
     subjectId: menu.id,
     personId,
-    data: { name: "Archive menu" },
+    data: { name: "Winter lunch" },
   });
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   expect(await readActivityForSubject(fx.db, { kind: "menu", id: menu.id })).toEqual(entries);
