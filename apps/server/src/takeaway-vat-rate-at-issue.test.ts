@@ -659,7 +659,7 @@ describe("a takeaway set menu priced for its invoice", () => {
     expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.82", "7.95", "2.23"]);
   });
 
-  it("weighs a dish with no ordinary offer by its product's price", async () => {
+  it("weighs a dish with no ordinary offer by its product's price when added", async () => {
     const lunch = await lunchVenue();
     await partyTx(lunch.venue, (tx) =>
       tx.update(products).set({ unitPrice: 700 }).where(eq(products.id, lunch.lunch.ids.Soup)),

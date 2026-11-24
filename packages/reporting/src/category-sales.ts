@@ -81,6 +81,7 @@ type LineRow = {
   dish_classification: string | null;
   advance_role: string | null;
   set_menu_role: string | null;
+  set_menu_part: string | null;
 };
 
 /** Which of two lines was issued later: by the original sale's issue time, then sale id, then
@@ -149,6 +150,13 @@ function cents(raw: string): number {
   return decimalToCents(rawCentsToDecimal(raw));
 }
 
+/** The net that goes with `part` of a row's `gross`, rounded half away from zero. */
+function netOfPart(net: number, gross: number, part: number): number {
+  if (part === gross) return net;
+  const exact = (net * part) / gross;
+  return Math.sign(exact) * Math.round(Math.abs(exact));
+}
+
 function tally(target: Node, name: string, rank: Rank, net: number, gross: number | null): void {
   target.netCents += net;
   target.grossCents += gross ?? 0;
@@ -199,6 +207,25 @@ function toTotal(node: Node, depth: number): CategoryTotal {
   };
 }
 
+function nodeAt(level: Map<string, Node>, segment: Segment, rank: Rank): Node {
+  const key = `${segment.kind}:${segment.id}`;
+  let node = level.get(key);
+  if (node === undefined) {
+    node = {
+      ...segment,
+      rank,
+      netCents: 0,
+      grossCents: 0,
+      directNetCents: 0,
+      directGrossCents: 0,
+      directLines: 0,
+      children: new Map(),
+    };
+    level.set(key, node);
+  }
+  return node;
+}
+
 /**
  * Sales by reporting category over a closed business-day range, in one of two modes. A line's
  * amount is added at every node of its path, and a node is keyed by the whole path from the root,
@@ -229,7 +256,7 @@ export async function computeCategorySales(
     with lines as (
       select s.id as sale_id, s.issued_at, sl.line_no, sl.id, sl.line_total, sl.line_gross,
         sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
-        sl.advance_role, sl.set_menu_role
+        sl.advance_role, sl.set_menu_role, sl.set_menu_part
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
@@ -237,7 +264,7 @@ export async function computeCategorySales(
       union all
       select s.id, s.issued_at, sl.line_no, sl.id, -sl.line_total, -sl.line_gross,
         sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
-        sl.advance_role, sl.set_menu_role
+        sl.advance_role, sl.set_menu_role, -sl.set_menu_part
       from sale_voids sv
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
@@ -262,7 +289,8 @@ export async function computeCategorySales(
       coalesce(l.parent_line_id, u.parent_line_id) as parent_line_id,
       l.product_id, l.category, l.classification,
       dl.product_id as dish_product_id, dl.category as dish_category,
-      dl.classification as dish_classification, l.advance_role, l.set_menu_role
+      dl.classification as dish_classification, l.advance_role, l.set_menu_role,
+      cast(l.set_menu_part as text) as set_menu_part
     from lines l
     left join up u on u.id = l.id and u.parent_line_id is not null
     left join sale_lines dl on dl.id = coalesce(l.parent_line_id, u.parent_line_id)
@@ -335,29 +363,32 @@ export async function computeCategorySales(
     netCents += net;
     grossCents += gross ?? 0;
 
+    // A divided set menu's part of a dish's row (and the net that goes with it) is counted under
+    // Set menus, so the dish shows what it sold for; the set menu's own row is counted as filed,
+    // which keeps every total as filed even when a corrective names only dishes.
+    const part =
+      row.set_menu_part === null || row.set_menu_role === "set_menu" || gross === null
+        ? 0
+        : cents(row.set_menu_part);
+    const partNet = part === 0 ? 0 : netOfPart(net, gross!, part);
+    if (part !== 0) {
+      const setMenus = nodeAt(roots, SET_MENUS, rank);
+      tally(setMenus, SET_MENUS.name, rank, partNet, part);
+      setMenus.directNetCents += partNet;
+      setMenus.directGrossCents += part;
+    }
+    const soldNet = net - partNet;
+    const soldGross = gross === null ? null : gross - part;
+
     let level = roots;
     let node: Node | undefined;
     for (const segment of path) {
-      const key = `${segment.kind}:${segment.id}`;
-      node = level.get(key);
-      if (node === undefined) {
-        node = {
-          ...segment,
-          rank,
-          netCents: 0,
-          grossCents: 0,
-          directNetCents: 0,
-          directGrossCents: 0,
-          directLines: 0,
-          children: new Map(),
-        };
-        level.set(key, node);
-      }
-      tally(node, segment.name, rank, net, gross);
+      node = nodeAt(level, segment, rank);
+      tally(node, segment.name, rank, soldNet, soldGross);
       level = node.children;
     }
-    node!.directNetCents += net;
-    node!.directGrossCents += gross ?? 0;
+    node!.directNetCents += soldNet;
+    node!.directGrossCents += soldGross ?? 0;
     node!.directLines += 1;
   }
 

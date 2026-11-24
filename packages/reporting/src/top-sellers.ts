@@ -39,6 +39,10 @@ function reaches(money: SQL, returned: SQL): SQL {
  * the only correction of that line, comes after every other correction of the original line, and,
  * if it counted the dish as sold again, is later reversed only in full.
  *
+ * A divided takeaway set menu's dishes count at what they sold for: the net that goes with each
+ * dish row's part of the set menu's price counts under the set menu it was divided from (a
+ * corrective's, under the original sale's), shared by price when that sale has several.
+ *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */
 export async function computeTopSellers(
@@ -64,15 +68,16 @@ export async function computeTopSellers(
     total: string;
   }>(sql`
     with lines as (
-      select sl.id, sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.corrects_line_id,
-        1 as sign
+      select sl.id, sl.sale_id, sl.name, sl.variant_name, sl.quantity, sl.line_total,
+        sl.line_gross, sl.set_menu_role, sl.set_menu_part, sl.corrects_line_id, 1 as sign
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
         and sl.advance_role is null
         ${nodeClause}
       union all
-      select sl.id, sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.corrects_line_id, -1
+      select sl.id, sl.sale_id, sl.name, sl.variant_name, sl.quantity, sl.line_total,
+        sl.line_gross, sl.set_menu_role, sl.set_menu_part, sl.corrects_line_id, -1
       from sale_voids sv
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
@@ -91,9 +96,48 @@ export async function computeTopSellers(
       from chain c
       join sale_lines t on t.id = c.beyond
     ),
+    -- A dish row's part of a divided set menu's price, as net (rounded half away from zero), and
+    -- the sale whose set menu it was divided from: the original sale, for a corrective's row.
+    moved as (
+      select l.id, l.sign, l.sale_id, coalesce(o.sale_id, l.sale_id) as owner_sale,
+        cast(round(1.0 * l.line_total * l.set_menu_part / l.line_gross) as integer) as net
+      from lines l
+      left join chain c on c.id = l.id and c.beyond is null
+      left join sale_lines o on o.id = c.target_id
+      where l.set_menu_part is not null and l.set_menu_role is not 'set_menu'
+        and l.line_gross is not null and l.line_gross != 0
+        and exists (
+          select 1 from sale_lines r
+          where r.sale_id = coalesce(o.sale_id, l.sale_id)
+            and r.set_menu_role = 'set_menu' and r.set_menu_part < 0
+        )
+    ),
+    moved_totals as (
+      select sale_id, sign, owner_sale, sum(net) as net
+      from moved
+      group by sale_id, sign, owner_sale
+    ),
+    -- Which divided set menu a dish row's part came from is not stored, so a sale's moved net is
+    -- shared between its divided set menus by their prices, each taking the difference of
+    -- cumulative truncated shares so the pieces add up to the whole.
+    menus as (
+      select r.sale_id, r.name, -r.set_menu_part as price,
+        sum(-r.set_menu_part) over (partition by r.sale_id order by r.line_no) as upto,
+        sum(-r.set_menu_part) over (partition by r.sale_id) as whole
+      from sale_lines r
+      where r.set_menu_role = 'set_menu' and r.set_menu_part < 0
+        and r.sale_id in (select owner_sale from moved_totals)
+    ),
+    shares as (
+      select mn.name, t.sign,
+        t.net * mn.upto / mn.whole - t.net * (mn.upto - mn.price) / mn.whole as line_total
+      from moved_totals t
+      join menus mn on mn.sale_id = t.owner_sale
+    ),
     -- Materialized, or the earlier sum's subquery runs again at each of its uses in scoped.
     counted as materialized (
-      select l.name, l.variant_name, l.sign, l.quantity, l.line_total, c.flip,
+      select l.name, l.variant_name, l.sign, l.quantity,
+        l.line_total - coalesce(m.net, 0) as line_total, c.flip,
         il.quantity as line_quantity,
         coalesce(il.line_gross, il.line_total) as line_money,
         case when il.line_gross is null then dl.line_total else coalesce(dl.line_gross, 0) end
@@ -112,6 +156,7 @@ export async function computeTopSellers(
             )
         ) end as earlier
       from lines l
+      left join moved m on m.id = l.id and m.sign = l.sign
       left join chain c on c.id = l.id and c.beyond is null
       left join sale_lines dl on dl.id = c.line_id
       left join sales ds on ds.id = dl.sale_id
@@ -128,6 +173,9 @@ export async function computeTopSellers(
         end as quantity,
         sign * line_total as line_total
       from counted
+      union all
+      select name, null, 0, sign * line_total
+      from shares
     ),
     ranked as (
       select name, sum(quantity) as quantity, sum(line_total) as total
