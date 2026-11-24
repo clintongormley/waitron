@@ -2615,7 +2615,8 @@ async function bootServer(
       !captureAccountEmail && {
         noticeRelayAllowed: async (tx, kind) =>
           !(await hasSavedSmtp(tx)) &&
-          (kind !== "certificate_reminder" || (await cloudConnection.emailRelayEnabled())),
+          (kind !== "certificate_reminder" ||
+            (await cloudConnection.emailRelayEnabled().catch(() => false))),
       }),
   };
   const boxNoticeRelayAllowed = async (tx: Transaction) =>

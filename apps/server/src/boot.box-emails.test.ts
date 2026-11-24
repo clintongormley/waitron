@@ -9,7 +9,9 @@ import { randomUUID } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { readVenue, saveCloudVenueId } from "@waitron/db";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { verifactuCertificates } from "@waitron/fiscal-verifactu/src/schema/index.js";
+import { CLOUD_CONNECTION_FILE, SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
@@ -241,7 +243,7 @@ async function bootServer(
   email?: { intent: "demo" | "prepare" | "live"; development: boolean },
   setupNote?: unknown[],
   seams: StartServerSeams = {},
-  cloud?: { origin: string; stateDir: string },
+  cloud?: { origin: string; stateDir: string; fiscalTestSubmissions?: true },
 ): Promise<void> {
   const [port] = await freePorts(1);
   booted.scratch = cloud?.stateDir ?? (await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-")));
@@ -257,6 +259,7 @@ async function bootServer(
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env = {
     ...(cloud ? { WAITRON_CLOUD_ORIGIN: cloud.origin } : {}),
+    ...(cloud?.fiscalTestSubmissions ? { WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" } : {}),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_HTTP_PORT: String(port),
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -697,6 +700,101 @@ describe("the running server's notice and email checks", () => {
         });
         expect(holder.smtp).toEqual([]);
       }
+    } finally {
+      await shutDown(booted);
+      origin.mockRestore();
+      await f.close();
+    }
+  });
+
+  it("sends a certificate reminder through the running box's opted-in Cloud relay", async () => {
+    const venue = await setupVenue(suite.db);
+    const { nodeId } = venue.cfg;
+    const booted: Booted = {};
+    let submitted: Record<string, unknown> | undefined;
+    const f = await installationFixture(undefined, {
+      emailConfiguration: true,
+      managementOrigin: "http://localhost:5191",
+      email: async (v, _saved, _req, res) => {
+        submitted = JSON.parse(String(v[7]));
+        res.end(
+          JSON.stringify({
+            version: 1,
+            messageId: v[4],
+            state: "accepted",
+            statusRevision: 1,
+            expiresAt: submitted!.expiresAt,
+            reason: null,
+          }),
+        );
+      },
+    });
+    const origin = vi.spyOn(cloudClient, "loadCloudOrigin").mockReturnValue(f.options.origin);
+    try {
+      const now = new Date();
+      const [manager] = await seedPersons(suite.db, {
+        displayName: "Certificate manager",
+        role: "manager",
+        email: "manager@example.test",
+      });
+      await withTransaction(suite.db, async (tx) => {
+        await saveCloudVenueId(tx, f.venueId);
+        await tx.insert(verifactuCertificates).values({
+          nodeId,
+          source: "setup",
+          kind: "representante",
+          fingerprint: "reminder-fixture",
+          installedAt: new Date("2026-01-01T00:00:00Z"),
+          validFrom: new Date("2026-01-01T00:00:00Z"),
+          validUntil: new Date("2026-07-01T00:00:00Z"),
+        });
+        await FISCAL_SLOT.certificate!.reminders.queue(tx, { nodeId }, [manager!.id], now);
+      });
+      f.patch({
+        emailRelay: {
+          version: 1,
+          grant: {
+            id: randomUUID(),
+            revision: 1,
+            enabled: true,
+            expiresAt: new Date(now.getTime() + 3600000).toISOString(),
+          },
+        },
+      });
+      expect(await f.client.emailRelay()).not.toBeNull();
+      holder.pauseMail = true;
+      await bootServer(
+        booted,
+        venue,
+        undefined,
+        undefined,
+        {},
+        {
+          origin: f.options.origin,
+          stateDir: f.stateDir,
+          fiscalTestSubmissions: true,
+        },
+      );
+      await holder.cloudPass;
+      const mail = { ...holder.mail!, now: () => now };
+      const stateFile = join(f.stateDir, CLOUD_CONNECTION_FILE);
+      const optedIn = await readFile(stateFile, "utf8");
+      for (const state of [
+        "{",
+        JSON.stringify({ ...JSON.parse(optedIn), emailRelayEnabled: false }),
+      ]) {
+        await writeFile(stateFile, state);
+        expect(await runMailPass(mail)).toMatchObject({ processed: false });
+        expect(submitted).toBeUndefined();
+      }
+      await writeFile(stateFile, optedIn);
+      await runMailPass(mail);
+      expect(submitted).toMatchObject({
+        class: "certificate_reminder",
+        recipient: "manager@example.test",
+        facts: { stage: "expired", date: "2026-07-01" },
+      });
+      expect(holder.smtp).toEqual([]);
     } finally {
       await shutDown(booted);
       origin.mockRestore();
