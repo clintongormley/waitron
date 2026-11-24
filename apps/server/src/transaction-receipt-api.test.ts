@@ -158,7 +158,7 @@ it("keeps the invoice available when its preview cannot be built", async () => {
   expect(answer.json).not.toHaveProperty("receiptPreview");
 });
 it("reads paid and orderless original sales and a correction by their own identity", async () => {
-  const order = await placedIssuedBill(venue, "Caña");
+  const order = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, order, "3.00")).status).toBe(200);
   const original = await saleOf(order);
   await credit(venue, order, "1.00", "-1.10");
@@ -184,7 +184,7 @@ it("reads paid and orderless original sales and a correction by their own identi
         {
           descriptions: {
             "es-ES":
-              id === correction ? "Descuento" : id === loose ? "Venta suelta" : "Caña de cerveza",
+              id === correction ? "Descuento" : id === loose ? "Venta suelta" : "Glass of lager",
           },
           gross: id === correction ? "-1.10" : id === loose ? "12.10" : "3.00",
         },
@@ -738,7 +738,7 @@ it.each([false, true])(
   },
 );
 it("a substitution uses its own receipt, and source-zone access checks all of its original bills", async () => {
-  const order = await placedIssuedBill(venue, "Caña"),
+  const order = await placedIssuedBill(venue, "Small beer"),
     original = await saleOf(order);
   const substitute = await projectionInvoice({
     counterpartyTaxId: "B00000000",
@@ -975,7 +975,7 @@ it.each([false, true])(
   },
 );
 it("reads every pre-invoice payment in order without replaying settlement", async () => {
-  const order = await parked(venue, "Caña");
+  const order = await parked(venue, "Small beer");
   for (const amount of ["1.00", "2.00"])
     expect(
       (
@@ -1002,7 +1002,7 @@ it("reads every pre-invoice payment in order without replaying settlement", asyn
   expect(await snapshot()).toEqual(before);
 });
 it("a card bill payment's details reach the receipt", async () => {
-  const order = await parked(venue, "Caña");
+  const order = await parked(venue, "Small beer");
   for (const amount of ["1.00", "2.00"])
     expect(
       (
@@ -1045,7 +1045,7 @@ it("a card bill payment's details reach the receipt", async () => {
   ]);
 });
 it("a card bill payment names its card when charged, even if voided later, and not before", async () => {
-  const order = await parked(venue, "Caña");
+  const order = await parked(venue, "Small beer");
   for (const amount of ["1.00", "2.00"])
     expect(
       (
@@ -1479,7 +1479,7 @@ it("a resend of a receipt original given up as out of date carries its waiting d
 
 // A445 D3a: Find a bill's reprint of a ticket whose free item holds its share of the price paid
 // shows the dishes as sold, with the comp beneath the free one.
-async function counterBillWithFreeCana(takeaway: boolean): Promise<string> {
+async function counterBillWithFreeBeer(takeaway: boolean): Promise<string> {
   const ids = new Map(
     venue.db
       .all<{ id: string; name: string }>(sql`select id, name from products`)
@@ -1488,12 +1488,12 @@ async function counterBillWithFreeCana(takeaway: boolean): Promise<string> {
   if (takeaway) {
     for (const [name, rate] of [
       ["House salad", "4.00"],
-      ["Caña", "21.00"],
+      ["Small beer", "21.00"],
     ] as const) {
       await inTx(venue, (tx) => setTakeawayVatRate(tx, ids.get(name)!, rate));
     }
   }
-  const id = await parked(venue, "House salad", "Caña");
+  const id = await parked(venue, "House salad", "Small beer");
   if (takeaway) {
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, id)),
@@ -1518,9 +1518,9 @@ const sold = (answer: { json: unknown }) =>
   }));
 
 it("reprints a takeaway ticket's free item and the dish beside it as sold, with the comp", async () => {
-  const answer = await get(await counterBillWithFreeCana(true));
+  const answer = await get(await counterBillWithFreeBeer(true));
   expect(answer.status).toBe(200);
-  // Filed: salad 9.60 at 4% and caña 2.40 at 21%, shared 12 : 3 of the €12.00 paid.
+  // Filed: salad 9.60 at 4% and small beer 2.40 at 21%, shared 12 : 3 of the €12.00 paid.
   expect(sold(answer)).toEqual([
     { gross: "9.60", listGross: "12.00", adjustments: undefined },
     { gross: "2.40", listGross: "3.00", adjustments: [{ kind: "comp", amount: "3.00" }] },
@@ -1528,7 +1528,7 @@ it("reprints a takeaway ticket's free item and the dish beside it as sold, with 
 });
 
 it("reprints a comped ticket eaten here with its comp", async () => {
-  const answer = await get(await counterBillWithFreeCana(false));
+  const answer = await get(await counterBillWithFreeBeer(false));
   expect(answer.status).toBe(200);
   expect(sold(answer)).toEqual([
     { gross: "12.00", listGross: undefined, adjustments: undefined },

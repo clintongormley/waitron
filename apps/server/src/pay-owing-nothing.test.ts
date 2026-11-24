@@ -78,9 +78,9 @@ function productIdOf(name: string): string {
   return row!.id;
 }
 
-/** A table's bill holding one Caña, given away. */
+/** A table's bill holding one Small beer, given away. */
 async function givenAwayBill(): Promise<{ partyId: string; tabId: string }> {
-  const party = await seatedWith(venue, "Caña");
+  const party = await seatedWith(venue, "Small beer");
   await seedGivenAwayLine(venue, party.tabId, 1);
   return party;
 }
@@ -160,7 +160,7 @@ async function expectClosedOwingNothing(billId: string): Promise<void> {
 
 describe("Pay on a bill whose every line was given away", () => {
   it("opens the drawer for a cash Pay of a bill that owes something, so the cases below can see one", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const drawerJobs = drawerJobCount();
 
     const answer = await cashPayment(venue, venue.cookie, party.tabId, "3.00");
@@ -281,7 +281,7 @@ describe("the card reader on a bill whose every line was given away", () => {
       const offered = await offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
-        productIds: [productIdOf("Caña")],
+        productIds: [productIdOf("Small beer")],
       });
       await tx.execute(sql`
         update floor_zones set paid_when = 'ticket_then_pay'
@@ -296,7 +296,9 @@ describe("the card reader on a bill whose every line was given away", () => {
         lines: [
           {
             menuItemId:
-              id === partyBill ? venue.offerFor("Caña") : ticketZone.offerFor(productIdOf("Caña")),
+              id === partyBill
+                ? venue.offerFor("Small beer")
+                : ticketZone.offerFor(productIdOf("Small beer")),
             quantity: "1",
           },
         ],
@@ -345,13 +347,13 @@ describe("the card reader on a bill whose every line was given away", () => {
   });
 });
 
-/** A counter order of one Caña, given away, then presented without an invoice. */
+/** A counter order of one Small beer, given away, then presented without an invoice. */
 async function presentedGivenAway(): Promise<string> {
   const id = randomUUID();
   const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
   await parkOrder(deps, venue.cfg, {
     id,
-    lines: [{ menuItemId: counter.offerFor(productIdOf("Caña")), quantity: "1" }],
+    lines: [{ menuItemId: counter.offerFor(productIdOf("Small beer")), quantity: "1" }],
     zoneId: counter.zoneId,
     operatorId: venue.operatorId,
   });
@@ -387,7 +389,7 @@ describe("other ways a bill owing nothing is paid", () => {
   });
 
   it("files and settles a 0.00 invoice as soon as a whole-bill comp leaves nothing due", async () => {
-    const { tabId } = await seatedWith(venue, "Caña");
+    const { tabId } = await seatedWith(venue, "Small beer");
     const drawerJobs = drawerJobCount();
 
     await compWholeBill(venue, tabId, 10000);
@@ -404,7 +406,7 @@ describe("other ways a bill owing nothing is paid", () => {
   });
 
   it("refuses a cash Pay of 0 on a bill comped only by half, which still owes, leaving it open with nothing filed", async () => {
-    const { tabId } = await seatedWith(venue, "Caña");
+    const { tabId } = await seatedWith(venue, "Small beer");
     await compWholeBill(venue, tabId, 5000);
 
     const answer = await cashPayment(venue, venue.cookie, tabId, "0");
@@ -462,7 +464,7 @@ describe("other ways a bill owing nothing is paid", () => {
 
   it("settles an edited counter basket already covered by a part payment without taking cash twice", async () => {
     const id = randomUUID();
-    const menuItemId = counter.offerFor(productIdOf("Caña"));
+    const menuItemId = counter.offerFor(productIdOf("Small beer"));
     await parkOrder({ db: venue.db }, venue.cfg, {
       id,
       zoneId: counter.zoneId,

@@ -99,7 +99,7 @@ const stationScreen = (...stationIds: string[]): DeviceKitchenScreen => ({
 const passScreen: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
 
 async function sentDish() {
-  const { tabId } = await seatedWith(venue, "Paella");
+  const { tabId } = await seatedWith(venue, "Seafood rice");
   const [item] = await inTx(venue, (tx) =>
     ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
   );
@@ -165,7 +165,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
       const screen = await display(stationScreen(bar));
-      const { tabId } = await seatedWith(venue, "Paella");
+      const { tabId } = await seatedWith(venue, "Seafood rice");
       const [dish] = await inTx(venue, (tx) =>
         ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
       );
@@ -175,7 +175,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
           venue.cfg,
           tabId,
           dish!.workingOrderLineId,
-          venue.offerFor("Caña"),
+          venue.offerFor("Small beer"),
           true,
         ),
       );
@@ -342,7 +342,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("refuses a dish already at the destination when the screen does not work there, and moves nothing", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId } = await seatedWith(venue, "Paella", "Caña");
+    const { tabId } = await seatedWith(venue, "Seafood rice", "Small beer");
     const items = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );

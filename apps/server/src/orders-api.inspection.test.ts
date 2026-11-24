@@ -23,7 +23,7 @@ describe("a session holding only invoice.inspect", () => {
   beforeAll(async () => {
     inspector = (await sessionHolding(venue.db, ["invoice.inspect"])).cookie;
     nobody = (await sessionHolding(venue.db, [])).cookie;
-    billId = await placedIssuedBill(venue, "Paella");
+    billId = await placedIssuedBill(venue, "Seafood rice");
   });
 
   const routes: [

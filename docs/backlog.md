@@ -1536,11 +1536,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Full-invoice recipient: country code names** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-country-code-names)
 
-- **Spanish text in a server test venue, for A913's English-only audit.**
-  `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
-  test's venue the Spanish refund dialog shows the reason "Mistake" in English. Found by A798-B
-  slice 8 (#2012).
-
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
   screen languages, themes and phone/desktop widths when the stack is available. The regional cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
@@ -1624,9 +1619,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local published-menu, menu-patch, current-order, integrated-sale, delivery, pay-and-dispatch
   and stuck-payment fixtures use Administrator, Main room and Drinks where present.
   Other display samples in those files remain.
-  BillVenue uses Steak,
-  Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
-  and kitchen names stay. PartyVenue uses Red wine bottle and Water as staff keys,
+  PartyVenue uses Red wine bottle and Water as staff keys,
   with customer Rioja crianza / Agua mineral and kitchen TINTO / AGUA unchanged.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
   their Spanish product samples (Agua mineral in both, Cerveza in the till API) remain.
@@ -1642,8 +1635,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
   suites still use Spanish display samples; fiscal-sale test descriptions,
   other shared-helper names and their consumers' dish selectors and screen expectations remain.
-  Triage made-here route and receipt-document fixture
-  text there while preserving Spanish receipt output and locale checks. Low priority.
+  Triage receipt-document fixture text there while preserving Spanish receipt output and locale checks.
+  Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
   BillVenue's receipt printer, card readers and cash till use English display names.
   Local device-equipment and office-printer route fixtures use English printer and reader names;

@@ -401,7 +401,7 @@ describe("A1208 counter orders are written as portions", () => {
       return (
         await openPartyTab(tx, venue.cfg, {
           tableId: table.id,
-          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
+          lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "2" }],
         })
       ).tabId;
     });

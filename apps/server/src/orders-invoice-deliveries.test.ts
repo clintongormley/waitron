@@ -94,7 +94,7 @@ useVenueDb({
 
 /** A full invoice on a new open bill (sent to the kitchen when `placed`), written through the core. */
 async function fullInvoice(placed = false): Promise<{ billId: string; saleId: string }> {
-  const billId = await parked(venue, "Caña");
+  const billId = await parked(venue, "Small beer");
   if (placed)
     await placeOrder(
       {
@@ -122,8 +122,8 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
       lines: [
         {
           lineNo: 1,
-          name: "Caña",
-          descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+          name: "Small beer",
+          descriptions: { [venue.cfg.locale]: "Glass of lager" },
           quantity: "1",
           unitPrice: "3.00",
           vatRate: "10",
@@ -316,7 +316,7 @@ describe("dashboard Print invoice", () => {
   });
 
   it("refuses a simplified invoice, writing nothing", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const before = await deliveryCount();
     expect(await printInvoice(venue.adminDashboard, billId, printBody())).toMatchObject({
       status: 409,
@@ -367,7 +367,7 @@ describe("dashboard Print invoice", () => {
 
   it("refuses a missing session, a bad body and a bill with no invoice", async () => {
     const { billId } = await fullInvoice();
-    const open = await parked(venue, "Caña");
+    const open = await parked(venue, "Small beer");
     const before = await deliveryCount();
     expect(await printInvoice("", billId, printBody())).toMatchObject({
       status: 401,
@@ -637,8 +637,8 @@ describe("the order detail's delivery status", () => {
   });
 
   it("has no delivery status and no downloads for a simplified invoice or an open bill", async () => {
-    const simplified = await placedIssuedBill(venue, "Caña");
-    const open = await parked(venue, "Caña");
+    const simplified = await placedIssuedBill(venue, "Small beer");
+    const open = await parked(venue, "Small beer");
     for (const billId of [simplified, open])
       expect((await detailOf(venue.adminDashboard, billId)).json).toMatchObject({
         deliveries: null,
@@ -766,7 +766,7 @@ describe("dashboard email", () => {
 
   it("refuses a bill with no invoice, a malformed id and a bad request key, writing nothing", async () => {
     email.transport = true;
-    const open = await parked(venue, "Caña");
+    const open = await parked(venue, "Small beer");
     const before = await deliveryCount();
     for (const id of [open, randomUUID(), "not-a-bill"]) {
       expect(await emailIt(venue.adminDashboard, id)).toMatchObject({

@@ -35,7 +35,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    beerId = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`)[0]!.id;
+    beerId = db.all<{ id: string }>(sql`select id from products where name = 'Small beer'`)[0]!.id;
     zoneOf.invoiced = await inTx(venue, (tx) =>
       offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
@@ -46,7 +46,7 @@ useVenueDb({
   },
 });
 
-/** One Caña (3.00), parked and placed through the routes; `invoiced` issues its invoice between. */
+/** One Small beer (3.00), parked and placed through the routes; `invoiced` issues its invoice between. */
 async function placed(kind: Kind): Promise<string> {
   const id = randomUUID();
   const zone = zoneOf[kind];

@@ -88,7 +88,7 @@ describe("Find a bill list routes", () => {
         })
         .where(eq(workingOrders.id, party.tabId)),
     );
-    const counter = await parked(venue, "Caña");
+    const counter = await parked(venue, "Small beer");
     expect(await get(`/api/bills/${party.tabId}`)).toMatchObject({
       status: 200,
       json: {
@@ -177,7 +177,7 @@ describe("Find a bill list routes", () => {
     expect(selected).toMatchObject({ status: 200, json: expected });
   });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     const result = await get("/api/bills");
     expect(result.status).toBe(200);
     expect(result.json).toMatchObject({
@@ -213,7 +213,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("requires an open session on every list, options and by-ID route", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     const raw = await venue.app.request("/api/bills");
     expect(raw.status).toBe(401);
     expect(await raw.json()).toEqual({ error: { code: "session.required", params: {} } });
@@ -237,7 +237,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("refuses a revoked device on every read", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     await inTx(venue, (tx) =>
       tx.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId)),
     );
@@ -249,7 +249,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("refuses sessions ended by a changed profile admission", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     const profile = await profileId();
     await inTx(venue, async (tx) => {
       await setProfileAdmission(tx, profile, { admittedStaffRoleIds: [] });
@@ -263,7 +263,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("allows admitted staff reads without any ordering, payment or print capability", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     const profile = await profileId();
     await inTx(venue, (tx) =>
       tx.update(deviceProfiles).set({ capabilities: [] }).where(eq(deviceProfiles.id, profile)),
@@ -272,7 +272,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("refuses a requested foreign zone and hides out-of-scope bills, counts, transactions and options", async () => {
-    const own = await parked(venue, "Caña");
+    const own = await parked(venue, "Small beer");
     const foreign = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
       tx
@@ -372,7 +372,7 @@ describe("Find a bill list routes", () => {
   });
 
   it("offers historical staff represented beyond the current page, including suspended staff", async () => {
-    const old = await parkedBy(venue, venue.supervisorId, "Caña");
+    const old = await parkedBy(venue, venue.supervisorId, "Small beer");
     await inTx(venue, (tx) =>
       tx
         .update(workingOrders)

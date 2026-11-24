@@ -81,7 +81,7 @@ useVenueDb({
       });
     }
     await inTx(venue, async (tx) => {
-      const beer = await productOf(tx, "Caña");
+      const beer = await productOf(tx, "Small beer");
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: beer }, zoneId: null },
@@ -133,7 +133,7 @@ useVenueDb({
         },
         "en",
       );
-      await assignProductUnit(tx, await productOf(tx, "Paella"), gram!.id);
+      await assignProductUnit(tx, await productOf(tx, "Seafood rice"), gram!.id);
       await assignProductUnit(tx, await productOf(tx, "Steak"), ml.id);
       await assignProductUnit(tx, await productOf(tx, "House salad"), kilo!.id);
       await assignProductUnit(tx, await productOf(tx, "Croquettes"), tenth.id);
@@ -472,13 +472,13 @@ describe("readOrderStateCounts", () => {
   it("counts a parked order's dishes by quantity, all unsent", async () => {
     const id = await parked([
       ["Tarta", "2"],
-      ["Caña", "3"],
+      ["Small beer", "3"],
     ]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 5, unsent: 5 }]]));
   });
 
   it("counts a 150 g dish as one", async () => {
-    const id = await parked([["Paella", "150"]]);
+    const id = await parked([["Seafood rice", "150"]]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
@@ -538,20 +538,20 @@ describe("readOrderStateCounts", () => {
 
   it("keeps a measure on both parts of a split dish", async () => {
     const { billId } = await seatParty();
-    await sendRound(billId, [plain("Paella", "150")]);
+    await sendRound(billId, [plain("Seafood rice", "150")]);
     await inTx(venue, (tx) =>
       splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "50" }]),
     );
     expect(await countsOfBill(billId)).toMatchObject({ ordered: 2 });
     await inTx(venue, async (tx) => {
-      const paella = await productOf(tx, "Paella");
+      const seafoodRice = await productOf(tx, "Seafood rice");
       const [original] = await tx
         .select({ id: products.unitId })
         .from(products)
-        .where(eq(products.id, paella));
-      await clearProductUnit(tx, paella);
+        .where(eq(products.id, seafoodRice));
+      await clearProductUnit(tx, seafoodRice);
       expect((await readOrderStateCounts(tx, [billId])).get(billId)).toMatchObject({ ordered: 2 });
-      await assignProductUnit(tx, paella, original!.id!);
+      await assignProductUnit(tx, seafoodRice, original!.id!);
     });
   });
 
@@ -634,7 +634,7 @@ describe("readOrderStateCounts", () => {
   it("counts any number of orders in the same statements, and none for an empty list", async () => {
     const ids = [
       await parked([["Tarta", "1"]]),
-      await parked([["Caña", "2"]]),
+      await parked([["Small beer", "2"]]),
       await parked([["Tarta", "1"]]),
     ];
     const statementsFor = (orderIds: string[]) =>
@@ -822,7 +822,7 @@ describe("readOrderStateCounts on a party's bill", () => {
 
   it("counts a dish with no kitchen work in a held group as held, by its group", async () => {
     const { partyId, billId } = await seatParty();
-    await holdGroup(partyId, [plain("Caña")]);
+    await holdGroup(partyId, [plain("Small beer")]);
 
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, held: 1 });
   });
@@ -933,14 +933,14 @@ describe("readOrderStateCounts on a party's bill", () => {
 
   it("counts a sent dish with no preparation as ready", async () => {
     const { billId } = await seatParty();
-    await sendRound(billId, [plain("Caña")]);
+    await sendRound(billId, [plain("Small beer")]);
 
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
   });
 
   it("counts a bill's saved draft dishes as ordered and unsent, apart from its total, until discarded", async () => {
     const { partyId, billId } = await seatParty();
-    await sendRound(billId, [plain("Caña")]);
+    await sendRound(billId, [plain("Small beer")]);
     const totalOf = async () =>
       (await listHeldOrders(deps())).find((order) => order.id === billId)!.total;
     const before = await totalOf();
@@ -952,7 +952,7 @@ describe("readOrderStateCounts on a party's bill", () => {
     await saveBillDraft(
       partyId,
       billId,
-      [draftLine("Tarta", "2"), draftLine("Paella", "150")],
+      [draftLine("Tarta", "2"), draftLine("Seafood rice", "150")],
       draft,
     );
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 4, unsent: 3, ready: 1 });
@@ -982,7 +982,7 @@ describe("readOrderStateCounts on a party's bill", () => {
     const bills = [];
     for (const withDraft of [true, false, true]) {
       const { partyId, billId } = await seatParty();
-      await sendRound(billId, [plain("Caña")]);
+      await sendRound(billId, [plain("Small beer")]);
       if (withDraft) await saveBillDraft(partyId, billId, [draftLine("Tarta")]);
       bills.push(billId);
     }

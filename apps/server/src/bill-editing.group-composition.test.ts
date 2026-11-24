@@ -80,7 +80,7 @@ async function save(p: Fixture, billId = p.tabId, operatorId = venue.operatorId)
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,
       expectedEdit,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
     }),
   );
 }
@@ -309,7 +309,9 @@ it("checks every source bill before moving a multi-bill selection", async () => 
     await submitGroups(tx, venue.cfg, p.partyId, {
       ...(await command(p)),
       billId: p.otherId,
-      groups: [{ release: "hold", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] }],
+      groups: [
+        { release: "hold", lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }] },
+      ],
     });
     return (
       await tx

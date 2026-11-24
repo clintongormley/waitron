@@ -81,7 +81,7 @@ async function issue(v: BillVenue, path: string, id: string, backend = v.backend
         tip: "0.00",
       },
       operator,
-      { lines: [{ menuItemId: v.offerFor("Caña"), quantity: "1" }], zoneId: v.zoneId },
+      { lines: [{ menuItemId: v.offerFor("Small beer"), quantity: "1" }], zoneId: v.zoneId },
     );
     return invoice;
   }
@@ -111,13 +111,13 @@ async function issue(v: BillVenue, path: string, id: string, backend = v.backend
 }
 
 async function prepare(v: BillVenue, path: string) {
-  if (path === "bill payment") return tabWith(v, "Caña");
+  if (path === "bill payment") return tabWith(v, "Small beer");
   const id = randomUUID();
   if (path !== "walk-up")
     await parkOrder(deps(v), v.cfg, {
       id,
       zoneId: v.zoneId,
-      lines: [{ menuItemId: v.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: v.offerFor("Small beer"), quantity: "1" }],
       operatorId: v.operatorId,
     });
   return id;

@@ -51,7 +51,7 @@ function pay(billId: string, body: Record<string, unknown>) {
 
 describe("bill payments on a box the held chart does not name primary", () => {
   it("refuses a reader payment before the reader is asked to charge", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const before = venue.card.collectCalls.length;
 
     const refused = await pay(billId, {
@@ -74,7 +74,7 @@ describe("bill payments on a box the held chart does not name primary", () => {
   });
 
   it("refuses a cash payment before any payment is kept", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
 
     const refused = await pay(billId, {
       submissionId: randomUUID(),
@@ -98,7 +98,7 @@ describe("bill payments on a box the held chart does not name primary", () => {
 describe("refunds on a box the held chart does not name primary", () => {
   it("records a confirmed hand-keyed card refund already made on the terminal", async () => {
     await suite.db.execute(sql`delete from node_membership`);
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const paid = await pay(billId, {
       submissionId: randomUUID(),
       kind: "contribution",

@@ -18,14 +18,14 @@ import "./errors.js";
 let venue: BillVenue;
 
 // Every case reads NOW, the latest record's time, and builds each clock from it. Only the setup
-// records a sale; every case's payment is a part payment of a 35.00 Paella bill.
+// records a sale; every case's payment is a part payment of a 35.00 Seafood rice bill.
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const settled = await pay(venue.app, billId, cashPart("35.00"));
     if (settled.status !== 200) throw new Error(`setup sale answered ${settled.status}`);
   },
@@ -78,7 +78,7 @@ function drawerJobs(): number {
 
 it("answers a bill payment's replay", async () => {
   const now = nowMs();
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   const body = cashPart();
   const first = await pay(at(now), billId, body);
   expect(first.status).toBe(200);

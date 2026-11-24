@@ -406,7 +406,7 @@ describe("a real full database after the charge", () => {
   });
 
   it("says so when a full disk fails a bill payment's transaction after its body has run", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const before = collects();
     fullDiskAfterNextBody();
 
@@ -433,7 +433,7 @@ describe("a real full database after the charge", () => {
   });
 
   it("says so on a bill's reader payment when the database is full when it completes the bill", async () => {
-    const billId = await tabWith(venue, ...Array.from({ length: 20 }, () => "Paella"));
+    const billId = await tabWith(venue, ...Array.from({ length: 20 }, () => "Seafood rice"));
     const before = collects();
     const disk = fillAfterCollect();
     try {
@@ -486,7 +486,7 @@ describe("a bill's reader payment when the bill's sale fails for a full disk aft
 
   it("says so on a bill's reader payment that would complete the bill", async () => {
     const { log, charged } = capturingLog();
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const spy = vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(diskFull());
     const before = collects();
 
@@ -519,7 +519,7 @@ describe("a bill's reader payment when the bill's sale fails for a full disk aft
   });
 
   it("passes any other failure on a bill's reader payment through unchanged", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(new Error("boom"));
 
     const answer = await pay(billId);
@@ -696,7 +696,7 @@ describe.each(REAL_PROVIDERS)(
     it("says the card was charged on a bill's reader payment, and the pending pass completes it", async () => {
       const real = make();
       const till = tillWith(real);
-      const billId = await tabWith(venue, "Paella");
+      const billId = await tabWith(venue, "Seafood rice");
       const disk = fullDiskOn("save capture");
       let answer;
       try {
@@ -753,7 +753,7 @@ describe.each(REAL_PROVIDERS)(
     it("still says the bill's payment is not recorded when the attempt cannot be saved, before any charge", async () => {
       const real = make();
       const till = tillWith(real);
-      const billId = await tabWith(venue, "Paella");
+      const billId = await tabWith(venue, "Seafood rice");
       const disk = fullDiskOn("insert attempting");
       let answer;
       try {

@@ -305,7 +305,13 @@ describe("late issuance rolls back its initiating command", () => {
   it.each([1, 2])(
     "a table split refused at invoice %i of two rolls back the split and takes no number",
     async (failAt) => {
-      const { partyId, tabId: bill1 } = await seatedWith(venue, "Caña", "Caña", "Paella", "Caña");
+      const { partyId, tabId: bill1 } = await seatedWith(
+        venue,
+        "Small beer",
+        "Small beer",
+        "Seafood rice",
+        "Small beer",
+      );
       const leaving = await joinSecondTable(partyId);
       const carvePath = `/api/bills/${bill1}/move-dishes`;
       const carvedLines = await suite.db

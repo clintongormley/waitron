@@ -134,7 +134,7 @@ describe("Find Transactions SQL paging", () => {
     });
   });
   it("includes paid sales, unpaid full invoices and signed corrections but excludes voids and attempts", async () => {
-    const paidOrder = await placedIssuedBill(venue, "Caña");
+    const paidOrder = await placedIssuedBill(venue, "Small beer");
     expect((await collect(venue, paidOrder, "3.00")).status).toBe(200);
     const paid = await saleOf(paidOrder);
     await credit(venue, paidOrder, "1.00", "-1.10");
@@ -178,7 +178,7 @@ describe("Find Transactions SQL paging", () => {
   });
 
   it("types a replacement `replacement`, a refund of it `correction`, both scoped to the original's bill", async () => {
-    const order = await placedIssuedBill(venue, "Caña");
+    const order = await placedIssuedBill(venue, "Small beer");
     const original = await saleOf(order);
     const replacement = await invoice({
       correctsSaleId: original,
@@ -201,7 +201,7 @@ describe("Find Transactions SQL paging", () => {
   });
 
   it("pages 101 invoices with stable ties and exact counts despite repeated tenders and attempts", async () => {
-    const order = await parked(venue, "Caña");
+    const order = await parked(venue, "Small beer");
     const ids: string[] = [];
     for (let i = 0; i < 101; i++)
       ids.push(await invoice(i === 0 ? { workingOrderId: order } : {}, i !== 0));
@@ -238,7 +238,7 @@ describe("Find Transactions SQL paging", () => {
   });
 
   it("keeps every split card by bill-payment identity and ignores failed or unrelated attempts", async () => {
-    const order = await parked(venue, "Caña");
+    const order = await parked(venue, "Small beer");
     const sale = await invoice({ workingOrderId: order }, false);
     for (const last4 of ["3210", "0091"]) {
       const bp = randomUUID();
@@ -340,7 +340,7 @@ describe("Find Transactions SQL paging", () => {
         .values({ nodeId: venue.cfg.nodeId, code: "T1" })
         .returning({ id: invoiceSeries.id }),
     );
-    const order = await parked(venue, "Caña");
+    const order = await parked(venue, "Small beer");
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ label: "Álvaro García" }).where(eq(workingOrders.id, order)),
     );
@@ -427,7 +427,7 @@ describe("Find Transactions SQL paging", () => {
         .values({ nodeId: venue.cfg.nodeId, code: "T1" })
         .returning({ id: invoiceSeries.id }),
     );
-    const orderZ = await parked(venue, "Caña");
+    const orderZ = await parked(venue, "Small beer");
     const orderA = await parked(venue, "Tarta");
     await inTx(venue, async (tx) => {
       await tx.update(workingOrders).set({ label: "Zed" }).where(eq(workingOrders.id, orderZ));
@@ -501,7 +501,7 @@ describe("Find Transactions SQL paging", () => {
   });
 
   it("uses every original order's zone for corrections and multi-sale substitutions", async () => {
-    const counter = await parked(venue, "Caña");
+    const counter = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const own = await invoice({ workingOrderId: counter });
     const other = await invoice({ workingOrderId: party.tabId });
@@ -676,7 +676,7 @@ describe("completed post-invoice refund Transactions", () => {
     expect((await list({ type: "refund", method: "cash" })).total).toBe(0);
   });
   it("keeps refund original-sale zone scope in addition to their distinct refund identity", async () => {
-    const allowed = await parked(venue, "Caña");
+    const allowed = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const own = await invoice({ workingOrderId: allowed });
     const denied = await invoice({ workingOrderId: party.tabId });

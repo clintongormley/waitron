@@ -49,7 +49,7 @@ function venueDetailsApp(): Hono {
 }
 
 async function paidBill(): Promise<string> {
-  const billId = await placedIssuedBill(venue, "Caña");
+  const billId = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, billId, "3.00")).status).toBe(200);
   return billId;
 }

@@ -218,7 +218,7 @@ async function mismatchedPending(billId: string, device?: { deviceId: string }):
 
 describe("recovery after a crash (design §8 test 13)", () => {
   it("finalises a card the provider captured, once, issuing the invoice it completes", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     venue.card.crashNextCollect("captured");
 
     const crashed = await cardContribution(billId, "35.00");
@@ -248,7 +248,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
   });
 
   it("files the invoice under the device that took the payment, not the loop's", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     await capturedPending(billId, 3500);
     expect(venue.device2Id).not.toBe(venue.cfg.origin.deviceId);
 
@@ -260,7 +260,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
   });
 
   it("leaves a card whose provider row is still attempting pending, holding the bill", async () => {
-    const billId = await tabWith(venue, "Paella", "Tarta");
+    const billId = await tabWith(venue, "Seafood rice", "Tarta");
     venue.card.crashNextCollect("attempting");
     await cardContribution(billId, "20.00");
     const [payment] = await paymentRows(venue, billId);
@@ -279,7 +279,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
   });
 
   it("records a recovered short capture once, reducing the tip before leaving bill money outstanding", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await mismatchedPending(billId);
     expect(await settle()).toMatchObject({ received: 1 });
     expect(await settle()).toMatchObject({ received: 0 });
@@ -300,7 +300,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     venue.db.run(
       sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()} where state = 'pending'`,
     );
-    const bills = [await tabWith(venue, "Paella"), await tabWith(venue, "Paella")];
+    const bills = [await tabWith(venue, "Seafood rice"), await tabWith(venue, "Seafood rice")];
     const first = await mismatchedPending(bills[0]!);
     const second = await mismatchedPending(bills[1]!, { deviceId: venue.deviceId });
     expect(await settle()).toMatchObject({ received: 2 });
@@ -318,7 +318,7 @@ describe("the loop's own edges", () => {
   it.each([true, false])(
     "releases a confirmed noncharge only with automatic audit = %s",
     async (automatic) => {
-      const billId = await tabWith(venue, "Paella");
+      const billId = await tabWith(venue, "Seafood rice");
       const id = await strandedPending(billId, 2000);
       const paymentRef = randomUUID();
       await inTx(venue, async (tx) => {
@@ -356,7 +356,7 @@ describe("the loop's own edges", () => {
   );
 
   it("dates a capture whose provider row carries no time at the pass", async () => {
-    const billId = await tabWith(venue, "Paella", "Tarta");
+    const billId = await tabWith(venue, "Seafood rice", "Tarta");
     const id = await strandedPending(billId, 1000);
     const paymentRef = `untimed-${randomUUID()}`;
     await inTx(venue, (tx) =>
@@ -387,9 +387,9 @@ describe("the loop's own edges", () => {
   });
 
   it("reports a payment it could not settle and carries on with the next", async () => {
-    const stuckBill = await tabWith(venue, "Paella");
+    const stuckBill = await tabWith(venue, "Seafood rice");
     const stuck = await strandedPending(stuckBill, 1000);
-    const freeBill = await tabWith(venue, "Paella");
+    const freeBill = await tabWith(venue, "Seafood rice");
     const free = await strandedPending(freeBill, 1000);
     // A trigger body takes no bound value, so the id is written into it.
     venue.db.run(
@@ -414,7 +414,7 @@ describe("the loop's own edges", () => {
   });
 
   it("raises one alert for a captured card whose invoice cannot be issued, leaving it pending", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await capturedPending(billId, 3500);
     let first, second;
     await refusingSalesOf(billId, async () => {
@@ -444,7 +444,7 @@ describe("the loop's own edges", () => {
   });
 
   it("raises no such alert for a payment no card was charged for", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await strandedPending(billId, 1000);
     const before = await incidentsOf("payment.bill_settle_failed");
     venue.db.run(
@@ -464,9 +464,9 @@ describe("the loop's own edges", () => {
   });
 
   it("reports an alert it could not record beside the failure, and carries on with the next", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await capturedPending(billId, 3500);
-    const freeBill = await tabWith(venue, "Paella");
+    const freeBill = await tabWith(venue, "Seafood rice");
     const free = await strandedPending(freeBill, 1000);
     venue.db.run(
       sql.raw(
@@ -505,8 +505,8 @@ describe("the invoice a finished card payment issues", () => {
     venue.db.run(sql`update devices set receipt_printer_id = ${r1!.id} where id = ${a.deviceId}`);
     venue.db.run(sql`update devices set receipt_printer_id = ${r2!.id} where id = ${b.deviceId}`);
     try {
-      const onA = await tabWith(venue, "Paella");
-      const onB = await tabWith(venue, "Paella");
+      const onA = await tabWith(venue, "Seafood rice");
+      const onB = await tabWith(venue, "Seafood rice");
       await capturedPending(onA, 3500, a);
       await capturedPending(onB, 3500, b);
 
@@ -551,7 +551,7 @@ describe("the guests a finished card payment's receipt prints", () => {
       sql`update devices set receipt_printer_id = ${r.id} where id = ${venue.cfg.origin.deviceId}`,
     );
     try {
-      const billId = await tabWith(venue, "Paella");
+      const billId = await tabWith(venue, "Seafood rice");
       await countGuests(billId, 4);
       await capturedPending(billId, 3500, { deviceId: venue.cfg.origin.deviceId });
 
@@ -598,7 +598,7 @@ describe("the guests a finished card payment's receipt prints", () => {
 
 describe("a pending card with no provider row (design §8 test 16)", () => {
   it("is failed by the loop, releasing its reservation", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await strandedPending(billId, 2000);
 
     const pass = await settle();
@@ -609,7 +609,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
   });
 
   it("stays pending when its provider row says failed: that word is not trusted", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await strandedPending(billId, 2000);
     await inTx(venue, (tx) =>
       insertFailedPayment(tx, {
@@ -630,7 +630,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
   });
 
   it("is left alone while its card is at a reader in this process", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const release = venue.card.holdNextCollect();
     const calls = venue.card.collectCalls.length;
     const paying = cardContribution(billId, "20.00");
@@ -714,7 +714,7 @@ describe("rows written within one millisecond", () => {
 
   async function bills(): Promise<string[]> {
     const opened: string[] = [];
-    for (let made = 0; made < COUNT; made++) opened.push(await tabWith(venue, "Paella"));
+    for (let made = 0; made < COUNT; made++) opened.push(await tabWith(venue, "Seafood rice"));
     return opened;
   }
 
@@ -800,7 +800,7 @@ describe("bill settlement in card follow-up", () => {
   });
 
   it("settles only on the primary, reading the role each pass", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await strandedPending(billId, 2000);
     let role: SingletonRole = "secondary";
     const job = testCardFollowUp({ settle }, { getRole: () => role });
@@ -885,7 +885,7 @@ describe("a pass while the start's time is unconfirmed", () => {
     );
 
   it("leaves a card charged before the start pending with no alert while waiting, and records it once confirmed", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await capturedPending(billId, 3500);
     const state = startClockState();
 
@@ -905,9 +905,9 @@ describe("a pass while the start's time is unconfirmed", () => {
   });
 
   it("leaves cards pending with no alert when a clock set begins after the pass listed them, and tries no further card", async () => {
-    const firstBill = await tabWith(venue, "Paella");
+    const firstBill = await tabWith(venue, "Seafood rice");
     const first = await capturedPending(firstBill, 3500);
-    const secondBill = await tabWith(venue, "Paella");
+    const secondBill = await tabWith(venue, "Seafood rice");
     const second = await capturedPending(secondBill, 3500);
     const state = startClockState();
     state.confirm("by_devices", {});
@@ -956,9 +956,9 @@ describe("a pass while the start's time is unconfirmed", () => {
   });
 
   it("records the card it reached before a clock set began, and takes no further card to the seat", async () => {
-    const firstBill = await tabWith(venue, "Paella");
+    const firstBill = await tabWith(venue, "Seafood rice");
     const first = await capturedPending(firstBill, 3500);
-    const secondBill = await tabWith(venue, "Paella");
+    const secondBill = await tabWith(venue, "Seafood rice");
     const second = await capturedPending(secondBill, 3500);
     const state = startClockState();
     state.confirm("by_devices", {});
@@ -1026,7 +1026,7 @@ describe("a pass while the start's time is unconfirmed", () => {
   });
 
   it("records a card charged before the start at once, with no alert, when the internet confirmed the start", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const id = await capturedPending(billId, 3500);
     const state = startClockState();
     state.confirm("by_internet", {});

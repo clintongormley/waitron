@@ -87,18 +87,18 @@ describe("Orders routes", () => {
     let oldPaid: string;
     let oldOpen: string;
     try {
-      oldPaid = await placedIssuedBill(venue, "Caña");
+      oldPaid = await placedIssuedBill(venue, "Small beer");
       expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
-      oldOpen = await parked(venue, "Caña");
+      oldOpen = await parked(venue, "Small beer");
     } finally {
       vi.useRealTimers();
     }
-    const open = await parked(venue, "Caña");
-    const waiting = await placedIssuedBill(venue, "Caña");
-    const left = (await departed(venue, "Caña")).tabId;
-    const paid = await placedIssuedBill(venue, "Caña");
+    const open = await parked(venue, "Small beer");
+    const waiting = await placedIssuedBill(venue, "Small beer");
+    const left = (await departed(venue, "Small beer")).tabId;
+    const paid = await placedIssuedBill(venue, "Small beer");
     expect((await collect(venue, paid, "3.00")).status).toBe(200);
-    const cancelled = await placedIssuedBill(venue, "Caña");
+    const cancelled = await placedIssuedBill(venue, "Small beer");
     expect(
       (
         await send(
@@ -254,7 +254,7 @@ describe("Orders routes", () => {
     const [person] = await withTransaction(venue.db, (tx) =>
       seedPersons(tx, { displayName: "Paul", pinHash: hashPin("8888"), role: "staff" }),
     );
-    await parkedBy(venue, person!.id, "Caña");
+    await parkedBy(venue, person!.id, "Small beer");
     await withTransaction(venue.db, (tx) =>
       deactivatePerson(tx, {
         managementSessionId: venue.adminDashboard.split("=")[1]!,
@@ -373,7 +373,7 @@ describe("Orders routes", () => {
   it.each([false, true])(
     "reprints a saved invoice with its trading context's printer and practice marking (%s)",
     async (practiceMode) => {
-      const billId = await placedIssuedBill(venue, "Paella");
+      const billId = await placedIssuedBill(venue, "Seafood rice");
       const ownNode = await seedNode(venue.db);
       const printer = { id: venue.printerId };
       const app = new Hono();

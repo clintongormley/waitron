@@ -73,7 +73,7 @@ async function kitchenItemOf(billId: string, lineNo: number) {
   return row ?? null;
 }
 
-/** `operatorId`'s New order on the bill, holding a Caña. */
+/** `operatorId`'s New order on the bill, holding a Small beer. */
 async function saveNewOrder(bill: Bill, operatorId: string) {
   const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, bill.billId));
   return inTx(venue, (tx) =>
@@ -82,7 +82,7 @@ async function saveNewOrder(bill: Bill, operatorId: string) {
       expectedEdit,
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
     }),
   );
 }
@@ -222,7 +222,7 @@ describe("changing a sent dish while a New order waits on the bill", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toEqual([
       expect.objectContaining({ lineNo: 1, kitchenName: "CHULETA" }),
-      { lineNo: 2, kitchenName: "CANA", sentAt: expect.any(String) },
+      { lineNo: 2, kitchenName: "BEER SMALL", sentAt: expect.any(String) },
     ]);
     expect((await kitchenItemOf(bill.billId, 2))!.firedAt).not.toBeNull();
   });

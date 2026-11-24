@@ -164,7 +164,7 @@ async function derived(day: string) {
 describe("dated business-day reporting through real storage", () => {
   it("preserves historical reports and complete frozen fiscal and close rows", async () => {
     await billlessSale(venue);
-    await parked(venue, "Caña");
+    await parked(venue, "Small beer");
     await inTx((tx) =>
       seedFinishedDrawer(tx, {
         nodeId: venue.cfg.nodeId,
@@ -173,7 +173,7 @@ describe("dated business-day reporting through real storage", () => {
       }),
     );
     vi.setSystemTime(new Date("2026-11-03T12:00:00.000Z"));
-    const deferred = await placedIssuedBill(venue, "Caña");
+    const deferred = await placedIssuedBill(venue, "Small beer");
     const voided = await placedIssuedBill(venue, "Tarta");
     await voidInvoice(venue, voided);
     const bill = await parked(venue, "Tarta");
@@ -382,7 +382,7 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
   "refuses an isolated future %s anchor and preserves its rows",
   async (kind) => {
     let bill: string;
-    if (kind === "void" || kind === "tender") bill = await placedIssuedBill(venue, "Caña");
+    if (kind === "void" || kind === "tender") bill = await placedIssuedBill(venue, "Small beer");
     else bill = await parked(venue, "Tarta");
     if (kind === "refund") await contribute(venue, bill, "5.00");
     vi.setSystemTime(new Date("2026-11-04T02:00:00.000Z"));

@@ -72,7 +72,7 @@ describe("a newly set-up venue's till", () => {
     ]);
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 
-    const billId = await tabWith(venue, "House salad", "Caña");
+    const billId = await tabWith(venue, "House salad", "Small beer");
     const cancelled = await cancelItemHttp(
       venue.db,
       venue.app,
@@ -84,7 +84,7 @@ describe("a newly set-up venue's till", () => {
     );
 
     expect(cancelled.status).toBe(200);
-    expect((await rowsOf(venue, billId)).map((row) => row.name)).toEqual(["Caña"]);
+    expect((await rowsOf(venue, billId)).map((row) => row.name)).toEqual(["Small beer"]);
   });
 });
 

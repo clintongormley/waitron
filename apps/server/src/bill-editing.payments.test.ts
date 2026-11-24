@@ -41,7 +41,7 @@ async function otherBill(p: { partyId: string; tabId: string }) {
       tx,
       venue.cfg,
       id,
-      [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       "Other bill",
       { partyId: p.partyId, existingService: true, copyServiceContextFrom: p.tabId },
     ),
@@ -141,7 +141,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
   "%s payment bill authority",
   (mode) => {
     it("refuses another editor before the unsent check with no writes or provider charge", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         owned = await owner(p),
         before = frozen(),
         calls = venue.card.collectCalls.length;
@@ -159,7 +159,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(venue.card.collectCalls.length).toBe(calls);
     });
     it.each([undefined, null])("requires a complete observation (%s)", async (value) => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         before = frozen();
       await expect(direct(mode, p.tabId, value)).rejects.toMatchObject({
         code: "management.request_invalid",
@@ -168,8 +168,8 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(frozen()).toEqual(before);
     });
     it("refuses an observation for another bill", async () => {
-      const p = await seatedWith(venue, "Paella"),
-        other = await seatedWith(venue, "Caña"),
+      const p = await seatedWith(venue, "Seafood rice"),
+        other = await seatedWith(venue, "Small beer"),
         before = frozen();
       await expect(direct(mode, p.tabId, await edit(other.tabId))).rejects.toMatchObject({
         code: "management.request_invalid",
@@ -178,7 +178,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(frozen()).toEqual(before);
     });
     it("refuses a stale observation without any payment reservation", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         current = await edit(p.tabId),
         before = frozen();
       await expect(
@@ -190,7 +190,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(frozen()).toEqual(before);
     });
     it("keeps the editor's own unsent refusal and changes nothing", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         owned = await owner(p, venue.operatorId),
         before = frozen();
       await expect(direct(mode, p.tabId, owned.edit)).rejects.toMatchObject({
@@ -200,7 +200,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(frozen()).toEqual(before);
     });
     it("accepts this bill while a colleague edits another bill", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         other = await otherBill(p),
         owned = await owner(other),
         current = await edit(p.tabId);
@@ -220,7 +220,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(await edit(other.tabId)).toEqual(owned.edit);
     });
     it("refuses an old draft revision before the current owner's unsent check", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         owned = await owner(p, venue.operatorId),
         before = frozen();
       await expect(
@@ -238,7 +238,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
           tx,
           venue.cfg,
           billId,
-          [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+          [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
           null,
           { zoneId: venue.zoneId },
         ),
@@ -257,7 +257,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(await edit(billId)).toEqual(current);
     });
     it("refuses a missing HTTP observation", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         before = frozen(true);
       const result = await http(mode, p.tabId, ask(mode, undefined));
       expect(result).toMatchObject({
@@ -267,7 +267,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(frozen(true)).toEqual(before);
     });
     it("uses the HTTP session actor rather than body-supplied editor identity", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         owned = await owner(p),
         before = frozen(true),
         calls = venue.card.collectCalls.length;
@@ -287,7 +287,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
       expect(venue.card.collectCalls.length).toBe(calls);
     });
     it("passes the HTTP observation without replacing it with a current read", async () => {
-      const p = await seatedWith(venue, "Paella"),
+      const p = await seatedWith(venue, "Seafood rice"),
         current = await edit(p.tabId),
         before = frozen(true);
       const result = await http(mode, p.tabId, ask(mode, { ...current, editorVersion: 1 }));
@@ -302,7 +302,7 @@ describe.each(["preview", "cash", "manual", "reader"] as const)(
 
 describe.each(["cash", "manual", "reader"] as const)("%s original payment replay", (mode) => {
   it("normalizes only the observed edit fields in the payment fingerprint", async () => {
-    const p = await seatedWith(venue, "Paella"),
+    const p = await seatedWith(venue, "Seafood rice"),
       expectedEdit = await edit(p.tabId),
       request = ask(mode, expectedEdit);
     const noisyRequest = {
@@ -323,7 +323,7 @@ describe.each(["cash", "manual", "reader"] as const)("%s original payment replay
     expect(venue.card.collectCalls.length).toBe(calls);
   });
   it("returns its original facts after a colleague acquires the bill, without collecting twice", async () => {
-    const p = await seatedWith(venue, "Paella"),
+    const p = await seatedWith(venue, "Seafood rice"),
       original = ask(mode, await edit(p.tabId));
     const first = await http(mode, p.tabId, original);
     expect(first.status).toBe(200);
@@ -345,7 +345,7 @@ describe.each(["cash", "manual", "reader"] as const)("%s original payment replay
 
 describe("payment preview actor", () => {
   it("requires a named actor on a party bill even when unowned", async () => {
-    const p = await seatedWith(venue, "Paella"),
+    const p = await seatedWith(venue, "Seafood rice"),
       before = frozen();
     await expect(
       previewBillPayment(

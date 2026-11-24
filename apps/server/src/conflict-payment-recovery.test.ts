@@ -149,7 +149,7 @@ it("finalises an already captured bill once after the actual administrator switc
       applied: "35.00",
       tip: "0.00",
     });
-  expect((await pay(await tabWith(venue, "Paella"))).status).toBe(200);
+  expect((await pay(await tabWith(venue, "Seafood rice"))).status).toBe(200);
   const original = suite.db.all<{ id: string; sif_id: string }>(
     sql`select id, sif_id from verifactu_records`,
   )[0]!;
@@ -171,7 +171,7 @@ it("finalises an already captured bill once after the actual administrator switc
     conflict = { registroId: original.id, sifId: original.sif_id };
     return result;
   };
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   expect((await pay(billId)).json).toMatchObject({
     code: "sale.charged_not_recorded",
     params: { reason: "issuance_refused" },

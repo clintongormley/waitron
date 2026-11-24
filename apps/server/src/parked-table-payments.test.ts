@@ -31,7 +31,7 @@ describe("parked bills paid with their retrieved edit observation", () => {
     const app = venue.app;
     let id: string;
     if (origin === "table") {
-      id = (await seatedWith(venue, "Paella")).tabId;
+      id = (await seatedWith(venue, "Seafood rice")).tabId;
     } else {
       id = randomUUID();
       const parked = await app.request("/api/working-orders", {
@@ -41,7 +41,7 @@ describe("parked bills paid with their retrieved edit observation", () => {
           dining: "eat_in",
           id,
           zoneId: counterZone,
-          lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+          lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
           label: "Parked order",
         }),
       });
@@ -86,7 +86,7 @@ describe("parked bills paid with their retrieved edit observation", () => {
 it.each(["missing", "stale"] as const)(
   "refuses a %s table edit observation before taking cash",
   async (kind) => {
-    const { tabId: id } = await seatedWith(venue, "Paella");
+    const { tabId: id } = await seatedWith(venue, "Seafood rice");
     const read = await venue.app.request(`/api/working-orders/${id}`, {
       headers: { cookie: venue.cookie },
     });

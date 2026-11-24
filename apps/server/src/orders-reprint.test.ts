@@ -92,7 +92,7 @@ async function counts() {
 
 describe("dashboard receipt reprint", () => {
   it("does not queue a job or audit row when a copy cannot be built", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const before = await counts();
     const [taxpayerRow] = await inTx(venue, (tx) => tx.select().from(taxpayer));
     await inTx(venue, (tx) => tx.delete(taxpayer));
@@ -108,7 +108,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("logs an Orders failure when receipt reconstruction throws, without queuing a copy", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const backend = Object.create(venue.backend) as FiscalBackend;
     vi.spyOn(backend, "filedReceiptFor").mockRejectedValue(new Error("reconstruction probe"));
     const events: string[] = [];
@@ -135,7 +135,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("prints one marked copy on the picked printer without opening a drawer or filing", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     expect((await collect(venue, billId, "3.00")).status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -176,7 +176,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("prints the guests stored with the sale on the copy", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     await guestsOf(party.partyId, 5);
     const billId = party.tabId;
     await placeOrder(
@@ -203,7 +203,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("prints on a second printer chosen for this copy", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const printer = await inTx(venue, (tx) =>
       createPrinter(tx, {
         name: "Oficina",
@@ -224,8 +224,8 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("lets a staff dashboard session copy a receipt and a voided invoice", async () => {
-    const paid = await placedIssuedBill(venue, "Caña");
-    const voided = await placedIssuedBill(venue, "Caña");
+    const paid = await placedIssuedBill(venue, "Small beer");
+    const voided = await placedIssuedBill(venue, "Small beer");
     await voidInvoice(venue, voided);
     const first = await post(venue.staffDashboard, paid, venue.printerId);
     const second = await post(venue.staffDashboard, voided, venue.printerId);
@@ -246,7 +246,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("applies the till copy's print-receipt capability to a bound dashboard device", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const [profile] = await inTx(venue, (tx) =>
       seedDeviceProfiles(tx, {
         name: `No receipt ${randomUUID()}`,
@@ -266,7 +266,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("checks a development device header through the same print-receipt gate", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const [profile] = await inTx(venue, (tx) =>
       seedDeviceProfiles(tx, {
         name: `No copy ${randomUUID()}`,
@@ -307,7 +307,7 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("refuses an office printer for a receipt copy", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const printerId = await inTx(venue, insertA4Printer);
     const before = await counts();
     expect(await post(venue.adminDashboard, billId, printerId)).toMatchObject({
@@ -318,8 +318,8 @@ describe("dashboard receipt reprint", () => {
   });
 
   it("refuses an uninvoiced bill and an inactive printer without writing", async () => {
-    const valid = await placedIssuedBill(venue, "Caña");
-    const open = await parked(venue, "Caña");
+    const valid = await placedIssuedBill(venue, "Small beer");
+    const open = await parked(venue, "Small beer");
     const noBill = await billlessSale(venue);
     const other = await inTx(venue, (tx) =>
       createPrinter(tx, {
@@ -374,7 +374,7 @@ describe("a receipt copy printed on a printer later deleted", () => {
     );
 
   it("keeps the old printer's name on the order, refuses it for a new copy, and prints the new copy on the replacement", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     expect((await collect(venue, billId, "3.00")).status).toBe(200);
     const old = await newPrinter("Old kitchen");
     const first = await post(venue.adminDashboard, billId, old.id);

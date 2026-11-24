@@ -14,14 +14,14 @@ import "./errors.js";
 let venue: BillVenue;
 
 // Every case reads NOW, the latest record's time, and builds each clock from it. Only the setup
-// and the whole payments of a Paella bill record sales; every refund is 5.00 of one.
+// and the whole payments of a Seafood rice bill record sales; every refund is 5.00 of one.
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const settled = await pay(venue.app, billId, cashPart("35.00"));
     if (settled.status !== 200) throw new Error(`setup sale answered ${settled.status}`);
   },
@@ -76,10 +76,10 @@ function pay(app: Hono, billId: string, body: Record<string, unknown>) {
   return send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, body);
 }
 
-/** A Paella bill paid whole at `ms`, which files its invoice, then its Paella cancelled for a
+/** A Seafood rice bill paid whole at `ms`, which files its invoice, then its line cancelled for a
  * refund; answers the sale, its one tender and the cancel. */
 async function soldAt(ms: number, method: "cash" | "card") {
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   const paid = await pay(at(ms), billId, method === "cash" ? cashPart() : readerPart());
   expect(paid.status).toBe(200);
   const [tender] = await inTx(venue, (tx) =>

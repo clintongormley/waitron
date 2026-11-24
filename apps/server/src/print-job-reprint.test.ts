@@ -183,7 +183,7 @@ async function paidSale(setting: EscSetting) {
     tx.update(printers).set(setting).where(eq(printers.id, venue.printerId)),
   );
   try {
-    const billId = await placedIssuedBill(venue, "Paella");
+    const billId = await placedIssuedBill(venue, "Seafood rice");
     expect((await collect(venue, billId, "35.00")).status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
@@ -709,7 +709,7 @@ describe("a receipt queued in a language other than the sale's", () => {
 
   /** A paid bill's receipt, original or copy, queued through the receipt helpers in `language`. */
   async function printedIn(language: string | undefined, kind: "original" | "copy") {
-    const billId = await placedIssuedBill(venue, "Paella");
+    const billId = await placedIssuedBill(venue, "Seafood rice");
     expect((await collect(venue, billId, "35.00")).status).toBe(200);
     const { saleId, jobId } = await inTx(venue, async (tx) => {
       const [sale] = await tx

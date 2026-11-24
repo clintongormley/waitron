@@ -43,7 +43,7 @@ async function markConflict() {
   );
 }
 async function issued() {
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   expect((await pay(billId, part("card", "35.00"))).status).toBe(200);
   const [tender] = await suite.db
     .select({ saleId: tenders.saleId, tenderId: tenders.id })
@@ -69,7 +69,7 @@ async function refundable(kind: "bill" | "tender") {
     };
   }
   await issued();
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   const paid = await pay(billId, part("card"));
   expect(paid.status).toBe(200);
   const paymentId = (paid.json.payment as { id: string }).id;
@@ -86,7 +86,7 @@ const refusal = {
 describe("conflict issuance preflights over real routes", () => {
   it("keeps a bill card capture recoverable when its invoice is refused by a later conflict", async () => {
     await issued();
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const collect = venue.card.collect.bind(venue.card);
     venue.card.collect = async (input) => {
       const result = await collect(input);
@@ -116,7 +116,7 @@ describe("conflict issuance preflights over real routes", () => {
 
   it.each(["cash", "card"] as const)("refuses a new %s bill contribution", async (method) => {
     await issued();
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     await markConflict();
     const sends = venue.card.collectCalls.length;
     const answer = await pay(billId, part(method));

@@ -17,7 +17,7 @@ import { systemClock } from "./till-backend.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-// Every payment here is a part payment of a 35.00 Paella bill, so no case records a sale: the
+// Every payment here is a part payment of a 35.00 Seafood rice bill, so no case records a sale: the
 // database never holds a record dated after the 28-10-2024 control.
 let venue: BillVenue;
 
@@ -92,7 +92,7 @@ function pay(
   );
 }
 
-const unpaidBill = () => tabWith(venue, "Paella");
+const unpaidBill = () => tabWith(venue, "Seafood rice");
 const collects = () => venue.card.collectCalls.length;
 
 describe("bill payments under a clock before 28-10-2024", () => {

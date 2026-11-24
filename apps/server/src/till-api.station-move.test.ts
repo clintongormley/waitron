@@ -82,7 +82,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it.each([false, true])(
     "refuses an extra without changing the request's dishes (mixed: %s)",
     async (mixed) => {
-      const { tabId } = await seatedWith(venue, "Paella");
+      const { tabId } = await seatedWith(venue, "Seafood rice");
       const [dish] = await inTx(venue, (tx) =>
         ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
       );
@@ -92,7 +92,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
           venue.cfg,
           tabId,
           dish!.workingOrderLineId,
-          venue.offerFor("Caña"),
+          venue.offerFor("Small beer"),
           true,
         ),
       );
@@ -124,7 +124,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   );
 
   it("records the session's device and person as the mover", async () => {
-    const { tabId } = await seatedWith(venue, "Paella");
+    const { tabId } = await seatedWith(venue, "Seafood rice");
     const [item] = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );
@@ -151,7 +151,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   });
 
   it("moves a queued dish and exposes its station and move eligibility", async () => {
-    const { tabId } = await seatedWith(venue, "Paella");
+    const { tabId } = await seatedWith(venue, "Seafood rice");
     const [item] = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );
@@ -228,7 +228,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   });
 
   it("answers 404 for an unknown order in the address, and 400 when only the body misses", async () => {
-    const { tabId } = await seatedWith(venue, "Paella");
+    const { tabId } = await seatedWith(venue, "Seafood rice");
     const unknownOrder = randomUUID();
     const body = { lineIds: [randomUUID()], stationId: grill };
     const missedAddress = await call(`/api/working-orders/${unknownOrder}/lines/move-station`, {
@@ -253,7 +253,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     ["ready", "ticket.already_started"],
     ["made here", "ticket.made_here"],
   ] as const)("maps %s to 409 %s", async (state, code) => {
-    const { tabId } = await seatedWith(venue, "Paella");
+    const { tabId } = await seatedWith(venue, "Seafood rice");
     const [item] = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );
@@ -278,7 +278,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       dining: "eat_in",
       id: tabId,
       zoneId: venue.zoneId,
-      lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
     });
     expect(parked.status).toBe(200);
     const listed = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${tabId}/lines`);
@@ -301,8 +301,8 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   });
 
   it("maps unowned lines, unknown and deleted stations, and closed orders", async () => {
-    const first = await seatedWith(venue, "Paella");
-    const second = await seatedWith(venue, "Paella");
+    const first = await seatedWith(venue, "Seafood rice");
+    const second = await seatedWith(venue, "Seafood rice");
     const [firstItem] = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, first.tabId)),
     );
@@ -359,7 +359,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it.each(["whole order", "one line"] as const)(
     "keeps moved make-at on added units through the %s route",
     async (path) => {
-      const { tabId } = await seatedWith(venue, "Paella");
+      const { tabId } = await seatedWith(venue, "Seafood rice");
       const [item] = await inTx(venue, (tx) =>
         ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
       );
@@ -379,7 +379,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
               lines: [
                 {
                   workingOrderLineId: item!.workingOrderLineId,
-                  menuItemId: venue.offerFor("Paella"),
+                  menuItemId: venue.offerFor("Seafood rice"),
                   quantity: "2",
                   makeAt: null,
                 },
@@ -419,7 +419,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         dining: "eat_in",
         id: tabId,
         zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
       });
       expect(parked.status).toBe(200);
       await inTx(venue, async (tx) => {
@@ -448,7 +448,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
               lines: [
                 {
                   workingOrderLineId: item!.workingOrderLineId,
-                  menuItemId: venue.offerFor("Paella"),
+                  menuItemId: venue.offerFor("Seafood rice"),
                   quantity: "2",
                   makeAt: null,
                 },
@@ -485,7 +485,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       dining: "eat_in",
       id: tabId,
       zoneId: venue.zoneId,
-      lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
     });
     expect(parked.status).toBe(200);
     await inTx(venue, async (tx) => {
@@ -526,7 +526,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
 
 describe("station queue move attribution", () => {
   it("reads the latest move at its receiving station for a till and a dashboard actor", async () => {
-    const { tabId } = await seatedWith(venue, "Paella");
+    const { tabId } = await seatedWith(venue, "Seafood rice");
     const [item] = await inTx(venue, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );

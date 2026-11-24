@@ -91,7 +91,7 @@ useVenueDb({
 
 /** A full invoice on a new open bill, in `seriesId` (the venue's full series by default). */
 async function fullInvoice(seriesId = fullSeriesId): Promise<{ billId: string; saleId: string }> {
-  const billId = await parked(venue, "Caña");
+  const billId = await parked(venue, "Small beer");
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
       operationDescription: "Restaurante",
@@ -107,8 +107,8 @@ async function fullInvoice(seriesId = fullSeriesId): Promise<{ billId: string; s
       lines: [
         {
           lineNo: 1,
-          name: "Caña",
-          descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+          name: "Small beer",
+          descriptions: { [venue.cfg.locale]: "Glass of lager" },
           quantity: "1",
           unitPrice: "3.00",
           vatRate: "10",
@@ -277,7 +277,7 @@ describe("dashboard invoice PDF download", () => {
   });
 
   it("refuses a simplified invoice, writing nothing", async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const before = await rowCounts();
     expect(await download(managerDashboard, billId)).toMatchObject({
       status: 409,
@@ -287,7 +287,7 @@ describe("dashboard invoice PDF download", () => {
   });
 
   it("refuses a bill with no invoice and an id that is not one", async () => {
-    const billId = await parked(venue, "Caña");
+    const billId = await parked(venue, "Small beer");
     for (const id of [billId, randomUUID(), "not-a-bill"]) {
       expect(await download(managerDashboard, id)).toMatchObject({
         status: 404,
@@ -351,10 +351,10 @@ async function saleDownload(cookie: string, saleId: string) {
 
 /** Issues one invoice of each kind and answers its sale's id. */
 const kinds = {
-  F2: async () => saleOfBill(await placedIssuedBill(venue, "Caña")),
+  F2: async () => saleOfBill(await placedIssuedBill(venue, "Small beer")),
   F1: async () => (await fullInvoice()).saleId,
   F3: async () => {
-    const ticket = await saleOfBill(await placedIssuedBill(venue, "Caña"));
+    const ticket = await saleOfBill(await placedIssuedBill(venue, "Small beer"));
     const { saleId } = await inTx(venue, (tx) =>
       recordSubstitution(tx, venue.backend, {
         operationDescription: "Restaurante",
@@ -372,8 +372,8 @@ const kinds = {
         lines: [
           {
             lineNo: 1,
-            name: "Caña",
-            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            name: "Small beer",
+            descriptions: { [venue.cfg.locale]: "Glass of lager" },
             quantity: "1",
             unitPrice: "3.00",
             vatRate: "10",
@@ -388,7 +388,7 @@ const kinds = {
     return saleId;
   },
   R5: async () => {
-    const billId = await placedIssuedBill(venue, "Caña");
+    const billId = await placedIssuedBill(venue, "Small beer");
     const ticket = await saleOfBill(billId);
     await credit(venue, billId, "1.00", "-1.10");
     const [corrective] = await inTx(venue, (tx) =>
@@ -507,7 +507,7 @@ describe("tax office copy: a ticket at ticket width, a full invoice on A4", () =
     F2: kinds.F2,
     R5: kinds.R5,
     "voided F2": async () => {
-      const billId = await placedIssuedBill(venue, "Caña");
+      const billId = await placedIssuedBill(venue, "Small beer");
       await voidInvoice(venue, billId);
       return saleOfBill(billId);
     },

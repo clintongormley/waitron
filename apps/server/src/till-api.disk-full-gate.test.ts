@@ -100,7 +100,7 @@ function park(app: Hono, id = randomUUID()) {
     dining: "eat_in",
     id,
     zoneId: venue.zoneId,
-    lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+    lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
   });
 }
 
@@ -179,7 +179,10 @@ describe("the full-disk gate on the till's routes", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "fire" },
+          {
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+            release: "fire",
+          },
         ],
       });
     const counts = () => ({

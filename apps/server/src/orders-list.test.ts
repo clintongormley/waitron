@@ -95,7 +95,7 @@ const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 
 describe("facts this list relies on", () => {
   it("an open bill abandoned from the till keeps its lines", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     const deleted = await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${id}`);
     expect(deleted.status).toBe(200);
     const lines = await inTx(venue, (tx) =>
@@ -120,7 +120,7 @@ describe("facts this list relies on", () => {
         dining: "eat_in",
         basket: {
           zoneId: venue.zoneId,
-          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+          lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
         },
       },
     );
@@ -138,7 +138,7 @@ describe("facts this list relies on", () => {
 
 describe("each status, from the product's own write paths", () => {
   it("reads an open bill as Open, owing its lines, credited to who rang them", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     expect(await rowOf(party.tabId)).toMatchObject({
       kind: "bill",
       status: "open",
@@ -186,7 +186,7 @@ describe("each status, from the product's own write paths", () => {
     });
 
   it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its corrective", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
       status: "cancelled",
@@ -198,7 +198,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("refuses to cancel a bill whose correctives already bring its invoice to nothing, leaving its row as it was", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     await credit(venue, id, "2.73", "-3.00");
     const before = await rowOf(id);
     expect(before).toMatchObject({ credited: "in_full", correctives: [expect.any(String)] });
@@ -210,7 +210,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("reads a debt cancelled at the till afterwards as Cancelled and credited in full, not Left without paying", async () => {
-    const party = await departed(venue, "Caña");
+    const party = await departed(venue, "Small beer");
     expect((await cancel(party.tabId)).status).toBe(200);
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "cancelled",
@@ -222,7 +222,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("lists an open bill abandoned with lines as Cancelled, and leaves out an empty one never sent", async () => {
-    const held = await parked(venue, "Caña");
+    const held = await parked(venue, "Small beer");
     await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${held}`);
     expect(await rowOf(held)).toMatchObject({ status: "cancelled" });
 
@@ -245,7 +245,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("reads a voided invoice's bill as Voided, ahead of Waiting for payment", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     await voidInvoice(venue, id);
     expect(await rowOf(id)).toMatchObject({
       status: "voided",
@@ -377,7 +377,7 @@ describe("a replaced invoice", () => {
 
 describe("filters and search", () => {
   it("limits a till lookup to bills that still owe money", async () => {
-    const waiting = await placedIssuedBill(venue, "Caña");
+    const waiting = await placedIssuedBill(venue, "Small beer");
     const fullyCredited = await departed(venue, "Red wine bottle");
     await credit(venue, fullyCredited.tabId, "27.27", "-30.00");
     const sale = await billlessSale(venue);
@@ -397,9 +397,9 @@ describe("filters and search", () => {
   });
 
   it("Unpaid takes Waiting for payment and Left without paying, and nothing else", async () => {
-    const waiting = await placedIssuedBill(venue, "Caña");
-    const debt = await departed(venue, "Caña");
-    const open = await seatedWith(venue, "Caña");
+    const waiting = await placedIssuedBill(venue, "Small beer");
+    const debt = await departed(venue, "Small beer");
+    const open = await seatedWith(venue, "Small beer");
     const found = ids((await list("status=unpaid&anyDate=true")).rows);
     expect(found).toEqual(expect.arrayContaining([waiting, debt.tabId]));
     expect(found).not.toContain(open.tabId);
@@ -416,7 +416,7 @@ describe("filters and search", () => {
   });
 
   it("finds a bill by its order number, before it has any invoice", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const row = await rowOf(party.tabId);
     expect(row.invoiceNumber).toBeNull();
     expect(ids((await list(`anyDate=true&q=${row.orderNumber as number}`)).rows)).toContain(
@@ -425,7 +425,7 @@ describe("filters and search", () => {
   });
 
   it("matches a table in any letter case, and a % literally", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const label = (await rowOf(party.tabId)).tables as string[];
     expect(
       ids((await list(`anyDate=true&table=${encodeURIComponent(label[0]!.toUpperCase())}`)).rows),
@@ -434,7 +434,7 @@ describe("filters and search", () => {
   });
 
   it("finds a party by its name", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const named = await send(venue.app, venue.cookie, "PUT", `/api/parties/${party.partyId}/name`, {
       name: "Familia Ortega",
       expectedPartyRevision: party.revision,
@@ -551,9 +551,9 @@ describe("dates and pages", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-14T03:59:59.000Z") });
     let before: string, after: string;
     try {
-      before = await parked(venue, "Caña");
+      before = await parked(venue, "Small beer");
       vi.setSystemTime(new Date("2026-03-14T04:00:00.000Z"));
-      after = await parked(venue, "Caña");
+      after = await parked(venue, "Small beer");
     } finally {
       vi.useRealTimers();
     }
@@ -580,7 +580,7 @@ describe("dates and pages", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-02-02T12:00:00.000Z") });
     let pair: string[];
     try {
-      pair = [await parked(venue, "Caña"), await parked(venue, "Caña")];
+      pair = [await parked(venue, "Small beer"), await parked(venue, "Small beer")];
     } finally {
       vi.useRealTimers();
     }
@@ -627,7 +627,7 @@ describe("rows written within one millisecond, read in the order they were writt
   };
 
   it("lists a party's tables joined together in the order they were joined", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const labels = await inTx(venue, async (tx) => {
       const [seated] = await tx
         .select({ joinedAt: partyTables.joinedAt })
@@ -671,7 +671,7 @@ describe("rows written within one millisecond, read in the order they were writt
   });
 
   it("shows a bill's payments, and each payment's refunds, in the order they were taken", async () => {
-    const billId = await parked(venue, "Caña");
+    const billId = await parked(venue, "Small beer");
     const paymentId = descendingIds();
     const refundId = descendingIds();
     await inTx(venue, async (tx) => {
@@ -820,7 +820,7 @@ describe("a filter on the order's id", () => {
   });
 
   it("keeps the bill whose order it names", async () => {
-    const billId = await parked(venue, "Caña");
+    const billId = await parked(venue, "Small beer");
     const page = await inTx(venue, (tx) =>
       listOrders(tx, {
         status: "all",

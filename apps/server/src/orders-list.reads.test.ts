@@ -61,7 +61,7 @@ const ANY: OrderListFilter = {
  * (amounts due, correctives), and a debt (a departure).
  */
 async function oneOfEach(): Promise<void> {
-  const party = await seatedWith(venue, "Caña", "Tarta");
+  const party = await seatedWith(venue, "Small beer", "Tarta");
   await contribute(venue, party.tabId, "5.00");
   const invoiced = await placedIssuedBill(venue, "Red wine bottle");
   await credit(venue, invoiced, "2.00", "-2.20");

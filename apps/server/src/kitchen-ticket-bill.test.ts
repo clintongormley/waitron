@@ -36,7 +36,7 @@ it("a moved dish shows under its new bill on every kitchen read", async () => {
       .where(eq(kitchenStations.id, station.id));
     return station;
   });
-  const party = await seatedWith(v, "Paella", "Tarta");
+  const party = await seatedWith(v, "Seafood rice", "Tarta");
   const lines = await v.db
     .select()
     .from(workingOrderLines)
@@ -79,8 +79,8 @@ it("a moved dish shows under its new bill on every kitchen read", async () => {
     );
   });
   for (const [id, wanted, absent] of [
-    [party.tabId, "PAELLA", "TARTA"],
-    [newBill, "TARTA", "PAELLA"],
+    [party.tabId, "RICE PAN", "TARTA"],
+    [newBill, "TARTA", "RICE PAN"],
   ] as const) {
     const before = new Set(
       (await v.db.select({ id: printJobs.id }).from(printJobs)).map((job) => job.id),

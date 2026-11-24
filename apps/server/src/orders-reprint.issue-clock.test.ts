@@ -60,7 +60,7 @@ describe("dashboard receipt reprint", () => {
     vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"));
     let oldPaid: string;
     try {
-      oldPaid = await placedIssuedBill(venue, "Caña");
+      oldPaid = await placedIssuedBill(venue, "Small beer");
       expect((await collect(venue, oldPaid, "3.00")).status).toBe(200);
     } finally {
       vi.useRealTimers();

@@ -56,7 +56,7 @@ useVenueDb({
         .map((row) => [row.name, row.id]),
     );
     counterOffer = (name) => offers.offerFor(productIds.get(name)!);
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const settled = await send(
       venue.app,
       venue.cookie,
@@ -180,7 +180,7 @@ function settlingSnapshot() {
 describe("a kitchen send", () => {
   it("rolls back a settling Cancel item when its saved-answer write refuses", async () => {
     const now = nowMs();
-    const party = await seatedWith(venueAt(now), "Caña", "Caña");
+    const party = await seatedWith(venueAt(now), "Small beer", "Small beer");
     const paid = await send(
       at(now),
       venue.cookie,
@@ -239,7 +239,7 @@ describe("a partial Cancel item", () => {
    * a bill written before portions holds it: the case cuts part of a line in place.
    */
   async function halfPaidBeers(now: number): Promise<string> {
-    const billId = await groupedTabWith(venue, "Caña");
+    const billId = await groupedTabWith(venue, "Small beer");
     expect((await setQuantity(at(now), billId, "2")).status).toBe(200);
     const paid = await send(
       at(now),
@@ -279,7 +279,7 @@ describe("a held-order save", () => {
 
   /** A bill of two beers, raised as the line route raises a beer, with 3.00 of it received. */
   async function halfPaidBeers(now: number): Promise<string> {
-    const billId = await tabWith(venue, "Caña");
+    const billId = await tabWith(venue, "Small beer");
     const raised = await send(
       at(now),
       venue.cookie,
@@ -313,7 +313,7 @@ describe("a held-order save", () => {
       lines: heldRow(
         dishLines(billId).map((line) => line.id),
         "1",
-        { menuItemId: venue.offerFor("Caña") },
+        { menuItemId: venue.offerFor("Small beer") },
       ),
     });
   }
@@ -419,7 +419,7 @@ describe("a cancel's credit", () => {
       dining: "eat_in",
       id,
       zoneId: counterZone,
-      lines: [{ menuItemId: counterOffer("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: counterOffer("Small beer"), quantity: "1" }],
     });
     expect(parked.status).toBe(200);
     if (issued) {

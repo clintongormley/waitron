@@ -330,9 +330,9 @@ function readerPart(amount: string) {
   };
 }
 
-/** A Paella bill (35.00) with one part payment taken through the ungated routes. */
+/** A Seafood rice bill (35.00) with one part payment taken through the ungated routes. */
 async function billPaid(body: Record<string, unknown>) {
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   const paid = await as(venue.app, "POST", `/api/working-orders/${billId}/payments`, body);
   expect(paid.status).toBe(200);
   return { billId, paymentId: (paid.json.payment as { id: string }).id };
@@ -350,7 +350,7 @@ function billRefund(billId: string, paymentId: string) {
     as(app, "POST", `/api/working-orders/${billId}/payments/${paymentId}/refunds`, body);
 }
 
-/** A Paella bill paid whole, which files its sale; answers the sale, its one tender and the bill. */
+/** A Seafood rice bill paid whole, which files its sale; answers the sale, its one tender and the bill. */
 async function soldWhole(method: "cash" | "card") {
   const { billId } = await billPaid(method === "cash" ? cashPart("35.00") : readerPart("35.00"));
   const [tender] = await inTx(venue, (tx) =>
@@ -363,7 +363,7 @@ async function soldWhole(method: "cash" | "card") {
   return { ...tender!, billId };
 }
 
-/** A Paella bill paid whole, then its Paella cancelled for a refund to name. */
+/** A Seafood rice bill paid whole, then its line cancelled for a refund to name. */
 async function soldForRefund(method: "cash" | "card") {
   const sold = await soldWhole(method);
   return { ...sold, cancellationId: await refundableCancel(venue.db, venue.cfg, sold.billId, 1) };
@@ -580,7 +580,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     };
   },
   "a bill's card part payment": async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const body = readerPart("10.00");
     return {
       send: (app) => as(app, "POST", `/api/working-orders/${billId}/payments`, body),
@@ -588,7 +588,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
     };
   },
   "a bill's cash part payment": async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const body = cashPart("10.00");
     return {
       send: (app) => as(app, "POST", `/api/working-orders/${billId}/payments`, body),
@@ -920,9 +920,9 @@ const manager = (app: Hono, path: string, body: unknown = {}) =>
 
 const confirmedBy = (outcome: string) => ({ outcome, note: "Seen at the provider", pin: "1234" });
 
-/** A Paella bill's card part payment whose reader stopped answering, left pending. */
+/** A Seafood rice bill's card part payment whose reader stopped answering, left pending. */
 async function stalledBillPayment(amount: string) {
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   venue.card.stallNextCollect();
   await as(venue.app, "POST", `/api/working-orders/${billId}/payments`, readerPart(amount));
   const [row] = venue.db.all<{ id: string; paymentRef: string }>(sql`

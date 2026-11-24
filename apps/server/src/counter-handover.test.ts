@@ -80,12 +80,12 @@ useVenueDb({
         return zone!.id;
       });
     }
-    // Caña is poured at the bar: it goes to no station, so an order of it alone has no kitchen
+    // Small beer is poured at the bar: it goes to no station, so an order of it alone has no kitchen
     // ticket.
     await inTx(venue, async (tx) => {
       const [item] = (
         await tx.execute<{ product_id: string }>(
-          sql`select product_id from menu_items where id = ${venue.offerFor("Caña")}`,
+          sql`select product_id from menu_items where id = ${venue.offerFor("Small beer")}`,
         )
       ).rows;
       await setRoutingCell(
@@ -256,7 +256,7 @@ describe("handing over a counter order sent without payment", () => {
   });
 
   it("refuses a placed order with no kitchen ticket (ticket.not_fired)", async () => {
-    const id = await placed("ticket_then_pay", "Caña");
+    const id = await placed("ticket_then_pay", "Small beer");
     expect(ticketItemCount(id)).toBe(0);
     const before = await orderRow(id);
 
@@ -268,7 +268,7 @@ describe("handing over a counter order sent without payment", () => {
   });
 
   it("refuses a presented table bill, even in a mode that takes payment after sending (working_order.not_settled)", async () => {
-    const id = await tabWith(venue, "Paella");
+    const id = await tabWith(venue, "Seafood rice");
     await inTx(venue, (tx) => VENUE_SERVICE.retargetOrderContext(tx, id, zones.ticket_then_pay));
     const context = await inTx(venue, (tx) => VENUE_SERVICE.findOrderContext(tx, id));
     expect(context?.serviceMode).toBe("ticket_then_pay");
@@ -622,7 +622,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
         zoneId: zones.ticket_then_pay,
         lines: [
           { menuItemId: venue.offerFor("Tarta"), quantity: "1" },
-          { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+          { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
         ],
       },
       "50.00",
@@ -642,7 +642,7 @@ describe("paying a counter order never sent, in a mode that sends before payment
       id,
       {
         zoneId: zones.ticket_then_pay,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       },
       "50.00",
     );
@@ -883,7 +883,7 @@ describe("GET /api/orders/counter-waiting", () => {
     const handedOver = await placed("issued", "Tarta");
     await markCollected({ db: venue.db }, venue.cfg, handedOver);
     const sentPrepay = await placed("prepay", "Tarta");
-    const sentNothingToCook = await placed("ticket_then_pay", "Caña");
+    const sentNothingToCook = await placed("ticket_then_pay", "Small beer");
     const paid = await paidPrepay();
 
     const rows = await waiting();
@@ -1040,7 +1040,7 @@ describe("GET /api/orders/counter-waiting", () => {
     const collected = await paidPrepay();
     await markCollected({ db: venue.db }, venue.cfg, collected);
     const open = await parked("ticket_then_pay", "Tarta");
-    const tableBill = await tabWith(venue, "Paella");
+    const tableBill = await tabWith(venue, "Seafood rice");
     await placeOrder(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,
@@ -1057,7 +1057,7 @@ describe("GET /api/orders/counter-waiting", () => {
       paidUnfired,
       {
         zoneId: zones.ticket_then_pay,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       },
       "50.00",
     );
@@ -1159,7 +1159,7 @@ describe("GET /api/working-orders/:id/placed", () => {
     send(venue.app, cookie, "GET", `/api/working-orders/${id}/placed`);
 
   it("answers a counter order sent without payment as the open-order read answered it before it was sent", async () => {
-    const id = await parked("ticket_then_pay", "Tarta", "Caña");
+    const id = await parked("ticket_then_pay", "Tarta", "Small beer");
     const open = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
     expect(open.status).toBe(200);
     await placeOrder(
@@ -1186,7 +1186,7 @@ describe("GET /api/working-orders/:id/placed", () => {
     const open = await parked("ticket_then_pay", "Tarta");
     const paid = await placed("ticket_then_pay", "Tarta");
     await collectCash(paid);
-    const tableBill = await tabWith(venue, "Paella");
+    const tableBill = await tabWith(venue, "Seafood rice");
     await placeOrder(
       { ...deps(), admission: testTradingAdmission() },
       venue.cfg,

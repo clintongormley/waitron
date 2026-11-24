@@ -102,13 +102,10 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   fixtures use English staff display names.
   The till-sale suite uses Main room, Administrator, Food and Drinks for local staff samples;
   its Spanish product names, customer wording and fiscal defaults remain.
-  BillVenue uses Croquettes and Octopus as staff keys, with their matching selectors and
-  readbacks; customer Croquetas de jamón / Pulpo a la gallega and kitchen CROQ / PULPO stay.
-  Its Tarta, Caña and Paella keys remain, along with the other fixture work below.
   The nine local party suites use English table, party, course and printer samples; shared
   party-venue defaults, dish selectors and till-API samples remain.
   The filing order-portion suite still has Spanish dish samples. Shared helpers' dish names and selectors
-  remain, including those read by the working-order, receipt-print and counter-portion suites.
+  remain, including those read by the working-order and receipt-print suites.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
@@ -481,10 +478,11 @@ also qualifies the historical operation-description references in this section.
   pay-and-dispatch and stuck-payment fixtures use Administrator; their location and category
   samples use Main room and Drinks where present.
   Other display samples in those files remain.
-  The shared `setupVenue` uses Administrator,
-  Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
-  and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
-  Caña, Paella and its other labels remain. PartyVenue uses Red wine bottle and Water as
+  The shared `setupVenue` uses Administrator, Drinks, Coffee and Water.
+  BillVenue still needs English names for Tarta and for the customer and kitchen names of
+  Steak, Red wine bottle, House salad, Croquettes and Octopus. Its other Spanish venue labels
+  still need triage.
+  PartyVenue uses Red wine bottle and Water as
   staff keys, retaining customer Rioja crianza / Agua mineral, kitchen TINTO / AGUA and the
   independent recorded Vino.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
@@ -503,9 +501,9 @@ also qualifies the historical operation-description references in this section.
   `order-portions.filing.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
   other shared-helper samples and their consumers' dish selectors also remain. These belong to
-  A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
-  samples and `receipt-document.test.ts` fixture descriptions and test titles also need
-  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale
+  A976 rather than the private-name work in A974. Triage the `receipt-document.test.ts`
+  fixture descriptions and test titles while preserving Spanish receipt output and
+  deliberate locale checks. Fiscal-sale
   descriptions also retain Spanish words. The fiscal-sale
   suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route

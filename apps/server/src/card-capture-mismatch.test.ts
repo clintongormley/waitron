@@ -52,7 +52,7 @@ it.each([
   "keeps a short whole-order charge on a $mode bill and takes the remainder with a new reader key",
   async ({ mode, captured, asked, actual: actualMoney, records }) => {
     const venue = await provisionBillVenue(suite.db);
-    const id = await tabWith(venue, "Paella");
+    const id = await tabWith(venue, "Seafood rice");
     const deps = { ...venue, admission: testTradingAdmission() };
     if (mode === "invoiced" || mode === "corrected")
       await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
@@ -290,7 +290,7 @@ it.each(["stripe", "sumup"])(
         provider.collect({ ...params, readerRef: "rdr_test" }),
     });
     vi.spyOn(venue.pool, "get").mockResolvedValue(routed);
-    const id = await tabWith(venue, "Paella");
+    const id = await tabWith(venue, "Seafood rice");
     const first = {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -354,7 +354,7 @@ it.each(["stripe", "sumup"])(
 
 it("retains a short capture after a lost reader answer and warns the next operator without recharging", async () => {
   const venue = await provisionBillVenue(suite.db);
-  const id = await tabWith(venue, "Paella");
+  const id = await tabWith(venue, "Seafood rice");
   let confirmed = false;
   const client = new FakeStripe();
   const read = client.retrievePaymentIntent.bind(client);

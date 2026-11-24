@@ -682,7 +682,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   await m2Files.close();
 
   // After the seed, so the only way M2 can come to hold them is the final copy.
-  const openTabId = await tabWith(venue, "Paella");
+  const openTabId = await tabWith(venue, "Seafood rice");
   const certificate = makeAuthority().issue();
   await sealAeatSecret(
     { db: m1Files.db, ring, nodeId: m1Id },
@@ -886,7 +886,7 @@ function askSale(boxes: Boxes, box: Box, orderId = randomUUID()) {
       dining: "eat_in",
       basket: {
         zoneId: boxes.venue.zoneId,
-        lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+        lines: [{ menuItemId: boxes.venue.offerFor("Small beer"), quantity: "1" }],
       },
     },
   });
@@ -954,7 +954,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
         entry: "reader",
         basket: {
           zoneId: boxes.venue.zoneId,
-          lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+          lines: [{ menuItemId: boxes.venue.offerFor("Small beer"), quantity: "1" }],
         },
         dining: "eat_in",
       },
@@ -1564,7 +1564,7 @@ async function inheritedWork(
     );
   const linesBefore = lineCount();
 
-  // Change the inherited table: one more Caña, sent to the kitchen.
+  // Change the inherited table: one more Small beer, sent to the kitchen.
   const readOne = await attempt(m2, `/api/working-orders/${tabId}`, { cookie: venue.cookie });
   const change = await attempt(m2, `/api/parties/${partyId}/groups`, {
     cookie: venue.cookie,
@@ -1572,7 +1572,9 @@ async function inheritedWork(
       submissionId: randomUUID(),
       expectedPartyRevision: partyRevision(),
       expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
-      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
+      ],
     },
   });
   const linesAfterChange = lineCount();
@@ -1667,7 +1669,7 @@ async function inheritedWork(
     body: {
       id: randomUUID(),
       zoneId: venue.zoneId,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       dining: "eat_in",
     },
   });
@@ -2323,7 +2325,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   it("the open table is on M2, through its till route, as it stands on M1", () => {
     const { b, on } = sold();
     expect(on.tableOnM2.find((order) => order.id === b.openTabId)?.items).toMatchObject([
-      { name: "Paella" },
+      { name: "Seafood rice" },
     ]);
     expect(on.m1TableStatus).toEqual([{ status: "open" }]);
   });

@@ -82,9 +82,9 @@ async function revisionOf(partyId: string): Promise<number> {
   return row!.revision;
 }
 
-/** A party with a main bill (Paella) and a second bill (Caña) split off it. */
+/** A party with a main bill (Seafood rice) and a second bill (Small beer) split off it. */
 async function twoBills(): Promise<{ partyId: string; main: string; second: string }> {
-  const { partyId, tabId } = await seated("Paella", "Caña");
+  const { partyId, tabId } = await seated("Seafood rice", "Small beer");
   const expectedPartyRevision = await revisionOf(partyId);
   const { billId: checkId } = await inTx(venue, (tx) =>
     splitBill(tx, venue.cfg, tabId, [{ lineNo: 2 }], {
@@ -284,7 +284,7 @@ describe("the bill action routes", () => {
   );
 
   it("move-dishes to a new bill answers the new bill's id and moves the party's revision once", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const expectedPartyRevision = await revisionOf(partyId);
 
     const answer = await post(`/api/bills/${tabId}/move-dishes`, {
@@ -444,7 +444,7 @@ describe("the bill action routes", () => {
   it.each(["move-dishes"] as const)(
     "a %s that leaves the source fully paid issues its invoice",
     async (route) => {
-      const { partyId, tabId } = await seated("Paella", "Caña");
+      const { partyId, tabId } = await seated("Seafood rice", "Small beer");
       await takeBillPayment(
         {
           admission: testTradingAdmission(),
@@ -503,7 +503,7 @@ describe("A803 rename: PUT /api/bills/:id/name", () => {
     };
   }
 
-  /** An unsent Paella on the bill, saved by the admin unless another person is named. */
+  /** An unsent Seafood rice on the bill, saved by the admin unless another person is named. */
   async function adminUnsentDish(partyId: string, billId: string, personId = venue.adminId) {
     return inTx(venue, (tx) =>
       saveDraftForTest(tx, partyId, personId, {
@@ -512,7 +512,7 @@ describe("A803 rename: PUT /api/bills/:id/name", () => {
         revision: 0,
         lines: [
           {
-            menuItemId: venue.offerFor("Paella"),
+            menuItemId: venue.offerFor("Seafood rice"),
             variantId: null,
             menuVersionId: null,
             quantity: "1",

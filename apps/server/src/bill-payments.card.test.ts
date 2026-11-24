@@ -144,7 +144,7 @@ async function providerRowOf(billPaymentId: string) {
 
 describe("a card on a reader: the three phases (design §5.3)", () => {
   it("reserves the payment while the reader runs, then records it received", async () => {
-    const billId = await tabWithDishes("Paella", "Tarta");
+    const billId = await tabWithDishes("Seafood rice", "Tarta");
     const { answer, release } = await heldCard(billId, "20.00");
 
     const during = await balance(billId);
@@ -171,7 +171,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("stores the received balance without counting another reader's pending reservation", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const first = await heldCard(billId, "10.00");
     const second = await cardContribution(billId, "5.00", { cookie: venue.cookie2 });
     first.release();
@@ -223,7 +223,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("marks a declined card failed and releases its reservation", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     venue.card.failNextCollect();
 
     const paid = await cardContribution(billId, "20.00");
@@ -237,7 +237,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("keeps a card the reader stopped answering pending, holding its reservation", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     venue.card.stallNextCollect();
 
     const paid = await cardContribution(billId, "20.00");
@@ -250,7 +250,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("marks a card the network refused offline failed: no money moved", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     venue.card.offlineNextCollect();
 
     const paid = await cardContribution(billId, "20.00");
@@ -263,7 +263,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("issues the invoice from the capture that pays the bill, under the device", async () => {
-    const billId = await tabWithDishes("Paella", "Tarta");
+    const billId = await tabWithDishes("Seafood rice", "Tarta");
     await cashContribution(billId, "23.00");
 
     const paid = await cardContribution(billId, "30.00");
@@ -284,14 +284,14 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("files the invoice a capture completes even when a line never sent has since been archived", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, billId, [
-        { menuItemId: venue.offerFor("Caña"), quantity: "1", hold: true },
+        { menuItemId: venue.offerFor("Small beer"), quantity: "1", hold: true },
       ]),
     );
     const card = await heldCard(billId, "38.00");
-    venue.db.run(sql`update products set active = 0 where name = 'Caña'`);
+    venue.db.run(sql`update products set active = 0 where name = 'Small beer'`);
     try {
       card.release();
       const paid = await card.answer;
@@ -299,12 +299,12 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       expect(paid.json).toMatchObject({ outcome: "received", invoice: { total: "38.00" } });
       expect(fiscalRecordCount(venue, billId)).toBe(1);
     } finally {
-      venue.db.run(sql`update products set active = 1 where name = 'Caña'`);
+      venue.db.run(sql`update products set active = 1 where name = 'Small beer'`);
     }
   });
 
   it("refuses a reader card on a device whose profile does not take integrated cards", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const calls = venue.card.collectCalls.length;
 
     const paid = await cardContribution(billId, "10.00", { cookie: venue.cookieNoCard });
@@ -322,7 +322,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   ] as const)(
     "answers a practice %s contribution and reserves only uncertain money",
     async (simulationOutcome, outcome, state, reserved) => {
-      const billId = await tabWithDishes("Paella");
+      const billId = await tabWithDishes("Seafood rice");
       const app = new Hono();
       mountTillApi(
         app,
@@ -358,7 +358,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   );
 
   it("refuses a practice outcome outside practice mode", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
 
     const paid = await send(
       venue.app,
@@ -386,7 +386,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
   });
 
   it("refuses a card from a session whose device has been revoked before any charge", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const calls = venue.card.collectCalls.length;
     const cookie = await revokedDeviceSessionCookie(venue.db, venue.operatorId, "5555");
 
@@ -410,7 +410,7 @@ describe("the box that started a card payment", () => {
   }
 
   it("records a reader card under this box's node id", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const paid = await cardContribution(billId, "10.00");
     expect(paid.status).toBe(200);
     const [row] = await paymentRows(venue, billId);
@@ -418,7 +418,7 @@ describe("the box that started a card payment", () => {
   });
 
   it("records a hand-keyed card under this box's node id", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const paid = await pay(billId, {
       kind: "contribution",
       amount: "10.00",
@@ -481,7 +481,7 @@ describe("a malformed payment body", () => {
     ],
     ["a reader id that is not an id", { ...card, readerId: "nope" }, "readerId"],
   ] as const)("refuses %s, naming the field", async (_name, body, field) => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
 
     const answer = await send(
       venue.app,
@@ -498,9 +498,9 @@ describe("a malformed payment body", () => {
 });
 
 describe("change versus tip (design §8 test 1)", () => {
-  // Steak €25.00 + House salad €12.00 + Caña €3.00 = €40.00, and a Tarta that stays unpaid.
+  // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta that stays unpaid.
   const items = [{ lineNo: 1 }, { lineNo: 2 }, { lineNo: 3 }];
-  const bill = () => tabWithDishes("Steak", "House salad", "Caña", "Tarta");
+  const bill = () => tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
 
   it("gives €10.00 change on €50.00 cash for €40.00 of items", async () => {
     const billId = await bill();
@@ -570,13 +570,13 @@ describe("change versus tip (design §8 test 1)", () => {
 });
 
 describe("the steak (design §8 test 3, §3.3)", () => {
-  // Paella 35 + Steak 25 + Red wine bottle 30 + House salad 12 + Tarta 18 = €120.00; the steak is line 2.
+  // Seafood rice 35 + Steak 25 + Red wine bottle 30 + House salad 12 + Tarta 18 = €120.00; the steak is line 2.
   const steak = [{ lineNo: 2 }];
 
   /** €105.00 contributed, one payment of it carrying a €5.00 tip that must never count. */
   async function billWith105(): Promise<string> {
     const billId = await tabWithDishes(
-      "Paella",
+      "Seafood rice",
       "Steak",
       "Red wine bottle",
       "House salad",
@@ -789,7 +789,7 @@ describe("retries (design §8 test 10, §5.1)", () => {
   });
 
   it("answers a retry of a card still at the reader 'pending' and starts no second collect", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const submissionId = randomUUID();
     const body: Body = {
       submissionId,
@@ -815,7 +815,7 @@ describe("retries (design §8 test 10, §5.1)", () => {
   });
 
   it("answers a retry of a declined card 'failed' and charges nothing more", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const body: Body = {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -836,7 +836,7 @@ describe("retries (design §8 test 10, §5.1)", () => {
   });
 
   it("replays a profile-change refusal as failed without charging, then accepts a fresh payment", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const body: Body = {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -882,7 +882,7 @@ describe("retries (design §8 test 10, §5.1)", () => {
   });
 
   it("refuses the id with another amount: submission.id_reused, charging nothing", async () => {
-    const billId = await tabWithDishes("Paella");
+    const billId = await tabWithDishes("Seafood rice");
     const submissionId = randomUUID();
     await pay(billId, {
       submissionId,
@@ -913,8 +913,8 @@ describe("retries (design §8 test 10, §5.1)", () => {
 
 describe("several devices (design §8 test 12, §5.2), each race in both orders", () => {
   it("cash first, then a card for the same last €40.00: the cash issues the invoice, and the card is refused before any charge", async () => {
-    // Steak 25 + House salad 12 + Caña 3 = €40.00.
-    const billId = await tabWithDishes("Steak", "House salad", "Caña");
+    // Steak 25 + House salad 12 + Small beer 3 = €40.00.
+    const billId = await tabWithDishes("Steak", "House salad", "Small beer");
     const calls = venue.card.collectCalls.length;
 
     const cash = await cashContribution(billId, "40.00");
@@ -929,7 +929,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("cash first while a third card is at the reader: the card for the same last €30.00 is refused order.payment_in_flight", async () => {
     // €58.00: the Tarta paid, a €10.00 card at the reader, then the last €30.00 twice.
-    const billId = await tabWithDishes("Steak", "House salad", "Caña", "Tarta");
+    const billId = await tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
     await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 4 }],
@@ -954,7 +954,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("a card first, then cash for the same last €40.00: the cash is refused, and the card's capture issues the invoice", async () => {
-    const billId = await tabWithDishes("Steak", "House salad", "Caña");
+    const billId = await tabWithDishes("Steak", "House salad", "Small beer");
     const card = await heldCard(billId, "40.00");
 
     const cash = await cashContribution(billId, "40.00", { cookie: venue.cookie2 });
@@ -968,7 +968,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("refuses another phone's stale Whole bill while a card reserves part of it", async () => {
-    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
+    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Small beer");
     const request = { kind: "share", shareOf: 1, method: "card", entry: "reader" } as const;
     const seen = await send(
       venue.app,
@@ -1010,8 +1010,8 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   ])(
     "two cards of €30.00 and €40.00 on €70.00, %s: only the second capture issues the invoice",
     async (_name, firstIndex) => {
-      // Red wine bottle 30 + Steak 25 + House salad 12 + Caña 3 = €70.00.
-      const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
+      // Red wine bottle 30 + Steak 25 + House salad 12 + Small beer 3 = €70.00.
+      const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Small beer");
       const cards = [
         await heldCard(billId, "30.00"),
         await heldCard(billId, "40.00", { cookie: venue.cookie2 }),
@@ -1042,7 +1042,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   );
 
   it("takes cash on another device while a card is at the reader, against what the card leaves", async () => {
-    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
+    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Small beer");
     const card = await heldCard(billId, "30.00");
 
     const cash = await cashContribution(billId, "40.00", { cookie: venue.cookie2 });
@@ -1060,7 +1060,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
-    const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
+    const billId = await tabWithDishes("Seafood rice", "Tarta", "Small beer", "Small beer");
     const drinks = venue.db
       .all<{
         id: string;
@@ -1092,7 +1092,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
         operatorId: venue.operatorId,
         billId,
         groups: [
-          { release: "fire", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] },
+          { release: "fire", lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }] },
         ],
       }),
     ).catch((error: unknown) => error);

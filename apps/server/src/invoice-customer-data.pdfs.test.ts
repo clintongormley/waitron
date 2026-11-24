@@ -93,7 +93,7 @@ const startsAsPdf = (bytes: Uint8Array) =>
 async function jordiInvoiceIn(seriesId: string, taxId = "01234567L"): Promise<string> {
   expect(getCountryPack("ES")!.taxIdentifier!.validate(taxId).valid).toBe(true);
   const { venue } = fixture;
-  const billId = await parked(venue, "Caña");
+  const billId = await parked(venue, "Small beer");
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
       operationDescription: "Restaurante",

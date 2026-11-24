@@ -268,7 +268,7 @@ describe("a card sale in flight when the box steps down", () => {
       state: "succeeded",
       attempts: 1,
     });
-    const billId = await tabWith(venue, "Caña");
+    const billId = await tabWith(venue, "Small beer");
     const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, billId));
     let restarts = 0;
     const restarted = hold();
@@ -370,7 +370,7 @@ describe("a card sale in flight when the box steps down", () => {
         entry: "reader",
         basket: {
           zoneId: venue.zoneId,
-          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+          lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
         },
       }),
     });
