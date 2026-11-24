@@ -11,6 +11,7 @@ import {
   decimal,
   decimalToCents,
   sumDecimals,
+  type ErrorCode,
   thousandthsToDecimal,
   type Decimal,
   type SaleId,
@@ -36,7 +37,7 @@ import { requireEconomicWrite, type TradingAdmission } from "./trading-admission
 /** The code (and params) the write would answer. Params stay as the refusal carries them: some
  * codes' params hold lists (`invoice_correction.money_short`'s invoice numbers). */
 export interface WaitReason {
-  code: string;
+  code: ErrorCode;
   params?: Record<string, unknown>;
 }
 
@@ -374,7 +375,7 @@ function waysOf(
     const pending = group.find((tender) => tender.pendingRefundId !== null);
     const first = group[0]!;
     const refused = refusedHere(device, first);
-    const reason =
+    const reason: WaitReason | null =
       pending !== undefined
         ? { code: "tender.refund_in_progress", params: { tenderId: pending.tenderId } }
         : cannotRefund.has(first.tenderId)

@@ -98,7 +98,7 @@ export function parseGiveBackRequest(body: Record<string, unknown>): GiveBackReq
 }
 
 function refusal(reason: WaitReason): AppError {
-  return new AppError(reason.code as never, (reason.params ?? {}) as never);
+  return new AppError(reason.code, (reason.params ?? {}) as never);
 }
 
 function refuseUnless(availability: Availability, field: string): void {
