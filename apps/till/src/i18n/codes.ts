@@ -610,8 +610,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta no tiene nada pagado de más.",
   },
   "bill.overpaid": {
-    en: "This bill has been paid more than it comes to. First give back the extra, or keep it as a tip where the bill offers that.",
-    es: "Esta cuenta se ha pagado de más. Primero devuelve lo que sobra o, si la cuenta lo ofrece, déjalo de propina.",
+    en: "This bill has been paid more than it comes to. First give back the extra, or keep it as a tip if the bill shows Keep as tip.",
+    es: "Esta cuenta se ha pagado de más. Primero devuelve lo que sobra o, si la cuenta muestra Dejar de propina, déjalo de propina.",
   },
   "bill.tip_needs_a_sale": {
     en: "This bill comes to nothing, so there is no sale to tip on. Give the money back instead.",

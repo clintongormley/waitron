@@ -88,9 +88,9 @@ export async function keepOverpaidAsTip(
   const earlier = await findSubmission(tx, workingOrderId, submissionId);
   if (earlier.payment !== undefined || earlier.refund !== undefined)
     throw new AppError("submission.id_reused", { submissionId });
-  const { excess, held, advances } = await readBillExcess(tx, workingOrderId);
+  const { excess, total, held, advances } = await readBillExcess(tx, workingOrderId);
   if (excess === undefined) throw new AppError("bill.not_overpaid", { workingOrderId });
-  if (compareDecimal((await readBillBalance(tx, workingOrderId)).total, ZERO) === 0)
+  if (total !== undefined && compareDecimal(total, ZERO) === 0)
     throw new AppError("bill.tip_needs_a_sale", { workingOrderId });
   if (!(await readPaymentsSettings(tx)).doc.tipsEnabled)
     throw new AppError("bill.tip_not_allowed_on_excess", { workingOrderId });
