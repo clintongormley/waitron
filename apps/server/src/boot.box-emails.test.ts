@@ -9,7 +9,6 @@ import { randomUUID } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { readVenue, saveCloudVenueId } from "@waitron/db";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { verifactuCertificates } from "@waitron/fiscal-verifactu/src/schema/index.js";
 import { CLOUD_CONNECTION_FILE, SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import { dirname, join } from "node:path";
@@ -732,11 +731,6 @@ describe("the running server's notice and email checks", () => {
     const origin = vi.spyOn(cloudClient, "loadCloudOrigin").mockReturnValue(f.options.origin);
     try {
       const now = new Date();
-      const [manager] = await seedPersons(suite.db, {
-        displayName: "Certificate manager",
-        role: "manager",
-        email: "manager@example.test",
-      });
       await withTransaction(suite.db, async (tx) => {
         await saveCloudVenueId(tx, f.venueId);
         await tx.insert(verifactuCertificates).values({
@@ -748,7 +742,6 @@ describe("the running server's notice and email checks", () => {
           validFrom: new Date("2026-01-01T00:00:00Z"),
           validUntil: new Date("2026-07-01T00:00:00Z"),
         });
-        await FISCAL_SLOT.certificate!.reminders.queue(tx, { nodeId }, [manager!.id], now);
       });
       f.patch({
         emailRelay: {
@@ -776,7 +769,15 @@ describe("the running server's notice and email checks", () => {
         },
       );
       await holder.cloudPass;
-      const mail = { ...holder.mail!, now: () => now };
+      const queuedAt = await vi.waitFor(async () => {
+        const [row] = await holder
+          .mail!.db.select()
+          .from(outgoingMail)
+          .where(eq(outgoingMail.kind, "certificate_reminder"));
+        expect(row).toMatchObject({ status: "pending" });
+        return new Date(row!.queuedAt);
+      });
+      const mail = { ...holder.mail!, now: () => queuedAt };
       const stateFile = join(f.stateDir, CLOUD_CONNECTION_FILE);
       const optedIn = await readFile(stateFile, "utf8");
       for (const state of [
@@ -791,7 +792,7 @@ describe("the running server's notice and email checks", () => {
       await runMailPass(mail);
       expect(submitted).toMatchObject({
         class: "certificate_reminder",
-        recipient: "manager@example.test",
+        recipient: "owner@example.test",
         facts: { stage: "expired", date: "2026-07-01" },
       });
       expect(holder.smtp).toEqual([]);

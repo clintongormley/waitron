@@ -135,16 +135,16 @@ describe("certificate reminder pass", () => {
 });
 
 describe("certificate reminder job", () => {
-  it("queues nothing when the Cloud grant cannot be read", async () => {
+  it.each([true, false])("queues nothing without a Cloud grant (opt-in %s)", async (enabled) => {
     const resolveGrant = vi.fn(async () => {
       throw new Error("Cloud unavailable");
     });
     await runCertificateReminderPass({
       ...deps(),
       resolveDelivery: unconfigured,
-      cloud: { ...cloudDelivery, resolveGrant },
+      cloud: { enabled: async () => enabled, resolveGrant },
     });
-    expect(resolveGrant).toHaveBeenCalledOnce();
+    expect(resolveGrant).toHaveBeenCalledTimes(enabled ? 1 : 0);
     expect(await reminders()).toEqual([]);
   });
 

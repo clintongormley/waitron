@@ -42,9 +42,10 @@ The queue's retry schedule replaces the old batch pause after a Cloud refusal.
 
 **Clock correction and retries (watcher, 2026-11-24 14:57 and 15:02):** The sender holds a
 future-stamped reminder until its queue time after the clock moves back. The email for that period
-can still go when the box reaches that time. A failed urgent or expired day's attempt, including
-a connection failure, is missed. The next day gets its own attempt.
-During a 25-hour autumn day, a refusal in the first hour can retry before midnight (watcher, 15:10).
+can still go when the box reaches that time. Urgent and expired reminders usually get one attempt
+per day, including if the connection fails. The next day gets its own row. A clock correction can
+make a refused row due again. On a 25-hour autumn day, a refusal in the first hour can retry before
+midnight (watcher, 15:10).
 
 **Base:** `main` after fi9, with slices 3a-ii and 3b landed. Line numbers read at `9c66ef0356`
 (after #2570, which changed `claimReminder` and `reportReminder` to read across the takeover
