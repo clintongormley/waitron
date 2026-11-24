@@ -95,8 +95,8 @@ describe("selected-hour admission before archive placement", () => {
     expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
       "original destination identity",
     );
-    expect(output.join("\n")).toContain(
-      "restore failed: promotion.break_glass_invalid — use the selected backup's master key",
+    expect(output.join("\n")).toMatch(
+      /^restore failed: promotion\.break_glass_invalid — wrong master key; use the one dated \d{4}-\d{2}-\d{2} · [0-9A-Z]{4}$/m,
     );
   });
 
