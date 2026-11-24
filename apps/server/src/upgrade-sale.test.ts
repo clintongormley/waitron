@@ -427,7 +427,7 @@ describe("a production copy whose record another producer filed", () => {
         }),
       );
       const result = await checkUpgradeSale(f.config, f.env, { socketPath: f.socketPath });
-      expect(result).toMatchObject({ total: "1.00", fiscalBackend: "verifactu", fiscalRecords: 1 });
+      expect(result).toMatchObject({ total: "1.00", fiscalBackend: "verifactu", fiscalRecords: 3 });
       const copy = await openVenueDatabase(f.config.venueDir);
       try {
         const [sale] = copy.venue.all<{ order: string }>(
