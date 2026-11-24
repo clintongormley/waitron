@@ -222,6 +222,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/payments                   | order; basket zone     | refuses POST …/payments and …/payments (basket zone)  |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds| order                  | refuses POST .../payments/:paymentId/refunds         |
  * | POST /api/working-orders/:id/item-payments, /preview    | order                  | refuses POST .../item-payments, /preview             |
+ * | POST /api/working-orders/:id/overpaid/keep-as-tip       | order                  | refuses POST .../overpaid/keep-as-tip                |
  * | POST /api/working-orders/:id/close-deferred          | order, inside the write | refuses POST .../close-deferred                  |
  * | GET  /api/working-orders/:id/deferred-closure           | order                  | refuses GET .../deferred-closure                     |
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
@@ -1392,6 +1393,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/payments/${id}/refunds`,
     () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/working-orders/:id/overpaid/keep-as-tip",
+    "POST",
+    (x) => `/api/working-orders/${x.deliOrder}/overpaid/keep-as-tip`,
+    () => ({ submissionId: randomUUID() }),
     deliOrderZone,
   ],
   [

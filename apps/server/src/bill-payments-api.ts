@@ -2,6 +2,7 @@ import { readOutsideCardDetails } from "./outside-card.js";
 import { parseBillEditExpected, parseBillEditExpecteds } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
+import { withIssuanceTransaction } from "@waitron/core";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import type { RequestReaderStop } from "@waitron/payments";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
@@ -27,6 +28,7 @@ import {
   type PayForItemsRequest,
 } from "./pay-for-items.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
+import { keepOverpaidAsTip } from "./bill-overpaid.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertProfileAction, assertTakesTender } from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
@@ -524,6 +526,28 @@ export function mountBillPaymentsApi(
       if (active?.sessionId !== session.sessionId || active.deviceId !== session.deviceId)
         return c.json({ outcome: "unavailable" });
       return c.json({ outcome: await active.stop() });
+    }),
+  );
+
+  app.post("/api/working-orders/:id/overpaid/keep-as-tip", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { permission: "payment.take" });
+      await assertRequestDevice(deps, c, session);
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const submissionId = submissionIdOf(asObject(await readRawJsonBody<unknown>(c)));
+      const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      return c.json(
+        await withIssuanceTransaction(
+          deps.db,
+          (tx) =>
+            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, {
+              personId: session.personId,
+              sessionId: session.sessionId,
+            }),
+          log,
+        ),
+      );
     }),
   );
 

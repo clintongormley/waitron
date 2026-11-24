@@ -664,6 +664,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.received_exceeds_total": 409,
   "bill.below_advances": 409,
   "bill.all_items_chosen": 409,
+  "bill.not_overpaid": 409,
   "bill.payments_received": 409,
   "bill.presented": 409,
   "bill.paid": 409,

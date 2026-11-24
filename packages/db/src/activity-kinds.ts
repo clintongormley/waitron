@@ -152,6 +152,12 @@ export interface ActivityKindData {
     readonly to: string;
     readonly rows: number;
   };
+  /** Who kept as a tip what Pay for items left a bill paid over its total: the whole amount, and
+   * how much each bill payment moved from its applied money to its tip. */
+  readonly "bill.overpaid_kept_as_tip": {
+    readonly amount: string;
+    readonly payments: readonly { readonly billPaymentId: string; readonly amount: string }[];
+  };
 }
 export type ActivityKind = keyof ActivityKindData;
 export interface ActivityKindRule {
@@ -199,5 +205,6 @@ export const ACTIVITY_KINDS = {
   "deferred_payment_export.downloaded": { subject: "report" },
   "accountant_export.downloaded": { subject: "report" },
   "tax_office.month_requested": { subject: "report" },
+  "bill.overpaid_kept_as_tip": { subject: "working_order" },
 } as const satisfies Record<ActivityKind, ActivityKindRule>;
 export type ActivitySubjectKind = (typeof ACTIVITY_KINDS)[ActivityKind]["subject"];

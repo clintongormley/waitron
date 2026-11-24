@@ -11,8 +11,11 @@ import type { PaymentProvider, RefundRefusalReason } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, decimalToCents, isAppError } from "@waitron/shared";
 import { money, ZERO } from "./bill-allocation.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
+import { refundPermission } from "./bill-overpaid.js";
+import { withIssuanceTransaction } from "@waitron/core";
 import {
   findSubmission,
+  issueIfFullyPaid,
   readBillBalance,
   readOnePaymentMoney,
   requireRefundableBill,
@@ -141,7 +144,9 @@ export async function refundTender(
 
 /**
  * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
- * needing `sale.refund` from the operator or the override. A payment gives back up to its net
+ * needing from the operator or the override the permission {@link refundPermission} names:
+ * `payment.take` for no more than what Pay for items left the bill paid over its total, else
+ * `sale.refund`. A completed refund issues the bill if it leaves it paid. A payment gives back up to its net
  * applied money; its tip comes back only with the whole of what is left of it; an item payment only
  * whole, which frees its lines.
  *
@@ -175,16 +180,21 @@ export async function refundBillPayment(
       confirmsManual,
       (checked) => {
         const override = withCheck(req.override, checked);
-        return withTransaction(deps.db, async (tx) => {
+        return withIssuanceTransaction(deps.db, async (tx) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
           await assertStillSignedIn(tx, {
             deviceId: cfg.origin.deviceId,
             personId: operator.personId,
             sessionId: operator.sessionId,
           });
+          const permission = await refundPermission(
+            tx,
+            workingOrderId,
+            centsToDecimal(applied + tip),
+          );
           const authorization = await authorize(
             tx,
-            { sessionId: operator.sessionId, permission: "sale.refund", override },
+            { sessionId: operator.sessionId, permission, override },
             operator.attempts,
           );
           const [found] = await tx
@@ -307,8 +317,10 @@ export async function refundBillPayment(
                 printers,
               ),
           });
-          if (refund.state === "completed")
+          if (refund.state === "completed") {
+            await issueIfFullyPaid(tx, deps, cfg, workingOrderId, operator.personId);
             return { kind: "done" as const, result: await resultOf(tx, refund, workingOrderId) };
+          }
 
           // Inside the transaction, so no loop pass runs between the insert and the claim.
           release = claimTenderRefund(deps.db, refund.id);

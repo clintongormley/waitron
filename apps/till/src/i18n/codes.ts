@@ -605,6 +605,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "These are all the items on this bill. Pay the whole bill instead.",
     es: "Son todos los artículos de esta cuenta. Cobra toda la cuenta.",
   },
+  "bill.not_overpaid": {
+    en: "This bill has nothing paid over what it comes to.",
+    es: "Esta cuenta no tiene nada pagado de más.",
+  },
   "bill.left_unpaid": {
     en: "This bill was recorded as left unpaid: its guests have gone",
     es: "Esta cuenta se registró como no pagada: los clientes se han ido",

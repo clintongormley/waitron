@@ -765,6 +765,13 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (source)",
     actions: [],
     basis:
+      'Keep as tip moves money the bill already received from its applied amount to its tip; it takes no payment and opens no drawer. bill-payments-api.ts; refusals: bill-overpaid.test.ts "keep as tip is refused when tips are off"',
+    routes: ["POST /api/working-orders/:id/overpaid/keep-as-tip"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: [],
+    basis:
       "transaction-receipt-api.test.ts: orderless handover records completion without printing; request proof is checked before its transaction.",
     routes: ["POST /api/transactions/:saleId/receipt-print/handover"],
   },

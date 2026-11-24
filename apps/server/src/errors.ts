@@ -905,8 +905,9 @@ declare module "@waitron/shared" {
      */
     "bill.line_paid": { workingOrderId: string; lineNo: number };
     /**
-     * A write would leave the bill's total below the money it has received or reserved. `excess`
-     * is by how much; refunding that first lets the write through.
+     * A write would leave the bill's total below the money it has received or reserved; on a bill
+     * Pay for items left below it already, an edit of its lines is refused only for taking the
+     * total further below. `excess` is by how much; refunding that first lets the write through.
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
@@ -916,6 +917,8 @@ declare module "@waitron/shared" {
     "bill.below_advances": { advances: string };
     /** Paying for chosen items chose every dish on the bill: that is paying the whole bill. */
     "bill.all_items_chosen": Record<string, never>;
+    /** Keep as tip on a bill that holds nothing paid over its total. */
+    "bill.not_overpaid": { workingOrderId: string };
     /**
      * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it

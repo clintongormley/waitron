@@ -289,6 +289,9 @@ export interface BillBalance {
   reserved: Decimal;
   /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: Decimal;
+  /** On an open or placed bill, received and reserved less the total when that is more than
+   * nothing (Pay for items can leave it so); zero otherwise. Such a bill issues nothing. */
+  overpaid: Decimal;
   /** The net tips of the received payments. */
   tips: Decimal;
   payments: BillPaymentView[];
@@ -557,8 +560,24 @@ export async function refusePaidLines(
 export async function assertBillInvariant(
   tx: Transaction,
   workingOrderIds: readonly string[],
+  /** An excess these bills already had, which the write may keep or lessen but not raise. */
+  allowed?: ReadonlyMap<string, Decimal>,
 ): Promise<void> {
+  for (const [workingOrderId, excess] of await billExcesses(tx, workingOrderIds)) {
+    if (compareDecimal(excess, allowed?.get(workingOrderId) ?? ZERO) > 0) {
+      throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
+    }
+  }
+}
+
+/** By how much each of these bills holding a payment has received and reserved more than its
+ * total; a bill that is not overpaid is left out. */
+export async function billExcesses(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+): Promise<Map<string, Decimal>> {
   const { held: payments, advances } = await readHeld(tx, workingOrderIds);
+  const excesses = new Map<string, Decimal>();
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
     if (held.length === 0) continue;
@@ -568,10 +587,9 @@ export async function assertBillInvariant(
       held,
     );
     const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
-    if (compareDecimal(excess, ZERO) > 0) {
-      throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
-    }
+    if (compareDecimal(excess, ZERO) > 0) excesses.set(workingOrderId, excess);
   }
+  return excesses;
 }
 
 function receivedHoldsMoney({ row, netApplied, netTip }: PaymentMoney): boolean {
@@ -961,6 +979,11 @@ export async function readBillBalance(
     ),
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
+    overpaid:
+      (order.status === "open" || order.status === "placed") &&
+      compareDecimal(outstanding, ZERO) < 0
+        ? money(subtractDecimal(ZERO, outstanding))
+        : ZERO,
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
