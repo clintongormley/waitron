@@ -905,12 +905,12 @@ export async function updateMenuDetails(
   },
   fallbackLanguage?: string,
 ): Promise<void> {
-  await assertMenuWritable(tx, menuId);
   const changesTerms =
     patch.setPrice !== undefined ||
     patch.setVatClass !== undefined ||
     patch.setTakeawayVatClass !== undefined;
   if (changesTerms) await requireSetMenu(tx, menuId);
+  else await assertMenuWritable(tx, menuId);
   const vatClass = patch.setVatClass === undefined ? undefined : setMenuVatClass(patch.setVatClass);
   const takeawayVatClass =
     patch.setTakeawayVatClass == null

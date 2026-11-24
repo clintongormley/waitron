@@ -83,11 +83,18 @@ export class MenuArchiveDialog extends LitElement {
     this.impact = undefined;
     this.problem = "";
     this.permission = "";
-    this.draft = {};
-    this.scope?.commit({});
     try {
       const impact = await this.api.getMenuArchiveImpact(this.menu.id);
-      if (this.isConnected) this.impact = impact;
+      if (!this.isConnected) return;
+      const draft: Record<string, string> = {};
+      for (const { id, choices, replacement } of impact.periods) {
+        if (replacement !== null && choices.some((choice) => choice.id === this.draft[id]))
+          draft[id] = this.draft[id]!;
+      }
+      if (impact.defaultChoices?.some(({ id }) => id === this.draft.default))
+        draft.default = this.draft.default!;
+      this.draft = draft;
+      this.impact = impact;
     } catch (error) {
       if (this.isConnected) this.refuse(error);
     }

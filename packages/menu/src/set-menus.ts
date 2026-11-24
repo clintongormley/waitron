@@ -410,7 +410,7 @@ export async function readSetMenu(
     courses,
     heldBy: menusContaining(graph, root).flatMap((id) => {
       const parent = graph.menu(id);
-      return parent?.kind === "menu" ? [{ id, name: parent.name }] : [];
+      return parent?.kind === "menu" && parent.active ? [{ id, name: parent.name }] : [];
     }),
   };
   return { ...details, problems: setMenuProblems(details) };

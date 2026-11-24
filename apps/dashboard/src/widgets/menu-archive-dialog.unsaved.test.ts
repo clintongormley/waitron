@@ -50,7 +50,7 @@ class ArchiveLeaveApp extends LitElement {
 customElements.define("menu-archive-leave-test-app", ArchiveLeaveApp);
 afterEach(cleanupWidgets);
 
-it("requires a replacement and sends it with the archive", async () => {
+it.each([false, true])("requires a replacement through archive (sign-in: %s)", async (signIn) => {
   const { el: app } = await mountWidget<ArchiveLeaveApp>("menu-archive-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("dashboard-menu-archive-dialog")!;
   const submit = () =>
@@ -80,6 +80,21 @@ it("requires a replacement and sends it with the archive", async () => {
   );
   await form.updateComplete;
   expect(submit().disabled).toBe(false);
+  if (signIn) {
+    form.permissionContinuation = {
+      snapshot: () => ({ accountGeneration: 0, authenticated: true, permissions: [] }),
+      subscribe: () => () => {},
+      signIn: async () => "signed-in",
+    };
+    app.api.archiveMenu.mockRejectedValueOnce({
+      code: "authorization.not_permitted",
+      params: { permission: "venue.configure" },
+    });
+    await userEvent.click(page.elementLocator(submit().shadowRoot!.querySelector("button")!));
+    await userEvent.click(page.getByRole("button", { name: t("permission_sign_in.heading") }));
+    await vi.waitFor(() => expect(submit()?.disabled).toBe(false));
+    expect(app.archived).toBe(false);
+  }
   await userEvent.click(page.elementLocator(submit().shadowRoot!.querySelector("button")!));
   await vi.waitFor(() => expect(app.archived).toBe(true));
   expect(app.api.archiveMenu).toHaveBeenCalledWith("winter", {

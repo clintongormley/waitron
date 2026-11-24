@@ -499,7 +499,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     const live = await allLive();
     const { menus: built } = await buildMenuDocuments(
       tx,
-      [...live.keys()].filter((other) => other !== menuId),
+      [...live.keys()].filter((other) => other !== menuId && graph.menu(other)?.active),
       graph,
     );
     const others = [...built]
