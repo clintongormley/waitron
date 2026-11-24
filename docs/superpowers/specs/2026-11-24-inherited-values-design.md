@@ -70,7 +70,11 @@ Looked at on the demo venue and in the code:
 8. **Hints are upright and muted, with no arrow.** An example starts "e.g." ("p. ej."). Prompts
    ("Choose a profile", "Search devices"), formats ("HH:MM") and "None" are not examples.
 9. **No italics** in the apps' own styles.
-10. **No other visible words** for inheriting: no "Same as …", "(default)", "from the …",
+10. **Inherited colours and photos look like any other** (owner, 2026-11-24, "A", from drawings): the
+    same solid ring or plain filled square, with no dashes, gap or grey border. This reverses the
+    owner's A423 (2026-10-08). The names screen readers hear stay ("… inherited from Mains", "The main
+    product's photo"); sighted people see it in the colour picker, where "Inherit" is chosen.
+11. **No other visible words** for inheriting: no "Same as …", "(default)", "from the …",
     "Use default". For screen readers only, the closed field's value is followed by "inherited"
     ("heredado"), and the calendar's hidden "as {department}" stays.
 
@@ -127,6 +131,8 @@ Looked at on the demo venue and in the code:
 | Set menu dishes, Surcharge | "Included" in italic | upright hint, no arrow |
 | Set menu variant, Surcharge | italic placeholder | arrow when it is the dish's surcharge; "Included" is a hint, with no arrow |
 | Product and variant colour | "Use category colour" / "Use default colour" | "Inherit" beside the chip of the colour it gives, or with no chip when there is none |
+| Product list and tree: inherited colour squares, photo rings | dashed (`product-media.ts`, `swatch-styles.ts`) | solid, the square filled to its edge, as a set colour is; the square beside a category's name box as well |
+| Product editor and variant window: the product's photo on a variant | dashed grey border (`product-appearance.ts`, `image-upload.ts`) | ordinary border; Remove stays disabled |
 | Category colour | "No colour", which inherits | "Inherit", with the chip of the colour it gives |
 | Calendar day box | grey italic hours | muted, upright |
 | Routes grid | differing inherited station in italic | muted, upright; nothing else |
@@ -153,15 +159,16 @@ Left as they are, and why:
 - **Filters** such as Routes' "All periods", and text only a screen reader hears. Price overrides'
   hidden "Leave it empty to use the inherited price" already says it, so that field does not also add
   "inherited".
-- **Inherited photos and colour squares**: dashed outlines, no text. The staffing and season grids'
-  faded blocks are the same.
+- **The staffing and season grids' faded blocks**: no text.
+- **Other dashed lines**, which do not mean inherited: an empty photo or logo slot, the "Contains none"
+  allergen chip, disabled fields, drop targets and special days.
 - The guides' and data-protection templates' own italics, which are prose.
 
 `hours.inherit`, `hours.inherit_value` and `hours.inherited_prefix` are read by nothing; delete them.
 
 ## Documents changed with the code
 
-- `docs/developers/design-system.md`: the rule above replaces "A field that falls back to another
+- `docs/developers/design-system.md`, A423's dashed marks included: the rule above replaces "A field that falls back to another
   value" where they differ; also the field box, hints, disclosure, Routes, calendar, Periods and
   component-table lines that say italic. `DESIGN.md`: "Placeholder and hints: muted ink, upright."
 - `CLAUDE.md` §3: one entry naming the rule and its guards.
