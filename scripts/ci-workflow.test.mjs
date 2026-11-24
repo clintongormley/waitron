@@ -464,6 +464,7 @@ describe("disposable server routing", () => {
           "ci",
           "server-probe",
           "test-webkit-startup",
+          "root-process-guards",
         ].includes(entry.id)
       )
         continue;
@@ -3325,7 +3326,7 @@ describe("the test shards", () => {
   });
 
   // A licence or sign-off failure leaves the scope outputs available.
-  it("runs only lint, root-guards and ci after changes failed with scope outputs set", () => {
+  it("runs only lint, both root guard jobs and ci after changes failed with scope outputs set", () => {
     const context = routingContext();
     for (const { body } of jobs)
       for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
@@ -3345,7 +3346,7 @@ describe("the test shards", () => {
     Object.assign(context.needs.changes.outputs, { server_route: "", server_jobs: "" });
     for (const { id } of downstream) context.needs[id] = { result: "skipped" };
     context.needs.ci = { result: "failure" };
-    expect(run().sort()).toEqual(["ci", "lint", "root-guards"]);
+    expect(run().sort()).toEqual(["ci", "lint", "root-guards", "root-process-guards"]);
   });
 
   // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still
@@ -3664,7 +3665,8 @@ describe("the test shards", () => {
         id.endsWith("-merge") ? 5 : id === "test-webkit-startup" ? 8 : 10,
       );
     }
-    for (const id of ["lint", "root-guards"]) expect(minutesOf(job(id).body), id).toBe(8);
+    for (const id of ["lint", "root-guards", "root-process-guards"])
+      expect(minutesOf(job(id).body), id).toBe(8);
   });
 
   it("caps light-bin package concurrency explicitly", () => {
@@ -4301,8 +4303,8 @@ describe("the sharded jobs", () => {
   });
 });
 
-describe("the lint and root-guards jobs", () => {
-  it.each(["lint", "root-guards"])(
+describe("the lint and root guard jobs", () => {
+  it.each(["lint", "root-guards", "root-process-guards"])(
     "does not start %s when workflow and changes are cancelled",
     (id) => {
       const context = routingContext();
@@ -4314,11 +4316,11 @@ describe("the lint and root-guards jobs", () => {
 
   // The repo-level project runs in a job of its own so its time runs beside lint's rather than
   // inside it.
-  it("run the repo-level Vitest project only in root-guards, including failed classification", () => {
+  it("runs root coverage only in root-guards, including failed classification", () => {
     const runsRoot = (body) =>
       body.some((line) => !line.trim().startsWith("#") && /pnpm vitest run --coverage/.test(line));
     expect(jobs.filter(({ body }) => runsRoot(body)).map(({ id }) => id)).toEqual(["root-guards"]);
-    for (const id of ["lint", "root-guards"]) {
+    for (const id of ["lint", "root-guards", "root-process-guards"]) {
       expect(
         job(id).body.filter((line) => /^ {4}(if|needs):/.test(line)),
         id,
@@ -4327,6 +4329,41 @@ describe("the lint and root-guards jobs", () => {
         "    if: ${{ always() && !cancelled() && !inputs.server_probe }}",
       ]);
     }
+  });
+
+  it("excludes exactly the suites the hosted root job runs", () => {
+    const workflow = parse(lines.join("\n"));
+    const args = (id) => {
+      const rootJob = workflow.jobs[id];
+      const step = rootJob?.steps.find(({ run }) => run?.includes("pnpm vitest run"));
+      expect(step, id).toBeDefined();
+      expect(step.if, id).toBeUndefined();
+      expect(step["continue-on-error"] ?? false, id).toBe(false);
+      const result = spawnSync(
+        "bash",
+        ["-e", "-c", `pnpm() { printf '%s\\n' "$@"; return 17; }\n${step.run}`],
+        {
+          cwd: repoRoot,
+          env: { ...process.env, ...workflow.env, ...rootJob.env, ...step.env },
+          encoding: "utf8",
+          timeout: 5_000,
+        },
+      );
+      expect(result.status, result.stderr).toBe(17);
+      return result.stdout.trimEnd().split("\n");
+    };
+    const [tool, command, ...suites] = args("root-process-guards");
+    expect([tool, command]).toEqual(["vitest", "run"]);
+    expect(suites.length).toBeGreaterThan(0);
+    expect(new Set(suites).size).toBe(suites.length);
+    for (const suite of suites) expect(existsSync(join(repoRoot, suite)), suite).toBe(true);
+    expect(args("root-guards")).toEqual([
+      "vitest",
+      "run",
+      "--coverage",
+      ...suites.flatMap((suite) => ["--exclude", suite]),
+    ]);
+    expect(workflow.jobs["root-process-guards"]["runs-on"]).toBe("ubuntu-latest");
   });
 
   it("fetch full tagged history in both root-guards checkout attempts", () => {

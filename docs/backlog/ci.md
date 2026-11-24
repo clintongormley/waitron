@@ -320,6 +320,7 @@ The bundle still needs a full-day queue measurement. Keep the corrected v41 cont
 - **A1424 / A1440: remaining real-run qualification.** Each line names the evidence that would close that gap; do not drain other lanes or repeat the completed rescue drill.
   - Image guest: one separately cleared disposable-guest image-smoke run passes the Bluetooth check and full smoke. Retained runs 42550200310 and 42525659420 stop at `dbus_unreachable`; keep image smoke hosted meanwhile (watcher, 2026-11-09 08:20).
   - Remaining workflows: retain a real selected run for each still-unqualified workflow with source, runner, selected checks and aggregate; a CI-only record cannot qualify other workflows.
+  - The hosted `root-process-guards` job needs controller and host support before it can run on the server.
   - Full-day capacity/queue target: one full-day ordinary-traffic measurement must account for waits and available capacity throughout; no single isolated CI run or episodic status sample can close it. A1461's smaller run sizes do not replace this measurement.
     On 24 November at 08:15:19 CET, the planner assigned 11 jobs to the server using all 11 free slots
     in its snapshot. All 11 passed, and the server controller recorded the last completion at 08:21:47.

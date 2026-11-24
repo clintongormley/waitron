@@ -2881,7 +2881,7 @@ CLAUDE.md — same incident, same fix, same regression test.)*
 
 ## A guard that reads the whole tree belongs in the ROOT Vitest project (`scripts/`)
 
-run by ci.yml's `root-guards` job — a package-resident guard
+The `root-guards` and `root-process-guards` jobs run that project. A package-resident guard
 only runs when its package is in scope, and most pushes never reach `packages/db`. Two costs of
 living there: the root project does not typecheck (§2), and a module tested only from there must be
 in the root `coverage.include` IF IT IS TO BE MEASURED AT ALL, and excluded from its package's.
