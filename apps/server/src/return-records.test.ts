@@ -2116,6 +2116,25 @@ it("after a restart with its own records confirmed, an unreachable main box answ
   expect(await sendBoth(unreachable, earlierTail, heard("holds"))).toBe("confirmed");
 });
 
+it("with its own records confirmed, a pass sends no own batch while another box's records are unfinished", async () => {
+  const app = destination();
+  const through = async (url: string | URL | Request, init?: RequestInit) =>
+    app.request(String(url), init);
+  expect(await sendBoth(through, earlierTail, heard("holds"))).toBe("confirmed");
+  const receive = receiveByPart(async () => false);
+  try {
+    received = [];
+    expect(await sendBoth(through, earlierTail, heard("lacks"))).toBe("needs-attention");
+    expect(received).toEqual(["earlier"]);
+    received = [];
+    expect(await sendBoth(through, earlierTail, null)).toBe("waiting");
+    expect(received).toEqual([]);
+  } finally {
+    receive.restore();
+  }
+  expect(await confirmations()).toHaveLength(1);
+});
+
 it("a second-part payment difference stores no clash, answers accounted, and the pass confirms", async () => {
   const seat = modules[0]!.handover!.returnRecords!;
   const inspect = vi.spyOn(seat, "inspect");

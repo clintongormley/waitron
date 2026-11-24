@@ -78,8 +78,22 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
     others === null || others.length === 0
       ? null
       : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
-  // Sent even when held: a main box restored from an earlier copy lacks these records.
-  const sent = await sendBatches(deps, chart, main, batches, inventory, false);
+  const othersState: ReturnState =
+    others === null
+      ? "waiting"
+      : sentOthers === null ||
+          sentOthers.state === "confirmed" ||
+          sentOthers.state === "record-clash"
+        ? "confirmed"
+        : sentOthers.state === "clash"
+          ? "needs-attention"
+          : sentOthers.state;
+  // Confirmed own records go again only once nothing else is left to send: a main box restored from
+  // an earlier copy lacks them, and each batch is a write on the selling main box.
+  const sent: Sent =
+    held && othersState !== "confirmed"
+      ? { state: "waiting" }
+      : await sendBatches(deps, chart, main, batches, inventory, false);
   if (sent.state === "confirmed" && !held)
     await withNodeTransaction(deps.node, (tx) =>
       appendHandoverEventTx(tx, {
@@ -95,15 +109,7 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
     held && (sent.state === "waiting" || sent.state === "needs-attention")
       ? "confirmed"
       : sent.state;
-  if (own !== "confirmed") return own;
-  if (others === null) return "waiting";
-  if (
-    sentOthers === null ||
-    sentOthers.state === "confirmed" ||
-    sentOthers.state === "record-clash"
-  )
-    return "confirmed";
-  return sentOthers.state === "clash" ? "needs-attention" : sentOthers.state;
+  return own === "confirmed" ? othersState : own;
 }
 
 /** Other boxes' records the main box lacks; `null` when some are held but no summary was heard. */
