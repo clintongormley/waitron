@@ -12,7 +12,7 @@ import { activateAuthenticatedAllocation } from "@waitron/fiscal-verifactu/src/a
 import { readModuleAllocationSeries } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { FISCAL_SLOT, liveSeriesBases } from "@waitron/fiscal-verifactu";
 import type { AllocationContext } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import {
   enrolPaperCustodian,
   paperCustodianFingerprint,
@@ -212,7 +212,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "reauthentication_required" },
     });
-    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, verifactuIdentities])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 
@@ -233,7 +233,7 @@ describe("internal fresh setup with a signed synthetic allocation", () => {
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
-    for (const table of [persons, taxpayer, nodes, invoiceSeries, fiscalAllocations])
+    for (const table of [persons, taxpayer, nodes, invoiceSeries, verifactuIdentities])
       expect(await suite.db.select().from(table)).toEqual([]);
   });
 });

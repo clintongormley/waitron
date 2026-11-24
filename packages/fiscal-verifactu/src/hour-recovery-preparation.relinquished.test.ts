@@ -18,7 +18,7 @@ import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import * as internet from "./hour-clock-time-service.js";
 import * as release from "./hour-release.js";
-import { fiscalAllocations } from "./schema/allocations.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
@@ -218,8 +218,8 @@ async function selectAndActivate(
     );
     const [stored] = await suite.db
       .select()
-      .from(fiscalAllocations)
-      .where(eq(fiscalAllocations.eventKey, binding.eventId));
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.eventKey, binding.eventId));
     return { selected: selected.input.approval, stored: stored!.approval };
   });
 }

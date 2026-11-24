@@ -502,6 +502,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
+  "fiscal_allocations",
   "fiscal_reservations",
   "acks",
   "filing_cases",
@@ -1375,6 +1376,19 @@ for (const locale of ["en", "es"] as const) {
           pk: 0,
         });
         for (const row of Object.values(submissions.rows)) row[name] = null;
+      }
+      const identities = expected[phase].tables.verifactu_identities!;
+      for (const name of [
+        "environment",
+        "event_key",
+        "allocation_key",
+        "allocation",
+        "approval",
+        "bases",
+        "result",
+      ]) {
+        identities.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(identities.rows)) row[name] = null;
       }
       const records = expected[phase].tables.verifactu_records!;
       for (const name of [

@@ -20,7 +20,7 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { type ActivationResult } from "./schema/allocations.js";
+import { type ActivationResult } from "./allocation-types.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 

@@ -24,7 +24,8 @@ import { admitsAllocationAction } from "./identity-change-authority.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { currentSif } from "./registro-sif.js";
-import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
+import type { ActivationResult } from "./allocation-types.js";
+import { allocationOf } from "./identity-allocation.js";
 
 export type ActivationRefusal =
   | AllocationRefusal
@@ -89,9 +90,9 @@ async function validateForActivation(
   });
   if (!validated.ok) return validated;
   const [usedAllocation] = await tx
-    .select({ eventKey: fiscalAllocations.eventKey })
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.allocationKey, validated.allocation.allocationId));
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.allocationKey, validated.allocation.allocationId));
   if (usedAllocation !== undefined) return { ok: false, reason: "allocation_consumed" };
   const [usedIdentity] = await tx
     .select({ id: verifactuIdentities.id })
@@ -230,11 +231,12 @@ async function activate(
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
   };
-  const [prior] = await tx
+  const [priorIdentity] = await tx
     .select()
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.eventKey, context.eventId));
-  if (prior !== undefined) {
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.eventKey, context.eventId));
+  if (priorIdentity !== undefined) {
+    const prior = allocationOf(priorIdentity)!;
     if (context.priorActivation !== "committed")
       return refuse(
         context.priorActivation === "uncertain"
@@ -249,11 +251,11 @@ async function activate(
       .where(eq(nodes.id, node.nodeId));
     if (
       storedNode === undefined ||
-      prior.nodeId !== node.nodeId ||
+      priorIdentity.nodeId !== node.nodeId ||
       context.targetNodeId !== node.nodeId
     )
       return refuse("node_mismatch");
-    if (taxpayer?.taxId !== prior.taxpayerNif) return refuse("taxpayer_mismatch");
+    if (taxpayer?.taxId !== priorIdentity.nif) return refuse("taxpayer_mismatch");
     if (stamp?.environment !== "production" && stamp?.environment !== "preproduction")
       return refuse("environment_unstamped");
     if (stamp.environment !== prior.environment) return refuse("environment_mismatch");
@@ -262,8 +264,8 @@ async function activate(
       approval,
       {
         ...context,
-        taxpayerNif: prior.taxpayerNif,
-        softwareId: prior.softwareId,
+        taxpayerNif: priorIdentity.nif,
+        softwareId: priorIdentity.idSistemaInformatico,
         environment: stamp.environment,
         requiredBases: prior.bases,
       },
@@ -271,12 +273,7 @@ async function activate(
     );
     if (!validated.ok) return refuse(validated.reason);
     const [activeSif] = await tx
-      .select({
-        id: verifactuIdentities.id,
-        nif: verifactuIdentities.nif,
-        softwareId: verifactuIdentities.idSistemaInformatico,
-        identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
-      })
+      .select({ id: verifactuIdentities.id })
       .from(verifactuIdentities)
       .where(
         and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
@@ -286,13 +283,7 @@ async function activate(
       .from(invoiceSeries)
       .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
       .orderBy(invoiceSeries.code);
-    if (
-      activeSif?.id !== prior.sifId ||
-      activeSif.nif !== prior.taxpayerNif ||
-      activeSif.softwareId !== prior.softwareId ||
-      activeSif.identity !== prior.installationIdentity ||
-      !isDeepStrictEqual(live, prior.result.series)
-    )
+    if (activeSif?.id !== priorIdentity.id || !isDeepStrictEqual(live, prior.result.series))
       return refuse("activation_superseded");
     authorise?.();
     return prior.result;
@@ -316,13 +307,6 @@ async function activate(
     .where(
       and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
     );
-  await tx.insert(verifactuIdentities).values({
-    id: sifId,
-    nodeId: node.nodeId,
-    nif: validated.allocation.taxpayerNif,
-    idSistemaInformatico: validated.allocation.softwareId,
-    numeroInstalacion: validated.allocation.installationIdentity,
-  });
   await tx
     .update(invoiceSeries)
     .set({ retiredAt })
@@ -333,15 +317,15 @@ async function activate(
   for (const entry of series)
     await tx.insert(invoiceSeries).values({ ...entry, nodeId: node.nodeId });
   const result: ActivationResult = { activationEventId: validated.approval.eventId, sifId, series };
-  await tx.insert(fiscalAllocations).values({
+  await tx.insert(verifactuIdentities).values({
+    id: sifId,
+    nodeId: node.nodeId,
+    nif: validated.allocation.taxpayerNif,
+    idSistemaInformatico: validated.allocation.softwareId,
+    numeroInstalacion: validated.allocation.installationIdentity,
     eventKey: result.activationEventId,
     allocationKey: validated.allocation.allocationId,
-    nodeId: node.nodeId,
-    sifId,
-    taxpayerNif: validated.allocation.taxpayerNif,
-    softwareId: validated.allocation.softwareId,
     environment: validated.allocation.environment,
-    installationIdentity: validated.allocation.installationIdentity,
     allocation: validated.allocation,
     approval: validated.approval,
     bases: bases.length > 0 ? bases : context.requiredBases,

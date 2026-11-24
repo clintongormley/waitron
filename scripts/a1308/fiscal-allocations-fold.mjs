@@ -2,7 +2,7 @@
 // taxpayer_nif -> nif, software_id -> id_sistema_informatico, installation_identity ->
 // numero_instalacion, sif_id -> id, activated_at -> registrado_en. The other columns keep their names.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -99,6 +99,7 @@ function main(args) {
   for (const file of files) {
     if (!file.endsWith(".ts")) continue;
     const path = resolve(root, file);
+    if (!lstatSync(path, { throwIfNoEntry: false })?.isFile()) continue;
     const input = readFileSync(path, "utf8");
     if (!oldName.test(input)) continue;
     const { text, manual } = rewriteSource(file, input);

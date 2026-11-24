@@ -1,3 +1,4 @@
+import { IDENTITY_CHANGE_REFUSAL, IDENTITY_DELETE_REFUSAL } from "./trigger-refusals.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -189,7 +190,10 @@ describe("allocation activation with host-issued operator authority", () => {
       ),
     ).resolves.toMatchObject({ activationEventId: "event-42" });
     expect(
-      (await suite.db.execute(sql`select installation_identity from fiscal_allocations`)).rows,
+      (
+        await suite.db.execute(sql`select numero_instalacion as installation_identity
+        from verifactu_identities where event_key is not null`)
+      ).rows,
     ).toEqual([{ installation_identity: "P000042" }]);
   });
 
@@ -231,7 +235,11 @@ describe("allocation activation with host-issued operator authority", () => {
       (await suite.db.execute(sql`select count(*) as n from verifactu_identities`)).rows,
     ).toEqual([{ n: 0 }]);
     expect(
-      (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
+      (
+        await suite.db.execute(
+          sql`select count(*) as n from verifactu_identities where event_key is not null`,
+        )
+      ).rows,
     ).toEqual([{ n: 0 }]);
   });
 
@@ -297,7 +305,6 @@ describe("allocation activation with host-issued operator authority", () => {
         await withOperationAuthority(binding, approval.operatorId, authenticated);
       const before = await suite.db.execute(sql`select * from verifactu_identities`);
       const beforeSeries = await suite.db.select().from(invoiceSeries);
-      const beforeAudit = await suite.db.execute(sql`select * from fiscal_allocations`);
       await withTransaction(suite.db, async (tx) => {
         let readSeen!: () => void;
         const paused = new Promise<void>((resolve) => {
@@ -362,7 +369,6 @@ describe("allocation activation with host-issued operator authority", () => {
       });
       expect(await suite.db.execute(sql`select * from verifactu_identities`)).toEqual(before);
       expect(await suite.db.select().from(invoiceSeries)).toEqual(beforeSeries);
-      expect(await suite.db.execute(sql`select * from fiscal_allocations`)).toEqual(beforeAudit);
     },
   );
 });
@@ -619,7 +625,7 @@ async function activate(
   );
 }
 async function activationSnapshot() {
-  const tables = ["verifactu_identities", "invoice_series", "fiscal_allocations"];
+  const tables = ["verifactu_identities", "invoice_series"];
   const snapshot: Record<string, unknown> = {};
   for (const name of tables) {
     if (!/^[a-z_]+$/.test(name)) throw new Error("invalid probe table");
@@ -659,7 +665,8 @@ describe("atomic allocation activation", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select event_key, allocation_key, installation_identity, result from fiscal_allocations`,
+          sql`select event_key, allocation_key, numero_instalacion as installation_identity, result
+            from verifactu_identities where id = ${result.sifId}`,
         )
       ).rows,
     ).toEqual([
@@ -733,7 +740,6 @@ describe("atomic allocation activation", () => {
     ["insert SIF", "before insert on verifactu_identities"],
     ["retire series", "before update on invoice_series"],
     ["insert series", "before insert on invoice_series when new.code = 'R-P000042'"],
-    ["audit result", "before insert on fiscal_allocations"],
   ])("rolls back every local write when %s is refused", async (_step, timing) => {
     await suite.db.insert(verifactuIdentities).values({
       nodeId: node.nodeId,
@@ -753,26 +759,6 @@ describe("atomic allocation activation", () => {
     } finally {
       await suite.db.execute(sql`drop trigger allocation_fail`);
     }
-  });
-});
-
-describe("activation replay identity integrity", () => {
-  it.each([
-    ["numero_instalacion", "P000043"],
-    ["nif", "B12345678"],
-    ["id_sistema_informatico", "ZZ"],
-  ])("refuses replay after the retained SIF %s changes", async (column, value) => {
-    const first = await activate();
-    if (!/^[a-z_]+$/.test(column)) throw new Error("invalid probe column");
-    await suite.db.execute(
-      sql`update verifactu_identities set ${sql.raw(column)} = ${value} where id = ${first.sifId}`,
-    );
-    const before = await activationSnapshot();
-    await expect(activate({ ...context, priorActivation: "committed" })).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "activation_superseded" },
-    });
-    expect(await activationSnapshot()).toEqual(before);
   });
 });
 
@@ -911,16 +897,20 @@ describe("replay scope and history", () => {
   });
 
   it("retains audit evidence against both update and deletion", async () => {
-    await activate();
+    const result = await activate();
     const before = await activationSnapshot();
     await expect(
       withTransaction(suite.db, (tx) =>
-        tx.execute(sql`update fiscal_allocations set allocation_key=${"rewritten"}`),
+        tx.execute(
+          sql`update verifactu_identities set allocation_key=${"rewritten"} where id=${result.sifId}`,
+        ),
       ),
-    ).rejects.toThrow("fiscal_allocations is append-only");
+    ).rejects.toThrow(IDENTITY_CHANGE_REFUSAL);
     await expect(
-      withTransaction(suite.db, (tx) => tx.execute(sql`delete from fiscal_allocations`)),
-    ).rejects.toThrow("fiscal_allocations is append-only");
+      withTransaction(suite.db, (tx) =>
+        tx.execute(sql`delete from verifactu_identities where id=${result.sifId}`),
+      ),
+    ).rejects.toThrow(IDENTITY_DELETE_REFUSAL);
     expect(await activationSnapshot()).toEqual(before);
   });
 });
@@ -1020,7 +1010,7 @@ async function inRestoredCopy(body: (db: Database) => Promise<void>) {
 
 async function rawActivationSnapshot(db: Database) {
   const result: Record<string, unknown> = {};
-  for (const table of ["verifactu_identities", "invoice_series", "fiscal_allocations"]) {
+  for (const table of ["verifactu_identities", "invoice_series"]) {
     if (!/^[a-z_]+$/.test(table)) throw new Error("invalid snapshot table");
     result[table] = (await db.execute(sql.raw(`select * from "${table}" order by rowid`))).rows;
   }
@@ -1167,7 +1157,10 @@ describe("independent attempts from the same old backup", () => {
           { code: `R-${draw.identity}`, purpose: "corrective" },
         ]);
         expect(
-          (await db.execute(sql`select installation_identity from fiscal_allocations`)).rows,
+          (
+            await db.execute(sql`select numero_instalacion as installation_identity
+            from verifactu_identities where event_key is not null`)
+          ).rows,
         ).toEqual([{ installation_identity: draw.identity }]);
         expect(known).not.toContain(draw.identity);
         known.push(draw.identity);
@@ -1178,7 +1171,11 @@ describe("independent attempts from the same old backup", () => {
     for (const series of results[0]!.series)
       expect(results[1]!.series.map((entry) => entry.code)).not.toContain(series.code);
     expect(
-      (await suite.db.execute(sql`select count(*) as n from fiscal_allocations`)).rows,
+      (
+        await suite.db.execute(
+          sql`select count(*) as n from verifactu_identities where event_key is not null`,
+        )
+      ).rows,
     ).toEqual([{ n: 0 }]);
   });
 });

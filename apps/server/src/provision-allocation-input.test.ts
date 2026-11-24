@@ -14,7 +14,6 @@ import { persons } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { FISCAL_SLOT, ALLOCATED_FISCAL_SEED } from "@waitron/fiscal-verifactu";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import {
   paperCustodianFingerprint,
@@ -225,9 +224,9 @@ async function allocatedVenue() {
     { code: "R-S000042", purpose: "corrective", nextNumber: 1 },
     { code: "RF-S000042", purpose: "full_corrective", nextNumber: 1 },
   ]);
-  expect(
-    await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
-  ).toEqual([{ approval }]);
+  expect((await allocationRows(suite.db)).map(({ approval }) => ({ approval }))).toEqual([
+    { approval },
+  ]);
 }
 it("carries the supplied setup identities and signed input through the historical provisionVenue harness", async () => {
   const pending = establish();

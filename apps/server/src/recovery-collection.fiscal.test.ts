@@ -8,7 +8,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { withCollectedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-operation.js";
 import { drawEmergencyIdentity } from "@waitron/fiscal-verifactu/src/allocation-envelope.js";
-import { type ActivationResult } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
+import { type ActivationResult } from "@waitron/fiscal-verifactu/src/allocation-types.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";

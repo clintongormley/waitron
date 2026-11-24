@@ -180,12 +180,7 @@ async function configurationArtifact() {
     new Date("2026-10-15T12:00:00Z"),
     await schemaVersionsByModule({ venue: source.db, node: source.node }, selected),
   );
-  for (const name of [
-    "invoice_series",
-    "fiscal_allocations",
-    "verifactu_records",
-    "verifactu_identities",
-  ])
+  for (const name of ["invoice_series", "verifactu_records", "verifactu_identities"])
     expect(bundle.tables).not.toHaveProperty(name);
   return {
     artifact: encodeConfigurationBundle(bundle, "import passphrase"),
@@ -337,7 +332,11 @@ it.each([
       try {
         if (change !== "none") {
           expect(disk.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
-          expect(disk.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(0);
+          expect(
+            disk
+              .prepare("select count(*) as n from verifactu_identities where event_key is not null")
+              .get()?.n,
+          ).toBe(0);
           expect(disk.prepare("select count(*) as n from products").get()?.n).toBe(0);
         } else {
           expect(disk.prepare("select name from products").all()).toEqual([
@@ -361,7 +360,7 @@ it.each([
           expect(
             disk
               .prepare(
-                "select environment, installation_identity as identity from fiscal_allocations",
+                "select environment, numero_instalacion as identity from verifactu_identities where event_key is not null",
               )
               .all(),
           ).toEqual([{ environment, identity: "0CNNY" }]);

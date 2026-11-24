@@ -52,7 +52,6 @@ async function storedSource(
 ): Promise<HourHistorySource> {
   const sifs = await rows(query, "verifactu_identities");
   const series = await rows(query, "invoice_series");
-  const allocations = await rows(query, "fiscal_allocations");
   let complete = true;
   const records: unknown[] = [];
   for (const row of sifs)
@@ -87,20 +86,21 @@ async function storedSource(
       recordedAtMs: time(row.retired_at),
     });
   }
-  for (const row of allocations) {
+  for (const row of sifs) {
+    if (row.event_key === null) continue;
     const allocation = json(row.allocation),
       approval = json(row.approval);
     if (allocation === null || approval === null) complete = false;
     records.push({
-      reference: `fiscal_allocations/${row.event_key}`,
+      reference: `verifactu_identities/allocation/${row.event_key}`,
       kind: "intent",
-      taxpayerNif: row.taxpayer_nif,
+      taxpayerNif: row.nif,
       environment: row.environment,
-      softwareId: row.software_id,
+      softwareId: row.id_sistema_informatico,
       nodeId: row.node_id,
-      identity: row.installation_identity,
+      identity: row.numero_instalacion,
       recordedAtMs: time(
-        row.activated_at,
+        row.registrado_en,
         typeof allocation?.issuedAt === "string" ? allocation.issuedAt : undefined,
         typeof approval?.confirmedAt === "string" ? approval.confirmedAt : undefined,
       ),

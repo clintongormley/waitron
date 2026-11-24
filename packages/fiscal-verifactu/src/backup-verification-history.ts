@@ -77,10 +77,10 @@ function ident(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 const SCOPE = [
-  ["taxpayer_nif", "taxpayerNif"],
-  ["software_id", "softwareId"],
+  ["nif", "taxpayerNif"],
+  ["id_sistema_informatico", "softwareId"],
   ["environment", "environment"],
-  ["installation_identity", "installationIdentity"],
+  ["numero_instalacion", "installationIdentity"],
   ["allocation_key", "allocationId"],
 ] as const;
 const BINDING = ["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"] as const;
@@ -300,25 +300,15 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
     !SCOPE.every(([column, key]) => row[column] === a[key]) ||
     p.eventId !== row.event_key ||
     p.targetNodeId !== row.node_id ||
-    !timestamp(row.activated_at) ||
     !exact(r, ["activationEventId", "sifId", "series"]) ||
     r.activationEventId !== row.event_key ||
-    r.sifId !== row.sif_id ||
+    r.sifId !== row.id ||
     !Array.isArray(r.series) ||
     !(a.source === "hour" ? isMinuteAllocatedSeries : isAllocatedSeries)(
       a.series,
       a.installationIdentity,
       b,
     )
-  )
-    return "invalid";
-  const sif = await first(query, "select * from verifactu_identities where id=?", [row.sif_id!]);
-  if (
-    sif === undefined ||
-    sif.node_id !== row.node_id ||
-    sif.nif !== a.taxpayerNif ||
-    sif.id_sistema_informatico !== a.softwareId ||
-    sif.numero_instalacion !== a.installationIdentity
   )
     return "invalid";
   const declared = [];
@@ -357,7 +347,6 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
 const LINKS = [
   ["returned_invoice_records", "record_id", "verifactu_records", "id"],
   ["verifactu_identities", "node_id", "nodes", "id"],
-  ["fiscal_allocations", "node_id", "nodes", "id"],
   ["verifactu_series_conflicts", "sif_id", "verifactu_identities", "id"],
   ["verifactu_series_conflicts", "series_id", "invoice_series", "id"],
   ["verifactu_submissions", "registro_id", "verifactu_records", "id"],
@@ -393,9 +382,7 @@ async function walk(
         (row.revocado_en !== null && !timestamp(row.revocado_en))
       )
         return "invalid";
-    }
-  if (await exists(query, "fiscal_allocations"))
-    for await (const row of query.rows("select * from fiscal_allocations")) {
+      if (row.event_key === null) continue;
       if (row.environment !== context.source.environment) return "invalid";
       const checked = await allocationRow(query, row);
       if (checked === "invalid") return "invalid";

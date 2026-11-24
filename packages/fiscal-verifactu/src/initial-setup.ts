@@ -25,7 +25,8 @@ import {
   paperBlockBytes,
 } from "./paper-protocol.js";
 import { enrolPaperCustodian } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
+import { verifactuIdentities } from "./schema/verifactu-identities.js";
+import { allocationOf } from "./identity-allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import {
   readDeclaredPaperInput,
@@ -603,23 +604,24 @@ function createInitialSetup(
         record(context.request) && context.request.kind === "waitron-hour-setup"
           ? readHourSetupInput(context, value)
           : readInput(context, value, receiptTrust()).input;
-      const [retained] = await tx
+      const [identity] = await tx
         .select()
-        .from(fiscalAllocations)
-        .where(eq(fiscalAllocations.eventKey, context.binding.eventId));
-      if (retained === undefined) return null;
+        .from(verifactuIdentities)
+        .where(eq(verifactuIdentities.eventKey, context.binding.eventId));
+      if (identity === undefined) return null;
+      const retained = allocationOf(identity)!;
       if (
-        retained.nodeId !== context.binding.targetNodeId ||
-        retained.taxpayerNif !== context.taxId ||
-        retained.softwareId !== WAITRON_ID_SISTEMA ||
+        identity.nodeId !== context.binding.targetNodeId ||
+        identity.nif !== context.taxId ||
+        identity.idSistemaInformatico !== WAITRON_ID_SISTEMA ||
         retained.environment !== context.environment ||
         !isDeepStrictEqual(input.allocation, retained.allocation) ||
         !isDeepStrictEqual(input.approval, retained.approval) ||
         retained.result.activationEventId !== context.binding.eventId ||
-        retained.result.sifId !== retained.sifId
+        retained.result.sifId !== identity.id
       )
         refuse("event_mismatch");
-      const [node] = await tx.select().from(nodes).where(eq(nodes.id, retained.nodeId));
+      const [node] = await tx.select().from(nodes).where(eq(nodes.id, identity.nodeId));
       if (node === undefined) refuse("node_mismatch");
       const active = await readModuleAllocationSeries(
         tx,

@@ -244,9 +244,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
-  expect((await allocationRows(suite.db))[0]!.approval.operatorId).toBe(
-    "administrator",
-  );
+  expect((await allocationRows(suite.db))[0]!.approval.operatorId).toBe("administrator");
 });
 
 it("refuses a promotion without an hour authority", async () => {
@@ -616,51 +614,42 @@ it("refuses unallocated live series rather than blessing scaffold references", a
   expect(await snapshot()).toEqual(before);
 });
 
-it.each([
-  "taxpayer",
-  "environment",
-  "identity",
-  "code",
-  "retired",
-  "extra",
-  "software",
-  "sif-retired",
-])("refuses a committed allocation after its %s changed", async (field) => {
-  await activateForRead();
-  if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
-  if (field === "environment") await suite.db.update(deployment).set({ environment: "production" });
-  if (field === "identity")
-    await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'P000043'`);
-  if (field === "code")
-    await withInvoiceSeriesGuardDropped(suite.db, () =>
-      suite.db
+it.each(["taxpayer", "environment", "code", "retired", "extra", "sif-retired"])(
+  "refuses a committed allocation after its %s changed",
+  async (field) => {
+    await activateForRead();
+    if (field === "taxpayer") await suite.db.execute(sql`update taxpayer set tax_id = '89890002M'`);
+    if (field === "environment")
+      await suite.db.update(deployment).set({ environment: "production" });
+    if (field === "code")
+      await withInvoiceSeriesGuardDropped(suite.db, () =>
+        suite.db
+          .update(invoiceSeries)
+          .set({ code: "changed" })
+          .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`),
+      );
+    if (field === "retired")
+      await suite.db
         .update(invoiceSeries)
-        .set({ code: "changed" })
-        .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`),
-    );
-  if (field === "retired")
-    await suite.db
-      .update(invoiceSeries)
-      .set({ retiredAt: new Date() })
-      .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
-  if (field === "extra")
-    await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
-  if (field === "software")
-    await suite.db.update(verifactuIdentities).set({ idSistemaInformatico: "W2" });
-  if (field === "sif-retired")
-    await suite.db
-      .update(verifactuIdentities)
-      .set({ revocadoEn: new Date() })
-      .where(isNull(verifactuIdentities.revocadoEn));
-  const before = await snapshot();
-  await expect(readAllocated()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "activation_superseded" },
-  });
-  expect(await snapshot()).toEqual(before);
-});
+        .set({ retiredAt: new Date() })
+        .where(sql`${invoiceSeries.purpose} = 'standard' and ${invoiceSeries.retiredAt} is null`);
+    if (field === "extra")
+      await suite.db
+        .insert(invoiceSeries)
+        .values({ nodeId: node.nodeId, code: "other", purpose: "standard" });
+    if (field === "sif-retired")
+      await suite.db
+        .update(verifactuIdentities)
+        .set({ revocadoEn: new Date() })
+        .where(isNull(verifactuIdentities.revocadoEn));
+    const before = await snapshot();
+    await expect(readAllocated()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "activation_superseded" },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it("refuses a live SIF that has no committed allocation ledger", async () => {
   await withTransaction(suite.db, (tx) =>

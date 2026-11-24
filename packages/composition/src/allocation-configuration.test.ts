@@ -23,7 +23,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { fixtureSifIdentities } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -175,9 +174,9 @@ it("reads an independently configured historical paper source without production
       { code: "RF-P000042", purpose: "full_corrective" },
     ]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "P000042" }]);
-    expect(
-      await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
-    ).toEqual([{ approval }]);
+    expect((await allocationRows(suite.db)).map(({ approval }) => ({ approval }))).toEqual([
+      { approval },
+    ]);
   });
 });
 it.each([
@@ -378,11 +377,9 @@ it("activates the current hour through production composition without signed-fil
       { code: "RF-0CNNY", purpose: "full_corrective" },
     ]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([{ identity: "0CNNY" }]);
-    expect(
-      (
-        await suite.db.select({ allocation: fiscalAllocations.allocation }).from(fiscalAllocations)
-      ).map(({ allocation }) => allocation.source),
-    ).toEqual(["hour"]);
+    expect((await allocationRows(suite.db)).map(({ allocation }) => allocation.source)).toEqual([
+      "hour",
+    ]);
     expect(history).toEqual(selectedHistory);
     await expect(
       operations.prepare({ ...operation, input }, async () => "admitted"),

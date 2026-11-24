@@ -485,9 +485,11 @@ it.each([
         const untouched = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
         try {
           expect(untouched.prepare("select count(*) as n from taxpayer").get()?.n).toBe(0);
-          expect(untouched.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(
-            0,
-          );
+          expect(
+            untouched
+              .prepare("select count(*) as n from verifactu_identities where event_key is not null")
+              .get()?.n,
+          ).toBe(0);
         } finally {
           untouched.close();
         }
@@ -533,7 +535,11 @@ it.each([
         ).toEqual([
           { privacyNoticeUrl: "https://example.com/privacy", privacyEmail: "privacy@example.com" },
         ]);
-        expect(db.prepare("select count(*) as n from fiscal_allocations").get()?.n).toBe(1);
+        expect(
+          db
+            .prepare("select count(*) as n from verifactu_identities where event_key is not null")
+            .get()?.n,
+        ).toBe(1);
         expect(db.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(0);
       } finally {
         db.close();
@@ -559,9 +565,11 @@ it.each([
             )
             .all(),
         ).not.toContainEqual({ id: claim.body.state.administratorId });
-        expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
-          { environment: "preproduction" },
-        ]);
+        expect(
+          isolated
+            .prepare("select environment from verifactu_identities where event_key is not null")
+            .all(),
+        ).toEqual([{ environment: "preproduction" }]);
         expect(isolated.prepare("select count(*) as n from verifactu_records").get()?.n).toBe(1);
         expect(
           isolated

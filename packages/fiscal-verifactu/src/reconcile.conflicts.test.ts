@@ -43,12 +43,7 @@ async function fixture(sent = true) {
 }
 
 async function immutableSnapshot() {
-  const tables = [
-    "verifactu_records",
-    "verifactu_identities",
-    "invoice_series",
-    "fiscal_allocations",
-  ];
+  const tables = ["verifactu_records", "verifactu_identities", "invoice_series"];
   const result: Record<string, unknown> = {
     verifactu_submissions: (
       await suite.db.execute(sql`

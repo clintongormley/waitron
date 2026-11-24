@@ -138,12 +138,7 @@ async function state(db: Pick<typeof suite.db, "execute"> = suite.db) {
   }
   return snapshot;
 }
-const FISCAL_TABLES = [
-  "verifactu_identities",
-  "invoice_series",
-  "fiscal_allocations",
-  "verifactu_records",
-];
+const FISCAL_TABLES = ["verifactu_identities", "invoice_series", "verifactu_records"];
 async function fiscalState() {
   const all = await state();
   return Object.fromEntries(FISCAL_TABLES.map((table) => [table, all[table]]));

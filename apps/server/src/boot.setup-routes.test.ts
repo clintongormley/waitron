@@ -1246,7 +1246,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       { numero_instalacion: "0CNNW" },
     ]);
     expect(
-      db.all(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`),
+      db.all(
+        sql`select nif as taxpayer_nif, environment, allocation_key from verifactu_identities where event_key is not null`,
+      ),
     ).toEqual([
       {
         taxpayer_nif: taxId,
@@ -1476,7 +1478,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         "taxpayer",
         "nodes",
         "verifactu_identities",
-        "fiscal_allocations",
         "invoice_series",
       ]) {
         expect(venue.store.venue.all(sql.raw(`select * from ${table}`)), table).toEqual([]);

@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -276,7 +277,7 @@ it("an active emergency identity uses the caller's issue instant rather than all
     ),
   );
   vi.useRealTimers();
-  const allocations = await suite.db.select().from(fiscal.fiscalAllocations);
+  const allocations = await allocationRows(suite.db);
   expect(allocations).toHaveLength(1);
   expect(allocations[0]).toMatchObject({
     allocation: { source: "emergency", issuedAt: "2026-10-13T10:00:00.000Z" },
@@ -306,5 +307,5 @@ it("an active emergency identity uses the caller's issue instant rather than all
     FechaHoraHusoGenRegistro: "2026-10-15T01:30:00+02:00",
     SistemaInformatico: { NumeroInstalacion: active.numeroInstalacion },
   });
-  expect(await suite.db.select().from(fiscal.fiscalAllocations)).toEqual(allocations);
+  expect(await allocationRows(suite.db)).toEqual(allocations);
 });

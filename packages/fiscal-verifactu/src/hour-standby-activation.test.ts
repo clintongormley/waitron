@@ -14,7 +14,6 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { compareHourClocks } from "./hour-clock.js";
 import { createHourSelection } from "./hour-selection.js";
 import type { HourHistorySource } from "./hour-history.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
@@ -431,8 +430,8 @@ it("detaches target, authority carrier and bases before its first awaited read",
     ),
   );
   const after = await snapshot();
-  expect(after.allocations[1]!.nodeId).toBe(standby.nodeId);
-  expect(after.allocations[1]!.bases).toEqual(bases);
+  const activation = after.allocations.find((row) => row.eventKey === f.binding.eventId);
+  expect(activation).toMatchObject({ nodeId: standby.nodeId, bases });
   expect(after.sifs.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.sifs);
   expect(after.series.filter((row) => row.nodeId === primary.nodeId)).toEqual(before.series);
 });
@@ -471,8 +470,8 @@ it("a promotion admitted with oldMachineRelinquished activates and stores its ve
   expect(result.activationEventId).toBe("promotion");
   const [stored] = await suite.db
     .select()
-    .from(fiscalAllocations)
-    .where(eq(fiscalAllocations.eventKey, "promotion"));
+    .from(verifactuIdentities)
+    .where(eq(verifactuIdentities.eventKey, "promotion"));
   expect(stored!.approval).toEqual(f.input.approval);
 });
 
@@ -487,8 +486,8 @@ it("refuses a relinquished promotion whose version 2 approval also says the old 
   expect(
     await suite.db
       .select()
-      .from(fiscalAllocations)
-      .where(eq(fiscalAllocations.eventKey, "promotion")),
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.eventKey, "promotion")),
   ).toEqual([]);
   expect(await snapshot()).toEqual(before);
 });

@@ -377,7 +377,9 @@ it.each(["allocation", "approval"])(
   "rejects malformed stored %s while projecting all hours",
   async (column) => {
     await capture();
-    both((db) => db.exec(`update fiscal_allocations set ${column}='null'`));
+    both((db) =>
+      db.exec(`update verifactu_identities set ${column}='null' where event_key is not null`),
+    );
     expectCheck(await verify(), "entries", "invalid");
   },
 );

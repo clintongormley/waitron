@@ -8,7 +8,6 @@ import {
   triggerRaised,
   withTransaction,
 } from "@waitron/db";
-import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroConsultado, VerifactuClient } from "@waitron/verifactu";
@@ -20,9 +19,7 @@ import { compareHourClocks } from "./hour-clock.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { createReconciliationSweep } from "./reconcile-sweep.js";
 import { appendPendingAlta, seedPendingEnvios, seedPinnedChain } from "../test/drain-fixtures.js";
-import { seedFixtureSif } from "../test/sif-fixture.js";
 import { readFilingOverview } from "./filing-overview.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { readActiveConflicts, assertNoActiveConflict } from "./conflict-evidence.js";
@@ -97,7 +94,6 @@ async function snapshot() {
     "verifactu_submissions",
     "verifactu_identities",
     "invoice_series",
-    "fiscal_allocations",
   ])
     result[table] = (
       await suite.db.execute(sql`select * from ${sql.identifier(table)} order by rowid`)
@@ -451,12 +447,7 @@ async function retireAndRevoke(nodeId: string, at: Date) {
 async function recover(f: Fixture, at: Date, code: string) {
   await retireAndRevoke(f.seeded.nodeId, at);
   return withTransaction(suite.db, async (tx) => {
-    const { id: sifId } = await seedFixtureSif(tx, {
-      nodeId: brandNodeId(f.seeded.nodeId),
-      nif: f.seeded.nif,
-      idSistemaInformatico: "WT",
-      numeroInstalacion: code,
-    });
+    const sifId = randomUUID();
     const series = { id: randomUUID(), code, purpose: "standard" as const };
     await tx.insert(invoiceSeries).values({ ...series, nodeId: f.seeded.nodeId });
     const fields = {
@@ -468,15 +459,15 @@ async function recover(f: Fixture, at: Date, code: string) {
       confirmedAt: at.toISOString(),
       incidentEvidence: "evidence",
     };
-    await tx.insert(fiscalAllocations).values({
+    await tx.insert(verifactuIdentities).values({
       eventKey: `event-${code}`,
       allocationKey: `allocation-${code}`,
       nodeId: f.seeded.nodeId,
-      sifId,
-      taxpayerNif: f.seeded.nif,
-      softwareId: "WT",
+      id: sifId,
+      nif: f.seeded.nif,
+      idSistemaInformatico: "WT",
       environment: "production",
-      installationIdentity: code,
+      numeroInstalacion: code,
       allocation: {
         version: 1,
         allocationId: `allocation-${code}`,
@@ -492,7 +483,7 @@ async function recover(f: Fixture, at: Date, code: string) {
       approval: { ...fields, version: 1, oldMachineOffline: true, oldMachineAbsent: false },
       bases: [],
       result: { activationEventId: `event-${code}`, sifId, series: [series] },
-      activatedAt: at,
+      registradoEn: at,
     });
     return sifId;
   });

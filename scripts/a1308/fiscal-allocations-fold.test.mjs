@@ -1,3 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { rewriteSource } from "./fiscal-allocations-fold.mjs";
 
@@ -38,4 +43,24 @@ it("keeps filtered reads, projections and SQL visible for manual conversion", ()
     text: expected,
     manual: [2, 4, 5, 6],
   });
+});
+
+it("checks a working tree with an unstaged TypeScript deletion", () => {
+  const root = mkdtempSync(join(tmpdir(), "allocation-fold-"));
+  try {
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+    );
+    const options = { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] };
+    execFileSync("git", ["init", "--quiet"], options);
+    mkdirSync(join(root, "packages"));
+    const source = join(root, "packages/retired.ts");
+    writeFileSync(source, "export const fiscalAllocations = {};");
+    execFileSync("git", ["add", "packages/retired.ts"], options);
+    rmSync(source);
+    const script = fileURLToPath(new URL("./fiscal-allocations-fold.mjs", import.meta.url));
+    expect(() => execFileSync(process.execPath, [script, "--check"], options)).not.toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

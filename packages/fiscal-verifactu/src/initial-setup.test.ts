@@ -17,7 +17,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { validateInitialPaperCandidates } from "./initial-paper-candidates.js";
 import type { PaperConsumption } from "./paper-protocol.js";
@@ -407,8 +406,8 @@ describe("first fiscal setup public contribution", () => {
     expect(await FISCAL_INITIAL_SETUP.committed(suite.db, f.held, f.input)).toEqual(result);
     const rows = await suite.db
       .select()
-      .from(fiscalAllocations)
-      .where(eq(fiscalAllocations.eventKey, context.binding.eventId));
+      .from(verifactuIdentities)
+      .where(eq(verifactuIdentities.eventKey, context.binding.eventId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.result).toEqual(result);
     await expect(
@@ -466,9 +465,7 @@ it("the historical paper collector activates independently bound evidence", asyn
     { code: "R-S000001", purpose: "corrective" },
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
-  expect((await allocationRows(suite.db))[0]?.allocation).toEqual(
-    f.input.allocation,
-  );
+  expect((await allocationRows(suite.db))[0]?.allocation).toEqual(f.input.allocation);
 });
 it("a claimed setup with no live host grant cannot fall back to valid configured paper files", async () => {
   const { withOperationAuthority } = await import("@waitron/module");

@@ -16,7 +16,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { runPaperCustodian } from "./paper-custodian.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
@@ -161,9 +160,9 @@ it("activates only the complete signed allocation confirmed by the separate file
         .select({ identity: verifactuIdentities.numeroInstalacion })
         .from(verifactuIdentities),
     ).toEqual([{ identity: "P000042" }]);
-    expect(
-      await suite.db.select({ approval: fiscalAllocations.approval }).from(fiscalAllocations),
-    ).toEqual([{ approval }]);
+    expect((await allocationRows(suite.db)).map(({ approval }) => ({ approval }))).toEqual([
+      { approval },
+    ]);
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(8);
   });
 });

@@ -177,6 +177,6 @@ describe("startAgainHoldings with no invoice record and the verifactu_submission
   });
 });
 
-it("lists the append-only tables the fiscal activation writes as deletable", () => {
-  expect(FISCAL_START_AGAIN_DELETABLE).toEqual(["fiscal_allocations", "verifactu_certificates"]);
+it("lists the append-only certificate table so setup can discard its own certificate", () => {
+  expect(FISCAL_START_AGAIN_DELETABLE).toEqual(["verifactu_certificates"]);
 });

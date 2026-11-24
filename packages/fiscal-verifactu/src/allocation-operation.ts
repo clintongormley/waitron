@@ -1,6 +1,6 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, readTaxpayer, type Transaction } from "@waitron/db";
 import {
   readOperationAuthority,
@@ -17,8 +17,8 @@ import {
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import { admitsAllocationAction } from "./identity-change-authority.js";
-import type { ActivationResult } from "./schema/allocations.js";
-import { fiscalAllocations } from "./schema/allocations.js";
+import type { ActivationResult } from "./allocation-types.js";
+import { allocationOf } from "./identity-allocation.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 type SeriesBases = readonly { readonly code: string; readonly purpose: string }[];
@@ -38,29 +38,18 @@ export async function readModuleAllocationSeries(
     .where(eq(nodes.id, node.nodeId));
   if (storedNode === undefined) return refuse("node_mismatch");
   const [sif] = await tx
-    .select({
-      id: verifactuIdentities.id,
-      taxpayerNif: verifactuIdentities.nif,
-      softwareId: verifactuIdentities.idSistemaInformatico,
-      identity: sql<string>`${verifactuIdentities.numeroInstalacion}`,
-    })
+    .select()
     .from(verifactuIdentities)
     .where(
       and(eq(verifactuIdentities.nodeId, node.nodeId), isNull(verifactuIdentities.revocadoEn)),
     );
   if (sif === undefined) return refuse("activation_superseded");
-  const [retained] = await tx
-    .select()
-    .from(fiscalAllocations)
-    .where(and(eq(fiscalAllocations.nodeId, node.nodeId), eq(fiscalAllocations.sifId, sif.id)));
+  const retained = allocationOf(sif);
   const taxpayer = await readTaxpayer(tx);
   const [stamp] = await tx.select().from(deployment).where(eq(deployment.id, 1));
   if (
     retained === undefined ||
-    retained.taxpayerNif !== taxpayer?.taxId ||
-    retained.taxpayerNif !== sif.taxpayerNif ||
-    retained.softwareId !== sif.softwareId ||
-    retained.installationIdentity !== sif.identity ||
+    sif.nif !== taxpayer?.taxId ||
     retained.environment !== stamp?.environment
   )
     return refuse("activation_superseded");

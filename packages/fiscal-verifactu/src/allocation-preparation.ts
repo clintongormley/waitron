@@ -11,7 +11,7 @@ import {
   withCollectedModuleAllocation,
   type AllocationEvidenceSource,
 } from "./allocation-operation.js";
-import type { ActivationResult } from "./schema/allocations.js";
+import type { ActivationResult } from "./allocation-types.js";
 import { createPaperAllocationSource } from "./allocation-paper-source.js";
 
 export function createPaperAllocationPreparation(configuration: {

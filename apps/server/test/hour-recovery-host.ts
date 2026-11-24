@@ -31,7 +31,6 @@ import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-read
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "../src/break-glass.js";
 import "../src/recovery-module-operation.js";

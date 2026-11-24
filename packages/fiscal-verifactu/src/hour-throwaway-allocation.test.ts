@@ -85,7 +85,20 @@ it("disposable preparation activates every exact hour base through the unchanged
   ]);
   const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.numeroInstalacion).toBe("0CNNW");
-  expect(JSON.stringify(sif)).not.toMatch(/throwaway|custodian|privateKey/);
+  const { id, nodeId, nif, idSistemaInformatico, numeroInstalacion, registradoEn, revocadoEn } =
+    sif!;
+  expect(
+    JSON.stringify({
+      id,
+      nodeId,
+      nif,
+      idSistemaInformatico,
+      numeroInstalacion,
+      registradoEn,
+      revocadoEn,
+    }),
+  ).not.toMatch(/throwaway/);
+  expect(JSON.stringify(sif)).not.toMatch(/custodian|privateKey/);
   const [row] = await allocationRows(suite.db);
   expect(row!.allocationKey).toMatch(/^throwaway-/);
   expect(row!.allocation).toMatchObject({ environment: "preproduction", source: "hour" });

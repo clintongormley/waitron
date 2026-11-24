@@ -59,7 +59,11 @@ it("accepting control preserves every captured row through every real owner", as
   expect(comparisons).toBe(ownersComparedFor(f));
   expect(f.logical.verifactu_records).toHaveLength(4);
   expect(f.logical.verifactu_identities).toHaveLength(3);
-  expect(f.logical.fiscal_allocations).toHaveLength(3);
+  expect(
+    f.logical.verifactu_identities.filter(
+      (row) => (JSON.parse(row) as { event_key: string | null }).event_key !== null,
+    ),
+  ).toHaveLength(3);
   expect(f.logical.verifactu_certificates).toHaveLength(1);
   expect(f.logical.sale_lines).toHaveLength(4);
   expect(f.entries.find((e) => e.name.endsWith("hour-history.json"))).toBeDefined();

@@ -1,6 +1,12 @@
 import { expect, it, onTestFinished, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deployment, invoiceSeries, withTransaction, readDeploymentEnvironment } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  newId,
+  withTransaction,
+  readDeploymentEnvironment,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { recordSale } from "@waitron/core";
@@ -15,7 +21,6 @@ import {
 import { liveSeriesBases } from "./reserved-series.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { VerifactuBackend } from "./backend.js";
@@ -119,33 +124,32 @@ it("positively inventories an unprovisioned empty database", async () => {
   const source = await readInventory();
   expect(source).toEqual({ reference: "venue", complete: true, records: [] });
 });
+type IdentityValues = typeof verifactuIdentities.$inferInsert;
+
 async function seedRows(
   options: { identity?: string; nif?: string; softwareId?: string; retired?: boolean } = {},
+  approvalFields: Partial<IdentityValues> = {},
+  seriesId = newId(),
 ) {
   await seedTaxpayers(suite.db);
   await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
   const identity = options.identity ?? "0CNN8";
-  const [sif] = await suite.db
-    .insert(verifactuIdentities)
-    .values({
-      nodeId: TAXPAYER_A.nodeId,
-      nif: options.nif ?? "89890001K",
-      idSistemaInformatico: options.softwareId ?? "W1",
-      numeroInstalacion: identity,
-      registradoEn: new Date("2026-10-16T11:20:00Z"),
-      revocadoEn: options.retired ? new Date("2026-10-16T11:30:00Z") : null,
-    })
-    .returning({ id: verifactuIdentities.id });
-  const [series] = await suite.db
-    .insert(invoiceSeries)
-    .values({
-      nodeId: TAXPAYER_A.nodeId,
-      code: `other-base-${identity}`,
-      purpose: "full",
-      retiredAt: options.retired ? new Date("2026-10-16T11:35:00Z") : null,
-    })
-    .returning({ id: invoiceSeries.id });
-  return { sifId: sif!.id, seriesId: series!.id };
+  await suite.db.insert(verifactuIdentities).values({
+    nodeId: TAXPAYER_A.nodeId,
+    nif: options.nif ?? "89890001K",
+    idSistemaInformatico: options.softwareId ?? "W1",
+    numeroInstalacion: identity,
+    registradoEn: new Date("2026-10-16T11:20:00Z"),
+    revocadoEn: options.retired ? new Date("2026-10-16T11:30:00Z") : null,
+    ...approvalFields,
+  });
+  await suite.db.insert(invoiceSeries).values({
+    nodeId: TAXPAYER_A.nodeId,
+    id: seriesId,
+    code: `other-base-${identity}`,
+    purpose: "full",
+    retiredAt: options.retired ? new Date("2026-10-16T11:35:00Z") : null,
+  });
 }
 const projection = async () =>
   projectHourHistory({
@@ -200,15 +204,14 @@ it("a malformed hour suffix cannot become empty history", async () => {
   await seedRows({ identity: "0cnn8" });
   expect((await projection()).contradictions.length).toBeGreaterThan(0);
 });
-async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferInsert> = {}) {
-  const ids = await seedRows();
-  const series = [{ id: ids.seriesId, code: "other-base-0CNN8", purpose: "full" }];
-  // A standard base is required by admission; retain both purposes in this synthetic receipt.
-  const [standard] = await suite.db
-    .insert(invoiceSeries)
-    .values({ nodeId: TAXPAYER_A.nodeId, code: "A-0CNN8", purpose: "standard" })
-    .returning({ id: invoiceSeries.id });
-  series.push({ id: standard!.id, code: "A-0CNN8", purpose: "standard" });
+async function seedAllocation(change: Partial<IdentityValues> = {}) {
+  const sifId = newId();
+  const seriesId = newId();
+  const standardId = newId();
+  const series = [
+    { id: seriesId, code: "other-base-0CNN8", purpose: "full" },
+    { id: standardId, code: "A-0CNN8", purpose: "standard" },
+  ];
   const input = {
     version: 1 as const,
     allocationId: "allocation",
@@ -233,44 +236,50 @@ async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferIns
     confirmedAt: input.issuedAt,
     incidentEvidence: "owned/event",
   };
-  await suite.db.insert(fiscalAllocations).values({
-    eventKey: "event",
-    allocationKey: "allocation",
+  await seedRows(
+    {},
+    {
+      eventKey: "event",
+      allocationKey: "allocation",
+      id: sifId,
+      environment: input.environment,
+      allocation: input,
+      approval,
+      bases: [
+        { code: "other-base", purpose: "full" },
+        { code: "A", purpose: "standard" },
+      ],
+      result: { activationEventId: "event", sifId, series },
+      registradoEn: new Date("2026-10-16T11:50:00Z"),
+      ...change,
+    },
+    seriesId,
+  );
+  await suite.db.insert(invoiceSeries).values({
+    id: standardId,
     nodeId: TAXPAYER_A.nodeId,
-    sifId: ids.sifId,
-    taxpayerNif: input.taxpayerNif,
-    softwareId: input.softwareId,
-    environment: input.environment,
-    installationIdentity: input.installationIdentity,
-    allocation: input,
-    approval,
-    bases: [
-      { code: "other-base", purpose: "full" },
-      { code: "A", purpose: "standard" },
-    ],
-    result: { activationEventId: "event", sifId: ids.sifId, series },
-    activatedAt: new Date("2026-10-16T11:50:00Z"),
-    ...change,
+    code: "A-0CNN8",
+    purpose: "standard",
   });
 }
 it("records the retained allocation's later commit time", async () => {
   await seedAllocation();
   const result = await projection();
   expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T11:50:00Z"));
-  expect(result.references).toContain("fiscal_allocations/event");
+  expect(result.references).toContain("verifactu_identities/allocation/event");
   expect(result.contradictions).toEqual([]);
 });
 it.each([
   { allocationKey: "changed" },
-  { softwareId: "OTHER" },
-  { installationIdentity: "0CNPG" },
+  { idSistemaInformatico: "OTHER" },
+  { numeroInstalacion: "0CNPG" },
   { nodeId: TAXPAYER_A.nodeId2 },
   { allocation: {} },
   { approval: {} },
   { result: {} },
   { bases: [] },
 ])("a contradictory committed receipt %j refuses completeness", async (change) => {
-  await seedAllocation(change as Partial<typeof fiscalAllocations.$inferInsert>);
+  await seedAllocation(change as Partial<IdentityValues>);
   expect((await projection()).contradictions).toContain("venue:incomplete");
 });
 

@@ -11,8 +11,11 @@ export function resultFacts<T extends RestoreRows>(
   return {
     ...rows,
     registrations: rows.registrations.map((row) => ({
-      ...row,
       id: sif(row.id),
+      nodeId: row.nodeId,
+      nif: row.nif,
+      idSistemaInformatico: row.idSistemaInformatico,
+      numeroInstalacion: row.numeroInstalacion,
       registradoEn: null,
       revocadoEn: row.revocadoEn !== null,
     })),

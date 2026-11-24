@@ -135,7 +135,9 @@ it.each([false, true])(
         taxpayer_nif: string;
         environment: string;
         allocation_key: string;
-      }>(sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`);
+      }>(
+        sql`select nif as taxpayer_nif, environment, allocation_key from verifactu_identities where event_key is not null`,
+      );
       expect(
         getCountryPack("ES")!.taxIdentifier!.validate(allocations[0]!.taxpayer_nif).valid,
       ).toBe(true);

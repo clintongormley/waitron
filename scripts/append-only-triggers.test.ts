@@ -42,7 +42,6 @@ const EXPECTED = [
   "deferred_closures",
   "document_page_reprints",
   "drawer_entries",
-  "fiscal_allocations",
   "handover_activations",
   "invoice_correction_refunds",
   "invoice_pdf_downloads",
