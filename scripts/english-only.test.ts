@@ -27,6 +27,7 @@ import {
   readText,
 } from "../packages/db/src/english-only.js";
 import { forbiddenVocabulary, vocabularyOwners } from "../packages/module/src/vocabulary.js";
+import { PRE_PUSH_WORDS } from "./check-english-only.js";
 import { STILL_TO_CLEAN } from "./english-only-still-to-clean.js";
 
 const OWNERS = vocabularyOwners(ALL_MODULES);
@@ -124,6 +125,10 @@ const ANCHORS: Record<string, readonly string[]> = {
 };
 
 describe("configuration", () => {
+  it("uses the same forbidden words before push and in CI", () => {
+    expect(PRE_PUSH_WORDS).toEqual(FORBIDDEN);
+  });
+
   it(
     "reads tracked text files only: never an untracked screenshot or a file holding a NUL byte",
     () => {
@@ -787,6 +792,13 @@ describe("findAccented", () => {
 });
 
 describe("per-file English rules", () => {
+  it("explains a finding in an unlisted file", () => {
+    const path = "packages/example/src/main.ts";
+    const problems = englishFileProblems(path, "// Heading\nconst mesa = 1;", FORBIDDEN, false);
+    expect(problems).toContain(`${path}:2: mesa — const mesa = 1;`);
+    expect(problems.join("\n")).toContain("Use English");
+  });
+
   it.each([
     ["const mesa = 1; const mesas = 2;", 2],
     ["const table = 1;", 0],

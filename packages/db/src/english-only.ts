@@ -462,5 +462,10 @@ export function englishFileProblems(
     ];
   }
 
-  return details.length === 0 ? [] : [...details, `${path}: Use English in this file.`];
+  return details.length === 0
+    ? []
+    : [
+        ...details,
+        `${path}: Use English in this file or move translated text to its translation home. For required non-English text, see KEEPS_NON_ENGLISH in packages/db/src/english-only.ts.`,
+      ];
 }

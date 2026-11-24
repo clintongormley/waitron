@@ -1,6 +1,6 @@
 /**
  * The Spanish labour terms this module OWNS: legitimate inside this package, forbidden in every
- * generic package. Interpreted only by the root english-only suite; nothing at runtime consults it.
+ * generic package. The pre-push check and root English-only suite use it.
  *
  * Tokens, not words — the guard's tokeniser contract (`packages/db/src/english-only.ts`): lowercase
  * ASCII, unaccented, singular and plural listed separately, nothing stemmed. Terms this package also

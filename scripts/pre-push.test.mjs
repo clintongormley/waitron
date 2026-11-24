@@ -23,7 +23,6 @@ const zero = "0".repeat(40);
 // with room. Guard: `scripts/spawn-timeout-budget.test.ts`, which checks only that the bound clears
 // the largest SINGLE wait; receipt in `docs/developers/testing-guide.md`.
 const HOOK_TIMEOUT_MS = 15_000;
-const ENGLISH_HOOK_TIMEOUT_MS = 35_000;
 vi.setConfig({ testTimeout: HOOK_TIMEOUT_MS + 10_000 });
 
 // Exercise the real shell and classifiers; pnpm records requests without launching nested suites.
@@ -98,8 +97,10 @@ function fixture(
 const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
-fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(args) + "\\n");
 const isEnglish = args.includes("../../scripts/check-english-only.ts");
+const input = isEnglish ? fs.readFileSync(0, "utf8") : undefined;
+const call = isEnglish ? [...args, { changedPaths: [...new Set(input.split("\\n").filter(Boolean))].sort() }] : args;
+fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(call) + "\\n");
 const kind = isEnglish ? "English-only check" : args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
 if (process.env.PUSH_FAIL === kind) process.exit(17);
 if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
@@ -109,7 +110,7 @@ if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
 }
 if (process.env.PUSH_REAL_ENGLISH === "1" && isEnglish) {
   const result = require("node:child_process").spawnSync("pnpm", args, {
-    cwd: ${JSON.stringify(root)}, stdio: "inherit",
+    cwd: ${JSON.stringify(root)}, input, stdio: ["pipe", "inherit", "inherit"],
     env: { ...process.env, PATH: ${JSON.stringify(env.PATH)} },
   });
   process.exit(result.status ?? 1);
@@ -148,7 +149,7 @@ if (kind === "ls") {
         cwd: dir,
         input,
         encoding: "utf8",
-        timeout: realEnglish ? ENGLISH_HOOK_TIMEOUT_MS : HOOK_TIMEOUT_MS,
+        timeout: HOOK_TIMEOUT_MS,
         env: {
           ...env,
           PATH: `${join(dir, "bin")}:${env.PATH}`,
@@ -220,7 +221,7 @@ const english = (...paths) => [
   "tsx",
   "../../scripts/check-english-only.ts",
   expect.any(String),
-  ...paths,
+  { changedPaths: paths },
 ];
 const source = "packages/source/src/index.ts";
 const checks = [...cheap(source), english(source)];
@@ -296,7 +297,10 @@ describe("pre-push fast checks", () => {
       git("commit", "-qs", "-m", "Delete a path and add a symlink");
       const result = invoke(ref(git("rev-parse", "HEAD")));
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks.slice(0, 4)).toEqual([...cheap(kept), english(kept)]);
+      expect(result.checks.slice(0, 4)).toEqual([
+        ...cheap(kept),
+        english(kept, "packages/source/src/deleted.ts", "packages/source/src/link.ts"),
+      ]);
     });
   });
   it("skips empty file lists without losing the remaining checks", () => {
@@ -304,7 +308,11 @@ describe("pre-push fast checks", () => {
       rmSync(join(dir, "packages/source/src/index.ts"));
       const result = invoke();
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.checks).toEqual([install, ["--filter", "...@waitron/source", "typecheck"]]);
+      expect(result.checks).toEqual([
+        install,
+        english(source),
+        ["--filter", "...@waitron/source", "typecheck"],
+      ]);
     });
   });
   it("blocks a malformed changed file with real cached Prettier, then accepts its correction", () => {
@@ -348,21 +356,31 @@ describe("pre-push fast checks", () => {
   it("blocks non-English changes and accepts the correction within the pushed paths", () => {
     const changed = "packages/source/src/index.ts";
     const translation = "packages/source/src/i18n/words.ts";
+    const stillListed = "apps/dashboard/src/api/client.test.ts";
+    const outside = "scripts/fixture-word.ts";
+    const linked = "packages/source/src/linked.ts";
+    const missing = "packages/source/src/missing.ts";
     fixture(
       changed,
       ({ invoke, dir, git, ref }) => {
-        mkdirSync(dirname(join(dir, translation)), { recursive: true });
-        writeFileSync(join(dir, translation), "const mesa = 1;\n");
-        writeFileSync(join(dir, changed), "// Heading\nconst mesa = 1;\n");
-        git("add", changed, translation);
+        for (const path of [translation, stillListed, outside, missing]) {
+          mkdirSync(dirname(join(dir, path)), { recursive: true });
+          writeFileSync(join(dir, path), "const mesa = 1;\n");
+        }
+        writeFileSync(join(dir, changed), "// Heading\nconst mesa = 1;\nconst huella = 2;\n");
+        symlinkSync("../../../" + outside, join(dir, linked));
+        git("add", changed, translation, stillListed, outside, linked, missing);
         git("commit", "-qs", "--amend", "--no-edit");
         const push = ref(git("rev-parse", "HEAD"));
+        rmSync(join(dir, missing));
 
         const bad = invoke(push);
         expect(bad.status, bad.stdout + bad.stderr).toBe(1);
         expect(bad.stdout).toContain("'English-only check' failed");
         expect(bad.stderr).toContain(`${changed}:2: mesa`);
+        expect(bad.stderr).toContain(`${changed}:3: huella`);
         expect(bad.stderr).toContain("Use English");
+        expect(bad.stderr).toContain("KEEPS_NON_ENGLISH");
 
         writeFileSync(join(dir, changed), "const table = 1;\n");
         const fixed = invoke(push);
@@ -370,7 +388,7 @@ describe("pre-push fast checks", () => {
       },
       { realEnglish: true },
     );
-  }, 75_000);
+  }, 40_000);
   it("blocks unsigned commits before running pnpm", () => {
     fixture(
       "packages/source/src/index.ts",
