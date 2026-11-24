@@ -1916,6 +1916,52 @@ it("a clash on one earlier chain leaves another chain's records accepted", async
   );
 });
 
+it("answers a record clash for the rest of an earlier chain whose clashing record a previous batch held back", async () => {
+  const { main, sender, earlier, other } = await boxesWithAnEarlierOne();
+  const a1 = await appendOriginal(earlier, "Earlier", 1);
+  const a2 = await appendOriginal(earlier, "Earlier", 2);
+  await appendOriginal(earlier, "Earlier", 3);
+  // The receiver holds another box's record under the id of the earlier box's second record.
+  await appendOriginal(other, "Other", 9);
+  const clashing = await readTail(other, 0);
+  clashing.records[0]!.id = a2.recordId;
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, other.nodeId, clashing, returnedAt),
+  );
+  const x2 = await appendOriginal(other, "Other", 10);
+  const first = await readTail(earlier, 0);
+  first.records = first.records.filter((row) => Number(row.secuencia) <= 2);
+  const second = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, [
+      { nodeId: earlier.nodeId, sifId: earlier.sifId, after: 2 },
+      { nodeId: other.nodeId, sifId: other.sifId, after: 1 },
+    ]),
+  );
+
+  expect(await receiveOthers(sender.nodeId, first, main.nodeId)).toEqual({
+    complete: false,
+    refusal: "fiscal.return_record_clash",
+  });
+  expect(await receiveOthers(sender.nodeId, second, main.nodeId)).toEqual({
+    complete: false,
+    refusal: "fiscal.return_record_clash",
+  });
+  expect(
+    receiver.db
+      .all<{ id: string }>(
+        sql`select id from verifactu_records where node_id = ${earlier.nodeId} order by secuencia`,
+      )
+      .map((row) => row.id),
+  ).toEqual([a1.recordId]);
+  expect(
+    receiver.db
+      .all<{ id: string }>(
+        sql`select id from verifactu_records where node_id = ${other.nodeId} order by secuencia`,
+      )
+      .map((row) => row.id),
+  ).toEqual([a2.recordId, x2.recordId]);
+});
+
 it("counts an earlier box's batch complete when its records went in but a payment row differs", async () => {
   const { main, sender, earlier } = await boxesWithAnEarlierOne();
   const first = await appendOriginal(earlier, "Earlier", 1);

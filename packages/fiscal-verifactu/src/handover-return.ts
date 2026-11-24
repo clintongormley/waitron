@@ -346,6 +346,7 @@ export async function receiveReturnedOriginals(
   }
   const allowed: ReturnRow[] = [];
   const allowedIds = new Set<ReturnRow[string]>();
+  const allowedPositions = new Set<string>();
   const blocked = new Set<ReturnRow[string]>();
   const withheld = new Set<ReturnRow[string]>();
   const inBoxOrder = [...returned.records].sort(
@@ -371,7 +372,16 @@ export async function receiveReturnedOriginals(
         ? own
         : undefined
       : collision;
-    if (conflict) blocked.add(record.node_id);
+    const previous = Number(record.secuencia) - 1;
+    // A batch is cut by size, so an earlier batch may have held back this record's predecessor on
+    // a clash; the record would then sit on a gap and fail the chain check below.
+    const gap =
+      others &&
+      previous > 0 &&
+      !allowedPositions.has(`${record.node_id}\n${previous}`) &&
+      tx.all(sql`select 1 from verifactu_records
+        where node_id = ${record.node_id} and secuencia = ${previous}`).length === 0;
+    if (conflict || gap) blocked.add(record.node_id);
     else if (
       others &&
       record.corrects_registro_id !== null &&
@@ -383,6 +393,7 @@ export async function receiveReturnedOriginals(
     else {
       allowed.push(record);
       allowedIds.add(record.id);
+      allowedPositions.add(`${record.node_id}\n${Number(record.secuencia)}`);
     }
   }
   const needed = new Set(allowed.map((row) => row.sale_id));

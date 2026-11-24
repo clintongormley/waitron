@@ -283,8 +283,9 @@ async function sendBatches(
     }
     if (answer.status !== 200) {
       const refused = refusalState(answer.text, fromRestriction);
-      // The main box takes each earlier box's batch in a transaction of its own, so a clash in one
-      // leaves the rest to send.
+      // The main box takes each earlier box's batch in a transaction of its own, and answers a
+      // record clash for a later batch of a chain whose clash left a gap, so a clash in one leaves
+      // the rest to send.
       if (others && refused === "record-clash") {
         recordClash = true;
         continue;
