@@ -793,9 +793,9 @@ Files: `till-app.ts`; `till-app-adjustments.test.ts`, `till-app-parties-closing.
    on **A dish** with the cancelled lines ticked, their owed amount, the cancel's reason and the only
    payment this device can use chosen, and sends `fromCancel` with no PIN; a device that cannot take
    that payment says so. Rewrite `till-app-adjustments.test.ts:4088-4789` and
-   the Finish table refund cases in `till-app-parties-closing.test.ts` keeping their assertions. Run, watch them fail.
+   the Finish table group in `till-app-parties-closing.test.ts` keeping their assertions. Run, watch them fail.
 2. Make the changes; `#openTenderRefund`'s fill path is no longer reached (left for PR 3).
-3. `pnpm --filter @waitron/till exec vitest run src/till-app-adjustments.test.ts src/till-app-parties-closing.test.ts`
+3. `pnpm --filter @waitron/till exec vitest run src/till-app-adjustments.test.ts src/till-app-parties.test.ts src/till-app-parties-closing.test.ts`
 
 #### Task 12: the Pay window's Refund on a part payment — about 40 calls
 
