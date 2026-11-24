@@ -1,7 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -32,7 +32,7 @@ import {
   provisionBillVenue,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { copyMigrationsRoot } from "./testing/boot-harness.js";
+import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
   filedRecordOf,
@@ -142,7 +142,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     // The opening reads a history of minute names, which the fixture's own identity is not.
     venue = await provisionBillVenue(db, { apply: applyVenueUnderInstallation(INSTALLATION) });
-    counter = await offerProducts(db, venue.cfg, { zone: "counter", orderStart: "counter" });
+    counter = await offerProducts(db, { zone: "counter", orderStart: "counter" });
     renameFixtureInstallation(db, INSTALLATION);
     await stampDeployment(db, "production");
     await seedModuleSettings(db, { "fiscal-none": false });
@@ -233,18 +233,11 @@ async function serving<T>(
 ): Promise<T> {
   const migrationsRoot = join(options.stateDir, "migrations");
   await copyMigrationsRoot(migrationsRoot);
-  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const [port] = await freePorts(1);
   adminCookie = await administratorCookie();
   const env = {
-    WAITRON_HTTP_LANDING_PORT: "0",
+    ...tradingBootEnv(suite.db, options.stateDir, venue.cfg.nodeId, migrationsRoot),
     WAITRON_HTTP_PORT: String(port),
-    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
-    WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_STATE_DIR: options.stateDir,
-    WAITRON_VENUE_DIR: dirname(database),
-    WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "production",
     WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
