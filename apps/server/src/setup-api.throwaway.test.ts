@@ -598,6 +598,45 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name }]);
   });
 
+  it("a Demo retried after its publishing step failed ends with one master_keys row, the one it showed", async () => {
+    const store = createSetupOperationStore(stateDir);
+    let refuseAdvance = true;
+    const post = realApp(PREPRODUCTION_BOX, {
+      operations: {
+        ...store,
+        run(kind, hash, body, hold) {
+          return store.run(
+            kind,
+            hash,
+            async (operation) => {
+              const advance = operation.advance;
+              operation.advance = async (phase, data) => {
+                if (phase === "publishing" && refuseAdvance) {
+                  refuseAdvance = false;
+                  throw new Error("operation advance write refused");
+                }
+                return advance(phase, data);
+              };
+              return body(operation);
+            },
+            hold,
+          );
+        },
+      },
+    });
+    const refused = await post(body("demo"));
+    expect(refused.status).toBe(500);
+    expect(await refused.json()).not.toHaveProperty("masterKey");
+    expect(await storedMasterKeys()).toEqual([]);
+
+    const retried = await post(body("demo"));
+    expect(retried.status, await retried.clone().text()).toBe(200);
+    const { masterKey, masterKeyName: name } = await retried.json();
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name, checkValue: masterKeyCheckValue(decodeMasterKeyCode(masterKey)) },
+    ]);
+  });
+
   it("Demo with no initialOperations makes a throwaway venue without a server key", async () => {
     const res = await realApp(PREPRODUCTION_BOX)(body("demo"));
 

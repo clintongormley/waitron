@@ -1772,7 +1772,9 @@ queues (`packages/store/src/index.ts`):
   half reaches `venue.db`, because a public key with no private half could never sign as the box.
   Until A1323 PR 2b, a new master key's `master_keys` row is the other exception: setup
   (`apps/server/src/setup-api.ts`) and Make a new master key (`backup-recovery-pack-api.ts`) save it
-  after node.db's box-key save, as the request's last write, so a failure before it leaves no row.
+  as the request's last venue.db write, after node.db's box-key save where there is one, so a
+  failure before it leaves no row. Setup records its publishing step inside that row's transaction,
+  so a failure recording it leaves no row either.
 - **`withTransaction` never takes the node handle**, and the compiler refuses it: it drains
   `change_log`, which `node.db` does not have (`packages/db/src/tenancy.ts`). A `node.db` write
   uses `withNodeTransaction`. Nothing guards the first two rules.

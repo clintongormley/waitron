@@ -1151,10 +1151,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
-        // The request's last database write, so a failure before it leaves the old key current.
-        // It follows node.db's key save: the stated exception to venue.db first, ending in PR 2b.
-        madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
-        await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
+        // Last venue.db write, after node.db's box-key save where there is one (an exception listed
+        // in conventions-data.md): a failure before it leaves no master_keys row. The publishing
+        // step is recorded inside its transaction, so a failure there leaves none either.
+        madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null, async () => {
+          await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
+        });
       }
 
       const publicResult = {
