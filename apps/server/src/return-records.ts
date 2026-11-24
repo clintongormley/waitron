@@ -70,7 +70,7 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   const held = await returnConfirmed(deps, operationId, inventory);
   // Sent even when held: a main box restored from an earlier copy lacks these records.
   const sent = await sendBatches(deps, chart, restriction, batches, inventory);
-  // An answer about the records themselves (clash, record-clash, clock) is never hidden by a held one.
+  // An answer about the records themselves is never hidden by a held one.
   if (sent.state === "waiting" || sent.state === "needs-attention")
     return held ? "confirmed" : sent.state;
   if (sent.state !== "confirmed") return sent.state;

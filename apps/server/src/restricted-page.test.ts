@@ -313,14 +313,7 @@ describe("the restricted box's own page", () => {
     },
   );
 
-  it.each([
-    "waiting",
-    "sending",
-    "needs-attention",
-    "clock",
-    "record-clash",
-    "hours-refused",
-  ] as const)(
+  it.each(["waiting", "sending", "needs-attention", "clock", "record-clash"] as const)(
     "keeps Progress while %s says nothing of the new main box having started",
     async (state) => {
       const successor = await seedSuccessor("Counter box");
@@ -334,6 +327,7 @@ describe("the restricted box's own page", () => {
   it.each([
     ["the return is confirmed", "confirmed", false],
     ["the main box answered with a payment clash", "clash", false],
+    ["the main box refused the returned working hours", "hours-refused", false],
     ["this box holds the main box's confirmation from an earlier start", "waiting", true],
   ] as const)(
     "hides Progress once the new main box has started: %s",
