@@ -77,11 +77,11 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
 > = {
   "en-GB": {
     waiting:
-      "This box is still sending its invoice records to the main box. Keep it switched on and connected; it keeps trying by itself.",
+      "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
     sending:
-      "This box is still sending its invoice records to the main box. Keep it switched on and connected; it keeps trying by itself.",
+      "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
     "needs-attention":
-      "The main box did not accept this box's invoice records. Keep this box switched on; it tries again by itself.",
+      "The main box did not accept this box's invoice records and working hours. Keep this box switched on; it tries again by itself.",
     clock:
       "The main box's clock is behind this box's invoice records. Check the time on both boxes; the return tries again by itself.",
     clash:
@@ -93,11 +93,11 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
   },
   "es-ES": {
     waiting:
-      "Este servidor aún está enviando sus registros de facturación al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
+      "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
     sending:
-      "Este servidor aún está enviando sus registros de facturación al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
+      "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
     "needs-attention":
-      "El servidor principal no ha aceptado los registros de facturación de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+      "El servidor principal no ha aceptado los registros de facturación y horas trabajadas de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
     clock:
       "El reloj del servidor principal va por detrás de los registros de facturación de este servidor. Comprueba la hora de ambos servidores; la devolución se vuelve a intentar por sí misma.",
     clash:

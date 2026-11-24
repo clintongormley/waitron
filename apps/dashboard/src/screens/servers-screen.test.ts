@@ -1200,7 +1200,9 @@ describe("servers screen order, addresses and the replaced box", () => {
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(returning) }));
     expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Replaced; not selling");
     const note = inTable(el, `replaced-note-${FORMER}`)!;
-    expect(note.textContent).toContain("Keep it switched on while it returns its invoice records.");
+    expect(note.textContent).toContain(
+      "Keep it switched on while it returns its invoice records and working hours.",
+    );
     const link = note.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("/help/en/servers#handed-over");
     expect(link.target).toBe("_blank");
@@ -1222,7 +1224,7 @@ describe("servers screen order, addresses and the replaced box", () => {
     expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Sustituido; no vende");
     const note = inTable(el, `replaced-note-${FORMER}`)!;
     expect(note.textContent).toContain(
-      "Mantenlo encendido mientras devuelve sus registros de facturación.",
+      "Mantenlo encendido mientras devuelve sus registros de facturación y horas trabajadas.",
     );
     expect(note.querySelector("a")!.getAttribute("href")).toBe("/help/es/servers#handed-over");
   });

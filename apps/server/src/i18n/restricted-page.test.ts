@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { RESTRICTED_PAGE_WORDS, STANDING_DOWN_PAGE_WORDS } from "./restricted-page.js";
+import {
+  RESTRICTED_PAGE_WORDS,
+  RESTRICTED_RETURN_WORDS,
+  STANDING_DOWN_PAGE_WORDS,
+} from "./restricted-page.js";
 
 describe("stepped-down page wording", () => {
   it.each([
@@ -36,6 +40,26 @@ describe("stepped-down page wording", () => {
   ] as const)("provides the %s standing-down words", (locale, title, body, restarting) => {
     expect(STANDING_DOWN_PAGE_WORDS[locale]).toEqual({ title, body, restarting });
   });
+
+  it.each([
+    [
+      "en-GB",
+      "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
+      "The main box did not accept this box's invoice records and working hours. Keep this box switched on; it tries again by itself.",
+    ],
+    [
+      "es-ES",
+      "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
+      "El servidor principal no ha aceptado los registros de facturación y horas trabajadas de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+    ],
+  ] as const)(
+    "names working hours beside invoice records in the %s return's waiting, sending and needs-attention lines",
+    (locale, sending, refused) => {
+      expect(RESTRICTED_RETURN_WORDS[locale].waiting).toBe(sending);
+      expect(RESTRICTED_RETURN_WORDS[locale].sending).toBe(sending);
+      expect(RESTRICTED_RETURN_WORDS[locale]["needs-attention"]).toBe(refused);
+    },
+  );
 
   // Reads the module's source as text; it does not observe what loads at runtime.
   it("imports only types", () => {

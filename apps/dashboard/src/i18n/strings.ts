@@ -2428,7 +2428,8 @@ export const en = {
   "servers.standing.primary": "Main box",
   "servers.standing.standby": "Spare box",
   "servers.standing.sell_only": "Replaced; not selling",
-  "servers.replaced_note": "Keep it switched on while it returns its invoice records.",
+  "servers.replaced_note":
+    "Keep it switched on while it returns its invoice records and working hours.",
   "servers.standing.removed": "Removed",
   "servers.remove": "Remove from venue",
   "servers.remove_title": "Remove this box from the venue?",
@@ -2440,14 +2441,15 @@ export const en = {
     "Nobody is restoring this venue from a backup or switching it to another box right now",
   "servers.remove_former_title": "Remove this box from the venue?",
   "servers.reset_warning":
-    "The old main box has not returned its invoice records. Switched on again with its data, it could sell beside this main box. If it does come back, wipe it, and never choose “Carry on as the main box” on it.",
+    "The old main box has not returned its invoice records and working hours. Switched on again with its data, it could sell beside this main box. If it does come back, wipe it, and never choose “Carry on as the main box” on it.",
   "servers.reset_statement": "The old main box has been wiped, or will never be switched on again",
-  "servers.return_waiting": "Waiting for the old main box to return its invoice records",
+  "servers.return_waiting":
+    "Waiting for the old main box to return its invoice records and working hours",
   "servers.abandon": "Will not return",
-  "servers.abandon_title": "Stop waiting for the old main box's invoice records?",
+  "servers.abandon_title": "Stop waiting for the old main box's invoice records and working hours?",
   "servers.abandon_explanation":
-    "Choose this only if the old main box will not be switched on again with its data, for example because it has been wiped. The last handover stops waiting for its invoice records. Any it made after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
-  "servers.abandon_confirm": "Stop waiting for its invoice records",
+    "Choose this only if the old main box will not be switched on again with its data, for example because it has been wiped. The last handover stops waiting for its invoice records and working hours. Any it recorded after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
+  "servers.abandon_confirm": "Stop waiting for its invoice records and working hours",
   "servers.reset_spare": "Wipe and remove",
   "servers.reset_asked":
     "Wipe asked. The old main box wipes itself and leaves the venue the next time it is on and can reach this box; you can then re-add it as a spare. If it was already wiped by hand, choose Remove from venue.",
@@ -2459,7 +2461,7 @@ export const en = {
   "servers.reset_download_no_address":
     "The old main box may hold data that this box does not have. You should download that data from the old main box's own page before wiping and reusing it.",
   "servers.reset_loss_warning":
-    "The old main box has not returned all its invoice records. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
+    "The old main box has not returned all its invoice records and working hours. Before it wipes itself it tries once more to send them; then its databases are set aside on it instead of deleted, and are no longer used.",
   "servers.reset_loss_confirm":
     "I have downloaded the old main box's data, or I accept that what it has not returned stays set aside on it and is no longer used.",
   "servers.reset_caution_label": "CAUTION:",
@@ -7270,7 +7272,8 @@ export const es: Record<StringKey, string> = {
   "servers.standing.primary": "Servidor principal",
   "servers.standing.standby": "Servidor de reserva",
   "servers.standing.sell_only": "Sustituido; no vende",
-  "servers.replaced_note": "Mantenlo encendido mientras devuelve sus registros de facturación.",
+  "servers.replaced_note":
+    "Mantenlo encendido mientras devuelve sus registros de facturación y horas trabajadas.",
   "servers.standing.removed": "Retirado",
   "servers.remove": "Retirar del local",
   "servers.remove_title": "¿Retirar este servidor del local?",
@@ -7283,17 +7286,17 @@ export const es: Record<StringKey, string> = {
     "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
   "servers.remove_former_title": "¿Retirar este servidor del local?",
   "servers.reset_warning":
-    "El servidor principal anterior no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, bórralo y no elijas nunca «Seguir como servidor principal» en él.",
+    "El servidor principal anterior no ha devuelto sus registros de facturación y horas trabajadas. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, bórralo y no elijas nunca «Seguir como servidor principal» en él.",
   "servers.reset_statement":
     "El servidor principal anterior se ha borrado o no se volverá a encender nunca",
   "servers.return_waiting":
-    "Esperando a que el servidor principal anterior devuelva sus registros de facturación",
+    "Esperando a que el servidor principal anterior devuelva sus registros de facturación y horas trabajadas",
   "servers.abandon": "No volverá",
   "servers.abandon_title":
-    "¿Dejar de esperar los registros de facturación del servidor principal anterior?",
+    "¿Dejar de esperar los registros de facturación y horas trabajadas del servidor principal anterior?",
   "servers.abandon_explanation":
-    "Elige esto solo si el servidor principal anterior no se va a volver a encender con sus datos, por ejemplo porque se ha borrado. El último traspaso deja de esperar sus registros de facturación. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
-  "servers.abandon_confirm": "Dejar de esperar sus registros de facturación",
+    "Elige esto solo si el servidor principal anterior no se va a volver a encender con sus datos, por ejemplo porque se ha borrado. El último traspaso deja de esperar sus registros de facturación y horas trabajadas. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
+  "servers.abandon_confirm": "Dejar de esperar sus registros de facturación y horas trabajadas",
   "servers.reset_spare": "Borrar y retirar",
   "servers.reset_asked":
     "Borrado solicitado. El servidor principal anterior se borrará y saldrá del local la próxima vez que esté encendido y pueda conectar con este servidor; después puedes volver a añadirlo como servidor de reserva. Si ya se borró a mano, elige Retirar del local.",
@@ -7305,7 +7308,7 @@ export const es: Record<StringKey, string> = {
   "servers.reset_download_no_address":
     "Puede que el servidor principal anterior tenga datos que este servidor no tiene. Descárgalos desde la propia página del servidor principal anterior antes de borrarlo y volver a usarlo.",
   "servers.reset_loss_warning":
-    "El servidor principal anterior no ha devuelto todos sus registros de facturación. Antes de borrarse, intenta enviarlos una vez más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse.",
+    "El servidor principal anterior no ha devuelto todos sus registros de facturación y horas trabajadas. Antes de borrarse, intenta enviarlos una vez más; después sus bases de datos se apartan en él en lugar de borrarse, y dejan de usarse.",
   "servers.reset_loss_confirm":
     "He descargado los datos del servidor principal anterior, o acepto que lo que no ha devuelto se quede apartado en él y deje de usarse.",
   "servers.reset_caution_label": "ATENCIÓN:",
