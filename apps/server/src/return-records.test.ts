@@ -2275,6 +2275,22 @@ it("logs a failure reading earlier boxes' records once across the duty's passes"
   }
 });
 
+it("with no main box in its chart and its own records confirmed, answers waiting while it holds another box's records", async () => {
+  await chartNaming(source, 3);
+  await database.withNodeTransaction(suite.node, (tx) =>
+    nodeDatabase.appendHandoverEventTx(tx, {
+      nodeId: source,
+      operationId: null,
+      kind: "return_confirmed",
+      detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+      envelope: null,
+    }),
+  );
+  const fetch = vi.fn(async () => new Response(null, { status: 503 }));
+  expect(await sendBoth(fetch, earlierTail, heard("lacks"))).toBe("waiting");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it("a second-part batch is not recorded as a return batch and moves no handover step", async () => {
   await completionBinding();
   const app = destination();
