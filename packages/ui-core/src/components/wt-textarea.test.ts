@@ -519,5 +519,7 @@ test("the inherited arrow sits beside the first line with a hidden label", async
   const style = getComputedStyle(textarea);
   const firstLineTop = textarea.getBoundingClientRect().top + parseFloat(style.paddingTop);
   expect(box.height).toBeGreaterThan(0);
-  expect(box.top + box.height / 2).toBeLessThan(firstLineTop + parseFloat(style.fontSize));
+  const centre = box.top + box.height / 2;
+  expect(centre).toBeGreaterThanOrEqual(firstLineTop);
+  expect(centre).toBeLessThan(firstLineTop + parseFloat(style.fontSize));
 });

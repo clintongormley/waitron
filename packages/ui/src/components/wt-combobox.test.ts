@@ -4438,7 +4438,7 @@ test("keeps the add action active after an unmatched search with an inherit row"
 });
 
 test.each([false, true])(
-  "a search refresh chooses the next match if present (%s)",
+  "a search refresh chooses the first match if present (%s)",
   async (hasMatch) => {
     const { el, trigger, popup } = await mountCombobox();
     el.options = [inheritNone, { value: "mains", label: "Mains" }];

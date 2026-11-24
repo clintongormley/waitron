@@ -2509,10 +2509,9 @@ import { registerIcons } from "@waitron/ui";
 registerIcons({ check: "M2 8 L6 12 L14 4" });
 ```
 
-An unregistered `name` renders nothing — there is no broken-icon fallback markup. When a
-`packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
-trigger, for one), register its name in each consuming app so the icon draws there. `grep -rn "registerIcons("
-apps` lists the registrations; on 2026-10-01 the production ones were `apps/dashboard/src/main.ts`
+Register the other names used by primitives, such as the `wt-row-actions` kebab icon, in each
+consuming app so they draw there. `grep -rn "registerIcons(" apps` lists the registrations.
+On 2026-10-01 the production ones were `apps/dashboard/src/main.ts`
 (registering `DASHBOARD_ICONS` from `apps/dashboard/src/icons.ts`, whose header carries the Material
 Symbols attribution), `apps/till/src/till-app.ts`, `apps/till/src/widgets/station-queue.ts`,
 `apps/till/src/widgets/menu-browser.ts` and `apps/setup/src/setup-app.ts`. `chevron-down` and
@@ -3961,8 +3960,9 @@ arrow in a repeated column. A price uses its normal number format.
 In a single-choice `wt-combobox`, supply one empty-string option with `inherited: true` and a
 localised `label` such as “Inherit: Mains”. Its `valueLabel` gives the closed text on its own.
 The row stays first during search. Enter picks the active match or Add action. If neither is
-available, use the arrow keys or click the Inherit row to pick it. The closed trigger shows the
-arrow unless `inTable` is set and adds `inheritedSuffix` to the accessible description if supplied.
+available, move to the Inherit row with the arrow keys and press Enter, or click it. The closed
+trigger shows the arrow unless `inTable` is set and adds `inheritedSuffix` to the accessible
+description if supplied.
 
 #### Hints
 
@@ -4022,6 +4022,9 @@ it in another is not seen; and it checks that the file holds `<wt-address-lookup
 that it is drawn for the address field, nor that it is handed a provider.
 
 #### A field that falls back to another value
+
+The older screen examples below describe their current fields. When you update them, follow
+[Inherited values](#inherited-values).
 
 Customer translation fields remain optional, including the default language. Units keep required
 staff name and abbreviation fields separately. In Edit translations, compare languages in bounded

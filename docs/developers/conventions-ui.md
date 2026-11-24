@@ -2113,7 +2113,7 @@ tests passed while a new probe measured an italic product name. The cell group r
 
 Measured 2026-10-16, with the test name used then: `pnpm --filter @waitron/dashboard exec vitest run
 src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed three cases with
-`italic` instead of `normal` before the selector correction. The assertion lives in
+`italic` instead of `normal` before the selector correction. The assertion lived in
 `apps/dashboard/src/widgets/product-list.test.ts`, under **A668 effective allergen cells**.
 
 A1570 replaced the italic badge with muted ink. The renamed “uses muted ink for inherited allergen
