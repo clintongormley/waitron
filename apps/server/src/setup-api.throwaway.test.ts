@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueResult } from "@waitron/provisioning";
-import { masterKeys, readRecoveryPacks, type Database } from "@waitron/db";
+import { masterKeys, readCurrentMasterKey, readRecoveryPacks, type Database } from "@waitron/db";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { PDFDocument } from "pdf-lib";
@@ -598,7 +598,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name }]);
   });
 
-  it("a Demo retried after its publishing step failed ends with one master_keys row, the one it showed", async () => {
+  it("a Demo retried after its publishing step failed keeps the unshown key's row, and the current key is the one the retry showed", async () => {
     const store = createSetupOperationStore(stateDir);
     let refuseAdvance = true;
     const post = realApp(PREPRODUCTION_BOX, {
@@ -627,14 +627,18 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const refused = await post(body("demo"));
     expect(refused.status).toBe(500);
     expect(await refused.json()).not.toHaveProperty("masterKey");
-    expect(await storedMasterKeys()).toEqual([]);
+    expect(await storedMasterKeys()).toHaveLength(1);
 
     const retried = await post(body("demo"));
     expect(retried.status, await retried.clone().text()).toBe(200);
     const { masterKey, masterKeyName: name } = await retried.json();
-    expect(await storedMasterKeys()).toMatchObject([
-      { number: 1, name, checkValue: masterKeyCheckValue(decodeMasterKeyCode(masterKey)) },
-    ]);
+    const rows = await storedMasterKeys();
+    expect(rows).toHaveLength(2);
+    expect(await readCurrentMasterKey(venueDb.db)).toMatchObject({
+      number: 2,
+      name,
+      checkValue: masterKeyCheckValue(decodeMasterKeyCode(masterKey)),
+    });
   });
 
   it("Demo with no initialOperations makes a throwaway venue without a server key", async () => {

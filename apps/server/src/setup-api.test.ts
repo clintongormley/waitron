@@ -35,15 +35,8 @@ import { STUB_NODE } from "./testing/node-copy.js";
 const masterKeySaves = vi.hoisted(() => ({ into: [] as string[] }));
 vi.mock("./master-key-record.js", async (original) => ({
   ...(await original<typeof import("./master-key-record.js")>()),
-  saveNewMasterKey: async (
-    _db: unknown,
-    key: { made: unknown },
-    _madeAt: unknown,
-    _madeBy: unknown,
-    beforeCommit?: () => Promise<void>,
-  ) => {
+  saveNewMasterKey: async (_db: unknown, key: { made: unknown }) => {
     masterKeySaves.into.push("saveMasterKey");
-    await beforeCommit?.();
     return key.made;
   },
 }));

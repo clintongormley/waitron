@@ -1152,11 +1152,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         }
         await deps.clearConfiguration?.();
         // Last venue.db write, after node.db's box-key save where there is one (an exception listed
-        // in conventions-data.md): a failure before it leaves no master_keys row. The publishing
-        // step is recorded inside its transaction, so a failure there leaves none either.
-        madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null, async () => {
-          await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
-        });
+        // in conventions-data.md): a failure before it leaves no master_keys row.
+        madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
+        await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
 
       const publicResult = {
