@@ -1534,7 +1534,7 @@ for (const locale of ["en", "es"] as const) {
         { name: "editor_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "editor_version", type: "INTEGER", notnull: 1, dflt_value: "0", pk: 0 },
       );
-      for (const name of ["zone_id", "department_id", "service_mode"])
+      for (const name of ["zone_id", "department_id", "service_mode", "items_paid_from"])
         orders.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
       orders.columns.splice(
         orders.columns.findIndex((column) => column.name === "opened_at") + 1,
@@ -1552,11 +1552,22 @@ for (const locale of ["en", "es"] as const) {
           zone_id: null,
           department_id: null,
           service_mode: null,
+          items_paid_from: null,
         });
       orders.foreignKeys = [
-        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id + (key.id >= 2 ? 3 : 2) })),
+        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id + (key.id >= 2 ? 4 : 3) })),
         {
-          id: 4,
+          id: 2,
+          seq: 0,
+          table: "working_orders",
+          from: "items_paid_from",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+        {
+          id: 5,
           seq: 0,
           table: "persons",
           from: "editor_id",
