@@ -5,8 +5,12 @@ import { batches } from "./batches.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { archiveProducts } from "./archive.js";
-import { updateProduct } from "./operations.js";
-import { isTopLevelProduct, type ProductScope } from "./variant-fallback.js";
+import {
+  isTopLevelProduct,
+  parentJoin,
+  parentProducts,
+  type ProductScope,
+} from "./variant-fallback.js";
 import "./errors.js";
 
 export interface ProductSelection {
@@ -89,25 +93,29 @@ class FolderTree {
   }
 }
 
-async function requireProductRows(
+async function readRequiredProductRows(
   tx: Transaction,
   ids: readonly string[],
   scope: ProductScope,
-): Promise<void> {
+) {
   const scopeFilter = scope === "top-level" ? isTopLevelProduct : undefined;
-  const found = new Set<string>();
-  for (const batch of batches([...ids]))
+  const found = new Map<string, { id: string; active: boolean; parentActive: boolean | null }>();
+  for (const batch of batches(ids))
     for (const row of await tx
-      .select({ id: products.id })
+      .select({ id: products.id, active: products.active, parentActive: parentProducts.active })
       .from(products)
+      .leftJoin(parentProducts, parentJoin)
       .where(and(inArray(products.id, batch), scopeFilter)))
-      found.add(row.id);
-  const missing = ids.find((id) => !found.has(id));
-  if (missing !== undefined) throw new AppError("product.not_found", { productId: missing });
+      found.set(row.id, row);
+  return ids.map((id) => {
+    const row = found.get(id);
+    if (row === undefined) throw new AppError("product.not_found", { productId: id });
+    return row;
+  });
 }
 
 async function readTree(tx: Transaction, selection: ProductSelection): Promise<FolderTree> {
-  await requireProductRows(tx, selection.productIds, "top-level");
+  await readRequiredProductRows(tx, selection.productIds, "top-level");
   const tree = new FolderTree(await listCategories(tx));
   for (const id of selection.categoryIds) tree.require(id);
   return tree;
@@ -118,8 +126,12 @@ export async function setProductAvailability(
   productIds: readonly string[],
   available: boolean,
 ): Promise<void> {
-  await requireProductRows(tx, productIds, "any");
-  for (const id of productIds) await updateProduct(tx, id, { available });
+  const rows = await readRequiredProductRows(tx, productIds, "any");
+  const deleted = rows.find((row) => !row.active || row.parentActive === false);
+  if (deleted !== undefined) throw new AppError("product.archived", { productId: deleted.id });
+  const updatedAt = now();
+  for (const batch of batches(productIds))
+    await tx.update(products).set({ available, updatedAt }).where(inArray(products.id, batch));
 }
 
 export async function moveProductItems(

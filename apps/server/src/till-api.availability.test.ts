@@ -153,6 +153,7 @@ it("applies dashboard product availability immediately to both published till zo
     { productIds: [productId], available: false, expected: [false, true] },
     { productIds: [productId], available: true, expected: [true, true] },
     { productIds: [productId, variantId], available: false, expected: [false, false] },
+    { productIds: [variantId], available: true, expected: [false, true] },
   ] as const;
   for (const [index, { productIds, available, expected }] of changes.entries()) {
     const response = await app.request("/management-api/products/availability", {

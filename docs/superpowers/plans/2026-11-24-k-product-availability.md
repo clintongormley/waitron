@@ -12,3 +12,5 @@ A signed-in menu manager can set one product or variant, or several together, av
 Estimate 40–55 production lines and 110–155 test lines in one PR. The whole-branch review covers permission, row selection and the combined write.
 
 The watcher cleared the plan at 22:35 on 24 November with these edits. Recheck `menu-api.ts` against lane E's `feat/e-set-menus-page` before the PR. Whoever lands second rebases.
+
+At 22:58 the watcher cleared the review's batched write. Read each row's active and parent-active flags in the same batched lookup. Check every ID before refusing a deleted row, then write only availability and its timestamp in batches within the same transaction. The product-and-variant test checks the number of reads and writes. The till test also turns the variant back on while its dish remains off.
