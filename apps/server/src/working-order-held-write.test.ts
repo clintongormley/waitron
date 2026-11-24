@@ -53,7 +53,7 @@ import {
   revisionOf,
   storedRows,
   insertContextlessLines,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("abandonHeldOrder", () => {
   it("requires Cancel item before forgetting a sent zero-price dish", async () => {

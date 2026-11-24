@@ -69,7 +69,7 @@ import {
   ticketItemsFor,
   byProduct,
   passItems,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("getHeldOrder", () => {
   it("names the area the order was parked in, and null for an order with none", async () => {

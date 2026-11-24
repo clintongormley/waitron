@@ -777,7 +777,7 @@ of the departed bill requires correction authority and writes its credit note
 
 - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
   decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
-  `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) issues
+  `apps/server/src/working-order-counter.ts`; the credit in `apps/server/src/cancel-credit.ts`) issues
   an R5 corrective invoice, by differences, for the whole invoice. The PIN override is B33
   (#1041). The owner dropped the dashboard Orders screen's "Invoice not credited" mark
   (2026-10-02 ~12:05): such a bill is to show as Cancelled with its credit note. Open:

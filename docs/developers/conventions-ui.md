@@ -594,9 +594,10 @@ offering the same product, or two picks exchanging counts between them, pairs wi
 new pick, priced now; an unchanged pick keeps its child at its own list's stored price.
 `docs/developers/modifiers.md` has the detail.
 
-What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
+In `apps/server/src/working-order.test.ts`, "keeps extras rows and customisation on
 a quantity-only edit" raises the offer's price and the extra list item's price, republishes the
-menus, and asserts the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
+menus, and asserts the parent and its child keep their ids and locked prices. In
+`apps/server/src/working-order-held-write.test.ts`, "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
 change places" do the same across a reorder; "keeps an extra's list and stored price on a quantity-only
 edit when two lists offer it" pins the list pairing; "prices a pick now when it moves to another list

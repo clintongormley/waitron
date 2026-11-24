@@ -45,7 +45,7 @@ import {
   attachedPrinter,
   OPERATOR,
   firedCourseAcrossTwoStations,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
   it("bumps a line queued→preparing→ready, and a Ready line still to serve back to preparing", async () => {

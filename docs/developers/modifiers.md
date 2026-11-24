@@ -291,7 +291,7 @@ the BILL.
 
 If a save re-sends a list and label after a rename, an unsent dish takes the new wording and
 keeps its stored price. See "keeps the price of a held line whose options list was renamed between
-the two sends, freezing the new name" in `apps/server/src/working-order.test.ts`. A line already sent (it or one of its extras sent, or
+the two sends, freezing the new name" in `apps/server/src/working-order-held-write.test.ts`. A line already sent (it or one of its extras sent, or
 either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
 `updateHeldOrder` passes `keepRecordedAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names

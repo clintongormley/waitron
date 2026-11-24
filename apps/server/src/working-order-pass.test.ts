@@ -27,7 +27,7 @@ import {
   passItems,
   makeTable,
   ticketItemRows,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("the pass board (cross-station expo/pass read)", () => {
   it("shows one order's two-station single-course dishes with their station names and course, excluding collected/abandoned orders", async () => {

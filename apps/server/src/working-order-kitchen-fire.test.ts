@@ -41,7 +41,7 @@ import {
   stubBackend,
   stubClock,
   OPERATOR,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("fireLines (routing resolver + snapshot)", () => {
   it("fires a zone-less order at the station that claimed its folder", async () => {

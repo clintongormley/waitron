@@ -8269,7 +8269,7 @@ describe("till-app", () => {
 
     // Without that answer on the wire the server refuses the whole edit with
     // `options.label_required` — pinned by "refuses a quantity-only edit that names no answer for an
-    // active options list" (`apps/server/src/working-order.test.ts`).
+    // active options list" (`apps/server/src/working-order-held-write.test.ts`).
     counter.store.setLineQuantity(0, "3");
     await el.updateComplete;
     emit(counter, "park-order", { label: counter.store.label });

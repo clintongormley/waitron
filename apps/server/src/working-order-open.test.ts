@@ -66,7 +66,7 @@ import {
   courseItemsFor,
   byLine,
   addExtra,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("a sold variant line carries its product and relative variant names", () => {
   const STAFF = "Coffee (Large)";

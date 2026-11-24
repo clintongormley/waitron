@@ -25,7 +25,7 @@ import {
   addOptionList,
   revisionOf,
   OPERATOR,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("correction slips on line changes and cancellations", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to

@@ -41,26 +41,22 @@ import { setRoutingCell, type RouteTarget } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { sql, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { createStation, createCourse, setProductCourse } from "./kitchen.js";
-import { readScopedPassBoard } from "./pass-board.js";
-import { attachPrinterToStation } from "./station-printers.js";
-import type { OrderFlow } from "./testing/bill-payment-fixture.js";
-import { ensureOperator } from "./testing/cancel-line.js";
-import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
-import {
-  updateHeldOrder,
-  addTabRound,
-  addGroupedTabRound,
-} from "./testing/order-writer-fixture.js";
-import { boardItems, EVERY } from "./testing/pass-board-probe.js";
-import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
-import { type ZoneOffers, offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import type { DeviceRequestConfig } from "./trading-context.js";
-import { fireLines } from "./working-order-kitchen-fire.js";
-import { fireOrderLines } from "./working-order-kitchen-service.js";
-import { parkOrder, createOpenOrder } from "./working-order-open.js";
+import { createStation, createCourse, setProductCourse } from "../kitchen.js";
+import { readScopedPassBoard } from "../pass-board.js";
+import { attachPrinterToStation } from "../station-printers.js";
+import type { OrderFlow } from "./bill-payment-fixture.js";
+import { ensureOperator } from "./cancel-line.js";
+import { openGroupedCounterOrder } from "./grouped-counter-order.js";
+import { updateHeldOrder, addTabRound, addGroupedTabRound } from "./order-writer-fixture.js";
+import { boardItems, EVERY } from "./pass-board-probe.js";
+import { publishWorkingMenu } from "./publish-menu.js";
+import { deviceRequestCfg } from "./session-device.js";
+import { testTradingAdmission } from "./trading-admission.js";
+import { type ZoneOffers, offerProducts, routeProductTo } from "./zone-offers.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
+import { fireLines } from "../working-order-kitchen-fire.js";
+import { fireOrderLines } from "../working-order-kitchen-service.js";
+import { parkOrder, createOpenOrder } from "../working-order-open.js";
 
 export const LOCALE = "es-ES";
 /** An ISO timestamp `minutes` in the past, for backdating a `queued_at` that a band assertion reads. */

@@ -51,7 +51,7 @@ import {
   updateProducts,
   revisionOf,
   seedVariantOffer,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("a dish's extras children", () => {
   it("rescales a held kitchen ticket by the extra's frozen 50 g portion", async () => {

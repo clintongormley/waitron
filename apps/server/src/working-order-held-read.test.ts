@@ -28,7 +28,7 @@ import {
   placeOrderWith,
   CONTENT_LANGUAGE,
   passItems,
-} from "./working-order.test-support.js";
+} from "./testing/working-order.test-support.js";
 
 describe("listHeldOrders", () => {
   it("lists the venue's open orders with item counts, GROSS total and label, ordered by number", async () => {
