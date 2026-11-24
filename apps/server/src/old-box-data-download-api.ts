@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { persons, readNodeMembership, recordActivity, withTransaction } from "@waitron/db";
+import { isSha256Hex, sha256Hex } from "@waitron/handover";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { readOpenHandoverOperation, readPinnedPrimaryKey } from "@waitron/node-db";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -14,6 +15,7 @@ import {
 } from "@waitron/shared";
 import {
   boxRefusal,
+  isRecord,
   isSilenceAfterConnecting,
   postToBox,
   readVenueAuthority,
@@ -50,15 +52,13 @@ const COUNT_KEYS = new Set([
 // No repeated group: V8 runs out of stack matching one on a few-MiB string.
 const BASE64_CHARACTERS = /^[A-Za-z0-9+/]*={0,2}$/;
 const PEER_WORD = /^[a-z_.]{1,80}$/;
+const ZIP_SIGNATURE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 type Counts = { invoiceRows: number } & Partial<Record<string, number>>;
 
 const refused = (reason: string): never => {
   throw new AppError("handover.old_box_data_refused", {}, { reason });
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 function countsIn(value: unknown): Counts | null {
   if (!isRecord(value) || !Number.isSafeInteger(value.invoiceRows)) return null;
@@ -188,19 +188,32 @@ export function mountOldBoxDataDownloadApi(
         );
       }
       if (answer.status !== 200) refused(statusReason(answer.status, answer.text));
+      let whole: unknown;
+      try {
+        whole = JSON.parse(answer.text);
+      } catch {
+        refused("answer");
+      }
+      if (!isRecord(whole)) return refused("answer");
       const checked = checkedPeerAnswer(
-        answer.text,
+        JSON.stringify(whole.envelope ?? null),
         "old-box-data",
         await peerKeyOf(deps, chart),
         targetNodeId,
         nonce,
       );
       if (!checked.ok) return refused(checked.check);
-      const { sourceNodeId, madeOn, counts: rawCounts, workbook } = checked.body;
+      const { sourceNodeId, madeOn, counts: rawCounts, sha256 } = checked.body;
       if (sourceNodeId !== deps.nodeId) refused("binding");
       const counts = countsIn(rawCounts);
-      if (typeof madeOn !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(madeOn) || counts === null)
+      if (
+        typeof madeOn !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(madeOn) ||
+        counts === null ||
+        !isSha256Hex(sha256)
+      )
         refused("answer");
+      const { workbook } = whole;
       if (
         typeof workbook !== "string" ||
         workbook.length % 4 !== 0 ||
@@ -208,6 +221,12 @@ export function mountOldBoxDataDownloadApi(
       )
         refused("workbook");
       const bytes = Buffer.from(workbook as string, "base64");
+      // An .xlsx is a zip; this also refuses an empty file.
+      if (
+        sha256Hex(bytes) !== sha256 ||
+        !bytes.subarray(0, ZIP_SIGNATURE.byteLength).equals(ZIP_SIGNATURE)
+      )
+        refused("workbook");
 
       await withTransaction(deps.db, (tx) =>
         recordActivity(tx, {

@@ -21,6 +21,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { endorseKey, signDocumentBody, type NodeStanding } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { UnreturnedRecord, WaitronModule } from "@waitron/module";
+import { sha256Hex } from "@waitron/handover";
 import { beginHandoverOperationTx, recordHandoverRestrictionTx } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { signAsThisBox } from "./handover-signing.js";
@@ -254,10 +255,16 @@ async function expectRefused(response: Response, code: string, status = 409) {
   return answer;
 }
 
-/** A re-signed copy of the old box's answer body, changed by `change`. */
+/** The old box's answer: its signed envelope, and the workbook in base64 beside it. */
+interface OldBoxAnswer {
+  envelope: { body: Record<string, unknown> };
+  workbook: string;
+}
+
+/** The old box's answer with its envelope's body changed by `change` and re-signed by `signer`. */
 function resigned(signer: () => string, change: (body: Record<string, unknown>) => void) {
   return async (answer: Response) => {
-    const envelope = (await answer.json()) as { body: Record<string, unknown> };
+    const { envelope, workbook } = (await answer.json()) as OldBoxAnswer;
     const body = { ...envelope.body };
     change(body);
     const signed = await signAsThisBox(
@@ -265,8 +272,29 @@ function resigned(signer: () => string, change: (body: Record<string, unknown>) 
       "old-box-data",
       body as never,
     );
-    return new Response(JSON.stringify(signed), { status: 200 });
+    return new Response(JSON.stringify({ envelope: signed, workbook }), { status: 200 });
   };
+}
+
+/** The old box's answer, changed by `change` outside its signed envelope. */
+function unsigned(change: (answer: Record<string, unknown>) => void) {
+  return async (answer: Response) => {
+    const whole = (await answer.json()) as Record<string, unknown>;
+    change(whole);
+    return new Response(JSON.stringify(whole), { status: 200 });
+  };
+}
+
+/** A builder that hands the old box's route `bytes` as the workbook. */
+const buildOf =
+  (bytes: Uint8Array<ArrayBuffer>): OldBoxDataPeerDeps["build"] =>
+  async () => ({ bytes, madeOn: "2026-11-23", counts: { invoiceRows: 1 } });
+
+/** `randomBytes(size)` behind a zip's opening signature, as an .xlsx begins. */
+function zipLike(size: number): Uint8Array<ArrayBuffer> {
+  const bytes = randomBytes(size) as Uint8Array<ArrayBuffer>;
+  bytes.set([0x50, 0x4b, 0x03, 0x04]);
+  return bytes;
 }
 
 /** An emergency switch from the old box to this one, declaring the copy's latest change. */
@@ -295,26 +323,21 @@ describe("a node.manage holder with a fresh proof", () => {
     const res = await download(appWith({ fetch: ex.fetch }));
 
     expect(res.status).toBe(200);
-    const answer = JSON.parse(ex.answers[0]!) as {
-      body: { madeOn: string; workbook: string };
-    };
-    expect(Buffer.from(await res.arrayBuffer())).toEqual(
-      Buffer.from(answer.body.workbook, "base64"),
+    const answer = JSON.parse(ex.answers[0]!) as OldBoxAnswer;
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(Buffer.from(answer.workbook, "base64"));
+    const expected = workbookDownloadHeaders(
+      `waitron-old-main-box-${String(answer.envelope.body.madeOn)}.xlsx`,
     );
-    const expected = workbookDownloadHeaders(`waitron-old-main-box-${answer.body.madeOn}.xlsx`);
     for (const [name, value] of Object.entries(expected)) expect(res.headers.get(name)).toBe(value);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
   it("passes on a workbook of about 5 MiB byte for byte", async () => {
-    const bytes = randomBytes(5 * 1024 * 1024) as Uint8Array<ArrayBuffer>;
-    const build: OldBoxDataPeerDeps["build"] = async () => ({
-      bytes,
-      madeOn: "2026-11-23",
-      counts: { invoiceRows: 1 },
-    });
-    const res = await download(appWith({ fetch: exchange(oldBoxApp({ build })).fetch }));
+    const bytes = zipLike(5 * 1024 * 1024);
+    const res = await download(
+      appWith({ fetch: exchange(oldBoxApp({ build: buildOf(bytes) })).fetch }),
+    );
 
     expect(res.status).toBe(200);
     expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
@@ -371,8 +394,10 @@ describe("a node.manage holder with a fresh proof", () => {
   it("records one download naming the person, the old box and the tab counts", async () => {
     const ex = exchange();
     expect((await download(appWith({ fetch: ex.fetch }))).status).toBe(200);
-    const counts = (JSON.parse(ex.answers[0]!) as { body: { counts: Record<string, number> } }).body
-      .counts;
+    const counts = (JSON.parse(ex.answers[0]!) as OldBoxAnswer).envelope.body.counts as Record<
+      string,
+      number
+    >;
 
     const entries = await downloads();
     expect(entries).toHaveLength(1);
@@ -502,12 +527,31 @@ describe("refusals", () => {
   it.each([
     after("status", async () => new Response("not found", { status: 404 })),
     after("signature", async (answer) => {
-      const envelope = (await answer.json()) as { body: Record<string, unknown> };
+      const { envelope, workbook } = (await answer.json()) as OldBoxAnswer;
       return new Response(
-        JSON.stringify({ ...envelope, body: { ...envelope.body, madeOn: "2026-01-01" } }),
+        JSON.stringify({
+          envelope: { ...envelope, body: { ...envelope.body, madeOn: "2026-01-01" } },
+          workbook,
+        }),
         { status: 200 },
       );
     }),
+    after("answer", async () => new Response("not json", { status: 200 })),
+    after(
+      "signature",
+      unsigned((answer) => {
+        delete answer.envelope;
+      }),
+    ),
+    after(
+      "answer",
+      resigned(
+        () => oldBox,
+        (body) => {
+          body.sha256 = "not a fingerprint";
+        },
+      ),
+    ),
     after(
       "signer",
       resigned(
@@ -562,12 +606,30 @@ describe("refusals", () => {
     ),
     after(
       "workbook",
+      unsigned((answer) => {
+        answer.workbook = "not base64!";
+      }),
+    ),
+    after(
+      "workbook",
+      unsigned((answer) => {
+        delete answer.workbook;
+      }),
+    ),
+    after(
+      "workbook",
       resigned(
         () => oldBox,
         (body) => {
-          body.workbook = "not base64!";
+          body.sha256 = sha256Hex("another file");
         },
       ),
+    ),
+    after(
+      "workbook",
+      unsigned((answer) => {
+        answer.workbook = Buffer.from(zipLike(64)).toString("base64");
+      }),
     ),
   ])(
     "after connecting, $reason: handover.old_box_data_refused, the reason in the log only",
@@ -580,6 +642,22 @@ describe("refusals", () => {
       expect(answer).toEqual({ error: { code: "handover.old_box_data_refused", params: {} } });
       const logged = lines.find((l) => l.event === "handover.old_box_data_refused");
       expect(String(logged?.fields?.logReason)).toMatch(new RegExp(`^${reason}`));
+    },
+  );
+
+  it.each([
+    ["an empty workbook", new Uint8Array(0)],
+    ["a workbook that is not a zip", randomBytes(64).fill(0x41, 0, 4) as Uint8Array<ArrayBuffer>],
+  ])(
+    "%s, though signed: handover.old_box_data_refused, the reason in the log only",
+    async (_name, bytes) => {
+      const ex = exchange(oldBoxApp({ build: buildOf(bytes as Uint8Array<ArrayBuffer>) }));
+      await expectRefused(
+        await download(appWith({ fetch: ex.fetch })),
+        "handover.old_box_data_refused",
+      );
+      const logged = lines.find((l) => l.event === "handover.old_box_data_refused");
+      expect(logged?.fields?.logReason).toBe("workbook");
     },
   );
 

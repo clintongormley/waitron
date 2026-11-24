@@ -16,7 +16,7 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
-import { verifyEnvelope } from "@waitron/handover";
+import { sha256Hex, verifyEnvelope } from "@waitron/handover";
 import { seedManager, seedPerson } from "@waitron/identity/test/fixtures.js";
 import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -169,23 +169,35 @@ function send(app: Hono, envelope: unknown): Promise<Response> {
   );
 }
 
-interface Answer {
+interface Signed {
   nonce: string;
   sourceNodeId: string;
   madeOn: string;
   counts: Record<string, number>;
-  workbook: string;
+  sha256: string;
 }
 
-/** The old box's signed answer, verified under its own key. */
+type Answer = Signed & { workbook: string };
+
+/**
+ * The old box's answer: its envelope verified under its own key, with the workbook beside it whose
+ * fingerprint the envelope signs.
+ */
 async function answered(response: Response): Promise<Answer> {
   expect(response.status).toBe(200);
   const sourceKey = nodeSigningPublicKey(await readNodeIdentityKey(suite.node, ring, source));
-  const verified = verifyEnvelope<Answer>(await response.json(), "old-box-data", (id) =>
+  const { envelope, workbook, ...rest } = (await response.json()) as {
+    envelope: unknown;
+    workbook: string;
+  };
+  expect(rest).toEqual({});
+  const verified = verifyEnvelope<Signed>(envelope, "old-box-data", (id) =>
     id === source ? sourceKey : undefined,
   );
   if (!verified.valid) throw new Error(`the answer did not verify: ${verified.reason}`);
-  return verified.body;
+  expect(verified.body).not.toHaveProperty("workbook");
+  expect(verified.body.sha256).toBe(sha256Hex(Buffer.from(workbook, "base64")));
+  return { ...verified.body, workbook };
 }
 
 const files = (answer: Answer) => unzipSync(new Uint8Array(Buffer.from(answer.workbook, "base64")));

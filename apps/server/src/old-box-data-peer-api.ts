@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
-import { verifyEnvelope } from "@waitron/handover";
+import { sha256Hex, verifyEnvelope } from "@waitron/handover";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { readHandoverRestriction } from "@waitron/node-db";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
@@ -79,7 +79,9 @@ async function checkedQuery(deps: OldBoxDataPeerDeps, raw: unknown, nowMs: numbe
 
 /**
  * `POST /api/node/old-box-data`: the new main box asks this replaced box for the workbook its own
- * page offers, built from the main box's summary and copy time. Like the page, it only reads.
+ * page offers, built from the main box's summary and copy time. Like the page, it only reads. The
+ * answer is `{ envelope, workbook }`: the signed `old-box-data` envelope names the file's SHA-256,
+ * and `workbook` is the file in base64.
  */
 export function mountOldBoxDataPeerApi(app: Hono, deps: OldBoxDataPeerDeps, log: Logger): void {
   const turn = deps.turn ?? oneBuildAtATime();
@@ -124,14 +126,23 @@ export function mountOldBoxDataPeerApi(app: Hono, deps: OldBoxDataPeerDeps, log:
           requestId: c.get("requestId"),
         });
         c.header("Cache-Control", "no-store");
+        // The file travels beside the envelope, which signs only its fingerprint: signing or
+        // verifying a body copies the whole of it, as canonical text and again as that text's bytes.
         return c.json(
-          await signAsThisBox(deps, "old-box-data", {
-            nonce: query.nonce,
-            sourceNodeId: query.source,
-            madeOn: made.madeOn,
-            counts: made.counts,
-            workbook: Buffer.from(made.bytes).toString("base64"),
-          }),
+          {
+            envelope: await signAsThisBox(deps, "old-box-data", {
+              nonce: query.nonce,
+              sourceNodeId: query.source,
+              madeOn: made.madeOn,
+              counts: made.counts,
+              sha256: sha256Hex(made.bytes),
+            }),
+            workbook: Buffer.from(
+              made.bytes.buffer,
+              made.bytes.byteOffset,
+              made.bytes.byteLength,
+            ).toString("base64"),
+          },
           200,
         );
       } finally {
