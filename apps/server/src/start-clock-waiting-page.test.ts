@@ -6,9 +6,12 @@ import { chromium, type Browser, type Page } from "playwright";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
 import { authorityKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { PDFDict, PDFDocument, PDFName, PDFString } from "pdf-lib";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { attachmentPath } from "./restore-flow.js";
 import { createStartClockWaiting } from "./start-clock-waiting.js";
+import { recoveryPackPdf } from "./testing/recovery-pack-pdf.js";
 
 const KEY = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => i * 13 + 5));
 let browser: Browser | undefined;
@@ -75,7 +78,9 @@ async function open(
     const res = await subject.app.request(request.url(), {
       method: request.method(),
       headers: request.headers(),
-      ...(request.method() === "POST" ? { body: request.postData() ?? "" } : {}),
+      ...(request.method() === "POST"
+        ? { body: new Uint8Array(request.postDataBuffer() ?? []) }
+        : {}),
     });
     await route.fulfill({
       status: res.status,
@@ -162,28 +167,94 @@ async function withPage(locale: string, run: (page: Page) => Promise<void>) {
   }
 }
 
-it.each([
-  [
-    "en-GB",
-    "Master key",
-    "If that page is closed, type the master key below to confirm the time from this device.",
-  ],
-  [
-    "es-ES",
-    "Clave maestra",
-    "Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
-  ],
-])(
+it.each(["en-GB", "es-ES"] as const)(
   "the page labels the field Master key with no hint and says 'type the master key below' (%s)",
-  (locale, label, sentence) =>
+  (locale) =>
     withPage(locale, async (page) => {
       await open(page, 0);
-      const field = page.getByLabel(label);
+      const field = page.getByLabel(START_CLOCK_WAITING_WORDS[locale].keyLabel);
       expect(await field.getAttribute("type")).toBe("password");
       expect(await field.getAttribute("placeholder")).toBeNull();
-      expect(await page.locator("p", { hasText: sentence }).count()).toBe(1);
+      expect(
+        await page.locator("p", { hasText: START_CLOCK_WAITING_WORDS[locale].why }).count(),
+      ).toBe(1);
+      if (locale === "en-GB") {
+        expect(await page.getByLabel("Master key").count()).toBe(1);
+        expect(
+          await page
+            .locator("p", {
+              hasText:
+                "If that page is closed, type the master key below to confirm the time from this device.",
+            })
+            .count(),
+        ).toBe(1);
+      }
     }),
 );
+
+const field = MASTER_KEY_FIELD_WORDS.en;
+
+/** Chooses `bytes` as the recovery pack PDF. */
+async function choosePack(page: Page, bytes: Uint8Array) {
+  const control = page.getByLabel(field.button);
+  expect(await control.getAttribute("type")).toBe("file");
+  expect(await control.getAttribute("accept")).toBe("application/pdf,.pdf");
+  await control.setInputFiles({
+    name: "recovery-pack.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(bytes),
+  });
+}
+
+it("it offers Choose the recovery pack PDF, whose master key fills the field and shows the clock step", () =>
+  withPage("en-GB", async (page) => {
+    await open(page, 0);
+    await choosePack(page, await recoveryPackPdf(KEY));
+    await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+    expect(await page.getByLabel(words.keyLabel).inputValue()).toBe(KEY);
+    expect(await page.locator("#clock-pack-error").isVisible()).toBe(false);
+    expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
+  }));
+
+it("says what is wrong with a chosen PDF that is not a pack, damaged, or without the master key", async () => {
+  const plain = await PDFDocument.create();
+  plain.addPage();
+  const broken = await PDFDocument.load(await recoveryPackPdf(KEY));
+  broken.context
+    .lookup(broken.context.trailerInfo.Info, PDFDict)
+    .set(PDFName.of("WaitronRecoveryDigest"), PDFString.of(`sha256-v1:${"0".repeat(64)}`));
+  const cases: [Uint8Array, string][] = [
+    [await plain.save(), field.notPack],
+    [await broken.save(), field.damaged],
+    [await recoveryPackPdf(null, 1), field.elsewhere(1)],
+    [await recoveryPackPdf(null, null), field.elsewhere(null)],
+  ];
+  await withPage("en-GB", async (page) => {
+    await open(page, 0);
+    for (const [bytes, line] of cases) {
+      await choosePack(page, bytes);
+      await expect.poll(() => page.locator("#clock-pack-error").innerText()).toBe(line);
+      expect(await page.getByLabel(field.button).getAttribute("aria-invalid")).toBe("");
+      expect(await page.locator("#clock-step").isVisible()).toBe(false);
+    }
+    // A good pack afterwards clears the line.
+    await choosePack(page, await recoveryPackPdf(KEY));
+    await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
+    expect(await page.locator("#clock-pack-error").isVisible()).toBe(false);
+    expect(await page.getByLabel(field.button).getAttribute("aria-invalid")).toBeNull();
+  });
+});
+
+it("refuses a chosen pack holding another master key with the key's refusal", () =>
+  withPage("en-GB", async (page) => {
+    await open(page, 0);
+    const other = encodeMasterKeyCode(Uint8Array.from({ length: 16 }, (_, i) => 250 - i));
+    await choosePack(page, await recoveryPackPdf(other));
+    await expect.poll(() => page.locator("#clock-key-error").isVisible()).toBe(true);
+    expect(await page.locator("#clock-pack-error").isVisible()).toBe(false);
+    expect(await page.getByLabel(words.keyLabel).inputValue()).toBe("");
+    expect(await page.locator("#clock-step").isVisible()).toBe(false);
+  }));
 
 it("shows nothing of the clock until the key is entered, and refuses a wrong key beside its field", () =>
   withPage("en-GB", async (page) => {

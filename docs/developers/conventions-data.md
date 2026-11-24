@@ -4642,7 +4642,10 @@ screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/s
 leaves the page"). The waiting app's clock routes take the key in the body, and compare it with the staged key file,
 refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
-setting nothing"). The done screen shows both times with **Confirm the time** and **This device**;
+setting nothing"). The page's recovery pack PDF goes to `/restore-clock/pack`, which reads it on
+the box and answers its master key only when that key is the staged one (`start-clock-waiting.test.ts`,
+"the restore clock page takes the master key and the pack PDF" and "refuses another key's pack as a
+wrong key"). The done screen shows both times with **Confirm the time** and **This device**;
 a browser that lost the key types it on the waiting page, as printed or as the secret, which
 shows the same step (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the
 done screen's step with both times and their dates" and "takes the master key as printed on the

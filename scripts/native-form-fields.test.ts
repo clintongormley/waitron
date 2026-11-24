@@ -68,9 +68,9 @@ const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = 
   },
   {
     file: "apps/server/src/start-clock-waiting.ts",
-    lines: 1,
+    lines: 2,
     reason:
-      "an HTML string the server builds for the page a box serves while a restore's start waits for its time; it loads no front-end bundle (only a short inline script for the key and clock step), so no field primitive can run on it",
+      "an HTML string the server builds for the page a box serves while a restore's start waits for its time: its master-key field and its file input for the recovery pack PDF, which the box reads; it loads no front-end bundle (only a short inline script for the key, the PDF and the clock step), so no field primitive can run on it",
   },
 ];
 

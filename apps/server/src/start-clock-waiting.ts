@@ -25,6 +25,8 @@ import type { SetupClockSetter } from "./setup-clock-set.js";
 
 const CHALLENGES = 64;
 const RETRY_AFTER_SECONDS = "60";
+/** Stands for the number of the pack holding the master key in the words the page fills in. */
+const HELD_BY_MARK = 987_654_321;
 
 export interface StartClockWaitingOptions {
   /** The state folder holding the staged authority key every clock route's master key is checked
@@ -54,7 +56,8 @@ export interface StartClockWaiting {
 /**
  * What the box's usual address answers while a restore's start waits to confirm its time: the
  * waiting page for every page, `server.waiting_for_clock` for everything else, and the clock
- * routes, which take nothing from a request without the master key whose authority key is staged.
+ * routes, which take nothing from a request without the master key whose authority key is staged
+ * (a chosen recovery pack PDF is answered with its master key only when it is that key).
  */
 export function createStartClockWaiting(options: StartClockWaitingOptions): StartClockWaiting {
   const wall = options.clock?.wall ?? Date.now;
@@ -219,6 +222,12 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
 
 function renderWaitingPage(locale: SupportedLocale, destination: string): string {
   const words = START_CLOCK_WAITING_WORDS[locale];
+  const packLines = {
+    notPack: words.notPack,
+    damaged: words.damaged,
+    elsewhere: words.elsewhere(null),
+    elsewhereOn: words.elsewhere(HELD_BY_MARK).replace(String(HELD_BY_MARK), "{heldBy}"),
+  };
   const say = (id: string, text: string) => `<p id="${id}" data-say hidden>${escapeHtml(text)}</p>`;
   return renderDocument(
     locale,
@@ -228,6 +237,9 @@ function renderWaitingPage(locale: SupportedLocale, destination: string): string
 <p><label for="clock-key-field">${escapeHtml(words.keyLabel)} *</label></p>
 <p><input type="password" id="clock-key-field" name="node-recovery-key" autocomplete="off" required aria-describedby="clock-key-error"></p>
 <p id="clock-key-error" hidden>${escapeHtml(words.keyRefused)}</p>
+<p><label for="clock-pack">${escapeHtml(words.packButton)}</label></p>
+<p><input type="file" id="clock-pack" accept="application/pdf,.pdf" aria-describedby="clock-pack-error"></p>
+<p id="clock-pack-error" hidden></p>
 <p><button type="submit">${escapeHtml(words.keyContinue)}</button></p>
 </form>
 <div id="clock-step" hidden>
@@ -241,6 +253,7 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
 <script>
 (() => {
   const destination = ${JSON.stringify(destination).replaceAll("<", "\\u003c")};
+  const packLines = ${JSON.stringify(packLines).replaceAll("<", "\\u003c")};
   const $ = (id) => document.getElementById(id);
   const field = $("clock-key-field");
   const show = (id) => {
@@ -282,8 +295,48 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     $("clock-server").textContent = when(answer.serverMs);
   };
   const quietly = (run) => () => run().catch(() => {});
+  const pack = $("clock-pack");
+  const packLine = (text) => {
+    $("clock-pack-error").textContent = text ?? "";
+    $("clock-pack-error").hidden = text === null;
+    pack.toggleAttribute("aria-invalid", text !== null);
+  };
+  // The chosen PDF is read on the box; the master key it answers is used as if typed.
+  pack.addEventListener("change", quietly(async () => {
+    const file = pack.files[0];
+    if (file === undefined) return;
+    const response = await fetch("/restore-clock/pack", {
+      method: "POST",
+      headers: { "content-type": "application/pdf" },
+      body: file,
+    });
+    pack.value = "";
+    const answer = response.status === 413 ? { result: "not_a_pack" } : await response.json();
+    if (typeof answer.key === "string") {
+      packLine(null);
+      field.value = answer.key;
+      return compare();
+    }
+    if (answer.error !== undefined) {
+      packLine(null);
+      field.value = "";
+      $("clock-key-error").hidden = false;
+      field.setAttribute("aria-invalid", "");
+      return;
+    }
+    packLine(
+      answer.result === "elsewhere"
+        ? answer.heldBy === null
+          ? packLines.elsewhere
+          : packLines.elsewhereOn.replace("{heldBy}", String(answer.heldBy))
+        : answer.result === "damaged"
+          ? packLines.damaged
+          : packLines.notPack,
+    );
+  }));
   $("clock-key").addEventListener("submit", (event) => {
     event.preventDefault();
+    packLine(null);
     void quietly(compare)();
   });
   const confirm = async () => {

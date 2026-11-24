@@ -11,6 +11,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
       why: string;
       keyLabel: string;
       keyRefused: string;
+      packButton: string;
+      notPack: string;
+      damaged: string;
+      elsewhere: (heldBy: number | null) => string;
       keyContinue: string;
       waitingForClock: string;
       deviceTime: string;
@@ -27,6 +31,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     title: "The box is restoring your backup and is waiting to confirm its time.",
     why: "So that no invoice series is ever repeated, it creates its new series only once its time is confirmed. It carries on by itself once it can check its time over the internet, or once its time is confirmed on the page where the restore was started. If that page is closed, type the master key below to confirm the time from this device.",
     keyLabel: MASTER_KEY_FIELD_WORDS.en.label,
+    packButton: MASTER_KEY_FIELD_WORDS.en.button,
+    notPack: MASTER_KEY_FIELD_WORDS.en.notPack,
+    damaged: MASTER_KEY_FIELD_WORDS.en.damaged,
+    elsewhere: MASTER_KEY_FIELD_WORDS.en.elsewhere,
     keyRefused: "Enter the selected backup’s master key.",
     keyContinue: "Continue",
     waitingForClock:
@@ -45,6 +53,10 @@ export const START_CLOCK_WAITING_WORDS: Readonly<
     title: "El servidor está restaurando tu copia y espera a confirmar su hora.",
     why: "Para que ninguna serie de facturas se repita, solo crea sus series nuevas cuando su hora está confirmada. Sigue sola en cuanto pueda comprobar su hora por internet, o cuando se confirme su hora en la página donde se empezó la restauración. Si esa página está cerrada, escribe abajo la clave maestra para confirmar la hora desde este dispositivo.",
     keyLabel: MASTER_KEY_FIELD_WORDS.es.label,
+    packButton: MASTER_KEY_FIELD_WORDS.es.button,
+    notPack: MASTER_KEY_FIELD_WORDS.es.notPack,
+    damaged: MASTER_KEY_FIELD_WORDS.es.damaged,
+    elsewhere: MASTER_KEY_FIELD_WORDS.es.elsewhere,
     keyRefused: "Introduce la clave maestra de la copia elegida.",
     keyContinue: "Continuar",
     waitingForClock:
