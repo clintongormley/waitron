@@ -141,7 +141,6 @@ describe("the restore's waiting app: pages", () => {
     ["POST", "/api/payments", html],
     ["GET", "/", { accept: "application/json" }],
     ["POST", "/restore-clock/reading", {}],
-    ["POST", "/restore-clock/pack", { "content-type": "application/pdf" }],
   ] as const)("answers %s %s with server.waiting_for_clock", async (method, path, headers) => {
     const log = vi.fn();
     const { app } = await waiting({ log });

@@ -58,8 +58,8 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Choose the recovery pack that holds
-this backup's master key in the recovery picker, or type the master key. There is no
+and key name. Keep production and preproduction separate. Choose **Choose the recovery pack PDF** and
+pick the pack that holds this backup's master key, or type the master key in **Master key**. There is no
 installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
 authenticate the selected backup; its short typing check is not authentication.

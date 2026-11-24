@@ -2499,7 +2499,8 @@ A test that chooses a recovery pack PDF in `wt-master-key-input` awaits the fiel
 before reading the filled key or the refusal line. `pdfRead` is the read the real file-picker
 event started, with the real reader, and it settles once the field shows its result. A one-second
 assertion window is not the read's completion signal. Cost: on 19 October, A679's full fiscal run
-failed a wrong-key case while a helper did not await the read.
+failed a wrong-key case while a helper did not await the old key field's PDF import; a controlled
+slow read reproduced it, and awaiting the import passed.
 
 ## A reopened polling dialog owns a new in-flight gate.
 
