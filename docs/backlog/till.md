@@ -2247,7 +2247,8 @@ order off a short screen.
 
 ### Custom item on the Counter (A738 residual)
 
-A1564. Decided by the owner on 2026-11-21 and queued for building:
+A1564. Decided by the owner on 2026-11-21; the first of three pull requests, the data and the reports,
+is built (what that leaves is in the index entry):
 [design](../superpowers/specs/2026-11-21-counter-custom-item-design.md) and
 [plan](../superpowers/plans/2026-11-21-counter-custom-item.md). A hidden product per takeaway VAT
 rate sits behind each line; the permission `order.custom_item` can be given to anyone, and

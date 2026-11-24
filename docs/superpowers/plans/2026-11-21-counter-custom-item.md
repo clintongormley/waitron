@@ -39,7 +39,8 @@ a supervisor's PIN once per request. Reports show these lines under their own "C
   and not built: production about +1,250 lines, tests about +1,900, and four generated files (the
   core set's SQL, snapshot and journal, and the epoch file).
 - **Approval:** the design is approved by the owner, 21 November (recorded in the spec's status line,
-  `c6efa1acbb`). Nobody has approved this plan. Fresh reads: one on 21 November, and two of the refresh
+  `c6efa1acbb`). The owner has not approved this plan; the watcher cleared PR 1 and Tasks 4a to 7a on
+  24 November 2026 at 08:28. Fresh reads: one on 21 November, and two of the refresh
   on 24 November (both "fix first"; both are applied).
 
 ## Pull requests

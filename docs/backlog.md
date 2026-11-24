@@ -658,13 +658,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   whether such a control should stack its choices instead.
   [Detail](backlog/till.md#segmented-choices-still-break-words-when-whole-words-cannot-fit-left-by-a773-2-b4b)
 
-- **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; queued for building).**
+- **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; two of three pull requests to come).**
   A dashed + Custom item tile for the rare thing not on the menu: typed name and price, the
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
   a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
+  Nobody can sell one yet: what exists is the hidden products (`customItemProduct`, which nothing calls),
+  the permission, which nothing checks, and the "Custom items" row of the category report. To come: the
+  server's order lines (Tasks 4a to 7b) and the till (Tasks 8 to 10c). The watcher cleared Tasks 4a to 7a
+  to build; what depends on the plan's Decision 2 waits for the owner's answer.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
-  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (16 tasks in three pull requests; refreshed on 2026-11-24 against VAT
-  rates piece A, which has landed, and revised after a fresh read). Waiting for the owner's answer to its Decision 2.
+  `docs/superpowers/plans/2026-11-21-counter-custom-item.md`.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
