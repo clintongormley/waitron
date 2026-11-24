@@ -286,6 +286,10 @@ export const ALERT_MESSAGES: Readonly<
       },
     },
   },
+  "sif.identity_change_blocked": {
+    en: "The box could not open its new fiscal installation for the new software producer, so it is not taking payments. It keeps trying. If this stays, open Box status and press Restart the box.",
+    es: "El servidor no ha podido abrir su nueva instalación fiscal para el productor del software nuevo, así que no acepta cobros. Lo sigue intentando. Si sigue así, abre Estado del servidor y pulsa Reiniciar el servidor.",
+  },
   "clock.sync_off": {
     en: "{reason:clock_sync_off}",
     es: "{reason:clock_sync_off}",
@@ -758,6 +762,10 @@ export const ALERT_WORDS: Readonly<
         en: "The tax agency refused a sale dated {refusedOn:date} because that date was in the future when it was sent, so the box has stopped taking payments until its time is checked. Confirm or correct the date and time on the Box status page; staff can use “Check the time” on a till.",
         es: "Hacienda rechazó una venta con fecha {refusedOn:date} porque esa fecha era futura cuando se envió, así que el servidor ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
       },
+      identity_change: {
+        en: "This version of Waitron has a new software producer, so the box opens a new fiscal installation, with new invoice numbers, as soon as its time is confirmed. Until then it is not taking payments. It confirms by itself once its time service reaches a time server over the internet; tills and handhelds agreeing with its time are not enough for this. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+        es: "Esta versión de Waitron tiene un productor del software nuevo, así que el servidor abre una nueva instalación fiscal, con una numeración de facturas nueva, en cuanto se confirme su hora. Hasta entonces no acepta cobros. La confirma por sí solo en cuanto su servicio de hora contacta con un servidor de hora por internet; para esto no basta con que las cajas o terminales coincidan con su hora. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+      },
     },
     otherwise: {
       en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once its time service reaches a time server over the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
@@ -768,6 +776,7 @@ export const ALERT_WORDS: Readonly<
     words: {
       clock_jumped: HOST_SILENT_AFTER_START,
       future_date_refused: HOST_SILENT_AFTER_START,
+      identity_change: HOST_SILENT_AFTER_START,
     },
     otherwise: {
       en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",

@@ -18,6 +18,7 @@ import { clockCorrection } from "./clock-correction.js";
 import { clockStartUp, type ClockStartUp } from "./clock-start-up.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountTillApi } from "./till-api.js";
@@ -585,6 +586,58 @@ it("confirms a till within a minute while waiting with no set and no row", async
   expect(start.status).toBe("by_person");
   expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
 });
+
+it.each([
+  ["a keep", 10 * MINUTE, true],
+  ["a till that agrees", 20_000, false],
+] as const)(
+  "changes nothing at %s while the internet's confirmation is held for a new fiscal installation, and logs it as unused",
+  async (_label, aheadMs, keep) => {
+    const { box, start } = await waitingBox();
+    const onHeld = vi.fn();
+    start.holdForIdentityChange(standingHold(onHeld));
+    const internets = { by: "by_internet", heads: { "node-a": 1 } } as const;
+    start.confirm(internets.by, internets.heads);
+    const asked = await ask(box, staffCookie);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + aheadMs,
+      ...(keep ? { keep } : {}),
+    });
+    expect(answer.status).toBe(200);
+    expect(start).toMatchObject({ status: "waiting", heldConfirmation: internets, mark: null });
+    expect(onHeld).not.toHaveBeenCalled();
+    const events = box.logs.map((line) => line.event);
+    expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
+    expect(events).not.toContain("clock_start.confirmed");
+  },
+);
+
+it.each([
+  ["a keep", 10 * MINUTE, true, ["clock_start.confirmation_held"]],
+  ["a till that agrees", 20_000, false, ["clock_start.confirmation_held"]],
+  // The set's own log line is the clock correction's.
+  ["a set from the till", 2 * DAY, false, []],
+] as const)(
+  "holds a person's confirmation from %s while a new fiscal installation waits to open, and logs it as held",
+  async (_label, aheadMs, keep, logged) => {
+    const { box, start } = await waitingBox();
+    const onHeld = vi.fn();
+    start.holdForIdentityChange(standingHold(onHeld));
+    const asked = await ask(box, staffCookie);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + aheadMs,
+      ...(keep ? { keep } : {}),
+    });
+    expect(answer.status).toBe(200);
+    expect(start).toMatchObject({ status: "waiting", mark: null });
+    expect(start.heldConfirmation).toMatchObject({ by: "by_person" });
+    expect(onHeld).toHaveBeenCalledOnce();
+    const events = box.logs.map(({ event }) => event);
+    expect(events.filter((event) => event.startsWith("clock_start.confirm"))).toEqual(logged);
+  },
+);
 
 it("refuses a keep with no stop once the start check turned by the internet after the challenge, and shuts the window", async () => {
   const start = startClockState();

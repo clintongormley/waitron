@@ -1409,6 +1409,42 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
     });
 
+    it("offers both choices while it waits to open a new fiscal installation", async () => {
+      const el = await mountClock(
+        waitingApi({
+          ...WAITING_CLOCK,
+          waiting: { ...WAITING_CLOCK.waiting!, cause: "identity_change" },
+        }),
+      );
+      expect(text(confirmButton(el))).toBe("The date and time are right");
+      expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
+    });
+
+    it("offers no confirmation of a date and time it does not show while the new fiscal installation is blocked", async () => {
+      const el = await mountClock(
+        waitingApi(
+          {
+            ...WAITING_CLOCK,
+            waiting: { ...WAITING_CLOCK.waiting!, cause: "identity_change" },
+          },
+          {
+            listAlerts: vi.fn().mockResolvedValue({
+              visible: true,
+              alerts: [alert("sif.identity_change_blocked", "box", { severity: "error" })],
+            }),
+          },
+        ),
+      );
+      const clock = q(el, "[data-test=row-clock]")!;
+      expect(text(clock.querySelector(".line"))).toBe(
+        "The box could not open its new fiscal installation for the new software producer, so it is not taking payments. It keeps trying. If this stays, open Box status and press Restart the box.",
+      );
+      expect(clock.querySelector("[data-test=row-alert]")).toBeNull();
+      expect(confirmButton(el)).toBeNull();
+      expect(clock.querySelector("[data-test=clock-confirm-help]")).toBeNull();
+      expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
+    });
+
     it("confirms the box's time as shown, and the row goes once the box is read again", async () => {
       const api = waitingApi();
       vi.mocked(api.getBoxHealth)

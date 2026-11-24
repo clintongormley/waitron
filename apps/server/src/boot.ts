@@ -314,6 +314,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { bootReader } from "./boot-reader.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
+import type { IdentityChangeNote } from "@waitron/fiscal";
 import { clockUnconfirmedAlertSource, startClockWaiting } from "./clock-unconfirmed-alert.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import { mountJoinApi } from "./join-api.js";
@@ -474,7 +475,17 @@ import { mountBoxHostApi } from "./box-host-api.js";
 import { collectBoxHealth } from "./box-health.js";
 import { sharedClockServiceReading, timeServiceReader } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
-import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
+import { clockCorrection, clockStanding, latestClockStepFor } from "./clock-correction.js";
+import {
+  identityChangeBlocked,
+  identityChangeBlockedAlertSource,
+} from "./identity-change-alert.js";
+import {
+  deleteLeftoverIdentityChangeNote,
+  identityChangeOpening,
+  servesAlone,
+} from "./identity-change-opening.js";
+import { deleteIdentityChangeNote, readIdentityChangeNote } from "./identity-change-note.js";
 import { startClockCheck, startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
@@ -2486,11 +2497,35 @@ async function bootServer(
     makeFiscalBackend(enabledAtStart, filingModule, db, env),
     startClockHolds,
   );
+  let waitingIdentityChange: IdentityChangeNote | null = null;
   // Only a node that can add a record is asked: a mirror's copy may hold its own node's chain from
   // before it handed over, made under the producer it ran then.
   if (!fencedOrMirror && nodeBackend.checkFilingIdentity !== undefined) {
     const checkFilingIdentity = nodeBackend.checkFilingIdentity.bind(nodeBackend);
-    await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId));
+    // The gate that keeps a waiting box from selling holds only on a box that files records, so any
+    // other ignores the note.
+    const note = filesRecords() ? await readIdentityChangeNote(config.stateDir) : null;
+    const answer = await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId, note));
+    if (note !== null && answer?.pending) {
+      waitingIdentityChange = note;
+      // Asked only once a person confirms, when the correction and the job runner built below exist.
+      startClock.holdForIdentityChange({
+        standing: () =>
+          clockStanding({
+            steps: correction.steps,
+            wall: () => Date.now(),
+            monotonic: boxBoot.elapsed,
+          }),
+        onHeld: () => jobRunner.wake("clock.watch"),
+      });
+      log("warn", "identity_change.waiting", { release: note.release });
+    } else if (note !== null && answer?.leftover) {
+      await deleteLeftoverIdentityChangeNote({
+        note,
+        deleteNote: () => deleteIdentityChangeNote(config.stateDir),
+        log,
+      });
+    }
   }
   const operationDescriptionDefault = offeredOperationDescriptionDefault(
     enabledFiscal.venueFields?.defaults?.operationDescription,
@@ -3879,13 +3914,30 @@ async function bootServer(
       log,
     });
   // Before the listener opens, so its first answer already knows whether the start is confirmed.
-  if (
-    (await startClockCheck({
-      state: startClock,
-      clockStatus: readClockService,
-      heads: () => db.withWriteLock(() => recordHeads(db)),
-    })) === "by_internet"
-  )
+  await startClockCheck({
+    state: startClock,
+    clockStatus: readClockService,
+    heads: () => db.withWriteLock(() => recordHeads(db)),
+  });
+  const identityChange =
+    waitingIdentityChange === null
+      ? null
+      : identityChangeOpening({
+          backend: nodeBackend,
+          nodeId: node.nodeId,
+          note: waitingIdentityChange,
+          state: startClock,
+          synchronised: timeServiceSynchronised,
+          mayOpen: async (tx) =>
+            filesRecords() && !isReadOnly() && (await servesAlone(tx, node.nodeId)),
+          deleteNote: () => deleteIdentityChangeNote(config.stateDir),
+          log,
+        });
+  if (identityChange !== null) await correction.inTurn(identityChange.attemptIdentityChange);
+  const identityChangeIsBlocked = () =>
+    identityChange !== null &&
+    identityChangeBlocked({ state: startClock, latestRefusal: identityChange.latestRefusal });
+  if (startClock.status === "by_internet")
     log("info", "clock_start.confirmed", {
       source: "internet",
       boxAt: tillClock.now().instant.toISOString(),
@@ -3923,6 +3975,9 @@ async function bootServer(
       },
       filesRecords,
       heads: recordHeads,
+      ...(identityChange === null
+        ? {}
+        : { attemptIdentityChange: identityChange.attemptIdentityChange }),
       retryTimeService: timeServiceRetry({
         host: boxHost,
         state: startClock,
@@ -3968,7 +4023,8 @@ async function bootServer(
       readClockService,
       async () => (await spareFollow?.facts())?.clock ?? null,
     ),
-    clockUnconfirmedAlertSource(startClockWaits),
+    clockUnconfirmedAlertSource(() => (identityChangeIsBlocked() ? null : startClockWaits())),
+    identityChangeBlockedAlertSource(identityChangeIsBlocked),
     printingAlertSource(tradingContext.nodeId),
     drawerCloseAlertSource(),
     contentSuggestionsAlertSource(translationContext),

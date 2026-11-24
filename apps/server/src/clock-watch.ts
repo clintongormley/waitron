@@ -26,10 +26,9 @@ export function createClockWatch(deps: {
   store: Pick<ClockWitnessStore, "witnesses">;
   clock: Pick<TrustedClock, "now">;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
-  /** The correction's one-at-a-time turn, taken around the devices' confirmation, the time-service
-   * restart and the jump check; each look also writes the rows of steps whose rows could not be
-   * written when they happened. The watch is to be added as its anchor, so a set re-takes the jump
-   * check's baseline; its set count covers a set whose re-anchoring did not run. */
+  /** The correction's one-at-a-time turn; each look also writes the rows of steps whose rows could
+   * not be written when they happened. The watch is to be added as its anchor, so a set re-takes the
+   * jump check's baseline; its set count covers a set whose re-anchoring did not run. */
   correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending" | "steps">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
@@ -50,6 +49,10 @@ export function createClockWatch(deps: {
      * devices' turn, on a box that files records. */
     retryTimeService?: () => Promise<void>;
     heads: (tx: Transaction) => Promise<ChainHeads>;
+    /** While a new fiscal installation waits to open: asked in the correction's turn at each look
+     * until the internet confirms, after the look at the time service. It opens nothing while no
+     * confirmation is held. `stopped` answers whether this watch has been halted. */
+    attemptIdentityChange?: (stopped: () => boolean) => Promise<void>;
     /** This box's chain and the latest sale on it above a position that AEAT refused as dated in
      * the future. At each look, whatever the status, such a refusal of a sale recorded since the
      * latest confirmation, and above any refusal an earlier look found while the time service was
@@ -98,6 +101,10 @@ export function createClockWatch(deps: {
     if (start.state.status === "waiting" && start.filesRecords()) start.clearClockStatus?.();
     await lookAtClockService({ state: start.state, clockStatus: start.clockStatus, heads });
     if (stopped) return;
+    const attempt = start.attemptIdentityChange;
+    if (attempt !== undefined) {
+      await inTurn(async () => (stopped ? undefined : attempt(() => stopped)));
+    }
     if (byInternet()) {
       deps.log("info", "clock_start.confirmed", {
         source: "internet",
@@ -231,7 +238,8 @@ export function clockWatchJob(watch: ClockWatch, intervalMs: number): JobDefinit
     name: "clock.watch",
     applies: () => true,
     firstPassAfterMs: intervalMs,
-    minSleepMs: intervalMs,
+    // Zero, so a wake ends the sleep at once: an unwoken one lasts the interval.
+    minSleepMs: 0,
     maxSleepMs: intervalMs,
     backoff: { firstMs: intervalMs, maxMs: intervalMs },
     async pass({ signal }) {

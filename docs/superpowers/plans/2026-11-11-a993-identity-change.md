@@ -447,7 +447,8 @@ The findings:
      stands. A person's confirmation wakes the clock watch (`jobRunner.wake`, `job-runner.ts:325`)
      so it does not wait the full 15 seconds. So the opening never runs inside a request's
      transaction, and there is no loop of this plan's own: the clock watch is a job the runner
-     stops at a stepdown (`job-catalogue.ts:26`) and on a failed start (`boot.ts:2813`).
+     stops at a stepdown (`job-catalogue.ts:26`) and on a failed start (`boot.ts:2813`). As built
+     2026-11-24: `clockWatchJob`'s `minSleepMs` is 0, since at the interval a wake ended no sleep.
 
    The cases:
    - **A crash before A950 commits:** recovery restores the copy taken before the note was written,
@@ -506,6 +507,12 @@ The findings:
    - **Who deletes it:** the server, after the opening commits, and at a start that finds the head
      already under the running producer (a crash between the two). A plain reset deletes it too: its
      name is a `state-layout.ts` entry whose fate is `deleted`.
+   - **As built 2026-11-24:** only a box that files records (`filesRecords`) reads the note; any
+     other is refused as today, because the gate that keeps a waiting box from selling holds only on
+     one that files. The seat's `checkFilingIdentity` answers `leftover` when the note names the
+     running release and producer and nothing is left to open: the head is already under the running
+     producer, the open installation holds no record yet (a crash between the opening and the first
+     record), or the box is not production. So a preproduction box that files records deletes it too.
    - **Disclosed limit:** root on the box can write the note by hand, as root can edit the database.
 7. ★ **New words are unavoidable on three screens; the upgrade's report gets none.**
    - **The upgrade's report: no new words.** A refused opening on a copy leaves the copy's start
@@ -544,7 +551,8 @@ The findings:
      3. The till's notice, `staff_notice.clock.unconfirmed_identity_change`: "Payments wait: the
         server must open new invoice numbering first, once its time is confirmed" / "Los cobros
         esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se
-        confirme su hora".
+        confirme su hora". (2026-11-24: the till's English line says "box" where this says "server":
+        the till's word changed on 2026-11-22 20:39, commit a71e1b45c0, after the owner's yes.)
      4. The alert `sif.identity_change_blocked` (area `box`): "The box could not open its new fiscal
         installation for the new software producer, so it is not taking payments. It keeps trying.
         If this stays, open Box status and press Restart the box." / "El servidor no ha podido abrir
@@ -555,6 +563,8 @@ The findings:
      confirmar la hora a mano ni con que las cajas coincidan con ella.", and 2 says "once the box's
      time service confirms its time" / "en cuanto el servicio de hora del servidor confirme su hora".
    - The till's guide gains the notice, in English and Spanish (`apps/server/src/guide/*/till-notices.md`).
+   - **As built 2026-11-24** (cleared by the watcher, 07:03, not the owner): while blocked, the Sales
+     row repeats the alert's words, and the Clock row leaves out **The date and time are right**.
    - Option 2 of decision 3 would need refusal words as well.
 8. **Order PR 1 → 2 → 3.** Nothing writes a note until PR 3.
 9. **The minute, and the box's role.**
@@ -828,6 +838,10 @@ review can take, Tasks 5c, 6a and 6b go into a pull request of their own before 
 - `readIdentityChangeNote(stateDir: string): Promise<IdentityChangeNote | null>`. It takes exact keys
   and `version: 1`; anything else answers `null`.
 - `deleteIdentityChangeNote(stateDir: string): Promise<void>`. A missing file is not an error.
+
+As built 2026-11-24: `checkFilingIdentity` answers `{ pending: true }`, `{ leftover: true }`
+(decision 6) or `undefined`, because an existing unedited case in `producer-change.test.ts` pins
+`undefined`; an unreadable note counts as absent.
 
 - [ ] **Step 1: Write the failing tests.**
   - The reader: absent, empty, malformed, an extra key, `version: 2` → `null`; well formed → the
@@ -1118,6 +1132,9 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 - `.github/workflows/ci.yml`: the comment at `:4692-4694`, and the refusal message at `:4734-4737`,
   which becomes "…and production boxes refuse to start on it unless it is installed as an upgrade,
   which opens a new fiscal installation. To publish it anyway, set…".
+- `docs/developers/conventions-data.md`: the topic file's copy of the sale-path bullet ("Nothing
+  external may block a sale…") gains what CLAUDE.md's gains. PR 2 already added the hold to "Every
+  start confirms the box's time before it trades".
 - `docs/operations/release.md:391-397`: **rewrite** "When the producer or the system code changes".
   The new text covers: set the three secrets, set `WAITRON_PRODUCER_CHANGE_ALLOWED`, install as an
   upgrade, a person confirms the time on a till or Box status if the box's time service is not
@@ -1187,7 +1204,8 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
   transaction covers a stepdown that has already happened, and the clock watch stops at a
   stepdown; a stepdown that starts during the transaction itself was read, not run (the stepdown
   aborts duties and then closes them, `handover-stepdown.ts:181-213`; I did not find whether it
-  waits for `venue.db`'s write lock). Task 5b's stepdown case covers only an attempt not yet begun.
+  waits for `venue.db`'s write lock). Task 5b's stepdown cases cover an attempt not yet begun and, by
+  halting the watch, one still reading the time service.
 - A history that stays broken (`history_invalid`) has no way out an operator can take: Restart the
   box only tries again. Restore and promotion refuse the same history. I did not design one; the
   owner may want one before go-live.

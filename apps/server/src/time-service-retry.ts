@@ -8,14 +8,14 @@ const LOG_EVERY = 10;
 
 /**
  * Asks the host to restart its time service, at most once per {@link RETRY_SPACING_MS}, while the
- * start waits for its time; left alone, the service asks again only after a wait that doubles.
- * Never once a set has been asked of the host in this process, whatever it answered, or a person
- * has confirmed the clock: a restart may move the clock (the host refuses the case it knows of,
- * `saved_time_ahead`).
+ * start waits for its time with no confirmation held; left alone, the service asks again only after
+ * a wait that doubles. Never once a set has been asked of the host in this process, whatever it
+ * answered, or a person's confirmation has been applied: a restart may move the clock (the host
+ * refuses the case it knows of, `saved_time_ahead`).
  */
 export function timeServiceRetry(deps: {
   host: Pick<BoxHostClient, "retryTimeService">;
-  state: Pick<StartClockState, "status" | "confirmedByPerson">;
+  state: Pick<StartClockState, "status" | "confirmedByPerson" | "heldConfirmation">;
   steps: () => number;
   monotonic: () => number;
   log: Logger;
@@ -27,9 +27,8 @@ export function timeServiceRetry(deps: {
   return async () => {
     const retry = deps.host.retryTimeService;
     if (retry === undefined) return;
-    if (deps.state.status !== "waiting" || deps.state.confirmedByPerson || deps.steps() > 0) {
-      return;
-    }
+    if (deps.state.status !== "waiting" || deps.state.heldConfirmation !== null) return;
+    if (deps.state.confirmedByPerson || deps.steps() > 0) return;
     const nowMs = deps.monotonic();
     if (!Number.isFinite(nowMs)) return;
     if (askedAtMs !== undefined && !(nowMs - askedAtMs >= RETRY_SPACING_MS)) return;

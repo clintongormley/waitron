@@ -331,7 +331,7 @@ box's clock to it, and **The box** keeps the box's clock whatever the till's tim
 waits for its time to be confirmed and payments are not also stopped because the clock
 reads before 28 October 2024; otherwise **The
 box** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
-box's clock. Each of these the box accepts restarts payments. When the box sets its clock, the bell and the email name the
+box's clock. When the box sets its clock, the bell and the email name the
 staff member and the till. When the till's time is used, other devices' readings do not stop it.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
@@ -352,9 +352,12 @@ kept in time over the internet: the **Clock** row then starts with **The tax age
 sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
 or staff use **Check the time** on a till.
 
+When the **Clock** row says **The new software producer needs a new fiscal installation**, devices
+agreeing with the box do not end the wait either: confirm or correct the time in the same ways.
+
 The box confirms its time by itself as soon as its [time service](box-status.md#clock-service)
 reaches a time server over the internet, or, unless it waits because
-of a refused sale, once two tills or handhelds that are switched on and connected agree with its
+of a refused sale or a new fiscal installation, once two tills or handhelds that are switched on and connected agree with its
 clock, even at the sign-in screen.
 
 An administrator can confirm it sooner on this page:

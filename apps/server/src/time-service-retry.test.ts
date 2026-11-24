@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BoxHostClient, TimeServiceOnAnswer } from "./box-host-client.js";
 import type { Logger } from "./logger.js";
 import { startClockState, type StartClockStatus } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { RETRY_SPACING_MS, timeServiceRetry } from "./time-service-retry.js";
 
 function harness(answers: Array<TimeServiceOnAnswer | Error> = []) {
@@ -105,7 +106,7 @@ describe("restarting the time service while the start waits", () => {
       const retryTimeService = vi.fn(async () => ({ available: true as const }));
       const retry = timeServiceRetry({
         host: { retryTimeService },
-        state: { status, confirmedByPerson: false },
+        state: { status, confirmedByPerson: false, heldConfirmation: null },
         steps: () => 0,
         monotonic: () => 1_000,
         log: vi.fn<Logger>(),
@@ -114,6 +115,39 @@ describe("restarting the time service while the start waits", () => {
       expect(retryTimeService).not.toHaveBeenCalled();
     },
   );
+
+  it("asks nothing while the internet's confirmation is held for an identity change, and asks again once it is dropped", async () => {
+    const h = harness();
+    h.state.holdForIdentityChange(standingHold());
+    h.state.confirm("by_internet", { "node-a": 1 });
+    expect(h.state.status).toBe("waiting");
+    await h.retry();
+    expect(h.retryTimeService).not.toHaveBeenCalled();
+
+    h.state.dropHeldConfirmation();
+    await h.retry();
+    expect(h.retryTimeService).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks nothing while a person's confirmation is held, asks again once it is dropped, and never again once it has ended the wait", async () => {
+    const h = harness();
+    h.state.holdForIdentityChange(standingHold());
+    h.state.confirm("by_person", { "node-a": 1 });
+    await h.retry();
+    expect(h.retryTimeService).not.toHaveBeenCalled();
+
+    h.state.dropHeldConfirmation();
+    await h.retry();
+    expect(h.retryTimeService).toHaveBeenCalledTimes(1);
+
+    h.state.confirm("by_person", { "node-a": 1 });
+    h.state.releaseIdentityChange();
+    h.state.backToWaiting("clock_jumped");
+    h.advance(RETRY_SPACING_MS);
+    await h.retry();
+    expect(h.state.status).toBe("waiting");
+    expect(h.retryTimeService).toHaveBeenCalledTimes(1);
+  });
 
   it("does nothing for a host that cannot restart the service", async () => {
     const log = vi.fn<Logger>();

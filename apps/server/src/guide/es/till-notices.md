@@ -62,6 +62,11 @@ así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
 que alguien compruebe la hora. · Comprobar la hora** es rojo. Que los dispositivos coincidan con el
 servidor no vuelve a activar los cobros: usa **Comprobar la hora**.
 
+**Los cobros esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se
+confirme su hora · Comprobar la hora** es rojo. Que los dispositivos coincidan con el servidor no
+vuelve a activar los cobros: usa **Comprobar la hora** y cobra cuando desaparezca la línea. Si la línea sigue, un encargado o un administrador puede
+reiniciar el servidor en la [página Estado del servidor](box-status.md#restart).
+
 Mientras los cobros esperan, o mientras la hora del servidor es incorrecta o su disco está lleno,
 un botón que empieza un cobro abre **Los cobros están en pausa** en su lugar, que explica el
 motivo; el pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
@@ -69,7 +74,7 @@ y cobra cuando desaparezca la línea roja.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Consulta Estado del servidor en el panel**,
 significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí
-mismo. Termina cualquiera de las líneas rojas de la hora de arriba. Pulsa **Comprobar la hora** para
+mismo. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja, una vez pasadas las páginas de fichaje y de asistencia.
 
@@ -77,13 +82,12 @@ El diálogo muestra la hora del servidor y la de esta caja. Nadie escribe una ho
 la hora de la propia caja.
 
 - Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
-  dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
-  puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la
+  dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora. Pulsa **El servidor** si la hora del servidor es la
   buena: cuando una línea roja de la hora dice que los cobros esperan y no se muestra **No se
-  pueden registrar ventas**, el servidor mantiene su hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
+  pueden registrar ventas**, el servidor mantiene su hora; si no, el diálogo te pide que corrijas la hora de la caja, como
   con **Las dos horas están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.
-- Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es; se puede volver a
-  cobrar. Pulsa **No** si no lo es.
+- Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es. Pulsa **No** si
+  no lo es.
 
 Si el diálogo te pide que corrijas la hora de la caja, corrígela en los ajustes de la propia caja y
 vuelve a abrir **Comprobar la hora**: el diálogo lee de nuevo la hora de la caja cada vez que se abre.

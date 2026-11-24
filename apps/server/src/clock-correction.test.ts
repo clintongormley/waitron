@@ -9,11 +9,17 @@ import type {
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { ClockServiceStatus, ClockSetAnswer } from "./box-host-client.js";
-import { clockCorrection, latestClockStepFor, type ClockAnchor } from "./clock-correction.js";
+import {
+  clockCorrection,
+  clockStanding,
+  latestClockStepFor,
+  type ClockAnchor,
+} from "./clock-correction.js";
 import { createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { startClockGateHolds } from "./start-clock-gate.js";
 import { startClockState, type ChainHeads, type StartClockState } from "./start-clock-check.js";
+import { standingHold } from "./testing/standing-hold.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const S = 1_000;
@@ -895,6 +901,14 @@ describe("one set at a time", () => {
     expect(order).toEqual(["set", "other"]);
   });
 
+  it("hands a turn nothing of the one before it", async () => {
+    const h = harness();
+    await h.correction.inTurn(async () => "earlier");
+    const turn = vi.fn(async () => {});
+    await h.correction.inTurn(turn);
+    expect(turn.mock.calls).toEqual([[]]);
+  });
+
   it("runs the next turn after one that threw", async () => {
     const h = harness();
     await expect(
@@ -1083,6 +1097,110 @@ describe("a set at the start", () => {
       expect(h.seatCalls[0]).toMatchObject({ reason: "start", source: "staff" });
       expect(start.state.status).toBe("by_person");
       expect(start.state.mark).toEqual({ "node-1": 8 });
+    },
+  );
+
+  it("sets, and logs the confirmation as unused, when the internet's was held while it set the clock and a new fiscal installation waits to open", async () => {
+    const start = waitingStart(() => 0);
+    const onHeld = vi.fn();
+    start.state.holdForIdentityChange(standingHold(onHeld));
+    const h = harness({
+      start,
+      anchors: [{ reanchor: async () => void start.state.confirm("by_internet", { "node-1": 2 }) }],
+    });
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(start.state).toMatchObject({
+      status: "waiting",
+      heldConfirmation: { by: "by_internet", heads: { "node-1": 2 } },
+      mark: null,
+    });
+    expect(onHeld).not.toHaveBeenCalled();
+    expect(h.log).toHaveBeenCalledWith("info", "clock_start.confirmation_unused", {
+      source: "set",
+    });
+  });
+
+  it("holds the person's confirmation after the drop, standing on the clock it set, when the hold keeps one", async () => {
+    const start = waitingStart(() => 0);
+    const heldAtAnchor: boolean[] = [];
+    const h = harness({
+      start,
+      anchors: [
+        { reanchor: async () => void heldAtAnchor.push(start.state.heldConfirmation !== null) },
+      ],
+    });
+    const onHeld = vi.fn();
+    start.state.holdForIdentityChange({
+      standing: () =>
+        clockStanding({
+          steps: h.correction.steps,
+          wall: () => h.measured().wallMs,
+          monotonic: () => h.measured().monoMs,
+        }),
+      onHeld,
+    });
+    const standing = () => {
+      const held = start.state.heldConfirmation;
+      return held?.by === "by_person" ? held.standing : undefined;
+    };
+    start.state.confirm("by_person", { "node-1": 2 });
+    const earlier = standing()!;
+    expect(earlier()).toBe(true);
+
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(heldAtAnchor).toEqual([false]);
+    expect(start.state).toMatchObject({
+      status: "waiting",
+      mark: null,
+      heldConfirmation: { by: "by_person", heads: { "node-1": 7 } },
+    });
+    expect(earlier()).toBe(false);
+    expect(standing()!()).toBe(true);
+    expect(onHeld).toHaveBeenCalledTimes(2);
+    expect(h.log).toHaveBeenCalledWith("info", "clock_start.confirmation_held", { source: "set" });
+  });
+
+  it.each([
+    ["a step the host verified", "start", "sets", {}, "person's"],
+    ["a step the host verified", "unusable", "sets", {}, null],
+    ["a step that missed its target", "start", "sets", { missByMs: 10 * S }, null],
+    ["a step the host moved but did not answer for", "start", "times-out-after-moving", {}, null],
+    [
+      "a step the host moved but did not answer for",
+      "unusable",
+      "times-out-after-moving",
+      {},
+      null,
+    ],
+    ["a step the host refused", "start", "refuses", {}, "internet's"],
+    ["a set the host did not answer, the clock unmoved", "unusable", "times-out", {}, "internet's"],
+  ] as const)(
+    "%s, asked for at reason %s (host %s), drops a held confirmation before re-anchoring only when the clock moved",
+    async (_label, reason, host, options, heldAfter) => {
+      const after = {
+        "internet's": { by: "by_internet", heads: { "node-1": 7 } },
+        "person's": { by: "by_person", heads: { "node-1": 8 } },
+      };
+      const state = startClockState();
+      state.holdForIdentityChange(standingHold());
+      state.confirm("by_internet", { "node-1": 7 });
+      const heldAtAnchor: boolean[] = [];
+      const h = harness({
+        ...options,
+        host,
+        start: { state, heads: () => ({ "node-1": 8 }) },
+        anchors: [
+          { reanchor: async () => void heldAtAnchor.push(state.heldConfirmation !== null) },
+        ],
+      });
+      await h.correction.set(reason === "start" ? byStaff(h, { reason }) : byAdmin(h));
+      expect(h.hostSets).toHaveLength(1);
+      expect(heldAtAnchor).toEqual([heldAfter === "internet's"]);
+      expect(state).toMatchObject({
+        status: "waiting",
+        cause: "identity_change",
+        heldConfirmation: heldAfter && after[heldAfter],
+      });
     },
   );
 
@@ -1449,5 +1567,42 @@ describe("the clock watch's jump check and a set", () => {
     h.moveWall(2 * 60_000);
     await w.look();
     expect(state).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+  });
+});
+
+describe("a clock that stands since it was read", () => {
+  function clocks() {
+    const at = { steps: 4, wallMs: START_MS, monoMs: 2 * H };
+    const stands = clockStanding({
+      steps: () => at.steps,
+      wall: () => at.wallMs,
+      monotonic: () => at.monoMs,
+    });
+    return { at, stands };
+  }
+
+  it("stands while both clocks run on together", () => {
+    const { at, stands } = clocks();
+    at.wallMs += 5 * H;
+    at.monoMs += 5 * H - S;
+    expect(stands()).toBe(true);
+  });
+
+  it.each([S + 1, -S - 1])("does not once the wall clock moves %i ms against the steady", (ms) => {
+    const { at, stands } = clocks();
+    at.wallMs += ms;
+    expect(stands()).toBe(false);
+  });
+
+  it("does not once a set was asked of the host, the clock unmoved", () => {
+    const { at, stands } = clocks();
+    at.steps++;
+    expect(stands()).toBe(false);
+  });
+
+  it("does not while the steady clock cannot be read", () => {
+    const { at, stands } = clocks();
+    at.monoMs = Number.NaN;
+    expect(stands()).toBe(false);
   });
 });

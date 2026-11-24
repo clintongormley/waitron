@@ -55,26 +55,30 @@ start again in the same ways.
 checks the time. · Check the time** is red. Devices agreeing with the box do not start payments
 again: use **Check the time**.
 
+**Payments wait: the box must open new invoice numbering first, once its time is confirmed ·
+Check the time** is red. Devices agreeing with the box do not start payments again: use **Check the
+time**, and pay once the line has gone. If the line stays, a manager or administrator can restart the box on the [Box status
+page](box-status.md#restart).
+
 While payments wait, or while the box's clock is wrong or its disk is full, a button that starts
 a payment opens **Payments are paused** instead, saying why; the order stays open. Use **Check the
 time** there when it shows, or **Close** it and pay once the red line has gone.
 
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the box's
-clock is in doubt and the box could not confirm it by itself. It ends any of the red
-clock lines above. Tap **Check the time** to open its dialog; when another notice shows first, open the
+clock is in doubt and the box could not confirm it by itself. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it once past the clock-in and attendance pages.
 
 The dialog shows the box's time and this till's time. Nobody types a time: the till's own time is
 what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
-  if the till's time is right: the box's clock is set to it and payments start again. Press **The
+  if the till's time is right: the box's clock is set to it. Press **The
   box** if the box's time is right: when a red clock line says payments wait and **Sales
-  can't be recorded** is not shown, the box keeps its time and payments start again; otherwise the dialog asks you to correct the
+  can't be recorded** is not shown, the box keeps its time; otherwise the dialog asks you to correct the
   till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither
   is.
-- When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start
-  again. Press **No** if it is not.
+- When they agree, it asks whether the time is correct. Press **Yes** if it is. Press **No**
+  if it is not.
 
 If the dialog asks you to correct the time on the till, correct it in the till's own settings, then
 open **Check the time** again: the dialog reads the till's time afresh each time it opens.

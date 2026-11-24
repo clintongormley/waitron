@@ -1,4 +1,5 @@
 // Not the package index: setup/clock-wait.ts puts this file in the setup and dashboard bundles.
+import type { ClockRefusalReason } from "@waitron/fiscal";
 import { AGREEMENT_MS } from "@waitron/module/src/device-clock.js";
 export { AGREEMENT_MS };
 /** How far the box's wall clock may drift against its steady clock before it counts as stepped. */
@@ -173,7 +174,7 @@ export function compareHourClocks(
   return decision;
 }
 
-export function clockRefusal(decision: HourClockDecision): string {
+export function clockRefusal(decision: HourClockDecision): ClockRefusalReason {
   if (!decisions.has(decision) || decision.releaseBlocked || decision.rangeBlocked)
     return "clock_unconfirmed";
   if (!decision.secondClock) return "second_clock_missing";

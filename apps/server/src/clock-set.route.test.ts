@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,6 +18,7 @@ import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witness
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import { standingHold } from "./testing/standing-hold.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
@@ -612,6 +613,42 @@ it("sets a waiting start's clock that reads before 28-10-2024 at the start, conf
   });
   expect(boxTime(box)).toBe(trueTime);
   expect(start.status).toBe("by_person");
+});
+
+it("changes nothing as the box's date and time stand while the internet's confirmation is held for a new fiscal installation, and logs it as unused", async () => {
+  const start = startClockState();
+  const onHeld = vi.fn();
+  start.holdForIdentityChange(standingHold(onHeld));
+  const internets = { by: "by_internet", heads: { "node-a": 1 } } as const;
+  start.confirm(internets.by, internets.heads);
+  const box = await stoppedBox(0, { start });
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(start).toMatchObject({ status: "waiting", heldConfirmation: internets, mark: null });
+  expect(onHeld).not.toHaveBeenCalled();
+  const events = box.logs.map((line) => line.event);
+  expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
+  expect(events).not.toContain("clock_start.confirmed");
+});
+
+it("holds a person's confirmation as the box's date and time stand while a new fiscal installation waits to open, and logs it as held", async () => {
+  const start = startClockState();
+  const onHeld = vi.fn();
+  start.holdForIdentityChange(standingHold(onHeld));
+  const box = await stoppedBox(0, { start });
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(start).toMatchObject({ status: "waiting", mark: null });
+  expect(start.heldConfirmation).toMatchObject({ by: "by_person" });
+  expect(onHeld).toHaveBeenCalledOnce();
+  const events = box.logs.map(({ event }) => event);
+  expect(events.filter((event) => event.startsWith("clock_start.confirm"))).toEqual([
+    "clock_start.confirmation_held",
+  ]);
 });
 
 it("confirms a waiting start as the box's date and time stand, setting nothing", async () => {

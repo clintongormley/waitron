@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readTaxpayer, withTransaction, type Database, type Transaction } from "@waitron/db";
-import type { IdentityChangeNote, IdentityChangeOutcome, SecondClock } from "@waitron/fiscal";
+import type {
+  IdentityChangeNote,
+  IdentityChangeOutcome,
+  IdentityChangeRefusalReason,
+  SecondClock,
+} from "@waitron/fiscal";
 import { AppError, type NodeId } from "@waitron/shared";
 import { withHourAdmission } from "./allocation-envelope.js";
 import {
@@ -20,10 +25,10 @@ import { projectHourHistory } from "./hour-history.js";
 import { encodeMinuteIdentity, EPOCH_MS, MINUTE_MS } from "./hour-identity.js";
 import { readHourRelease } from "./hour-release.js";
 import { withIdentityChangeAuthority } from "./identity-change-authority.js";
-import { readHeadProducer } from "./producer-change.js";
+import { notedForRunning, readHeadProducer } from "./producer-change.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
-import { PRODUCER_PENDING, softwareVersion, type SoftwareIdentity } from "./software-identity.js";
+import { PRODUCER_PENDING, type SoftwareIdentity } from "./software-identity.js";
 import "./errors.js";
 
 /** The producer and environment a backend files under. */
@@ -42,7 +47,7 @@ type IdentityChangePlan =
       sampledAt: { wallMs: number; monotonicMs: number };
     };
 
-function waiting(reason: string): never {
+function waiting(reason: IdentityChangeRefusalReason): never {
   throw new AppError("sif.identity_change_waiting", { reason });
 }
 
@@ -60,11 +65,7 @@ export async function planIdentityChange(
 ): Promise<IdentityChangePlan> {
   const producer = filing.identity.producer;
   if (typeof producer === "object" && "invalid" in producer) throw producer.invalid;
-  if (
-    producer === PRODUCER_PENDING ||
-    note.release !== softwareVersion() ||
-    note.producerTaxId !== producer.nif
-  )
+  if (producer === PRODUCER_PENDING || !notedForRunning(note, producer.nif))
     return { kind: "not-named" };
   const { environment } = filing;
   if (environment !== "production") return { kind: "nothing-to-open" };
@@ -107,7 +108,8 @@ export async function planIdentityChange(
 
 /**
  * Opens the installation `planIdentityChange` plans, on the planned minute, closing the open one
- * and its series. `mayOpen` is the host's check that this box alone serves as primary.
+ * and its series. The transaction first asks the host's `mayOpen`; a false answer refuses
+ * `not_sole_primary`.
  */
 export async function openIdentityChange(
   db: Database,

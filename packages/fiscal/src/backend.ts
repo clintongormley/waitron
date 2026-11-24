@@ -303,6 +303,24 @@ export type SecondClock =
  * note does not name this release, this producer, or the producer the open chain was filed under. */
 export type IdentityChangeOutcome = "opened" | "nothing-to-open" | "not-named";
 
+/** Why the clocks read did not vouch for the box's time. */
+export type ClockRefusalReason =
+  "clock_unconfirmed" | "second_clock_missing" | "clock_disagreement";
+
+/** Why `openIdentityChange` refused to open. */
+export type IdentityChangeRefusalReason =
+  | ClockRefusalReason
+  | "confirmation_stale"
+  | "clock_corrected"
+  | "head_moved"
+  | "minute_in_use"
+  | "history_invalid"
+  | "not_sole_primary";
+
+/** What `checkFilingIdentity` found of a note: a change it names still to open, or none left. */
+export type NotedIdentityChange =
+  { pending: true; leftover?: never } | { leftover: true; pending?: never };
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -513,9 +531,16 @@ export interface FiscalBackend {
   /**
    * Throws when this backend's producer settings are malformed, and, in production, when this
    * node's open chain was made under a different software producer from the one this backend files
-   * under. Reads only. Optional: a backend that names no producer omits it.
+   * under, unless `note` names that change: then it answers `pending`, and nothing may be recorded
+   * on that chain. Answers `leftover` when `note` names this release and producer and nothing is
+   * left to open, as once the change is made. Reads only. Optional: a backend that names no
+   * producer omits it.
    */
-  checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>;
+  checkFilingIdentity?(
+    tx: Transaction,
+    nodeId: NodeId,
+    note?: IdentityChangeNote | null,
+  ): Promise<NotedIdentityChange | undefined>;
 
   /**
    * When this node's open chain was filed under the producer `note` moves from, opens a new

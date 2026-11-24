@@ -16,7 +16,12 @@ import type { BoxHostClient, ClockSetAnswer as HostSetAnswer } from "./box-host-
 import type { EmailedIncident } from "./box-alert-email.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
-import type { ChainHeads, StartClockState } from "./start-clock-check.js";
+import {
+  confirmByPerson,
+  PERSON_CONFIRMATION_EVENTS,
+  type ChainHeads,
+  type StartClockState,
+} from "./start-clock-check.js";
 
 /** How far a set may land from its target, by the boot-time clock, and still be verified. */
 const VERIFY_MS = 2_000;
@@ -34,6 +39,19 @@ export function wallMovedAgainstSteady(
   now: { wallMs: number; monoMs: number },
 ): boolean {
   return !(Math.abs(now.wallMs - then.wallMs - (now.monoMs - then.monoMs)) <= STALE_MS);
+}
+
+/** Whether the box's clock stands as it was at this call: no set has been asked of the host since,
+ * and the wall clock has not moved against the steady clock. */
+export function clockStanding(deps: {
+  steps: () => number;
+  wall: () => number;
+  monotonic: () => number;
+}): () => boolean {
+  const reading = () => ({ wallMs: deps.wall(), monoMs: deps.monotonic() });
+  const then = reading();
+  const steps = deps.steps();
+  return () => deps.steps() === steps && !wallMovedAgainstSteady(then, reading());
 }
 
 /** Told after every set. A throw from `reanchor` keeps the step's row pending. */
@@ -129,7 +147,7 @@ export function clockCorrection(deps: {
   let turn: Promise<unknown> = Promise.resolve();
 
   function inTurn<T>(fn: () => Promise<T>): Promise<T> {
-    const result = turn.then(fn);
+    const result = turn.then(() => fn());
     turn = result.catch(() => {});
     return result;
   }
@@ -225,9 +243,11 @@ export function clockCorrection(deps: {
 
   /** A verified set at the start confirms it by a person; a failed heads read leaves the start as
    * it was. */
-  async function confirmByPerson(start: NonNullable<typeof deps.start>): Promise<void> {
+  async function confirmSet(start: NonNullable<typeof deps.start>): Promise<void> {
     try {
-      start.state.confirm("by_person", await deps.read((tx) => start.heads(tx)));
+      const done = confirmByPerson(start.state, await deps.read((tx) => start.heads(tx)));
+      if (done !== "confirmed")
+        deps.log("info", PERSON_CONFIRMATION_EVENTS[done], { source: "set" });
     } catch (error) {
       deps.log("warn", "clock_start.mark_failed", { errorCode: codeOf(error) });
     }
@@ -292,6 +312,8 @@ export function clockCorrection(deps: {
       const verified =
         answer.available && Math.abs(wallAfter - (targetMs + bootElapsed)) <= VERIFY_MS;
       const moved = Math.abs(stepMs) > MOVED_MS;
+      // A held confirmation was of the clock before the step.
+      if (moved) deps.start?.state.dropHeldConfirmation();
       if (!verified && moved) unverifiedStep(stepMs);
 
       unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
@@ -333,7 +355,7 @@ export function clockCorrection(deps: {
       }
       deps.log("info", "clock_correction.stepped", { source: input.source, stepMs, verified });
       if (verified && input.reason === "start" && deps.start !== undefined)
-        await confirmByPerson(deps.start);
+        await confirmSet(deps.start);
       return verified
         ? { set: true, confirmationId, stepMs, confirmedAt: after.instant.toISOString() }
         : { set: false, reason: "unverified" };

@@ -1,18 +1,25 @@
 import { FISCAL_SLOT, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import * as hourRelease from "@waitron/fiscal-verifactu/src/hour-release.js";
+import {
+  runningIdentity,
+  softwareVersion,
+} from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { seedNamedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { seedModuleSettings } from "../test/module-settings.js";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
-import { beforeAll, afterAll, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, ne, sql } from "drizzle-orm";
 import {
   nodes,
   openVenueDatabase,
   readTaxpayer,
   sales,
+  stampDeployment,
   withTransaction,
+  writeNodeMembership,
   type Transaction,
 } from "@waitron/db";
 import { nodeId, saleId } from "@waitron/shared";
@@ -24,8 +31,16 @@ import { provisionOrderVenue, billlessSale, type OrderVenue } from "./testing/or
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
-import { TEST_PRODUCER } from "./testing/test-producer.js";
+import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
+import { applyVenueUnderInstallation } from "./testing/bill-venue.js";
+import {
+  acceptFiledRecords,
+  filedRecordOf,
+  renameFixtureInstallation,
+} from "./testing/fiscal-fixtures.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { loadConfig } from "./config.js";
+import { systemClock } from "./till-backend.js";
 import { checkUpgradeSale } from "./upgrade-sale.js";
 import * as upgradeChecks from "./upgrade-checks.js";
 
@@ -51,11 +66,19 @@ afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
-async function fixture(synchronised = true, earlierSales = 1, regime = "verifactu") {
+async function fixture(
+  synchronised = true,
+  earlierSales = 1,
+  regime = "verifactu",
+  from: { db: typeof source; nodeId: string; env?: Record<string, string> } = {
+    db: source,
+    nodeId: venue.cfg.nodeId,
+  },
+) {
   const state = await mkdtemp(join(root, "copy-"));
   await mkdir(join(state, "venue"));
-  await source.db.archiveTo(join(state, "venue", "venue.db"));
-  await source.node.archiveTo(join(state, "venue", "node.db"));
+  await from.db.db.archiveTo(join(state, "venue", "venue.db"));
+  await from.db.node.archiveTo(join(state, "venue", "node.db"));
   const copy = await openVenueDatabase(join(state, "venue"));
   try {
     for (let made = 1; made < earlierSales; made += 1)
@@ -96,7 +119,7 @@ async function fixture(synchronised = true, earlierSales = 1, regime = "verifact
     ...TEST_PRODUCER,
     WAITRON_ENV: "preproduction",
     WAITRON_STATE_DIR: state,
-    WAITRON_NODE_ID: venue.cfg.nodeId,
+    WAITRON_NODE_ID: from.nodeId,
     WAITRON_MIGRATIONS_DIR: join(state, "migrations"),
     WAITRON_HTTP_PORT: String(held.port),
     WAITRON_HTTP_LANDING_PORT: "0",
@@ -104,6 +127,7 @@ async function fixture(synchronised = true, earlierSales = 1, regime = "verifact
     WAITRON_TLS_KEY_FILE: join(state, "key.pem"),
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    ...from.env,
   };
   return {
     env,
@@ -335,4 +359,93 @@ it("accepts a sale recorded just after another record joined the chain", async (
     recorder.mockRestore();
     await f.close();
   }
+});
+
+describe("a production copy whose record another producer filed", () => {
+  useTestProducer();
+  const PRODUCER = "11111111H";
+  const INSTALLATION = "0CNN8";
+  let changing: OrderVenue;
+  const earlier = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    resetPerTest: false,
+    setup: async (db) => {
+      changing = await provisionOrderVenue(db, {
+        apply: applyVenueUnderInstallation(INSTALLATION),
+      });
+      const { nodeId } = changing.cfg;
+      renameFixtureInstallation(db, INSTALLATION);
+      await writeNodeMembership(db, signedMembershipDoc(0, { signerNodeId: nodeId }));
+      await stampDeployment(db, "production");
+      const backend = new VerifactuBackend({
+        identity: runningIdentity("production"),
+        clock: systemClock(),
+        db,
+        environment: "production",
+        deploymentEnvironment: "production",
+      });
+      for (let sale = 0; sale < 2; sale++) await billlessSale({ ...changing, backend });
+      // A production start with a record to file and no certificate answers /health 503.
+      acceptFiledRecords(db);
+    },
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("opens the installation the copy's note names, and its sale starts the new chain", async () => {
+    // A run from source carries no release date, and opens nothing.
+    vi.spyOn(hourRelease, "readHourRelease").mockReturnValue({
+      sourceCommit: "0000000000000000000000000000000000000000",
+      committedAt: "2026-10-15T00:00:00Z",
+      generator: "minute",
+      generatorSha256: "",
+      instantMs: Date.parse("2026-10-15T00:00:00Z"),
+    });
+    // The backend reads its producer from the process's environment.
+    vi.stubEnv("WAITRON_PRODUCER_TAX_ID", PRODUCER);
+    const f = await fixture(true, 1, "verifactu", {
+      db: earlier,
+      nodeId: changing.cfg.nodeId,
+      env: {
+        WAITRON_ENV: "production",
+        WAITRON_PRODUCER_TAX_ID: PRODUCER,
+        WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+      },
+    });
+    const note = join(f.env.WAITRON_STATE_DIR, "identity-change.json");
+    try {
+      await writeFile(
+        note,
+        JSON.stringify({
+          version: 1,
+          release: softwareVersion(),
+          producerTaxId: PRODUCER,
+          fromProducerTaxId: TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID,
+        }),
+      );
+      const result = await checkUpgradeSale(f.config, f.env, { socketPath: f.socketPath });
+      expect(result).toMatchObject({ total: "1.00", fiscalBackend: "verifactu", fiscalRecords: 3 });
+      const copy = await openVenueDatabase(f.config.venueDir);
+      try {
+        const [sale] = copy.venue.all<{ order: string }>(
+          sql`select working_order_id as "order" from sales where id = ${result.saleId}`,
+        );
+        const record = filedRecordOf(copy.venue, sale!.order);
+        expect(record).toEqual({
+          first: 1,
+          producer: PRODUCER,
+          installation: expect.stringMatching(/^[0-9A-Z]{5}$/),
+        });
+        expect(record.installation).not.toBe(INSTALLATION);
+      } finally {
+        await copy.close();
+      }
+      await expect(access(note)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await f.close();
+    }
+  });
 });

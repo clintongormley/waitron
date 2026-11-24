@@ -76,6 +76,7 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     ["start", "staff_notice.clock.unconfirmed"],
     ["clock_jumped", "staff_notice.clock.unconfirmed_jumped"],
     ["future_date_refused", "staff_notice.clock.unconfirmed_future_date"],
+    ["identity_change", "staff_notice.clock.unconfirmed_identity_change"],
   ] as const)("words the wait by its cause %s, with its count", (cause, key) => {
     setLocale(locale);
     expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } })).toEqual({
@@ -96,6 +97,20 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
           "The tax agency refused a sale because the box's date was ahead. Payments wait until someone checks the time.",
         "es-ES":
           "Hacienda rechazó una venta porque la fecha del servidor iba adelantada. Los cobros esperan hasta que alguien compruebe la hora.",
+      }[locale],
+      hint: words["staff_notice.check_time"],
+    });
+  });
+
+  it("words a wait for a new fiscal installation with no device count, and Check the time", () => {
+    setLocale(locale);
+    const notice = { code: "clock.unconfirmed", params: { agreed: 1, cause: "identity_change" } };
+    expect(staffNoticeText(notice, true)).toEqual({
+      main: {
+        "en-GB":
+          "Payments wait: the box must open new invoice numbering first, once its time is confirmed",
+        "es-ES":
+          "Los cobros esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se confirme su hora",
       }[locale],
       hint: words["staff_notice.check_time"],
     });

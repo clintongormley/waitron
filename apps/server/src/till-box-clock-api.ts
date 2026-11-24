@@ -24,7 +24,12 @@ import {
 } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { Logger } from "./logger.js";
-import type { ChainHeads, StartClockState } from "./start-clock-check.js";
+import {
+  confirmByPerson,
+  PERSON_CONFIRMATION_EVENTS,
+  type ChainHeads,
+  type StartClockState,
+} from "./start-clock-check.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
 import { parseOverrideField } from "./till-api.js";
@@ -44,7 +49,7 @@ export interface TillBoxClockDeps {
   /** The start's clock check. Until it is confirmed by the internet, staff are admitted whatever
    * the start-up window says (plan A1420 D1). */
   start?: {
-    state: Pick<StartClockState, "status" | "confirm" | "mark">;
+    state: Pick<StartClockState, "status" | "confirm" | "mark" | "heldConfirmation">;
     heads(tx: Transaction): Promise<ChainHeads>;
   };
 }
@@ -268,8 +273,9 @@ export function mountTillBoxClockApi(
         personId: string,
         now: ReturnType<TrustedClock["now"]>,
         heads: ChainHeads,
+        done: ReturnType<typeof confirmByPerson>,
       ) =>
-        log("info", "clock_start.confirmed", {
+        log("info", PERSON_CONFIRMATION_EVENTS[done], {
           source: asAdmin ? "admin" : "staff",
           person: personId,
           device: session.deviceId,
@@ -301,12 +307,12 @@ export function mountTillBoxClockApi(
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;
               const heads = await start.heads(tx);
-              start.state.confirm("by_person", heads);
-              return { personId, now, heads };
+              const done = confirmByPerson(start.state, heads);
+              return { personId, now, heads, done };
             }),
           ),
         );
-        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads, confirmed.done);
         return c.json(
           { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,
@@ -329,12 +335,12 @@ export function mountTillBoxClockApi(
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;
               const heads = await start!.heads(tx);
-              start!.state.confirm("by_person", heads);
-              return { personId, now, heads };
+              const done = confirmByPerson(start!.state, heads);
+              return { personId, now, heads, done };
             }),
           ),
         );
-        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads, confirmed.done);
         return c.json(
           { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,

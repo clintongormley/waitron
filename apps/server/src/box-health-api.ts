@@ -28,7 +28,12 @@ import "./errors.js";
 import type { FreedSpace } from "./free-space-now.js";
 import type { Logger } from "./logger.js";
 import { requestFromBox } from "./request-from-box.js";
-import type { ChainHeads, StartClockState } from "./start-clock-check.js";
+import {
+  confirmByPerson,
+  PERSON_CONFIRMATION_EVENTS,
+  type ChainHeads,
+  type StartClockState,
+} from "./start-clock-check.js";
 import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 
 export interface BoxHealthApiDeps {
@@ -50,7 +55,7 @@ export interface BoxHealthApiDeps {
     correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "set" | "steps">;
     /** The start's clock check; without it no confirmation is admitted. */
     start?: {
-      state: Pick<StartClockState, "status" | "confirm">;
+      state: Pick<StartClockState, "status" | "confirm" | "heldConfirmation">;
       heads(tx: Transaction): Promise<ChainHeads>;
     };
   };
@@ -299,11 +304,11 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
           if (clockUnusableAt(backend, now)) throw refuse("stopped");
           if (start === undefined || start.state.status !== "waiting") throw refuse("not_stopped");
           const heads = await start.heads(tx);
-          start.state.confirm("by_person", heads);
-          return { now, heads };
+          const done = confirmByPerson(start.state, heads);
+          return { now, heads, done };
         }),
       );
-      log("info", "clock_start.confirmed", {
+      log("info", PERSON_CONFIRMATION_EVENTS[confirmed.done], {
         source: "admin",
         person: authorizedBy,
         boxAt: confirmed.now.instant.toISOString(),

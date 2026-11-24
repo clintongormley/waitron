@@ -358,8 +358,7 @@ pone el reloj del servidor a esa hora, y **El servidor** mantiene el reloj del s
 hora de la caja mientras el servidor espera a que se confirme su hora y los cobros no
 están parados además porque el reloj marca una fecha
 anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
-la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cada uno de ellos
-que el servidor acepta reanuda los cobros. Cuando el servidor pone su reloj en hora, la campana y el
+la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del servidor. Cuando el servidor pone su reloj en hora, la campana y el
 correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
 dispositivos no lo impiden.
 
@@ -381,9 +380,13 @@ no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacien
 venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
 hora en esta página, o el personal usa **Comprobar la hora** en una caja.
 
+Cuando la fila **Reloj** dice **El productor del software nuevo necesita una nueva instalación
+fiscal**, que los dispositivos coincidan con el servidor tampoco termina la espera: confirma o corrige
+la hora de las mismas maneras.
+
 El servidor confirma su hora por sí solo en cuanto su [servicio de hora](box-status.md#clock-service)
 contacta con un servidor de hora por internet, o, salvo si espera por una venta
-rechazada, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
+rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 
 Un administrador puede confirmarla antes en esta página:

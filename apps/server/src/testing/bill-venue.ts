@@ -122,6 +122,17 @@ export interface BillVenue {
 const quiet: Logger = () => {};
 const appDatabases = new WeakMap<Hono, Database>();
 
+/** Applies a venue whose series codes end in `name`, for `renameFixtureInstallation` (./fiscal-fixtures.ts) to match. */
+export function applyVenueUnderInstallation(name: string): typeof applyVenue {
+  return (actions, deps) =>
+    applyVenue(
+      actions.map((action) =>
+        action.kind === "create-series" ? { ...action, code: `${action.code}-${name}` } : action,
+      ),
+      deps,
+    );
+}
+
 export async function provisionBillVenue(
   db: Database,
   // Unset, a historical fiscal identity, as existing-sale suites want. A suite whose box must pass a
