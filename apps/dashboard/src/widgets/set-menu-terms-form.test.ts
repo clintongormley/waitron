@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { DashboardApi } from "../api/client.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import "../screens/menus-screen.js";
+import "./set-menu-terms-form.js";
 
 useLocale("en-GB");
 afterEach(cleanupWidgets);
