@@ -225,7 +225,7 @@ describe("demo seed end-to-end", () => {
         (entry) => entry.kind === "options" || (entry.kind === "extras" && entry.minPicks > 0),
       );
     // Products seeded under the frozen clock share one creation time, so the list's order among
-    // them follows their random ids: pick the second menu's dish by what it is, sold in whole
+    // them follows their IDs: pick the second menu's dish by what it is, sold in whole
     // portions, which a counter order stores one line per dish.
     const wholePortions = ({ unit }: (typeof read.products)[number]): boolean =>
       unit.hardwareUnit === null && unit.precision === 0 && unit.measure !== true;

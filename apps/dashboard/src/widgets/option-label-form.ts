@@ -11,7 +11,7 @@ import {
 } from "@waitron/ui";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { ContentLanguages } from "@waitron/shared";
+import { newRowId, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -212,7 +212,7 @@ export class OptionLabelForm extends LitElement {
       value: {
         // A new option gets its id here, not from the server: the list may name it as its default
         // in the same save, and `parseOptionListInput` refuses a default naming no submitted label.
-        id: this.value?.id ?? crypto.randomUUID(),
+        id: this.value?.id ?? newRowId(),
         name: this.name,
         customerName: { ...this.customerName },
         kitchenName: this.kitchenName,

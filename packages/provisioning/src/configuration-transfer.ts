@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import {
   AppError,
+  newRowId,
   nodeId as brandNodeId,
   businessDayAt,
   cutoverForBusinessDay,
@@ -910,8 +911,7 @@ export async function importConfigurationTables(
   for (const [declaration, rows] of checked) {
     for (const row of rows) {
       if (typeof row.id === "string") {
-        const mapped =
-          declaration.name === "roles" ? await importAccessRole(tx, row) : randomUUID();
+        const mapped = declaration.name === "roles" ? await importAccessRole(tx, row) : newRowId();
         idMap.set(row.id, mapped);
         if (declaration.name === "persons" && row.id === bundle.sourceOperatorId) continue;
         if (typeof row.person_id === "string" && sourceOperatorIds.has(row.person_id)) continue;

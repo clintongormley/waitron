@@ -1,5 +1,5 @@
 import "./errors.js";
-import { workingOrderLines, type Transaction, kitchenStations } from "@waitron/db";
+import { workingOrderLines, newId, type Transaction, kitchenStations } from "@waitron/db";
 import {
   type ResolvedExtraList,
   readProductModifiers,
@@ -41,7 +41,6 @@ import {
 } from "@waitron/shared";
 import { offeredKey } from "@waitron/venue-service";
 import { and, inArray, eq } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
@@ -710,7 +709,7 @@ export async function priceOrderLines(
 
   // Pre-generated ids let extras name their dish before either row is written.
   // gross.lines lists each dish before its extras, as chunked inserts need for the parent key.
-  const ids = gross.lines.map(() => randomUUID());
+  const ids = gross.lines.map(() => newId());
   const byLineNo = new Map(gross.lines.map((line, i) => [line.lineNo, ids[i]!]));
   const lineRows = gross.lines.map((line, i) => {
     const meta = lineMeta[i]!;

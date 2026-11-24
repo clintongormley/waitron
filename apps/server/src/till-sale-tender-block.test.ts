@@ -1,7 +1,6 @@
-import crypto, { randomUUID } from "node:crypto";
-import { syncBuiltinESMExports } from "node:module";
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tenders, withTransaction } from "@waitron/db";
@@ -36,7 +35,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
-import { descendingIds } from "./testing/descending-ids.js";
+import { mockRowIdOrder } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
@@ -334,8 +333,6 @@ describe("readTenderBlock", () => {
   });
 
   it("shows the tender taken first when two were taken in the same millisecond", async () => {
-    const descending = descendingIds();
-
     const { block, written } = await withTransaction(suite.db, async (tx) => {
       const workingOrderId = randomUUID();
       await createOpenOrder(tx, cfg, workingOrderId, [{ menuItemId, quantity: "1" }], null, {
@@ -358,8 +355,7 @@ describe("readTenderBlock", () => {
         settlement: { kind: "deferred" },
       });
       const settledAt = new Date();
-      const tenderIds = vi.spyOn(crypto, "randomUUID").mockImplementation(descending);
-      syncBuiltinESMExports();
+      const restoreIds = mockRowIdOrder("descending");
       try {
         await settleSale(tx, {
           saleId,
@@ -369,8 +365,7 @@ describe("readTenderBlock", () => {
           ],
         });
       } finally {
-        tenderIds.mockRestore();
-        syncBuiltinESMExports();
+        restoreIds();
       }
       const rows = await tx
         .select({ id: tenders.id })

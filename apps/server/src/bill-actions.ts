@@ -1,7 +1,6 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { randomUUID } from "node:crypto";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
-import { workingOrderLines, workingOrders } from "@waitron/db";
+import { newId, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
@@ -330,7 +329,7 @@ export async function moveDishes(
 
   let destinationId = toBillId;
   if (destinationId === null) {
-    destinationId = randomUUID();
+    destinationId = newId();
     await createOpenOrder(tx, cfg, destinationId, [], await orderTableLabel(tx, fromBillId), {
       partyId: path.partyId,
       existingService: true,

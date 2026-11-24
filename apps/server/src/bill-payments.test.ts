@@ -5,8 +5,7 @@ import { seedPerson, seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import crypto, { randomUUID } from "node:crypto";
-import { syncBuiltinESMExports } from "node:module";
+import { randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -89,7 +88,7 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import { createTable } from "./testing/live-table.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
-import { descendingIds } from "./testing/descending-ids.js";
+import { descendingIds, mockRowIdOrder } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { readSettledTicket, printSaleReceipt, reprintSale } from "./till-sale.js";
@@ -3202,9 +3201,7 @@ describe("the receipt's payments, taken within one millisecond", () => {
       });
     }
 
-    const tenderId = descendingIds();
-    const tenderIds = vi.spyOn(crypto, "randomUUID").mockImplementation(tenderId);
-    syncBuiltinESMExports();
+    const restoreIds = mockRowIdOrder("descending");
     try {
       await inTx((tx) =>
         issueIfFullyPaid(
@@ -3216,8 +3213,7 @@ describe("the receipt's payments, taken within one millisecond", () => {
         ),
       );
     } finally {
-      tenderIds.mockRestore();
-      syncBuiltinESMExports();
+      restoreIds();
     }
 
     const tenderIdsTaken = (

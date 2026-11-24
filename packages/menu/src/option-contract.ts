@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isUuid, newRowId } from "@waitron/shared";
 import type { OptionLabel, OptionList, OptionSelection } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { contractInput } from "./contract-input.js";
@@ -47,7 +46,7 @@ export function parseOptionListInput(
     const field = `labels.${index}`;
     const label = record(entry, field);
     keys(label, ["id", "name", "customerName", "kitchenName", "available"], field);
-    const labelId = label.id === undefined ? randomUUID() : id(label.id, `${field}.id`);
+    const labelId = label.id === undefined ? newRowId() : id(label.id, `${field}.id`);
     if (seen.has(labelId)) invalid(`${field}.id`);
     seen.add(labelId);
     return {

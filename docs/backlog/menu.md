@@ -657,7 +657,7 @@ text differ, this text wins. The editor is `apps/dashboard/src/widgets/product-e
    sorted.** Today they read in the venue's first content language (`locales[0]`,
    `apps/dashboard/src/widgets/product-editor.ts`), which is Catalan for a Catalan venue even with
    the dashboard in English, while "Each" comes from the dashboard's own strings
-   (`editor.unit_each`); and after Each they come in the order of their random ids
+   (`editor.unit_each`); and after Each they come in ID order
    (`packages/menu/src/units.ts`). Show each unit's name in the dashboard's language (falling
    back as other content does when a unit has none), Each first, the rest alphabetical. Read, not
    run, 2026-10-15.

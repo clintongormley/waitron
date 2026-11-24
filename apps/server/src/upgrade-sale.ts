@@ -2,6 +2,7 @@ import { randomUUID, randomInt } from "node:crypto";
 import { request } from "node:https";
 import { eq } from "drizzle-orm";
 import {
+  newId,
   openVenueDatabase,
   withTransaction,
   persons,
@@ -213,7 +214,7 @@ export async function checkUpgradeSale(
       req.on("error", reject);
       req.end(body === undefined ? undefined : JSON.stringify(body));
     });
-  const orderId = randomUUID();
+  const orderId = newId();
   let ticket: { total: string; invoiceNumber: string };
   try {
     await call("/health");

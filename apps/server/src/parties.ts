@@ -1,13 +1,14 @@
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
   deferredClosures,
   diningTables,
   invoiceSeries,
+  newId,
   nowIso,
   sales,
   serviceCommands,
@@ -212,7 +213,7 @@ export async function insertPartyBill(
   partyId: string,
   keepDining?: Dining,
 ): Promise<string> {
-  const billId = randomUUID();
+  const billId = newId();
   const zoneId = await partyZone(tx, partyId);
   await createOpenOrder(tx, cfg, billId, [], null, {
     zoneId: zoneId ?? undefined,

@@ -7,7 +7,14 @@
  * and with it `@waitron/db` and Node builtins. A deep import is safe only while the module it reaches
  * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
-import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  newRowId,
+  subtractDecimal,
+  sumDecimals,
+} from "@waitron/shared";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import type { Decimal, Dining, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
@@ -236,7 +243,7 @@ export class WorkingOrderStore {
   readonly #splitFamilies = new WeakMap<OrderLine, readonly OrderLine[]>();
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
   /** The idempotency key park and pay send, so a retried request settles the order once. */
-  #id: string = crypto.randomUUID();
+  #id: string = newRowId();
   #label?: string;
   #total: Decimal | null = null;
   /**
@@ -948,7 +955,7 @@ export class WorkingOrderStore {
     this.#loadGeneration++;
     this.#editLock = null;
     this.#lines.length = 0;
-    this.#id = crypto.randomUUID();
+    this.#id = newRowId();
     this.#fullInvoiceOrderId = undefined;
     this.#label = undefined;
     this.#dining = this.#startingDining;

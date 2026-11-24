@@ -71,6 +71,7 @@ it("stores two successive replacements under the original invoice identity witho
     .values(rowFor(3, first!, first!.id))
     .returning();
 
+  expect([original!.id, first!.id, second!.id].map((id) => id[14])).toEqual(["4", "4", "4"]);
   expect(first!.correctsRegistroId).toBe(original!.id);
   expect(second!.correctsRegistroId).toBe(first!.id);
   for (const replacement of [first!, second!]) {

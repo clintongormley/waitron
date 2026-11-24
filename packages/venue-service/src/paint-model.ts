@@ -6,7 +6,7 @@ export type Paint = { periodId: string | null; startsAt: string; endsAt: string 
 const STEP_MINUTES = 15;
 const DAY_MINUTES = 1440;
 // `layerPaint` treats a null period as unpainted, so stored Closed travels through it under an id
-// no period can have: period ids come from `newId` (packages/db/src/schema/columns.ts), a random UUID.
+// no period can have: stored period IDs are UUIDs.
 const CLOSED = "closed";
 
 function toLayer(range: Paint, keepClosed: boolean) {

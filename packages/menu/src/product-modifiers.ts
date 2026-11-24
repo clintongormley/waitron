@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, newRowId } from "@waitron/shared";
 import { extraLists, optionLists, productModifiers } from "@waitron/db";
 import type { ProductModifierRef } from "@waitron/shared";
 import "./errors.js";
@@ -126,7 +125,7 @@ export async function writeProductModifiers(
   if (normalised.length === 0) return;
   await tx.insert(productModifiers).values(
     normalised.map((ref, sort) => ({
-      id: randomUUID(),
+      id: newRowId(),
       productId: product,
       sort,
       extraListId: ref.kind === "extras" ? ref.id : null,

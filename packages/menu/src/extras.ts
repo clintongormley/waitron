@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   extraListItems,
@@ -10,6 +9,7 @@ import {
 } from "@waitron/db";
 import {
   AppError,
+  newRowId,
   centsToDecimal,
   decimal,
   decimalToThousandths,
@@ -314,7 +314,7 @@ async function writeItems(
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
     await tx.insert(extraListItems).values({
-      id: item.id ?? randomUUID(),
+      id: item.id ?? newRowId(),
       listId: extraListId,
       productId: item.productId,
       maxQuantity: item.maxQuantity,
@@ -336,7 +336,7 @@ export async function createExtraList(
   const input = parseExtraListInput(value);
   const names = input.customerName === null ? {} : validateOptionalTranslations(input.customerName);
   input.customerName = Object.keys(names).length === 0 ? null : names;
-  const extraListId = randomUUID();
+  const extraListId = newRowId();
   await tx.insert(extraLists).values({ id: extraListId, ...listValues(input) });
   await writeItems(tx, extraListId, input);
   return getExtraList(tx, extraListId);

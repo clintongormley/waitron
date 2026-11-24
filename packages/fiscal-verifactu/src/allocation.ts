@@ -1,16 +1,9 @@
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import {
-  deployment,
-  invoiceSeries,
-  newId,
-  nodes,
-  now,
-  readTaxpayer,
-  type Transaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, nodes, now, readTaxpayer, type Transaction } from "@waitron/db";
 import { readOperationAuthority, type ProvisionedNode } from "@waitron/module";
 import {
   validateAllocationEnvelope,
@@ -300,7 +293,7 @@ async function activate(
   const bases = dormantBases ?? (await liveSeriesBases(tx, node));
   authorise?.();
   const retiredAt = now();
-  const sifId = newId();
+  const sifId = randomUUID();
   await tx
     .update(verifactuIdentities)
     .set({ revocadoEn: retiredAt })
@@ -313,7 +306,7 @@ async function activate(
     .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)));
   const series = [...validated.allocation.series]
     .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
-    .map((s) => ({ id: newId(), ...s }));
+    .map((s) => ({ id: randomUUID(), ...s }));
   for (const entry of series)
     await tx.insert(invoiceSeries).values({ ...entry, nodeId: node.nodeId });
   const result: ActivationResult = { activationEventId: validated.approval.eventId, sifId, series };

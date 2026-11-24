@@ -88,7 +88,7 @@ describe("category authoring", () => {
       primaryCategoryId: null,
     });
     expect((await app((tx) => listProducts(tx)))[0]!.categoryId).toBeNull();
-    // Sorted by id: two rows written in one millisecond tie on `created_at`, and the random id then
+    // Sorted by id: two rows written in one millisecond tie on `created_at`, and the ID then
     // decides their order (operations.test.ts, "settles a created_at tie").
     expect(byId(await app((tx) => listCategories(tx)))).toEqual(byId([food, drinks]));
   });

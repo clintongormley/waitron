@@ -22,6 +22,7 @@ export {
   deviceId,
   fiscalRecordId,
   isUuid,
+  newRowId,
   nodeId,
   normaliseUuid,
   saleId,

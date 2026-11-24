@@ -1,5 +1,5 @@
 import "./errors.js";
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { and, eq, gt, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import {
   type Database,
@@ -12,6 +12,7 @@ import {
   nowIso,
   printAgents,
   withTransaction,
+  newId,
 } from "@waitron/db";
 import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -722,7 +723,7 @@ export async function selfEnrolNodeAgent(
   }
 
   // The `(node_id)` unique index refuses a second row for the same node.
-  const agentId = randomUUID();
+  const agentId = newId();
   await tx.insert(printAgents).values({
     id: agentId,
     nodeId: input.nodeId,

@@ -1,6 +1,5 @@
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
@@ -10,6 +9,7 @@ import {
   saleVoids,
   sales,
   taxpayer,
+  newId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimal } from "@waitron/shared";
@@ -194,7 +194,7 @@ export async function recordReplacement(
     });
   }
 
-  const copiedId = new Map(lines.map((line) => [line.id, randomUUID()]));
+  const copiedId = new Map(lines.map((line) => [line.id, newId()]));
   await insertInChunks(
     tx,
     saleLines,

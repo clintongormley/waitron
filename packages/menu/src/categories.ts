@@ -1,5 +1,5 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
-import { AppError, colorOrNull } from "@waitron/shared";
+import { AppError, colorOrNull, newRowId } from "@waitron/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { assertCategoryNamesFree } from "./category-names.js";
@@ -70,7 +70,7 @@ function categoryColorInput(value: unknown): string | null {
 export async function createCategory(tx: Transaction, input: CategoryInput): Promise<Category> {
   const name = categoryName(input.name);
   const color = input.color === undefined ? null : categoryColorInput(input.color);
-  const id = crypto.randomUUID();
+  const id = newRowId();
   await validateParent(tx, id, input.parentId ?? null);
   await assertCategoryNamesFree(tx, [{ id, name, parentId: input.parentId ?? null }]);
   await tx.insert(categories).values({ id, name, parentId: input.parentId ?? null, color });

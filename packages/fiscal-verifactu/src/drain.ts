@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
-import { newId, readDeploymentEnvironment, withTransaction } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { readDeploymentEnvironment, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -1246,7 +1247,7 @@ async function openTechnicalIncident(
 ): Promise<void> {
   await tx.execute(sql`
     insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
-    values (1, ${now.toISOString()}, 0, ${newId()})
+    values (1, ${now.toISOString()}, 0, ${randomUUID()})
     on conflict (id) do update set technical_incident_token = excluded.technical_incident_token
   `);
   await markTechnicalCohort(tx, environment, now, attemptedIds);

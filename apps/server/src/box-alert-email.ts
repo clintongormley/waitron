@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import {
@@ -5,7 +6,6 @@ import {
   enqueueMail,
   incidents,
   MAIL_LIFETIME_MS,
-  newId,
   outgoingMail,
   readVenue,
   withTransaction,
@@ -310,7 +310,7 @@ export function createBoxEmailDuty(deps: {
             ? key
             : code === BACKUP_REFUSED_EMAIL_CODE
               ? `${code}:${deps.backupStopped()!.since}`
-              : newId(),
+              : randomUUID(),
         ...(incident ? { incidentId: key.slice("incident:".length) } : {}),
         queuedFor: new Set(),
         code,

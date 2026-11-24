@@ -5,8 +5,7 @@ import { toDraftLineInput } from "./draft-lines.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
-// A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // A gross-1.50 espresso at the general rate.
 const coffee: TillProduct = {
@@ -793,8 +792,8 @@ describe("WorkingOrderStore", () => {
   it("mints a uuid id for a fresh store, unique per instance", () => {
     const a = new WorkingOrderStore();
     const b = new WorkingOrderStore();
-    expect(a.id).toMatch(UUID_RE);
-    expect(b.id).toMatch(UUID_RE);
+    expect(a.id).toMatch(ROW_ID);
+    expect(b.id).toMatch(ROW_ID);
     expect(a.id).not.toBe(b.id); // a new basket is a new working order
   });
 
@@ -804,7 +803,7 @@ describe("WorkingOrderStore", () => {
     s.addProduct(coffee, "1");
     s.clear();
     expect(s.id).not.toBe(before); // a cleared basket is a new working order
-    expect(s.id).toMatch(UUID_RE);
+    expect(s.id).toMatch(ROW_ID);
     expect(s.lines).toHaveLength(0);
   });
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { SQLInputValue } from "node:sqlite";
 import { sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
-import { openVenueDatabase, withTransaction, type Transaction } from "@waitron/db";
+import { newId, openVenueDatabase, withTransaction, type Transaction } from "@waitron/db";
 import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { checkFiscalChains } from "@waitron/fiscal-verifactu/src/handover-chain-check.js";
 import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
@@ -127,7 +127,7 @@ export async function growFiscal(
         const batch = Math.min(remaining, BATCH_SIZE);
         await withTransaction(db, async (tx) => {
           for (let index = 0; index < batch; index++) {
-            const saleId = randomUUID();
+            const saleId = newId();
             number++;
             const saleValues = commas(
               saleColumns.map(({ name, clear }) => {

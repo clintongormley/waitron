@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
+  newId,
   insertInChunks,
   lineServiceCancellations,
   sales,
@@ -119,7 +119,7 @@ async function openSplitBill(
     .select({ receiptLocale: workingOrders.receiptLocale })
     .from(workingOrders)
     .where(eq(workingOrders.id, fromBillId));
-  const billId = randomUUID();
+  const billId = newId();
   const { billNumber } = await createOpenOrder(
     tx,
     cfg,
@@ -151,12 +151,12 @@ export async function copyBillDishes(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromBillId))
     .orderBy(workingOrderLines.lineNo);
-  const copyOf = new Map(rows.map((row) => [row.id, randomUUID()]));
+  const copyOf = new Map(rows.map((row) => [row.id, newId()]));
   // The originals keep their cohorts, and `(cohort_id, cohort_ordinal)` is unique.
   const cohorts = new Map<string, string>();
   const cohortFor = (cohortId: string): string => {
     let copy = cohorts.get(cohortId);
-    if (copy === undefined) cohorts.set(cohortId, (copy = randomUUID()));
+    if (copy === undefined) cohorts.set(cohortId, (copy = newId()));
     return copy;
   };
   await insertInChunks(

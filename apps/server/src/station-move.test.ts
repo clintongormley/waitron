@@ -1,3 +1,4 @@
+import { mockRowIdOrder } from "./testing/descending-ids.js";
 import { unboundLineCohort } from "./testing/portion-bill.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
@@ -234,26 +235,26 @@ async function burger() {
   return { partyId, tabId, item: item! };
 }
 
-/** Orders Burgers on one bill until two of its lines have ids that sort against their line
- *  numbers, and returns them: `first` has the lower line number and the larger id. */
+/** The first line has the lower line number and the larger ID. */
 async function burgersAgainstIds(prefix: string) {
   const tableId = await venue.table(`${prefix}-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
-  for (let round = 0; round < 20; round++) {
+  const restoreIds = mockRowIdOrder("descending");
+  try {
     await orderForParty(venue, partyId, ["Burger"], tabId);
-    const lines = await inTx(venue, (tx) =>
-      tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, tabId))
-        .orderBy(workingOrderLines.lineNo),
-    );
-    for (let i = 0; i < lines.length; i++)
-      for (let j = i + 1; j < lines.length; j++)
-        if (lines[i]!.id > lines[j]!.id)
-          return { partyId, tabId, first: lines[i]!.id, second: lines[j]!.id };
+    await orderForParty(venue, partyId, ["Burger"], tabId);
+  } finally {
+    restoreIds();
   }
-  throw new Error("no line pair whose ids run against their line numbers");
+  const [first, second] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo),
+  );
+  expect(first!.id > second!.id).toBe(true);
+  return { partyId, tabId, first: first!.id, second: second!.id };
 }
 
 async function snapshot(tabId: string, itemId: string) {
