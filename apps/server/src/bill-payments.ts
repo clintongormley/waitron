@@ -2049,15 +2049,25 @@ export async function takeBillPayment(
   operator: { personId: string; sessionId: string },
   basket?: CounterPayment,
 ): Promise<BillPaymentResult | SettledBill> {
-  // Awaited only while `since()` names a refusal: otherwise the payment enters the write queue in
-  // this turn.
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     (tx) =>
       takeBillPaymentWithin(tx, deps, cfg, workingOrderId, req, operator, { preRead, basket }),
     deps.log,
   );
+}
+
+/**
+ * The full-disk refusal a payment reads before it opens its transaction, asked of the disk only
+ * while `since()` names a refusal. Otherwise it is `false` with no promise, so a caller that awaits
+ * only a promise enters the write queue in its own turn.
+ */
+export function diskFullBeforePayment(
+  deps: Pick<BillPaymentDeps, "disk">,
+): false | Promise<boolean> {
+  return deps.disk !== undefined && deps.disk.since() !== null && deps.disk.full();
 }
 
 /** What {@link takeBillPaymentIn} may be told besides the request. */

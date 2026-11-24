@@ -6310,3 +6310,88 @@ it("files the placed bill's saved full invoice once when a reader payment is ret
   expect(await saleOf(id)).toHaveLength(1);
   expect(fiscalRecordCount(id)).toBe(1);
 });
+
+describe("A1515 pay for items over HTTP", () => {
+  /** A party's bill holding three salads on one line, then a paella. */
+  async function threeSaladsAndPaella(): Promise<{ billId: string; partyId: string }> {
+    const billId = await inTx(async (tx) => {
+      const table = await createTable(tx, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      });
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      await writeGroupedLines(tx, venue.cfg, tabId, [
+        { menuItemId: offer("Salad"), quantity: "3" },
+        { menuItemId: offer("Paella"), quantity: "1" },
+      ]);
+      return tabId;
+    });
+    const [row] = await inTx((tx) =>
+      tx
+        .select({ partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    return { billId, partyId: row!.partyId! };
+  }
+
+  it("previews, then takes, cash for one of three salads on a bill of their own", async () => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+    const picks = [{ lineId: salad, quantity: "1" }];
+
+    const preview = await request("POST", `/api/working-orders/${billId}/item-payments/preview`, {
+      picks,
+      method: "cash",
+      tendered: "20.00",
+    });
+    expect(preview).toEqual({
+      status: 200,
+      json: { total: "12.00", applied: "12.00", tip: "0.00", change: "8.00" },
+    });
+
+    const paid = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks,
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      method: "cash",
+      tendered: "20.00",
+      applied: "12.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    const newBill = paid.json.billId as string;
+    expect(paid.json.payment).toMatchObject({
+      outcome: "received",
+      payment: { method: "cash", applied: "12.00", change: "8.00" },
+      balance: { workingOrderId: newBill, status: "settled", total: "12.00" },
+    });
+    expect(await statusOf(billId)).toBe("open");
+    expect(await lineTotals(billId)).toEqual(["24.00", "35.00"]);
+    expect(await lineTotals(newBill)).toEqual(["12.00"]);
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("refuses picks that are not a list of line ids by the field it names", async () => {
+    const { billId } = await threeSaladsAndPaella();
+
+    const refused = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks: [{ lineId: "line 1" }],
+      expectedEdits: [],
+      method: "cash",
+      tendered: "20.00",
+      applied: "12.00",
+      tip: "0.00",
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "picks" } },
+    });
+    expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
+  });
+});

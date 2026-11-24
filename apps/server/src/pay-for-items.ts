@@ -39,6 +39,7 @@ import {
 } from "./bill-allocation.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
+  diskFullBeforePayment,
   issueIfFullyPaid,
   takeBillPaymentIn,
   type BillPaymentDeps,
@@ -332,8 +333,8 @@ export async function payForItems(
     ...(req.method === "cash" ? { tendered: req.tendered! } : { entry: "manual" as const }),
     ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
   });
-  // Awaited only while `since()` names a refusal, as `takeBillPayment` reads it.
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
+  const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
