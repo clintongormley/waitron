@@ -4466,12 +4466,11 @@ describe("all menu structures", () => {
     );
     const expectedMenus = (await (await send(app, "GET", "/management-api/menus")).json()) as {
       id: string;
-      heldBy?: { id: string; name: string }[];
     }[];
     const expected = [];
-    for (const { heldBy: _heldBy, ...menu } of expectedMenus)
+    for (const menu of expectedMenus)
       expected.push({
-        menu,
+        menu: Object.fromEntries(Object.entries(menu).filter(([key]) => key !== "heldBy")),
         structure: await (
           await send(app, "GET", `/management-api/menus/${menu.id}/structure`)
         ).json(),
