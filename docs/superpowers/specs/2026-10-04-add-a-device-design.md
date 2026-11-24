@@ -225,6 +225,7 @@ The plan writes each of these as a failing test first:
 ## 9. Not in this work
 
 - **A269:** apply "discarded when the window shuts" to print agents without stranding them.
+  Update, 2026-11-24. See the revised print-agent behavior in §4.
 - **A270:** whether "made here" belongs on the device or on its profile. It stays on the device
   (owner, 2026-10-04). _2026-11-14: settled, on the device, as one station; see A1534 in `docs/backlog.md`._
 - **A271:** each browser tab as its own device, in Demo as well as dev mode, with its own device

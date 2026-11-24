@@ -64,8 +64,8 @@ import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { readPrintedVenue } from "./receipt-print.js";
 import { opensDrawer, printedCommands, printedLines } from "./testing/decode-ticket.js";
-import { acceptPrintAgentJoinRequest } from "./join-requests.js";
-import { createPairingMode, type PairingMode } from "./pairing-mode.js";
+import { acceptPrintAgentJoinRequest, PENDING_CAP } from "./join-requests.js";
+import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
 import { mountJoinApi } from "./join-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import type { TradingContext } from "./trading-context.js";
@@ -505,6 +505,72 @@ describe("remote print agent pairing retries", () => {
     } finally {
       waiting.mockRestore();
     }
+  });
+
+  it("refuses an earlier window’s Deny and clears stale requests before counting the cap", async () => {
+    let elapsed = 0;
+    const start = Date.now();
+    const mode = createPairingMode({ steady: () => elapsed });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(start);
+    try {
+      const app = mountApp({ pairingOpen: false, pairingMode: mode });
+      mountJoinApi(app, { db: suite.db, cfg, pairingMode: mode, deviceAddress: "" }, noopLog);
+      mode.open();
+      const first = await knock(app);
+      for (let i = 1; i < PENDING_CAP; i++) await knock(app, `Agent ${i}`);
+
+      elapsed = PAIRING_HOLD_MS + 1_000;
+      vi.setSystemTime(start + elapsed);
+      mode.open();
+      const stale = await send(app, "POST", `/management-api/join-requests/${first.joinId}/deny`, {
+        cookie: managerCookie,
+        body: {},
+      });
+      expect(stale.status).toBe(404);
+      expect(await stale.json()).toMatchObject({ error: { code: "join_request.not_found" } });
+      const current = await knock(app, "Current agent");
+      const rows = await send(app, "GET", "/management-api/join-requests?kind=print_agent", {
+        cookie: managerCookie,
+      });
+      expect(await rows.json()).toMatchObject([{ id: current.joinId }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not remember a denial that rolled back before the window closed", async () => {
+    const mode = createPairingMode();
+    const app = mountApp({ pairingOpen: false, pairingMode: mode });
+    mountJoinApi(app, { db: suite.db, cfg, pairingMode: mode, deviceAddress: "" }, noopLog);
+    const hold = mode.open();
+    const request = await knock(app);
+    const write = suite.db.withWriteLock.bind(suite.db);
+    const failure = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce((body) =>
+      write(async () => {
+        await body();
+        throw new Error("The denial could not be saved");
+      }),
+    );
+    try {
+      const response = await send(
+        app,
+        "POST",
+        `/management-api/join-requests/${request.joinId}/deny`,
+        {
+          cookie: managerCookie,
+          body: {},
+        },
+      );
+      expect(response.status).toBe(500);
+    } finally {
+      failure.mockRestore();
+    }
+
+    const poll = () => send(app, "GET", "/print-api/agent/join/status", { bearer: request.token });
+    expect(await (await poll()).json()).toEqual({ status: "pending" });
+    mode.release(hold.holdId);
+    expect(await (await poll()).json()).toEqual({ status: "not_approved" });
   });
 
   it("identifies a revoked approval only to its matching token", async () => {

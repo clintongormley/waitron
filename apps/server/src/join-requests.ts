@@ -30,7 +30,7 @@ const ownedBy = (cfg: Pick<TradingContext, "nodeId">) => eq(joinRequests.nodeId,
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
 
-/** A request lapses after this long, even while the window stays open. A device request also ends
+/** A request lapses after this long, even while the window stays open. A request also ends
  * when the window shuts. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
@@ -636,7 +636,7 @@ export async function readAgentJoinStatus(
         .where(eq(printAgents.id, joinId));
       if (accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash))
         return accepted.active ? "approved" : "revoked";
-      const deniedHash = window?.deniedAgentHash(joinId);
+      const deniedHash = await window?.deniedAgentHash(joinId);
       return deniedHash !== undefined && deviceTokenMatches(token, deniedHash)
         ? "denied"
         : "not_approved";
@@ -650,11 +650,11 @@ export async function denyJoinRequest(
   tx: Transaction,
   cfg: TradingContext,
   id: string,
-  window?: Pick<PairingMode, "rememberDeniedAgent">,
+  rememberDenial?: (tokenHash: string) => void,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
   await tx.delete(joinRequests).where(and(ownedBy(cfg), eq(joinRequests.id, id)));
-  if (row.kind === "print_agent") window?.rememberDeniedAgent(id, row.tokenHash);
+  if (row.kind === "print_agent") rememberDenial?.(row.tokenHash);
   return row.kind;
 }
 
