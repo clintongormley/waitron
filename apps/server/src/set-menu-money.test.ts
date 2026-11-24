@@ -757,6 +757,56 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
     expect(await filed(billId)).toEqual(DIVIDED);
   });
 
+  it("a covered dish whose set menu is on another bill files at a rate the ticket pays", async () => {
+    const lunchTab = await lunchBill();
+    const paying = await seatedBill("takeaway");
+    await order(venue, paying.tabId, "Burger");
+    const lemonade = (await specRows(spec, lunchTab.tabId)).find(
+      ({ name }) => name === "Lemonade",
+    )!;
+    const [burger] = await specRows(spec, paying.tabId);
+    // No staff action found leaves this state: the link is set directly.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ workingOrderId: paying.tabId, lineNo: burger!.lineNo + 1 })
+        .where(eq(workingOrderLines.id, lemonade.id)),
+    );
+    await payWhole(paying.tabId, "12.00");
+    expect(await filed(paying.tabId)).toEqual({
+      rows: [
+        ["Burger", 1200, 1000, null],
+        ["Lemonade", 0, 1000, null],
+      ],
+      total: 1200,
+      vat: [{ rate: "10.00", base: "10.91", tax: "1.09" }],
+      recordVat: "1.09",
+    });
+  });
+
+  it("a set menu none of whose dishes has a rate refuses on its first dish's row", async () => {
+    await lemonadeAt(null);
+    await inTx(venue, (tx) =>
+      tx
+        .delete(productTakeawayVatRates)
+        .where(inArray(productTakeawayVatRates.productId, dishIds())),
+    );
+    try {
+      const tab = await lunchBill();
+      await expect(
+        takeBillPayment(
+          deps(),
+          venue.cfg,
+          tab.tabId,
+          { ...wholePayment("14.00"), method: "cash", tendered: "14.00" },
+          venue.operator,
+        ),
+      ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 2 } });
+    } finally {
+      await inTx(venue, (tx) => tx.insert(productTakeawayVatRates).values(saved.rates));
+    }
+  });
+
   it("part paid, then a rate changed, then paid, issues the division at the new rate", async () => {
     await lemonadeAt("10.00");
     const tab = await lunchBill();

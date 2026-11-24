@@ -273,15 +273,18 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
 /**
  * Each line's rate on `on`, except that a 0.00 line whose rate no line with money carries takes its
  * parent's if it is an extra, else its set menu's, so the ticket gains no empty VAT row (S4); when
- * the line it names is not on the ticket, it takes the first rate that carries money. A set menu
- * priced 0.00 that was not divided follows `freeMenuRate`.
+ * that line is not on the ticket, as for a covered dish whose set menu is on another bill, it takes
+ * the first rate that carries money. A set menu priced 0.00 that was not divided follows
+ * `freeMenuRate`. A line with no rates is refused; a set menu's own row, whose rates are its
+ * dishes', only after every other line.
  */
 function lineRates(gross: GrossLines, on: string): Decimal[] {
-  const own = gross.lines.map((line) => {
-    if (line.vatRates.length === 0)
-      throw new AppError("vat_rate.unavailable", { lineNo: line.lineNo });
-    return rateOn(line.vatRates, on);
-  });
+  const unrated = (line: GrossLine) => line.vatRates.length === 0;
+  const missing =
+    gross.lines.find((line) => unrated(line) && line.setMenuRole !== "set_menu") ??
+    gross.lines.find(unrated);
+  if (missing !== undefined) throw new AppError("vat_rate.unavailable", { lineNo: missing.lineNo });
+  const own = gross.lines.map((line) => rateOn(line.vatRates, on));
   const funded = new Set(own.filter((_, index) => !isZeroDecimal(gross.lines[index]!.lineGross)));
   const firstFunded = funded.size > 0 ? [...funded][0] : undefined;
   const indexByLineNo = new Map(gross.lines.map((line, index) => [line.lineNo, index]));
@@ -317,7 +320,8 @@ function lineRates(gross: GrossLines, on: string): Decimal[] {
       const holder = line.parentLineNo ?? line.setMenuParts?.[0]?.setMenuLineNo;
       const at = holder == null ? undefined : indexByLineNo.get(holder);
       if (at !== undefined) rates[index] = rateAt(at);
-      else if (holder != null && firstFunded !== undefined) rates[index] = firstFunded;
+      else if ((holder != null || line.setMenuRole === "dish") && firstFunded !== undefined)
+        rates[index] = firstFunded;
     }
     return rates[index];
   };

@@ -468,6 +468,46 @@ describe("shareSetMenus — a takeaway set menu's price divided between its dish
     ]);
   });
 
+  it("files a 0.00 dish with no set-menu link on the ticket at a rate that carries money", () => {
+    const gross = lines(
+      row(1, "Burger", "9.00", AT_10, null),
+      row(2, "Lemonade", "0.00", AT_21, "dish"),
+    );
+    expect(rated(gross)).toEqual([
+      ["Burger", "9.00", "10.00"],
+      ["Lemonade", "0.00", "10.00"],
+    ]);
+  });
+
+  it("keeps a 0.00 a la carte line at its own rate", () => {
+    const gross = lines(
+      row(1, "Burger", "9.00", AT_10, null),
+      row(2, "Lemonade", "0.00", AT_21, null),
+    );
+    expect(rated(gross)).toEqual([
+      ["Burger", "9.00", "10.00"],
+      ["Lemonade", "0.00", "21.00"],
+    ]);
+  });
+
+  it("refuses a missing rate on a dish's row before its set menu's", () => {
+    const gross = lines(
+      menu(1, "14.00", []),
+      dish(2, "Soup", [], [[1, "5.50"]]),
+      dish(3, "Hake", [], [[1, "12.50"]]),
+    );
+    expect(() => rateLines(gross, ON)).toThrow(
+      expect.objectContaining({ code: "vat_rate.unavailable", params: { lineNo: 2 } }),
+    );
+  });
+
+  it("refuses a missing rate on a set menu's own row when no other line lacks one", () => {
+    const gross = lines(row(1, "Burger", "9.00", AT_10, null), menu(2, "14.00", []));
+    expect(() => rateLines(gross, ON)).toThrow(
+      expect.objectContaining({ code: "vat_rate.unavailable", params: { lineNo: 2 } }),
+    );
+  });
+
   it("leaves a 0.00 dish whose set menu is absent at its own rate when nothing carries money", () => {
     const gross = lines(dish(1, "Lemonade", AT_21, [[7, "3.50"]]));
     expect(rated(gross)).toEqual([["Lemonade", "0.00", "21.00"]]);
