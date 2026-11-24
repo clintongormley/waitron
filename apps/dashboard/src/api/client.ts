@@ -1694,15 +1694,16 @@ export interface SalesPeriodDto {
 export type CategoryReportMode = "at_time_of_sale" | "current";
 
 /**
- * One node of the category report. `name` is `""` for `set_menus`, `uncategorised`, `not_recorded`
- * and `payments_on_account` (the screen names those); a `free_text` node's `id` and `name` are the
- * recorded free-text category. `gross` and `net` include the children; `direct` is the lines whose
+ * One node of the category report. `name` is `""` for `set_menus`, `custom_items`, `uncategorised`,
+ * `not_recorded` and `payments_on_account` (the screen names those); a `free_text` node's `id` and
+ * `name` are the recorded free-text category. `gross` and `net` include the children; `direct` is the lines whose
  * own category is this node.
  */
 export interface CategoryTotalDto {
   kind:
     | "category"
     | "set_menus"
+    | "custom_items"
     | "uncategorised"
     | "not_recorded"
     | "payments_on_account"

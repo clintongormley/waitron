@@ -361,6 +361,24 @@ describe("formatCategorySalesPage", () => {
     );
   });
 
+  it("names Custom items, in English and in Spanish", () => {
+    const report = sampleReport({
+      tree: [
+        node({
+          kind: "custom_items",
+          id: "custom_items",
+          gross: "12.00",
+          net: "9.92",
+          direct: { gross: "12.00", net: "9.92", lines: 2 },
+        }),
+      ],
+    });
+    expect(lineFor(page({ report }), "Custom items")).toMatch(/^Custom items +€12\.00 +€9\.92$/);
+    expect(lineFor(page({ report, locale: "es-ES" }), "Artículos libres")).toMatch(
+      /^Artículos libres +12,00 € +9,92 €$/,
+    );
+  });
+
   it("prints the total and no label section, in English and in Spanish", () => {
     const lines = page();
     expect(lineFor(lines, "Total")).toMatch(/^Total +€17\.71 +€23\.00$/);

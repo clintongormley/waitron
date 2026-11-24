@@ -34,7 +34,6 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { notCustomItem } from "./custom-item-products.js";
 import { readDefaultProductVatClass, readNewProductVatRates } from "./settings.js";
 import {
   checkPickableTakeawayVatRate,
@@ -96,6 +95,7 @@ import {
 import {
   effectiveProductColumns as effective,
   isTopLevelProduct,
+  notCustomItem,
   parentJoin,
   parentProducts,
   unitOwnerJoin,

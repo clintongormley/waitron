@@ -486,6 +486,33 @@ describe("dashboard-sales-screen — category report", () => {
     expect(rows(await mount(api))[0]![0]).toBe("Payments on account");
   });
 
+  it("names Custom items in Spanish and English, with no path", async () => {
+    const api = stubApi({
+      getCategorySales: vi.fn().mockResolvedValue({
+        ...report,
+        tree: [
+          node({
+            kind: "custom_items",
+            id: "custom_items",
+            depth: 0,
+            gross: "12.00",
+            net: "9.92",
+            direct: { gross: "12.00", net: "9.92", lines: 2 },
+          }),
+        ],
+      } satisfies CategorySalesDto),
+    });
+    const el = await mount(api);
+    expect(rows(el)).toEqual([
+      ["Artículos libres", 0, "custom_items", "12,00\u00a0€", "9,92\u00a0€"],
+    ]);
+    const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test=category-row] th")!;
+    expect(cell.querySelector("[data-test=category-path]")).toBeNull();
+    cleanupWidgets();
+    setLocale("en");
+    expect(rows(await mount(api))[0]![0]).toBe("Custom items");
+  });
+
   it("names the screen's own rows and the mode in English", async () => {
     setLocale("en");
     const api = stubApi({

@@ -1,4 +1,4 @@
-import { eq, isNull, type SQL } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError, stringToBasisPoints } from "@waitron/shared";
 import { createProductSkippingNameCheck } from "./operations.js";
@@ -6,9 +6,6 @@ import { clearTakeawayVatRates, readVenueVatRates } from "./takeaway-vat-rates.j
 import "./errors.js";
 
 const UNCHOSEN_KEY = "unchosen";
-
-/** Leaves the hidden products out of a list of products. */
-export const notCustomItem: SQL = isNull(products.customItemKey);
 
 /**
  * The id of the hidden product behind a custom item taken away at `takeawayRateBp`, or, for null,

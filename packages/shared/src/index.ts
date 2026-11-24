@@ -220,6 +220,7 @@ export type {
   PrinterDeleteImpact,
 } from "./delete-impact.js";
 export { deleteTargetName } from "./delete-impact.js";
+export { CUSTOM_ITEMS_CLASSIFICATION_ID } from "./sale-line-classification.js";
 export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";
 export { compareLabels, createLabelComparator } from "./compare-labels.js";
 export {

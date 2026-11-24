@@ -1,6 +1,11 @@
 import { inArray } from "drizzle-orm";
 import { categories, products, type Transaction } from "@waitron/db";
-import { AppError, type ClassificationEntry, type SaleLineClassification } from "@waitron/shared";
+import {
+  AppError,
+  CUSTOM_ITEMS_CLASSIFICATION_ID,
+  type ClassificationEntry,
+  type SaleLineClassification,
+} from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
 
@@ -8,8 +13,9 @@ import "./errors.js";
 export interface LoadedClassification {
   /** Every reporting category: its name and its parent. */
   categories: ReadonlyMap<string, { name: string; parentId: string | null }>;
-  /** Each loaded product: its main category after the variant fallback. */
-  products: ReadonlyMap<string, { categoryId: string | null }>;
+  /** Each loaded product: its main category after the variant fallback, and the key only a hidden
+   * custom item product holds. */
+  products: ReadonlyMap<string, { categoryId: string | null; customItemKey: string | null }>;
 }
 
 /**
@@ -21,7 +27,11 @@ export async function loadClassification(
   productIds: readonly string[],
 ): Promise<LoadedClassification> {
   const productRows = await tx
-    .select({ id: products.id, categoryId: effectiveProductColumns.categoryId })
+    .select({
+      id: products.id,
+      categoryId: effectiveProductColumns.categoryId,
+      customItemKey: products.customItemKey,
+    })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, [...productIds]));
@@ -32,7 +42,12 @@ export async function loadClassification(
     categories: new Map(
       categoryRows.map((row) => [row.id, { name: row.name, parentId: row.parentId }]),
     ),
-    products: new Map(productRows.map((row) => [row.id, { categoryId: row.categoryId }])),
+    products: new Map(
+      productRows.map((row) => [
+        row.id,
+        { categoryId: row.categoryId, customItemKey: row.customItemKey },
+      ]),
+    ),
   };
 }
 
@@ -45,10 +60,12 @@ function loadedProduct(c: LoadedClassification, productId: string) {
 /**
  * The snapshot a sale line records for `productId`: its main reporting chain from the root to the
  * leaf (empty when Uncategorised), each category with its name now. Checked by `validateSnapshot`
- * before it is returned.
+ * before it is returned, except a custom item's, whose one entry is not a category.
  */
 export function classifyLine(c: LoadedClassification, productId: string): SaleLineClassification {
   const product = loadedProduct(c, productId);
+  if (product.customItemKey !== null)
+    return { reporting: [{ id: CUSTOM_ITEMS_CLASSIFICATION_ID, name: "" }] };
   const reporting: ClassificationEntry[] = [];
   // Bounded by the tree's size, so a loop in the data ends with a repeated id that validation
   // refuses rather than a walk that never ends.

@@ -3212,6 +3212,7 @@ export const en = {
   "sales.not_recorded": "Not recorded",
   "sales.payments_on_account": "Payments on account",
   "sales.set_menus": "Set menus",
+  "sales.custom_items": "Custom items",
   "sales.no_category_recorded": "Category unknown",
   "sales.gross_incomplete":
     "Gross total incomplete: {count} lines recorded before classification began",
@@ -8073,6 +8074,7 @@ export const es: Record<StringKey, string> = {
   "sales.not_recorded": "No registrada",
   "sales.payments_on_account": "Pagos a cuenta",
   "sales.set_menus": "Menús",
+  "sales.custom_items": "Artículos libres",
   "sales.no_category_recorded": "Categoría desconocida",
   "sales.gross_incomplete":
     "Total bruto incompleto: {count} líneas registradas antes de que empezara la clasificación",

@@ -6,6 +6,9 @@ import type { VatClass } from "@waitron/shared";
 /** A `products` row with no parent: a product in its own right, never a variant. */
 export const isTopLevelProduct = isNull(products.parentId);
 
+/** Leaves the hidden products out of a list of products. */
+export const notCustomItem: SQL = isNull(products.customItemKey);
+
 /**
  * Which rows a read or write of ONE product by id may find. `"top-level"` finds only a product with
  * no parent, so a variant's id answers exactly as an id that names no product; `"any"` finds a

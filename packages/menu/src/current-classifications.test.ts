@@ -6,6 +6,7 @@ import { createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { currentClassifications } from "./current-classifications.js";
 
 const fx = useMenuDb();
@@ -111,6 +112,17 @@ describe("currentClassifications", () => {
     const map = await app((tx) => currentClassifications(tx, [unknown, f.water, f.water]));
 
     expect([...map.keys()]).toEqual([f.water]);
+  });
+
+  it("classifies a hidden custom item product under custom_items", async () => {
+    await fixture();
+
+    const map = await app(async (tx) => {
+      const id = await customItemProduct(tx, null);
+      return currentClassifications(tx, [id]);
+    });
+
+    expect([...map.values()]).toEqual([{ reporting: [{ id: "custom_items", name: "" }] }]);
   });
 
   it("answers an empty list with an empty map", async () => {

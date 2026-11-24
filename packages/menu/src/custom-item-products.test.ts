@@ -9,8 +9,9 @@ import {
 } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { customItemProduct, notCustomItem } from "./custom-item-products.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { createProduct } from "./operations.js";
+import { notCustomItem } from "./variant-fallback.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);

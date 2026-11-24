@@ -5,6 +5,7 @@ import type { SaleLineClassification } from "@waitron/shared";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { createProduct } from "./operations.js";
 import { createCategory } from "./categories.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { setProductVariants } from "./variants.js";
 import {
   classifyLine,
@@ -127,6 +128,27 @@ describe("classifyLine", () => {
     expect(classifyLine(await loaded(f), f.products.water)).toEqual({ reporting: [] });
   });
 
+  it("records a hidden custom item product under custom_items, and an ordinary one without a category still Uncategorised", async () => {
+    await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db, { fiscalTerritory: "ES-common" });
+    const { c, hidden, ordinary } = await app(async (tx) => {
+      const hidden = [await customItemProduct(tx, 2100), await customItemProduct(tx, null)];
+      const { id: ordinary } = await createProduct(tx, {
+        categoryId: null,
+        name: "Tap water",
+        unitId: null,
+        unitPrice: "0.00",
+      });
+      return { c: await loadClassification(tx, [...hidden, ordinary]), hidden, ordinary };
+    });
+
+    expect(hidden.map((id) => classifyLine(c, id))).toEqual([
+      { reporting: [{ id: "custom_items", name: "" }] },
+      { reporting: [{ id: "custom_items", name: "" }] },
+    ]);
+    expect(classifyLine(c, ordinary)).toEqual({ reporting: [] });
+  });
+
   it("classifies an extras pick by its own product, not by any dish", async () => {
     const f = await fixture();
 
@@ -150,7 +172,7 @@ describe("classifyLine", () => {
   it("refuses to build a chain through a category that was not loaded", () => {
     const c: LoadedClassification = {
       categories: new Map([["leaf", { name: "Leaf", parentId: "gone" }]]),
-      products: new Map([["p", { categoryId: "leaf" }]]),
+      products: new Map([["p", { categoryId: "leaf", customItemKey: null }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(
@@ -167,7 +189,7 @@ describe("classifyLine", () => {
         ["a", { name: "A", parentId: "b" }],
         ["b", { name: "B", parentId: "a" }],
       ]),
-      products: new Map([["p", { categoryId: "a" }]]),
+      products: new Map([["p", { categoryId: "a", customItemKey: null }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(

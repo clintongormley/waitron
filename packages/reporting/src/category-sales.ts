@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { decimalToCents, rawCentsToDecimal } from "@waitron/shared";
+import { CUSTOM_ITEMS_CLASSIFICATION_ID, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
 import type { Decimal, SaleLineClassification } from "@waitron/shared";
 import {
   issuedSalesClause,
@@ -34,15 +34,17 @@ export interface CategoryTotal {
   kind:
     | "category"
     | "set_menus"
+    | "custom_items"
     | "uncategorised"
     | "not_recorded"
     | "payments_on_account"
     | "free_text";
-  /** The category id; "set_menus"; "uncategorised"; "not_recorded"; "payments_on_account"; for
-   * "free_text" the recorded text. */
+  /** The category id; "set_menus"; "custom_items"; "uncategorised"; "not_recorded";
+   * "payments_on_account"; for "free_text" the recorded text. */
   id: string;
   /** A category's name (recorded, or today's in current mode); a free-text node's text; "" for
-   * set_menus, uncategorised, not_recorded and payments_on_account, which the screen names. */
+   * set_menus, custom_items, uncategorised, not_recorded and payments_on_account, which the screen
+   * names. */
   name: string;
   /** 0 at the root. */
   depth: number;
@@ -115,6 +117,11 @@ interface Node {
 }
 
 const SET_MENUS: Segment = { kind: "set_menus", id: "set_menus", name: "" };
+const CUSTOM_ITEMS: Segment = {
+  kind: "custom_items",
+  id: CUSTOM_ITEMS_CLASSIFICATION_ID,
+  name: "",
+};
 const UNCATEGORISED: Segment = { kind: "uncategorised", id: "uncategorised", name: "" };
 const NOT_RECORDED: Segment = { kind: "not_recorded", id: "not_recorded", name: "" };
 const PAYMENTS_ON_ACCOUNT: Segment = {
@@ -134,6 +141,7 @@ function pathOf(
       : [NOT_RECORDED];
   }
   if (classification.reporting.length === 0) return [UNCATEGORISED];
+  if (classification.reporting[0]!.id === CUSTOM_ITEMS_CLASSIFICATION_ID) return [CUSTOM_ITEMS];
   return classification.reporting.map((entry) => ({ kind: "category", ...entry }));
 }
 
@@ -154,9 +162,10 @@ const KIND_ORDER: Record<CategoryTotal["kind"], number> = {
   category: 0,
   free_text: 0,
   set_menus: 1,
-  uncategorised: 2,
-  not_recorded: 3,
-  payments_on_account: 4,
+  custom_items: 2,
+  uncategorised: 3,
+  not_recorded: 4,
+  payments_on_account: 5,
 };
 
 function compareText(a: string, b: string): number {
