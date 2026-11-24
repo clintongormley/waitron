@@ -83,6 +83,7 @@ interface MixVectors {
   readonly vectors: Int32Array;
   readonly bases: Float64Array;
   readonly solve: (counts: number[], base: number) => MixSearchResult;
+  // A discarded mix cannot rejoin, so the cutoff must never rise.
   readonly cutoff: () => number;
   readonly canSolve?: () => boolean;
   readonly accept: (candidate: MixSearchResult) => void;
@@ -101,15 +102,24 @@ export function searchMixVectors({
 }: MixVectors): boolean {
   const bounds = bases.slice();
   const slopes = new Float64Array(offerCount);
+  const remaining = Int32Array.from(bases.keys());
+  let remainingCount = remaining.length;
   for (;;) {
     let next = -1;
-    let lowest = cutoff();
-    for (let mix = 0; mix < bases.length; mix++) {
-      if (bounds[mix]! < lowest) {
-        lowest = bounds[mix]!;
+    let kept = 0;
+    const viable = cutoff();
+    let lowest = viable;
+    for (let row = 0; row < remainingCount; row++) {
+      const mix = remaining[row]!;
+      const bound = bounds[mix]!;
+      if (!(bound < viable)) continue;
+      remaining[kept++] = mix;
+      if (bound < lowest) {
+        lowest = bound;
         next = mix;
       }
     }
+    remainingCount = kept;
     if (next === -1) return true;
     if (canSolve && !canSolve()) return false;
 
@@ -125,7 +135,8 @@ export function searchMixVectors({
     });
 
     const limit = cutoff();
-    for (let mix = 0; mix < bases.length; mix++) {
+    for (let row = 0; row < remainingCount; row++) {
+      const mix = remaining[row]!;
       if (bounds[mix]! >= limit) continue;
       let bound = bases[mix]! + candidate.placement.cost;
       for (let offer = 0; offer < offerCount; offer++) {
