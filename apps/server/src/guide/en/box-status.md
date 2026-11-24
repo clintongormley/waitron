@@ -353,8 +353,7 @@ sale**. Devices agreeing with the box do not end this wait: confirm or correct t
 or staff use **Check the time** on a till.
 
 When the **Clock** row says **The new software producer needs a new fiscal installation**, devices
-agreeing with the box do not end the wait either: confirm or correct the time in the same ways. If
-the row then says the box could not open it, and that stays, press **Restart the box**.
+agreeing with the box do not end the wait either: confirm or correct the time in the same ways.
 
 The box confirms its time by itself as soon as its [time service](box-status.md#clock-service)
 reaches a time server over the internet, or, unless it waits because

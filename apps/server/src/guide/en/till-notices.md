@@ -65,8 +65,7 @@ a payment opens **Payments are paused** instead, saying why; the order stays ope
 time** there when it shows, or **Close** it and pay once the red line has gone.
 
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the box's
-clock is in doubt and the box could not confirm it by itself. It ends any of the red
-clock lines above. Tap **Check the time** to open its dialog; when another notice shows first, open the
+clock is in doubt and the box could not confirm it by itself. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it once past the clock-in and attendance pages.
 
 The dialog shows the box's time and this till's time. Nobody types a time: the till's own time is

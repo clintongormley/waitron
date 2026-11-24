@@ -383,8 +383,7 @@ hora en esta página, o el personal usa **Comprobar la hora** en una caja.
 
 Cuando la fila **Reloj** dice **El productor del software nuevo necesita una nueva instalación
 fiscal**, que los dispositivos coincidan con el servidor tampoco termina la espera: confirma o corrige
-la hora de las mismas maneras. Si la fila dice después que el servidor no ha podido abrirla, y sigue
-así, pulsa **Reiniciar el servidor**.
+la hora de las mismas maneras.
 
 El servidor confirma su hora por sí solo en cuanto su [servicio de hora](box-status.md#clock-service)
 contacta con un servidor de hora por internet, o, salvo si espera por una venta

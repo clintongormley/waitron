@@ -791,7 +791,6 @@ describe("the Clock row while the start waits for its time", () => {
       const blocked = alert("sif.identity_change_blocked", "box", { severity: "error" });
       const { rows, other } = boxStatusRows(waitingHealth(hostAnswers, "identity_change"), [
         alert("clock.sync_off", "box", { params: { reason: "off" } }),
-        UNCONFIRMED,
         blocked,
       ]);
       expect(row(rows, "clock")).toMatchObject({

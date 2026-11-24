@@ -550,7 +550,8 @@ The findings:
      3. The till's notice, `staff_notice.clock.unconfirmed_identity_change`: "Payments wait: the
         server must open new invoice numbering first, once its time is confirmed" / "Los cobros
         esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se
-        confirme su hora".
+        confirme su hora". (2026-11-24: the till's English line says "box" where this says "server":
+        the till's word changed on 2026-11-22 20:39, commit a71e1b45c0, after the owner's yes.)
      4. The alert `sif.identity_change_blocked` (area `box`): "The box could not open its new fiscal
         installation for the new software producer, so it is not taking payments. It keeps trying.
         If this stays, open Box status and press Restart the box." / "El servidor no ha podido abrir
