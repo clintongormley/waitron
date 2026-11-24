@@ -102,6 +102,30 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
   });
 });
 
+it("explains when the period has no replacement menu", async () => {
+  const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-archive-dialog"]>(
+    "dashboard-menu-archive-dialog",
+    {
+      menu: { id: "winter", name: "Winter" },
+      api: {
+        getMenuArchiveImpact: async () => ({
+          ...impact,
+          periods: [{ ...impact.periods[0]!, choices: [] }],
+        }),
+      },
+    },
+  );
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.textContent).toMatch(
+      /No replacement is available for Dining · Evening|No hay otra carta disponible para Dining · Evening/,
+    ),
+  );
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="archive"]')
+      ?.disabled,
+  ).toBe(true);
+});
+
 it("discards a staged choice on Cancel without archiving", async () => {
   const { el: app } = await mountWidget<ArchiveLeaveApp>("menu-archive-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("dashboard-menu-archive-dialog")!;
