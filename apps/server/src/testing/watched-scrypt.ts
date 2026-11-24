@@ -46,7 +46,7 @@ export function isWatchingDerivation(secret: string): boolean {
 }
 
 /** Records one key derivation for `watchingDerivations`, inside or outside the request's
- * transactions; a master key check, which runs no `scrypt`, calls it from a spy. */
+ * transactions. */
 export function recordDerivation(): void {
   if (!watchState.all) return;
   if (passwords.inRequestTransaction > 0) passwords.order.push("key derived in a transaction");

@@ -12,6 +12,7 @@ import {
 import { mintMasterKey } from "./testing/master-key.js";
 import * as operations from "./operation-authentication.js";
 import * as shared from "@waitron/shared";
+import * as credentials from "@waitron/credentials";
 import {
   venueAndNodeWritersBesideRequest,
   recordDerivation,
@@ -136,11 +137,17 @@ describe("scoped recovery-key authority", () => {
   it("derives outside the write lock and rolls back a refused operation", async () => {
     await perform(async () => {});
     const decode = shared.decodeMasterKeyCode;
-    const spy = vi.spyOn(shared, "decodeMasterKeyCode").mockImplementation((code) => {
+    const decodeSpy = vi.spyOn(shared, "decodeMasterKeyCode").mockImplementation((code) => {
       recordDerivation();
       return decode(code);
     });
-    onTestFinished(() => spy.mockRestore());
+    onTestFinished(() => decodeSpy.mockRestore());
+    const derive = credentials.authorityKey;
+    const deriveSpy = vi.spyOn(credentials, "authorityKey").mockImplementation((masterKey) => {
+      recordDerivation();
+      return derive(masterKey);
+    });
+    onTestFinished(() => deriveSpy.mockRestore());
     const original = (await readCurrentMasterKey(suite.db))?.number;
     let held: unknown;
     const observed = await venueAndNodeWritersBesideRequest(suite.db, suite.node, () =>
@@ -156,7 +163,9 @@ describe("scoped recovery-key authority", () => {
       ),
     );
     expect(observed.result).toBe("committed");
-    expect(observed.outside).toBe(1);
+    expect(decodeSpy).toHaveBeenCalledTimes(1);
+    expect(deriveSpy).toHaveBeenCalledTimes(1);
+    expect(observed.outside).toBe(2);
     expect(observed.order).not.toContain("key derived in a transaction");
     expect(readOperationAuthority(held, binding)).toBeUndefined();
     await expect(

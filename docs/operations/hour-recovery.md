@@ -300,7 +300,7 @@ After the restore, follow the guide's
 [After a recovery](../../apps/server/src/guide/en/backup-recovery.md#after-recovery).
 
 Ordinary reboot and exact completion keep the current activation.
-They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
+They do not take another name. Keep the recovery pack that holds the
 key each retained backup needs, and check the restored box's outcome before using the till. The
 pack setup makes holds the master key on its first page, then the box key
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
