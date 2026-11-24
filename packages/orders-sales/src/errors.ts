@@ -19,8 +19,10 @@ declare module "@waitron/shared" {
      * server's current answer, for the till to show again.
      */
     "bill.allocation_changed": { workingOrderId: string; preview: AllocationPreview };
-    // Venue Service declares the same parameters for its own callers.
-    /** Editing or closing a bill must wait while its card payment can still settle. */
+    /**
+     * Declared by `@waitron/venue-service` too, with the same params.
+     * Editing or closing a bill must wait while its card payment can still settle.
+     */
     "order.payment_in_flight": { workingOrderId: string };
     "invoice.recipient_invalid": {
       field: "taxId" | "legalName" | "address" | "identifierType" | "identifierCountryCode";
