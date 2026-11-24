@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
 import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/client.js";
+import { createFreshSignInGate } from "../api/fresh-sign-in.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
-import type { RecoveryPackDialog, RecoveryPackMade } from "./recovery-pack-dialog.js";
+import type {
+  RecoveryPackDialog,
+  RecoveryPackDialogKind,
+  RecoveryPackMade,
+} from "./recovery-pack-dialog.js";
 import "./recovery-pack-dialog.js";
 
 const MADE_AT = "2026-10-12T12:00:00.000Z";
@@ -20,6 +25,8 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
+    masterKey: null,
+    keepOldPackUntil: "2026-11-11T12:00:00.000Z",
     serverKey: "set",
     timeZone: "Europe/Madrid",
     ...overrides,
@@ -52,12 +59,14 @@ function stubApi() {
 
 type Api = ReturnType<typeof stubApi>;
 
-async function open(options: { api?: Api; at?: RecoveryPackStatus | null } = {}) {
+async function open(
+  options: { api?: Api; at?: RecoveryPackStatus | null; kind?: RecoveryPackDialogKind } = {},
+) {
   const api = options.api ?? stubApi();
   const { el } = await mountWidget<RecoveryPackDialog>("dashboard-recovery-pack-dialog", {
     api: api as unknown as DashboardApi,
   });
-  el.show(options.at === undefined ? status() : options.at);
+  el.show(options.at === undefined ? status() : options.at, options.kind ?? "pack");
   await el.updateComplete;
   const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
@@ -68,14 +77,6 @@ function button(el: RecoveryPackDialog, test: string) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     `wt-button[data-test=${test}]`,
   );
-}
-
-function box(el: RecoveryPackDialog): HTMLInputElement {
-  return el.shadowRoot!.querySelector<HTMLInputElement>("input[name=new-server-key]")!;
-}
-
-function tick(el: RecoveryPackDialog): void {
-  box(el).click();
 }
 
 function words(node: Element | null | undefined): string {
@@ -105,7 +106,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const option = () => t("recovery_pack_dialog.new_key");
+const option = () => t("recovery_pack.make_master_key");
 const unreceivedWords = () =>
   fill("recovery_pack_dialog.unreceived", { number: "3", date: "12 October", option: option() });
 
@@ -114,146 +115,261 @@ afterEach(() => vi.restoreAllMocks());
 afterEach(() => setLocale("en-GB"));
 
 describe("the form", () => {
-  it("draws recovery choices and both actions without a duplicate sign-in form", async () => {
+  it("draws the plain make: its intro, Cancel and Make pack, with no choice and no sign-in form", async () => {
     const { el, dialog } = await open();
     expect(dialog.heading).toBe(t("recovery_pack_dialog.heading"));
     expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toBe(
       t("recovery_pack_dialog.intro"),
     );
     expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
-    expect(box(el).checked).toBe(false);
-    expect(words(el.shadowRoot!.querySelector("label[for=new-server-key]"))).toBe(option());
+    expect(el.shadowRoot!.querySelector("input")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=note]")).toBeNull();
     expect(button(el, "cancel-pack")!.slot).toBe("cancel");
+    expect(words(button(el, "cancel-pack"))).toBe(t("action.cancel"));
     expect(words(button(el, "make-pack"))).toBe(t("recovery_pack_dialog.make"));
     expect(button(el, "make-pack")!.variant).toBe("primary");
     expect(button(el, "make-pack")!.disabled).toBe(false);
   });
 
-  it("turns Make pack to the danger colour when the box is ticked", async () => {
-    const { el } = await open();
-    tick(el);
-    await el.updateComplete;
-    expect(button(el, "make-pack")!.variant).toBe("danger");
-  });
-
-  it("names the pack holding the current key, with its date, under the box", async () => {
-    const { el } = await open({ at: HELD });
-    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toBe(
-      `${fill("recovery_pack_dialog.new_key_held", { number: "3", date: "12 October" })} ${t("recovery_pack_dialog.new_key_effect")}`,
-    );
-  });
-
-  it.each([
-    // 01:30 on 13 October at the venue; 12 October in any zone from UTC-11 to UTC+12.
-    ["Pacific/Kiritimati", "2026-10-12T11:30:00.000Z", "13 October"],
-    // 22:30 on 12 October at the venue; 13 October in any zone from UTC to UTC+14.
-    ["Pacific/Pago_Pago", "2026-10-13T09:30:00.000Z", "12 October"],
-  ])(
-    "dates the pack in the venue's zone (%s), not the browser's",
-    async (timeZone, madeAt, day) => {
-      setLocale("en-GB");
-      const { el } = await open({
-        at: status({ timeZone, keep: [{ number: 3, madeAt, until: null, why: "server_key" }] }),
-      });
-      expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
-        fill("recovery_pack_dialog.new_key_held", { number: "3", date: day }),
-      );
-    },
-  );
-
-  it("says the pack holding the current key was never confirmed received, when the status says so", async () => {
-    const { el } = await open({ at: UNRECEIVED });
-    const why = words(el.shadowRoot!.querySelector("[data-test=new-key-why]"));
-    expect(why).toBe(`${unreceivedWords()} ${t("recovery_pack_dialog.new_key_effect")}`);
-    expect(why).not.toContain(
-      fill("recovery_pack_dialog.new_key_held", { number: "3", date: "12 October" }),
-    );
-  });
-
-  it("describes the setup PDF next to the replacement option", async () => {
-    setLocale("en-GB");
-    const { el } = await open({
-      at: { ...UNRECEIVED, unreceived: { ...UNRECEIVED.unreceived!, offeredAtSetup: true } },
-    });
-    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
-      "Offered as a PDF at the end of setup on 12 October.",
-    );
-  });
-
-  it("names no pack when the status names none holding the key", async () => {
-    const { el } = await open({ at: status() });
-    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toBe(
-      `${t("recovery_pack_dialog.new_key_unknown")} ${t("recovery_pack_dialog.new_key_effect")}`,
-    );
-  });
-
-  const lastPack = (state: "absent" | "not-set-up") => ({
-    number: 2,
-    madeAt: MADE_AT,
-    madeByName: "Marta",
-    received: true,
-    parts: [
-      { part: "bucket", state: "included" },
-      { part: "server-key", state },
-    ] satisfies NonNullable<RecoveryPackStatus["latest"]>["parts"],
-  });
-
-  it.each([
-    ["a venue that keeps no server key, whose last pack had no server-key part", "none", "absent"],
-    ["a venue that keeps no server key, before any pack", "none", null],
-    ["a box with no server key yet, before any pack", "not_yet", null],
-    ["a box with no server key yet, after a pack made without one", "not_yet", "not-set-up"],
-  ] as const)("offers no new server key on %s", async (_label, serverKey, part) => {
-    const at = status({ serverKey, latest: part === null ? null : lastPack(part) });
-    const { el, api } = await open({ at });
-    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=new-key-why]")).toBeNull();
-    expect(button(el, "make-pack")!.variant).toBe("primary");
+  it("asks for a plain pack with no new key", async () => {
+    const { el, api } = await open({ at: HELD });
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({ newServerKey: false });
   });
 
   it.each([
-    ["before any pack", null],
-    ["after a pack made while the box had none", "not-set-up"],
-    ["after a pack made while the venue kept none", "absent"],
-  ] as const)("offers a new server key on a box that has one, %s", async (_label, part) => {
-    const at = status({
-      serverKey: "set",
-      latest: part === null ? null : lastPack(part),
-      reasons: part === null ? [] : [{ part: "server-key", kind: "set_up_after" }],
+    [
+      "en-GB",
+      "Make a new master key?",
+      "Do this only if the master key is lost, or someone who should not have it may have seen it. Backups made before now still need the old key. Keep the old pack until 23 December 2026. The new key is shown once, in a new recovery pack.",
+      "You will be asked to sign in again.",
+      "Make a new master key",
+      "Stop",
+    ],
+    [
+      "es-ES",
+      "¿Crear una clave maestra nueva?",
+      "Hazlo solo si la clave maestra se ha perdido o si alguien que no debía ha podido verla. Las copias anteriores siguen necesitando la clave antigua. Guarda el paquete antiguo hasta el 23 de diciembre de 2026. La clave nueva se muestra una sola vez, en un paquete de recuperación nuevo.",
+      "Se te pedirá que vuelvas a iniciar sesión.",
+      "Crear una clave maestra nueva",
+      "Detener",
+    ],
+  ] as const)(
+    "Make a new master key asks first, in %s, with the day to keep the old pack until",
+    async (locale, heading, text, note, make, stop) => {
+      setLocale(locale);
+      const { el, dialog, api } = await open({
+        at: status({ keepOldPackUntil: "2026-12-23T12:00:00.000Z" }),
+        kind: "master-key",
+      });
+      expect(dialog.heading).toBe(heading);
+      expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toBe(text);
+      expect(words(el.shadowRoot!.querySelector("[data-test=note]"))).toBe(note);
+      expect(words(button(el, "make-pack"))).toBe(make);
+      expect(button(el, "make-pack")!.variant).toBe("danger");
+      expect(words(button(el, "cancel-pack"))).toBe(stop);
+      expect(button(el, "cancel-pack")!.slot).toBe("cancel");
+      expect(el.shadowRoot!.querySelector("input")).toBeNull();
+      expect(api.makeRecoveryPack).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    // 00:30 on 24 December at the venue; 23 December in any zone from UTC-11 to UTC+13.
+    ["Pacific/Kiritimati", "2026-12-23T10:30:00.000Z", "24 December 2026"],
+    // 23:30 on 23 December at the venue; 24 December in any zone from UTC to UTC+14.
+    ["Pacific/Pago_Pago", "2026-12-24T10:30:00.000Z", "23 December 2026"],
+  ])(
+    "dates the keep day in the venue's zone (%s), not the browser's",
+    async (timeZone, keepOldPackUntil, day) => {
+      setLocale("en-GB");
+      const { el } = await open({ at: status({ timeZone, keepOldPackUntil }), kind: "master-key" });
+      expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toContain(
+        `Keep the old pack until ${day}.`,
+      );
+    },
+  );
+
+  it("asks for a new box key with the new master key", async () => {
+    const { el, api } = await open({ kind: "master-key" });
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
+    expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({ newServerKey: true });
+  });
+});
+
+describe("the new master key", () => {
+  const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+  const NAME = "2026-11-23 · QZJV";
+
+  async function shown(locale: "en-GB" | "es-ES" = "en-GB") {
+    setLocale(locale);
+    const api = stubApi();
+    api.makeRecoveryPack.mockResolvedValue({
+      pdf: pdf(),
+      number: 4,
+      key: "replaced",
+      madeAt: "2026-11-23T09:00:00.000Z",
+      masterKey: { key: KEY, name: NAME },
     });
-    const { el } = await open({ at });
-    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
-    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toBe(
-      `${t("recovery_pack_dialog.new_key_unknown")} ${t("recovery_pack_dialog.new_key_effect")}`,
+    const opened = await open({ api, kind: "master-key" });
+    const seen = made(opened.el);
+    button(opened.el, "make-pack")!.click();
+    await expect
+      .poll(() => opened.el.shadowRoot!.querySelector("[data-test=master-key]"))
+      .not.toBeNull();
+    return { ...opened, seen };
+  }
+
+  it.each([
+    [
+      "en-GB",
+      "Recovery pack",
+      "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+      "This is the only time the master key is shown.",
+      `Master key · ${NAME}`,
+      ["Download", "Print", "Copy"],
+    ],
+    [
+      "es-ES",
+      "Paquete de recuperación",
+      "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+      "Esta es la única vez que se muestra la clave maestra.",
+      `Clave maestra · ${NAME}`,
+      ["Descargar", "Imprimir", "Copiar"],
+    ],
+  ] as const)(
+    "on success shows the new key with Download, Print and Copy, as setup's last step does (%s)",
+    async (locale, heading, lead, warning, name, labels) => {
+      const { el, dialog, seen } = await shown(locale);
+      expect(dialog.open).toBe(true);
+      expect(dialog.heading).toBe(heading);
+      const root = el.shadowRoot!;
+      expect(words(root.querySelector("[data-test=shown-lead]"))).toBe(lead);
+      expect(words(root.querySelector("[data-test=shown-warning]"))).toBe(warning);
+      expect(words(root.querySelector("[data-test=master-key-name]"))).toBe(name);
+      expect(root.querySelector("[data-test=master-key]")!.textContent).toBe(KEY);
+      expect(["key-download", "key-print", "key-copy"].map((b) => words(button(el, b)))).toEqual(
+        labels,
+      );
+      expect(button(el, "key-continue")).toBeNull();
+      expect(button(el, "make-pack")).toBeNull();
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ number: 4, key: "replaced", received: true });
+    },
+  );
+
+  it("Copy puts the key on the clipboard exactly as printed, says Copied., then offers Continue", async () => {
+    const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    const { el, dialog } = await shown();
+    button(el, "key-copy")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=key-copied]")).not.toBeNull();
+    expect(write).toHaveBeenCalledWith(KEY);
+    expect(words(el.shadowRoot!.querySelector("[data-test=key-copied]"))).toBe(
+      t("master_key_shown.copied"),
+    );
+    await expect.poll(() => button(el, "key-continue")).not.toBeNull();
+    expect(words(button(el, "key-continue"))).toBe(t("master_key_shown.continue"));
+    const closed = dialogClosed(dialog);
+    button(el, "key-continue")!.click();
+    await closed;
+    expect(dialog.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=master-key]")).toBeNull();
+  });
+
+  it("a Copy the browser refuses says so and counts for nothing", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    const { el } = await shown();
+    button(el, "key-copy")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=copy-failed]")).not.toBeNull();
+    expect(words(el.shadowRoot!.querySelector("[data-test=copy-failed]"))).toBe(
+      t("master_key_shown.copy_failed"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=key-copied]")).toBeNull();
+    expect(button(el, "key-continue")).toBeNull();
+  });
+
+  it("Download saves the pack and Print opens it, each then offering Continue", async () => {
+    const opened = vi.spyOn(window, "open").mockReturnValue(null);
+    const clicked: { href: string; download: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push({ href: this.href, download: this.download });
+    });
+    const first = await shown();
+    button(first.el, "key-download")!.click();
+    await expect.poll(() => button(first.el, "key-continue")).not.toBeNull();
+    expect(clicked).toEqual([
+      { href: expect.stringMatching(/^blob:/), download: "waitron-recovery-pack-4.pdf" },
+    ]);
+    expect(await (await fetch(clicked[0]!.href)).text()).toBe("%PDF-1.7 pack");
+    cleanupWidgets();
+    const second = await shown();
+    button(second.el, "key-print")!.click();
+    await expect.poll(() => button(second.el, "key-continue")).not.toBeNull();
+    expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^blob:/), "_blank");
+  });
+
+  it("asks for a fresh sign-in through the shared gate, then shows the key the resent make returns", async () => {
+    const prompt = vi.fn(async () => true);
+    let makes = 0;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const call = `${init?.method ?? "GET"} ${String(input)}`;
+      if (call === "POST /api/backup/recovery-pack" && makes++ === 0)
+        return new Response(
+          JSON.stringify({ error: { code: "management_session.proof_required" } }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      if (call === "POST /api/backup/recovery-pack")
+        return new Response("%PDF-1.7 pack\n%%EOF\n", {
+          status: 200,
+          headers: {
+            "Content-Type": "application/pdf",
+            "X-Waitron-Recovery-Pack": "4",
+            "X-Waitron-Recovery-Pack-Key": "replaced",
+            "X-Waitron-Recovery-Pack-Made-At": "2026-11-23T09:00:00.000Z",
+            "X-Waitron-Master-Key": KEY,
+            "X-Waitron-Master-Key-Name": encodeURIComponent(NAME),
+          },
+        });
+      if (call === "POST /api/backup/recovery-pack/4/received")
+        return new Response(null, { status: 204 });
+      throw new Error(`Unexpected request: ${call}`);
+    });
+    const api = new DashboardApi("", fetchImpl as typeof fetch, undefined, undefined, false, {
+      freshSignIn: createFreshSignInGate({ sessionGeneration: () => 0, prompt }),
+    });
+    const { el } = await mountWidget<RecoveryPackDialog>("dashboard-recovery-pack-dialog", { api });
+    el.show(status(), "master-key");
+    await el.updateComplete;
+    button(el, "make-pack")!.click();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-test=master-key]")).not.toBeNull();
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(makes).toBe(2);
+    expect(el.shadowRoot!.querySelector("[data-test=master-key]")!.textContent).toBe(KEY);
+    expect(words(el.shadowRoot!.querySelector("[data-test=master-key-name]"))).toBe(
+      `Master key · ${NAME}`,
     );
   });
 
-  it("offers the new box key when the card could not read the status, since nothing is known", async () => {
-    const { el } = await open({ at: null });
-    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
-  });
-
-  it("offers the new box key when the last pack had a server-key part", async () => {
-    const at = status({
-      latest: {
-        number: 2,
-        madeAt: MADE_AT,
-        madeByName: "Marta",
-        received: true,
-        parts: [{ part: "server-key", state: "failed" }],
-      },
-    });
-    const { el } = await open({ at });
-    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
+  it("shows no key when the box answered without one, and closes as a made pack", async () => {
+    const { el, dialog } = await open({ kind: "master-key" });
+    const seen = made(el);
+    button(el, "make-pack")!.click();
+    await expect.poll(() => seen.length).toBe(1);
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=master-key]")).toBeNull();
   });
 });
 
 describe("a made pack", () => {
   it("marks the pack received, then hands the PDF over and closes", async () => {
-    const { el, api, dialog } = await open();
+    const { el, api, dialog } = await open({ kind: "master-key" });
     const order: string[] = [];
     api.markRecoveryPackReceived.mockImplementation(async () => {
       order.push("marked");
@@ -261,8 +377,6 @@ describe("a made pack", () => {
     el.addEventListener("recovery-pack-made", () => order.push("handed"));
     const seen = made(el);
     const closeAfter = vi.spyOn(dialog, "closeAfter");
-    tick(el);
-    await el.updateComplete;
     button(el, "make-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     expect(api.makeRecoveryPack).toHaveBeenCalledWith({
@@ -370,15 +484,16 @@ describe("closing", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("forgets its new-key choice on close, and a reopened dialog starts unticked", async () => {
-    const { el, dialog } = await open();
-    tick(el);
+  it("forgets its kind on close: a dialog reopened for a plain pack makes a plain pack", async () => {
+    const { el, dialog } = await open({ kind: "master-key" });
     const closed = dialogClosed(dialog);
     button(el, "cancel-pack")!.click();
     await closed;
     el.show(status());
     await expect.poll(() => dialog.open).toBe(true);
-    expect(box(el).checked).toBe(false);
+    await el.updateComplete;
+    expect(dialog.heading).toBe(t("recovery_pack_dialog.heading"));
+    expect(button(el, "make-pack")!.variant).toBe("primary");
   });
 });
 
@@ -392,10 +507,8 @@ describe("the box key was not replaced", () => {
       madeAt: "2026-10-30T09:00:00.000Z",
     });
     api.getRecoveryPackStatus.mockResolvedValue(at);
-    const { el, dialog } = await open({ api, at: HELD });
+    const { el, dialog } = await open({ api, at: HELD, kind: "master-key" });
     const seen = made(el);
-    tick(el);
-    await el.updateComplete;
     button(el, "make-pack")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=key-failed]")).not.toBeNull();
     return { el, api, dialog, seen };
@@ -450,7 +563,7 @@ describe("the box key was not replaced", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("closes as a made pack when the box was not ticked", async () => {
+  it("closes as a made pack when it was a plain make", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockResolvedValue({
       pdf: pdf(),
@@ -471,23 +584,26 @@ describe("a lost answer", () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue(options.error ?? { code: "connection.failed" });
     api.getRecoveryPackStatus.mockResolvedValue(options.after ?? status());
-    const { el, dialog } = await open({ api, at: HELD });
-    if (options.ticked) tick(el);
-    await el.updateComplete;
+    const { el, dialog } = await open({
+      api,
+      at: HELD,
+      kind: options.ticked ? "master-key" : "pack",
+    });
     button(el, "make-pack")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=lost]")).not.toBeNull();
     return { el, api, dialog };
   }
 
-  it("with the box ticked, reads the status again and warns that the only copy of the key may be on a pack the person does not have", async () => {
+  it("after Make a new master key, reads the status again and warns that the only copy of the key may be on a pack the person does not have", async () => {
     const { el, api } = await lose({ ticked: true });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(t("recovery_pack_dialog.lost_new_key"));
     expect(lost).not.toContain(codeMessage("connection.failed"));
     expect(bottom(el)).toBe("");
-    expect(words(button(el, "remake-pack"))).toBe(t("recovery_pack_dialog.remake"));
-    expect(words(button(el, "stop-pack"))).toBe(t("recovery_pack_dialog.stop"));
+    expect(lost).toContain(t("recovery_pack_dialog.lost_new_key_choices"));
+    expect(words(button(el, "remake-pack"))).toBe(t("master_key_dialog.make"));
+    expect(words(button(el, "stop-pack"))).toBe(t("master_key_dialog.stop"));
     expect(button(el, "make-pack")).toBeNull();
     expect(button(el, "retry-pack")).toBeNull();
     expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
@@ -520,12 +636,12 @@ describe("a lost answer", () => {
     expect(lost).not.toContain("recovery pack 4");
   });
 
-  it("offers a new pack with a new key, ticked, through the shared sign-in gate", async () => {
+  it("offers Make a new master key again, through the shared sign-in gate", async () => {
     const { el, api } = await lose({ ticked: true });
     button(el, "remake-pack")!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
-    expect(box(el).checked).toBe(true);
+    expect(words(button(el, "make-pack"))).toBe(t("master_key_dialog.make"));
     expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
     expect(button(el, "make-pack")!.variant).toBe("danger");
@@ -539,14 +655,14 @@ describe("a lost answer", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("with the box not ticked, says the pack may have been made and offers Try again and Stop", async () => {
+  it("after a plain make, says the pack may have been made and offers Try again and Stop", async () => {
     const { el, api } = await lose({ ticked: false });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(t("recovery_pack_dialog.lost"));
     expect(lost).not.toContain(t("recovery_pack_dialog.lost_new_key"));
     expect(words(button(el, "retry-pack"))).toBe(t("recovery_pack_dialog.try_again"));
-    expect(button(el, "stop-pack")).not.toBeNull();
+    expect(words(button(el, "stop-pack"))).toBe(t("recovery_pack_dialog.stop"));
     expect(button(el, "remake-pack")).toBeNull();
   });
 
@@ -601,9 +717,7 @@ describe("a lost answer", () => {
       const { el } = await mountWidget<RecoveryPackDialog>("dashboard-recovery-pack-dialog", {
         api,
       });
-      el.show(HELD);
-      await el.updateComplete;
-      tick(el);
+      el.show(HELD, "master-key");
       await el.updateComplete;
       button(el, "make-pack")!.click();
       return el;
@@ -642,9 +756,7 @@ describe("a lost answer", () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({ code: "connection.timed_out" });
     api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
-    const { el } = await open({ api });
-    tick(el);
-    await el.updateComplete;
+    const { el } = await open({ api, kind: "master-key" });
     button(el, "make-pack")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=lost]")).not.toBeNull();
     expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
@@ -657,9 +769,7 @@ describe("a refusal", () => {
   it("shows a server refusal and keeps Make pack working", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({ code: "password.throttled", status: 429 });
-    const { el } = await open({ api });
-    tick(el);
-    await el.updateComplete;
+    const { el } = await open({ api, kind: "master-key" });
     button(el, "make-pack")!.click();
     await expect.poll(() => bottom(el)).toBe(codeMessage("password.throttled"));
     expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
@@ -690,9 +800,7 @@ describe("a refusal", () => {
       params: { reason: "shape" },
       status: 400,
     });
-    const { el } = await open({ api });
-    tick(el);
-    await el.updateComplete;
+    const { el } = await open({ api, kind: "master-key" });
     button(el, "make-pack")!.click();
     await expect.poll(() => bottom(el)).toBe(codeMessage("recovery.pack_invalid"));
     expect(bottom(el)).not.toBe(codeMessage("test.unmapped_code"));
@@ -704,10 +812,6 @@ describe("the words", () => {
   const KEYS = [
     "recovery_pack_dialog.heading",
     "recovery_pack_dialog.intro",
-    "recovery_pack_dialog.new_key",
-    "recovery_pack_dialog.new_key_held",
-    "recovery_pack_dialog.new_key_unknown",
-    "recovery_pack_dialog.new_key_effect",
     "recovery_pack_dialog.unreceived",
     "recovery_pack_dialog.make",
     "recovery_pack_dialog.key_failed",
@@ -718,9 +822,22 @@ describe("the words", () => {
     "recovery_pack_dialog.lost_new_key_choices",
     "recovery_pack_dialog.lost",
     "recovery_pack_dialog.lost_choices",
-    "recovery_pack_dialog.remake",
     "recovery_pack_dialog.try_again",
     "recovery_pack_dialog.stop",
+    "master_key_dialog.heading",
+    "master_key_dialog.text",
+    "master_key_dialog.note",
+    "master_key_dialog.make",
+    "master_key_dialog.stop",
+    "master_key_shown.lead",
+    "master_key_shown.warning",
+    "master_key_shown.key_name",
+    "master_key_shown.download",
+    "master_key_shown.print",
+    "master_key_shown.copy",
+    "master_key_shown.copied",
+    "master_key_shown.copy_failed",
+    "master_key_shown.continue",
   ] as const;
 
   it("has its own English and Spanish for every sentence", () => {
@@ -731,29 +848,32 @@ describe("the words", () => {
     }
   });
 
-  it("uses the plan's unreceived wording", () => {
+  it("names the Make a new master key button in the unreceived wording", () => {
     expect(en["recovery_pack_dialog.unreceived"]).toBe(
-      "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
+      "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
     );
   });
 
-  it("says the key was not replaced without claiming its page was not drawn", () => {
+  it("says the master key was not replaced without claiming its page was not drawn", () => {
     expect(en["recovery_pack_dialog.key_failed"]).toBe(
-      "The pack was made, but the box key was {not} replaced. The pack says why.",
+      "The pack was made, but the master key was {not} replaced. The pack says why.",
     );
     expect(es["recovery_pack_dialog.key_failed"]).toBe(
-      "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
+      "El paquete se ha hecho, pero la clave maestra {not} se ha sustituido. El paquete explica por qué.",
     );
   });
 
-  it("dates a pack in Spanish on a Spanish screen", async () => {
+  it("dates the keep day in Spanish on a Spanish screen", async () => {
     setLocale("es-ES");
-    const { el } = await open({ at: HELD });
-    expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
-      "12 de octubre",
+    const { el } = await open({
+      at: status({ keepOldPackUntil: "2026-10-12T12:00:00.000Z" }),
+      kind: "master-key",
+    });
+    expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toContain(
+      "12 de octubre de 2026",
     );
     expect(el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.heading).toBe(
-      es["recovery_pack_dialog.heading"],
+      es["master_key_dialog.heading"],
     );
   });
 });

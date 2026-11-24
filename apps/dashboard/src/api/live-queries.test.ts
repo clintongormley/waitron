@@ -497,10 +497,11 @@ it("refreshes the bucket copy's settings every ten seconds and on backup documen
   expect(query.refreshMs).toBe(10_000);
 });
 
-it("reads the recovery-pack status on pack, maker, backup and time-zone changes, and on its timer", () => {
+it("reads the recovery-pack status on pack, master key, maker, backup and time-zone changes, and on its timer", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getRecoveryPackStatus", []);
   expect(query.dependencies.map(({ type }) => type)).toEqual([
     "recovery_packs",
+    "master_keys",
     "persons",
     "backup_status",
     "settings.backup",

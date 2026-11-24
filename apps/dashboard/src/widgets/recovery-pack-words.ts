@@ -14,6 +14,13 @@ export function packDate(iso: string, timeZone: string | undefined): string {
   );
 }
 
+/** A whole date, "23 December 2026", "23 de diciembre de 2026", in the venue's zone; today's without one. */
+export function keepDate(iso: string | undefined, timeZone: string | undefined): string {
+  return dateTimeFormat(currentLocale(), { dateStyle: "long", timeZone }).format(
+    iso === undefined ? new Date() : new Date(iso),
+  );
+}
+
 type KeyHolder = { number: number; madeAt: string; received: boolean; offeredAtSetup?: true };
 
 /** A later pack that leaves the key in place cannot hide the unconfirmed pack that holds it. */
@@ -52,6 +59,6 @@ export function unreceivedWords(
     "recovery_pack_dialog.unreceived",
     { number: String(holder.number), date },
     "option",
-    t("recovery_pack_dialog.new_key"),
+    t("recovery_pack.make_master_key"),
   );
 }

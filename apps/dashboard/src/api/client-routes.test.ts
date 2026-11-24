@@ -2333,6 +2333,74 @@ describe("the recovery pack calls", () => {
     ]);
   });
 
+  it("hands back the new master key and its name when the box made one", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(MINIMAL_PDF, {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "4",
+        "X-Waitron-Recovery-Pack-Key": "replaced",
+        "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
+        "X-Waitron-Master-Key": "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+        "X-Waitron-Master-Key-Name": encodeURIComponent("2026-11-23 · QZJV"),
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    const made = await api.makeRecoveryPack({ locale: "en", newServerKey: true });
+
+    expect(made.masterKey).toEqual({
+      key: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      name: "2026-11-23 · QZJV",
+    });
+  });
+
+  it("hands back no master key when the box made none", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(MINIMAL_PDF, {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "4",
+        "X-Waitron-Recovery-Pack-Key": "unchanged",
+        "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
+      }),
+    );
+    const made = await new DashboardApi("", fetchImpl).makeRecoveryPack({
+      locale: "en",
+      newServerKey: false,
+    });
+    expect(made).not.toHaveProperty("masterKey");
+  });
+
+  it.each([
+    [
+      "a master key without its name",
+      { "X-Waitron-Master-Key": "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5" },
+    ],
+    [
+      "a name without its master key",
+      { "X-Waitron-Master-Key-Name": "2026-11-23%20%C2%B7%20QZJV" },
+    ],
+    [
+      "a name that does not decode",
+      {
+        "X-Waitron-Master-Key": "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+        "X-Waitron-Master-Key-Name": "%E0%A4%A",
+      },
+    ],
+  ])("refuses %s as recovery.pack_invalid", async (_label, extra) => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(MINIMAL_PDF, {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "4",
+        "X-Waitron-Recovery-Pack-Key": "replaced",
+        "X-Waitron-Recovery-Pack-Made-At": "2026-10-30T23:30:00.000Z",
+        ...extra,
+      }),
+    );
+    await expect(
+      new DashboardApi("", fetchImpl).makeRecoveryPack({ locale: "en", newServerKey: true }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
   it.each([
     ["a body that is not a PDF", "<html></html>", "text/html", "4", "unchanged"],
     ["an empty PDF", "", "application/pdf", "4", "unchanged"],
