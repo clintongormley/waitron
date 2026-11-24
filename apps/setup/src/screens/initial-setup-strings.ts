@@ -7,8 +7,7 @@ export const initialSetupStrings = {
     required: "Enter your password.",
     block: "Confirm before selecting an hour or making your recovery pack.",
     activation: "Confirm before activation.",
-    reissue:
-      "Make the pack again with a new box key. Older backups still need the pack holding their matching key.",
+    reissue: "Confirm before making new keys.",
     confirm: "Confirm",
     cancel: "Cancel",
     next: "Review",
@@ -27,8 +26,7 @@ export const initialSetupStrings = {
     required: "Introduce tu contraseña.",
     block: "Confirma antes de seleccionar una hora o hacer el paquete de recuperación.",
     activation: "Confirma antes de activar.",
-    reissue:
-      "Haz el paquete otra vez con una nueva clave del servidor. Las copias anteriores siguen necesitando el paquete con su clave correspondiente.",
+    reissue: "Confirma antes de crear claves nuevas.",
     confirm: "Confirmar",
     cancel: "Cancelar",
     next: "Revisar",

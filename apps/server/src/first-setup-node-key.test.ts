@@ -77,7 +77,7 @@ it("a restart keeps only the stage and refuses silent reminting", async () => {
   expect(await restarted.readStage(f.ownerAttempt)).toEqual(first.stage);
   const nonce = await f.owner.reconfirm(f.ownerAttempt, PASSWORD, "block-use");
   await expect(restarted.stageInitialNodeKey(f.ownerAttempt, nonce)).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
+    code: "setup.node_key_lost",
   });
   expect(await readFile(f.path, "utf8")).toBe(bytes);
 });

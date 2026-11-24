@@ -73,6 +73,18 @@ export const finishEn = {
     "Any that were opened at an IP address (for example by scanning a QR code) must be opened again: go to /setup/trust on this box, scan its QR code, and set the device up again.",
   "done.devices.print_agent":
     "A print agent on this box reconnects by itself. One on another computer that was given an IP address needs its Box address changed on its own page, at port 9110 on that computer.",
+  "done.pack.heading": "Recovery pack",
+  "done.pack.lead":
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
+  "done.pack.warning": "This is the only time the master key is shown.",
+  "done.pack.key_name": "Master key · {name}",
+  "done.pack.download": "Download",
+  "done.pack.print": "Print",
+  "done.pack.copy": "Copy",
+  "done.pack.copied": "Copied.",
+  "done.pack.copy_failed": "Copy did not work. Use Download or Print, or write the key down.",
+  "done.pack.print_failed": "Your browser blocked printing. Use Download instead.",
+  "done.pack.continue": "Continue",
   "done.break_glass.heading": "Save your box key now",
   "done.break_glass.key_name": "Box key {date} · {code}",
   "done.break_glass.backups":
@@ -92,7 +104,7 @@ export const finishEn = {
   "done.break_glass.file_keep":
     "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
-    "The box key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new box key before taking your first bucket copy.",
+    "The box key was issued when setup finished. If you did not save it, sign in to Backups and choose Make a new master key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
   "done.joining.heading": "This box is joining",
   "done.joined.heading": "This box has joined",
@@ -205,6 +217,18 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Los que se abrieron en una dirección IP (por ejemplo, escaneando un código QR) hay que volver a abrirlos: ve a /setup/trust en este servidor, escanea su código QR y vuelve a configurar el dispositivo.",
   "done.devices.print_agent":
     "Un agente de impresión en este servidor se vuelve a conectar solo. Si está en otro ordenador y se le dio una dirección IP, hay que cambiar su «Box address» en su propia página, en el puerto 9110 de ese ordenador.",
+  "done.pack.heading": "Paquete de recuperación",
+  "done.pack.lead":
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
+  "done.pack.warning": "Esta es la única vez que se muestra la clave maestra.",
+  "done.pack.key_name": "Clave maestra · {name}",
+  "done.pack.download": "Descargar",
+  "done.pack.print": "Imprimir",
+  "done.pack.copy": "Copiar",
+  "done.pack.copied": "Copiada.",
+  "done.pack.copy_failed": "No se ha podido copiar. Usa Descargar o Imprimir, o apunta la clave.",
+  "done.pack.print_failed": "El navegador ha bloqueado la impresión. Usa Descargar.",
+  "done.pack.continue": "Continuar",
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":
@@ -225,7 +249,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.file_keep":
     "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
   "done.break_glass.replacement":
-    "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
+    "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y elige Crear una clave maestra nueva antes de hacer la primera copia en el bucket.",
   "done.break_glass.open_backups": "Abrir Copias de seguridad",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joined.heading": "Este servidor se ha unido",

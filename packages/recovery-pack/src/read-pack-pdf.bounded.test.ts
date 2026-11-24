@@ -35,7 +35,7 @@ function allocated(): number {
 
 const file: RecoveryPackFile = {
   kind: "waitron-recovery-pack",
-  version: 1,
+  version: 2,
   number: 2,
   madeAt: "2026-10-29T17:00:00.000Z",
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
@@ -44,6 +44,9 @@ const file: RecoveryPackFile = {
   serverKey: null,
   serverKeyName: null,
   serverKeyHeldBy: null,
+  masterKey: null,
+  masterKeyName: null,
+  masterKeyHeldBy: null,
 };
 
 async function carrier(): Promise<PDFDocument> {

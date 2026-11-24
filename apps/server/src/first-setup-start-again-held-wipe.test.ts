@@ -17,6 +17,7 @@ import {
 } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
+import { DatabaseSync } from "node:sqlite";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { access, rm, rmdir, unlink } from "node:fs/promises";
@@ -35,6 +36,21 @@ import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
 import { foreignHotJournal } from "../test/foreign-journal.js";
 import { runStagedRestore } from "./restore-request.js";
+
+it("a held setup past publication with a master_keys row is offered Start again, which deletes the row with its database", async () => {
+  const f = await heldSetup();
+  const venueFile = join(f.roots.venueDir, "venue.db");
+  const read = new DatabaseSync(venueFile, { readOnly: true });
+  try {
+    expect(read.prepare("select count(*) as n from master_keys").get()).toEqual({ n: 1 });
+  } finally {
+    read.close();
+  }
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expect(access(venueFile)).rejects.toMatchObject({ code: "ENOENT" });
+});
 
 it("a held setup database: the summary answers and Start again deletes it with no password", async () => {
   const f = await heldSetup();

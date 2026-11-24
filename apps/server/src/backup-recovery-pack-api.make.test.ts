@@ -14,11 +14,18 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { loadKeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  masterKeyCheckValue,
+  masterKeyName,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import {
   CORE_CHANGE_SOURCES,
   insertRecoveryPack,
   installChangeFeed,
+  insertMasterKey,
+  masterKeys,
   readRecoveryPacks,
   removeChangeFeed,
   setNodePublicKey,
@@ -42,7 +49,12 @@ import { readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
-import { AppError, type ResourceIdentity } from "@waitron/shared";
+import {
+  AppError,
+  decodeMasterKeyCode,
+  encodeMasterKeyCode,
+  type ResourceIdentity,
+} from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
@@ -53,6 +65,7 @@ import {
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -153,9 +166,12 @@ function fixture(
     evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
     loadFonts?: typeof loadRecoveryPackFonts;
     readBoxEnv?: () => Promise<Record<string, string | undefined>>;
+    requestLog?: boolean;
   } = {},
 ) {
   const local = new Hono();
+  if (options.requestLog === true)
+    local.use(requestIdMiddleware((...values) => logs.push(values), Date.now));
   const app = options.remote
     ? createStaffApp(local, async () => "https://staff.example.test")
     : local;
@@ -310,6 +326,20 @@ async function pdfText(bytes: ArrayBuffer): Promise<string> {
       for (const item of content.items) if ("str" in item) words.push(item.str);
     }
     return words.join(" ").replace(/\s+/g, " ");
+  } finally {
+    await loading.destroy();
+  }
+}
+
+async function firstPageText(bytes: ArrayBuffer): Promise<string> {
+  const loading = getDocument({ data: new Uint8Array(bytes.slice(0)), useSystemFonts: false });
+  try {
+    const content = await (await (await loading.promise).getPage(1)).getTextContent();
+    return content.items
+      .flatMap((item) => ("str" in item ? [item.str] : []))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
   } finally {
     await loading.destroy();
   }
@@ -533,6 +563,184 @@ describe("a made pack", () => {
     ]);
   });
 
+  const storedMasterKeys = () => suite.db.select().from(masterKeys).orderBy(masterKeys.number);
+  const shownMasterKey = (response: Response) => ({
+    masterKey: response.headers.get("x-waitron-master-key"),
+    masterKeyName: decodeURIComponent(response.headers.get("x-waitron-master-key-name") ?? ""),
+  });
+
+  it("Make a new master key also makes a new box key, and answers the master key it saved", async () => {
+    const f = fixture();
+    const response = await f.make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("replaced");
+    const { masterKey, masterKeyName: name } = shownMasterKey(response);
+    const bytes = decodeMasterKeyCode(masterKey!);
+    expect(masterKey).toBe(encodeMasterKeyCode(bytes));
+    const publicKey = sealingPublicKey(bytes);
+    expect(name).toBe(masterKeyName(publicKey, "2026-10-30"));
+    expect(await storedMasterKeys()).toEqual([
+      {
+        number: 1,
+        name,
+        checkValue: masterKeyCheckValue(bytes),
+        publicKey: new Uint8Array(publicKey),
+        madeAt: new Date("2026-10-30T09:00:00.000Z"),
+        madeBy: admin.personId,
+      },
+    ]);
+    expect(JSON.stringify(logs)).not.toContain(masterKey!.slice(0, 9));
+    const again = shownMasterKey(await f.make(true));
+    const rows = await storedMasterKeys();
+    expect(rows.map((row) => [row.number, row.name])).toEqual([
+      [1, name],
+      [2, again.masterKeyName],
+    ]);
+  });
+
+  it("the request log line for Make a new master key does not carry the key", async () => {
+    const response = await fixture({ requestLog: true }).make(true);
+    const masterKey = response.headers.get("x-waitron-master-key")!;
+    expect(masterKey).toMatch(/^(?:\S{4} ){6}\S{4}$/);
+    const requestLines = logs.filter(([, event]) => event === "http.request");
+    expect(requestLines).toMatchObject([
+      [expect.any(String), "http.request", { routePath: "/api/backup/recovery-pack", status: 200 }],
+    ]);
+    const logged = JSON.stringify(logs);
+    expect(logged).not.toContain(masterKey.slice(0, 9));
+    expect(logged).not.toContain(masterKey.replaceAll(" ", "").slice(0, 8));
+  });
+
+  it("a pack without a new box key makes no master key", async () => {
+    const response = await fixture().make(false);
+    expect(response.status).toBe(200);
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toEqual([]);
+  });
+
+  it("a Make a new master key whose box-key page fails makes no master key", async () => {
+    const response = await fixture({ seats: 2 }).make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toEqual([]);
+  });
+
+  it("a failed node.db save after Make a new master key leaves the old key current", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    const f = fixture();
+    suite.node.run(
+      sql`create trigger refuse_box_key before update on box begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await f.make(true);
+    } finally {
+      suite.node.run(sql`drop trigger refuse_box_key`);
+    }
+    expect(refused.status).toBe(500);
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: old.name }]);
+    const retried = await f.make(true);
+    expect(retried.status).toBe(200);
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: old.name },
+      { number: 2, name: shownMasterKey(retried).masterKeyName },
+    ]);
+  });
+
+  it("a refused master_keys save after the new box key is saved answers an error and keeps the old master key current, the new box key nobody was shown in force until a retry makes one key and a working box key", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    const f = fixture();
+    suite.db.run(
+      sql`create trigger refuse_master_key before insert on master_keys begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await f.make(true);
+    } finally {
+      suite.db.run(sql`drop trigger refuse_master_key`);
+    }
+    expect(refused.status).toBe(500);
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await refused.json()).toEqual({ error: { code: "server.internal" } });
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: old.name }]);
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).not.toBe(keyInForce.name);
+    const unseen = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
+    expect(await verifySecretAsync(keyInForce.secret, unseen)).toBe(false);
+
+    const retried = await f.make(true);
+    expect(retried.status).toBe(200);
+    const shown = shownMasterKey(retried);
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: old.name },
+      {
+        number: 2,
+        name: shown.masterKeyName,
+        checkValue: masterKeyCheckValue(decodeMasterKeyCode(shown.masterKey!)),
+      },
+    ]);
+    const file = await readRecoveryPackPdf(new Uint8Array(await retried.arrayBuffer()));
+    const carried = (file.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
+    expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(carried.name);
+    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
+    expect(await verifySecretAsync(carried.secret, verifier)).toBe(true);
+  });
+
+  it("Make a new master key also makes a new box key, and its pack holds both", async () => {
+    const response = await fixture().make(true);
+    const shown = shownMasterKey(response);
+    const bytes = await response.arrayBuffer();
+    const file = await readRecoveryPackPdf(new Uint8Array(bytes));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
+      shown.masterKey,
+      shown.masterKeyName,
+      null,
+    ]);
+    const carried = (file.serverKey as { nodeKey: { name: string } }).nodeKey;
+    expect(carried.name).toBe(await readRecoveryKeyName(suite.node, node.nodeId));
+    expect(await firstPageText(bytes)).toBe(
+      `Waitron recovery pack · Sala Master key · ${shown.masterKeyName} ${shown.masterKey} Master key`,
+    );
+  });
+
+  it("a pack made without a new master key names the pack that holds the current one", async () => {
+    const f = fixture();
+    const first = shownMasterKey(await f.make(true));
+    const plain = await f.make(false);
+    expect(plain.headers.get("x-waitron-recovery-pack")).toBe("2");
+    const bytes = await plain.arrayBuffer();
+    const file = await readRecoveryPackPdf(new Uint8Array(bytes));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
+      null,
+      first.masterKeyName,
+      1,
+    ]);
+    expect(await firstPageText(bytes)).toBe(
+      `Waitron recovery pack · Sala Master key ${first.masterKeyName}: in pack 1`,
+    );
+    expect(await pdfText(bytes)).not.toContain(first.masterKey!);
+  });
+
+  it("a Make a new master key whose box-key page fails shows no new master key", async () => {
+    const response = await fixture({ seats: 2 }).make(true);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([null, null, null]);
+  });
+
   it("never gives a new key the name of the key in force or of a key an earlier pack carried", async () => {
     const f = fixture();
     const keyName = async (response: Response) =>
@@ -675,7 +883,7 @@ describe("a made pack", () => {
     const response = await fixture().make(true);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
-    expect(await pdfText(await response.arrayBuffer())).toContain("This box has no box key yet.");
+    expect(await pdfText(await response.arrayBuffer())).toContain("Page 3 of 3");
     expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
     const [record] = await packs();
     expect(record!.parts[3]).toEqual({ part: "server-key", state: "not-set-up" });
@@ -1147,6 +1355,51 @@ describe("the status route", () => {
     expect(await read(fixture())).toMatchObject({ serverKey: "not_yet" });
   });
 
+  it("names the current master key and the pack that showed it, which a plain make does not change", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
+    expect(await read(f)).toMatchObject({ masterKey: null });
+    const response = await f.make(true);
+    const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
+    await response.arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+    await (await f.make(false)).arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+  });
+
+  it("names no pack for a master key when a plain pack was made at the same instant as the pack that showed it", async () => {
+    const f = fixture({ now: () => new Date("2026-10-30T09:00:00.000Z") });
+    const response = await f.make(true);
+    const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
+    await response.arrayBuffer();
+    await (await f.make(false)).arrayBuffer();
+    const third = await f.make(false);
+    expect(third.headers.get("x-waitron-recovery-pack")).toBe("3");
+    const file = await readRecoveryPackPdf(new Uint8Array(await third.arrayBuffer()));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([null, name, null]);
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: null } });
+  });
+
+  it("names no pack for a master key no pack on this box showed", async () => {
+    await withTransaction(suite.db, (tx) =>
+      insertMasterKey(tx, {
+        name: "2026-10-01 · AAAA",
+        checkValue: "a".repeat(64),
+        publicKey: Buffer.alloc(44, 1),
+        madeAt: new Date("2026-10-01T09:00:00.000Z"),
+        madeBy: null,
+      }),
+    );
+    expect(await read(fixture())).toMatchObject({
+      masterKey: { name: "2026-10-01 · AAAA", pack: null },
+    });
+  });
+
+  it("names the day the old pack is kept until if a new master key is made now", async () => {
+    // Daily archives keeping 7: the last one made before now is gone 8 days from now.
+    expect(await read(fixture())).toMatchObject({ keepOldPackUntil: "2026-11-07T09:00:00.000Z" });
+  });
+
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });
@@ -1440,7 +1693,8 @@ it.each([
   expect(text).not.toContain(EMERGENCY.code);
   expect(text).not.toContain("SECRET-error-message");
   expect(text).not.toContain("99 seconds");
-  expect(text).toContain("new pack");
+  if (closed) expect(text).toContain("Page 2 of 4");
+  else expect(text).toContain("new pack");
   const record = (await packs())[0]!;
   expect(record.parts[0]).toEqual({ part: "emergency", state: closed ? "absent" : "failed" });
   expect(record.parts.slice(1).map((p) => p.state)).toEqual(["included", "included", "included"]);
@@ -1458,13 +1712,8 @@ it.each(["disconnected", "secondary", "permission"] as const)(
     expect(response.status).toBe(200);
     const text = await pdfText(await response.arrayBuffer());
     expect(text).not.toContain(EMERGENCY.code);
-    expect(text).toContain(
-      reason === "permission"
-        ? "administrator"
-        : reason === "secondary"
-          ? "main box"
-          : "not connected",
-    );
+    expect(text).toContain("Page 2 of 4");
+    expect(text).not.toContain("Emergency start");
     expect(fetchCode).not.toHaveBeenCalled();
     expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
   },

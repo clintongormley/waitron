@@ -24,16 +24,27 @@ async function digest(bytes: Uint8Array<ArrayBuffer>) {
   ).join("");
 }
 
+const made = {
+  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+  masterKeyName: "2026-11-23 · QZJV",
+};
+
 describe("setup's delivery is recovery pack 1", () => {
   it.each(["en", "es"] as const)(
-    "carries only the staged server key, as pack 1, in %s",
+    "carries the new master key and the staged server key, as pack 1, in %s",
     async (locale) => {
-      const session = createRecoveryDelivery(document, locale, async () => true, "Europe/Madrid");
+      const session = createRecoveryDelivery(
+        document,
+        made,
+        locale,
+        async () => true,
+        "Europe/Madrid",
+      );
       try {
         const bytes = new Uint8Array(await (await fetch(await session.download())).arrayBuffer());
         expect(await readRecoveryPackPdf(bytes)).toEqual({
           kind: "waitron-recovery-pack",
-          version: 1,
+          version: 2,
           number: 1,
           madeAt: document.createdAt,
           bucketCode: null,
@@ -42,6 +53,8 @@ describe("setup's delivery is recovery pack 1", () => {
           serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(document))),
           serverKeyName: "2026-10-17 · ACRY",
           serverKeyHeldBy: null,
+          ...made,
+          masterKeyHeldBy: null,
         });
         expect((await readRecoveryPdf(bytes)).document).toEqual(document);
         expect((await session.ready()).documentDigest).toBe(await digest(bytes));

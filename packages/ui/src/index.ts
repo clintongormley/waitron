@@ -203,6 +203,12 @@ export { WtChoiceRow } from "./components/wt-choice-row.js";
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
 export { WtBanner, type WtBannerTone } from "./components/wt-banner.js";
+export {
+  WtMasterKeyBox,
+  type MasterKeyAction,
+  type MasterKeyBoxCopy,
+  type MasterKeyUsedDetail,
+} from "./components/wt-master-key-box.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 export { WtThemeChooser, type WtThemeLabels } from "./components/wt-theme-chooser.js";
 export {

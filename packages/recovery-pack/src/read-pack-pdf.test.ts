@@ -11,7 +11,7 @@ import { MAX_PACK_PDF, readRecoveryPackPdf } from "./read-pack-pdf.js";
 
 const file: RecoveryPackFile = {
   kind: "waitron-recovery-pack",
-  version: 1,
+  version: 2,
   number: 2,
   madeAt: "2026-10-29T17:00:00.000Z",
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
@@ -20,6 +20,9 @@ const file: RecoveryPackFile = {
   serverKey: null,
   serverKeyName: "2026-10-12 · key",
   serverKeyHeldBy: { number: 1, madeOn: "2026-10-12", received: true },
+  masterKey: null,
+  masterKeyName: null,
+  masterKeyHeldBy: null,
 };
 const fileBytes = buildRecoveryPackFile(file);
 
@@ -180,7 +183,7 @@ describe("reading the pack file out of a pack PDF", () => {
         .set(PDFName.of("DOS"), pdf.context.register(pdf.context.flateStream("hidden")));
     if (kind === "catalog association")
       pdf.catalog.set(PDFName.of("AF"), pdf.context.obj([spec, spec]));
-    if (kind === "name not text") list.set(0, PDFName.of("waitron-recovery-pack-v1.json"));
+    if (kind === "name not text") list.set(0, PDFName.of("waitron-recovery-pack-v2.json"));
     if (kind === "file not a stream")
       spec.lookup(PDFName.of("EF"), PDFDict).set(PDFName.of("F"), pdf.context.obj({ Length: 0 }));
     expect(await reason(await pdf.save())).toBe("carrier");

@@ -26,6 +26,8 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
+    masterKey: null,
+    keepOldPackUntil: "2026-11-11T12:00:00.000Z",
     serverKey: "set",
     timeZone: "Europe/Madrid",
     ...overrides,
@@ -33,8 +35,8 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
 }
 
 it.each([
-  ["en-GB", "Backup encryption key", "Box key"],
-  ["es-ES", "Clave de cifrado de copias", "Clave del servidor"],
+  ["en-GB", "Backup key", "Box key"],
+  ["es-ES", "Clave de las copias", "Clave del servidor"],
 ] as const)("names the two keys separately on the pack in %s", async (locale, backup, server) => {
   setLocale(locale);
   const el = await mount(stubApi(STATES["up to date"]));
@@ -42,6 +44,54 @@ it.each([
   expect(root.querySelector("[data-test=row-backup-key] dt")?.textContent).toBe(backup);
   expect(root.querySelector("[data-test=row-server-key] dt")?.textContent).toBe(server);
 });
+
+it.each([
+  ["en-GB", "Master key", "2026-11-23 · QZJV, in pack 1", "None yet"],
+  ["es-ES", "Clave maestra", "2026-11-23 · QZJV, en el paquete 1", "Ninguna todavía"],
+] as const)(
+  "the card shows the current master key's name, and the pack that showed it, in %s",
+  async (locale, label, value, none) => {
+    setLocale(locale);
+    const shown = await mount(
+      stubApi(status({ latest: latest(), masterKey: { name: "2026-11-23 · QZJV", pack: 1 } })),
+    );
+    expect(shown.shadowRoot!.querySelector("[data-test=row-master-key] dt")?.textContent).toBe(
+      label,
+    );
+    expect(row(shown, "master-key")).toBe(value);
+    const without = await mount(stubApi(status({ latest: latest(), masterKey: null })));
+    expect(row(without, "master-key")).toBe(none);
+    const before = await mount(
+      stubApi(status({ masterKey: { name: "2026-11-23 · QZJV", pack: null } })),
+    );
+    expect(row(before, "master-key")).toBe("2026-11-23 · QZJV");
+  },
+);
+
+it.each([
+  [
+    "en-GB",
+    "Recovery pack",
+    "Keep the recovery pack somewhere safe, away from the box.",
+    "Make a new master key",
+  ],
+  [
+    "es-ES",
+    "Paquete de recuperación",
+    "Guarda el paquete de recuperación en un lugar seguro, lejos del servidor.",
+    "Crear una clave maestra nueva",
+  ],
+] as const)(
+  "draws the card's heading, intro and Make a new master key in %s",
+  async (locale, heading, intro, make) => {
+    setLocale(locale);
+    const el = await mount(stubApi(STATES["up to date"]));
+    const root = el.shadowRoot!;
+    expect(words(root.querySelector("h2"))).toBe(heading);
+    expect(words(root.querySelector("h2 + p"))).toBe(intro);
+    expect(words(root.querySelector("wt-button[data-test=make-master-key]"))).toBe(make);
+  },
+);
 
 const PARTS: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
   { part: "bucket", state: "included" },
@@ -192,7 +242,7 @@ const DAYS = {
   },
 } as const;
 
-const option = () => t("recovery_pack_dialog.new_key");
+const option = () => t("recovery_pack.make_master_key");
 
 describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => {
   const day = DAYS[locale];
@@ -350,8 +400,8 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(offered?.classList.contains("warn")).toBe(false);
     expect(offered?.textContent?.trim()).toBe(
       locale === "en-GB"
-        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new pack with a new box key."
-        : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
+        ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new master key."
+        : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea una clave maestra nueva.",
     );
     expect(row(el, "server-key")).toContain("1");
     expect(line(el)).toBe("");
@@ -474,7 +524,7 @@ describe("an unreceived pack", () => {
 });
 
 describe("which pack holds the box key", () => {
-  it("is the same pack on the card and in the dialog when the status names a kept and an unreceived holder", async () => {
+  it("is the same pack in the card's row and line when the status names a kept and an unreceived holder", async () => {
     setLocale("en-GB");
     const both = status({
       latest: latest({ number: 4, received: false }),
@@ -491,11 +541,6 @@ describe("which pack holds the box key", () => {
       fill("recovery_pack.server_key_on_unreceived", { number: "4", date: "12 October" }),
     );
     expect(line(el)).toContain(unreceived);
-    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-recovery-pack]")!.click();
-    const dialog = dialogOf(el);
-    await expect
-      .poll(() => words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]")))
-      .toBe(`${unreceived} ${t("recovery_pack_dialog.new_key_effect")}`);
   });
 });
 
@@ -570,7 +615,7 @@ describe("reading the status", () => {
     expect(make.disabled).toBe(false);
     const show = vi.spyOn(dialogOf(el), "show");
     make.click();
-    expect(show).toHaveBeenCalledWith(null);
+    expect(show).toHaveBeenCalledWith(null, "pack");
   });
 
   it("re-reads when asked again while a read is out, ending on the later answer", async () => {
@@ -588,6 +633,30 @@ describe("reading the status", () => {
     expect(line(el)).toContain(
       fill("recovery_pack.out_of_date", { number: "3", date: "12 October" }),
     );
+  });
+
+  it("a new master_keys row refreshes the card without a reload", async () => {
+    const api = stubApi(
+      status({
+        latest: latest(),
+        upToDate: true,
+        masterKey: { name: "2026-10-02 · RW7M", pack: 3 },
+      }),
+    );
+    const el = await mount(api);
+    expect(row(el, "master-key")).toBe(
+      fill("recovery_pack.master_key_in", { name: "2026-10-02 · RW7M", number: "3" }),
+    );
+    api.getRecoveryPackStatus.mockResolvedValue(
+      status({
+        latest: latest(),
+        upToDate: true,
+        masterKey: { name: "2026-11-23 · QZJV", pack: null },
+      }),
+    );
+    api.liveData.invalidate([{ type: "master_keys" }]);
+    await settle(el);
+    expect(row(el, "master-key")).toBe("2026-11-23 · QZJV");
   });
 
   it("shows a pack marked received elsewhere once the live feed says the packs changed", async () => {
@@ -698,7 +767,63 @@ describe("making a pack", () => {
     const el = await mount(api);
     const show = vi.spyOn(dialogOf(el), "show");
     el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-recovery-pack]")!.click();
-    expect(show).toHaveBeenCalledWith(STATES["up to date"]);
+    expect(show).toHaveBeenCalledWith(STATES["up to date"], "pack");
+  });
+
+  it("opens the dialog as Make a new master key from its own button, with the status it holds", async () => {
+    const el = await mount(stubApi(STATES["up to date"]));
+    const show = vi.spyOn(dialogOf(el), "show");
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-master-key]")!.click();
+    expect(show).toHaveBeenCalledWith(STATES["up to date"], "master-key");
+  });
+
+  it.each([
+    ["none", false],
+    ["not_yet", false],
+    ["set", true],
+  ] as const)(
+    "offers Make a new master key only once the status says the box has a box key to replace with it (%s)",
+    async (serverKey, offered) => {
+      const el = await mount(stubApi(status({ serverKey })));
+      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]") !== null).toBe(
+        offered,
+      );
+      expect(
+        el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]"),
+      ).not.toBeNull();
+    },
+  );
+
+  it("offers no Make a new master key while the status is still being read", async () => {
+    const api = stubApi(STATES["up to date"]);
+    const slow = deferred<RecoveryPackStatus>();
+    api.getRecoveryPackStatus.mockReturnValue(slow.promise);
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
+    slow.resolve(STATES["up to date"]);
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+  });
+
+  it("offers no Make a new master key when the status cannot be read, since nothing is known", async () => {
+    const api = stubApi(STATES["up to date"]);
+    api.getRecoveryPackStatus.mockRejectedValueOnce({ code: "connection.failed" });
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
+  });
+
+  it("stops offering Make a new master key when a later read fails", async () => {
+    const api = stubApi(STATES["up to date"]);
+    const el = await mount(api);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+    api.getRecoveryPackStatus.mockRejectedValueOnce({ code: "connection.failed" });
+    el.reload();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
   });
 
   it("offers the made pack to download and print, then re-reads the status", async () => {
@@ -1215,25 +1340,6 @@ it("does not claim an emergency-only pack carries a backup key", async () => {
   );
 });
 
-it.each(["en-GB", "es-ES"])(
-  "shows the printed emergency issue time in the venue zone (%s)",
-  async (locale) => {
-    setLocale(locale);
-    const el = await mount(
-      stubApi(
-        status({
-          latest: latest({
-            parts: [{ part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
-          }),
-          upToDate: true,
-        }),
-      ),
-    );
-    expect(row(el, "emergency-code")).toContain("2026");
-    expect(row(el, "emergency-code")).toContain("12:00");
-  },
-);
-
 it("does not call an unknown emergency code out of date or ask for another pack", async () => {
   const el = await mount(
     stubApi(status({ latest: latest(), reasons: [{ part: "emergency", kind: "cannot_check" }] })),
@@ -1290,12 +1396,13 @@ it.each([true, false])(
       release(value);
     }
     await expect.poll(() => dialog.isOpen).toBe(true);
-    await dialog.updateComplete;
-    expect(dialog.shadowRoot!.querySelector("#new-server-key") !== null).toBe(present);
-    if (present)
-      expect(words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
-        "recovery pack 1, made on 2 September",
-      );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]") !== null).toBe(
+      present,
+    );
+    expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+      t("recovery_pack_dialog.heading"),
+    );
     dialog.dismiss();
     api.getRecoveryPackStatus.mockResolvedValue({ ...value });
     el.reload();
@@ -1320,3 +1427,38 @@ it("opens the linked maker after the initial status read fails", async () => {
     )
     .toBe(true);
 });
+
+it.each([
+  ...Object.entries(STATES),
+  [
+    "an emergency code printed",
+    status({
+      latest: latest({
+        parts: [...PARTS, { part: "emergency", state: "included", codeIssuedAt: MADE_AT }],
+      }),
+      upToDate: true,
+    }),
+  ],
+] as [string, RecoveryPackStatus][])("draws no emergency code row (%s)", async (_state, at) => {
+  const el = await mount(stubApi(at));
+  expect(el.shadowRoot!.querySelector("[data-test=pack-status], dl")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=row-emergency-code]")).toBeNull();
+});
+
+it.each([
+  ["en-GB", "backup key", "encryption"],
+  ["es-ES", "clave de las copias", "cifrado"],
+] as const)(
+  "calls it the backup key in the card's own sentences, as its row does (%s)",
+  async (locale, name, old) => {
+    setLocale(locale);
+    for (const sentence of [
+      fill("recovery_pack.reason.key_changed", { date: "x" }),
+      fill("recovery_pack.keep_backup_key", { number: "1", date: "x", until: "y" }),
+      t("recovery_pack.older_key"),
+    ]) {
+      expect(sentence.toLowerCase()).toContain(name);
+      expect(sentence).not.toContain(old);
+    }
+  },
+);

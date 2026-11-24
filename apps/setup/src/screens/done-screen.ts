@@ -4,6 +4,8 @@ import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-master-key-box.js";
 import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { JoinCopyStage, SetupApi } from "../api/client.js";
@@ -189,6 +191,13 @@ export class SetupDoneScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
+      .pack-warning {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+      }
       a.break-glass-save {
         display: inline-block;
       }
@@ -215,6 +224,13 @@ export class SetupDoneScreen extends LitElement {
 
   @property({ attribute: false }) recoveryPackPdf?: string;
   #recoveryPackUrl?: string;
+
+  /** The setup's new master key, as printed; the server keeps none, so this step shows it once. */
+  @property({ attribute: false }) masterKey?: string;
+  @property({ attribute: false }) masterKeyName?: string;
+
+  @state() private packUsed = false;
+  @state() private packContinued = false;
 
   @property({ type: Boolean }) cloudStaffEmailUnavailable = false;
   @property() onboardingIntent?: "demo" | "prepare" | "live";
@@ -740,7 +756,49 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
+  #recoveryPackStep(key: string): TemplateResult {
+    return html`
+      <h1>${t("done.pack.heading")}</h1>
+      <p data-test="pack-lead">${t("done.pack.lead")}</p>
+      <p class="pack-warning" data-test="pack-warning">${t("done.pack.warning")}</p>
+      <wt-master-key-box
+        data-test="master-key-box"
+        .masterKey=${key}
+        .keyName=${this.masterKeyName}
+        .pdfUrl=${this.#recoveryPackUrl}
+        .copy=${{
+          name: (name: string) => format("done.pack.key_name", { name }),
+          download: t("done.pack.download"),
+          print: t("done.pack.print"),
+          copy: t("done.pack.copy"),
+          copied: t("done.pack.copied"),
+          copyFailed: t("done.pack.copy_failed"),
+          printFailed: t("done.pack.print_failed"),
+        }}
+        @wt-master-key-used=${() => {
+          this.packUsed = true;
+        }}
+      ></wt-master-key-box>
+      ${
+        this.packUsed
+          ? html`<wt-form-actions
+              ><wt-button
+                data-test="pack-continue"
+                variant="primary"
+                @click=${() => {
+                  this.packContinued = true;
+                }}
+                >${t("done.pack.continue")}</wt-button
+              ></wt-form-actions
+            >`
+          : nothing
+      }
+    `;
+  }
+
   #renderTrading(): TemplateResult {
+    if (this.masterKey !== undefined && !this.packContinued)
+      return this.#recoveryPackStep(this.masterKey);
     const needsReplacement = this.breakGlassKeyInBackups && this.breakGlassSecret === undefined;
     return html`
       <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>

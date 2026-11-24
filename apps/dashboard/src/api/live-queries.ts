@@ -444,6 +444,7 @@ export const QUERY_DEPENDENCIES = {
   // server key name and Cloud's emergency state, none of which send an event, so its timer stays.
   getRecoveryPackStatus: [
     "recovery_packs",
+    "master_keys",
     "persons",
     "backup_status",
     "settings.backup",

@@ -154,7 +154,10 @@ function interval(schedule: BackupSchedule): number {
  * `count` newest archives and none older than `days`, checked after each new one is stored. Taking
  * the change itself for the newest archive made with the old key errs later.
  */
-function keepUntil(changedAt: number, input: PackStatusInput): number {
+function keepUntil(
+  changedAt: number,
+  input: Pick<PackStatusInput, "retention" | "schedule">,
+): number {
   let until = changedAt + BUCKET_COPY_KEEP;
   if (input.retention !== undefined && input.schedule !== undefined) {
     const every = interval(input.schedule);
@@ -164,6 +167,13 @@ function keepUntil(changedAt: number, input: PackStatusInput): number {
     until = Math.max(until, gone);
   }
   return until;
+}
+
+/** When a pack made before a key change now could be thrown away, by the rule above. */
+export function keepOldPackUntil(
+  input: Pick<PackStatusInput, "retention" | "schedule" | "now">,
+): string {
+  return new Date(keepUntil(input.now.getTime(), input)).toISOString();
 }
 
 /** The day after the key name's own day, which a replacement outside any pack is dated by. */

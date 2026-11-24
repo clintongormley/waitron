@@ -16,6 +16,11 @@ async function digest(bytes: Uint8Array<ArrayBuffer>) {
     n.toString(16).padStart(2, "0"),
   ).join("");
 }
+const made = {
+  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+  masterKeyName: "2026-11-23 · QZJV",
+};
+
 describe("transient recovery delivery session", () => {
   it("reuses exact bytes and URL, confirms only on explicit kept and revokes on disposal", async () => {
     const storage = {
@@ -23,7 +28,7 @@ describe("transient recovery delivery session", () => {
       session: Object.entries(sessionStorage),
     };
     const confirm = vi.fn(async () => "host-grant");
-    const session = createRecoveryDelivery(document, "en", confirm, "Europe/Madrid");
+    const session = createRecoveryDelivery(document, made, "en", confirm, "Europe/Madrid");
     try {
       const download = await session.download();
       const print = await session.print();
@@ -58,7 +63,7 @@ describe("transient recovery delivery session", () => {
     }
   });
   it("rejects render completion after disposal", async () => {
-    const session = createRecoveryDelivery(document, "es", async () => true, "Europe/Madrid");
+    const session = createRecoveryDelivery(document, made, "es", async () => true, "Europe/Madrid");
     const pending = session.download();
     session.dispose();
     await expect(pending).rejects.toThrow("Recovery delivery disposed");
@@ -67,6 +72,7 @@ describe("transient recovery delivery session", () => {
     let done!: (v: string) => void;
     const session = createRecoveryDelivery(
       document,
+      made,
       "en",
       () =>
         new Promise<string>((resolve) => {
@@ -83,7 +89,7 @@ describe("transient recovery delivery session", () => {
   });
   it("freezes caller input and rejects invalid data", async () => {
     const input = structuredClone(document);
-    const session = createRecoveryDelivery(input, "en", async () => true, "Europe/Madrid");
+    const session = createRecoveryDelivery(input, made, "en", async () => true, "Europe/Madrid");
     Object.assign(input.nodeKey, { secret: "z".repeat(32) });
     try {
       expect(
@@ -98,6 +104,7 @@ describe("transient recovery delivery session", () => {
     }
     const bad = createRecoveryDelivery(
       { ...document, venueName: "" },
+      made,
       "en",
       async () => true,
       "Europe/Madrid",

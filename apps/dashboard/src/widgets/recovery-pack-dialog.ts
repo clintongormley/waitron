@@ -6,16 +6,27 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type MasterKeyUsedDetail,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-master-key-box.js";
 import type { DashboardApi, RecoveryPackKeyState, RecoveryPackStatus } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { keyHolder, packDate, unreceivedWords, withStrong } from "./recovery-pack-words.js";
+import {
+  keepDate,
+  keyHolder,
+  packDate,
+  unreceivedWords,
+  withStrong,
+} from "./recovery-pack-words.js";
+
+/** A plain pack, or a new master key (with a new box key, until the box key goes) and its pack. */
+export type RecoveryPackDialogKind = "pack" | "master-key";
 
 /** The detail of `recovery-pack-made`: the pack's PDF, and whether the box has it marked received. */
 export interface RecoveryPackMade {
@@ -24,11 +35,6 @@ export interface RecoveryPackMade {
   key: RecoveryPackKeyState;
   madeAt: string;
   received: boolean;
-}
-
-/** The status says the box has no server key to replace; a status the card could not read says nothing. */
-function noServerKey(status: RecoveryPackStatus | null): boolean {
-  return status !== null && status.serverKey !== "set";
 }
 
 /** A refusal envelope carries the status the box answered with; a lost answer has none. */
@@ -40,12 +46,13 @@ function answeredByBox(error: unknown): boolean {
   );
 }
 
-type Step = "form" | "lost" | "key-failed";
-type Draft = { ticked: boolean };
+type Step = "form" | "lost" | "key-failed" | "shown";
+/** A shown master key whose pack was not yet downloaded or printed is lost when the dialog closes. */
+type Draft = { unkept: boolean };
 
 /**
- * Makes a recovery pack after a fresh sign-in. Fires `recovery-pack-closed` on closing only when it
- * sent a make, which may have changed the status.
+ * Makes a recovery pack, or a new master key, after a fresh sign-in. Fires `recovery-pack-closed`
+ * on closing only when it sent a make, which may have changed the status.
  */
 @customElement("dashboard-recovery-pack-dialog")
 export class RecoveryPackDialog extends LitElement {
@@ -58,25 +65,12 @@ export class RecoveryPackDialog extends LitElement {
       p {
         margin: 0 0 var(--wt-space-3);
       }
-      .option {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        column-gap: var(--wt-space-3);
-        align-items: start;
-      }
-      .option input {
-        width: var(--wt-space-5);
-        height: var(--wt-space-5);
-        margin: 0;
-      }
-      .option label {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .option .why {
-        grid-column: 2;
-        margin: var(--wt-space-1) 0 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
+      .warning {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
       }
     `,
   ];
@@ -88,14 +82,16 @@ export class RecoveryPackDialog extends LitElement {
 
   @state() private opened = false;
   @state() private status: RecoveryPackStatus | null = null;
-  @state() private ticked = false;
+  @state() private kind: RecoveryPackDialogKind = "pack";
   @state() private busy = false;
   @state() private step: Step = "form";
   /** A refusal's sentence that names no field, kept until the next press. */
   @state() private refusal = "";
   /** The status read again after a lost answer or an unreplaced key; null when unreadable. */
   @state() private reread: RecoveryPackStatus | null = null;
-  @state() private lostTicked = false;
+  @state() private lostMasterKey = false;
+  @state() private shown: { key: string; name: string; url: string; number: number } | null = null;
+  @state() private used = false;
 
   #generation = 0;
   #sent = false;
@@ -107,14 +103,19 @@ export class RecoveryPackDialog extends LitElement {
     new LocaleChangeController(this);
   }
 
-  /** Opens the dialog; `status` is the card's latest answer, which names the pack holding the key. */
-  show(status: RecoveryPackStatus | null): void {
+  /**
+   * Opens the dialog; `status` is the card's latest answer, which names the pack holding the key.
+   * A new master key needs one: its keep date is that answer's.
+   */
+  show(status: RecoveryPackStatus, kind?: RecoveryPackDialogKind): void;
+  show(status: RecoveryPackStatus | null, kind?: "pack"): void;
+  show(status: RecoveryPackStatus | null, kind: RecoveryPackDialogKind = "pack"): void {
     if (this.opened) return;
     this.#generation++;
     this.opened = true;
     this.#sent = false;
     this.status = status;
-    this.ticked = false;
+    this.kind = kind;
     this.busy = false;
     this.step = "form";
     this.refusal = "";
@@ -123,15 +124,14 @@ export class RecoveryPackDialog extends LitElement {
       id: {},
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) => a.ticked === b.ticked,
+      equal: (a, b) => a.unkept === b.unkept,
       restore: () => {
-        this.ticked = false;
         this.refusal = "";
       },
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    scope.commit({ ticked: false });
+    scope.commit({ unkept: false });
   }
 
   /** Closes without asking, forgetting everything typed. */
@@ -158,9 +158,13 @@ export class RecoveryPackDialog extends LitElement {
     return (this.reread ?? this.status)?.timeZone;
   }
 
+  /** The box saves a new master key before it answers, so the answer must reach the person. */
+  get #making(): boolean {
+    return this.busy && this.kind === "master-key";
+  }
+
   #draft(): Draft {
-    if (this.step !== "form") return { ticked: false };
-    return { ticked: this.ticked };
+    return { unkept: this.step === "shown" && !this.used };
   }
 
   #close(announce = true): void {
@@ -172,13 +176,20 @@ export class RecoveryPackDialog extends LitElement {
     this.opened = false;
     this.busy = false;
     this.step = "form";
-    this.ticked = false;
     this.refusal = "";
     this.reread = null;
+    this.#forgetShown();
     if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
         new CustomEvent("recovery-pack-closed", { bubbles: true, composed: true }),
       );
+  }
+
+  /** The shown key and the link to its pack go when the dialog closes: nothing else holds them. */
+  #forgetShown(): void {
+    if (this.shown) URL.revokeObjectURL(this.shown.url);
+    this.shown = null;
+    this.used = false;
   }
 
   #dialog(): WtDialog | null {
@@ -190,15 +201,10 @@ export class RecoveryPackDialog extends LitElement {
     !this.#scope ||
     (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) === "proceeded";
 
-  #edited(): void {
-    this.#scope?.changed();
-    this.requestUpdate();
-  }
-
   async #make(): Promise<void> {
     if (!this.opened || this.busy) return;
     const generation = this.#generation;
-    const newServerKey = this.ticked;
+    const newServerKey = this.kind === "master-key";
     const api = this.api;
     this.refusal = "";
     this.busy = true;
@@ -218,7 +224,7 @@ export class RecoveryPackDialog extends LitElement {
       }
       this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
-      this.lostTicked = newServerKey;
+      this.lostMasterKey = newServerKey;
       this.step = "lost";
       this.busy = false;
       return;
@@ -248,6 +254,18 @@ export class RecoveryPackDialog extends LitElement {
       if (generation !== this.#generation) return;
       this.step = "key-failed";
       this.busy = false;
+      return;
+    }
+    if (newServerKey && made.masterKey) {
+      this.shown = {
+        key: made.masterKey.key,
+        name: made.masterKey.name,
+        url: URL.createObjectURL(made.pdf),
+        number: made.number,
+      };
+      this.step = "shown";
+      this.busy = false;
+      this.#scope?.changed();
       return;
     }
     this.#dialog()?.closeAfter("security");
@@ -287,8 +305,13 @@ export class RecoveryPackDialog extends LitElement {
 
   #remake(): void {
     this.step = "form";
-    this.ticked = true;
     this.refusal = "";
+  }
+
+  /** Copy does not count: the pack also holds the new box key, which Copy leaves out. */
+  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
+    if (event.detail.action === "copy") return;
+    this.used = true;
     this.#scope?.changed();
   }
 
@@ -301,8 +324,15 @@ export class RecoveryPackDialog extends LitElement {
     const open = this.opened;
     return html`<wt-dialog
       data-test="recovery-pack-dialog"
-      heading=${t("recovery_pack_dialog.heading")}
+      heading=${t(
+        this.step === "shown"
+          ? "master_key_shown.heading"
+          : this.kind === "master-key"
+            ? "master_key_dialog.heading"
+            : "recovery_pack_dialog.heading",
+      )}
       .open=${open}
+      .dismissible=${!this.#making}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
@@ -315,47 +345,45 @@ export class RecoveryPackDialog extends LitElement {
 
   #body(): TemplateResult {
     return html`<div ?hidden=${this.step !== "form"}>
-        <p data-test="intro">${t("recovery_pack_dialog.intro")}</p>
-        ${this.#option()}
+        ${
+          this.kind === "master-key"
+            ? html`<p data-test="intro">
+                ${fill("master_key_dialog.text", {
+                  date: keepDate(this.status!.keepOldPackUntil, this.#zone),
+                })}
+              </p>`
+            : html`<p data-test="intro">${t("recovery_pack_dialog.intro")}</p>`
+        }
       </div>
       ${this.step === "lost" ? this.#lost() : nothing}
-      ${this.step === "key-failed" ? this.#keyFailed() : nothing}`;
+      ${this.step === "key-failed" ? this.#keyFailed() : nothing}
+      ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
   }
 
-  #option(): TemplateResult | typeof nothing {
-    if (noServerKey(this.status)) return nothing;
-    const holder = keyHolder(this.status);
-    const why =
-      holder === null
-        ? t("recovery_pack_dialog.new_key_unknown")
-        : holder.received
-          ? fill("recovery_pack_dialog.new_key_held", {
-              number: String(holder.number),
-              date: packDate(holder.madeAt, this.#zone),
-            })
-          : unreceivedWords(holder, this.#zone);
-    return html`<div class="option">
-      <input
-        type="checkbox"
-        id="new-server-key"
-        name="new-server-key"
-        aria-describedby="new-key-why"
-        .checked=${this.ticked}
-        ?disabled=${this.busy}
-        @change=${(event: Event) => {
-          this.ticked = (event.target as HTMLInputElement).checked;
-          this.#edited();
+  #shown(shown: { key: string; name: string; url: string; number: number }): TemplateResult {
+    return html`<p data-test="shown-lead">${t("master_key_shown.lead")}</p>
+      <p class="warning" data-test="shown-warning">${t("master_key_shown.warning")}</p>
+      <wt-master-key-box
+        data-test="master-key-box"
+        .masterKey=${shown.key}
+        .keyName=${shown.name}
+        .pdfUrl=${shown.url}
+        fileName=${`waitron-recovery-pack-${shown.number}.pdf`}
+        .copy=${{
+          name: (name: string) => fill("master_key_shown.key_name", { name }),
+          download: t("master_key_shown.download"),
+          print: t("master_key_shown.print"),
+          copy: t("master_key_shown.copy"),
+          copied: t("master_key_shown.copied"),
+          copyFailed: t("master_key_shown.copy_failed"),
+          printFailed: t("master_key_shown.print_failed"),
         }}
-      />
-      <label for="new-server-key">${t("recovery_pack_dialog.new_key")}</label>
-      <p class="why" id="new-key-why" data-test="new-key-why">
-        ${why} ${t("recovery_pack_dialog.new_key_effect")}
-      </p>
-    </div>`;
+        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+      ></wt-master-key-box>`;
   }
 
   #lost(): TemplateResult {
-    if (!this.lostTicked)
+    if (!this.lostMasterKey)
       return html`<div data-test="lost" role="alert">
         <p>${t("recovery_pack_dialog.lost")}</p>
         <p>${t("recovery_pack_dialog.lost_choices")}</p>
@@ -397,6 +425,21 @@ export class RecoveryPackDialog extends LitElement {
   #footer(): TemplateResult {
     const leave = () =>
       void this.#dialog()?.requestClose(this.step === "form" ? "cancel" : "navigation");
+    const master = this.kind === "master-key";
+    if (this.step === "shown")
+      return this.used
+        ? html`<wt-form-actions slot="footer">
+            <wt-button
+              data-test="key-continue"
+              variant="primary"
+              @click=${() => {
+                this.#dialog()?.closeAfter("saved");
+                this.#close();
+              }}
+              >${t("master_key_shown.continue")}</wt-button
+            >
+          </wt-form-actions>`
+        : html``;
     if (this.step === "key-failed")
       return html`<wt-form-actions slot="footer">
         <wt-button data-test="close-pack" variant="primary" @click=${leave}
@@ -406,15 +449,15 @@ export class RecoveryPackDialog extends LitElement {
     if (this.step === "lost")
       return html`<wt-form-actions slot="footer">
         <wt-button slot="cancel" data-test="stop-pack" variant="secondary" @click=${leave}
-          >${t("recovery_pack_dialog.stop")}</wt-button
+          >${t(this.lostMasterKey ? "master_key_dialog.stop" : "recovery_pack_dialog.stop")}</wt-button
         >
         ${
-          this.lostTicked
+          this.lostMasterKey
             ? html`<wt-button
                 data-test="remake-pack"
                 variant="danger"
                 @click=${() => this.#remake()}
-                >${t("recovery_pack_dialog.remake")}</wt-button
+                >${t("master_key_dialog.make")}</wt-button
               >`
             : html`<wt-button data-test="retry-pack" variant="primary" @click=${() => this.#retry()}
                 >${t("recovery_pack_dialog.try_again")}</wt-button
@@ -422,15 +465,20 @@ export class RecoveryPackDialog extends LitElement {
         }
       </wt-form-actions>`;
     return html`<wt-form-actions slot="footer" .error=${this.refusal}>
-      <wt-button slot="cancel" data-test="cancel-pack" variant="secondary" @click=${leave}
-        >${t("action.cancel")}</wt-button
+      <wt-button
+        slot="cancel"
+        data-test="cancel-pack"
+        variant="secondary"
+        ?disabled=${this.#making}
+        @click=${leave}
+        >${t(master ? "master_key_dialog.stop" : "action.cancel")}</wt-button
       >
       <wt-button
         data-test="make-pack"
-        variant=${this.ticked ? "danger" : "primary"}
+        variant=${master ? "danger" : "primary"}
         ?disabled=${this.busy}
         @click=${() => void this.#make()}
-        >${t("recovery_pack_dialog.make")}</wt-button
+        >${t(master ? "master_key_dialog.make" : "recovery_pack_dialog.make")}</wt-button
       >
     </wt-form-actions>`;
   }

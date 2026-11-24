@@ -3,32 +3,15 @@ export type PartKind = "bucket" | "archives" | "server-key" | "emergency";
 
 type Words = {
   title: string;
+  heading: (venue: string) => string;
+  masterKeyLabel: (keyName: string) => string;
+  masterKeyQr: string;
+  masterKeyInPack: (keyName: string, number: number) => string;
+  /** On a pack that does not hold the master key, when no pack of this box is known to. */
+  masterKeyNamed: (keyName: string) => string;
   header: (venue: string, number: number, day: string) => string;
   page: (n: number, of: number) => string;
-  madeBy: (day: string, time: string, person: string) => string;
-  madeDuringSetup: (day: string, time: string) => string;
-  whichPage: string;
-  whatHappened: string;
-  pageColumn: string;
-  whatIsIn: string;
-  partColumn: string;
-  lastChangedColumn: string;
-  checkColumn: string;
-  couldNotBeDrawn: string;
-  lockedAway: string;
-  /** For a pack holding a restore code or the backup encryption key, and not the server key. */
-  anyoneHoldingBackups: string;
-  /** For a pack holding a restore code or the backup encryption key, and the server key. */
-  anyoneHoldingBackupsAndServerKey: string;
-  /** For a pack holding the server key and no restore code or backup encryption key. */
-  anyoneHoldingServerKey: string;
-  emergencyWarning: string;
-  whichToKeep: string;
-  serverKeyPage: (page: number) => string;
   part: Record<PartKind, string>;
-  situation: Record<PartKind, string>;
-  notSetUp: Record<PartKind, string>;
-  absent: Record<PartKind, string>;
   failedTitle: (part: string) => string;
   thisPackHoldsKey: string;
   noNewKey: string;
@@ -41,53 +24,18 @@ type Words = {
 export const PACK_WORDS: Record<PackLocale, Words> = {
   en: {
     title: "Waitron recovery pack",
-    emergencyWarning:
-      "The emergency code starts a locked copy in the cloud. You also need your password and your authenticator or a recovery code. Passkeys do not work there.",
+    heading: (venue) => `Waitron recovery pack · ${venue}`,
+    masterKeyLabel: (keyName) => `Master key · ${keyName}`,
+    masterKeyQr: "Master key",
+    masterKeyInPack: (keyName, number) => `Master key ${keyName}: in pack ${number}`,
+    masterKeyNamed: (keyName) => `Master key ${keyName}`,
     header: (venue, number, day) => `${venue} · Recovery pack ${number} · ${day}`,
     page: (n, of) => `Page ${n} of ${of}`,
-    madeBy: (day, time, person) => `Made on ${day} at ${time} by ${person}.`,
-    madeDuringSetup: (day, time) => `Made during setup on ${day} at ${time}.`,
-    whichPage: "Which page do I need?",
-    whatHappened: "What has happened",
-    pageColumn: "Page",
-    whatIsIn: "What is in this pack",
-    partColumn: "Part",
-    lastChangedColumn: "Last changed",
-    checkColumn: "Check",
-    couldNotBeDrawn: "Could not be drawn",
-    lockedAway: "Keep this pack locked away, and off the box.",
-    anyoneHoldingBackups:
-      "Anyone holding it can open the backups its restore codes or backup encryption key unlock.",
-    anyoneHoldingBackupsAndServerKey:
-      "Anyone holding it can open the backups its restore codes or backup encryption key unlock, and, with its box key and a matching backup, recover the box.",
-    anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the box.",
-    whichToKeep:
-      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
-    serverKeyPage: (page) =>
-      `Always keep the pack that holds the box key (page ${page} says which).`,
     part: {
       bucket: "Bucket copy",
       archives: "Archives",
       "server-key": "Box key",
       emergency: "Emergency start",
-    },
-    situation: {
-      emergency: "The box has died and you need to start the venue in the cloud.",
-      bucket: "You are setting up a new box and want the venue back from your bucket copy.",
-      archives: "You need one old archive back (for example a month-end copy).",
-      "server-key": "You are recovering the box's own key with a backup.",
-    },
-    notSetUp: {
-      emergency: "Cloud cannot start this venue yet.",
-      bucket: "This box has no bucket copy.",
-      archives: "This box makes no archives.",
-      "server-key": "This box has no box key yet.",
-    },
-    absent: {
-      emergency: "Emergency start is not available for this pack.",
-      bucket: "This box has no bucket copy.",
-      archives: "This box makes no archives.",
-      "server-key": "This venue files no invoices with the tax agency.",
     },
     failedTitle: (part) => `${part}: could not be drawn`,
     thisPackHoldsKey: "This pack holds the box key.",
@@ -95,62 +43,25 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `The key itself is on recovery pack ${number}, made on ${day}. Keep that pack.`,
     keyOnUnreceivedPack: (number, day) =>
-      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
+      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, choose Make a new master key on Backups.`,
     keyOnSheet: (keyName, day) =>
       `The key itself is on the recovery sheet whose key name is ${keyName}, made on ${day}. Keep that sheet.`,
     spaceMark: "Each \u02fd is a space: type one space for it.",
   },
   es: {
     title: "Paquete de recuperación de Waitron",
-    emergencyWarning:
-      "El código de emergencia inicia una copia bloqueada en la nube. También necesitas tu contraseña y tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
+    heading: (venue) => `Paquete de recuperación de Waitron · ${venue}`,
+    masterKeyLabel: (keyName) => `Clave maestra · ${keyName}`,
+    masterKeyQr: "Clave maestra",
+    masterKeyInPack: (keyName, number) => `Clave maestra ${keyName}: en el paquete ${number}`,
+    masterKeyNamed: (keyName) => `Clave maestra ${keyName}`,
     header: (venue, number, day) => `${venue} · Paquete de recuperación ${number} · ${day}`,
     page: (n, of) => `Página ${n} de ${of}`,
-    madeBy: (day, time, person) => `Hecho el ${day} a las ${time} por ${person}.`,
-    madeDuringSetup: (day, time) => `Hecho durante la instalación el ${day} a las ${time}.`,
-    whichPage: "¿Qué página necesito?",
-    whatHappened: "Qué ha pasado",
-    pageColumn: "Página",
-    whatIsIn: "Qué contiene este paquete",
-    partColumn: "Parte",
-    lastChangedColumn: "Último cambio",
-    checkColumn: "Comprobación",
-    couldNotBeDrawn: "No se pudo generar",
-    lockedAway: "Guarda este paquete bajo llave, y fuera del servidor.",
-    anyoneHoldingBackups:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de cifrado de copias.",
-    anyoneHoldingBackupsAndServerKey:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de cifrado de copias y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
-    anyoneHoldingServerKey:
-      "Quien lo tenga, junto con su copia correspondiente, puede recuperar el servidor.",
-    whichToKeep:
-      "Cuando hagas un paquete nuevo, la pantalla Copias de seguridad del panel te dice qué paquetes anteriores guardar y hasta cuándo.",
-    serverKeyPage: (page) =>
-      `Guarda siempre el paquete que tiene la clave del servidor (la página ${page} dice cuál).`,
     part: {
       emergency: "Inicio de emergencia",
       bucket: "Copia en el bucket",
       archives: "Archivos",
       "server-key": "Clave del servidor",
-    },
-    situation: {
-      emergency: "El servidor ha fallado y necesitas iniciar el local en la nube.",
-      bucket:
-        "Estás instalando un servidor nuevo y quieres recuperar el local desde tu copia en el bucket.",
-      archives: "Necesitas recuperar un archivo antiguo (por ejemplo, una copia de fin de mes).",
-      "server-key": "Estás recuperando la clave propia del servidor junto con una copia.",
-    },
-    notSetUp: {
-      emergency: "Cloud aún no puede iniciar este local.",
-      bucket: "Este servidor no tiene copia en el bucket.",
-      archives: "Este servidor no hace archivos.",
-      "server-key": "Este servidor aún no tiene clave del servidor.",
-    },
-    absent: {
-      emergency: "El inicio de emergencia no está disponible en este paquete.",
-      bucket: "Este servidor no tiene copia en el bucket.",
-      archives: "Este servidor no hace archivos.",
-      "server-key": "Este local no presenta facturas a la Agencia Tributaria.",
     },
     failedTitle: (part) => `${part}: no se pudo generar`,
     thisPackHoldsKey: "Este paquete tiene la clave del servidor.",
@@ -158,7 +69,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `La clave está en el paquete de recuperación ${number}, hecho el ${day}. Guarda ese paquete.`,
     keyOnUnreceivedPack: (number, day) =>
-      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, elige Crear una clave maestra nueva en Copias de seguridad.`,
     keyOnSheet: (keyName, day) =>
       `La clave está en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}. Guarda esa hoja.`,
     spaceMark: "Cada \u02fd es un espacio: escribe un espacio en su lugar.",
@@ -179,16 +90,6 @@ type PartWords = {
     notEnrolled: string;
     nobody: string;
     steps: string[];
-    absent: Record<
-      | "not_connected"
-      | "not_primary"
-      | "permission"
-      | "setting_off"
-      | "level_inactive"
-      | "no_payment_method"
-      | "not_provisioned",
-      string
-    >;
     failed: PartFailure;
   };
   bucket: {
@@ -209,8 +110,6 @@ type PartWords = {
     stepsFolder: string[];
   };
   keyRow: string;
-  /** The cover's check for a part guarded by the backup encryption key. */
-  check: (keyDay: string, revision: string | undefined) => string;
   keyChangedOn: (day: string) => string;
   alsoServerKey: (page: number) => string;
   keyNotReplaced: string;
@@ -245,20 +144,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         "4. Review any missing minutes and confirm that the old box is stopped.",
         "5. Follow the page to join the tills to the cloud copy.",
       ],
-      absent: {
-        not_connected:
-          "This box is not connected to Cloud. Connect it from Cloud services, then make a new pack.",
-        not_primary: "This box is not the main box. Make the pack on the main box.",
-        permission:
-          "The maker cannot start the venue in the cloud; the code is left out. An administrator can make a pack with the code.",
-        setting_off: "Emergency start is off. Enable it in Cloud, then make a new pack.",
-        level_inactive:
-          "The Cloud level for emergency start is inactive. Check it in Cloud, then make a new pack.",
-        no_payment_method:
-          "Cloud has no payment method for emergency start. Add one in Cloud, then make a new pack.",
-        not_provisioned:
-          "Cloud cannot start this venue yet. Make a new pack when emergency start is available.",
-      },
       failed: {
         what: "The emergency code could not be read from Cloud.",
         todo: "Make a new pack when Cloud answers; if you just requested a code, try again in a minute.",
@@ -298,17 +183,13 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       ],
     },
     keyRow: "Backup encryption key",
-    check: (keyDay, revision) =>
-      revision === undefined
-        ? `key of ${keyDay}`
-        : `key of ${keyDay} · rev ${revision.slice(0, 8)}`,
     keyChangedOn: (day) => `changed on ${day}`,
     alsoServerKey: (page) => `It also needs the box key: page ${page}, or the pack it names.`,
     keyNotReplaced: "The box key was not replaced.",
     currentKeyOnPack: (number, day) =>
       `The current key, on recovery pack ${number} made on ${day}, still works.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `The current box key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new box key ticked.`,
+      `The current box key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, choose Make a new master key on Backups.`,
     currentKeyOnSheet: (keyName, day) =>
       `The current key, on the recovery sheet whose key name is ${keyName}, made on ${day}, still works.`,
     failures: {
@@ -360,21 +241,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         "4. Revisa los minutos que falten y confirma que el servidor antiguo está parado.",
         "5. Sigue la página para conectar las cajas a la copia en la nube.",
       ],
-      absent: {
-        not_connected:
-          "Este servidor no está conectado a Cloud. Conéctalo desde Servicios en la nube y haz un paquete nuevo.",
-        not_primary: "Este no es el servidor principal. Haz el paquete en el servidor principal.",
-        permission:
-          "Quien hizo el paquete no puede iniciar el local en la nube; se omite el código. Un administrador puede hacer un paquete con el código.",
-        setting_off:
-          "El inicio de emergencia está desactivado. Actívalo en Cloud y haz un paquete nuevo.",
-        level_inactive:
-          "El nivel de Cloud para el inicio de emergencia está inactivo. Revísalo en Cloud y haz un paquete nuevo.",
-        no_payment_method:
-          "Cloud no tiene un método de pago para el inicio de emergencia. Añade uno en Cloud y haz un paquete nuevo.",
-        not_provisioned:
-          "Cloud aún no puede iniciar este local. Haz un paquete nuevo cuando el inicio de emergencia esté disponible.",
-      },
       failed: {
         what: "No se pudo leer el código de emergencia de Cloud.",
         todo: "Haz un paquete nuevo cuando Cloud responda; si acabas de pedir un código, vuelve a intentarlo en un minuto.",
@@ -413,10 +279,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       ],
     },
     keyRow: "Clave de cifrado de copias",
-    check: (keyDay, revision) =>
-      revision === undefined
-        ? `clave del ${keyDay}`
-        : `clave del ${keyDay} · rev ${revision.slice(0, 8)}`,
     keyChangedOn: (day) => `cambiada el ${day}`,
     alsoServerKey: (page) =>
       `También necesita la clave del servidor: página ${page}, o el paquete que esta indica.`,
@@ -424,7 +286,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     currentKeyOnPack: (number, day) =>
       `La clave actual, en el paquete de recuperación ${number} hecho el ${day}, sigue sirviendo.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, elige Crear una clave maestra nueva en Copias de seguridad.`,
     currentKeyOnSheet: (keyName, day) =>
       `La clave actual, en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}, sigue sirviendo.`,
     failures: {

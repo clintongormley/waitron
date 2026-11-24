@@ -62,7 +62,7 @@ it("reads every table", () => {
     "serverKeyPage.en.title",
     "checkVenue.en.blocked",
     "clockWait.en.theServer",
-    "firstHour.en.packWhy",
+    "firstHour.en.packLead",
     "recoveryHour.en.heading",
     "promotion.emergency.en.secondClockDo",
     "keyElsewhere(true,null,null)",

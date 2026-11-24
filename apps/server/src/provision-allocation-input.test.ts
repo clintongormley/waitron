@@ -329,7 +329,13 @@ it("forwards signed input and planned identities from the public setup route", a
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body()),
   });
-  expect(await response.clone().json()).toEqual({ provisioned: true, restarting: true });
+  expect(await response.clone().json()).toEqual({
+    provisioned: true,
+    restarting: true,
+    masterKey: expect.any(String),
+    masterKeyName: expect.any(String),
+    recoveryPackPdf: expect.any(String),
+  });
   expect(response.status).toBe(200);
   await allocatedVenue();
 });
@@ -425,7 +431,13 @@ it("resumes the actual persisted setup request after a committed venue lost its 
   await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
   const recovered = await send();
   expect(recovered.status).toBe(200);
-  expect(await recovered.json()).toEqual({ provisioned: true, restarting: true });
+  expect(await recovered.json()).toEqual({
+    provisioned: true,
+    restarting: true,
+    masterKey: expect.any(String),
+    masterKeyName: expect.any(String),
+    recoveryPackPdf: expect.any(String),
+  });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
   expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");

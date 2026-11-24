@@ -1672,38 +1672,27 @@ export const en = {
     "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
   "fresh_sign_in.retry": "Try again",
   "recovery_pack_dialog.heading": "Make recovery pack",
-  "recovery_pack_dialog.intro":
-    "The pack holds every key this venue has. It is made once, for this download; the box keeps no copy.",
-  "recovery_pack_dialog.new_key": "Also make a new box key",
-  "recovery_pack_dialog.new_key_held":
-    "Only if the pack or sheet holding the current key (recovery pack {number}, made on {date}) is lost.",
-  "recovery_pack_dialog.new_key_unknown":
-    "Only if the pack or sheet holding the current key is lost.",
-  "recovery_pack_dialog.new_key_effect":
-    "New backups will use the new key; older backups still need the old one.",
+  "recovery_pack_dialog.intro": "The pack is made once, for this download; the box keeps no copy.",
   "recovery_pack_dialog.unreceived":
-    "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
+    "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack_dialog.make": "Make pack",
   "recovery_pack_dialog.key_failed":
-    "The pack was made, but the box key was {not} replaced. The pack says why.",
+    "The pack was made, but the master key was {not} replaced. The pack says why.",
   "recovery_pack_dialog.not": "not",
   "recovery_pack_dialog.key_still_works":
     "The current key, on recovery pack {number} made on {date}, still works.",
   "recovery_pack_dialog.lost_new_key":
-    "The box may have made a recovery pack with a new box key that did not reach this browser. If it did, the only copy of your current box key is on a pack you do not have.",
+    "The box may have made a new master key that did not reach this browser. If it did, the only copy of your current master key is on a pack you do not have.",
   "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Make a new pack with a new box key replaces the key again and puts it on a pack you download now; you sign in again first. Stop closes this window and changes nothing.",
+    "Make a new master key replaces the key again and shows it here. Stop closes this window and changes nothing.",
   "recovery_pack_dialog.lost":
     "The box may have made the recovery pack, but it did not reach this browser.",
   "recovery_pack_dialog.lost_choices":
     "Try again asks the box for a new pack. Stop closes this window and changes nothing.",
-  "recovery_pack_dialog.remake": "Make a new pack with a new box key",
   "recovery_pack_dialog.try_again": "Try again",
   "recovery_pack_dialog.stop": "Stop",
   "cloud.emergency_print_pack": "Print recovery pack",
-  "recovery_pack.row.emergency": "Emergency code issued",
-  "recovery_pack.emergency_absent": "Not in this pack",
   "recovery_pack.reason.emergency_changed": "The emergency code changed on {date}.",
   "recovery_pack.reason.emergency_missing":
     "A person with permission to manage the box must make the pack to include the emergency code.",
@@ -1713,8 +1702,7 @@ export const en = {
   "recovery_pack.cannot_check":
     "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
   "recovery_pack.title": "Recovery pack",
-  "recovery_pack.intro":
-    "Keep this pack locked away, off the box. It can hold the emergency code, restore codes and keys. The backup encryption key opens encrypted copies. The box key authorises restore or takeover.",
+  "recovery_pack.intro": "Keep the recovery pack somewhere safe, away from the box.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
@@ -1722,10 +1710,10 @@ export const en = {
   "recovery_pack.incomplete":
     "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
   "recovery_pack.offered_at_setup":
-    "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new pack with a new box key.",
+    "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new master key.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
-  "recovery_pack.reason.key_changed": "The backup encryption key changed on {date}.",
+  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
@@ -1738,13 +1726,13 @@ export const en = {
   "recovery_pack.make_new": "Make a new pack.",
   "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the box key.",
   "recovery_pack.keep_backup_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup encryption key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.keep_old_server_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its box key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup encryption key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
   "recovery_pack.row.last": "Last pack",
-  "recovery_pack.row.backup_key": "Backup encryption key",
+  "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.row.server_key": "Box key",
   "recovery_pack.last_none": "None yet",
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
@@ -1767,6 +1755,27 @@ export const en = {
   "recovery_pack.load_failed":
     "The recovery pack's state could not be read. Try again reads it once more.",
   "recovery_pack.retry": "Try again",
+  "recovery_pack.row.master_key": "Master key",
+  "recovery_pack.master_key_in": "{name}, in pack {number}",
+  "recovery_pack.master_key_none": "None yet",
+  "recovery_pack.make_master_key": "Make a new master key",
+  "master_key_dialog.heading": "Make a new master key?",
+  "master_key_dialog.text":
+    "Do this only if the master key is lost, or someone who should not have it may have seen it. Backups made before now still need the old key. Keep the old pack until {date}. The new key is shown once, in a new recovery pack.",
+  "master_key_dialog.make": "Make a new master key",
+  "master_key_dialog.stop": "Stop",
+  "master_key_shown.heading": "Recovery pack",
+  "master_key_shown.lead":
+    "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+  "master_key_shown.warning": "This is the only time the master key is shown.",
+  "master_key_shown.key_name": "Master key · {name}",
+  "master_key_shown.download": "Download",
+  "master_key_shown.print": "Print",
+  "master_key_shown.copy": "Copy",
+  "master_key_shown.copied": "Copied.",
+  "master_key_shown.copy_failed": "Copy did not work. Use Download or Print.",
+  "master_key_shown.print_failed": "Your browser blocked printing. Use Download instead.",
+  "master_key_shown.continue": "Continue",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
   "profile.passkey_added": "Added {date}",
@@ -6505,38 +6514,28 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.retry": "Volver a intentarlo",
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
-    "El paquete contiene todas las claves de este local. Se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
-  "recovery_pack_dialog.new_key": "También crear una clave del servidor nueva",
-  "recovery_pack_dialog.new_key_held":
-    "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",
-  "recovery_pack_dialog.new_key_unknown":
-    "Solo si se ha perdido el paquete o la hoja con la clave actual.",
-  "recovery_pack_dialog.new_key_effect":
-    "Las copias nuevas usarán la clave nueva; las copias anteriores siguen necesitando la antigua.",
+    "El paquete se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
   "recovery_pack_dialog.unreceived":
-    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
+    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
   "recovery_pack_dialog.key_failed":
-    "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
+    "El paquete se ha hecho, pero la clave maestra {not} se ha sustituido. El paquete explica por qué.",
   "recovery_pack_dialog.not": "no",
   "recovery_pack_dialog.key_still_works":
     "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
   "recovery_pack_dialog.lost_new_key":
-    "Puede que el servidor haya hecho un paquete de recuperación con una nueva clave del servidor que no llegó a este navegador. Si fue así, la única copia de tu clave actual del servidor está en un paquete que no tienes.",
+    "Puede que el servidor haya creado una clave maestra nueva que no llegó a este navegador. Si fue así, la única copia de tu clave maestra actual está en un paquete que no tienes.",
   "recovery_pack_dialog.lost_new_key_named":
     "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Hacer un paquete nuevo con una nueva clave del servidor vuelve a sustituir la clave y la pone en un paquete que descargas ahora; antes vuelves a iniciar sesión. Parar cierra esta ventana y no cambia nada.",
+    "Crear una clave maestra nueva vuelve a sustituir la clave y la muestra aquí. Parar cierra esta ventana y no cambia nada.",
   "recovery_pack_dialog.lost":
     "Puede que el servidor haya hecho el paquete de recuperación, pero no llegó a este navegador.",
   "recovery_pack_dialog.lost_choices":
     "Volver a intentarlo pide al servidor un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
-  "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
   "recovery_pack_dialog.try_again": "Volver a intentarlo",
   "recovery_pack_dialog.stop": "Parar",
   "cloud.emergency_print_pack": "Imprimir paquete de recuperación",
-  "recovery_pack.row.emergency": "Código de emergencia emitido",
-  "recovery_pack.emergency_absent": "No está en este paquete",
   "recovery_pack.reason.emergency_changed": "El código de emergencia cambió el {date}.",
   "recovery_pack.reason.emergency_missing":
     "Una persona con permiso para gestionar el servidor debe hacer el paquete para incluir el código de emergencia.",
@@ -6547,7 +6546,7 @@ export const es: Record<StringKey, string> = {
     "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
-    "Guarda este paquete bajo llave, fuera del servidor. Puede contener el código de emergencia, los códigos de restauración y las claves. La clave de cifrado de copias abre las copias cifradas. La clave del servidor autoriza la restauración o el traspaso a otro servidor.",
+    "Guarda el paquete de recuperación en un lugar seguro, lejos del servidor.",
   "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en este servidor.",
   "recovery_pack.up_to_date":
     "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
@@ -6558,10 +6557,10 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.incomplete":
     "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
   "recovery_pack.offered_at_setup":
-    "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
+    "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea una clave maestra nueva.",
   "recovery_pack.not_received":
     "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
-  "recovery_pack.reason.key_changed": "La clave de cifrado de copias cambió el {date}.",
+  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
   "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
   "recovery_pack.reason.bucket_set_up":
@@ -6577,13 +6576,13 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.keep_server_key":
     "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
   "recovery_pack.keep_backup_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de cifrado de copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.keep_old_server_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de cifrado de copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
   "recovery_pack.row.last": "Último paquete",
-  "recovery_pack.row.backup_key": "Clave de cifrado de copias",
+  "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.row.server_key": "Clave del servidor",
   "recovery_pack.last_none": "Ninguno todavía",
   "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
@@ -6606,6 +6605,27 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.load_failed":
     "No se ha podido leer el estado del paquete de recuperación. Volver a intentarlo lo lee otra vez.",
   "recovery_pack.retry": "Volver a intentarlo",
+  "recovery_pack.row.master_key": "Clave maestra",
+  "recovery_pack.master_key_in": "{name}, en el paquete {number}",
+  "recovery_pack.master_key_none": "Ninguna todavía",
+  "recovery_pack.make_master_key": "Crear una clave maestra nueva",
+  "master_key_dialog.heading": "¿Crear una clave maestra nueva?",
+  "master_key_dialog.text":
+    "Hazlo solo si la clave maestra se ha perdido o si alguien que no debía ha podido verla. Las copias anteriores siguen necesitando la clave antigua. Guarda el paquete antiguo hasta el {date}. La clave nueva se muestra una sola vez, en un paquete de recuperación nuevo.",
+  "master_key_dialog.make": "Crear una clave maestra nueva",
+  "master_key_dialog.stop": "Parar",
+  "master_key_shown.heading": "Paquete de recuperación",
+  "master_key_shown.lead":
+    "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+  "master_key_shown.warning": "Esta es la única vez que se muestra la clave maestra.",
+  "master_key_shown.key_name": "Clave maestra · {name}",
+  "master_key_shown.download": "Descargar",
+  "master_key_shown.print": "Imprimir",
+  "master_key_shown.copy": "Copiar",
+  "master_key_shown.copied": "Copiada.",
+  "master_key_shown.copy_failed": "No se ha podido copiar. Usa Descargar o Imprimir.",
+  "master_key_shown.print_failed": "El navegador ha bloqueado la impresión. Usa Descargar.",
+  "master_key_shown.continue": "Continuar",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
   "profile.passkey_added": "Añadida el {date}",

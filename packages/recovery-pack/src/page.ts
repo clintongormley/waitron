@@ -28,10 +28,5 @@ export type PackPart = {
   page?: RecoveryPackPage;
   /** Required when `state` is `failed`. */
   failure?: { what: string; todo: string };
-  /** A day, `YYYY-MM-DD`. */
-  lastChanged?: string;
-  check?: string;
-  /** Replaces the menu's reason on the cover for an `absent` or `not-set-up` part. */
-  absentReason?: string;
   serverKeyLocation?: ServerKeyLocation;
 };

@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
@@ -288,7 +288,14 @@ export class RecoveryPackCard extends LitElement {
 
   #make(): void {
     this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
-    this.dialog?.show(this.failed ? null : this.status);
+    this.dialog?.show(this.failed ? null : this.status, "pack");
+  }
+
+  /** Offered only once a status has loaded: its keep date and its box key come from that status. */
+  #makeMasterKey(): void {
+    if (this.status === null || this.failed) return;
+    this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
+    this.dialog?.show(this.status, "master-key");
   }
 
   #date(iso: string): string {
@@ -319,6 +326,16 @@ export class RecoveryPackCard extends LitElement {
                 variant="secondary"
                 @click=${() => this.reload()}
                 >${t("recovery_pack.retry")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          this.status?.serverKey === "set" && !this.failed
+            ? html`<wt-button
+                data-test="make-master-key"
+                variant="ghost"
+                @click=${() => this.#makeMasterKey()}
+                >${t("recovery_pack.make_master_key")}</wt-button
               >`
             : nothing
         }
@@ -433,9 +450,11 @@ export class RecoveryPackCard extends LitElement {
         <dd>${value}</dd>
       </div>`;
     if (latest === null)
-      return html`<dl>${row("last", "recovery_pack.row.last", t("recovery_pack.last_none"))}</dl>`;
+      return html`<dl>
+        ${row("last", "recovery_pack.row.last", t("recovery_pack.last_none"))}
+        ${row("master-key", "recovery_pack.row.master_key", this.#masterKey(status))}
+      </dl>`;
     const pack = { number: String(latest.number), date: this.#date(latest.madeAt) };
-    const issued = latest.parts.find((part) => part.part === "emergency")?.codeIssuedAt;
     return html`<dl>
       ${row(
         "last",
@@ -444,20 +463,17 @@ export class RecoveryPackCard extends LitElement {
           ? fill("recovery_pack.last_value_unnamed", pack)
           : fill("recovery_pack.last_value", { ...pack, name: latest.madeByName }),
       )}
+      ${row("master-key", "recovery_pack.row.master_key", this.#masterKey(status))}
       ${row("backup-key", "recovery_pack.row.backup_key", this.#backupKey(status, pack))}
       ${row("server-key", "recovery_pack.row.server_key", this.#serverKey(status))}
-      ${row(
-        "emergency-code",
-        "recovery_pack.row.emergency",
-        issued
-          ? new Date(issued).toLocaleString(currentLocale(), {
-              timeZone: status.timeZone,
-              dateStyle: "long",
-              timeStyle: "short",
-            })
-          : t("recovery_pack.emergency_absent"),
-      )}
     </dl>`;
+  }
+
+  #masterKey(status: Status): string {
+    const key = status.masterKey;
+    if (key === null) return t("recovery_pack.master_key_none");
+    if (key.pack === null) return key.name;
+    return fill("recovery_pack.master_key_in", { name: key.name, number: String(key.pack) });
   }
 
   #backupKey(status: Status, pack: { number: string; date: string }): string {

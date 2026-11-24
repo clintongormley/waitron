@@ -20,7 +20,8 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import type { MadeMasterKey, VenueRequest, VenueResult } from "@waitron/provisioning";
+import { makeNewMasterKey } from "@waitron/provisioning";
 import {
   validateVenueFields,
   venueFiscalSelection,
@@ -85,7 +86,11 @@ import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { mintBreakGlassKey } from "./break-glass.js";
-import { makePreparationRecoveryPack } from "./backup-recovery-pack-output.js";
+import {
+  makeMasterKeyRecoveryPack,
+  makePreparationRecoveryPack,
+} from "./backup-recovery-pack-output.js";
+import { saveNewMasterKey } from "./master-key-record.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
@@ -1085,29 +1090,49 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("secret_sealed");
       }
 
-      let key: { secret: string; name: string; recoveryPackPdf?: string } | undefined;
+      let key: { secret: string; name: string } | undefined;
+      let recoveryPackPdf: string | undefined;
+      let madeMasterKey: MadeMasterKey | undefined;
       let cloudStaffEmailUnavailable = operation?.data.cloudStaffEmailUnavailable === true;
       if (!setupPhaseReached(operation, "publishing")) {
+        const madeAt = new Date();
+        const masterKey = makeNewMasterKey(madeAt.toISOString().slice(0, 10));
+        const shown = { made: masterKey.made, madeAt: madeAt.toISOString() };
+        const packLocale =
+          resolveLoginLocale(
+            c.req.header("X-Waitron-Recovery-Pack-Locale"),
+            venue.admin.locale ?? FALLBACK_LOCALE,
+          ) === "es-ES"
+            ? "es"
+            : "en";
         if (keyOutput !== undefined) {
           const handles = { venue: db, node: keyOutput.node };
-          const minted =
+          const {
+            recoveryPackPdf: pdf,
+            ...minted
+          }: Awaited<ReturnType<typeof makePreparationRecoveryPack>> =
             deps.recoveryPackEvidence === undefined
               ? await mintBreakGlassKey(handles, result.nodeId)
               : await makePreparationRecoveryPack(
                   handles,
                   result.nodeId,
                   keyOutput.module,
-                  resolveLoginLocale(
-                    c.req.header("X-Waitron-Recovery-Pack-Locale"),
-                    venue.admin.locale ?? FALLBACK_LOCALE,
-                  ) === "es-ES"
-                    ? "es"
-                    : "en",
+                  packLocale,
                   deps.recoveryPackEvidence,
                   log,
+                  shown,
                 );
           key = { ...minted, secret: keyOutput.format(minted.secret) };
+          recoveryPackPdf = pdf;
         }
+        if (keyOutput === undefined || deps.recoveryPackEvidence === undefined)
+          recoveryPackPdf = await makeMasterKeyRecoveryPack(
+            db,
+            result.nodeId,
+            packLocale,
+            log,
+            shown,
+          );
         const trading: TradingConfig = {
           nodeId: result.nodeId,
           environment,
@@ -1126,6 +1151,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
+        // Last venue.db write, after node.db's box-key save where there is one (an exception listed
+        // in conventions-data.md): a failure before it leaves no master_keys row.
+        madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
         await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
 
@@ -1137,13 +1165,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
-      if (key === undefined) return c.json(publicResult);
+      if (key === undefined && madeMasterKey === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
       return c.json({
         ...publicResult,
-        breakGlassSecret: key.secret,
-        breakGlassKeyName: key.name,
-        ...(key.recoveryPackPdf === undefined ? {} : { recoveryPackPdf: key.recoveryPackPdf }),
+        ...madeMasterKey,
+        ...(key === undefined ? {} : { breakGlassSecret: key.secret, breakGlassKeyName: key.name }),
+        ...(recoveryPackPdf === undefined ? {} : { recoveryPackPdf }),
       });
     };
     return runProvision(c, log, async () => {

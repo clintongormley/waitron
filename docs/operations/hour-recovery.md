@@ -302,8 +302,9 @@ After the restore, follow the guide's
 Ordinary reboot and exact completion keep the current activation.
 They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
 key each retained backup needs, and check the restored box's outcome before using the till. The
-pack setup makes holds only the box key (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`,
-"the command path writes recovery pack 1 holding only the staged key, in %s").
+pack setup makes holds the master key on its first page, then the box key
+(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
+1 holding the master key, then the staged box key, in %s").
 
 Signed paper allocations, Cloud allocation receipts and random emergency identities are historical
 formats. Their old environment-file collectors do not provide authority through the current

@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  type DraftScope,
+  type MasterKeyBoxCopy,
+  type MasterKeyUsedDetail,
+} from "@waitron/ui";
 import type {
   InitialSetupActions,
   InitialSetupRecoveryReference,
@@ -10,6 +16,7 @@ import { WAITRON_ID_SISTEMA } from "../software.js";
 import { isMinuteIdentity } from "../hour-identity.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-master-key-box.js";
 import {
   ClockWait,
   clockProblem,
@@ -70,15 +77,22 @@ export const firstHourStrings = {
       "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
       "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.",
-    next: "Keep your recovery pack.",
-    packWhy:
-      "The recovery pack is a PDF holding the box key. If this box ever fails, restoring this venue's backups onto a new box asks for that key, so keep the pack somewhere safe, away from the box.",
-    download: "Download recovery pack",
-    print: "Open to print",
-    kept: "I kept the recovery pack.",
+    next: "Recovery pack",
+    packLead:
+      "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+    packWarning: "This is the only time the master key is shown.",
+    showKey: "Show the master key",
+    masterKey: "Master key",
+    download: "Download",
+    print: "Print",
+    copy: "Copy",
+    copied: "Copied.",
+    copyFailed: "Copy did not work. Use Download or Print.",
+    printFailed: "Your browser blocked printing. Use Download instead.",
     confirmKept: "Continue",
     complete: "Recovery pack confirmed.",
-    replace: "Make the pack again with a new box key",
+    keyLost: "The box no longer holds the master key it made. Make new keys to carry on.",
+    replace: "Make new keys",
   },
   es: {
     ...clockWaitStrings.es,
@@ -93,15 +107,22 @@ export const firstHourStrings = {
       "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
     secondClockEnds:
       "Sigue sola cuando el servidor se ponga en hora por internet, o en el móvil si sigues allí.",
-    next: "Guarda el paquete de recuperación.",
-    packWhy:
-      "El paquete de recuperación es un PDF con la clave de este servidor. Si este servidor falla, restaurar las copias de este local en un servidor nuevo pide esa clave, así que guarda el paquete en un lugar seguro, lejos del servidor.",
-    download: "Descargar el paquete de recuperación",
-    print: "Abrir para imprimir",
-    kept: "He guardado el paquete de recuperación.",
+    next: "Paquete de recuperación",
+    packLead:
+      "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+    packWarning: "Esta es la única vez que se muestra la clave maestra.",
+    showKey: "Mostrar la clave maestra",
+    masterKey: "Clave maestra",
+    download: "Descargar",
+    print: "Imprimir",
+    copy: "Copiar",
+    copied: "Copiada.",
+    copyFailed: "No se ha podido copiar. Usa Descargar o Imprimir.",
+    printFailed: "El navegador ha bloqueado la impresión. Usa Descargar.",
     confirmKept: "Continuar",
     complete: "Paquete de recuperación confirmado.",
-    replace: "Hacer el paquete otra vez con una nueva clave del servidor",
+    keyLost: "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",
+    replace: "Crear claves nuevas",
   },
 };
 @customElement("vf-first-setup-hour")
@@ -141,6 +162,13 @@ export class FirstSetupHour extends LitElement {
         display: inline-flex;
         align-items: center;
       }
+      .pack-warning {
+        margin: var(--wt-space-3) 0;
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+      }
     `,
     checkVenueStyles,
   ];
@@ -154,7 +182,13 @@ export class FirstSetupHour extends LitElement {
   @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private error = false;
   @state() private pdfUrl?: string;
-  @state() private pdfKept = false;
+  @state() private pdfUsed = false;
+  /**
+   * The box answered that it no longer holds the keys it made, as after a restart. Only then may
+   * the step make new ones: new keys would orphan a master key the person already copied.
+   */
+  @state() private keyLost = false;
+  @state() private masterKey?: { masterKey: string; masterKeyName: string };
   @state() private kept = false;
   #delivery?: ReturnType<typeof createRecoveryDelivery<void>>;
   #reference?: InitialSetupRecoveryReference;
@@ -221,11 +255,13 @@ export class FirstSetupHour extends LitElement {
     this.#delivery = undefined;
     this.#reference = undefined;
     this.pdfUrl = undefined;
-    this.pdfKept = false;
+    this.pdfUsed = false;
+    this.masterKey = undefined;
     this.kept = false;
   }
   #clear(): void {
     this.#disposeDelivery();
+    this.keyLost = false;
     ++this.#generation;
     this.busy = false;
     this.sending = undefined;
@@ -411,6 +447,7 @@ export class FirstSetupHour extends LitElement {
           createdAt: new Date().toISOString(),
           nodeKey: staged.key,
         },
+        { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName },
         this.locale,
         async () => {
           await api.confirmRecoveryDocument!(this.#reference!);
@@ -449,18 +486,23 @@ export class FirstSetupHour extends LitElement {
       this.#delivery = delivery;
       delivery = undefined;
       this.pdfUrl = url;
-      await this.updateComplete;
-      if (current())
-        this.shadowRoot?.querySelector<HTMLAnchorElement>("a[data-test=download-pdf]")?.click();
-    } catch {
-      if (current()) this.error = true;
+      this.masterKey = { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName };
+      this.keyLost = false;
+    } catch (error) {
+      if (!current()) return;
+      if ((error as { code?: unknown } | null)?.code === "setup.node_key_lost") this.keyLost = true;
+      else this.error = true;
     } finally {
       delivery?.dispose();
       if (current()) this.busy = false;
     }
   }
+  /** Copy does not count: the pack also holds the box key, which Copy leaves out. */
+  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
+    if (event.detail.action !== "copy") this.pdfUsed = true;
+  }
   async #keepPdf(): Promise<void> {
-    if (this.busy || !this.pdfKept || !this.#delivery || this.kept) return;
+    if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
     const generation = ++this.#generation,
       delivery = this.#delivery;
     this.busy = true;
@@ -476,6 +518,44 @@ export class FirstSetupHour extends LitElement {
     } finally {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
+  }
+  #packControls(
+    t: (typeof firstHourStrings)["en"],
+    made: { masterKey: string; masterKeyName: string },
+    pdfUrl: string,
+  ) {
+    const copy: MasterKeyBoxCopy = {
+      name: (name) => `${t.masterKey} · ${name}`,
+      download: t.download,
+      print: t.print,
+      copy: t.copy,
+      copied: t.copied,
+      copyFailed: t.copyFailed,
+      printFailed: t.printFailed,
+    };
+    return html`<wt-master-key-box
+        data-test="master-key-box"
+        .masterKey=${made.masterKey}
+        .keyName=${made.masterKeyName}
+        .pdfUrl=${pdfUrl}
+        fileName="waitron-recovery-pack-1.pdf"
+        .copy=${copy}
+        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+      ></wt-master-key-box>
+      ${
+        this.pdfUsed
+          ? html`<wt-form-actions
+              ><wt-button
+                data-test="kept"
+                variant=${this.kept ? "secondary" : "primary"}
+                ?disabled=${this.busy || this.kept}
+                @click=${() => void this.#keepPdf()}
+                >${t.confirmKept}</wt-button
+              ></wt-form-actions
+            >`
+          : nothing
+      }
+      ${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`;
   }
   override render() {
     const en = this.locale === "en";
@@ -547,61 +627,28 @@ export class FirstSetupHour extends LitElement {
           </ul>
         </section>
         <section aria-label=${t.next}>
-          <h3>${t.next}</h3>
-          <p data-test="pack-why">${t.packWhy}</p>
+          <h3 data-test="pack-heading">${t.next}</h3>
+          <p data-test="pack-lead">${t.packLead}</p>
+          <p class="pack-warning" data-test="pack-warning">${t.packWarning}</p>
           ${
-            this.pdfUrl
-              ? html`<p>
-                    <a
-                      data-test="download-pdf"
-                      href=${this.pdfUrl}
-                      download="waitron-recovery-pack-1.pdf"
-                      >${t.download}</a
-                    >
-                  </p>
-                  <p>
-                    <a data-test="print-pdf" href=${this.pdfUrl} target="_blank" rel="noopener"
-                      >${t.print}</a
-                    >
-                  </p>
-                  <label
-                    ><input
-                      type="checkbox"
-                      name="setup-pdf-kept"
-                      required
-                      .checked=${this.pdfKept}
-                      ?disabled=${this.busy || this.kept}
-                      @change=${(e: Event) => {
-                        this.pdfKept = (e.currentTarget as HTMLInputElement).checked;
-                      }}
-                    />${t.kept} *</label
-                  ><wt-form-actions
-                    ><wt-button
-                      data-test="kept"
-                      variant=${this.pdfKept && !this.kept ? "primary" : "secondary"}
-                      ?disabled=${this.busy || !this.pdfKept || this.kept}
-                      @click=${() => void this.#keepPdf()}
-                      >${t.confirmKept}</wt-button
-                    ></wt-form-actions
-                  >${this.kept ? html`<p role="status">${t.complete}</p>` : nothing}`
-              : html`<wt-button
-                  data-test="prepare-pdf"
-                  variant="primary"
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#preparePdf()}
-                  >${t.download}</wt-button
-                >`
-          }
-          ${
-            this.api.reissueNodeKey
-              ? html`<wt-button
-                  data-test="replace-key"
-                  variant=${this.busy ? "secondary" : "primary"}
-                  ?disabled=${this.busy}
-                  @click=${() => void this.#preparePdf(true)}
-                  >${t.replace}</wt-button
-                >`
-              : nothing
+            this.pdfUrl && this.masterKey
+              ? this.#packControls(t, this.masterKey, this.pdfUrl)
+              : this.keyLost && this.api.reissueNodeKey
+                ? html`<p data-test="key-lost">${t.keyLost}</p>
+                    <wt-button
+                      data-test="replace-key"
+                      variant=${this.busy ? "secondary" : "primary"}
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#preparePdf(true)}
+                      >${t.replace}</wt-button
+                    >`
+                : html`<wt-button
+                    data-test="prepare-pdf"
+                    variant="primary"
+                    ?disabled=${this.busy}
+                    @click=${() => void this.#preparePdf()}
+                    >${t.showKey}</wt-button
+                  >`
           }
         </section>
         ${failure}`;

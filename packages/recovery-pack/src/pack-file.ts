@@ -1,6 +1,6 @@
 import { canonicalJson } from "./canonical-json.js";
 
-export const PACK_ATTACHMENT = "waitron-recovery-pack-v1.json";
+export const PACK_ATTACHMENT = "waitron-recovery-pack-v2.json";
 export const MAX_PACK_FILE = 16 * 1024;
 export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-2:";
 export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
@@ -31,7 +31,7 @@ export type ServerKeyHolder = { number: number; madeOn: string; received: boolea
 /** Every key is always present; a part the pack does not hold is `null`. */
 export type RecoveryPackFile = {
   kind: "waitron-recovery-pack";
-  version: 1;
+  version: 2;
   number: number;
   madeAt: string;
   bucketCode: string | null;
@@ -42,6 +42,12 @@ export type RecoveryPackFile = {
   serverKey: Record<string, unknown> | null;
   serverKeyName: string | null;
   serverKeyHeldBy: ServerKeyHolder | null;
+  /** As printed: seven groups of four, single spaces. Only on a pack made with a new master key. */
+  masterKey: string | null;
+  /** The current master key's name, on every pack made while the venue has one. */
+  masterKeyName: string | null;
+  /** On a pack without the master key: the number of this box's pack that holds it, if known. */
+  masterKeyHeldBy: number | null;
 };
 
 const FIELDS = [
@@ -55,7 +61,13 @@ const FIELDS = [
   "serverKey",
   "serverKeyName",
   "serverKeyHeldBy",
+  "masterKey",
+  "masterKeyName",
+  "masterKeyHeldBy",
 ] as const;
+
+const MASTER_KEY = /^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/;
+const MASTER_KEY_NAME = /^(\d{4}-\d\d-\d\d) · [2-9A-HJKMNP-Z]{4}$/;
 
 function refuse(reason: RecoveryPackFileRefusal): never {
   throw new RecoveryPackFileError(reason);
@@ -149,11 +161,25 @@ function holder(value: unknown): boolean {
   );
 }
 
+function masterKeyFields(value: Record<string, unknown>): boolean {
+  const { masterKey, masterKeyName, masterKeyHeldBy } = value;
+  const named = typeof masterKeyName === "string" && day(MASTER_KEY_NAME.exec(masterKeyName)?.[1]);
+  if (masterKey !== null)
+    return (
+      typeof masterKey === "string" &&
+      MASTER_KEY.test(masterKey) &&
+      named &&
+      masterKeyHeldBy === null
+    );
+  if (masterKeyName === null) return masterKeyHeldBy === null;
+  return named && (masterKeyHeldBy === null || count(masterKeyHeldBy));
+}
+
 function checked(value: unknown): RecoveryPackFile {
   if (
     !exact(value, FIELDS) ||
     value.kind !== "waitron-recovery-pack" ||
-    value.version !== 1 ||
+    value.version !== 2 ||
     !count(value.number) ||
     !instant(value.madeAt) ||
     !code(value.bucketCode, BUCKET_CODE_PREFIX) ||
@@ -164,7 +190,8 @@ function checked(value: unknown): RecoveryPackFile {
     ) ||
     !(value.serverKey === null || (plainObject(value.serverKey) && json(value.serverKey))) ||
     !(value.serverKeyName === null || label(value.serverKeyName)) ||
-    !holder(value.serverKeyHeldBy)
+    !holder(value.serverKeyHeldBy) ||
+    !masterKeyFields(value)
   )
     refuse("shape");
   return value as RecoveryPackFile;

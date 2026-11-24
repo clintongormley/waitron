@@ -30,6 +30,7 @@ function publicBytes(value: RecoveryDocumentPublic): Uint8Array<ArrayBuffer> {
 }
 export function createRecoveryDelivery<T>(
   document: RecoveryDocument,
+  made: { masterKey: string; masterKeyName: string },
   locale: "en" | "es",
   confirmKept: (binding: RecoveryDeliveryBinding) => Promise<T>,
   timeZone: string,
@@ -45,7 +46,13 @@ export function createRecoveryDelivery<T>(
     const parsed = await parseRecoveryDocument(input);
     input = undefined;
     active();
-    const bytes = await renderSetupRecoveryPack(parsed, locale, timeZone, loadRecoveryPackFonts);
+    const bytes = await renderSetupRecoveryPack(
+      parsed,
+      made,
+      locale,
+      timeZone,
+      loadRecoveryPackFonts,
+    );
     active();
     const statement = recoveryDocumentPublic(parsed);
     const binding = {

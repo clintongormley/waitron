@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
@@ -10,8 +10,19 @@ import { setLocale } from "./i18n/t.js";
 import { wizardApi, venue, initial } from "../test/first-setup-browser.js";
 
 const hosts: HTMLElement[] = [];
-beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
+/** The files the recovery pack step has handed to the browser to save, newest last. */
+const saved: string[] = [];
+beforeEach(() => {
+  sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+  saved.length = 0;
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push(this.href);
+  });
+});
 afterEach(async () => {
+  vi.restoreAllMocks();
   hosts.splice(0).forEach((host) => host.remove());
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -21,6 +32,11 @@ const control = <T extends HTMLElement = HTMLElement & { disabled: boolean }>(
   el: LitElement,
   name: string,
 ) => el.shadowRoot!.querySelector<T>(`[data-test=${name}]`)!;
+/** A part of the hour step's master key box. */
+const keyPart = (hour: LitElement, name: string) =>
+  hour
+    .shadowRoot!.querySelector("wt-master-key-box")
+    ?.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`) ?? null;
 async function screen(app: SetupApp, name: string) {
   await expect.poll(() => control(app, `screen-${name}`)).not.toBeNull();
   const el = control<LitElement>(app, `screen-${name}`);
@@ -32,6 +48,170 @@ function emit(app: SetupApp, type: string, detail?: unknown) {
     .shadowRoot!.querySelector("main")!
     .dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
+/** Drives the real wizard to the series list, with the box answering `/node-key` as given. */
+async function reachSeries(
+  locale: "en-GB" | "es-ES",
+  theme: "light" | "dark",
+  nodeKey: () => Response,
+) {
+  let retained: FirstSetupState = {
+    ...structuredClone(initial),
+    status: "claimed",
+    environment: "production",
+  };
+  let replacement = 0;
+  const instant = Date.parse("2026-10-18T12:30:00Z");
+  const selected = {
+    kind: "waitron-hour-setup",
+    status: "selected",
+    identity: "0CRHE",
+    input: {
+      allocation: {
+        installationIdentity: "0CRHE",
+        series: [
+          { code: "A-0CRHE", purpose: "standard" },
+          { code: "FF-0CRHE", purpose: "full" },
+          { code: "R-0CRHE", purpose: "corrective" },
+        ],
+      },
+    },
+  };
+  const { api, requests } = wizardApi({
+    intercept(path, body) {
+      if (path.endsWith("/preparation"))
+        return Response.json({
+          state: retained,
+          preparation:
+            (body as { proposal: { action: string } }).proposal.action === "clock-challenge"
+              ? { id: "challenge" }
+              : {
+                  id: "comparison",
+                  clock: {
+                    usable: ["box", "browser"].map((source) => ({
+                      source,
+                      lowerMs: instant,
+                      upperMs: instant,
+                    })),
+                    unavailable: [],
+                    secondClock: true,
+                    disagreement: false,
+                    releaseBlocked: false,
+                    rangeBlocked: false,
+                  },
+                },
+        });
+      if (path.endsWith("/candidates")) {
+        retained = {
+          ...retained,
+          revision: 3,
+          status: "consumption-intent",
+          consumptionIntent: true,
+        };
+        return Response.json({ state: retained });
+      }
+      if (path.endsWith("/request"))
+        return Response.json({
+          attemptId: initial.attemptId,
+          modules: [{ module: "fiscal-verifactu", request: selected }],
+        });
+      if (path.endsWith("/input")) {
+        retained = { ...retained, revision: 4 };
+        return Response.json({ state: retained });
+      }
+      if (path.endsWith("/reconfirm")) return Response.json({ reconfirmation: "proof" });
+      if (path.endsWith("/node-key")) return nodeKey();
+      if (path.endsWith("/node-key-reissue")) {
+        ++replacement;
+        return Response.json({
+          stage: {
+            stageId: `replacement-${replacement}`,
+            nodeId: initial.nodeId,
+            name: `Key ${replacement}`,
+          },
+          key: {
+            nodeId: initial.nodeId,
+            name: `Key ${replacement}`,
+            secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+          },
+          masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+          masterKeyName: "2026-11-23 · QZJV",
+        });
+      }
+      if (path.endsWith("/recovery-document") || path.endsWith("/recovery-document-kept"))
+        return Response.json({ accepted: true });
+    },
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  hosts.push(host);
+  applyTokens(host);
+  host.dataset.theme = theme;
+  host.lang = locale;
+  const app = new SetupApp();
+  app.api = api;
+  app.browserLanguages = [locale];
+  host.append(app);
+  await screen(app, "mode");
+  emit(app, "setup-patch", { patch: { mode: "live", venue } });
+  emit(app, "setup-goto", { screen: "venue" });
+  await screen(app, "venue");
+  emit(app, "setup-advance");
+  await screen(app, "cert");
+  emit(app, "setup-goto", { screen: "review" });
+  const shell = await screen(app, "first-setup");
+  const module = shell.shadowRoot!.querySelector<LitElement>("vf-first-fiscal-screen")!;
+  await module.updateComplete;
+  const hour = module.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
+  await expect.poll(() => hour.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull();
+  const password = async () => {
+    await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
+    await userEvent.fill(
+      control(shell, "owner-password").shadowRoot!.querySelector<HTMLInputElement>("input")!,
+      venue.admin.password,
+    );
+    await userEvent.click(control(shell, "reconfirm"));
+  };
+  await userEvent.click(
+    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!,
+  );
+  await userEvent.click(control(hour, "compare"));
+  await password();
+  await expect.poll(() => control(hour, "selected-hour")).not.toBeNull();
+  expect(control(hour, "replace-key")).toBeNull();
+  return { host, shell, hour, requests, password };
+}
+const lostKey = () =>
+  Response.json({ error: { code: "setup.node_key_lost", params: {} } }, { status: 409 });
+const heldKey = () =>
+  Response.json({
+    stage: { stageId: "stage", nodeId: initial.nodeId, name: "Held key" },
+    key: { nodeId: initial.nodeId, name: "Held key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+    masterKeyName: "2026-11-23 · QZJV",
+  });
+
+it("cancelling the password prompt leaves Show the master key in place and shows no lost-key sentence", async () => {
+  setLocale("en-GB");
+  const { shell, hour, requests } = await reachSeries("en-GB", "light", heldKey);
+  await userEvent.click(control(hour, "prepare-pdf"));
+  await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
+  await userEvent.click(shell.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!);
+  await expect.poll(() => control(shell, "owner-password")).toBeNull();
+  await expect.poll(() => control(hour, "prepare-pdf")?.disabled).toBe(false);
+  expect(requests.filter((r) => r.path.endsWith("/node-key"))).toEqual([]);
+  expect(control(hour, "key-lost")).toBeNull();
+  expect(control(hour, "replace-key")).toBeNull();
+  await userEvent.click(control(hour, "prepare-pdf"));
+  await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
+  await userEvent.fill(
+    control(shell, "owner-password").shadowRoot!.querySelector<HTMLInputElement>("input")!,
+    venue.admin.password,
+  );
+  await userEvent.click(control(shell, "reconfirm"));
+  await expect.poll(() => keyPart(hour, "master-key")).not.toBeNull();
+  expect(requests.filter((r) => r.path.endsWith("/node-key-reissue"))).toEqual([]);
+});
+
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
@@ -40,144 +220,18 @@ for (const locale of ["en-GB", "es-ES"] as const)
         try {
           await page.viewport(width, 1800);
           setLocale(locale);
-          let retained: FirstSetupState = {
-            ...structuredClone(initial),
-            status: "claimed",
-            environment: "production",
-          };
-          let replacement = 0;
-          const instant = Date.parse("2026-10-18T12:30:00Z");
-          const selected = {
-            kind: "waitron-hour-setup",
-            status: "selected",
-            identity: "0CRHE",
-            input: {
-              allocation: {
-                installationIdentity: "0CRHE",
-                series: [
-                  { code: "A-0CRHE", purpose: "standard" },
-                  { code: "FF-0CRHE", purpose: "full" },
-                  { code: "R-0CRHE", purpose: "corrective" },
-                ],
-              },
-            },
-          };
-          const { api, requests } = wizardApi({
-            intercept(path, body) {
-              if (path.endsWith("/preparation"))
-                return Response.json({
-                  state: retained,
-                  preparation:
-                    (body as { proposal: { action: string } }).proposal.action === "clock-challenge"
-                      ? { id: "challenge" }
-                      : {
-                          id: "comparison",
-                          clock: {
-                            usable: ["box", "browser"].map((source) => ({
-                              source,
-                              lowerMs: instant,
-                              upperMs: instant,
-                            })),
-                            unavailable: [],
-                            secondClock: true,
-                            disagreement: false,
-                            releaseBlocked: false,
-                            rangeBlocked: false,
-                          },
-                        },
-                });
-              if (path.endsWith("/candidates")) {
-                retained = {
-                  ...retained,
-                  revision: 3,
-                  status: "consumption-intent",
-                  consumptionIntent: true,
-                };
-                return Response.json({ state: retained });
-              }
-              if (path.endsWith("/request"))
-                return Response.json({
-                  attemptId: initial.attemptId,
-                  modules: [{ module: "fiscal-verifactu", request: selected }],
-                });
-              if (path.endsWith("/input")) {
-                retained = { ...retained, revision: 4 };
-                return Response.json({ state: retained });
-              }
-              if (path.endsWith("/reconfirm")) return Response.json({ reconfirmation: "proof" });
-              if (path.endsWith("/node-key"))
-                return Response.json(
-                  { error: { code: "setup.attempt_conflict", params: {} } },
-                  { status: 409 },
-                );
-              if (path.endsWith("/node-key-reissue")) {
-                ++replacement;
-                return Response.json({
-                  stage: {
-                    stageId: `replacement-${replacement}`,
-                    nodeId: initial.nodeId,
-                    name: `Key ${replacement}`,
-                  },
-                  key: {
-                    nodeId: initial.nodeId,
-                    name: `Key ${replacement}`,
-                    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-                  },
-                });
-              }
-              if (path.endsWith("/recovery-document") || path.endsWith("/recovery-document-kept"))
-                return Response.json({ accepted: true });
-            },
-          });
-          const host = document.createElement("div");
-          document.body.append(host);
-          hosts.push(host);
-          applyTokens(host);
-          host.dataset.theme = theme;
-          host.lang = locale;
-          const app = new SetupApp();
-          app.api = api;
-          app.browserLanguages = [locale];
-          host.append(app);
-          await screen(app, "mode");
-          emit(app, "setup-patch", { patch: { mode: "live", venue } });
-          emit(app, "setup-goto", { screen: "venue" });
-          await screen(app, "venue");
-          emit(app, "setup-advance");
-          await screen(app, "cert");
-          emit(app, "setup-goto", { screen: "review" });
-          const shell = await screen(app, "first-setup");
-          const module = shell.shadowRoot!.querySelector<LitElement>("vf-first-fiscal-screen")!;
-          await module.updateComplete;
-          const hour = module.shadowRoot!.querySelector<LitElement>("vf-first-setup-hour")!;
-          await expect
-            .poll(() => hour.shadowRoot!.querySelector("[data-clock=read]"))
-            .not.toBeNull();
-          const password = async () => {
-            await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
-            await userEvent.fill(
-              control(shell, "owner-password").shadowRoot!.querySelector<HTMLInputElement>(
-                "input",
-              )!,
-              venue.admin.password,
-            );
-            await userEvent.click(control(shell, "reconfirm"));
-          };
-          await userEvent.click(
-            hour.shadowRoot!.querySelector<HTMLInputElement>(
-              'input[name="setup-details-confirmed"]',
-            )!,
+          const { host, shell, hour, requests, password } = await reachSeries(
+            locale,
+            theme,
+            lostKey,
           );
-          await userEvent.click(control(hour, "compare"));
-          await password();
-          await expect.poll(() => control(hour, "selected-hour")).not.toBeNull();
           await userEvent.click(control(hour, "prepare-pdf"));
           await password();
-          await expect
-            .poll(() => hour.shadowRoot!.querySelector("wt-form-actions[data-failed=true]"))
-            .not.toBeNull();
+          await expect.poll(() => control(hour, "replace-key")).not.toBeNull();
+          expect(
+            hour.shadowRoot!.querySelector("wt-form-actions[data-failed=false]"),
+          ).not.toBeNull();
           expect(requests.some((r) => r.path.endsWith("/node-key-reissue"))).toBe(false);
-          expect(control(hour, "replace-key")).not.toBeNull();
           await userEvent.click(control(hour, "replace-key"));
           await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
           expect(control(shell, "next").disabled).toBe(true);
@@ -187,46 +241,34 @@ for (const locale of ["en-GB", "es-ES"] as const)
             path: `__screenshots__/a679-reissue/${locale}-${theme}-${width}-password.png`,
           });
           await password();
-          await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
-          const download = control<HTMLAnchorElement>(hour, "download-pdf");
-          const bytes = new Uint8Array(await (await fetch(download.href)).arrayBuffer());
+          await expect.poll(() => keyPart(hour, "download")).not.toBeNull();
+          expect(control(hour, "replace-key")).toBeNull();
+          expect(control(hour, "kept")).toBeNull();
+          await userEvent.click(keyPart(hour, "download")!);
+          const bytes = new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer());
           expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
-          expect(control(hour, "kept").disabled).toBe(true);
           expect(control(shell, "next").disabled).toBe(true);
-          await userEvent.click(
-            hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
-          );
+          expect(
+            leaveCoordinatorFor(hour)!.isDirty([shell]),
+            "a replacement PDF needs kept consent before leaving",
+          ).toBe(true);
           await userEvent.click(control(hour, "kept"));
           await password();
           await expect.poll(() => control(shell, "next").disabled).toBe(false);
           expect(leaveCoordinatorFor(hour)!.isDirty([shell])).toBe(false);
+          expect(control(hour, "replace-key")).toBeNull();
           expect((await axe.run(host)).violations).toEqual([]);
           await page.screenshot({
             path: `__screenshots__/a679-reissue/${locale}-${theme}-${width}-kept.png`,
           });
-          await userEvent.click(control(hour, "replace-key"));
-          await expect.poll(() => control(shell, "owner-password")).not.toBeNull();
-          expect(control(shell, "next").disabled).toBe(true);
-          expect(
-            leaveCoordinatorFor(hour)!.isDirty([shell]),
-            "a replacement PDF needs fresh kept consent before leaving",
-          ).toBe(true);
-          expect(control(hour, "download-pdf")).toBeNull();
-          await password();
-          await expect.poll(() => control(hour, "download-pdf")).not.toBeNull();
-          expect(
-            hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!
-              .checked,
-          ).toBe(false);
-          expect(control(shell, "next").disabled).toBe(true);
           expect(
             requests.filter((r) => r.path.endsWith("/node-key-reissue")).map((r) => r.body),
-          ).toEqual([{ password: venue.admin.password }, { password: venue.admin.password }]);
+          ).toEqual([{ password: venue.admin.password }]);
           expect(
             requests
               .filter((r) => r.path.endsWith("/recovery-document"))
               .map((r) => (r.body as { stageId: string }).stageId),
-          ).toEqual(["replacement-1", "replacement-2"]);
+          ).toEqual(["replacement-1"]);
           expect(
             requests
               .filter((r) => r.path.endsWith("/recovery-document-kept"))

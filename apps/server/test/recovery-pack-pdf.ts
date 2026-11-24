@@ -15,7 +15,7 @@ export async function recoveryPackPdf(codes: {
 }): Promise<Uint8Array<ArrayBuffer>> {
   const file: RecoveryPackFile = {
     kind: "waitron-recovery-pack",
-    version: 1,
+    version: 2,
     number: 2,
     madeAt: "2026-10-29T17:00:00.000Z",
     ...codes,
@@ -23,6 +23,9 @@ export async function recoveryPackPdf(codes: {
     serverKey: null,
     serverKeyName: null,
     serverKeyHeldBy: null,
+    masterKey: null,
+    masterKeyName: null,
+    masterKeyHeldBy: null,
   };
   buildRecoveryPackFile(file);
   const font = new Uint8Array(await readFile(FONT));
@@ -35,14 +38,7 @@ export async function recoveryPackPdf(codes: {
         await readFile(new URL("../src/assets/invoice-noto-sans-mono.ttf", import.meta.url)),
       ),
     }),
-    cover: {
-      legalName: "Waitron SL",
-      taxId: "89890001K",
-      venueName: "Local",
-      madeAt: file.madeAt,
-      madeBy: null,
-      number: file.number,
-    },
+    pack: { venueName: "Local", madeAt: file.madeAt, number: file.number },
     parts: [],
     file,
   });

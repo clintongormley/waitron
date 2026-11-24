@@ -496,6 +496,23 @@ it.each([0, 8 * 1024 * 1024 + 1])(
   },
 );
 
+it("hands the renderer the staged master key, for the pack's first page", async () => {
+  const f = await fixture();
+  const seat = f.runtime.modules.find((module) => module.name === MODULE)!.provisioning!
+    .initialSetup!;
+  const render = vi.spyOn(seat, "commandRecoveryDocument");
+  expect((await f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en")).status).toBe(
+    "ready",
+  );
+  const staged = (await readSetupFlowRecord(f.options.stateDir))?.nodeKey as {
+    masterKeyName: string;
+  };
+  expect(render.mock.calls[0]![2].masterKey).toEqual({
+    masterKey: expect.stringMatching(/^(?:\S{4} ){6}\S{4}$/),
+    masterKeyName: staged.masterKeyName,
+  });
+});
+
 it("a renderer cannot write its PDF after the setup is stopped", async () => {
   const f = await fixture();
   const seat = f.runtime.modules.find((module) => module.name === MODULE)!.provisioning!

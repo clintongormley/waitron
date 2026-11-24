@@ -460,8 +460,8 @@ configuración para poner en marcha otro local.
   dentro de la base de datos. Cada copia programada va cifrada con la clave de cifrado de copias, que guarda el servidor. Mientras la hace, el servidor escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
-  menos 12 caracteres, así que es tan segura como esa frase. Revisa si alguna parte de la portada del paquete de recuperación indica **No se pudo generar**.
-  Lee sus páginas antes de necesitar el paquete: pueden nombrar un paquete anterior o una hoja que
+  menos 12 caracteres, así que es tan segura como esa frase.
+  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior o una hoja que
   también necesites. Conserva esos papeles y los paquetes de las copias anteriores que puedas
   necesitar. Guarda cada paquete de recuperación bajo llave, fuera del servidor.
 
@@ -592,9 +592,9 @@ dos pasos. Waitron no permite **Restablecer acceso** para el único administrado
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
-**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración solo
-contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
-sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
+**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración contiene
+la clave maestra y la clave del servidor. Una recuperación necesita la clave del servidor junto con
+el acceso a una copia; para sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia en el bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de cifrado de copias, así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
@@ -615,9 +615,9 @@ proveedor. Mientras las copias programadas están activadas, **Copias de segurid
 seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio y toda la
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
-puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **También crear una
-clave del servidor nueva** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
-necesitando la antigua.
+puede contener la clave del servidor. Para sustituirla, elige **Crear una clave maestra nueva**, que
+también crea una clave del servidor nueva: las copias nuevas usan la clave nueva, y las anteriores
+siguen necesitando la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,

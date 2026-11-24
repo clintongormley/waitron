@@ -1150,6 +1150,8 @@ export class SetupApp extends LitElement {
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private restored: "bucket" | "archive" | "cloud" | undefined;
   @state() private recoveryPackPdf?: string;
+  @state() private masterKey?: string;
+  @state() private masterKeyName?: string;
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: Message;
   @state() private cloudInvalidField?: CloudField;
@@ -2050,6 +2052,8 @@ export class SetupApp extends LitElement {
       this.#rootScope?.commit(submitted);
       if (cloudSignInTab) sessionStorage.removeItem("waitron-setup-cloud-signed-in");
       this.recoveryPackPdf = result.recoveryPackPdf;
+      this.masterKey = result.masterKey;
+      this.masterKeyName = result.masterKeyName;
       this.breakGlassSecret = result.breakGlassSecret;
       this.breakGlassKeyName = result.breakGlassKeyName;
       this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
@@ -2687,6 +2691,8 @@ export class SetupApp extends LitElement {
   /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
   #clearProvisionOutcome(): void {
     this.recoveryPackPdf = undefined;
+    this.masterKey = undefined;
+    this.masterKeyName = undefined;
     this.breakGlassSecret = undefined;
     this.breakGlassKeyName = undefined;
     this.breakGlassKeyInBackups = false;
@@ -3230,6 +3236,8 @@ export class SetupApp extends LitElement {
           .onboardingIntent=${this.draft.mode}
           .restored=${this.restored}
           .recoveryPackPdf=${this.recoveryPackPdf}
+          .masterKey=${this.masterKey}
+          .masterKeyName=${this.masterKeyName}
         ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen

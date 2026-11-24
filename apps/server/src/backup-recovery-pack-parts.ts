@@ -58,7 +58,17 @@ export type BuiltPart = {
 
 export type EmergencyPartInput =
   | { state: "included"; code: EmergencyCode }
-  | { state: "absent"; reason: keyof (typeof PART_WORDS)["en"]["emergency"]["absent"] }
+  | {
+      state: "absent";
+      reason:
+        | "not_connected"
+        | "not_primary"
+        | "permission"
+        | "setting_off"
+        | "level_inactive"
+        | "no_payment_method"
+        | "not_provisioned";
+    }
   | { state: "failed"; failedWith: string };
 
 export function buildEmergencyPart(
@@ -70,7 +80,7 @@ export function buildEmergencyPart(
   const record = { part: "emergency", state: input.state } as const;
   if (input.state === "absent")
     return {
-      part: { kind: "emergency", state: "absent", absentReason: words.absent[input.reason] },
+      part: { kind: "emergency", state: "absent" },
       record,
       file: {},
     };
@@ -92,7 +102,6 @@ export function buildEmergencyPart(
     part: {
       kind: "emergency",
       state: "included",
-      lastChanged: dayIn(context.timeZone, code.codeIssuedAt),
       page: {
         title: words.title,
         intro: words.intro,
@@ -169,16 +178,13 @@ async function backupKey(env: PartsContext["env"]): Promise<string> {
   return key;
 }
 
-function keyFacts(context: PartsContext, revision: string | undefined) {
+function keyFacts(context: PartsContext) {
   const rotatedAt = loadKeyRotatedAt(context.env);
   const keyChangedAt = rotatedAt ?? context.madeAt;
   const words = PART_WORDS[context.locale];
   const when = packDates(context.locale, context.timeZone);
-  const lastChanged = dayIn(context.timeZone, keyChangedAt);
   return {
     record: rotatedAt === undefined ? { keyChangedAt, keyNeverChanged: true } : { keyChangedAt },
-    lastChanged,
-    check: words.check(when.shortDay(lastChanged), revision),
     rows:
       rotatedAt === undefined
         ? []
@@ -207,14 +213,12 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
       pointerSignerPublicKey,
     });
     const revision = (await credentialRevision(tx, { purpose: STREAM_PURPOSE }))!;
-    const facts = keyFacts(context, revision);
+    const facts = keyFacts(context);
     const words = PART_WORDS[context.locale].bucket;
     return {
       part: {
         kind: "bucket",
         state: "included",
-        lastChanged: facts.lastChanged,
-        check: facts.check,
         page: {
           title: words.title,
           intro: words.intro,
@@ -250,7 +254,7 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
     const folder = destinations.find((d) => d.kind === "local-fs");
     const recoveryKey = await backupKey(context.env);
     const revision = sealed.revision;
-    const facts = keyFacts(context, sealed.revision);
+    const facts = keyFacts(context);
     const words = PART_WORDS[context.locale].archives;
     const record: RecoveryPackPartRecord = {
       part: "archives",
@@ -262,8 +266,6 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
     const part = {
       kind: "archives",
       state: "included",
-      lastChanged: facts.lastChanged,
-      check: facts.check,
     } as const;
     if (bucket !== undefined) {
       const archivePrefix = archiveNamespace(bucket.bucket.prefix);
@@ -426,8 +428,6 @@ export async function buildServerKeyPart(
       kind: "server-key",
       state: "included",
       page: drawn.page,
-      lastChanged: name.slice(0, 10),
-      check: name,
       serverKeyLocation: newKey === undefined ? keyInForce.holder : { kind: "this-pack" },
     },
     record: {

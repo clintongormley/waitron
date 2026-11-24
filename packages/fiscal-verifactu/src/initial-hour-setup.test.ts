@@ -76,6 +76,11 @@ function fixture() {
   });
 }
 
+const made = {
+  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+  masterKeyName: "2026-11-23 · QZJV",
+};
+
 it.each(["en", "es"] as const)(
   "the command document seat renders the frozen identity and staged key in %s",
   async (locale) => {
@@ -92,6 +97,7 @@ it.each(["en", "es"] as const)(
         venueName: "Olivo Centro",
         timeZone: "Europe/Madrid",
       },
+      masterKey: made,
       locale,
     });
     expect(document.statement).toEqual({
@@ -142,6 +148,7 @@ it("the command recovery pack uses the frozen venue zone", async () => {
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
     key: { nodeId: "node", name: "2026-10-16 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Atlantic/Canary" },
+    masterKey: made,
     locale: "en",
   });
   const task = getDocument({ data: document.bytes.slice(), useSystemFonts: false, useWasm: false });
@@ -155,7 +162,7 @@ it("the command recovery pack uses the frozen venue zone", async () => {
 });
 
 it.each(["en", "es"] as const)(
-  "the command path writes recovery pack 1 holding only the staged key, in %s",
+  "the command path writes recovery pack 1 holding the master key, then the staged box key, in %s",
   async (locale) => {
     const f = configured();
     const saved = fixture();
@@ -171,6 +178,7 @@ it.each(["en", "es"] as const)(
         venueName: "Olivo Centro",
         timeZone: "Europe/Madrid",
       },
+      masterKey: made,
       locale,
     });
     const task = getDocument({
@@ -185,22 +193,16 @@ it.each(["en", "es"] as const)(
       const pages = await pageTexts(pdf);
       const words = PACK_WORDS[locale];
       expect(pages).toHaveLength(2);
-      expect(pages[0]).toContain(words.title);
-      expect(pages[0]).toContain(
-        words.madeDuringSetup(
-          locale === "en" ? "16 October 2026" : "16 de octubre de 2026",
-          "13:40",
-        ),
+      expect(pages[0]!.replace(/\s+/g, " ").trim()).toBe(
+        `${words.heading("Olivo Centro")} ${words.masterKeyLabel(made.masterKeyName)} ${made.masterKey} ${words.masterKeyQr}`,
       );
-      expect(pages[0]).toContain(words.notSetUp.bucket);
-      expect(pages[0]).toContain(words.notSetUp.archives);
       expect(pages[1]).toContain("Olivo Restauración SL");
       expect(pages[1]).toContain("2026-10-16 · ACRY");
       expect(
         JSON.parse(Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString()),
       ).toEqual({
         kind: "waitron-recovery-pack",
-        version: 1,
+        version: 2,
         number: 1,
         madeAt: "2026-10-16T11:40:00.000Z",
         bucketCode: null,
@@ -209,6 +211,8 @@ it.each(["en", "es"] as const)(
         serverKey: { ...(document.statement as object), nodeKey: key },
         serverKeyName: "2026-10-16 · ACRY",
         serverKeyHeldBy: null,
+        ...made,
+        masterKeyHeldBy: null,
       });
     } finally {
       await task.destroy();
@@ -226,6 +230,7 @@ it("the command document seat refuses a foreign staged node and changed hour inp
       secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
     },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
+    masterKey: made,
     locale: "en" as const,
   };
   await expect(
@@ -247,6 +252,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
     key: { nodeId: "node", name: "2026-10-17 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
+    masterKey: made,
     locale: "en",
   });
   expect(document.statement).toMatchObject({ createdAt: "2026-10-17T12:30:00.000Z" });

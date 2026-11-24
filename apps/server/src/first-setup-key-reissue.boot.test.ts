@@ -70,6 +70,11 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     expect(initialListener?.listening).toBe(false);
     server = undefined;
     server = await startServer(env);
+    const again = await post("reconfirm", { password: PASSWORD, purpose: "block-use" });
+    expect(again.status).toBe(200);
+    const lost = await post("node-key", again.body);
+    expect(lost.status).toBe(409);
+    expect(lost.body.error.code).toBe("setup.node_key_lost");
     const before = (await readSetupFlowRecord(stateDir))?.attempt;
     const refused = await post("node-key-reissue", { password: "wrong password" });
     expect(refused.status).toBe(403);

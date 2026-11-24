@@ -1,5 +1,5 @@
 import { isSecure } from "./encrypted-connection.js";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
@@ -8,7 +8,6 @@ import {
   nextRecoveryPackNumber,
   readRecoveryPack,
   readRecoveryPacks,
-  readTaxpayer,
   readVenue,
   withNodeTransaction,
   withTransaction,
@@ -21,7 +20,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn, persons } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
-import { newBreakGlassKeyName } from "@waitron/provisioning";
+import { makeNewMasterKey, newBreakGlassKeyName, type MadeMasterKey } from "@waitron/provisioning";
 import type { PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
@@ -32,6 +31,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
+import { saveNewMasterKey } from "./master-key-record.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
   buildEmergencyPart,
@@ -47,8 +47,17 @@ import {
   type PartsContext,
   type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
-import { drawRecoveryPack } from "./backup-recovery-pack-output.js";
-import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
+import {
+  currentMasterKeyElsewhere,
+  drawRecoveryPack,
+  shownMasterKey,
+} from "./backup-recovery-pack-output.js";
+import {
+  carriesServerKey,
+  keepOldPackUntil,
+  packStatus,
+  type CurrentChecks,
+} from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
@@ -265,6 +274,8 @@ type MakeInput = {
   madeAt: string;
   newSecret: string | undefined;
   verifier: string | undefined;
+  /** Shown only if the pack also carries the new box key, the one case it is saved in. */
+  newMasterKey: MadeMasterKey | undefined;
 };
 
 /**
@@ -288,15 +299,7 @@ async function makePack(
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   await requireFreshManagementSignIn(tx, input.token);
-  const taxpayer = await readTaxpayer(tx);
   const venue = await readVenue(tx);
-  if (taxpayer === null) {
-    throw new Error("the box has no taxpayer to name on a recovery pack");
-  }
-  const [person] = await tx
-    .select({ name: persons.displayName })
-    .from(persons)
-    .where(eq(persons.id, input.personId));
   const number = await nextRecoveryPackNumber(tx, nodeId);
   const keyName = await readRecoveryKeyName(nodeTx, nodeId);
   const records = await readRecoveryPacks(tx, nodeId);
@@ -345,16 +348,17 @@ async function makePack(
       locale: request.locale,
       timeZone: venue.timeZone,
       loadFonts: deps.loadFonts,
-      cover: {
-        legalName: taxpayer.legalName,
-        taxId: taxpayer.taxId,
-        venueName: venue.name,
-        madeAt,
-        madeBy: person?.name ?? null,
-        number,
-      },
+      pack: { venueName: venue.name, madeAt, number },
     },
-    { nodeId, madeBy: input.personId, parts },
+    {
+      nodeId,
+      madeBy: input.personId,
+      parts,
+      masterKey:
+        carried && input.newMasterKey !== undefined
+          ? shownMasterKey(input.newMasterKey)
+          : await currentMasterKeyElsewhere(tx, records),
+    },
   );
   await insertRecoveryPack(tx, record);
   const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
@@ -396,7 +400,10 @@ export function mountBackupRecoveryPackMakeApi(
           const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
           const replacement = request.newServerKey ? await makeBreakGlassSecret() : undefined;
-          return withNodeTransaction(deps.nodeDb, async (nodeTx) => {
+          const newMasterKey = request.newServerKey
+            ? makeNewMasterKey(madeAt.slice(0, 10))
+            : undefined;
+          const pack = await withNodeTransaction(deps.nodeDb, async (nodeTx) => {
             const made = await withTransaction(deps.db, (tx) =>
               makePack(tx, nodeTx, deps, {
                 emergency,
@@ -408,6 +415,7 @@ export function mountBackupRecoveryPackMakeApi(
                 madeAt,
                 newSecret: replacement?.secret,
                 verifier: replacement?.verifier,
+                newMasterKey: newMasterKey?.made,
               }),
             );
             // venue.db's pack record is saved first and the key in node.db follows. If this save
@@ -424,6 +432,13 @@ export function mountBackupRecoveryPackMakeApi(
             }
             return made;
           });
+          // The request's last database write, so a failure before it leaves the old key current.
+          // It follows node.db's key save, an exception listed in conventions-data.md.
+          const masterKey =
+            pack.replacement === undefined || newMasterKey === undefined
+              ? undefined
+              : await saveNewMasterKey(deps.db, newMasterKey, new Date(madeAt), personId);
+          return { ...pack, masterKey };
         }),
       );
       log("info", "recovery.pack_made", {
@@ -441,6 +456,12 @@ export function mountBackupRecoveryPackMakeApi(
         "X-Waitron-Recovery-Pack": String(made.number),
         "X-Waitron-Recovery-Pack-Key": made.key,
         "X-Waitron-Recovery-Pack-Made-At": made.madeAt,
+        ...(made.masterKey === undefined
+          ? {}
+          : {
+              "X-Waitron-Master-Key": made.masterKey.masterKey,
+              "X-Waitron-Master-Key-Name": encodeURIComponent(made.masterKey.masterKeyName),
+            }),
       });
     });
   });
@@ -476,6 +497,7 @@ export function mountBackupRecoveryPackMakeApi(
               ).map((p) => [p.id, p.name] as const),
         );
         const loaded = deps.backups();
+        const now = deps.now();
         const status = packStatus({
           records: records.map((r) => ({
             ...r,
@@ -491,9 +513,22 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== undefined &&
             fileKey !== undefined &&
             loaded.recoveryKey !== fileKey,
-          now: deps.now(),
+          now,
         });
-        return { ...status, timeZone: knownZone((await readVenue(tx)).timeZone) };
+        const master = await currentMasterKeyElsewhere(tx, records);
+        return {
+          ...status,
+          masterKey:
+            master.masterKeyName === null
+              ? null
+              : { name: master.masterKeyName, pack: master.masterKeyHeldBy },
+          keepOldPackUntil: keepOldPackUntil({
+            retention: loaded.retention,
+            schedule: loaded.schedule,
+            now,
+          }),
+          timeZone: knownZone((await readVenue(tx)).timeZone),
+        };
       });
       return c.json(status);
     });

@@ -19,11 +19,16 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
+import {
+  openVenueDatabase,
+  readCurrentMasterKey,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { planVenue } from "@waitron/provisioning";
+import { makeNewMasterKey, planVenue, type MadeMasterKey } from "@waitron/provisioning";
 import { getCountryPack } from "@waitron/country-packs";
 import { parseModuleConfig } from "@waitron/module";
 import { nodeId as brandNodeId, readVariable } from "@waitron/shared";
@@ -33,6 +38,7 @@ import { writeModuleConfig } from "../src/module-config.js";
 import { resolveConfigDir } from "../src/config.js";
 import { listStations } from "../src/kitchen.js";
 import { enrolDeviceForTest } from "../src/testing/enrol.js";
+import { saveNewMasterKey } from "../src/master-key-record.js";
 import type { TradingContext } from "../src/trading-context.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
@@ -130,6 +136,15 @@ export interface DevSetupResult {
   /** True when an already-provisioned venue was reused (no new fiscal chain). */
   reused: boolean;
   env: DevEnv;
+  /** Only when this run made the venue's first master key. */
+  masterKey?: MadeMasterKey;
+}
+
+/** The summary's master-key line, for a venue provisioned now. */
+export function masterKeySummaryLines(result: DevSetupResult): string[] {
+  return result.masterKey === undefined
+    ? []
+    : [`  master key ${result.masterKey.masterKeyName}:  ${result.masterKey.masterKey}`];
 }
 
 export interface DevVenueIds {
@@ -340,6 +355,22 @@ async function writeFiscalModuleSettings(
   log("dev-setup: saved module settings (fiscal slot → verifactu; fiscal-none disabled)");
 }
 
+/** The venue's last database write, so a run that failed before it is finished by the next. */
+async function saveMasterKeyIfNone(venueDir: string): Promise<MadeMasterKey | undefined> {
+  const store = await openVenueDatabase(venueDir);
+  try {
+    if ((await readCurrentMasterKey(store.venue)) !== null) return undefined;
+    return await saveNewMasterKey(
+      store.venue,
+      makeNewMasterKey(new Date().toISOString().slice(0, 10)),
+      new Date(),
+      null,
+    );
+  } finally {
+    await store.close();
+  }
+}
+
 /**
  * Provisions a venue ONLY into a directory that holds none — a second venue is a second SIF and a
  * second hash chain (CLAUDE.md §5). Reuses the venue the `.env` names; refuses a venue it does not
@@ -363,7 +394,8 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
     await writeFiscalModuleSettings(venueDir, log);
-    return { reused: true, env: existing };
+    const masterKey = await saveMasterKeyIfNone(venueDir);
+    return { reused: true, env: existing, ...(masterKey === undefined ? {} : { masterKey }) };
   }
 
   if (hasAny) {
@@ -402,7 +434,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
   await writeFiscalModuleSettings(venueDir, log);
-  return { reused: false, env };
+  return { reused: false, env, masterKey: (await saveMasterKeyIfNone(venueDir))! };
 }
 
 /**
@@ -468,6 +500,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  for (const line of masterKeySummaryLines(result)) console.log(line);
   console.log("");
   console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/till/?dev`);
   for (const line of DEMO_DEVICE_LINES) console.log(`    ${line}`);

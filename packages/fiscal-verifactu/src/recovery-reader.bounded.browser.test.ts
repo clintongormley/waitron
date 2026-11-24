@@ -27,7 +27,7 @@ const keyDocument: RecoveryDocument = {
 };
 const packFile: RecoveryPackFile = {
   kind: "waitron-recovery-pack",
-  version: 1,
+  version: 2,
   number: 3,
   madeAt: "2026-10-17T12:40:00.000Z",
   bucketCode: null,
@@ -36,6 +36,9 @@ const packFile: RecoveryPackFile = {
   serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(keyDocument))),
   serverKeyName: "Caja principal",
   serverKeyHeldBy: null,
+  masterKey: null,
+  masterKeyName: null,
+  masterKeyHeldBy: null,
 };
 const attachments: Readonly<Record<string, Uint8Array>> = {
   [RECOVERY_ATTACHMENT]: recoveryDocumentBytes(keyDocument),

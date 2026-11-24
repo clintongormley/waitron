@@ -424,8 +424,8 @@ own, can also make scheduled backups, and can export your setup to start another
   the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
-  as that passphrase. Check the recovery pack's cover for any part marked **Could not be drawn**.
-  Read its pages before you need the pack: they may name an older pack or sheet you also need.
+  as that passphrase.
+  Read the recovery pack's pages before you need it: they may name an older pack or sheet you also need.
   Keep those papers and the packs for any older backups you may still need. Keep every recovery
   pack locked away, off the box.
 
@@ -543,8 +543,8 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery pack.** The pack made during first setup holds only the box key, which a
-recovery needs alongside access to a copy; to replace it, see the end of this section. A pack made
+**A lost recovery pack.** The pack made during first setup holds the master key and the box key.
+A recovery needs the box key alongside access to a copy; to replace it, see the end of this section. A pack made
 on **Backups** after you set up the bucket copy holds your bucket's access
 key and secret and the backup encryption key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
@@ -559,7 +559,7 @@ so change those at each provider too. While scheduled backups are on, **Backups*
 **Change the backup encryption key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
 pack. Scheduled backups made before the change and the whole older bucket copy still need the
 old key. Keep the matching recovery pack for any older copy you may need to restore. A pack can also
-hold the box key. To replace it, make a new pack with **Also make a new box key** ticked: new backups use the new key, and older backups still need the old one.
+hold the box key. To replace it, choose **Make a new master key**, which makes a new box key too: new backups use the new key, and older backups still need the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with

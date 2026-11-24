@@ -1,9 +1,11 @@
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { AppError } from "@waitron/shared";
+import { AppError, isCalendarDate } from "@waitron/shared";
 import { hashSecretAsync } from "@waitron/identity";
+import { masterKeyName } from "@waitron/credentials";
 import {
+  insertMasterKey,
   insertRecoveryPack,
   markRecoveryPackReceived,
   readRecoveryPack,
@@ -12,6 +14,7 @@ import {
 } from "@waitron/db";
 import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
+import { makeNewMasterKey, type MadeMasterKey } from "./new-master-key.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import type {
@@ -30,6 +33,11 @@ export interface StagedNodeKey {
   readonly frozenDigest: string;
   readonly name: string;
   readonly verifier: string;
+  readonly masterKeyName: string;
+  /** Lower-case hex; the master key itself is never staged. */
+  readonly masterKeyCheckValue: string;
+  /** The sealing public key, SPKI DER, as base64. */
+  readonly masterKeyPublicKey: string;
 }
 interface Options {
   stateDir: string;
@@ -46,10 +54,40 @@ function uncertain(): never {
 export function firstSetupFrozenDigest(state: FirstSetupState): string {
   return createHash("sha256").update(JSON.stringify(state.frozen)).digest("hex");
 }
+const X25519_SPKI_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
+function masterKeyFactsValid(name: unknown, checkValue: unknown, publicKey: unknown): boolean {
+  if (
+    typeof name !== "string" ||
+    typeof checkValue !== "string" ||
+    !/^[0-9a-f]{64}$/.test(checkValue) ||
+    typeof publicKey !== "string"
+  )
+    return false;
+  const bytes = Buffer.from(publicKey, "base64");
+  if (
+    bytes.toString("base64") !== publicKey ||
+    bytes.length !== 44 ||
+    !bytes.subarray(0, 12).equals(X25519_SPKI_PREFIX)
+  )
+    return false;
+  const day = name.slice(0, 10);
+  return isCalendarDate(day) && name === masterKeyName(bytes, day);
+}
 export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState): StagedNodeKey {
   if (typeof value !== "object" || value === null || Array.isArray(value)) invalid();
   const v = value as Record<string, unknown>;
-  const fields = ["version", "stageId", "attemptId", "nodeId", "frozenDigest", "name", "verifier"];
+  const fields = [
+    "version",
+    "stageId",
+    "attemptId",
+    "nodeId",
+    "frozenDigest",
+    "name",
+    "verifier",
+    "masterKeyName",
+    "masterKeyCheckValue",
+    "masterKeyPublicKey",
+  ];
   if (
     Reflect.ownKeys(v).length !== fields.length ||
     fields.some((k) => !Object.hasOwn(v, k)) ||
@@ -62,7 +100,8 @@ export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState):
     typeof v.name !== "string" ||
     !/^\d{4}-\d\d-\d\d · [34679ACDEFHJKMNPQRTUVWXY]{4}$/.test(v.name) ||
     typeof v.verifier !== "string" ||
-    !/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(v.verifier)
+    !/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/.test(v.verifier) ||
+    !masterKeyFactsValid(v.masterKeyName, v.masterKeyCheckValue, v.masterKeyPublicKey)
   )
     invalid();
   return Object.freeze({ ...v }) as unknown as StagedNodeKey;
@@ -72,6 +111,7 @@ export function createFirstSetupNodeKeys(options: Options) {
     | {
         stage: StagedNodeKey;
         key: { nodeId: string; name: string; secret: string };
+        made: MadeMasterKey;
         ownerGeneration: number;
       }
     | undefined;
@@ -89,10 +129,9 @@ export function createFirstSetupNodeKeys(options: Options) {
   };
   const generate = async (state: FirstSetupState, prior?: StagedNodeKey) => {
     const secret = generatePassword();
-    const name = newBreakGlassKeyName(
-      new Date().toISOString().slice(0, 10),
-      new Set(prior === undefined ? [] : [prior.name]),
-    );
+    const day = new Date().toISOString().slice(0, 10);
+    const name = newBreakGlassKeyName(day, new Set(prior === undefined ? [] : [prior.name]));
+    const masterKey = makeNewMasterKey(day);
     const stage: StagedNodeKey = {
       version: 1,
       stageId: randomUUID(),
@@ -101,14 +140,18 @@ export function createFirstSetupNodeKeys(options: Options) {
       frozenDigest: firstSetupFrozenDigest(state),
       name,
       verifier: await hashSecretAsync(secret),
+      masterKeyName: masterKey.made.masterKeyName,
+      masterKeyCheckValue: masterKey.checkValue,
+      masterKeyPublicKey: masterKey.publicKey.toString("base64"),
     };
     await updateSetupFlowSection(options.stateDir, "nodeKey", () => stage);
     transient = {
       stage,
       key: { nodeId: stage.nodeId, name, secret },
+      made: masterKey.made,
       ownerGeneration: state.ownerGeneration,
     };
-    return structuredClone({ stage, key: transient.key });
+    return structuredClone({ stage, key: transient.key, ...transient.made });
   };
   return {
     stageInitialNodeKey(
@@ -123,13 +166,17 @@ export function createFirstSetupNodeKeys(options: Options) {
           throw new AppError("setup.attempt_conflict", {});
         const prior = await read(state);
         if (prior !== null) {
+          if (transient === undefined) throw new AppError("setup.node_key_lost", {});
           if (
-            transient === undefined ||
             transient.ownerGeneration !== state.ownerGeneration ||
             !isDeepStrictEqual(prior, transient.stage)
           )
             throw new AppError("setup.attempt_conflict", {});
-          return structuredClone({ stage: transient.stage, key: transient.key });
+          return structuredClone({
+            stage: transient.stage,
+            key: transient.key,
+            ...transient.made,
+          });
         }
         return generate(state);
       });
@@ -200,8 +247,15 @@ export function createFirstSetupNodeKeys(options: Options) {
                 { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
               ],
             });
-            // The first-hour step's "I kept it" confirmed this pack reached the person.
+            // The first-hour step's Continue confirmed this pack reached the person.
             await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
+            await insertMasterKey(tx, {
+              name: stage.masterKeyName,
+              checkValue: stage.masterKeyCheckValue,
+              publicKey: Buffer.from(stage.masterKeyPublicKey, "base64"),
+              madeAt: at,
+              madeBy: null,
+            });
           });
           if (!keyStaged)
             await setRecoveryKeyTx(nodeTx, stage.nodeId, stage.verifier, stage.name, null);

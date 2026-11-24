@@ -22,9 +22,12 @@ const loadFonts = async () => ({ regular: fontBytes, mono: monoBytes });
 const bucketCode = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(124);
 const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(80);
 
+const masterKey = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+const masterKeyName = "2026-11-23 · QZJV";
+
 const file: RecoveryPackFile = {
   kind: "waitron-recovery-pack",
-  version: 1,
+  version: 2,
   number: 3,
   madeAt: "2026-10-12T16:40:00.000Z",
   bucketCode,
@@ -33,13 +36,14 @@ const file: RecoveryPackFile = {
   serverKey: null,
   serverKeyName: "2026-09-02 · K7QF",
   serverKeyHeldBy: { number: 1, madeOn: "2026-09-02", received: true },
+  masterKey,
+  masterKeyName,
+  masterKeyHeldBy: null,
 };
 
 const bucket: PackPart = {
   kind: "bucket",
   state: "included",
-  lastChanged: "2026-09-20",
-  check: "key of 20 Sep 2026 · rev 4",
   page: {
     title: "Bucket copy",
     intro: "The box sends a continuous copy of the venue to your bucket.",
@@ -51,8 +55,6 @@ const bucket: PackPart = {
 const archives: PackPart = {
   kind: "archives",
   state: "included",
-  lastChanged: "2026-09-20",
-  check: "key of 20 Sep 2026 · rev 4",
   page: {
     title: "Archives",
     rows: [],
@@ -63,8 +65,6 @@ const archives: PackPart = {
 const serverKey: PackPart = {
   kind: "server-key",
   state: "included",
-  lastChanged: "2026-09-02",
-  check: "2026-09-02 · K7QF",
   page: {
     title: "Server key",
     rows: [
@@ -81,14 +81,7 @@ function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
     locale: "en",
     timeZone: "Europe/Madrid",
     loadFonts,
-    cover: {
-      legalName: "Bar Nora S.L.",
-      taxId: "B12345678",
-      venueName: "Bar Nora",
-      madeAt: file.madeAt,
-      madeBy: "Marta Puig",
-      number: 3,
-    },
+    pack: { venueName: "Bar Nora", madeAt: file.madeAt, number: 3 },
     parts: [bucket, archives, serverKey],
     file,
     ...overrides,
@@ -136,186 +129,89 @@ it("starts %PDF- and ends %%EOF, the two marks the dashboard's makeRecoveryPack 
   expect(text(bytes.length - 16)).toMatch(/%%EOF\s*$/);
 });
 
-describe("the recovery pack's cover", () => {
-  it("names the venue, who made it and when, its number, and what each page is for", async () => {
-    const [cover] = await rendered(await renderRecoveryPack(input()));
-    const text = cover!.text;
-    expect(text).toContain("Waitron recovery pack");
-    expect(text).toContain("Bar Nora S.L.");
-    expect(text).toContain("NIF B12345678");
-    expect(text).toContain("Made on 12 October 2026 at 18:40 by Marta Puig");
-    expect(text).toContain("Recovery pack 3 · 12 Oct 2026");
-    expect(text).toContain("Which page do I need?");
-    expect(text).toContain(
-      "You are setting up a new box and want the venue back from your bucket copy.",
+describe("the master key's page", () => {
+  it("the pack's first page has the key box with its name, the key's QR code and nothing else", async () => {
+    const [page] = await rendered(await renderRecoveryPack(input()), 3, [0]);
+    expect(page!.text).toBe(
+      "Waitron recovery pack · Bar Nora Master key · 2026-11-23 · QZJV 88DP 74BA YPVB RRM5 XFV2 WPQY B5M5 Master key",
     );
-    expect(text).toContain("You need one old archive back (for example a month-end copy).");
-    expect(text).toContain("You are recovering the box's own key with a backup.");
-    expect(text).toContain("What is in this pack");
-    expect(text).toContain("Bucket copy 20 Sept 2026 key of 20 Sep 2026 · rev 4 2");
-    expect(text).toContain("Box key 2 Sept 2026 2026-09-02 · K7QF 4");
-    expect(text).toContain("Page 1 of 4");
+    expect(page!.qr).not.toBeNull();
   });
 
-  it("warns to keep it locked away, and says the Backups screen names the packs to keep", async () => {
-    const [cover] = await rendered(await renderRecoveryPack(input()));
-    expect(cover!.text).toContain("Keep this pack locked away, and off the box.");
-    expect(cover!.text).toContain(
-      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when. Always keep the pack that holds the box key (page 4 says which).",
-    );
-  });
-
-  it("keeps the text inside its boxes clear of the box's edge", async () => {
-    const bytes = await renderRecoveryPack(input());
-    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
-    try {
-      const pdf = await loading.promise;
-      for (const [page, start] of [
-        [1, "Keep this pack locked away"],
-        [4, "This pack did not make"],
-      ] as const) {
-        const items = (await (await pdf.getPage(page)).getTextContent()).items;
-        const item = items.find((i) => "str" in i && i.str.startsWith(start));
-        expect((item as { transform: number[] }).transform[4]).toBeGreaterThanOrEqual(48 + 10);
-      }
-    } finally {
-      await loading.destroy();
-    }
-  });
-
-  it("says a pack made during setup was made during setup", async () => {
-    const [cover] = await rendered(
-      await renderRecoveryPack(input({ cover: { ...input().cover, madeBy: null } })),
-    );
-    expect(cover!.text).toContain("Made during setup on 12 October 2026 at 18:40");
+  it("the key's QR code reads back as the printed key", async () => {
+    const [page] = await rendered(await renderRecoveryPack(input()), 3, [0]);
+    expect(page!.qr).toBe(masterKey);
   });
 
   it("is in Spanish for a Spanish speaker", async () => {
     const pages = await rendered(await renderRecoveryPack(input({ locale: "es" })));
-    expect(pages[0]!.text).toContain("Paquete de recuperación de Waitron");
-    expect(pages[0]!.text).toContain("Hecho el 12 de octubre de 2026 a las 18:40 por Marta Puig");
-    expect(pages[0]!.text).toContain("¿Qué página necesito?");
-    expect(pages[0]!.text).toContain(PACK_WORDS.es.lockedAway);
-    expect(pages[0]!.text).toContain("Página 1 de 4");
+    expect(pages[0]!.text).toBe(
+      "Paquete de recuperación de Waitron · Bar Nora Clave maestra · 2026-11-23 · QZJV 88DP 74BA YPVB RRM5 XFV2 WPQY B5M5 Clave maestra",
+    );
     expect(pages[3]!.text).toContain(
       "La clave está en el paquete de recuperación 1, hecho el 2 de septiembre de 2026. Guarda ese paquete.",
     );
   });
-});
 
-describe("what the cover says holding the pack opens", () => {
-  const keyOnly = (locale: "en" | "es") =>
-    input({
-      locale,
-      parts: [
-        { kind: "bucket", state: "not-set-up" },
-        { kind: "archives", state: "not-set-up" },
-        { ...serverKey, serverKeyLocation: { kind: "this-pack" } },
-      ],
-      file: {
-        ...file,
-        bucketCode: null,
-        archiveCode: null,
-        backupKey: null,
-        serverKey: { kind: "a-key-file" },
-        serverKeyHeldBy: null,
-      },
+  it("the attached file carries masterKey and masterKeyName", async () => {
+    const read = await readRecoveryPackPdf(await renderRecoveryPack(input()));
+    expect(read.version).toBe(2);
+    expect([read.masterKey, read.masterKeyName]).toEqual([masterKey, masterKeyName]);
+  });
+
+  it.each([
+    ["en", "Waitron recovery pack · Bar Nora Master key 2026-11-23 · QZJV: in pack 1"],
+    [
+      "es",
+      "Paquete de recuperación de Waitron · Bar Nora Clave maestra 2026-11-23 · QZJV: en el paquete 1",
+    ],
+  ] as const)(
+    "a pack made without a new master key names the pack that holds the current one (%s)",
+    async (locale, expected) => {
+      const elsewhere = { ...file, masterKey: null, masterKeyHeldBy: 1 };
+      const bytes = await renderRecoveryPack(input({ locale, file: elsewhere }));
+      const pages = await rendered(bytes, 3, [0]);
+      expect(pages[0]!.text).toBe(expected);
+      expect(pages[0]!.qr).toBeNull();
+      expect(pages).toHaveLength(4);
+      expect(await readRecoveryPackPdf(bytes)).toEqual(elsewhere);
+    },
+  );
+
+  it("names the current master key alone when no pack of this box is known to hold it", async () => {
+    const unknown = { ...file, masterKey: null, masterKeyHeldBy: null };
+    const [page] = await rendered(await renderRecoveryPack(input({ file: unknown })));
+    expect(page!.text).toBe("Waitron recovery pack · Bar Nora Master key 2026-11-23 · QZJV");
+  });
+
+  it("has only the heading when the venue has no master key", async () => {
+    const none = { ...file, masterKey: null, masterKeyName: null, masterKeyHeldBy: null };
+    const [page] = await rendered(await renderRecoveryPack(input({ file: none })));
+    expect(page!.text).toBe("Waitron recovery pack · Bar Nora");
+  });
+
+  it("draws the key in the equal-width face, and gives the part pages their header", async () => {
+    const bytes = await renderRecoveryPack(input());
+    const task = getDocument({
+      data: bytes.slice(),
+      useSystemFonts: false,
+      fontExtraProperties: true,
     });
-
-  const others = (words: (typeof PACK_WORDS)["en"], said: keyof typeof PACK_WORDS.en) =>
-    (
-      [
-        "anyoneHoldingServerKey",
-        "anyoneHoldingBackups",
-        "anyoneHoldingBackupsAndServerKey",
-      ] as const
-    )
-      .filter((key) => key !== said)
-      .map((key) => words[key]);
-
-  it.each(["en", "es"] as const)(
-    "a pack holding the server key and no backup key says it recovers the server with its matching backup, in %s",
-    async (locale) => {
-      const [cover] = await rendered(await renderRecoveryPack(keyOnly(locale)));
-      const words = PACK_WORDS[locale];
-      expect(cover!.text).toContain(`${words.anyoneHoldingServerKey} ${words.whichToKeep}`);
-      for (const other of others(words, "anyoneHoldingServerKey"))
-        expect(cover!.text).not.toContain(other);
-    },
-  );
-
-  const held = [
-    ["the bucket code", { bucketCode }],
-    ["the archive code", { archiveCode }],
-    ["the backup key", { backupKey: "a backup passphrase" }],
-  ] as const;
-
-  it.each(
-    held.flatMap(([what, secrets]) =>
-      (["en", "es"] as const).map((locale) => [what, locale, secrets] as const),
-    ),
-  )(
-    "a pack holding %s and the server key says it opens the backups those unlock and, with a matching backup, recovers the server, in %s",
-    async (_, locale, secrets) => {
-      const pack = keyOnly(locale);
-      const [cover] = await rendered(
-        await renderRecoveryPack({ ...pack, file: { ...pack.file, ...secrets } }),
+    try {
+      const page = await (await task.promise).getPage(1);
+      await page.getOperatorList();
+      const items = (await page.getTextContent()).items;
+      const key = items.find((item) => "str" in item && item.str.startsWith("88DP"));
+      expect(key).toBeDefined();
+      expect(page.commonObjs.get((key as { fontName: string }).fontName).name).toContain(
+        "NotoSansMono",
       );
-      const words = PACK_WORDS[locale];
-      expect(cover!.text).toContain(
-        `${words.anyoneHoldingBackupsAndServerKey} ${words.whichToKeep}`,
-      );
-      for (const other of others(words, "anyoneHoldingBackupsAndServerKey"))
-        expect(cover!.text).not.toContain(other);
-    },
-  );
-
-  it.each(
-    held.flatMap(([what, secrets]) =>
-      (["en", "es"] as const).map((locale) => [what, locale, secrets] as const),
-    ),
-  )(
-    "a pack holding %s but not the server key says only that it opens the backups those unlock, in %s",
-    async (_, locale, secrets) => {
-      const [cover] = await rendered(
-        await renderRecoveryPack(
-          input({
-            locale,
-            file: { ...file, bucketCode: null, archiveCode: null, ...secrets },
-          }),
-        ),
-      );
-      const words = PACK_WORDS[locale];
-      expect(cover!.text).toContain(
-        `${words.anyoneHoldingBackups} ${words.whichToKeep} ${words.serverKeyPage(4)}`,
-      );
-      for (const other of others(words, "anyoneHoldingBackups"))
-        expect(cover!.text).not.toContain(other);
-    },
-  );
-
-  it("a pack holding no secret claims nothing about what it opens", async () => {
-    const [cover] = await rendered(
-      await renderRecoveryPack(
-        input({
-          parts: [
-            { kind: "bucket", state: "absent" },
-            { kind: "archives", state: "absent" },
-            { kind: "server-key", state: "absent" },
-          ],
-          file: {
-            ...file,
-            bucketCode: null,
-            archiveCode: null,
-            serverKeyName: null,
-            serverKeyHeldBy: null,
-          },
-        }),
-      ),
-    );
-    expect(cover!.text).toContain(PACK_WORDS.en.whichToKeep);
-    for (const other of others(PACK_WORDS.en, "lockedAway"))
-      expect(cover!.text).not.toContain(other);
+    } finally {
+      await task.destroy();
+    }
+    const pages = await rendered(bytes);
+    expect(pages[0]!.text).not.toContain("Page 1 of 4");
+    expect(pages[1]!.text).toContain("Bar Nora · Recovery pack 3 · 12 Oct 2026 Page 2 of 4");
   });
 });
 
@@ -346,15 +242,13 @@ describe("long names", () => {
   const setupPack = (locale: "en" | "es", legalName: string, venueName: string) =>
     input({
       locale,
-      cover: { ...input().cover, legalName, venueName, madeBy: null, number: 1 },
+      pack: { ...input().pack, venueName, number: 1 },
       parts: [
         { kind: "bucket", state: "not-set-up" },
         { kind: "archives", state: "not-set-up" },
         {
           kind: "server-key",
           state: "included",
-          lastChanged: "2026-10-17",
-          check: "2026-10-17 · ACRY",
           page: serverKeyPage(legalName, venueName),
           serverKeyLocation: { kind: "this-pack" },
         },
@@ -371,7 +265,7 @@ describe("long names", () => {
   const dashboardPack = (locale: "en" | "es", legalName: string, venueName: string) =>
     input({
       locale,
-      cover: { ...input().cover, legalName, venueName },
+      pack: { ...input().pack, venueName },
       parts: [
         bucket,
         archives,
@@ -408,9 +302,7 @@ describe("long names", () => {
       const keyPage = pages.at(-1)!.text;
       expect(squash(keyPage)).toContain(squash(legalName));
       expect(squash(keyPage)).toContain(squash(venueName));
-      expect(squash(pages[0]!.text)).toContain(
-        squash(`${legalName} · NIF B12345678 · ${venueName}`),
-      );
+      expect(squash(pages[0]!.text)).toContain(squash(venueName));
       if (pack === setupPack) expect(await fontSizeOf(bytes, 2, keyText)).toBeCloseTo(10);
     },
   );
@@ -427,16 +319,11 @@ describe("long names", () => {
     expect(await fontSizeOf(bytes, 2, keyText)).toBeCloseTo(10);
   });
 
-  it("cuts a cover name longer than the cover can hold with a mark", async () => {
+  it("cuts a venue name longer than the key page can hold with a mark", async () => {
     const pages = await rendered(
       await renderRecoveryPack(
         input({
-          cover: {
-            ...input().cover,
-            legalName: "W".repeat(1000),
-            venueName: "W".repeat(1000),
-            madeBy: "M".repeat(1000),
-          },
+          pack: { ...input().pack, venueName: "W".repeat(1000) },
           parts: [
             { kind: "bucket", state: "absent" },
             { kind: "archives", state: "absent" },
@@ -447,13 +334,12 @@ describe("long names", () => {
       ),
     );
     expect(pages).toHaveLength(1);
-    expect(squash(pages[0]!.text)).toMatch(/W+…·NIFB12345678·W+…Which/);
-    expect(squash(pages[0]!.text)).toMatch(/byM+…\./);
+    expect(squash(pages[0]!.text)).toMatch(/^Waitronrecoverypack·W+…Masterkey·/);
   });
 
   it("keeps the running header's venue name clear of the page number", async () => {
     const bytes = await renderRecoveryPack(
-      input({ cover: { ...input().cover, venueName: wide(256) } }),
+      input({ pack: { ...input().pack, venueName: wide(256) } }),
     );
     const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
     try {
@@ -475,17 +361,12 @@ describe("long names", () => {
 });
 
 describe("the Spanish pack's other wording", () => {
-  it("covers setup, a failed page and each place the key can be", async () => {
-    const es = (parts: PackPart[], madeBy: string | null = "Marta Puig") =>
-      renderRecoveryPack(input({ locale: "es", parts, cover: { ...input().cover, madeBy } }));
+  it("covers a failed page and each place the key can be", async () => {
+    const es = (parts: PackPart[]) => renderRecoveryPack(input({ locale: "es", parts }));
     const failed = await rendered(
-      await es(
-        [{ kind: "server-key", state: "failed", failure: { what: "Falló.", todo: "Reintenta." } }],
-        null,
-      ),
-    );
-    expect(failed[0]!.text).toContain(
-      PACK_WORDS.es.madeDuringSetup("12 de octubre de 2026", "18:40"),
+      await es([
+        { kind: "server-key", state: "failed", failure: { what: "Falló.", todo: "Reintenta." } },
+      ]),
     );
     expect(failed[1]!.text).toContain("Clave del servidor: no se pudo generar");
     const at = async (serverKeyLocation: PackPart["serverKeyLocation"]) =>
@@ -558,19 +439,10 @@ describe("parts the renderer refuses", () => {
       process.off("unhandledRejection", record);
     }
   });
-
-  it("leaves blank a last-changed day and check the part does not give", async () => {
-    const pages = await rendered(
-      await renderRecoveryPack(
-        input({ parts: [{ kind: "bucket", state: "included", page: bucket.page! }] }),
-      ),
-    );
-    expect(pages[0]!.text).toContain("Page Bucket copy 2");
-  });
 });
 
 describe("a part the pack does not hold", () => {
-  it("keeps its cover line with the reason, and has no page", async () => {
+  it("has no page", async () => {
     const pages = await rendered(
       await renderRecoveryPack(
         input({
@@ -583,27 +455,11 @@ describe("a part the pack does not hold", () => {
       ),
     );
     expect(pages).toHaveLength(2);
-    expect(pages[0]!.text).toContain("Bucket copy This box has no bucket copy.");
-    expect(pages[0]!.text).toContain("Box key This venue files no invoices with the tax agency.");
-    expect(pages[0]!.text).not.toContain("page 4 says which");
-    expect(pages[0]!.text).not.toContain("from your bucket copy");
+    expect(pages[1]!.text).toContain("Archives");
+    expect(pages.map((page) => page.text).join(" ")).not.toContain("Bucket copy");
   });
 
-  it("uses the reason the caller gives, when it gives one", async () => {
-    const pages = await rendered(
-      await renderRecoveryPack(
-        input({
-          parts: [
-            { kind: "bucket", state: "absent", absentReason: "Reason from the box." },
-            archives,
-          ],
-        }),
-      ),
-    );
-    expect(pages[0]!.text).toContain("Bucket copy Reason from the box.");
-  });
-
-  it("says a failed part failed, on the cover and on its own page", async () => {
+  it("says a failed part failed, on its own page", async () => {
     const pages = await rendered(
       await renderRecoveryPack(
         input({
@@ -623,7 +479,6 @@ describe("a part the pack does not hold", () => {
       ),
     );
     expect(pages).toHaveLength(4);
-    expect(pages[0]!.text).toContain("Archives Could not be drawn 3");
     expect(pages[2]!.text).toContain("Archives");
     expect(pages[2]!.text).toContain("The archive settings could not be read.");
     expect(pages[2]!.text).toContain("Make a new pack.");
@@ -654,7 +509,7 @@ describe("the server-key page says where the key is", () => {
       ),
     );
     expect(pages[3]!.text).toContain(
-      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, make a new pack with Also make a new box key ticked.",
+      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, choose Make a new master key on Backups.",
     );
     expect(pages[3]!.text).not.toContain("Keep that pack");
   });
@@ -693,6 +548,19 @@ describe("the server-key page says where the key is", () => {
     );
   });
 
+  it("keeps the text inside its boxes clear of the box's edge", async () => {
+    const bytes = await renderRecoveryPack(input());
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    try {
+      const pdf = await loading.promise;
+      const items = (await (await pdf.getPage(4)).getTextContent()).items;
+      const item = items.find((i) => "str" in i && i.str.startsWith("This pack did not make"));
+      expect((item as { transform: number[] }).transform[4]).toBeGreaterThanOrEqual(48 + 10);
+    } finally {
+      await loading.destroy();
+    }
+  });
+
   it("prints every pack number with its date", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     for (const { text } of pages) {
@@ -710,7 +578,7 @@ describe("the secrets on the pages", () => {
     expect(pages[1]!.qr).toBe(bucketCode);
     expect(squash(pages[2]!.text)).toContain(archiveCode);
     expect(pages[2]!.qr).toBe(archiveCode);
-    expect(pages[0]!.qr).toBeNull();
+    expect(pages[0]!.qr).toBe(masterKey);
   });
 
   it.each([
@@ -791,7 +659,7 @@ describe("the secrets on the pages", () => {
     const pages = await rendered(
       await renderRecoveryPack(
         input({
-          cover: { ...input().cover, venueName: "Bar 🍷" },
+          pack: { ...input().pack, venueName: "Bar 🍷" },
           parts: [
             {
               ...bucket,
@@ -837,12 +705,11 @@ describe("the attached file", () => {
 });
 
 it.each(["en", "es"] as const)(
-  "prints two distinct emergency QR codes and keeps attachment v1 (%s)",
+  "prints two distinct emergency QR codes and keeps the attachment (%s)",
   async (locale) => {
     const emergency: PackPart = {
       kind: "emergency",
       state: "included",
-      lastChanged: "2026-10-12",
       page: {
         title: "Emergency start",
         intro: "Starts a locked copy; sign in with your password.",
@@ -857,11 +724,6 @@ it.each(["en", "es"] as const)(
     );
     const pages = await rendered(bytes);
     expect(pages).toHaveLength(5);
-    expect(pages[0]!.text).toContain(PACK_WORDS[locale].emergencyWarning);
-    if (locale === "en")
-      expect(pages[0]!.text).toContain(
-        "You also need your password and your authenticator or a recovery code.",
-      );
     expect(pages[1]!.text).toContain("https://rescue.venue.example/");
     expect(squash(pages[1]!.text)).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
     expect(await readRecoveryPackPdf(bytes)).toEqual(file);
@@ -903,14 +765,13 @@ describe("pack typography", () => {
   });
 
   it.each(["en", "es"] as const)(
-    "embeds mono for codes, addresses, Check and marked rows, with stroked headings (%s)",
+    "embeds mono for the master key, codes, addresses and marked rows, with stroked headings (%s)",
     async (locale) => {
       const code = "Il10O-aB2";
       const address = "https://rescue.venue.example/";
       const name = "2026-11-16-Il10O";
       const part: PackPart = {
         ...bucket,
-        check: name,
         page: {
           title: "Recovery page",
           address: { label: "Address", text: address, qr: true },
@@ -929,14 +790,16 @@ describe("pack typography", () => {
         const pdf = await task.promise;
         expect(pdf.numPages).toBe(2);
         for (const [pageNumber, values] of [
-          [1, [name]],
+          [1, [masterKey]],
           [2, [address, code, name]],
         ] as const) {
           const page = await pdf.getPage(pageNumber);
           const ops = await page.getOperatorList();
           const content = await page.getTextContent();
           for (const value of values) {
-            const item = content.items.find((item) => "str" in item && item.str === value);
+            const item = content.items.find(
+              (item) => "str" in item && item.str.startsWith(value.split(" ")[0]!),
+            );
             expect(item, value).toBeDefined();
             if (item && "fontName" in item)
               expect(page.commonObjs.get(item.fontName).name).toContain("NotoSansMono");
@@ -960,21 +823,12 @@ describe("pack typography", () => {
             }
           });
           const words = PACK_WORDS[locale];
-          const headings =
-            pageNumber === 1
-              ? [
-                  words.title,
-                  words.whichPage,
-                  words.whatIsIn,
-                  words.whatHappened,
-                  words.partColumn,
-                  words.lastChangedColumn,
-                  words.checkColumn,
-                  words.lockedAway,
-                ]
-              : [part.page!.title];
+          const headings = pageNumber === 1 ? [words.heading("Bar Nora")] : [part.page!.title];
           for (const text of headings) expect(squash(ink.bold.join(" "))).toContain(squash(text));
-          const plain = pageNumber === 1 ? [name] : [address, code, name, "Keep this pack."];
+          const plain =
+            pageNumber === 1
+              ? [words.masterKeyLabel(masterKeyName), masterKey]
+              : [address, code, name, "Keep this pack."];
           for (const text of plain) expect(squash(ink.plain.join(" "))).toContain(squash(text));
         }
         const pages = await rendered(bytes);

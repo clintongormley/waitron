@@ -38,6 +38,11 @@ async function pages(bytes: Uint8Array): Promise<string[]> {
   }
 }
 
+const made = {
+  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+  masterKeyName: "2026-11-23 · QZJV",
+};
+
 it.each(["en", "es"] as const)(
   "draws in full a legal name at the tax agency's 120-character cap and a venue name at the recovery document's 256, in the widest letter the pack's font draws, in %s",
   async (locale) => {
@@ -46,6 +51,7 @@ it.each(["en", "es"] as const)(
     const texts = await pages(
       await renderSetupRecoveryPack(
         { ...document, taxpayerName, venueName },
+        made,
         locale,
         "Europe/Madrid",
         loadRecoveryPackFonts,
@@ -53,9 +59,8 @@ it.each(["en", "es"] as const)(
     );
     expect(texts).toHaveLength(2);
     const squash = (text: string) => text.replace(/\s+/g, "");
-    for (const text of texts) {
-      expect(squash(text)).toContain(taxpayerName);
-      expect(squash(text)).toContain(venueName);
-    }
+    expect(squash(texts[0]!)).toContain(venueName);
+    expect(squash(texts[1]!)).toContain(taxpayerName);
+    expect(squash(texts[1]!)).toContain(venueName);
   },
 );

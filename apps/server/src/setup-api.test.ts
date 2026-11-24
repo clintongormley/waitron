@@ -30,6 +30,23 @@ import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
+// The fake database cannot tell writes apart, so the master key's save and its pack's drawing are
+// recorded by name.
+const masterKeySaves = vi.hoisted(() => ({ into: [] as string[] }));
+vi.mock("./master-key-record.js", async (original) => ({
+  ...(await original<typeof import("./master-key-record.js")>()),
+  saveNewMasterKey: async (_db: unknown, key: { made: unknown }) => {
+    masterKeySaves.into.push("saveMasterKey");
+    return key.made;
+  },
+}));
+vi.mock("./backup-recovery-pack-output.js", async (original) => ({
+  ...(await original<typeof import("./backup-recovery-pack-output.js")>()),
+  makeMasterKeyRecoveryPack: async () => {
+    masterKeySaves.into.push("drawRecoveryPack");
+    return "PDF";
+  },
+}));
 vi.mock("./break-glass.js", async (original) => ({
   ...(await original<typeof import("./break-glass.js")>()),
   mintBreakGlassKey: async () => ({
@@ -377,6 +394,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   requestRestart: ReturnType<typeof vi.fn>;
 } {
   const calls: string[] = [];
+  masterKeySaves.into = calls;
   const provisionRequests: ProvisionRequest[] = [];
   const provision = vi.fn(async (req: ProvisionRequest) => {
     provisionRequests.push(req);
@@ -828,7 +846,14 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(res.status).toBe(200);
     const contactUrl = ownContactUrl("https://waitron.local", NODE_ID);
     expect(contactUrl).toBe(`https://box-${NODE_ID.slice(0, 4).toLowerCase()}.waitron.local`);
-    expect(await res.json()).toEqual({ provisioned: true, restarting: true, contactUrl });
+    expect(await res.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      contactUrl,
+      masterKey: expect.any(String),
+      masterKeyName: expect.any(String),
+      recoveryPackPdf: "PDF",
+    });
     await tick();
   });
 
@@ -842,7 +867,13 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const res = await postProvision(app, demoBody());
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ provisioned: true, restarting: true });
+      expect(await res.json()).toEqual({
+        provisioned: true,
+        restarting: true,
+        masterKey: expect.any(String),
+        masterKeyName: expect.any(String),
+        recoveryPackPdf: "PDF",
+      });
       await tick();
     },
   );
@@ -863,7 +894,13 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const res = await postProvision(app, demoBody());
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ provisioned: true, restarting: true });
+    expect(await res.json()).toEqual({
+      provisioned: true,
+      restarting: true,
+      masterKey: expect.any(String),
+      masterKeyName: expect.any(String),
+      recoveryPackPdf: "PDF",
+    });
 
     // The restart is scheduled on the NEXT tick, so it has NOT fired by the time the 200 is returned.
     expect(requestRestart).not.toHaveBeenCalled();
@@ -872,7 +909,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedDemo",
       "establishIdentity",
       "seedMembership",
+      "drawRecoveryPack",
       "persistTrading",
+      "saveMasterKey",
     ]);
     await tick();
     expect(calls).toEqual([
@@ -880,7 +919,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedDemo",
       "establishIdentity",
       "seedMembership",
+      "drawRecoveryPack",
       "persistTrading",
+      "saveMasterKey",
       "requestRestart",
     ]);
 
@@ -1554,7 +1595,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "seedMembership",
       "sealCredential",
       "sealCredential",
+      "drawRecoveryPack",
       "persistTrading",
+      "saveMasterKey",
       "requestRestart",
     ]);
   });

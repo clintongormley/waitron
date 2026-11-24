@@ -145,6 +145,7 @@ export function createHourInitialSetup(
       const { renderSetupRecoveryPack } = await import("./setup-recovery-pack.js");
       const bytes = await renderSetupRecoveryPack(
         recovery,
+        document.masterKey,
         document.locale,
         document.identity.timeZone,
         loadRecoveryPackFonts,

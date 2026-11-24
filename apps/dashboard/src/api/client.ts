@@ -2459,6 +2459,16 @@ export interface MadeRecoveryPack {
   key: RecoveryPackKeyState;
   /** The box's own time for the pack, the same instant its status read reports. */
   madeAt: string;
+  /** The new master key as printed, and its name; only when the box made and saved one. */
+  masterKey?: { key: string; name: string };
+}
+
+function decodedName(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 /** True for a string spelled exactly as `Date#toISOString` spells a real instant. */
@@ -2512,6 +2522,10 @@ export interface RecoveryPackStatus {
   backupsUseOlderKey: boolean;
   /** The box's server key now: `none` on a venue that files no invoices, `not_yet` when the box has no server key. */
   serverKey: "none" | "not_yet" | "set";
+  /** The venue's current master key, and this box's pack that showed it, if one did. */
+  masterKey: { name: string; pack: number | null } | null;
+  /** Until when a pack made before now is kept, were a new master key made now. */
+  keepOldPackUntil: string;
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
 }
@@ -5614,6 +5628,8 @@ export class DashboardApi {
         "X-Waitron-Recovery-Pack",
         "X-Waitron-Recovery-Pack-Key",
         "X-Waitron-Recovery-Pack-Made-At",
+        "X-Waitron-Master-Key",
+        "X-Waitron-Master-Key-Name",
       ],
       refusals: "envelope",
     });
@@ -5621,6 +5637,16 @@ export class DashboardApi {
     const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
     const key = file.headers?.["X-Waitron-Recovery-Pack-Key"];
     const madeAt = file.headers?.["X-Waitron-Recovery-Pack-Made-At"] ?? "";
+    const masterKey = file.headers?.["X-Waitron-Master-Key"] ?? undefined;
+    const encodedName = file.headers?.["X-Waitron-Master-Key-Name"] ?? undefined;
+    const masterKeyName = encodedName === undefined ? undefined : decodedName(encodedName);
+    if (
+      (masterKey === undefined) !== (encodedName === undefined) ||
+      masterKey === "" ||
+      masterKeyName === null ||
+      masterKeyName === ""
+    )
+      throw { code: "recovery.pack_invalid" };
     if (
       pdf.type !== "application/pdf" ||
       pdf.size === 0 ||
@@ -5632,7 +5658,15 @@ export class DashboardApi {
       !/%%EOF\s*$/.test(await pdf.slice(-16).text())
     )
       throw { code: "recovery.pack_invalid" };
-    return { pdf, number: Number(number), key, madeAt };
+    return {
+      pdf,
+      number: Number(number),
+      key,
+      madeAt,
+      ...(masterKey === undefined || masterKeyName === undefined
+        ? {}
+        : { masterKey: { key: masterKey, name: masterKeyName } }),
+    };
   }
 
   getRecoveryPackStatus(): Promise<RecoveryPackStatus> {

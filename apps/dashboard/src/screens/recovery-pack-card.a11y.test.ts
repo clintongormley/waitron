@@ -20,6 +20,8 @@ const BASE: RecoveryPackStatus = {
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
+  masterKey: null,
+  keepOldPackUntil: "2026-11-11T12:00:00.000Z",
   serverKey: "set",
   timeZone: "Europe/Madrid",
 };
