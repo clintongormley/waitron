@@ -155,7 +155,7 @@ const WORDS = {
     waiting:
       "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
     "needs-attention":
-      "The main box did not accept some invoice records or working hours this box holds. Keep this box switched on; it tries again by itself.",
+      "This box cannot yet confirm that the main box holds all the invoice records and working hours this box holds. Keep this box switched on; it tries again by itself.",
     clock:
       "The main box's clock is behind some invoice records this box holds. Check the time on both boxes; the return tries again by itself.",
     clash:
@@ -170,7 +170,7 @@ const WORDS = {
     waiting:
       "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
     "needs-attention":
-      "El servidor principal no ha aceptado algunos registros de facturación u horas trabajadas que tiene este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+      "Este servidor aún no puede confirmar que el servidor principal tenga todos los registros de facturación y horas trabajadas que tiene este servidor. Mantén este servidor encendido; lo vuelve a intentar por sí mismo.",
     clock:
       "El reloj del servidor principal va por detrás de algunos registros de facturación que tiene este servidor. Comprueba la hora de ambos servidores; la devolución se vuelve a intentar por sí misma.",
     clash:
@@ -287,8 +287,8 @@ describe("the restricted box's own page", () => {
       await recordConfirmedReturn(successor);
       const held = {
         "needs-attention": {
-          "en-GB": "some invoice records or working hours this box holds",
-          "es-ES": "algunos registros de facturación u horas trabajadas que tiene este servidor",
+          "en-GB": "all the invoice records and working hours this box holds",
+          "es-ES": "todos los registros de facturación y horas trabajadas que tiene este servidor",
         }[locale],
         clock: {
           "en-GB": "some invoice records this box holds",
