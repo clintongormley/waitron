@@ -2415,7 +2415,7 @@ describe("backup admin routes", () => {
       ["credentials.decrypt_failed", sealedUnder("1")],
       ["credentials.key_version_unknown", sealedUnder("2")],
       ["credentials.malformed_payload", () => storeRawArchive("not json")],
-      ["server.credential_unusable", () => storeRawArchive("{}")],
+      ["credentials.unusable", () => storeRawArchive("{}")],
     ];
 
     for (const [code, store] of UNREADABLE) {
@@ -2828,7 +2828,7 @@ describe("backup admin routes", () => {
         },
       ],
       [
-        "server.credential_unusable",
+        "credentials.unusable",
         async () => {
           await storeStream();
           await omitStoredStreamField(suite.db, RING, "endpoint");

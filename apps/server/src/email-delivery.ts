@@ -80,7 +80,7 @@ export async function resolveMailDeliveryIn(
     } catch (error) {
       if (
         isAppError(error) &&
-        hasCode(error, "server.credential_unusable") &&
+        hasCode(error, "credentials.unusable") &&
         error.params.purpose === "email.smtp" &&
         error.params.field === "from"
       ) {
@@ -108,7 +108,7 @@ export async function readSavedSmtp(
   validatePayload("email.smtp", configured);
   const { doc } = await readSettings(tx, MAIL_SETTINGS);
   if (doc.from === null)
-    throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "from" });
+    throw new AppError("credentials.unusable", { purpose: "email.smtp", field: "from" });
   return { url, from: doc.from };
 }
 

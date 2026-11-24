@@ -1504,7 +1504,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
 
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index and key names that
-  still read `tenant`, and the prefix for `server.credential_unusable`.
+  still read `tenant`.
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
 
 - **Go-live day steps.**

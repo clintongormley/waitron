@@ -42,7 +42,7 @@ const LOOKS: Readonly<Record<string, StringKey>> = {
 const SHOWS_WRITTEN_TIME = new Set([
   "credentials.decrypt_failed",
   "credentials.malformed_payload",
-  "server.credential_unusable",
+  "credentials.unusable",
 ]);
 const NAMED_CAUSES = new Set([
   "credentials.key_version_unknown",
@@ -79,7 +79,7 @@ function cause(
         ? t("backup_evidence.cause.decrypt_failed_plain")
         : fill("backup_evidence.cause.decrypt_failed", { n: String(recordKeyVersion) });
     case "credentials.malformed_payload":
-    case "server.credential_unusable":
+    case "credentials.unusable":
       return t("backup_evidence.cause.malformed");
     case "backup.archive_settings_invalid": {
       const reason = detail && "reason" in detail ? PARTS[detail.reason] : undefined;

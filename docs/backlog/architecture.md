@@ -54,16 +54,6 @@ A1308 leaves these names with the slices that own their tables:
 - `print_agents_tenant_node_key` and `purchase_invoices_tenant_received_idx`: the devices and
   menu areas; no slice plan names their rename yet.
 
-## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
-
-It is thrown for AEAT's certificate
-  (`packages/fiscal-verifactu/src/aeat-transport.ts`), for Stripe's secret key and webhook secret
-  (`apps/server/src/stripe-account.ts`, `apps/server/src/webhook.ts`), and for the email and
-  machine-key credentials (`credentialField`, `apps/server/src/credentials.ts`); both
-  `packages/fiscal-verifactu/src/errors.ts` and `apps/server/src/errors.ts` declare it. **Next
-  action:** choose a prefix (`credentials.missing` is the nearest sibling) and rename it in one
-  change, checking the prefix matchers `docs/developers/conventions-data.md` lists.
-
 ## A913's fix items: general code English only
 
 **2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
@@ -392,7 +382,6 @@ OPEN.
 ## Loose ends left by the tenant-column removal (#378, 2026-09-16)
 
 - [Index and key names that still read `tenant`](#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone).
-- [`server.credential_unusable`'s domain prefix](#servercredential_unusable-names-an-unusable-credential-although-server-is-reserved-for-facts-about-the-process-itself).
 
 ## A974. Finish the remaining English names in general code.
 

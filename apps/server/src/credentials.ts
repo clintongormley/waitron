@@ -23,7 +23,7 @@ export const UNREADABLE_CREDENTIAL: ReadonlySet<string> = new Set([
   "credentials.decrypt_failed",
   "credentials.malformed_payload",
   "credentials.key_version_unknown",
-  "server.credential_unusable",
+  "credentials.unusable",
 ]);
 
 /**
@@ -37,6 +37,6 @@ export function credentialField<P extends Purpose>(
   field: (typeof PURPOSES)[P][number],
 ): string {
   const value = payload[field];
-  if (value === undefined) throw new AppError("server.credential_unusable", { purpose, field });
+  if (value === undefined) throw new AppError("credentials.unusable", { purpose, field });
   return value;
 }

@@ -84,17 +84,17 @@ describe("fiscal and payment job reports", () => {
     const d = deps({
       drain: () =>
         Promise.reject(
-          new AppError("server.credential_unusable", {
+          new AppError("credentials.unusable", {
             purpose: "fiscal.aeat",
             field: "certKind",
           }),
         ),
       reconcile: async () => tickResult({ nextDueAt: LATER }),
     });
-    await expect(runDrain(d)).rejects.toMatchObject({ code: "server.credential_unusable" });
+    await expect(runDrain(d)).rejects.toMatchObject({ code: "credentials.unusable" });
     expect(d.health.duties[DRAIN_DUTY]?.consecutiveFailures).toBe(1);
     expect(d.lines).toContain(
-      'error duty.failed {"duty":"fiscal.drain","errorCode":"server.credential_unusable"}',
+      'error duty.failed {"duty":"fiscal.drain","errorCode":"credentials.unusable"}',
     );
     expect(await runReconcile(d)).toEqual({ nextDueAt: LATER, degraded: false });
     expect(d.health.duties[RECONCILE_DUTY]?.lastOkAt).toEqual(NOW);

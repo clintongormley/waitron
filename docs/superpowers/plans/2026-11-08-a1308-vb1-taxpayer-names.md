@@ -1,5 +1,7 @@
 # A1308 venue and box, PR vb1: no name says "tenant" — implementation plan
 
+> **2026-11-24.** The unusable-credential code below was renamed to [`credentials.unusable`](../../../apps/server/README.md#log-events).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to build this plan task by task. Steps use checkbox
 > (`- [ ]`) syntax. Every rule in [the slice rules](2026-11-08-a1308-slice-rules.md) applies; this

@@ -8,7 +8,7 @@ export function venueSmtpFrom(
   senderName: string,
 ): { name: string; address: string } {
   const invalid = (): never => {
-    throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "from" });
+    throw new AppError("credentials.unusable", { purpose: "email.smtp", field: "from" });
   };
   if (/[\r\n]/.test(storedFrom)) invalid();
   const parsed = addressparser(storedFrom);
@@ -28,7 +28,7 @@ export function validateSmtpTestFrom(storedFrom: string): void {
   } catch (error) {
     if (
       isAppError(error) &&
-      hasCode(error, "server.credential_unusable") &&
+      hasCode(error, "credentials.unusable") &&
       error.params.purpose === "email.smtp" &&
       error.params.field === "from"
     ) {

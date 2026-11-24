@@ -517,7 +517,7 @@ describe("GET /api/backup/settings-evidence", () => {
 
   for (const [plaintext, code] of [
     ["not json", "credentials.malformed_payload"],
-    ["{}", "server.credential_unusable"],
+    ["{}", "credentials.unusable"],
   ] as const) {
     it(`a record that opens but is not backup settings (${code}): its written time survives`, async () => {
       await storeRaw(plaintext);

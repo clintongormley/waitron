@@ -56,7 +56,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       "management.request_invalid": 400,
       "settings.invalid": 500,
       "settings.out_of_date": 409,
-      "server.credential_unusable": 500,
+      "credentials.unusable": 500,
     },
     "email_settings.failed",
   );
@@ -135,7 +135,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
           url = new URL(saved.url);
           if (!["smtp:", "smtps:"].includes(url.protocol) || !url.hostname) throw new Error();
         } catch {
-          throw new AppError("server.credential_unusable", { purpose: "email.smtp", field: "url" });
+          throw new AppError("credentials.unusable", { purpose: "email.smtp", field: "url" });
         }
         return c.json({
           mode,
@@ -220,7 +220,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       } catch (error) {
         if (
           isAppError(error) &&
-          hasCode(error, "server.credential_unusable") &&
+          hasCode(error, "credentials.unusable") &&
           error.params.purpose === "email.smtp" &&
           error.params.field === "from"
         ) {

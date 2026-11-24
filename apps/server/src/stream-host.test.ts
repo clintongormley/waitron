@@ -463,7 +463,7 @@ describe("the live copy's wiring", () => {
       }),
     );
     await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
-      code: "server.credential_unusable",
+      code: "credentials.unusable",
       params: { purpose: "backup.stream", field: "stream" },
     });
   });
@@ -580,7 +580,7 @@ describe("the live copy's wiring", () => {
       async (field) => {
         await omitStoredStreamField(db, RING, field);
         await expect(readStreamSettings(db, RING)).rejects.toMatchObject({
-          code: "server.credential_unusable",
+          code: "credentials.unusable",
           params: { purpose: "backup.stream", field },
         });
       },

@@ -56,7 +56,7 @@ export function stripeSecretKeyFrom(
 ): string {
   const secretKey = payload.secretKey;
   if (secretKey === undefined) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "secretKey" });
+    throw new AppError("credentials.unusable", { ...ref, field: "secretKey" });
   }
   const keyEnvironment = keyEnvironmentOf(secretKey);
   if (keyEnvironment !== null && keyEnvironment !== environment) {

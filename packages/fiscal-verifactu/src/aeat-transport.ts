@@ -28,7 +28,7 @@ export interface CertMaterial {
 }
 
 /**
- * Validates the decrypted payload at the READ site and throws `server.credential_unusable` when a
+ * Validates the decrypted payload at the READ site and throws `credentials.unusable` when a
  * declared field is absent or unusable — including a `pfxBase64` that is PRESENT but decodes to
  * nothing usable, not merely one that is missing or the empty string.
  *
@@ -43,21 +43,21 @@ export function certMaterialFrom(
 ): CertMaterial {
   const certKind = payload.certKind;
   if (certKind === undefined || !isCertKind(certKind)) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "certKind" });
+    throw new AppError("credentials.unusable", { ...ref, field: "certKind" });
   }
   const pfxBase64 = payload.pfxBase64;
   if (pfxBase64 === undefined) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "pfxBase64" });
+    throw new AppError("credentials.unusable", { ...ref, field: "pfxBase64" });
   }
   // Checked after decoding: `Buffer.from("!!!!", "base64")` is zero bytes despite a non-empty
   // input, which would otherwise surface much later as an unexplained TLS error.
   const pfx = Buffer.from(pfxBase64, "base64");
   if (pfx.length === 0) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "pfxBase64" });
+    throw new AppError("credentials.unusable", { ...ref, field: "pfxBase64" });
   }
   const passphrase = payload.passphrase;
   if (passphrase === undefined) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "passphrase" });
+    throw new AppError("credentials.unusable", { ...ref, field: "passphrase" });
   }
   return { pfx, passphrase, certKind };
 }

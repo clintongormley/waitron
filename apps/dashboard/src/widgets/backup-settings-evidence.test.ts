@@ -82,7 +82,7 @@ const CAUSES: {
   },
   {
     name: "an unusable credential",
-    failure: { code: "server.credential_unusable", detail: null },
+    failure: { code: "credentials.unusable", detail: null },
     expected: (c) => words(c, "backup_evidence.cause.malformed"),
   },
   {

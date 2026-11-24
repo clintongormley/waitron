@@ -344,7 +344,7 @@ describe("hostedWebhookSecretFrom", () => {
   // can be sealed through the vault.
   it("fails loudly on a payload sealed without a webhookSecret, rather than passing undefined on", () => {
     expect(() => hostedWebhookSecretFrom({ secretKey: "sk_test_x" }, REF)).toThrow(
-      /server.credential_unusable/,
+      /credentials\.unusable/,
     );
   });
 

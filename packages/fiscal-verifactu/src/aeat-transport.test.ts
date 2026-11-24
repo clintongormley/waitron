@@ -85,7 +85,7 @@ describe("readCertMaterial", () => {
   it("rejects a certKind that is not one of the two kinds", async () => {
     await provision("wildcard");
     const error = await captureError(() => readCertMaterial(suite.db, ring));
-    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.code).toBe("credentials.unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field: "certKind" });
   });
 
@@ -104,7 +104,7 @@ describe("certMaterialFrom", () => {
   // the vault's own API.
   it("fails loudly on a payload sealed before certKind existed, rather than guessing a host", () => {
     expect(() => certMaterialFrom({ pfxBase64: "AAA=", passphrase: "p" }, REF)).toThrow(
-      /server.credential_unusable/,
+      /credentials\.unusable/,
     );
   });
 
@@ -116,7 +116,7 @@ describe("certMaterialFrom", () => {
     };
     delete full[field];
     const error = await captureError(() => Promise.resolve(certMaterialFrom(full, REF)));
-    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.code).toBe("credentials.unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field });
   });
 
@@ -128,7 +128,7 @@ describe("certMaterialFrom", () => {
         certMaterialFrom({ pfxBase64: "!!!!", passphrase: "p", certKind: "sello" }, REF),
       ),
     );
-    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.code).toBe("credentials.unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field: "pfxBase64" });
   });
 

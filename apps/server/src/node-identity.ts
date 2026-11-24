@@ -27,7 +27,7 @@ export async function readNodeIdentityKey(
     privateKey = await readNodeSigningKey(node, ring, nodeId);
   } catch (error) {
     if (isAppError(error) && error.code === "credentials.malformed_payload")
-      throw new AppError("server.credential_unusable", {
+      throw new AppError("credentials.unusable", {
         purpose: NODE_KEY_PURPOSE,
         field: "privateKey",
       });

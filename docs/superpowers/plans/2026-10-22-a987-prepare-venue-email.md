@@ -6,6 +6,8 @@
 
 # A987 Prepare venue email Implementation Plan
 
+> **2026-11-24.** The unusable-credential code below was renamed to [`credentials.unusable`](../../../apps/server/README.md#log-events).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Native inline execution is owner-authorised. Steps use checkbox (`- [ ]`) syntax for tracking. Do not dispatch agents or ask an execution-method question.
 
 **Goal:** Let Prepare and Live use their own SMTP server, keep the unlinked Demo mailbox, and leave Cloud integration dormant until D102 releases its contract and joint tests pass.

@@ -49,7 +49,7 @@ export function hostedWebhookSecretFrom(
 ): string {
   const webhookSecret = payload.webhookSecret;
   if (webhookSecret === undefined) {
-    throw new AppError("server.credential_unusable", { ...ref, field: "webhookSecret" });
+    throw new AppError("credentials.unusable", { ...ref, field: "webhookSecret" });
   }
   return webhookSecret;
 }
