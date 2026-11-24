@@ -38,10 +38,11 @@ import { returnDigest, returnVenue } from "./return-records.js";
 import { orderReset } from "./reset-order.js";
 import { listServers } from "./membership-removal.js";
 import { mountResetOrderApi } from "./reset-order-api.js";
-import { insertFiscalRecord, seedFiscalParents } from "./testing/fiscal-fixtures.js";
+import { insertFiscalRecord, numberedAs, seedFiscalParents } from "./testing/fiscal-fixtures.js";
 import {
   earlierBoxChain,
   lackingChainOf,
+  differingAtItsLast,
   oneRecordChainOf,
 } from "@waitron/fiscal-verifactu/src/testing/holdings.js";
 
@@ -700,16 +701,16 @@ describe("an acknowledgement", () => {
     ]);
   });
 
-  /** A one-record chain of `nodeId` this box holds, as the old box lists it with `changes`. */
-  async function heldChainWith(changes: { huella?: string; count?: number }, nodeId = main) {
+  /** A one-record chain of `nodeId` this box holds, as a box holding that record lists it. */
+  async function heldChain(nodeId = main) {
     const seriesId = randomUUID();
     await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId, code: "A" });
     const ids = await seedFiscalParents(suite.db, {
       ids: { nodeId, seriesId },
       reuseExistingParents: true,
     });
-    await insertFiscalRecord(suite.db, ids, { numSerie: `A/${nodeId}` });
-    return { ...(await oneRecordChainOf(suite.db, ids.sifId)), ...changes };
+    await insertFiscalRecord(suite.db, ids, numberedAs(`A/${nodeId}`));
+    return oneRecordChainOf(suite.db, ids.sifId);
   }
 
   const reasonsLacking = async (chains: CanonicalValue[]) =>
@@ -725,7 +726,7 @@ describe("an acknowledgement", () => {
       { db: suite.db, node: suite.node, nodeId: main },
       { targetNodeId: oldBox, personId, acceptLoss: true },
     );
-    const differing = await heldChainWith({ huella: "a".repeat(64) });
+    const differing = differingAtItsLast(await heldChain());
     expect(await reasonsLacking([differing])).toEqual(["hash_differs"]);
     const ack = { orderId: order.orderId, setAside: true, lacking: {} };
 
@@ -742,8 +743,8 @@ describe("an acknowledgement", () => {
 
   it("says records are missing when a chain this box holds has fewer records, beside one that differs", async () => {
     const order = await ordered();
-    const differing = await heldChainWith({ huella: "a".repeat(64) });
-    const shorter = await heldChainWith({ count: 2 }, oldBox);
+    const differing = differingAtItsLast(await heldChain());
+    const shorter = { ...(await heldChain(oldBox)), count: 2 };
     expect(await reasonsLacking([differing, shorter])).toEqual(["hash_differs", "fewer_records"]);
     const ack = { orderId: order.orderId, setAside: true, lacking: {} };
 
