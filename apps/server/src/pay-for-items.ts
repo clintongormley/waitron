@@ -376,11 +376,11 @@ export async function payForItems(
     return { billId, request: payment(await readBillEditState(tx, billId)) };
   };
   const pending = diskFullBeforePayment(deps);
+  const preRead = pending !== false && (await pending);
   if ("provider" in deps && req.entry === "reader") {
     const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
     let billId = fromBillId;
     try {
-      const preRead = pending !== false && (await pending);
       const begun = await withSettledSlip((slip) =>
         withIssuanceTransaction(
           deps.db,
@@ -415,7 +415,6 @@ export async function payForItems(
       hold.release();
     }
   }
-  const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
