@@ -299,7 +299,7 @@ export async function priceOrderLines(
   /** For `linkSetMenusFor`, once the rows are written. */
   setMenuLinks: SetMenuLinks;
 }> {
-  // One clock reading for the whole round, so the menus that sold a dish are the ones it links.
+  // Pricing and linking share one clock reading, so the menus that sold a dish are the ones it links.
   const at = new Date();
   if (requestedLines.length === 0) {
     return {

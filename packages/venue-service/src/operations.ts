@@ -965,7 +965,8 @@ function servedSetMenus(
 
 /** {@link listZoneOffers}' set menus, without serving the zone's other offers; a zone whose menus
  *  hold no set menu answers no selling versions either, without reading its timetable. A
- *  `ZoneSelling` names the live menus and those orderable, so neither is read again. */
+ *  `ZoneSelling` supplies the zone's menu ids and the orderable ones, so neither the zone's menu
+ *  list nor its timetable is read. */
 export async function listZoneSetMenus(
   tx: Transaction,
   zoneId: string,

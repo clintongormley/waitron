@@ -354,7 +354,7 @@ it("links the set menus of a dish whose quantity a saved-again parked order rais
   });
 });
 
-it("links the set menus of a sent dish raised on its bill, which adds a row", async () => {
+it("links the set menus of a sent dish raised on its bill", async () => {
   const { venue, copy } = fixture;
   const { tabId, partyId } = await seated();
   await orderForParty(venue, partyId, ["Flan"], tabId);

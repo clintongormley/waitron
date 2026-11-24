@@ -274,7 +274,7 @@ export const workingOrderLines = table(
     // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.
     listUnitPriceGross: money("list_unit_price_gross"),
     // What the dish costs à la carte, written when it is added; null on an extras pick and on a
-    // set-menu line.
+    // set menu's own row.
     aLaCarteUnitPrice: money("a_la_carte_unit_price"),
     menuItemId: id("menu_item_id"),
     menuId: id("menu_id"),
