@@ -297,6 +297,24 @@ async function openCorrectionOf(saleId: string): Promise<string> {
   return id;
 }
 
+/** The administrator closes the correction, as the correction route's close does. */
+function closeCorrection(correctionId: string) {
+  return inTx(venue, (tx) =>
+    closeInvoiceCorrection(
+      tx,
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      correctionId,
+      { personId: venue.adminId },
+    ),
+  );
+}
+
 function balance(billId: string) {
   return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
@@ -596,21 +614,48 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await invoiceCount(sourceId)).toBe(0);
     expect(await statusOf(venue, sourceId)).toBe("open");
 
-    await inTx(venue, (tx) =>
-      closeInvoiceCorrection(
-        tx,
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        correctionId,
-        { personId: venue.adminId },
-      ),
-    );
+    await closeCorrection(correctionId);
 
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("closing a correction of the source's advance leaves the source open while a colleague's order is unsent on it, and discarding the order issues it once", async () => {
+    const sourceId = await coffeeAndTarta();
+    const advanceId = await advanceOn(sourceId);
+    const { answer, release } = await heldTartaPayment(sourceId);
+    const draft = await colleagueDraft(sourceId);
+    const correctionId = await openCorrectionOf(advanceId);
+    release();
+    expect((await answer).json.payment).toMatchObject({ outcome: "received" });
+    await expect(discardColleagueDraft(sourceId, draft)).rejects.toMatchObject({
+      code: "advance.correction_open",
+    });
+
+    await closeCorrection(correctionId);
+
+    expect(await statusOf(venue, sourceId)).toBe("open");
+    expect(await invoiceCount(sourceId)).toBe(0);
+    await discardColleagueDraft(sourceId, draft);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("closing a correction of the source's advance leaves a colleague's unsent order on the source able to be sent", async () => {
+    const sourceId = await coffeeAndTarta();
+    const advanceId = await advanceOn(sourceId);
+    const { answer, release } = await heldTartaPayment(sourceId);
+    const draft = await colleagueDraft(sourceId);
+    const correctionId = await openCorrectionOf(advanceId);
+    release();
+    expect((await answer).json.payment).toMatchObject({ outcome: "received" });
+
+    await closeCorrection(correctionId);
+
+    const sent = await sendColleagueDraft(sourceId, draft);
+    expect(sent.draft).toBeNull();
+    expect(await invoiceCount(sourceId)).toBe(0);
+    await contribute(sourceId, "3.00");
     expect(await invoiceCount(sourceId)).toBe(1);
     expect(await statusOf(venue, sourceId)).toBe("settled");
   });

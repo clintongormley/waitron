@@ -1398,7 +1398,9 @@ export async function issueIfFullyPaid(
  * {@link issueIfFullyPaid} for a bill whose money has already moved but whose invoice was held
  * back, issued as recovery's completion would have issued it for the bill's latest received
  * payment that paid no advance: under that payment's device and person, dated by the latest
- * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance.
+ * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance. An order
+ * left unsent on the bill makes it wait: issuing would settle the bill under it, and its send would
+ * then be refused; sending or discarding it issues the bill if it is still paid.
  */
 export async function issueHeldBill(
   tx: Transaction,
@@ -1407,6 +1409,7 @@ export async function issueHeldBill(
   workingOrderId: string,
   operatorId: string,
 ): Promise<TillSaleResult | null> {
+  if ((await readBillUnsent(tx, workingOrderId)).length > 0) return null;
   const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
   // Rows come in creation order (createdAt, then rowid), so of two received in the same
   // millisecond the later-created one wins.
@@ -2596,9 +2599,7 @@ async function putItemsBack(
  * way whether that payment was received or failed: as {@link issueHeldBill}, under the source's own
  * latest payment, whose money its invoice settles, else `payment`'s device and person. With money
  * moved, so an advance's correction opened while the card was collected makes the invoice wait
- * (closing it issues the bill) rather than undo a card already captured. An order left unsent on
- * the source also makes it wait: issuing would settle the bill under it, and its send would then be
- * refused; sending or discarding it issues the bill if it is still paid.
+ * (closing it issues the bill) rather than undo a card already captured.
  */
 async function issueHeldSource(
   tx: Transaction,
@@ -2607,7 +2608,6 @@ async function issueHeldSource(
   payment: PaymentRow,
   sourceId: string,
 ): Promise<void> {
-  if ((await readBillUnsent(tx, sourceId)).length > 0) return;
   await issueHeldBill(
     tx,
     deps,
