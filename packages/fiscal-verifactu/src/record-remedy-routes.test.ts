@@ -191,8 +191,6 @@ const CORRECTION_FILES = [
 ];
 /** Thrown in those files, but by a function a correction record never calls. */
 const NOT_ON_THE_CORRECTION_PATH: Record<string, string> = {
-  "sif.id_sistema_invalid": "registerSif and writeReservedSif only",
-  "sif.allocation_invalid": "registerSif and writeReservedSif only",
   "filing_case.remedy_invalid": "recordCaseEvent is handed the new record, never the case's own",
 };
 /** Thrown on the correction path by code outside this package, so no file here names them. */

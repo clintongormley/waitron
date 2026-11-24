@@ -292,10 +292,11 @@ the schema: a promotion whose old box gave up filing stores a version 2 approval
 - **Rows:** 1, plus one per restore or promotion.
 
 **2026-11-24, as built in Fi9.** The seven allocation columns are empty together for fixture
-identities and set together when activation records an approval. The owner chose to drop
-`fiscal_allocations_identity_uq` on 2026-11-09 because the existing installation-name unique index
-already covers all environments. Start again still needs the certificate exemption added by
-A1379 part 2. Fi9 removes only the allocation table from that list.
+identities and set together when activation records an approval. The
+[Fi9 plan](../../plans/2026-11-08-a1308-fi9-identities-absorb-allocations.md#decisions-this-plan-makes)
+records the 2026-11-09 decision to drop `fiscal_allocations_identity_uq` because the existing
+installation-name unique index covers all environments. Start again still needs the certificate
+exemption added by A1379 part 2. Fi9 removes only the allocation table from that list.
 
 Why the fold is sound:
 

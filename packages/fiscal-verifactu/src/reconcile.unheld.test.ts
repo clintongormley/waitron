@@ -25,6 +25,7 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 import { readActiveConflicts, assertNoActiveConflict } from "./conflict-evidence.js";
 import { drain } from "./drain.js";
 import { reconcile } from "./reconcile.js";
+import { readLiveReconciliationSeries, retainUnheldSeriesConflicts } from "./reconcile-series.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -149,6 +150,32 @@ it("observes an active series in a month without any locally stored invoice", as
     await withTransaction(suite.db, (tx) => readActiveConflicts(tx, f.seeded.nodeId)),
   ).toHaveLength(1);
   expect(await snapshot()).toEqual(before);
+});
+
+it("excludes a series whose identity has neither an approval nor a record in this environment", async () => {
+  const f = await fixture();
+  const { nodeId, nif } = f.seeded;
+  await retireAndRevoke(nodeId, NOW);
+  await suite.db.insert(verifactuIdentities).values({
+    nodeId,
+    nif,
+    idSistemaInformatico: "WT",
+    numeroInstalacion: "unapproved",
+  });
+  await suite.db.insert(invoiceSeries).values({ nodeId, code: "HELD", purpose: "standard" });
+  f.foreign.IDFactura.NumSerieFactura = "HELD/99";
+  const scope = {
+    nodeId,
+    historyNodeIds: [nodeId],
+    taxpayerId: nif,
+    environment: "production" as const,
+  };
+
+  await withTransaction(suite.db, async (tx) => {
+    expect(await readLiveReconciliationSeries(tx, scope)).toEqual([]);
+    await retainUnheldSeriesConflicts(tx, scope, [f.foreign], new Set(), NOW, PERIOD);
+  });
+  expect(await storedConflicts()).toEqual([]);
 });
 
 it.each(["S10/99", "S1X/99", "X1/99", "S1/0", "S1/-1", "S1/1.5", "S1/", "OTHER/99"])(

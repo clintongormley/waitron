@@ -46,12 +46,6 @@ export async function seedFixtureSif(
   });
 }
 
-/**
- * AEAT caps `IdSistemaInformatico` at two characters (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`).
- *
- * `verifactu_identities` carries no CHECK on the column, so the bound is applied in code: `registerSif`
- * and `writeReservedSif` below each open with `assertUsableIdSistema`.
- */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
 function assertUsableIdSistema(value: string): void {
