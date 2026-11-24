@@ -940,8 +940,9 @@ the pending reread reads `paidOn`. Every branch rereads the table's bill without
 
 **For the watcher (not blocking PR 2's build):** (1) the items route still takes no receipt guest
 count, so the new bill's receipt is never asked one (PR2-D5); (2) Keep as tip, and a refund that
-issues the bill, answer no invoice, so the till shows no receipt window for it (the server still
-prints the receipt); (3) a set-menu dish with a supplement, which today's items payment takes alone,
+issues the bill, answer no invoice, so the till shows no receipt window for it; the till asks for
+the bill's receipt itself when the answer says the bill is settled (a connected-card give-back that
+completes later is not asked one); (3) a set-menu dish with a supplement, which today's items payment takes alone,
 now needs its set menu chosen too (PR2-D12's words).
 
 ## PR 4 — Printed bills (`feat/a1515-1-printed-bills`)

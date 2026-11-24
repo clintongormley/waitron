@@ -22823,6 +22823,7 @@ export class TillApp extends LitElement {
       limit.done();
       this.overpaidBusy = false;
     }
+    if (kept?.status === "settled") void this.#printOwedReceipt(billId);
     if (!this.#hasLeftOrder(billId, visit)) await this.#rereadAmounts(billId, visit, kept);
   }
 
@@ -24177,6 +24178,9 @@ export class TillApp extends LitElement {
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
     // Whatever closes the payment dialog closes the refund dialog over it (#closeBillPaying).
     const paying = this.#billPayingNow(open.payId)!;
+    const before = paying.balance?.status;
+    if (before !== undefined && before !== "settled" && result.balance.status === "settled")
+      void this.#printOwedReceipt(open.billId);
     this.billPaying = {
       ...paying,
       balance: result.balance,

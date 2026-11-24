@@ -1114,6 +1114,7 @@ describe("till-app: a bill paid more than it comes to", () => {
     expect(text(row)).toContain(t("table.bill_paid"));
     expect(row!.querySelector("[data-paid-mark]")).not.toBeNull();
     expect(order.shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+    expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-4", { ifOwed: true });
   });
 
   it("each Keep as tip sends its own submission id", async () => {
@@ -1153,6 +1154,7 @@ describe("till-app: a bill paid more than it comes to", () => {
     expect(text(banner(el))).toContain(codeMessage("bill.not_overpaid"));
     expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
     expect(order.overpaidBusy).toBe(false);
+    expect(api.printReceipt).not.toHaveBeenCalled();
   });
 
   it("Keep as tip refused because the excess changed says so and shows the new amount to confirm", async () => {
@@ -1340,6 +1342,24 @@ describe("till-app: giving back money just taken on this bill", () => {
     expect(approval(el)).toBeNull();
     expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
     expect(refundDialog(el)).toBeNull();
+    expect(api.printReceipt).not.toHaveBeenCalled();
+  });
+
+  it("a give-back that issues the bill prints its receipt", async () => {
+    const el = await giveBackKeyed(
+      {
+        refundBillPayment: vi.fn().mockResolvedValue({
+          ...givenBack,
+          balance: { ...givenBack.balance, status: "settled" },
+        }),
+      },
+      "5.00",
+    );
+
+    inRefund(el, "[data-refund-terminal-done]")!.click();
+    await flush(el);
+
+    expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-4", { ifOwed: true });
   });
 
   it("a hand-keyed give-back the server still wants approved asks a PIN", async () => {
