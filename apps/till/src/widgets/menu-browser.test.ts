@@ -1,10 +1,10 @@
 import { bill as setMenuBill, daily, special } from "../../test/set-menu-widgets.js";
-import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
-import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
+import { mediaTestReference } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney, HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shared";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -17,7 +17,7 @@ import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/cli
 const EACH = {
   staffName: "Staff unit",
   staffAbbreviation: "su",
-  id: "unit-each",
+  id: EACH_UNIT_ID,
   name: { es: "unidad", en: "each" },
   abbreviation: { es: "ud", en: "ea" },
   precision: 0,
@@ -889,6 +889,20 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "structure"))).toContain("Agua");
     });
 
+    it("shows a variant price range on a product tile", async () => {
+      const glass = wine.variants![0]!;
+      const product = {
+        ...wine,
+        variants: [glass, { ...glass, id: "v-bottle", name: "Bottle", unitPrice: "9.00" }],
+      };
+      const { el } = await mount({ products: [product] });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      const price = entry(el, "section", "Vino").querySelector(".price")!.textContent;
+      expect(price).toBe(
+        `${formatMoney("3.00", currentLocale())}–${formatMoney("9.00", currentLocale())}`,
+      );
+    });
+
     it("lists the menu's top level in the structure, sections and products in order", async () => {
       const { el } = await mount();
       expect(names(entries(el, "structure"))).toEqual([
@@ -907,7 +921,7 @@ describe("till-menu-browser", () => {
       ]);
     });
 
-    it("tells a section from a product by text and an icon, not colour alone", async () => {
+    it("distinguishes a section from a product by its folder and accessible name", async () => {
       const { el } = await mount();
       const sectionEntry = entry(el, "shortcuts", "Drinks (EN)");
       const productEntry = entry(el, "shortcuts", "Café");
@@ -915,11 +929,16 @@ describe("till-menu-browser", () => {
       expect(icon.getAttribute("name")).toBe("menu-section");
       await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       expect(icon.shadowRoot!.querySelector("svg path")).not.toBeNull();
-      expect(sectionEntry.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+      await expect
+        .element(page.elementLocator(sectionEntry.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleName("Drinks (EN) Section");
+      expect(
+        sectionEntry.querySelector(".section-kind")!.getBoundingClientRect().width,
+      ).toBeLessThanOrEqual(1);
       expect(productEntry.querySelector("wt-icon")).toBeNull();
       expect(productEntry.querySelector(".kind")).toBeNull();
       expect(productEntry.querySelector(".price")!.textContent).toBe(
-        `${formatMoney("1.50", currentLocale())}/ea`,
+        `${formatMoney("1.50", currentLocale())}`,
       );
     });
 
@@ -1159,7 +1178,7 @@ describe("till-menu-browser", () => {
       for (const grid of grids(el)) expect(tracks(grid)).toBe(8);
     });
 
-    describe("tile modes", () => {
+    describe("tile colours", () => {
       const photo = product("photo", "Photo", {
         image: mediaTestReference("cafe.webp"),
         color: "#b12525",
@@ -1183,85 +1202,45 @@ describe("till-menu-browser", () => {
             ...withShortcuts([]),
           }),
         );
-      const image = (tile: Button) => tile.querySelector<HTMLImageElement>("img");
 
-      it("paints Colours mode from the product's and the section's colour, and Thumbnails mode from the image, else the colour, else neutral", async () => {
-        const thumbnails = await mount({
+      it("uses colour and the folder even with stored Thumbnails and photos", async () => {
+        const { el } = await mount({
           menu: tiled({ tiles: "thumbnails" }),
-          products: [photo, blue, bare],
+          products: [{ ...photo, allergens: { milk: {} } }, blue, bare],
         });
-        const photoTile = entry(thumbnails.el, "structure", "Photo");
-        const img = image(photoTile)!;
-        await vi.waitFor(() =>
-          expect(img.getAttribute("src")).toBe(
-            `/media/renditions/v1/${mediaTestReference("cafe.webp")}/till/7500-2500-200.webp`,
-          ),
-        );
-        expect(img.getAttribute("alt")).toBe("");
-        expect(img.parentElement!.firstElementChild).toBe(img);
-        expect(img.compareDocumentPosition(photoTile.querySelector(".name")!)).toBe(
-          Node.DOCUMENT_POSITION_FOLLOWING,
-        );
-        expect(photoTile.hasAttribute("data-painted")).toBe(false);
-        expect(photoTile.hasAttribute("style")).toBe(false);
-
-        const blueTile = entry(thumbnails.el, "structure", "Blue");
-        expect(image(blueTile)).toBeNull();
-        expect(blueTile.hasAttribute("data-painted")).toBe(true);
-        expect(
-          getComputedStyle(blueTile.shadowRoot!.querySelector("button")!).backgroundColor,
-        ).toBe("rgb(37, 107, 177)");
-
-        const sectionTile = entry(thumbnails.el, "structure", "Pictured (EN)");
-        await vi.waitFor(() =>
-          expect(image(sectionTile)!.getAttribute("src")).toBe(
-            `/media/renditions/v1/${mediaTestReference("drinks.webp")}/till/7500-2500-200.webp`,
-          ),
-        );
-        expect(sectionTile.querySelector("wt-icon")).toBeNull();
-        expect(sectionTile.querySelector(".kind")!.textContent!.trim()).toBe("Section");
-
-        const colours = await mount({
-          menu: tiled({ tiles: "colours" }),
-          products: [photo, blue, bare],
-        });
-        const colourPhoto = entry(colours.el, "structure", "Photo");
-        expect(image(colourPhoto)).toBeNull();
-        expect(colourPhoto.hasAttribute("data-painted")).toBe(true);
-        const colourSection = entry(colours.el, "structure", "Pictured (EN)");
-        expect(image(colourSection)).toBeNull();
-        expect(colourSection.querySelector("wt-icon")).not.toBeNull();
+        const dish = entry(el, "structure", "Photo");
+        expect(dish.querySelector("img")).toBeNull();
+        expect(dish.hasAttribute("data-painted")).toBe(true);
+        const section = entry(el, "structure", "Pictured (EN)");
+        expect(section.querySelector("img")).toBeNull();
+        expect(section.hasAttribute("data-painted")).toBe(false);
+        expect(section.querySelector('wt-icon[name="menu-section"]')).not.toBeNull();
       });
 
-      it("draws a product with neither image nor colour neutral in Thumbnails mode, name and price shown", async () => {
+      it("draws an uncoloured product with its name and price", async () => {
         const { el } = await mount({
           menu: tiled({ tiles: "thumbnails" }),
           products: [photo, blue, bare],
         });
         const tile = entry(el, "structure", "Bare");
-        expect(image(tile)).toBeNull();
         expect(tile.hasAttribute("data-painted")).toBe(false);
         expect(tile.hasAttribute("style")).toBe(false);
         expect(tile.querySelector(".name")!.textContent!.trim()).toBe("Bare");
         expect(tile.querySelector(".price")!.textContent).toBe(
-          `${formatMoney("1.50", currentLocale())}/ea`,
+          `${formatMoney("1.50", currentLocale())}`,
         );
       });
 
-      it("draws search results and an open section in the device's tile mode", async () => {
-        const menu = tiled({ tiles: "thumbnails" }, "handheld");
-        const handheld = await mount({ menu, products: [photo, blue, bare], handheld: true });
-        const till = await mount({ menu, products: [photo, blue, bare], handheld: false });
-        for (const [{ el }, drawn] of [
-          [handheld, true],
-          [till, false],
-        ] as const) {
-          await search(el, "photo");
-          expect(image(entry(el, "results", "Photo")) !== null).toBe(drawn);
-          await search(el, "");
-          await tap(el, entry(el, "structure", "Pictured (EN)"));
-          expect(image(entry(el, "section", "Photo")) !== null).toBe(drawn);
-        }
+      it("paints the same dish in search results and in its section", async () => {
+        const { el } = await mount({
+          menu: tiled({}),
+          products: [photo, blue, bare],
+        });
+        await search(el, "photo");
+        expect(entry(el, "results", "Photo").hasAttribute("data-painted")).toBe(true);
+        await search(el, "");
+        await tap(el, entry(el, "structure", "Pictured (EN)"));
+        expect(entry(el, "section", "Photo").hasAttribute("data-painted")).toBe(true);
       });
     });
 
@@ -1309,7 +1288,7 @@ describe("till-menu-browser", () => {
           unit: {
             staffName: "Staff unit",
             staffAbbreviation: "su",
-            id: "unit-each",
+            id: "unit-piece",
             name: { fr: "pièce", en: "each" },
             abbreviation: { fr: "pc", en: "ea" },
             precision: 0,
@@ -1514,9 +1493,10 @@ describe("till-menu-browser", () => {
         "Comida (ES)",
         "plain-internal",
       ]);
-      expect(
-        entry(el, "structure", "Bebidas (ES)").querySelector(".kind")!.textContent!.trim(),
-      ).toBe("Sección");
+      const button = entry(el, "structure", "Bebidas (ES)").shadowRoot!.querySelector("button")!;
+      await expect
+        .element(page.elementLocator(button))
+        .toHaveAccessibleName("Bebidas (ES) Sección");
       await tap(el, entry(el, "structure", "Bebidas (ES)"));
       expect(breadcrumb(el)).toBe("Inicio › Bebidas (ES)");
     });
@@ -1858,10 +1838,10 @@ describe("till-menu-browser", () => {
       ]);
       const price = (tile: Button) => tile.querySelector(".price")!.textContent;
       expect(price(groupEntry(el, "menu-lunch", "Cola"))).toBe(
-        `${formatMoney("1.50", currentLocale())}/ea`,
+        `${formatMoney("1.50", currentLocale())}`,
       );
       expect(price(groupEntry(el, "menu-drinks", "Cola"))).toBe(
-        `${formatMoney("2.20", currentLocale())}/ea`,
+        `${formatMoney("2.20", currentLocale())}`,
       );
       await tap(el, groupEntry(el, "menu-drinks", "Cola"));
       expect(store.lines).toHaveLength(1);
@@ -2455,14 +2435,19 @@ describe("till-menu-browser", () => {
         expect(readings.filter(({ seen }) => seen < 4.5)).toEqual([]);
       });
 
-      it("paints a coloured section's tile and its Section label", async () => {
+      it("paints a coloured section's tile, folder and filter notice", async () => {
         const el = await mountPainted(theme);
         const tile = entry(el, "structure", "Red (EN)");
         expect(background(tile)).toBe("rgb(177, 37, 37)");
         expect(ink(tile, ".name")).toBe(WHITE);
-        expect(ink(tile, ".kind")).toBe(WHITE);
         const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
         expect(getComputedStyle(icon).fill).toBe(WHITE);
+        el.products = painted.filter((product) => product !== inside);
+        el.unfilteredProducts = painted;
+        await el.updateComplete;
+        const filtered = entry(el, "structure", "Red (EN)");
+        expect(filtered.querySelector(".kind")!.textContent).toBe("Nothing matches the filter");
+        expect(ink(filtered, ".kind")).toBe(WHITE);
       });
 
       it("draws a null, a missing and a malformed colour neutral", async () => {
@@ -3045,31 +3030,19 @@ describe("till-menu-browser", () => {
       expect(breadcrumb(el)).toBe("Home › Drinks (EN) › Beer (EN)");
     });
 
-    it("paints a folder's override colour and photo", async () => {
-      // The published document already carries the folder's own colour and photo in `color` and
-      // `image`; this pins that the tile draws them.
+    it("paints a folder's override colour", async () => {
       const folder: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
-        image: mediaTestReference("bar-folder.webp"),
-        fixed: { color: "#256bb1", image: mediaTestReference("bar-folder.webp") },
+        fixed: { color: "#256bb1" },
       };
-      const menu = (tiles: HomeDisplay["tiles"]) =>
-        display("till", { tiles }, lunch({ structure: { members: [folder] } }));
-      const colours = await mount({ menu: menu("colours") });
-      const painted = entry(colours.el, "structure", "Bar (EN)");
+      const { el } = await mount({ menu: lunch({ structure: { members: [folder] } }) });
+      const painted = entry(el, "structure", "Bar (EN)");
       expect(painted.hasAttribute("data-painted")).toBe(true);
       expect(getComputedStyle(painted.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
         "rgb(37, 107, 177)",
       );
       expect(getComputedStyle(painted.querySelector(".name")!).color).toBe("rgb(255, 255, 255)");
-      const thumbnails = await mount({ menu: menu("thumbnails") });
-      const pictured = entry(thumbnails.el, "structure", "Bar (EN)");
-      await vi.waitFor(() =>
-        expect(pictured.querySelector("img")!.getAttribute("src")).toBe(
-          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
-        ),
-      );
     });
 
     it("the same included menu in two lists draws each copy with its own name", async () => {
@@ -3170,11 +3143,9 @@ describe("till-menu-browser", () => {
       const paintedBar: DocumentMember = {
         ...(bar as SectionNode),
         color: "#256bb1",
-        image: mediaTestReference("bar-folder.webp"),
         fixed: {
           names: { en: "Bar (EN)" },
           color: "#256bb1",
-          image: mediaTestReference("bar-folder.webp"),
         },
       };
       const shortcut = [sectionTile("sec-drinks")];
@@ -3183,16 +3154,6 @@ describe("till-menu-browser", () => {
       const tile = entry(el, "shortcuts", "Bar (EN)");
       expect(getComputedStyle(tile.shadowRoot!.querySelector("button")!).backgroundColor).toBe(
         "rgb(37, 107, 177)",
-      );
-      const thumbnails = await mount({
-        menu: display("till", { tiles: "thumbnails" }, twice(paintedBar, shortcut)),
-      });
-      await vi.waitFor(() =>
-        expect(
-          entry(thumbnails.el, "shortcuts", "Bar (EN)").querySelector("img")!.getAttribute("src"),
-        ).toBe(
-          `/media/renditions/v1/${mediaTestReference("bar-folder.webp")}/till/7500-2500-200.webp`,
-        ),
       );
       await tap(el, tile);
       expect(breadcrumb(el)).toBe("Home › Bar (EN)");
@@ -3386,13 +3347,13 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
     expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
   });
 
-  it("the badge never covers the name, and the allergen mark keeps the other corner", async () => {
+  it("the order count badge stays inside the tile and clear of its name", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
       const allergens = { milk: {} } as TillProduct["allergens"];
-      const pictured = product("photo", "Grilled octopus with smoked paprika", {
-        image: mediaTestReference("cafe.webp"),
+      const painted = product("painted", "Grilled octopus with smoked paprika", {
+        color: "#256bb1",
         allergens,
       });
       const plainDish = product("plain", "Mediterranean vegetables", { allergens });
@@ -3400,11 +3361,11 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
       // Each dish in a grid of its own, so no taller neighbour stretches its tile and centres the
       // name away from the corner.
-      for (const dish of [pictured, plainDish]) {
+      for (const dish of [painted, plainDish]) {
         const { el } = await mount({
           menu: display(
             "handheld",
-            { tiles: "thumbnails" },
+            {},
             lunch({ structure: { members: [member(dish.id.slice(2))] }, ...withShortcuts([]) }),
           ),
           handheld: true,
@@ -3423,33 +3384,27 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         text.selectNodeContents(tile.querySelector(".name")!);
         for (const line of text.getClientRects())
           expect(overlaps(box, line), dish.name).toBe(false);
-        expect(tile.querySelector(".thumb") !== null, dish.name).toBe(dish === pictured);
-        expect(box.right).toBeLessThanOrEqual(
-          tile.querySelector(".nutrition-mark")!.getBoundingClientRect().left,
-        );
         cleanupWidgets();
       }
     } finally {
       await page.viewport(viewport.width, viewport.height);
     }
   });
-  it("adding a dish leaves its tile and its row the same height, on a photo tile and a colour tile", async () => {
+  it("adding a dish leaves its tile and its row the same height, on a neutral and a painted tile", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
-      const pictured = product("photo", "Grilled octopus with smoked paprika", {
-        image: mediaTestReference("cafe.webp"),
-      });
+      const plain = product("plain", "Grilled octopus with smoked paprika");
       const painted = product("blue", "Mediterranean vegetables", {
         image: null,
         color: "#256bb1",
       });
       const neighbour = product("water", "Agua");
-      for (const dish of [pictured, painted]) {
+      for (const dish of [plain, painted]) {
         const { el } = await mount({
           menu: display(
             "handheld",
-            { tiles: "thumbnails" },
+            {},
             lunch({
               structure: { members: [member(dish.id.slice(2)), member("water")] },
               ...withShortcuts([]),
@@ -3460,7 +3415,6 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
           inOrder: new Map(),
         });
         const tile = entry(el, "structure", dish.name);
-        expect(tile.querySelector(".thumb") !== null, dish.name).toBe(dish === pictured);
         const grid = tile.closest(".grid")!;
         const heights = () => [
           tile.getBoundingClientRect().height,
@@ -3491,7 +3445,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         const { el } = await mount({
           menu: display(
             "handheld",
-            { tiles: "thumbnails" },
+            {},
             lunch({
               structure: { members: painted.map((dish) => member(dish.id.slice(2))) },
               ...withShortcuts([]),
@@ -3504,7 +3458,6 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         const read = () =>
           painted.map((dish) => {
             const tile = entry(el, "structure", dish.name);
-            expect(tile.querySelector(".thumb"), dish.name).toBeNull();
             const words = document.createRange();
             words.selectNodeContents(tile.querySelector(".name")!);
             const box = words.getBoundingClientRect();
@@ -3535,10 +3488,13 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
 
 describe("Spanish pricing-unit labels", () => {
   it.each([
-    { unit: EACH, label: "ud" },
-    { unit: { ...EACH, name: { en: "Each" }, abbreviation: { en: "ea" } }, label: "ea" },
-    { unit: undefined, label: "ud" },
-  ])("shows /$label on the dish tile without exposing a unit id", async ({ unit, label }) => {
+    { unit: { ...EACH, id: "unit-piece" }, suffix: "/ud" },
+    {
+      unit: { ...EACH, id: "unit-serving", name: { en: "Serving" }, abbreviation: { en: "ea" } },
+      suffix: "/ea",
+    },
+    { unit: undefined, suffix: "" },
+  ])("shows a localised price with suffix '$suffix'", async ({ unit, suffix }) => {
     setLocale("es-ES");
     setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
     const dish = product("cafe", "Café", { unit, pricingUnit: "each" });
@@ -3547,7 +3503,7 @@ describe("Spanish pricing-unit labels", () => {
       products: [dish],
     });
     const price = entry(el, "structure", "Café").querySelector(".price")!.textContent;
-    expect(price).toBe(`1,50\u00a0€/${label}`);
+    expect(price).toBe(`1,50\u00a0€${suffix}`);
     expect(price).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/i);
   });
 });
@@ -3978,35 +3934,6 @@ it.each(
     setLocale(before);
     await page.viewport(1280, 844);
   }
-});
-
-const mediaReplacements = useMediaPresentations();
-
-it("keeps the published menu and chosen order unchanged while mounted thumbnails follow replacements", async () => {
-  const reference = mediaTestReference("cafe.webp");
-  const replacement = mediaTestReference("replacement.webp");
-  const menu = display("till", { tiles: "thumbnails" });
-  const original = JSON.stringify(menu);
-  const products = [{ ...coffee, image: reference }, ...PRODUCTS.filter((p) => p.id !== coffee.id)];
-  const { el, store } = await mount({ menu, products });
-  const img = entry(el, "shortcuts", "Café").querySelector("img")!;
-  await vi.waitFor(() =>
-    expect(img.getAttribute("src")).toBe(
-      `/media/renditions/v1/${reference}/till/7500-2500-200.webp`,
-    ),
-  );
-  mediaReplacements.set(reference, replacement);
-  invalidateMediaImages();
-  await vi.waitFor(() =>
-    expect(img.getAttribute("src")).toBe(
-      `/media/renditions/v1/${replacement}/till/7500-2500-200.webp`,
-    ),
-  );
-  const box = img.getBoundingClientRect();
-  expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
-  expect(JSON.stringify(menu)).toBe(original);
-  expect(products[0]!.image).toBe(reference);
-  expect(store.lines).toHaveLength(0);
 });
 
 it("uses the filtered offer for information Add and forwards exclusions to new and weighed choices", async () => {

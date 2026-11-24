@@ -1,4 +1,9 @@
-import { staffPresentationName, contentLanguageCode, resolveContentText } from "@waitron/shared";
+import {
+  staffPresentationName,
+  contentLanguageCode,
+  resolveContentText,
+  tilePrice,
+} from "@waitron/shared";
 import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
@@ -65,6 +70,12 @@ export function productUnit(
           hardwareUnit: null,
         })
   );
+}
+
+export function productTilePrice(product: TillProduct, locale: string = currentLocale()): string {
+  const unit = productUnit(product);
+  const suffix = unit.id === EACH_UNIT_ID ? "" : unitName({ unit }, locale);
+  return tilePrice(product.unitPrice, product.variants ?? [], suffix, locale);
 }
 
 export function soldByTheUnit(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {

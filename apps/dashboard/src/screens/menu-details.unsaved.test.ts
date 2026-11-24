@@ -180,7 +180,7 @@ for (const succeeds of [true, false]) {
         if (!succeeds)
           throw {
             code: "menu.home_display_invalid",
-            params: { device: "handheld", field: "tiles" },
+            params: { device: "handheld", field: "order" },
           };
       },
     } as unknown as DashboardApi;
@@ -190,12 +190,12 @@ for (const succeeds of [true, false]) {
     });
     const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
     await expect
-      .poll(() => screen.shadowRoot!.querySelector('input[name="home-tiles"][value="thumbnails"]'))
+      .poll(() => screen.shadowRoot!.querySelector('input[name="home-order"][value="menu_first"]'))
       .not.toBeNull();
     screen
-      .shadowRoot!.querySelector<HTMLInputElement>('input[name="home-tiles"][value="thumbnails"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>('input[name="home-order"][value="menu_first"]')!
       .click();
-    await expect.poll(() => writes).toEqual([["menu", "handheld", { tiles: "thumbnails" }]]);
+    await expect.poll(() => writes).toEqual([["menu", "handheld", { order: "menu_first" }]]);
     await screen.updateComplete;
     expect(app.leave.coordinator.isDirty()).toBe(false);
     const event = new Event("beforeunload", { cancelable: true });
@@ -205,7 +205,9 @@ for (const succeeds of [true, false]) {
     if (!succeeds)
       await expect
         .poll(() =>
-          screen.shadowRoot!.querySelector('input[value="colours"]')!.getAttribute("aria-invalid"),
+          screen
+            .shadowRoot!.querySelector('input[name="home-order"][value="home_first"]')!
+            .getAttribute("aria-invalid"),
         )
         .toBe("true");
   });

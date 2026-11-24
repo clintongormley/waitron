@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 
 declare module "vitest/browser" {
@@ -470,7 +471,7 @@ function frozenOffer(
     unit: {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      id: "unit-each",
+      id: EACH_UNIT_ID,
       name: { en: "Each" },
       precision: 0,
       abbreviation: { en: "ea" },

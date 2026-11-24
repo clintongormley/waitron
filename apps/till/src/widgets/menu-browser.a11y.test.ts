@@ -8,6 +8,7 @@ import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 
 function product(key: string, name: string, available = true): TillProduct {
   return {
@@ -23,7 +24,7 @@ function product(key: string, name: string, available = true): TillProduct {
     unit: {
       staffName: "Staff unit",
       staffAbbreviation: "su",
-      id: "unit-each",
+      id: EACH_UNIT_ID,
       name: { en: "Each", es: "Unidad" },
       abbreviation: { en: "ea", es: "ud" },
       precision: 0,
@@ -356,34 +357,6 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
       menu: { ...menu, home: { ...menu.home, till: { ...menu.home.till, order: "menu_first" } } },
     });
     expect(el.shadowRoot!.querySelector("h2.divider")!.textContent!.trim()).toBe("Shortcuts");
-    await expectNoA11yViolations(host);
-  });
-
-  it("Thumbnails, with an imaged product, an imaged section and a neutral tile, has no violations", async () => {
-    const pictured: DocumentMember = {
-      kind: "section",
-      sectionId: "sec-pictured",
-      internalName: "pictured-internal",
-      names: { en: "Pictured (EN)" },
-      image: "drinks.webp",
-      color: null,
-      members: [member("cola")],
-    };
-    const { el, host } = await mount(theme, {
-      menu: {
-        ...menu,
-        structure: { members: [member("photo"), pictured, member("cana")] },
-        home: {
-          ...menu.home,
-          shortcuts: [],
-          till: { ...menu.home.till, tiles: "thumbnails" },
-        },
-      },
-      products: [...products, { ...product("photo", "Photo"), image: "cafe.webp" }],
-    });
-    expect(button(el, "Photo").querySelector("img")).not.toBeNull();
-    expect(button(el, "Pictured (EN)").querySelector("img")).not.toBeNull();
-    expect(button(el, "Caña").querySelector("img")).toBeNull();
     await expectNoA11yViolations(host);
   });
 

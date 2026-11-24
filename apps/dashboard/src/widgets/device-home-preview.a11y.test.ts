@@ -24,12 +24,11 @@ const SHORTCUTS: DocumentTile[] = [
   { kind: "section", sectionId: "s-drinks" },
 ];
 
-/** Drinks › Beer, a dark-painted Lemonade with a photo, a pale-painted Ham, and a plain Water. */
-function lunch(tiles: "colours" | "thumbnails" = "colours"): MenuDocument {
+/** Drinks › Beer, a dark-painted Lemonade, a pale-painted Ham, and a plain Water. */
+function lunch(): MenuDocument {
   const drinks = {
     ...documentSection("s-drinks", "Drinks", [documentProduct("mi-beer", "p-beer")]),
     color: "#1f3a5f",
-    image: "drinks.webp",
   } as const;
   const document = menuDocument(
     [
@@ -40,14 +39,13 @@ function lunch(tiles: "colours" | "thumbnails" = "colours"): MenuDocument {
     ],
     { "p-beer": "Beer", "p-lemonade": "Lemonade", "p-ham": "Ham", "p-water": "Water" },
   );
-  Object.assign(document.offers["mi-lemonade"]!, { image: "lemonade.webp", color: "#256bb1" });
+  document.offers["mi-lemonade"]!.color = "#256bb1";
   document.offers["mi-ham"]!.color = "#f5e663";
   return {
     ...document,
     home: {
+      ...document.home,
       shortcuts: SHORTCUTS,
-      handheld: { ...document.home.handheld, tiles },
-      till: { ...document.home.till, tiles },
     },
   };
 }
@@ -89,15 +87,6 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
     const { host } = await mountWidget<DeviceHomePreview>(
       "dashboard-device-home-preview",
       { document: lunch(), device },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders Thumbnails accessibly", async () => {
-    const { host } = await mountWidget<DeviceHomePreview>(
-      "dashboard-device-home-preview",
-      { document: lunch("thumbnails") },
       theme,
     );
     await expectNoA11yViolations(host);

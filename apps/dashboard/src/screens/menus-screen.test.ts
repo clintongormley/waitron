@@ -11224,13 +11224,13 @@ describe("the Home page tab", () => {
     expect(radio(el, "home-device", "till").checked).toBe(false);
     expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 3, 3]);
     expect(slider(el).label).toBe(t("home.columns"));
-    expect(radio(el, "home-tiles", "thumbnails").checked).toBe(true);
+    expect(q(el, 'input[name="home-tiles"]')).toBeNull();
     expect(radio(el, "home-order", "home_first").checked).toBe(true);
     await vi.waitFor(() => expect(preview(el)).not.toBeNull());
     expect(preview(el)!.device).toBe("handheld");
     await choose(el, "home-device", "till");
     expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([4, 10, 9]);
-    expect(radio(el, "home-tiles", "colours").checked).toBe(true);
+    expect(q(el, 'input[name="home-tiles"]')).toBeNull();
     expect(radio(el, "home-order", "menu_first").checked).toBe(true);
     expect(preview(el)!.device).toBe("till");
   });
@@ -11280,21 +11280,10 @@ describe("the Home page tab", () => {
     });
     await slider(el).updateComplete;
     expect(slider(el).disabled).toBe(true);
-    for (const [name, value] of [
-      ["home-tiles", "thumbnails"],
-      ["home-order", "menu_first"],
-    ])
-      expect(radio(el, name!, value!).disabled, name).toBe(true);
+    expect(radio(el, "home-order", "menu_first").disabled).toBe(true);
     out.resolve();
     await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
     expect(slider(el).value).toBe(2);
-    await choose(el, "home-tiles", "thumbnails");
-    await vi.waitFor(() =>
-      expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
-        tiles: "thumbnails",
-      }),
-    );
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
     await choose(el, "home-order", "menu_first");
     await vi.waitFor(() =>
       expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
@@ -11309,12 +11298,7 @@ describe("the Home page tab", () => {
         columns: 9,
       }),
     );
-    expect(writeCalls(client)).toEqual([
-      "setHomeDisplay",
-      "setHomeDisplay",
-      "setHomeDisplay",
-      "setHomeDisplay",
-    ]);
+    expect(writeCalls(client)).toEqual(["setHomeDisplay", "setHomeDisplay", "setHomeDisplay"]);
   });
 
   it("never reads a change from the preview's search as a setting", async () => {
@@ -11341,15 +11325,15 @@ describe("the Home page tab", () => {
 
     client.setHomeDisplay.mockRejectedValueOnce({
       code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "tiles" },
+      params: { device: "handheld", field: "order" },
     });
-    await choose(el, "home-tiles", "thumbnails");
+    await choose(el, "home-order", "menu_first");
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-tiles-error"]'))).toBe(
+      expect(text(q(el, '[data-test="home-order-error"]'))).toBe(
         codeMessage("menu.home_display_invalid"),
       ),
     );
-    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
+    expect(q(el, '[data-test="home-error"]')).toBeNull();
 
     client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
     await choose(el, "home-order", "menu_first");
@@ -11393,29 +11377,23 @@ describe("the Home page tab", () => {
     });
   });
 
-  it.each([
-    ["home-order", "home_first", "menu_first"],
-    ["home-tiles", "colours", "thumbnails"],
-  ])(
-    "shows the %s choice just made while its save is out, and keeps it once saved",
-    async (name, saved, chosen) => {
-      const out = deferred<void>();
-      const client = api();
-      const el = await mountHome(client);
-      client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-      const after = menuHome();
-      after.handheld = { ...after.handheld, [name === "home-order" ? "order" : "tiles"]: chosen };
-      client.getMenuHome.mockResolvedValue(after);
-      await choose(el, name, chosen);
-      expect(client.setHomeDisplay).toHaveBeenCalledTimes(1);
-      expect(radio(el, name, chosen).checked).toBe(true);
-      expect(radio(el, name, saved).checked).toBe(false);
-      out.resolve();
-      await vi.waitFor(() => expect(radio(el, name, chosen).disabled).toBe(false));
-      expect(radio(el, name, chosen).checked).toBe(true);
-      expect(radio(el, name, saved).checked).toBe(false);
-    },
-  );
+  it("shows the order choice while its save is out, and keeps it once saved", async () => {
+    const out = deferred<void>();
+    const client = api();
+    const el = await mountHome(client);
+    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
+    const after = menuHome();
+    after.handheld = { ...after.handheld, order: "menu_first" };
+    client.getMenuHome.mockResolvedValue(after);
+    await choose(el, "home-order", "menu_first");
+    expect(client.setHomeDisplay).toHaveBeenCalledTimes(1);
+    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
+    expect(radio(el, "home-order", "home_first").checked).toBe(false);
+    out.resolve();
+    await vi.waitFor(() => expect(radio(el, "home-order", "menu_first").disabled).toBe(false));
+    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
+    expect(radio(el, "home-order", "home_first").checked).toBe(false);
+  });
 
   it("shows the choice just made while its save is out, and the saved one again once it is refused", async () => {
     const out = deferred<void>();
@@ -11451,18 +11429,18 @@ describe("the Home page tab", () => {
   it("writes a refusal under a group of choices as the slider writes its own", async () => {
     const client = api();
     const el = await mountHome(client);
-    for (const field of ["columns", "tiles"])
+    for (const field of ["columns", "order"])
       client.setHomeDisplay.mockRejectedValueOnce({
         code: "menu.home_display_invalid",
         params: { device: "handheld", field },
       });
     await slide(el, 2);
     await vi.waitFor(() => expect(slider(el).error).not.toBe(""));
-    await choose(el, "home-tiles", "thumbnails");
-    await vi.waitFor(() => expect(q(el, '[data-test="home-tiles-error"]')).not.toBeNull());
+    await choose(el, "home-order", "menu_first");
+    await vi.waitFor(() => expect(q(el, '[data-test="home-order-error"]')).not.toBeNull());
     await slider(el).updateComplete;
     const sliderError = getComputedStyle(slider(el).shadowRoot!.querySelector(".error")!);
-    const choiceError = getComputedStyle(q(el, '[data-test="home-tiles-error"]')!);
+    const choiceError = getComputedStyle(q(el, '[data-test="home-order-error"]')!);
     for (const property of ["font-size", "font-weight", "color", "margin"] as const)
       expect(choiceError.getPropertyValue(property), property).toBe(
         sliderError.getPropertyValue(property),
@@ -11490,16 +11468,16 @@ describe("the Home page tab", () => {
     const el = await mountHome(client);
     client.setHomeDisplay.mockRejectedValueOnce({
       code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "tiles" },
+      params: { device: "handheld", field: "order" },
     });
-    await choose(el, "home-tiles", "thumbnails");
+    await choose(el, "home-order", "menu_first");
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-tiles-error"]'))).toBe(
+      expect(text(q(el, '[data-test="home-order-error"]'))).toBe(
         codeMessage("menu.home_display_invalid"),
       ),
     );
     await choose(el, "home-device", "till");
-    expect(q(el, '[data-test="home-tiles-error"]')).toBeNull();
+    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
   });
 
   it("keeps showing a saved setting when the read after the save fails", async () => {

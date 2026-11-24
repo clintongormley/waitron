@@ -75,21 +75,7 @@ function busyDuringPress(button: HTMLElement, after: number, duration: number): 
 }
 
 describe("product nutrition on the menu", () => {
-  it.each([
-    { name: "allergen", allergens: { milk: {} }, dietaryDeclarations: [], marked: true },
-    { name: "diet only", allergens: {}, dietaryDeclarations: ["halal"], marked: true },
-    { name: "reviewed empty", allergens: {}, dietaryDeclarations: [], marked: false },
-    { name: "unreviewed", allergens: null, dietaryDeclarations: [], marked: false },
-  ])("marks $name products only when information was declared", async (values) => {
-    const { button } = await mount({
-      ...dish,
-      allergens: values.allergens as TillProduct["allergens"],
-      dietaryDeclarations: values.dietaryDeclarations,
-    });
-    expect(button.querySelector('wt-icon[name="allergies"]') !== null).toBe(values.marked);
-  });
-
-  it("reserves room for the mark without splitting a word that fits a phone tile", async () => {
+  it("keeps a word that fits a phone tile on one line", async () => {
     await page.viewport(390, 844);
     try {
       const { button } = await mount({ ...dish, name: "Vegetable soup" });
@@ -141,8 +127,9 @@ describe("product nutrition on the menu", () => {
     expect(info(el)).toBeNull();
   });
 
-  it("a held mouse press opens the dish information and never adds it", async () => {
+  it("a held mouse press shows declared nutrition without marking the tile or adding the dish", async () => {
     const { el, store, button } = await mount();
+    expect(button.querySelector('wt-icon[name="allergies"]')).toBeNull();
     await userEvent.click(button, { delay: 650 });
     await el.updateComplete;
     expect(store.lines).toHaveLength(0);
@@ -153,16 +140,6 @@ describe("product nutrition on the menu", () => {
     ).toBe("Staff soup");
     expect(info(el)!.shadowRoot!.textContent).toContain("Wheat, Barley");
     expect(info(el)!.shadowRoot!.textContent).not.toContain("Customer soup");
-  });
-
-  it("a short click on the mark adds once without opening information", async () => {
-    const { el, store, button } = await mount();
-    const mark = button.querySelector<HTMLElement>('wt-icon[name="allergies"]');
-    expect(mark).not.toBeNull();
-    await userEvent.click(mark!);
-    expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.quantity).toBe("1");
-    expect(info(el)).toBeNull();
   });
 
   it("a short press queued behind busy rendering adds once without opening information", async () => {
@@ -183,7 +160,7 @@ describe("product nutrition on the menu", () => {
     expect(info(el)).toBeNull();
   });
 
-  it("an unmarked unreviewed dish still opens information on hold", async () => {
+  it("an unreviewed dish still opens information on hold", async () => {
     const { el, store, button } = await mount({
       ...dish,
       allergens: null,

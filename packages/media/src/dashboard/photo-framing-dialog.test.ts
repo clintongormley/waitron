@@ -45,19 +45,16 @@ async function mount(framing = { x: 5000, y: 5000, zoom: 100 }) {
 function pixel(c: HTMLCanvasElement, x: number) {
   return [...c.getContext("2d")!.getImageData(x, Math.floor(c.height / 2), 1, 1).data];
 }
-it("paints square and 4:3 previews from the accepted geometry, without mutating its input", async () => {
+it("shows only the square Lists crop and accepts changes without mutating its input", async () => {
   const initial = { x: 2500, y: 5000, zoom: 100 };
   const root = await mount(initial);
   const lists = root.querySelector("[data-test=lists]")!.shadowRoot!.querySelector("canvas")!;
-  const till = root.querySelector("[data-test=till]")!.shadowRoot!.querySelector("canvas")!;
+  expect([...root.querySelectorAll("figcaption")].map((caption) => caption.textContent)).toEqual([
+    "Lists",
+  ]);
   expect(pixel(lists, lists.width - 2)).toEqual([255, 0, 0, 255]);
-  expect(pixel(till, till.width - 2)).toEqual([0, 0, 255, 255]);
   expect(lists.getBoundingClientRect().width / lists.getBoundingClientRect().height).toBeCloseTo(
     1,
-    2,
-  );
-  expect(till.getBoundingClientRect().width / till.getBoundingClientRect().height).toBeCloseTo(
-    4 / 3,
     2,
   );
   const frame = root.querySelector<HTMLElement>("[data-test=frame]")!;

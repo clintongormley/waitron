@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { tilePrice } from "./customer-menu-presentation.js";
 import {
   HOME_COLUMN_RANGE,
   HOME_DISPLAY_DEFAULTS,
@@ -21,6 +22,30 @@ declare global {
     ): Record<string, string>;
   }
 }
+
+describe("tile price", () => {
+  it("uses numeric extremes of the menu's variant prices, excluding the parent price", () => {
+    expect(tilePrice("40.00", [{ unitPrice: "10.00" }, { unitPrice: "2.50" }], "", "en-IE")).toBe(
+      "€2.50–€10.00",
+    );
+  });
+
+  it("shows one price when all variants cost the same", () => {
+    expect(tilePrice("4.00", [{ unitPrice: "3.00" }, { unitPrice: "3.00" }], "", "en-IE")).toBe(
+      "€3.00",
+    );
+  });
+
+  it("uses the base price without a unit for Each", () => {
+    expect(tilePrice("5.50", [], "", "en-IE")).toBe("€5.50");
+  });
+
+  it("appends a measured unit once, after the localised range", () => {
+    expect(tilePrice("4.00", [{ unitPrice: "12.50" }, { unitPrice: "85.00" }], "kg", "es-ES")).toBe(
+      "12,50\u00a0€–85,00\u00a0€/kg",
+    );
+  });
+});
 
 describe("display settings", () => {
   it("defaults a handheld to three columns and a till to six, colours, Device Home Page first", () => {
@@ -74,18 +99,13 @@ describe("arrangeHome", () => {
 });
 
 describe("tileFill", () => {
-  it("paints a stored colour in Colours mode and never shows an image there", () => {
-    expect(tileFill("colours", "a.webp", "#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
-    expect(tileFill("colours", "a.webp", null)).toEqual({ kind: "neutral" });
-  });
-  it("shows the image in Thumbnails mode, else the colour, else neutral", () => {
-    expect(tileFill("thumbnails", "a.webp", "#256bb1")).toEqual({ kind: "image", image: "a.webp" });
-    expect(tileFill("thumbnails", null, "#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
-    expect(tileFill("thumbnails", "", undefined)).toEqual({ kind: "neutral" });
+  it("paints a stored colour and otherwise uses the neutral fill", () => {
+    expect(tileFill("#256bb1")).toEqual({ kind: "color", color: "#256bb1" });
+    expect(tileFill(null)).toEqual({ kind: "neutral" });
   });
   it("draws a malformed colour neutral, because it would land in a style attribute", () => {
     for (const color of ["red", "#B12525", "#b12", "x;background:url(y)"])
-      expect(tileFill("colours", null, color)).toEqual({ kind: "neutral" });
+      expect(tileFill(color)).toEqual({ kind: "neutral" });
   });
 });
 

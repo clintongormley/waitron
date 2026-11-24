@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
-import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -11,16 +12,13 @@ afterEach(cleanupWidgets);
 
 const cases = [360, 390].flatMap((width) =>
   [2, 3].flatMap((columns) =>
-    (["colours", "thumbnails"] as const).flatMap((tiles) =>
-      (["light", "dark"] as const).map((theme) => ({
-        width,
-        columns,
-        tiles,
-        theme,
-        handheld: true,
-        wantedTracks: columns,
-      })),
-    ),
+    (["light", "dark"] as const).map((theme) => ({
+      width,
+      columns,
+      theme,
+      handheld: true,
+      wantedTracks: columns,
+    })),
   ),
 );
 
@@ -28,7 +26,6 @@ cases.push(
   ...(["light", "dark"] as const).map((theme) => ({
     width: 1024,
     columns: 4,
-    tiles: "colours" as const,
     theme,
     handheld: false,
     wantedTracks: 4,
@@ -39,7 +36,6 @@ cases.push(
   ...[360, 390].map((width) => ({
     width,
     columns: 6,
-    tiles: "colours" as const,
     theme: "light" as const,
     handheld: false,
     wantedTracks: 2,
@@ -47,8 +43,8 @@ cases.push(
 );
 
 it.each(cases)(
-  "fits $wantedTracks columns at $width px ($tiles, $theme, handheld=$handheld)",
-  async ({ width, columns, tiles, theme, handheld, wantedTracks }) => {
+  "fits $wantedTracks columns at $width px ($theme, handheld=$handheld)",
+  async ({ width, columns, theme, handheld, wantedTracks }) => {
     const locale = currentLocale();
     setLocale("es-ES");
     try {
@@ -56,7 +52,8 @@ it.each(cases)(
       const products: TillProduct[] = [
         "Pollo asado con patatas y verduras",
         "Extraordinariamenteextralargapalabra",
-        "Zumo de naranja recién exprimido",
+        // Measure centring on words that wrap without a browser-inserted hyphen.
+        "Zumo de naranja recién hecho",
       ].map((name, index) => ({
         id: `p${index}`,
         productId: `p${index}`,
@@ -69,7 +66,7 @@ it.each(cases)(
         unit: {
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          id: "unit-each",
+          id: EACH_UNIT_ID,
           name: { es: "unidad" },
           abbreviation: { es: "ud" },
           precision: 0,
@@ -79,8 +76,26 @@ it.each(cases)(
         vatClass: "reduced",
         category: null,
         allergens: null,
-        image: "photo.svg",
         color: "#256bb1",
+      }));
+      const measured = products[2]!;
+      measured.unit = {
+        id: "unit-kg",
+        staffName: "Kilogram",
+        staffAbbreviation: "kg",
+        name: { es: "kg" },
+        abbreviation: { es: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      };
+      measured.allergens = { milk: {} };
+      measured.variants = ["12.50", "85.00"].map((unitPrice, index) => ({
+        ...sellingValuesOf(measured),
+        id: `v${index}`,
+        name: `Size ${index}`,
+        unitPrice,
+        unitPriceDifference: null,
+        available: true,
       }));
       const members = products.map((product) => ({
         kind: "product" as const,
@@ -111,7 +126,7 @@ it.each(cases)(
         },
         home: {
           shortcuts: [],
-          handheld: { columns, tiles, order: "menu_first" },
+          handheld: { ...HOME_DISPLAY_DEFAULTS.handheld, columns, order: "menu_first" },
           till: { ...HOME_DISPLAY_DEFAULTS.till, columns },
         },
       };
@@ -130,21 +145,13 @@ it.each(cases)(
       host.style.paddingInline = "calc(var(--wt-space-5) + var(--wt-space-4))";
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
-      for (const image of grid.querySelectorAll<HTMLImageElement>("img")) {
-        image.src =
-          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'/%3E";
-        await image.decode();
-      }
       expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(wantedTracks);
       expect(grid.querySelectorAll(".tile")).toHaveLength(4);
-      expect(grid.querySelectorAll("img")).toHaveLength(tiles === "thumbnails" ? 3 : 0);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
         const box = tile.getBoundingClientRect();
         expect(box.width).toBeGreaterThanOrEqual(handheld ? 44 : 104);
         expect(box.height).toBeGreaterThanOrEqual(44);
-        for (const content of tile.querySelectorAll<HTMLElement>(
-          ".name, .price, .kind, wt-icon, img",
-        )) {
+        for (const content of tile.querySelectorAll<HTMLElement>(".name, .price, .kind, wt-icon")) {
           const bounds = content.getBoundingClientRect();
           expect(bounds.left).toBeGreaterThanOrEqual(box.left);
           expect(bounds.right).toBeLessThanOrEqual(box.right);
@@ -167,6 +174,22 @@ it.each(cases)(
           }
         }
       }
+      const measuredName = [...grid.querySelectorAll(".name")].find(
+        (name) => name.textContent === measured.name,
+      )!;
+      const measuredTile = measuredName.closest(".tile")!.getBoundingClientRect();
+      const words = document.createRange();
+      words.selectNodeContents(measuredName);
+      const lines = [...words.getClientRects()];
+      if (handheld && width === 390 && columns === 3) expect(lines.length).toBeGreaterThan(1);
+      for (const line of lines) {
+        expect(
+          Math.abs(line.left + line.width / 2 - (measuredTile.left + measuredTile.width / 2)),
+        ).toBeLessThan(1);
+      }
+      expect([...grid.querySelectorAll(".price")].map((price) => price.textContent)).toContain(
+        "12,50\u00a0€–85,00\u00a0€/kg",
+      );
       expect(grid.querySelector('[data-kind="section"] wt-icon')).not.toBeNull();
       if (width === 360 && columns === 3) await expectNoA11yViolations(host);
     } finally {

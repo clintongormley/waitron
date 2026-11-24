@@ -1,7 +1,6 @@
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
-import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import {
   LitElement,
@@ -23,7 +22,6 @@ import {
   Gestures,
 } from "@waitron/ui";
 import "./product-info.js";
-import { nutritionDietLabels } from "../diet-labels.js";
 import {
   centsToDecimal,
   copiesListing,
@@ -51,7 +49,7 @@ import {
   type HomeIndex,
   type SectionStep,
 } from "@waitron/shared";
-import type { DocumentMember, DocumentTile, HomeDisplay, HomeTileMode } from "@waitron/shared";
+import type { DocumentMember, DocumentTile, HomeDisplay } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -61,7 +59,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
-import { productName, unitName } from "./product-name.js";
+import { productName, productTilePrice } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import {
   draftMenuDishes,
@@ -122,10 +120,6 @@ function indexMenu(
     (id) => offers.get(id),
     (id) => copies.some(({ copy }) => copy.menuId === id),
   );
-}
-
-function thumb(image: string): TemplateResult {
-  return html`<img class="thumb" src=${liveMediaImage(image, "till")} alt="" />`;
 }
 
 const paints = new Map<string, string>();
@@ -286,12 +280,8 @@ export class TillMenuBrowser extends LitElement {
         --home-tile-min: calc(var(--wt-tap-min) * 1.5);
       }
 
-      .thumb {
-        display: block;
-        width: 100%;
-        aspect-ratio: 4 / 3;
-        object-fit: cover;
-        border-radius: var(--wt-radius-sm);
+      .section-kind {
+        ${visuallyHiddenStyles}
       }
 
       .tile,
@@ -310,15 +300,6 @@ export class TillMenuBrowser extends LitElement {
         padding: var(--wt-space-2);
       }
 
-      .nutrition-mark {
-        position: absolute;
-        inset-block-start: var(--wt-space-1);
-        inset-inline-end: var(--wt-space-1);
-      }
-      .tile[data-nutrition] .name {
-        padding-inline-end: var(--wt-space-5);
-      }
-
       .in-order {
         position: absolute;
         inset-block-start: var(--wt-space-1);
@@ -335,9 +316,8 @@ export class TillMenuBrowser extends LitElement {
         text-align: center;
       }
       /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
-         never changes size when its first dish is added and its name stays centred. On a photo the
-         badge covers the photo's corner instead. */
-      .tile[data-counted]:not(:has(.thumb))::part(button) {
+       never changes size when its first dish is added and its name stays centred. */
+      .tile[data-counted]::part(button) {
         padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
       }
       .in-order-words {
@@ -354,7 +334,7 @@ export class TillMenuBrowser extends LitElement {
       }
 
       /* A centred column item is as wide as its longest word, so without this a word wider than
-         the tile would spill out of it instead of breaking. */
+       the tile would spill out of it instead of breaking. */
       .label > * {
         max-width: 100%;
       }
@@ -366,8 +346,8 @@ export class TillMenuBrowser extends LitElement {
       .name[lang] {
         hyphens: auto;
         /* No hyphen in a word under 8 letters, so a short word that fits a line stays whole
-           (menu-browser.home-columns.test.ts); a longer one can still be hyphenated where it would
-           fit on the next line. */
+         (menu-browser.home-columns.test.ts); a longer one can still be hyphenated where it would
+         fit on the next line. */
         hyphenate-limit-chars: 8 auto auto;
       }
 
@@ -406,7 +386,7 @@ export class TillMenuBrowser extends LitElement {
       }
 
       /* Inset shadows take no layout width, so the labels stay centred. The text-coloured line
-         under the stripe keeps a stripe close to the tile's own fill visible. */
+       under the stripe keeps a stripe close to the tile's own fill visible. */
       .tile[data-sold-out][data-painted]::part(button) {
         box-shadow:
           inset var(--wt-space-1) 0 0 var(--tile-fill),
@@ -989,13 +969,12 @@ export class TillMenuBrowser extends LitElement {
     return [...found, ...search(customerNamed).filter((result) => !shown.has(result))];
   }
 
-  #resultTile(result: SearchResult, mode: HomeTileMode, menuId: string): TemplateResult {
+  #resultTile(result: SearchResult, menuId: string): TemplateResult {
     if (result.kind === "product")
-      return this.#productButton(result.product, mode, () => this.#pick(result.product));
+      return this.#productButton(result.product, () => this.#pick(result.product));
     if (result.kind === "set_menu") return this.#setMenuTile(result.row);
     return this.#sectionButton(
       result.section,
-      mode,
       result.disabled
         ? undefined
         : () => {
@@ -1017,14 +996,11 @@ export class TillMenuBrowser extends LitElement {
     );
   }
 
-  #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
-    const price = `${formatMoney(product.unitPrice, currentLocale())}/${unitName(product)}`;
+  #productButton(product: TillProduct, onTap: () => void): TemplateResult {
+    const price = productTilePrice(product);
     const sellable = hasSomethingToSell(product);
-    const fill = tileFill(mode, product.image, product.color);
+    const fill = tileFill(product.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
-    const marked =
-      Object.keys(product.allergens ?? {}).length > 0 ||
-      nutritionDietLabels(product.diet, product.dietaryDeclarations).length > 0;
     const inOrder = this.inOrder?.get(product.id) ?? 0;
     return html`<wt-button
       class="tile"
@@ -1032,7 +1008,6 @@ export class TillMenuBrowser extends LitElement {
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
       ?data-sold-out=${!sellable}
-      ?data-nutrition=${marked}
       ?data-counted=${this.inOrder !== undefined}
       ?data-in-order=${inOrder > 0}
       @contextmenu=${(event: Event) => event.preventDefault()}
@@ -1054,14 +1029,12 @@ export class TillMenuBrowser extends LitElement {
         }
       }}
     >
-      ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
       ${
         inOrder > 0
           ? html`<span class="in-order" data-in-order-count aria-hidden="true">${inOrder}</span>`
           : nothing
       }
       <span class="label">
-        ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name" lang=${currentContentLanguages().defaultLanguage}
           >${productName(product)}</span
         >
@@ -1079,8 +1052,8 @@ export class TillMenuBrowser extends LitElement {
   }
 
   /** Without `onTap`, the section is one the diet filter emptied: greyed and not openable. */
-  #sectionButton(section: SectionNode, mode: HomeTileMode, onTap?: () => void): TemplateResult {
-    const fill = tileFill(mode, section.image, section.color);
+  #sectionButton(section: SectionNode, onTap?: () => void): TemplateResult {
+    const fill = tileFill(section.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     const filtered = onTap === undefined;
     return html`<wt-button
@@ -1093,9 +1066,10 @@ export class TillMenuBrowser extends LitElement {
       @click=${onTap ?? nothing}
     >
       <span class="label">
-        ${fill.kind === "image" ? thumb(fill.image) : html`<wt-icon name="menu-section"></wt-icon>`}
+        <wt-icon name="menu-section" aria-hidden="true"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>
-        <span class="kind">${t(filtered ? "menu.filtered_out" : "menu.section")}</span>
+        <span class="section-kind">${t("menu.section")}</span>
+        ${filtered ? html`<span class="kind">${t("menu.filtered_out")}</span>` : nothing}
       </span>
     </wt-button>`;
   }
@@ -1107,7 +1081,6 @@ export class TillMenuBrowser extends LitElement {
     ref: DocumentTile | DocumentMember,
     opens: SectionStep[],
     index: MenuIndex,
-    mode: HomeTileMode,
   ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "set_menu") {
@@ -1118,26 +1091,25 @@ export class TillMenuBrowser extends LitElement {
       const id = ref.sectionId;
       const own = "members" in ref ? ref : undefined;
       if (index.sections.has(id))
-        return this.#sectionButton(own ?? openedSection(id, index)!, mode, () => this.#open(opens));
+        return this.#sectionButton(own ?? openedSection(id, index)!, () => this.#open(opens));
       const unfiltered = this.#unfilteredIndex(this.menu!);
       return unfiltered.sections.has(id)
-        ? this.#sectionButton(own ?? openedSection(id, unfiltered)!, mode)
+        ? this.#sectionButton(own ?? openedSection(id, unfiltered)!)
         : nothing;
     }
     const product = index.products.get(ref.productId);
     return product === undefined
       ? nothing
-      : this.#productButton(product, mode, () => this.#pick(product));
+      : this.#productButton(product, () => this.#pick(product));
   }
 
   #listTiles(
     list: readonly DocumentMember[],
     path: SectionStep[],
     index: MenuIndex,
-    mode: HomeTileMode,
   ): (TemplateResult | typeof nothing)[] {
     const opens = tilePaths(list, path);
-    return list.map((member, place) => this.#tile(member, opens[place]!, index, mode));
+    return list.map((member, place) => this.#tile(member, opens[place]!, index));
   }
 
   #home(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
@@ -1146,14 +1118,12 @@ export class TillMenuBrowser extends LitElement {
         tile,
         tile.kind === "section" ? [{ sectionId: tile.sectionId, copy: 0 }] : [],
         index,
-        display.tiles,
       ),
     );
     const members = this.#listTiles(
       shownMembers(menu.structure.members, this.setMenuCopies.length > 0),
       [],
       index,
-      display.tiles,
     );
     if (this.#heldMenuFolders().length > 0) members.push(this.#setMenuTile(undefined, true));
     const { blocks, divider } = arrangeHome(
@@ -1209,7 +1179,6 @@ export class TillMenuBrowser extends LitElement {
           shownMembers(current.members, this.setMenuCopies.length > 0),
           this.path,
           index,
-          display.tiles,
         ),
         display,
       )}
@@ -1314,7 +1283,7 @@ export class TillMenuBrowser extends LitElement {
       .filter((other) => other.found.length > 0);
     const tiles = (results: SearchResult[], menuId: string) =>
       this.#grid(
-        results.map((result) => this.#resultTile(result, display.tiles, menuId)),
+        results.map((result) => this.#resultTile(result, menuId)),
         display,
       );
     const empty = (text: string) => html`<p class="empty">${text}</p>`;

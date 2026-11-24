@@ -568,12 +568,13 @@ fewer where a tile would be narrower than its minimum (`HOME_GRID_COLUMNS`). Han
 `--wt-tap-min * 1.5`; till tiles keep twice `--wt-tap-min` plus `--wt-space-4`. Handheld settings
 offer 2–3 columns and till settings 4–10. The handheld grid and its preview show three columns at
 360px and 390px. The handheld preview uses `--wt-space-4` side insets to fit inside the dashboard's
-own phone-width padding; narrower grids keep the same reading order. In Colours
-mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
-4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
-Colours mode, or neutral. A section tile always has a second line under its name — "Section", or
-on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
-differ without colour; its image, when shown, takes the folder icon's place.
+own phone-width padding; narrower grids keep the same reading order. The till and preview use
+painted or neutral tiles with centred names. The owner removed tile photos and the nutrition mark
+on 24 November (“i think we drop the photos, and the icon”). You can still use the till's filter or
+long-press a product for its information. A folder identifies a section and the accessible name
+includes "Section". A section emptied by a diet filter keeps its notice. A product tile shows its
+menu price or the range of its variant prices, including sold-out variants, with one amount when
+the prices are equal. It appends the unit once for units other than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
 The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the
@@ -1179,9 +1180,8 @@ starts, quiet and disabled exactly when the draft bar's is; Send all never shrin
 words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
 number at the tile's corner with the words for screen readers; side by side the map is not passed.
-The number takes no room of its own: on a photo it covers the photo's corner, and a tile without a
-photo keeps a band for it above the name whenever the map is passed, so adding a dish changes no
-tile's size and the name stays centred and wraps as it would with no number drawn.
+A tile reserves space above the name whenever the map is passed. Adding a dish keeps the tile's
+size and the name's centred wrapping.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, one entry per shown name in first-appearance order) and
 `newOrderByProduct` (the tiles), where a whole-unit line counts by quantity and a weighed or
@@ -3719,9 +3719,8 @@ added on a line that already has one passes.
 To bring an off-centre dish into its thumbnails, open **Edit photo**, then **Adjust framing**.
 The second window owns a separate draft. Drag inside the square, or focus it and use the arrow
 keys to move the focal point by 1% of the source; Shift changes the step to 10%. Zoom runs from
-100% to 400% and redraws during the drag. **Lists** shows the square crop and **Till buttons**
-shows its 4:3 counterpart. Both use the same focal point and zoom. Reset returns to the centre at
-100%; Done accepts that frame into Edit photo, even when you changed nothing. Escape or a
+100% to 400% and redraws during the drag. **Lists** shows the square crop. Reset returns to the
+centre at 100%. Done accepts that frame into Edit photo, even when you changed nothing. Escape or a
 backdrop click discards only the second window's unaccepted changes.
 
 Edit photo shows the framed picture and the upload's basename, falling back to the stored
@@ -7343,12 +7342,9 @@ for the hierarchy's separate immediate cleanup and retained-history limits.
 
 ### Nutrition at the till
 
-A product button uses the shared `allergies` symbol in its top trailing corner when it has declared
-allergens or dietary labels. The name leaves room for the mark. The mark is decorative; a short
-press on any part of the button selects the dish. A held pointer press opens the product information
-window without selecting it. The window shows the published description and current product allergens
-and dietary labels, offers Close and Add to
-order, and remains available on products with no mark.
+A short press anywhere on a product button selects the dish. A held pointer press opens the product
+information window without selecting it. The window shows the published description, current allergens
+and dietary labels, and offers Close and Add to order.
 
 Counter and table-order lines place the dish’s allergen and positive diet icons after its name.
 Each icon carries the localized name, including cereal or nut kinds. A dish with unreviewed allergens
