@@ -265,6 +265,8 @@ export async function checkUpgradeSale(
     await server.close();
   }
   const after = await checkUpgradeData(config, env);
+  // The sale that follows an identity change starts its chain, so the check reads that record alone.
+  const expectedRecords = before.identityChange === "pending" ? 1 : before.fiscalRecords + 1;
   const store = await openVenueDatabase(config.venueDir);
   try {
     const [sale] = await store.venue.select().from(sales).where(eq(sales.workingOrderId, orderId));
