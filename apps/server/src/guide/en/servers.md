@@ -159,8 +159,11 @@ box; this does not replay orders, stock changes, printing or drawer openings. Do
 still need its data.
 
 Switch the old box on and keep it connected: it returns its invoice records and working hours by
-itself. Until they arrive, its row in **System → Servers** on the new main box says **Waiting for
-the old main box to return its invoice records and working hours**, and the venue cannot be handed over again or that box removed.
+itself. It also sends invoice records of earlier main boxes that the new main box does not have
+yet. Until its own records arrive, its row in **System → Servers** on the new main box says
+**Waiting for the old main box to return its invoice records and working hours**, and the venue
+cannot be handed over again or that box removed. The old box's own page can keep saying it is
+sending after that row stops waiting; leave it switched on.
 
 A person added on the old box after the copy comes back disabled, with their hours but no email
 address: add their first and last names and email address with **Edit…**, then
