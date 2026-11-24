@@ -1062,10 +1062,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the rule. [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
-- **A production box opens a new installation for another producer only at the start of a release
-  the checked upgrade installed, whose note names that producer, once that start's time is confirmed; every
-  other start whose chain holds a record under another producer refuses `sif.producer_changed`**
-  (owner, 2026-11-06), so a stray setting opens nothing. The publish job refuses a new tax number
+- **A production box that keeps its database opens a new installation for another producer only at the
+  start of a release the checked upgrade installed, whose note names that producer (owner,
+  2026-11-06), once that start's time is confirmed (owner, 2026-11-22); every other full start, neither a
+  mirror's nor fenced, whose open chain's latest record names another producer refuses
+  `sif.producer_changed`**, so a stray setting opens nothing. A restore, a promotion or a conflict switch opens its own. The publish job refuses a new tax number
   unless `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Guards:
   `apps/server/src/boot.producer-change.test.ts`, `apps/server/src/boot.identity-change.test.ts`,
   `packages/fiscal-verifactu/src/identity-change.test.ts`,
@@ -1088,8 +1089,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
   person confirmed on that page, while the box has not rebooted, the server has not restarted and
   its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's).
-  A producer change takes the box's current minute on a weaker confirmation: the time service, or any
-  person the till or Box status lets confirm the time, even with no second clock (owner, 2026-11-22).
+  A producer change takes the box's current minute once the time service says it is synchronised, or
+  on a weaker confirmation: any person the till or Box status lets confirm the time (owner,
+  2026-11-22), even with no second clock (A993 decision 3, the plan's).
   A minute whose name is already in a history the box reads is not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction. On a development box (`WAITRON_ENV=dev`) a preproduction first setup on the setup page takes the box's own clock as its second clock (owner, 2026-11-17); the person still confirms it there.

@@ -1129,18 +1129,19 @@ replacement and the invoice it replaces are read whatever their date. The purcha
 covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
 that period's return changes with it.
 
-### A993: a change of producer opens a new installation (owner and watcher, 2026-11-06 to 2026-11-22)
+### A993: a change of producer opens a new installation (owner and watcher, 2026-11-06 to 2026-11-24)
 
 The owner's constraint (2026-11-06, about 18:13): a start opens a new installation for a producer
 difference only when the upgrade's own marker names that same new producer; otherwise it keeps
 refusing. The choices below are in the
 [plan](../superpowers/plans/2026-11-11-a993-identity-change.md), by its decision numbers. The owner
 said "build it" (2026-11-21) and "yes" to who may open it (3) and to the four messages (7)
-(2026-11-22 12:52); the watcher cleared the plan and took 12.
+(2026-11-22 12:52); the watcher cleared the plan, took 12, and cleared carrying a waiting note to a
+later release (6, 2026-11-24).
 
 - **1. Only the producer opens one, and no column stores it.** A chain's producer is its latest
   record's. A change of the two-character code or of the fiscal mode opens nothing, and a preproduction box changes producer on the same chain (the owner
-  does not mind: such a box can be reset).
+  did not mind this before A993, since such a box can be reset; the plan keeps it).
 - **2. No check when a record is written, and no guard for an old release started by hand.** Between
   the opening and its first record a start under any producer passes. The owner, 2026-11-22: "there
   should be no releases started by hand, so no need for a guard".
@@ -1149,7 +1150,7 @@ said "build it" (2026-11-21) and "yes" to who may open it (3) and to the four me
 - **4. No stuck page and no new clock route:** the start keeps waiting until the opening commits.
 - **7. Four waiting messages of its own;** the upgrade's report has none.
 - **12. The upgrade's copy is told its time is synchronised,** so a box whose time service is not
-  still upgrades. Its test sale no longer proves that the new version can get through its own wait
+  synchronised can still upgrade. Its test sale no longer proves that the new version can get through its own wait
   for the time; an accepted upgrade has no Restore.
 
 ### A445: a free item on a ticket with two or more VAT rates takes its share of the price paid (owner and watcher, 2026-11-23)
@@ -1670,7 +1671,7 @@ built without a release version refuses earlier, with `server.unreleased_build`,
 cannot be built without them; a partly set or malformed value refuses in every environment; and a production start
 whose open chain was made under another tax number refuses (`sif.producer_changed`) unless the
 checked upgrade's note names the change, and then opens a new installation
-([decisions](#a993-a-change-of-producer-opens-a-new-installation-owner-and-watcher-2026-11-06-to-2026-11-22)).
+([decisions](#a993-a-change-of-producer-opens-a-new-installation-owner-and-watcher-2026-11-06-to-2026-11-24)).
 The three secrets hold placeholder values for now (owner, 2026-11-08; `gh secret list` showed all three set that day); replace them, with
 `gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`,
 before any box starts in production, because a later change opens a new fiscal installation on each production box.

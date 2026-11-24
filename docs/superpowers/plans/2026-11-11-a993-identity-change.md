@@ -1087,7 +1087,8 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
   kept after a failed check. Run `waitron.sh restore` to put the selling version back, then try
   the upgrade again."
   - **As built 2026-11-24:** the message says "so it cannot be kept.", without "after a failed
-    check": Keep is also refused after a power cut stopped the checks, when none had failed.
+    check": Keep is also refused after a power cut stopped the checks, when none had failed. It says
+    "the previous version", not "the selling version": one waiting to open its installation sells nothing.
 - Tests: `candidate.test.mjs`, `transaction.test.mjs`, `host.test.mjs`.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1120,7 +1121,7 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
     attempt directory, which a finished attempt deletes. `waitron.sh` captures only the helper's
     stdout (`cmd_checked_install`), so a manual install shows the line on its own stderr and an
     automatic one passes it to whatever ran `install-offered-upgrade`; no unit in `deploy/box` runs
-    that today. With the option, a host that sends nothing for a second counts as unavailable, since
+    that today. With the option, a host that has not finished its line within a second counts as unavailable, since
     the copy stops waiting after two.
 - Modify `scripts/box/upgrades/candidate.mjs:72`: the stopped checks' relay passes
   `answerSynchronised: true`. Nothing else starts a relay (`git grep -n clockStatusRelay`: only

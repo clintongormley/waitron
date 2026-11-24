@@ -305,8 +305,8 @@ used for Restore. A leftover trial folder from an interrupted attempt is removed
 
 If a final stopped-copy check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
 `sudo bash waitron.sh restore` to return to the stopped copy, or `sudo bash waitron.sh keep`
-to start the candidate despite the failed checks. Keep refuses an upgrade that changes the software
-producer, and still uses the ordinary boot guards.
+to start the candidate despite the failed checks. Keep refuses an upgrade to a numbered release
+that has a change of software producer to make, and still uses the ordinary boot guards.
 Restore puts back the copied data, Compose configuration and old images; the host clock
 service, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while

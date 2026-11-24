@@ -377,7 +377,9 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
   }
   if (verb === "apply" || automatic) {
     if (current)
-      throw new Error("resolve the upgrade attempt with restore or keep before installing");
+      throw new Error(
+        "resolve the upgrade attempt with restore or keep before installing (only restore if the producer changes)",
+      );
     const [installedVersion, target, trustDirectory] = automatic ? prepare.splice(0, 3) : [];
     if (prepare.length === 0) throw new Error("apply requires the candidate preparation command");
     await fs.mkdir(`${boxDirectory}.upgrades`, { recursive: true, mode: 0o700 });

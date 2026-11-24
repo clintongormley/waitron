@@ -4533,7 +4533,8 @@ Who decided: a producer difference opens an installation only when the upgrade's
 (owner, 2026-11-06); any person who confirms the time on a till or Box status may open it, two
 devices alone may not, and the four waiting messages (owner, 2026-11-22); single boxes first, and no
 guard for a release started by hand (owner, 2026-11-22). That the upgrade's copy is told its time is
-synchronised, and the plan as a whole, are the watcher's (2026-11-22).
+synchronised, and the plan as a whole, are the watcher's (2026-11-22), and so is carrying a waiting
+note forward (2026-11-24).
 
 The confirmation is weaker than a restore's or a promotion's: it needs no setup password, recovery
 key or `node.manage` sign-in; **The box** on a till, and Box status's confirmations, carry no

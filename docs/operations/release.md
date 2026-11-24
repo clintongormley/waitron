@@ -393,21 +393,23 @@ all of `--version`, `--place` and `--date`.
 ## When the producer or the system code changes
 
 A release that changes the producer, or the two-character code that names the system, says so in
-the first line of its pull request. Nothing opens a new installation for a change of the code.
+the first line of its pull request. Nothing opens a new installation for a change of the code, so no such release is cut.
 
 To change the producer's tax number:
 
-1. Set the three repository secrets `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and
-   `WAITRON_PRODUCER_ADDRESS`.
+1. Change the values in `~/waitron-campaign-shared/private/producer-identity.env`, then set the three
+   repository secrets `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and
+   `WAITRON_PRODUCER_ADDRESS` from it.
 2. Set the repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` to the new tax number. Without it
    the publish job refuses the new number.
 3. Cut the release and install it on each box as an upgrade (`waitron.sh install v<version>`). A
-   production box given the new number any other way refuses `sif.producer_changed`.
+   production box whose open chain's latest record names the old number refuses
+   `sif.producer_changed` when given the new one any other way.
 
 A production box opens its new installation, with a new chain and new invoice series, at the new release's
 start. If its time service is not synchronised, the box takes no payment until the service
 synchronises or a person confirms the time on a till or on Box status; two devices agreeing with the
-box are not enough. A failed check leaves only Restore, not Keep.
+box are not enough. A manual upgrade held by a failed check after the stop offers only Restore, not Keep.
 
 `sif.identity_change_blocked` in the bell means that the time is confirmed and the opening still
 fails. The box keeps trying and takes no payment; press **Restart the box** on Box status. Nothing
