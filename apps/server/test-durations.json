@@ -158,7 +158,6 @@
   "src/backup-verification.permission.test.ts": 18.9,
   "src/backup-verification.settings.test.ts": 10.7,
   "src/backup-verification.test.ts": 31.8,
-  "src/bill-allocation.test.ts": 0.7,
   "src/bill-editing.add-abandon.test.ts": 3.3,
   "src/bill-editing.adjustments.test.ts": 9.1,
   "src/bill-editing.bill-moves.test.ts": 3.9,
