@@ -1476,8 +1476,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Orders and Sales can run the receipt helper, invoice selection and Find a bill search and date
   suites independently. The Find a bill routes and readers remain in the server. When changing
   the parser, also run the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
-  and `bill-advances` suites to check the HTTP routes and bill and transaction data. Run `orders-api`
-  when changing the shared search limit to check the Orders API's search and table filters.
+  and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
+  the shared search limit, also run the server's `orders-api`, `tax-office-list`, `bill-lookup-api`,
+  `report-api.returned-invoices` and `bill-payments` suites for their search-length cases.
   Further slices move server callers with the shared code and error declarations they use.
   [Receipt helpers](superpowers/plans/2026-11-21-a1308-orders-sales-first-shared-piece.md)
   [Invoice selection](superpowers/plans/2026-11-23-a1308-invoice-selection.md)
