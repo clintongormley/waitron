@@ -59,7 +59,50 @@ function selectedRecords(select: string | readonly ChainRange[]) {
     where node_id = json_extract(chosen.value, '$.nodeId')
       and sif_id = json_extract(chosen.value, '$.sifId')
       and secuencia > json_extract(chosen.value, '$.after'))`;
-  return { where, order: sql`node_id, sif_id, secuencia` };
+  return { where, order: sql`node_id, secuencia` };
+}
+
+/**
+ * Records in the given box-then-position order, except that a correction comes after the record
+ * it corrects when that record is among them. A correction may name a record of a box its writer
+ * took over from, and the receiver checks that reference as each record goes in.
+ */
+function correctionsAfterTargets(records: ReturnRow[]): ReturnRow[] {
+  const byId = new Map(records.map((row) => [row.id, row]));
+  const before = new Map(
+    records.map((row, index) => {
+      const previous = records[index - 1];
+      return [
+        row,
+        [
+          previous?.node_id === row.node_id ? previous : undefined,
+          byId.get(row.corrects_registro_id),
+        ].filter((dependency) => dependency !== undefined),
+      ];
+    }),
+  );
+  const placed = new Set<ReturnRow>();
+  const waiting = new Set<ReturnRow>();
+  const ordered: ReturnRow[] = [];
+  for (const start of records) {
+    const stack = placed.has(start) ? [] : [start];
+    while (stack.length) {
+      const row = stack.at(-1)!;
+      waiting.add(row);
+      const dependencies = before.get(row)!.filter((dependency) => !placed.has(dependency));
+      if (dependencies.some((dependency) => waiting.has(dependency)))
+        throw new AppError("fiscal.return_invalid", { reason: "correction cycle" });
+      if (dependencies.length) {
+        stack.push(dependencies[0]!);
+        continue;
+      }
+      stack.pop();
+      waiting.delete(row);
+      placed.add(row);
+      ordered.push(row);
+    }
+  }
+  return ordered;
 }
 
 export async function readReturnedOriginals(
@@ -85,8 +128,9 @@ export async function readReturnedOriginals(
       on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
     where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
-  const records = tx.all<ReturnRow>(sql`
+  const read = tx.all<ReturnRow>(sql`
     select * from verifactu_records where ${chosen.where} order by ${chosen.order}`);
+  const records = typeof select === "string" ? read : correctionsAfterTargets(read);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
     select device_id from verifactu_records where ${chosen.where}
@@ -273,6 +317,10 @@ export async function receiveReturnedOriginals(
 ): Promise<{ complete: boolean; refusal?: "fiscal.return_record_clash" }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
+  if (others && accepted.length)
+    throw new AppError("fiscal.return_invalid", {
+      reason: "accepted payment clash for another box's record",
+    });
   if (
     returned.refunds.some((row) => row.state !== "completed" && row.state !== "pending") ||
     returned.orders.some((row) => row.status !== "settled")
@@ -304,16 +352,19 @@ export async function receiveReturnedOriginals(
       throw new AppError("fiscal.return_clock_ahead", { recordAt, clockAt: now.toISOString() });
   }
   const allowed: ReturnRow[] = [];
+  const allowedIds = new Set<ReturnRow[string]>();
   const blocked = new Set<ReturnRow[string]>();
-  for (const record of [...returned.records].sort(
+  const withheld = new Set<ReturnRow[string]>();
+  const inBoxOrder = [...returned.records].sort(
     (a, b) =>
       (String(a.node_id) < String(b.node_id)
         ? -1
         : String(a.node_id) > String(b.node_id)
           ? 1
           : 0) || Number(a.secuencia) - Number(b.secuencia),
-  )) {
-    if (blocked.has(record.node_id)) continue;
+  );
+  for (const record of others ? correctionsAfterTargets(inBoxOrder) : inBoxOrder) {
+    if (blocked.has(record.node_id) || withheld.has(record.node_id)) continue;
     const own = held(tx, "verifactu_records", record.id);
     const [collision] = tx.all<ReturnRow>(sql`select * from verifactu_records where
       (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
@@ -328,7 +379,18 @@ export async function receiveReturnedOriginals(
         : undefined
       : collision;
     if (conflict) blocked.add(record.node_id);
-    else allowed.push(record);
+    else if (
+      others &&
+      record.corrects_registro_id !== null &&
+      !allowedIds.has(record.corrects_registro_id) &&
+      !held(tx, "verifactu_records", record.corrects_registro_id)
+    )
+      // Its box's later records wait with it; the batch then reads as incomplete.
+      withheld.add(record.node_id);
+    else {
+      allowed.push(record);
+      allowedIds.add(record.id);
+    }
   }
   const needed = new Set(allowed.map((row) => row.sale_id));
   function includeParent(id: ReturnRow[string]) {

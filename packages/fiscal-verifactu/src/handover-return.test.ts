@@ -1946,3 +1946,131 @@ it("counts an earlier box's batch complete when its records went in but a paymen
     { id: "earlier-payment", amount: 300 },
   ]);
 });
+
+/** Two earlier boxes, the one whose id sorts first having corrected the other's last record. */
+async function correctionOfAnEarlierBox(records = 1) {
+  const main = await seedNode(suite.db, "Main");
+  const sender = await seedNode(suite.db, "Sender");
+  const [corrector, corrected] = [await seedNode(suite.db, "One"), await seedNode(suite.db, "Two")]
+    .sort((a, b) => (a.nodeId < b.nodeId ? -1 : 1))
+    .map((node) => node!);
+  await suite.db.execute(sql`update verifactu_identities set numero_instalacion = 'corrector',
+    nif = (select nif from verifactu_identities where id = ${corrected!.sifId})
+    where id = ${corrector!.sifId}`);
+  await copyBase();
+  const targets = [];
+  for (let invoice = 1; invoice <= records; invoice++)
+    targets.push(await appendOriginal(corrected!, "Corrected", invoice));
+  const target = targets.at(-1)!;
+  await recordTakeover(suite.db, corrected!.nodeId, corrector!.nodeId);
+  const [identity] = suite.db.all<{ numero_instalacion: string }>(
+    sql`select numero_instalacion from verifactu_identities where id = ${corrector!.sifId}`,
+  );
+  const pending = altaFor(corrector!, target.saleId, records, records + 1);
+  pending.input.IDEmisorFactura = target.issuerTaxId;
+  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  pending.input.NumSerieFactura = `Corrected/${records}`;
+  pending.input.Subsanacion = "S";
+  await withTransaction(suite.db, (tx) =>
+    appendToChain(tx, corrector!.nodeId, { ...pending, correctsRegistroId: target.recordId }),
+  );
+  await checkFixture();
+  const [correction] = suite.db.all<{ id: string }>(
+    sql`select id from verifactu_records where corrects_registro_id = ${target.recordId}`,
+  );
+  const both = () =>
+    withTransaction(suite.db, (tx) =>
+      readOtherBoxesOriginals(tx, [
+        { nodeId: corrector!.nodeId, sifId: corrector!.sifId, after: 0 },
+        { nodeId: corrected!.nodeId, sifId: corrected!.sifId, after: 0 },
+      ]),
+    );
+  return { main, sender, corrected: corrected!, targets, correctionId: correction!.id, both };
+}
+
+function inBoxOrder(returned: Awaited<ReturnType<typeof readOtherBoxesOriginals>>) {
+  returned.records.sort(
+    (a, b) =>
+      (String(a.node_id) < String(b.node_id)
+        ? -1
+        : String(a.node_id) > String(b.node_id)
+          ? 1
+          : 0) || Number(a.secuencia) - Number(b.secuencia),
+  );
+  return returned;
+}
+
+it("takes a correction of another earlier box's record sent before that record in one batch", async () => {
+  const { main, sender, targets, correctionId, both } = await correctionOfAnEarlierBox();
+  const returned = inBoxOrder(await both());
+  expect(returned.records.map((row) => row.id)).toEqual([correctionId, targets[0]!.recordId]);
+
+  expect(await receiveOthers(sender.nodeId, returned, main.nodeId)).toEqual({ complete: true });
+  expect(heldRecordIds().sort()).toEqual([correctionId, targets[0]!.recordId].sort());
+});
+
+it("reads and batches a correction after the earlier box's record it corrects, across batches", async () => {
+  const { main, sender, corrected, targets, correctionId, both } =
+    await correctionOfAnEarlierBox(51);
+  const returned = await both();
+  const ids = returned.records.map((row) => row.id);
+  expect(ids.indexOf(correctionId)).toBeGreaterThan(ids.indexOf(targets.at(-1)!.recordId));
+  expect(
+    returned.records.filter((row) => row.node_id === corrected.nodeId).map((row) => row.secuencia),
+  ).toEqual(targets.map((_, index) => index + 1));
+
+  const batches = makeReturnedBatches(returned);
+  expect(batches.length).toBeGreaterThan(1);
+  expect(batches.flatMap((batch) => batch.records)).toEqual(returned.records);
+  for (const batch of batches)
+    expect(await receiveOthers(sender.nodeId, batch, main.nodeId)).toEqual({ complete: true });
+  expect(heldRecordIds()).toHaveLength(targets.length + 1);
+});
+
+it("holds back a correction whose earlier record's box clashes, without a database error", async () => {
+  const { main, sender, corrected, both } = await correctionOfAnEarlierBox();
+  const clashing = await readTail(corrected, 0);
+  clashing.records[0]!.id = "receiver-original";
+  clashing.records[0]!.sale_id = "receiver-sale";
+  clashing.sales[0]!.id = "receiver-sale";
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, corrected.nodeId, clashing, returnedAt),
+  );
+
+  expect(await receiveOthers(sender.nodeId, inBoxOrder(await both()), main.nodeId)).toEqual({
+    complete: false,
+    refusal: "fiscal.return_record_clash",
+  });
+  expect(heldRecordIds()).toEqual(["receiver-original"]);
+});
+
+it("refuses an accepted payment clash for another box's records", async () => {
+  const { main, sender, earlier } = await boxesWithAnEarlierOne();
+  await appendOriginal(earlier, "Earlier", 1);
+  const tail = await readTail(earlier, 0);
+
+  await expect(
+    withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, sender.nodeId, tail, returnedAt, ["a-fingerprint"], {
+        destinationNodeId: main.nodeId,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "accepted payment clash for another box's record" },
+  });
+  expect(heldRecordIds()).toEqual([]);
+});
+
+it("refuses records that correct each other rather than looping", async () => {
+  const { main, sender, targets, correctionId, both } = await correctionOfAnEarlierBox();
+  const returned = await both();
+  returned.records.find((row) => row.id === targets[0]!.recordId)!.corrects_registro_id =
+    correctionId;
+
+  await expect(receiveOthers(sender.nodeId, returned, main.nodeId)).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "correction cycle" },
+  });
+  expect(heldRecordIds()).toEqual([]);
+});
