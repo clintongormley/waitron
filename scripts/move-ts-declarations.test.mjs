@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { main } from "./move-ts-declarations.mjs";
 
@@ -59,7 +60,7 @@ describe("move-ts-declarations", () => {
       "original.ts",
       "export function read() {\n  return branchAmount;\n}\n\nconst branchAmount = 75;\n\nexport const keepHere = 1;\n",
     );
-    write("consumer.ts", 'export { read } from "./original.js";\n');
+    write("consumer.ts", 'export { read, keepHere as retained } from "./original.js";\n');
 
     await move("original.ts", { "reading.ts": ["read"], "branch.ts": ["branchAmount"] }, [
       "keepHere",
@@ -70,7 +71,9 @@ describe("move-ts-declarations", () => {
       'import { branchAmount } from "./branch.js";\n\nexport function read() {\n  return branchAmount;\n}\n',
     );
     expect(read("branch.ts")).toBe("export const branchAmount = 75;\n");
-    expect(read("consumer.ts")).toBe('export { read } from "./reading.js";\n');
+    expect(read("consumer.ts")).toBe(
+      'export { keepHere as retained } from "./original.js";\nexport { read } from "./reading.js";\n',
+    );
   });
 
   it("keeps a titled test block byte for byte while importing its fixture", async () => {
@@ -195,5 +198,99 @@ describe("move-ts-declarations", () => {
     await expect(move("original.ts", { "bump.ts": ["bump"] })).rejects.toThrow(/bump.*body/i);
     expect(read("original.ts")).toBe(source);
     expect(() => read("bump.ts")).toThrow(/ENOENT/);
+  });
+
+  it("imports the binding referenced only by a shorthand property", async () => {
+    write("amounts.ts", "export const fired = 7;\n");
+    write(
+      "original.ts",
+      [
+        'import { fired } from "./amounts.js";',
+        "",
+        "export function ticket() {",
+        "  return { fired };",
+        "}\n",
+      ].join("\n"),
+    );
+
+    await move("original.ts", { "ticket.ts": ["ticket"] });
+
+    expect(read("ticket.ts")).toBe(
+      [
+        'import { fired } from "./amounts.js";',
+        "",
+        "export function ticket() {",
+        "  return { fired };",
+        "}\n",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps the shorthand property when its binding moves out", async () => {
+    write(
+      "original.ts",
+      ["const fired = 7;", "", "export function ticket() {", "  return { fired };", "}\n"].join(
+        "\n",
+      ),
+    );
+
+    await move("original.ts", { "amounts.ts": ["fired"] }, ["ticket"]);
+
+    expect(read("amounts.ts")).toBe("export const fired = 7;\n");
+    expect(read("original.ts")).toContain('import { fired } from "./amounts.js";');
+    expect(read("original.ts")).toContain("return { fired };");
+  });
+
+  it("refuses a declaration assigned to both the source and a destination", async () => {
+    const source = "export const fired = 7;\n";
+    write("original.ts", source);
+
+    await expect(move("original.ts", { "amounts.ts": ["fired"] }, ["fired"])).rejects.toThrow(
+      /fired.*more than once/i,
+    );
+    expect(read("original.ts")).toBe(source);
+    expect(() => read("amounts.ts")).toThrow(/ENOENT/);
+  });
+
+  it("keeps type and value imports valid with the Server's compiler settings", async () => {
+    const compilerOptions = {
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      verbatimModuleSyntax: true,
+    };
+    write("tsconfig.json", JSON.stringify({ compilerOptions }));
+    write(
+      "original.ts",
+      [
+        "export interface Row {",
+        "  price: number;",
+        "}",
+        "",
+        "export const fees = { small: { price: 7 } };",
+        "",
+        "export function fee(row: Row) {",
+        "  return row.price;",
+        "}",
+        "",
+        "export function readFee(size: keyof typeof fees): number {",
+        "  return fee(fees[size]);",
+        "}\n",
+      ].join("\n"),
+    );
+
+    await move("original.ts", { "ticket.ts": ["Row", "fee"], "fees.ts": ["fees"] }, ["readFee"]);
+
+    const program = ts.createProgram(
+      [join(root, "original.ts")],
+      ts.convertCompilerOptionsFromJson(compilerOptions, root).options,
+    );
+    expect(
+      ts
+        .getPreEmitDiagnostics(program)
+        .map(
+          ({ code, messageText }) =>
+            `${code}: ${ts.flattenDiagnosticMessageText(messageText, "\n")}`,
+        ),
+    ).toEqual([]);
   });
 });

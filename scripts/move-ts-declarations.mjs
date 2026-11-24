@@ -70,11 +70,14 @@ function nameOf(statement) {
 function validateMap(file, targets, keep) {
   const actual = file.statements.map(nameOf).filter(Boolean);
   const expected = [...keep, ...Object.values(targets).flat()];
+  const assigned = new Set();
   for (const name of expected) {
     if (!actual.includes(name)) throw new Error(`${file.fileName}: missing declaration ${name}`);
+    if (assigned.has(name)) throw new Error(`${file.fileName}: ${name} assigned more than once`);
+    assigned.add(name);
   }
   for (const name of actual) {
-    if (!expected.includes(name)) throw new Error(`${file.fileName}: unmapped declaration ${name}`);
+    if (!assigned.has(name)) throw new Error(`${file.fileName}: unmapped declaration ${name}`);
   }
 }
 
@@ -228,9 +231,54 @@ function groupForTypeScript(original, targets) {
   return [staying, ...groups].filter(Boolean).join("\n\n") + "\n";
 }
 
+function revealShorthand(file) {
+  const edits = [];
+  const affected = new Set();
+  function visit(node) {
+    if (ts.isShorthandPropertyAssignment(node) && !node.objectAssignmentInitializer) {
+      edits.push({
+        span: { start: node.name.end, length: 0 },
+        newText: `: ${node.name.getText(file)}`,
+      });
+    }
+    ts.forEachChild(node, visit);
+  }
+  for (const statement of file.statements) {
+    const name = nameOf(statement);
+    if (!name) continue;
+    const count = edits.length;
+    visit(statement);
+    if (edits.length !== count) affected.add(name);
+  }
+  return { text: replace(file.text, edits), affected };
+}
+
+function restoreDeclarations(file, output, names) {
+  const originals = file.statements.filter((statement) => names.has(nameOf(statement)));
+  const moved = output.statements.filter((statement) => names.has(nameOf(statement)));
+  if (moved.length !== originals.length) {
+    throw new Error(`${output.fileName}: TypeScript did not preserve ${[...names].join(", ")}`);
+  }
+  const restored = moved.map((statement, index) => {
+    const original = originals[index];
+    const { start, end } = span(file, original);
+    const declaration = file.text.slice(start, end);
+    const exportAt = original.getStart(file) - start;
+    const newText =
+      isExported(statement) && !isExported(original)
+        ? declaration.slice(0, exportAt) + "export " + declaration.slice(exportAt)
+        : declaration;
+    const outputSpan = span(output, statement);
+    return {
+      span: { start: outputSpan.start, length: outputSpan.end - outputSpan.start },
+      newText,
+    };
+  });
+  return replace(output.text, restored);
+}
+
 function moveDeclarations(project, source, names, target) {
   const file = parse(source, project.readFile(source));
-  const nodes = file.statements.filter((statement) => names.has(nameOf(statement)));
   const oldTarget = project.readFile(target);
   if (
     oldTarget &&
@@ -238,11 +286,16 @@ function moveDeclarations(project, source, names, target) {
   ) {
     throw new Error(`${target}: already contains one of ${[...names].join(", ")}`);
   }
+  // TypeScript misses imports that are used only in a shorthand property.
+  const { text, affected } = revealShorthand(file);
+  if (affected.size) project.set(source, text);
+  const refactorSource = parse(source, text);
+  const nodes = refactorSource.statements.filter((statement) => names.has(nameOf(statement)));
   const reexports = reexportEdits(project.service.getProgram(), source, names, target);
   const { edits } = project.service.getEditsForRefactor(
     source,
     { quotePreference: "double", newLineCharacter: "\n" },
-    { pos: nodes[0].getStart(file), end: nodes.at(-1).end },
+    { pos: nodes[0].getStart(refactorSource), end: nodes.at(-1).end },
     "Move to file",
     "Move to file",
     { importModuleSpecifierEnding: "js", quotePreference: "double" },
@@ -259,25 +312,14 @@ function moveDeclarations(project, source, names, target) {
     );
   }
   const output = parse(target, project.readFile(target));
-  const moved = output.statements.filter((statement) => names.has(nameOf(statement)));
-  if (moved.length !== nodes.length)
-    throw new Error(`${target}: TypeScript did not move ${[...names].join(", ")}`);
-  const restored = moved.map((statement, index) => {
-    const original = nodes[index];
-    const { start, end } = span(file, original);
-    const declaration = file.text.slice(start, end);
-    const exportAt = original.getStart(file) - start;
-    const newText =
-      isExported(statement) && !isExported(original)
-        ? declaration.slice(0, exportAt) + "export " + declaration.slice(exportAt)
-        : declaration;
-    const outputSpan = span(output, statement);
-    return {
-      span: { start: outputSpan.start, length: outputSpan.end - outputSpan.start },
-      newText,
-    };
-  });
-  project.set(target, replace(output.text, restored));
+  project.set(target, restoreDeclarations(file, output, names));
+  const staying = affected.difference(names);
+  if (staying.size) {
+    project.set(
+      source,
+      restoreDeclarations(file, parse(source, project.readFile(source)), staying),
+    );
+  }
 }
 
 export async function main([mapFile], root) {
