@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import type { Socket } from "node:net";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activityLog,
   handoverActivations,
@@ -305,6 +307,19 @@ describe("a node.manage holder with a fresh proof", () => {
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
   });
 
+  it("passes on a workbook of about 5 MiB byte for byte", async () => {
+    const bytes = randomBytes(5 * 1024 * 1024) as Uint8Array<ArrayBuffer>;
+    const build: OldBoxDataPeerDeps["build"] = async () => ({
+      bytes,
+      madeOn: "2026-11-23",
+      counts: { invoiceRows: 1 },
+    });
+    const res = await download(appWith({ fetch: exchange(oldBoxApp({ build })).fetch }));
+
+    expect(res.status).toBe(200);
+    expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
+  });
+
   it("sends this box's summary, signed, to the old box's address", async () => {
     let asked = "";
     const ex = exchange();
@@ -510,6 +525,42 @@ describe("refusals", () => {
       ),
     ),
     after(
+      "answer",
+      resigned(
+        () => oldBox,
+        (body) => {
+          body.madeOn = '2026-11-23"\r\nX: y';
+        },
+      ),
+    ),
+    after(
+      "answer",
+      resigned(
+        () => oldBox,
+        (body) => {
+          body.counts = { invoiceRows: -1 };
+        },
+      ),
+    ),
+    after(
+      "answer",
+      resigned(
+        () => oldBox,
+        (body) => {
+          body.counts = { invoiceRows: 1, guestRows: 2 };
+        },
+      ),
+    ),
+    after(
+      "binding",
+      resigned(
+        () => oldBox,
+        (body) => {
+          body.sourceNodeId = randomUUID();
+        },
+      ),
+    ),
+    after(
       "workbook",
       resigned(
         () => oldBox,
@@ -561,6 +612,45 @@ describe("refusals", () => {
     };
     await expectRefused(await download(appWith({ post })), "handover.old_box_data_too_large");
     expect(cap).toBe(64 * 1024 * 1024);
+  });
+});
+
+describe("over the real connection", () => {
+  let server: Server | undefined;
+  const sockets = new Set<Socket>();
+  afterEach(async () => {
+    for (const socket of sockets) socket.destroy();
+    sockets.clear();
+    await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
+    server = undefined;
+  });
+
+  it("an answer one byte over 64 MiB: handover.old_box_data_too_large", async () => {
+    const chunk = Buffer.alloc(1024 * 1024, 0x61);
+    server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      const write = (left: number) => {
+        while (left > 0) {
+          const ok = res.write(left > 1 ? chunk : chunk.subarray(0, 1));
+          left--;
+          if (!ok) return void res.once("drain", () => write(left));
+        }
+        res.end();
+      };
+      // 64 one-MiB chunks, then a single byte.
+      write(65);
+    });
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    await holdChart({ oldUrl: `http://127.0.0.1:${port}` });
+
+    const started = Date.now();
+    await expectRefused(await download(appWith()), "handover.old_box_data_too_large");
+    expect(Date.now() - started).toBeLessThan(10_000);
   });
 });
 

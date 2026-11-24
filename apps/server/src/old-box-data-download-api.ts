@@ -47,7 +47,8 @@ const COUNT_KEYS = new Set([
   "hoursRows",
   "activityRows",
 ]);
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+// No repeated group: V8 runs out of stack matching one on a few-MiB string.
+const BASE64_CHARACTERS = /^[A-Za-z0-9+/]*={0,2}$/;
 const PEER_WORD = /^[a-z_.]{1,80}$/;
 
 type Counts = { invoiceRows: number } & Partial<Record<string, number>>;
@@ -200,7 +201,12 @@ export function mountOldBoxDataDownloadApi(
       const counts = countsIn(rawCounts);
       if (typeof madeOn !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(madeOn) || counts === null)
         refused("answer");
-      if (typeof workbook !== "string" || !BASE64.test(workbook)) refused("workbook");
+      if (
+        typeof workbook !== "string" ||
+        workbook.length % 4 !== 0 ||
+        !BASE64_CHARACTERS.test(workbook)
+      )
+        refused("workbook");
       const bytes = Buffer.from(workbook as string, "base64");
 
       await withTransaction(deps.db, (tx) =>
@@ -218,7 +224,7 @@ export function mountOldBoxDataDownloadApi(
         requestId: c.get("requestId"),
       });
       return c.body(
-        new Uint8Array(bytes),
+        new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
         200,
         workbookDownloadHeaders(`waitron-old-main-box-${madeOn as string}.xlsx`),
       );
