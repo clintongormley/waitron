@@ -25,41 +25,33 @@ export const cellControlStyles = css`
   }
 `;
 
+const CELL_ACTION = ".sort, .row-controls > input[type=checkbox]";
 const CELL_CONTROLS =
-  "button, a, input, select, textarea, label, [role=button], [role=switch], wt-button, wt-row-actions, wt-help-tooltip, wt-switch";
+  "button, a, input, select, textarea, label, [role=button], wt-button, wt-row-actions, wt-help-tooltip";
 
-function fromCellControl(event: Event): boolean {
+function fromCellControl(event: Event, except?: Element | null): boolean {
   const path = event.composedPath();
   return path
     .slice(0, path.indexOf(event.currentTarget!))
-    .some((target) => target instanceof Element && target.matches(CELL_CONTROLS));
+    .some(
+      (target) => target !== except && target instanceof Element && target.matches(CELL_CONTROLS),
+    );
 }
 
-const controlPresses = new WeakMap<EventTarget, number>();
+const controlPresses = new WeakSet<HTMLTableCellElement>();
 
-// A press on a control and release on cell padding can dispatch a click to the cell itself.
-export const rememberCellPress = {
-  capture: true,
-  handleEvent(event: PointerEvent): void {
-    const cell = event.currentTarget!;
-    if (fromCellControl(event)) controlPresses.set(cell, event.pointerId);
-    else controlPresses.delete(cell);
-  },
-};
+// A press on a neighboring control can dispatch its click to the cell if the pointer slips.
+export function rememberCellPress(event: PointerEvent): void {
+  const cell = event.currentTarget as HTMLTableCellElement;
+  if (fromCellControl(event, cell.querySelector(CELL_ACTION))) controlPresses.add(cell);
+  else controlPresses.delete(cell);
+}
 
 export function forwardCellClick(event: MouseEvent): void {
   const cell = event.currentTarget as HTMLTableCellElement;
-  if (event.detail > 0) {
-    const fromPointer = controlPresses.get(cell);
-    controlPresses.delete(cell);
-    if (
-      fromPointer !== undefined &&
-      (!(event instanceof PointerEvent) || event.pointerId === fromPointer)
-    )
-      return;
-  }
+  if (event.detail > 0 && controlPresses.delete(cell)) return;
   if (fromCellControl(event)) return;
-  const control = cell.querySelector<HTMLElement>(".sort, .row-controls > input[type=checkbox]")!;
+  const control = cell.querySelector<HTMLElement>(CELL_ACTION)!;
   event.stopPropagation();
   control.focus({ preventScroll: true });
   control.click();

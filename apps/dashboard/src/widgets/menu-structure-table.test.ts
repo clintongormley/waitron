@@ -3500,6 +3500,8 @@ it("ticks from padding beside the menu grip and leaves selection alone during a 
   } finally {
     pointer(grip, "pointercancel");
   }
+  await userEvent.click(cell, { position });
+  expect(changes).toHaveLength(2);
 });
 
 describe("Select mode while a search or filter hides rows", () => {

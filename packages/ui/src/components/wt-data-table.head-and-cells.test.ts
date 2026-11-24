@@ -156,11 +156,41 @@ test("sorts from a visible heading without scrolling to its hidden button", asyn
   cell.append(visiblePadding);
   const scrollAtPress: number[] = [];
   visiblePadding.addEventListener("pointerdown", () => scrollAtPress.push(scroll.scrollLeft));
+  const sort = vi.fn();
+  el.addEventListener("wt-sort-change", sort);
   await clickPadding(visiblePadding);
   expect(scrollAtPress).toEqual([200]);
+  expect(sort).toHaveBeenCalledTimes(1);
   expect(root.activeElement).toBe(button);
   expect(scroll.scrollLeft).toBe(200);
 });
+
+test.each(["sort", "checkbox"] as const)(
+  "finishes a press on the cell's own %s in its padding",
+  async (kind) => {
+    const el = await table({
+      columns: [{ ...nameColumn, sortValue: (row) => row.name }],
+      selectable: kind === "checkbox",
+    });
+    const root = el.shadowRoot!;
+    const control = root.querySelector(kind === "sort" ? ".sort" : '[data-test="select-food"]')!;
+    const cell = control.closest("th, td")!;
+    const from = box(control);
+    const to = box(cell);
+    const x = from.left + from.width / 2;
+    const y = from.top - 2;
+    const hit = root.elementFromPoint(x, y);
+    expect(cell.contains(hit)).toBe(true);
+    expect(control.contains(hit)).toBe(false);
+    const change = vi.fn();
+    el.addEventListener(kind === "sort" ? "wt-sort-change" : "wt-selection-change", change);
+    await userEvent.dragAndDrop(control, cell, {
+      sourcePosition: { x: from.width / 2, y: 1 },
+      targetPosition: { x: x - to.left, y: y - to.top },
+    });
+    expect(change).toHaveBeenCalledTimes(1);
+  },
+);
 
 test.each([
   { tree: false, activation: "click", grip: false },
