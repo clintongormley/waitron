@@ -153,28 +153,32 @@ const WORDS = {
   "en-GB": {
     dashboard: "Open the dashboard on the new main box.",
     waiting:
-      "This box is still sending its invoice records to the main box. Keep it switched on and connected; it keeps trying by itself.",
+      "This box is still sending its invoice records and working hours to the main box. Keep it switched on and connected; it keeps trying by itself.",
     "needs-attention":
-      "The main box did not accept this box's invoice records. Keep this box switched on; it tries again by itself.",
+      "The main box did not accept this box's invoice records and working hours. Keep this box switched on; it tries again by itself.",
     clock:
       "The main box's clock is behind this box's invoice records. Check the time on both boxes; the return tries again by itself.",
     clash:
       "The return stopped: some payments on this box differ from the main box's. Keep both boxes switched on with their data. Once the main box accepts the difference, switch this box off and on.",
     "record-clash":
       "The return stopped: an invoice record on this box clashes with one on the main box. Carry on selling on the main box, and keep this box's data.",
+    "hours-refused":
+      "This box's invoice records have reached the main box, but the main box could not store some of its working hours. Carry on with the main box. Before this box is wiped, download its data below.",
   },
   "es-ES": {
     dashboard: "Abrir el panel en el nuevo servidor principal.",
     waiting:
-      "Este servidor aún está enviando sus registros de facturación al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
+      "Este servidor aún está enviando sus registros de facturación y horas trabajadas al servidor principal. Mantenlo encendido y conectado; lo sigue intentando por sí mismo.",
     "needs-attention":
-      "El servidor principal no ha aceptado los registros de facturación de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
+      "El servidor principal no ha aceptado los registros de facturación y horas trabajadas de este servidor. Mantenlo encendido; lo vuelve a intentar por sí mismo.",
     clock:
       "El reloj del servidor principal va por detrás de los registros de facturación de este servidor. Comprueba la hora de ambos servidores; la devolución se vuelve a intentar por sí misma.",
     clash:
       "La devolución se ha detenido: algunos pagos de este servidor no coinciden con los del servidor principal. Mantén ambos servidores encendidos con sus datos. Cuando el servidor principal acepte la diferencia, apaga y enciende este servidor.",
     "record-clash":
       "La devolución se ha detenido: un registro de facturación de este servidor choca con uno del servidor principal. Sigue vendiendo con el servidor principal y conserva los datos de este servidor.",
+    "hours-refused":
+      "Los registros de facturación de este servidor han llegado al servidor principal, pero el servidor principal no ha podido guardar algunas de sus horas trabajadas. Sigue con el servidor principal. Antes de que se borre este servidor, descarga sus datos aquí abajo.",
   },
 } as const;
 
@@ -245,9 +249,17 @@ describe("the restricted box's own page", () => {
 
   it.each(
     LANGUAGES.flatMap(([locale, header]) =>
-      (["waiting", "sending", "needs-attention", "clock", "clash", "record-clash"] as const).map(
-        (state) => [locale, header, state] as const,
-      ),
+      (
+        [
+          "waiting",
+          "sending",
+          "needs-attention",
+          "clock",
+          "clash",
+          "record-clash",
+          "hours-refused",
+        ] as const
+      ).map((state) => [locale, header, state] as const),
     ),
   )(
     "shows one line for the return while it needs the person, in %s (%s), while %s",
@@ -315,6 +327,7 @@ describe("the restricted box's own page", () => {
   it.each([
     ["the return is confirmed", "confirmed", false],
     ["the main box answered with a payment clash", "clash", false],
+    ["the main box refused the returned working hours", "hours-refused", false],
     ["this box holds the main box's confirmation from an earlier start", "waiting", true],
   ] as const)(
     "hides Progress once the new main box has started: %s",
@@ -820,6 +833,7 @@ describe("the restricted page after the main box asks this box to reset", () => 
         "clock",
         "clash",
         "record-clash",
+        "hours-refused",
         "confirmed",
       ] as const
     ).map((state) => [locale, header, state] as const),

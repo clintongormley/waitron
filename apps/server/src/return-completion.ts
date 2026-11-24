@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray } from "drizzle-orm";
 import {
   handoverActivations,
   handoverReturnBatches,
@@ -161,14 +161,45 @@ export async function returnsCompletedAt(
   return bySource;
 }
 
-/** Whether every batch of one inventory recorded for `operationId` is accounted. */
+/**
+ * Whether every batch of some inventory is recorded for `operationId` and their digests make it up.
+ * Finds each inventory by one index seek and counts its index entries, so only an inventory with
+ * every batch recorded has its rows read.
+ */
 export async function returnCompletedFor(tx: Transaction, operationId: string): Promise<boolean> {
-  const rows = await tx
-    .select()
-    .from(handoverReturnBatches)
-    .where(eq(handoverReturnBatches.operationId, operationId))
-    .orderBy(asc(handoverReturnBatches.inventory), asc(handoverReturnBatches.batchIndex));
-  return completedIn(rows).has(operationId);
+  let inventory: string | undefined;
+  for (;;) {
+    const [next] = await tx
+      .select({ inventory: handoverReturnBatches.inventory })
+      .from(handoverReturnBatches)
+      .where(
+        and(
+          eq(handoverReturnBatches.operationId, operationId),
+          inventory === undefined ? undefined : gt(handoverReturnBatches.inventory, inventory),
+        ),
+      )
+      .orderBy(asc(handoverReturnBatches.inventory))
+      .limit(1);
+    if (!next) return false;
+    inventory = next.inventory;
+    const scope = and(
+      eq(handoverReturnBatches.operationId, operationId),
+      eq(handoverReturnBatches.inventory, inventory),
+    );
+    const [first] = await tx
+      .select({ count: handoverReturnBatches.batchCount })
+      .from(handoverReturnBatches)
+      .where(scope)
+      .limit(1);
+    const [recorded] = await tx.select({ n: count() }).from(handoverReturnBatches).where(scope);
+    if (recorded?.n !== first?.count) continue;
+    const rows = await tx
+      .select()
+      .from(handoverReturnBatches)
+      .where(scope)
+      .orderBy(asc(handoverReturnBatches.batchIndex));
+    if (completedIn(rows).has(operationId)) return true;
+  }
 }
 
 /** `rows` ordered by operation, inventory and batch index. */

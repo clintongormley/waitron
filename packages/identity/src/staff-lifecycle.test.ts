@@ -29,6 +29,7 @@ import {
   invitePerson,
   listPersons,
   reactivatePersonForInvitation,
+  requireLoginEmail,
   resetPersonLogin,
   updatePersonDetails,
 } from "./staff.js";
@@ -826,6 +827,56 @@ describe("reactivatePersonForInvitation refusals", () => {
       ),
     ).toBe("person.transition_invalid");
     expect(await statusOf(target)).toBe("active");
+  });
+});
+
+describe("requireLoginEmail", () => {
+  it("refuses a person with no login email, and passes one with an email or no row", async () => {
+    const withoutEmail = await seedPerson(suite.db, "staff", "suspended");
+    const withEmail = await seedPerson(suite.db, "staff", "suspended");
+    await suite.db.run(
+      sql`update persons set email = 'kept@example.com', email_folded = 'kept@example.com'
+          where id = ${withEmail}`,
+    );
+    const activeWithoutEmail = await seedPerson(suite.db, "staff", "active");
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: withoutEmail, change: "reactivate" })),
+    ).rejects.toMatchObject({ code: "person.email_missing", params: { personId: withoutEmail } });
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: activeWithoutEmail, change: "reset-login" })),
+    ).rejects.toMatchObject({
+      code: "person.email_missing",
+      params: { personId: activeWithoutEmail },
+    });
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: withEmail, change: "reactivate" })),
+    ).resolves.toBeUndefined();
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: MISSING_ID, change: "reset-login" })),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses the change itself before the missing email", async () => {
+    const suspended = await seedPerson(suite.db, "staff", "suspended");
+    const active = await seedPerson(suite.db, "staff", "active");
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: suspended, change: "reset-login" })),
+    ).rejects.toMatchObject({ code: "person.transition_invalid" });
+
+    const [returned] = await suite.db.all<{ display_name: string }>(
+      sql`select display_name from persons where id = ${suspended}`,
+    );
+    await suite.db.run(
+      sql`update persons set display_name = ${returned!.display_name},
+            display_name_folded = ${foldForUniqueness(returned!.display_name)}
+          where id = ${active}`,
+    );
+    await expect(
+      run((tx) => requireLoginEmail(tx, { personId: suspended, change: "reactivate" })),
+    ).rejects.toMatchObject({
+      code: "person.display_name_taken",
+      params: { displayName: returned!.display_name },
+    });
   });
 });
 

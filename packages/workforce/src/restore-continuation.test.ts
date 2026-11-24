@@ -123,8 +123,7 @@ describe("cold restore continues the working-time chain (no hook)", () => {
     }
     await suite.db.transaction((tx) => appendToChain(tx, k, inputAt("2026-01-06T09:00:00Z")));
 
-    // A survivor also wrote position 4 on this lineage; nothing carries rows between nodes today, so
-    // a raw insert stands in for its arrival.
+    // A survivor also wrote position 4 on this lineage; a raw insert stands in for its arrival.
     const error = await captureError(() => rawForkInsertAt(4));
     expect(isUniqueViolation(error)).toBe(true);
     // `time_entries_chain_position_uq`'s columns, so a refusal on any other key fails here.

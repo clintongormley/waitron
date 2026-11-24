@@ -19,6 +19,7 @@ import {
   holdsCompletedReturnFrom,
   readCompletedReturns,
   recordReturnBatchTx,
+  returnCompletedFor,
 } from "./return-completion.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -160,4 +161,39 @@ it("answers for one box from its own takeovers alone, whatever another box has r
   expect(await holdsCompletedReturnFrom(suite.db, sourceNodeId)).toBe(true);
   expect(await readCompletedReturns(suite.db, [operationId])).toEqual(new Set([operationId]));
   expect((await activationsBySource(suite.db)).size).toBe(2);
+});
+
+it("answers whether any inventory of the takeover has every batch recorded and digests matching it", async () => {
+  const asked = (id = operationId) => withTransaction(suite.db, (tx) => returnCompletedFor(tx, id));
+  await record(0);
+  await record(2);
+  expect(await asked()).toBe(false);
+  await record(1, { digest: "c".repeat(64) });
+  expect(await asked()).toBe(false);
+  for (const index of [0, 1, 2]) await record(index, { inventory: "a".repeat(64) });
+  expect(await asked()).toBe(false);
+
+  const complete = returnDigest(["d", "e"].map((p) => returnDigest({ module: "m", payload: p })));
+  await record(1, {
+    inventory: complete,
+    count: 2,
+    digest: returnDigest({ module: "m", payload: "e" }),
+  });
+  expect(await asked()).toBe(false);
+  await record(0, {
+    inventory: complete,
+    count: 2,
+    digest: returnDigest({ module: "m", payload: "d" }),
+  });
+  expect(await asked()).toBe(true);
+  expect(await asked("other-takeover")).toBe(false);
+});
+
+it("counts the takeover as returned when an inventory sorting earlier has every batch but wrong digests", async () => {
+  const asked = () => withTransaction(suite.db, (tx) => returnCompletedFor(tx, operationId));
+  const earlier = "0".repeat(64);
+  expect(earlier < inventory).toBe(true);
+  for (const index of [0, 1, 2]) await record(index, { inventory: earlier });
+  for (const index of [0, 1, 2]) await record(index);
+  expect(await asked()).toBe(true);
 });

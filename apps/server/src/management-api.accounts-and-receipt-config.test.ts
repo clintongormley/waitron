@@ -2192,6 +2192,127 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(sent).toHaveLength(1);
   });
 
+  it("refuses to re-enable a person with no email address, changing nothing, until one is added", async () => {
+    const { staffId } = await setupVenue();
+    const sent: Parameters<MailSink>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+      return "sent";
+    });
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set status = 'suspended', email = null, email_folded = null
+          where id = ${staffId}`,
+    );
+    const row = () => suite.db.all(sql`select status, email from persons where id = ${staffId}`)[0];
+    const mail = () => suite.db.all(sql`select id from outgoing_mail where person_id = ${staffId}`);
+    const reactivate = () =>
+      app.request(`/management-api/staff/${staffId}/reactivate`, {
+        method: "POST",
+        headers: { cookie },
+      });
+
+    const refused = await reactivate();
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.email_missing", params: { personId: staffId } },
+    });
+    expect(row()).toEqual({ status: "suspended", email: null });
+    expect(mail()).toEqual([]);
+
+    const edited = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        displayName: "The Clerk",
+        firstNames: "The",
+        lastNames: "Clerk",
+        telephone: null,
+        email: STAFF_EMAIL,
+        status: "suspended",
+      }),
+    });
+    expect(edited.status).toBe(204);
+    const enabled = await reactivate();
+    expect(await enabled.json()).toEqual({ invitationSent: true, delivery: "queued" });
+    expect(row()).toEqual({ status: "pending", email: STAFF_EMAIL });
+    await app.flushMail();
+    expect(sent.map((m) => [m.purpose, m.email])).toEqual([["invitation", STAFF_EMAIL]]);
+  });
+
+  it("refuses to reset the login of a person with no email address, changing nothing", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set email = null, email_folded = null where id = ${staffId}`,
+    );
+
+    const refused = await app.request(`/management-api/staff/${staffId}/reset-login`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.email_missing", params: { personId: staffId } },
+    });
+    expect(
+      suite.db.all(
+        sql`select status, pin_hash is not null as pin from persons where id = ${staffId}`,
+      ),
+    ).toEqual([{ status: "active", pin: 1 }]);
+    expect(suite.db.all(sql`select id from outgoing_mail where person_id = ${staffId}`)).toEqual(
+      [],
+    );
+  });
+
+  it("refuses a disabled person's login reset as disabled before asking for an email address", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set status = 'suspended', email = null, email_folded = null
+          where id = ${staffId}`,
+    );
+
+    const refused = await app.request(`/management-api/staff/${staffId}/reset-login`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.transition_invalid", params: {} },
+    });
+    expect(suite.db.all(sql`select status from persons where id = ${staffId}`)).toEqual([
+      { status: "suspended" },
+    ]);
+  });
+
+  it("refuses to re-enable a person whose name another account uses before asking for an email address", async () => {
+    const { staffId } = await setupVenue();
+    const app = mountApp(async () => "sent");
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    await suite.db.run(
+      sql`update persons set status = 'suspended', email = null, email_folded = null
+          where id = ${staffId}`,
+    );
+    await withTransaction(suite.db, (tx) =>
+      seedPersons(tx, { displayName: "The Clerk", email: "again@x.com", role: "staff" }),
+    );
+
+    const refused = await app.request(`/management-api/staff/${staffId}/reactivate`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "person.display_name_taken", params: { displayName: "The Clerk" } },
+    });
+    expect(suite.db.all(sql`select status from persons where id = ${staffId}`)).toEqual([
+      { status: "suspended" },
+    ]);
+  });
+
   it("deletes a deactivated person's PIN and passkey, and leaves their working-time entries as they were", async () => {
     const { staffId } = await setupVenue();
     await withTransaction(suite.db, async (tx) => {

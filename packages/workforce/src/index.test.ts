@@ -11,6 +11,7 @@ describe("the public surface", () => {
         "WORKFORCE_CHANGE_SOURCES",
         "WORKFORCE_CLASSIFICATION",
         "WORKFORCE_CONFIGURATION_TRANSFER",
+        "WORKFORCE_HANDOVER",
         "WORKFORCE_MIGRATIONS",
         "WORKFORCE_PERMISSIONS",
         "maySelfApproveAttendance",

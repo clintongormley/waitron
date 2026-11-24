@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
   type Database,
+  type Transaction,
   handoverActivations,
   withNodeTransaction,
   tenders,
@@ -37,6 +38,7 @@ import { seedNode as bareNode, seedPerson, seedWorkingOrder } from "@waitron/db/
 import { payments, recordRefund } from "@waitron/payments";
 import { getHeldOrder, listHeldOrders } from "./working-order.js";
 import { ALL_MODULES } from "@waitron/composition";
+import type { WaitronModule } from "@waitron/module";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody } from "@waitron/membership";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -59,7 +61,8 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { computeDailyClose, computeVatReturn, mapModelo303 } from "@waitron/reporting";
-import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
+import { decimal, jobOrigin, saleId as brandSaleId, type SaleId } from "@waitron/shared";
+import { appendChainEntries } from "@waitron/workforce/test/fixtures.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import {
   formerMainForReturn,
@@ -384,6 +387,97 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   }
 });
 
+/**
+ * The replaced main box (`old`, its chart naming it sell-only) and the new main box (`current`),
+ * whose emergency takeover from it is activated, answering returns through `modules`.
+ * `seedOldBox` runs after the base copy and before `old` holds the chart.
+ */
+async function activatedTakeover(options: {
+  operationId: string;
+  modules: WaitronModule[];
+  seedOldBox?: (source: SeededNode) => Promise<void>;
+}) {
+  const { operationId } = options;
+  const source = await seedNode(old.db, "Source");
+  const receiverId = await bareNode(old.db);
+  await stampDeployment(old.db, "preproduction");
+  await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
+  await copyBase();
+  await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
+  const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
+  const receiverKey = await readNodeIdentityKey(current.node, ring, receiverId);
+  await pinMainBoxKey(current.node, receiverId, {
+    nodeId: source.nodeId,
+    publicKey: nodeSigningPublicKey(sourceKey),
+  });
+  const body = {
+    term: 2,
+    nodes: [
+      {
+        nodeId: receiverId,
+        contactUrl: "https://receiver.test",
+        standing: "serving-primary" as const,
+      },
+      { nodeId: source.nodeId, contactUrl: "https://source.test", standing: "sell-only" as const },
+    ],
+  };
+  const chart = {
+    body,
+    signerNodeId: receiverId,
+    signature: signDocumentBody(body, receiverKey),
+    endorsements: [
+      endorseKey(receiverId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
+    ],
+  };
+  await writeNodeMembership(current.db, chart);
+  await options.seedOldBox?.(source);
+  await writeNodeMembership(old.db, chart);
+  await withNodeTransaction(current.node, (tx) =>
+    beginHandoverOperationTx(tx, {
+      nodeId: receiverId,
+      operationId,
+      role: "destination",
+      scenario: "emergency",
+      sourceNodeId: source.nodeId,
+      destinationNodeId: receiverId,
+      binding: {},
+      fingerprint: operationId,
+      state: "activated",
+      waitingReason: null,
+    }),
+  );
+  await current.db.insert(handoverActivations).values({
+    operationId,
+    scenario: "emergency",
+    sourceNodeId: source.nodeId,
+    destinationNodeId: receiverId,
+    evidence: {
+      purpose: "waitron.handover.declaration.v1",
+      body: {},
+      signerNodeId: receiverId,
+      signature: "signature",
+    },
+    personId: "person",
+    activatedAt: "2026-07-20T10:00:00.000Z",
+  });
+  const app = new Hono();
+  mountReturnRecordsApi(
+    app,
+    {
+      db: current.db,
+      node: current.node,
+      ring,
+      nodeId: receiverId,
+      modules: options.modules,
+      requireWritable: () => {},
+      wake: () => {},
+      now: () => now,
+    },
+    () => {},
+  );
+  return { source, receiverId, app };
+}
+
 it.each([
   ["no records", false],
   ["one record", false],
@@ -391,91 +485,16 @@ it.each([
 ] as const)(
   "closes the new main box's takeover once a return holding %s is accounted (confirmation held: %s)",
   async (holding, held) => {
-    const source = await seedNode(old.db, "Source");
-    const receiverId = await bareNode(old.db);
-    await stampDeployment(old.db, "preproduction");
-    await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
-    await copyBase();
-    await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
-    const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
-    const receiverKey = await readNodeIdentityKey(current.node, ring, receiverId);
-    await pinMainBoxKey(current.node, receiverId, {
-      nodeId: source.nodeId,
-      publicKey: nodeSigningPublicKey(sourceKey),
-    });
-    const body = {
-      term: 2,
-      nodes: [
-        {
-          nodeId: receiverId,
-          contactUrl: "https://receiver.test",
-          standing: "serving-primary" as const,
-        },
-        {
-          nodeId: source.nodeId,
-          contactUrl: "https://source.test",
-          standing: "sell-only" as const,
-        },
-      ],
-    };
-    const chart = {
-      body,
-      signerNodeId: receiverId,
-      signature: signDocumentBody(body, receiverKey),
-      endorsements: [
-        endorseKey(receiverId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
-      ],
-    };
-    await writeNodeMembership(current.db, chart);
-    if (holding === "one record") {
-      const pending = await originalFor(old.db, source, await seedSale(old.db, source, 1));
-      await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
-    }
-    await writeNodeMembership(old.db, chart);
     const operationId = "real-takeover";
-    await withNodeTransaction(current.node, (tx) =>
-      beginHandoverOperationTx(tx, {
-        nodeId: receiverId,
-        operationId,
-        role: "destination",
-        scenario: "emergency",
-        sourceNodeId: source.nodeId,
-        destinationNodeId: receiverId,
-        binding: {},
-        fingerprint: "real-takeover",
-        state: "activated",
-        waitingReason: null,
-      }),
-    );
-    await current.db.insert(handoverActivations).values({
+    const { source, receiverId, app } = await activatedTakeover({
       operationId,
-      scenario: "emergency",
-      sourceNodeId: source.nodeId,
-      destinationNodeId: receiverId,
-      evidence: {
-        purpose: "waitron.handover.declaration.v1",
-        body: {},
-        signerNodeId: receiverId,
-        signature: "signature",
+      modules,
+      seedOldBox: async (seeded) => {
+        if (holding !== "one record") return;
+        const pending = await originalFor(old.db, seeded, await seedSale(old.db, seeded, 1));
+        await withTransaction(old.db, (tx) => appendToChain(tx, seeded.nodeId, pending));
       },
-      personId: "person",
-      activatedAt: "2026-07-20T10:00:00.000Z",
     });
-    const app = new Hono();
-    mountReturnRecordsApi(
-      app,
-      {
-        db: current.db,
-        node: current.node,
-        ring,
-        nodeId: receiverId,
-        modules,
-        requireWritable: () => {},
-        wake: () => {},
-        now: () => now,
-      },
-      () => {},
-    );
     if (held) {
       // As if confirmed by this box before it was restored from a copy taken earlier.
       const batches: string[] = [];
@@ -523,6 +542,147 @@ it.each([
   },
 );
 
+it("keeps every returned invoice record and the takeover waiting when the main box refuses a working-time entry", async () => {
+  const withHours = ALL_MODULES.filter(
+    (module) => module.name === "workforce" || module.name === "fiscal-verifactu",
+  );
+  const operationId = "hours-refused-takeover";
+  let personId = "";
+  const { source, receiverId, app } = await activatedTakeover({
+    operationId,
+    modules: withHours,
+    seedOldBox: async (seeded) => {
+      personId = await seedPerson(old.db, { displayName: "Ana" });
+      const pending = await originalFor(old.db, seeded, await seedSale(old.db, seeded, 1));
+      await withTransaction(old.db, (tx) => appendToChain(tx, seeded.nodeId, pending));
+      await appendChainEntries(old.db, seeded.nodeId, [
+        {
+          personId,
+          entryKind: "in",
+          eventAt: "2026-07-20T09:00:00.000Z",
+          eventOffsetMinutes: 0,
+          recordedByPersonId: personId,
+          origin: jobOrigin("dashboard"),
+        },
+      ]);
+    },
+  });
+  // The main box already holds that entry's id, recorded at another time.
+  const [person] = old.db.all<ReturnRow>(sql`select * from persons where id = ${personId}`);
+  const [entry] = old.db.all<ReturnRow>(sql`select * from time_entries`);
+  await insertRow(current.db, "persons", person!);
+  await insertRow(current.db, "time_entries", {
+    ...entry!,
+    recorded_at: "2026-07-20T09:30:00.000Z",
+  });
+  const answers: { module: string; status: number; code?: string }[] = [];
+  expect(
+    await runReturnRecordsPass({
+      db: old.db,
+      node: old.node,
+      ring,
+      nodeId: source.nodeId,
+      modules: withHours,
+      stopped: () => false,
+      fetch: async (url, init) => {
+        const response = await app.request(String(url), init);
+        const { module } = (JSON.parse(String(init?.body)) as { body: { module: string } }).body;
+        const answer = (await response.clone().json()) as { error?: { code: string } };
+        answers.push({ module, status: response.status, code: answer.error?.code });
+        return response;
+      },
+    }),
+  ).toBe("hours-refused");
+  expect(answers).toEqual([
+    { module: "fiscal-verifactu", status: 200, code: undefined },
+    { module: "workforce", status: 409, code: "attendance.return_entry_clash" },
+  ]);
+  expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from verifactu_records`),
+  );
+  expect((await readHandoverOperation(current.node, receiverId, operationId))?.state).toBe(
+    "return_pending",
+  );
+});
+
+it("leaves the takeover waiting and reads hours-refused when a working-time entry cannot fit a batch", async () => {
+  const withHours = ALL_MODULES.filter(
+    (module) => module.name === "workforce" || module.name === "fiscal-verifactu",
+  );
+  const operationId = "hours-too-large-takeover";
+  const entryBy = (personId: string, minute: number) => ({
+    personId,
+    entryKind: "in" as const,
+    eventAt: `2026-07-20T09:0${minute}:00.000Z`,
+    eventOffsetMinutes: 0,
+    recordedByPersonId: personId,
+    origin: jobOrigin("dashboard"),
+  });
+  let fits = "";
+  const { source, receiverId, app } = await activatedTakeover({
+    operationId,
+    modules: withHours,
+    seedOldBox: async (seeded) => {
+      const ana = await seedPerson(old.db, { displayName: "Ana" });
+      const giant = await seedPerson(old.db, { displayName: "a".repeat(205 * 1024) });
+      const pending = await originalFor(old.db, seeded, await seedSale(old.db, seeded, 1));
+      await withTransaction(old.db, (tx) => appendToChain(tx, seeded.nodeId, pending));
+      [fits] = await appendChainEntries(old.db, seeded.nodeId, [entryBy(ana, 0)]);
+      await appendChainEntries(old.db, seeded.nodeId, [entryBy(giant, 1)]);
+    },
+  });
+  const answers: { module: string; status: number; error?: unknown }[] = [];
+  expect(
+    await runReturnRecordsPass({
+      db: old.db,
+      node: old.node,
+      ring,
+      nodeId: source.nodeId,
+      modules: withHours,
+      stopped: () => false,
+      fetch: async (url, init) => {
+        const response = await app.request(String(url), init);
+        const { module } = (JSON.parse(String(init?.body)) as { body: { module: string } }).body;
+        const answer = (await response.clone().json()) as { error?: unknown };
+        answers.push({ module, status: response.status, error: answer.error });
+        return response;
+      },
+    }),
+  ).toBe("hours-refused");
+  expect(answers).toEqual([
+    { module: "fiscal-verifactu", status: 200, error: undefined },
+    { module: "workforce", status: 200, error: undefined },
+    {
+      module: "workforce",
+      status: 409,
+      error: {
+        code: "attendance.return_entry_invalid",
+        params: { reason: "entry too large to return" },
+      },
+    },
+  ]);
+  expect(current.db.all<ReturnRow>(sql`select * from verifactu_records`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from verifactu_records`),
+  );
+  expect(current.db.all<{ id: string }>(sql`select id from time_entries`)).toEqual([{ id: fits }]);
+  expect((await readHandoverOperation(current.node, receiverId, operationId))?.state).toBe(
+    "return_pending",
+  );
+});
+
+async function insertRow(db: Database | Transaction, table: string, row: ReturnRow) {
+  const entries = Object.entries(row);
+  await db.execute(sql`insert into ${sql.identifier(table)}
+    (${sql.join(
+      entries.map(([key]) => sql.identifier(key)),
+      sql`, `,
+    )})
+    values (${sql.join(
+      entries.map(([, value]) => sql`${value}`),
+      sql`, `,
+    )})`);
+}
+
 async function copyBase() {
   await withTransaction(current.db, async (tx) => {
     for (const table of [
@@ -535,20 +695,9 @@ async function copyBase() {
       "verifactu_identities",
       "devices",
       "deployment",
-    ]) {
-      for (const row of old.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {
-        const entries = Object.entries(row);
-        await tx.execute(sql`insert into ${sql.identifier(table)}
-          (${sql.join(
-            entries.map(([key]) => sql.identifier(key)),
-            sql`, `,
-          )})
-          values (${sql.join(
-            entries.map(([, value]) => sql`${value}`),
-            sql`, `,
-          )})`);
-      }
-    }
+    ])
+      for (const row of old.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`))
+        await insertRow(tx, table, row);
   });
 }
 

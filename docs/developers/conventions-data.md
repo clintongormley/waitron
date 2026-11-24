@@ -4675,8 +4675,10 @@ The existing mixed-source argument case also passed: exit 2, no restore called a
 The working-time chain continues from the backup's head. A survivor's forked row is refused by
 `time_entries_chain_position_uq`, reported by this engine as
 `UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067. It names the columns rather
-than the index. Guard: `packages/workforce/src/restore-continuation.test.ts`. Nothing carries
-working-time rows between nodes today.
+than the index. Guard: `packages/workforce/src/restore-continuation.test.ts`. An old main box
+returning after a switch sends its own working-time rows to the new main box
+(`packages/workforce/src/handover-return.ts`), which refuses one that disagrees with a row it
+holds at the same position with `attendance.return_entry_clash`.
 
 ## On a node that files, every start puts each sale left "being sent" back to waiting
 

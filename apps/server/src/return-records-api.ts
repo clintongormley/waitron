@@ -41,6 +41,8 @@ export function mountReturnRecordsApi(
       "node.read_only": 409,
       "fiscal.return_clock_ahead": 409,
       "fiscal.return_record_clash": 409,
+      "attendance.return_entry_clash": 409,
+      "attendance.return_entry_invalid": 409,
     },
     "return-records.failed",
   );
@@ -52,6 +54,8 @@ export function mountReturnRecordsApi(
       const { body, seat, chart, source } = await checkedReturn(deps, raw);
       const outcome = await withNodeTransaction(deps.node, async (node) => {
         const operation = await readOpenHandoverOperation(node, deps.nodeId);
+        const awaitingReturn =
+          operation?.state === "activated" || operation?.state === "return_pending";
         const result = await withTransaction(deps.db, async (tx) => {
           deps.requireWritable();
           const held = await readNodeMembership(tx);
@@ -90,7 +94,13 @@ export function mountReturnRecordsApi(
             complete,
             takeover,
             open: open !== undefined,
-            returned: takeover !== undefined && (await returnCompletedFor(tx, takeover)),
+            // Only read while the takeover waits for its return, the one time the answer is used;
+            // otherwise the check would read every recorded batch for nothing.
+            returned:
+              open !== undefined &&
+              awaitingReturn &&
+              takeover !== undefined &&
+              (await returnCompletedFor(tx, takeover)),
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
           };
         });
@@ -103,11 +113,7 @@ export function mountReturnRecordsApi(
         if (result.open && BEFORE_ACTIVATION.some((step) => step === state))
           return "before activation";
         // A failure here sends no receipt, so the old box resends and the replay takes these steps.
-        if (
-          result.open &&
-          result.takeover !== undefined &&
-          (state === "activated" || state === "return_pending")
-        ) {
+        if (result.open && result.takeover !== undefined && awaitingReturn) {
           await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_pending", {});
           if (result.returned)
             await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_complete", {});
@@ -117,7 +123,7 @@ export function mountReturnRecordsApi(
       deps.wake();
       // A refusal must not undo facts the venue transaction has already accounted for.
       if (outcome === "before activation") refuseReturn("activating");
-      if (typeof outcome !== "boolean") throw new AppError(outcome.refusal, {});
+      if (typeof outcome !== "boolean") throw new AppError(outcome.refusal, outcome.params ?? {});
       const digest = returnDigest({ module: body.module!, payload: body.payload! });
       c.header("Cache-Control", "no-store");
       return c.json(

@@ -638,6 +638,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "That email is already in use",
     es: "Ese correo ya está en uso",
   },
+  "person.email_missing": {
+    en: "This user has no email address, so no invitation can be sent and nothing was changed. Choose Cancel, add their email address, and their first and last names if missing, with Edit…, then try again.",
+    es: "Este usuario no tiene correo electrónico, así que no se le puede enviar una invitación y no se ha cambiado nada. Elige Cancelar, añade su correo, y su nombre y apellidos si faltan, con Editar… y vuelve a intentarlo.",
+  },
   "person.telephone_invalid": {
     en: "Enter a valid telephone number or leave it blank. Start foreign numbers with + and the country code.",
     es: "Introduce un teléfono válido o déjalo en blanco. Empieza los números extranjeros con + y el prefijo del país.",
@@ -1614,8 +1618,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El servidor principal no se puede retirar ni quitar de la lista.",
   },
   "membership.reset_statement_required": {
-    en: "This box was the main box before and has not returned its invoice records, so it was not removed. Confirm that it has been wiped or will never be switched on again: switched on with its data, it could sell beside the main box.",
-    es: "Este servidor fue el servidor principal y no ha devuelto sus registros de facturación, así que no se ha retirado. Confirma que se ha borrado o que no se volverá a encender nunca: encendido con sus datos, podría vender a la vez que el servidor principal.",
+    en: "This box was the main box before and has not returned its invoice records and working hours, so it was not removed. Confirm that it has been wiped or will never be switched on again: switched on with its data, it could sell beside the main box.",
+    es: "Este servidor fue el servidor principal y no ha devuelto sus registros de facturación y horas trabajadas, así que no se ha retirado. Confirma que se ha borrado o que no se volverá a encender nunca: encendido con sus datos, podría vender a la vez que el servidor principal.",
   },
   "membership.standby_joined": {
     en: "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another box right now.",
@@ -1729,12 +1733,12 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
   },
   "handover.return_outstanding": {
-    en: "The last handover is still waiting for the old main box to return its invoice records. Switch it on, or choose Will not return for it on the Servers page. Will not return stops the wait; invoice records the old main box made after the copy this main box started from stay only on it. Or choose Wipe and remove on its row to wipe it once it is on, accepting that what it has not returned stays set aside on it.",
-    es: "El último traspaso sigue esperando a que el servidor principal anterior devuelva sus registros de facturación. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación que el servidor principal anterior hizo después de la copia con la que empezó este servidor principal se quedan solo en él. O elige Borrar y retirar en su fila para borrarlo cuando esté encendido, aceptando que lo que no ha devuelto se quede apartado en él.",
+    en: "The last handover is still waiting for the old main box to return its invoice records and working hours. Switch it on, or choose Will not return for it on the Servers page. Will not return stops the wait; invoice records and working hours the old main box recorded after the copy this main box started from stay only on it. Or choose Wipe and remove on its row to wipe it once it is on, accepting that what it has not returned stays set aside on it.",
+    es: "El último traspaso sigue esperando a que el servidor principal anterior devuelva sus registros de facturación y horas trabajadas. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación y horas trabajadas que el servidor principal anterior hizo después de la copia con la que empezó este servidor principal se quedan solo en él. O elige Borrar y retirar en su fila para borrarlo cuando esté encendido, aceptando que lo que no ha devuelto se quede apartado en él.",
   },
   "handover.reset_loss_unaccepted": {
-    en: "The old main box has not returned all its invoice records, so it was not asked to wipe itself. Keep it switched on and connected while it returns them, then choose Wipe and remove again. Or choose Wipe and remove now and tick that you accept that what it has not returned stays set aside on it.",
-    es: "El servidor principal anterior no ha devuelto todos sus registros de facturación, así que no se le ha pedido que se borre. Mantenlo encendido y conectado mientras los devuelve y luego vuelve a elegir Borrar y retirar. O elige ahora Borrar y retirar y marca que aceptas que lo que no ha devuelto se quede apartado en él.",
+    en: "The old main box has not returned all its invoice records and working hours, so it was not asked to wipe itself. Keep it switched on and connected while it returns them, then choose Wipe and remove again. Or choose Wipe and remove now and tick that you accept that what it has not returned stays set aside on it.",
+    es: "El servidor principal anterior no ha devuelto todos sus registros de facturación y horas trabajadas, así que no se le ha pedido que se borre. Mantenlo encendido y conectado mientras los devuelve y luego vuelve a elegir Borrar y retirar. O elige ahora Borrar y retirar y marca que aceptas que lo que no ha devuelto se quede apartado en él.",
   },
   "handover.reset_not_previous_main": {
     en: "This main box did not take over directly from that old main box, so it cannot send it the wipe, and it was not asked to wipe itself. Choose Remove from venue on its row, then wipe that box from a terminal.",
@@ -1745,8 +1749,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Ese servidor ya no figura como un servidor principal sustituido, así que no se le ha pedido que se borre. Actualiza la lista para ver en qué punto está.",
   },
   "handover.return_not_outstanding": {
-    en: "No handover here is waiting for that box to return its invoice records, so nothing was changed. Refresh the list.",
-    es: "Ningún traspaso de este servidor está esperando a que ese servidor devuelva sus registros de facturación, así que no se ha cambiado nada. Actualiza la lista.",
+    en: "No handover here is waiting for that box to return its invoice records and working hours, so nothing was changed. Refresh the list.",
+    es: "Ningún traspaso de este servidor está esperando a que ese servidor devuelva sus registros de facturación y horas trabajadas, así que no se ha cambiado nada. Actualiza la lista.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.

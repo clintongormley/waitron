@@ -25,17 +25,19 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody, type CanonicalValue } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import type { WaitronModule } from "@waitron/module";
+import type { ReturnRefusal, WaitronModule } from "@waitron/module";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import {
   startReturnRecordsDuty,
   runReturnRecordsPass,
   formerMainForReturn,
+  readReturnInventory,
   returnDigest,
   returnVenue,
 } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { returnCompletedFor } from "./return-completion.js";
 import { abandonReturn } from "./return-abandoned.js";
 import { advanceHandover } from "./handover-store.js";
 import { listServers, removeStandby } from "./membership-removal.js";
@@ -43,6 +45,11 @@ import { signAsThisBox } from "./handover-signing.js";
 import { AppError } from "@waitron/shared";
 import { caCertPath } from "./box-secrets.js";
 import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
+
+vi.mock("./return-completion.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./return-completion.js")>();
+  return { ...original, returnCompletedFor: vi.fn(original.returnCompletedFor) };
+});
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const ring = loadKeyRing({
@@ -584,6 +591,188 @@ it("runs one pass on passNow() after the duty has confirmed and stopped", async 
     expect(duty.state()).toBe("confirmed");
   } finally {
     await duty.stop();
+  }
+});
+
+const workforceRefusals: ReturnRefusal[] = [
+  { refusal: "attendance.return_entry_clash" },
+  { refusal: "attendance.return_entry_invalid", params: { reason: "hash mismatch" } },
+];
+let hoursRefusal: ReturnRefusal | null;
+// The working-time stand-in is listed first, so only the fiscal slot can put invoices ahead of it.
+const hoursFirst: WaitronModule[] = [
+  {
+    name: "hours",
+    version: "1.0.0",
+    tier: "mandatory",
+    handover: {
+      returnRecords: {
+        read: async () => ["hours-1"],
+        receive: async (_tx, _source, batch) => {
+          received.push(batch);
+          return hoursRefusal ?? true;
+        },
+      },
+    },
+  },
+  {
+    name: "invoices",
+    version: "1.0.0",
+    tier: "mandatory",
+    fiscal: {} as NonNullable<WaitronModule["fiscal"]>,
+    handover: {
+      returnRecords: {
+        read: async () => ["invoice-1", "invoice-2"],
+        receive: async (_tx, _source, batch) => {
+          received.push(batch);
+          return true;
+        },
+      },
+    },
+  },
+];
+function hoursDestination(destinationModules = hoursFirst) {
+  const app = new Hono();
+  mountReturnRecordsApi(
+    app,
+    {
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: receiver,
+      modules: destinationModules,
+      requireWritable: () => {},
+      wake: () => {},
+    },
+    () => {},
+  );
+  const sentModules: string[] = [];
+  const answers: { status: number; body: unknown }[] = [];
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const { body } = JSON.parse(String(init?.body)) as { body: { module: string } };
+    sentModules.push(body.module);
+    const response = await app.request(String(url), init);
+    answers.push({ status: response.status, body: await response.clone().json() });
+    return response;
+  };
+  return { sentModules, answers, fetch };
+}
+
+it("sends the fiscal slot's batches before other modules' and takes the inventory in that order", async () => {
+  hoursRefusal = null;
+  const { batches, inventory } = await readReturnInventory({
+    db: suite.db,
+    nodeId: source,
+    modules: hoursFirst,
+  });
+  const expected = [
+    { module: "invoices", payload: "invoice-1" },
+    { module: "invoices", payload: "invoice-2" },
+    { module: "hours", payload: "hours-1" },
+  ];
+  expect(batches).toEqual(expected);
+  expect(inventory).toBe(returnDigest(expected.map(returnDigest)));
+  const { sentModules, fetch } = hoursDestination();
+  expect(
+    await runReturnRecordsPass({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules: hoursFirst,
+      fetch,
+      stopped: () => false,
+    }),
+  ).toBe("confirmed");
+  expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
+  expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
+});
+
+it.each(workforceRefusals)(
+  "reads hours-refused when the main box refuses working hours with $refusal after every invoice batch",
+  async (refusal) => {
+    hoursRefusal = refusal;
+    const { sentModules, answers, fetch } = hoursDestination();
+    expect(
+      await runReturnRecordsPass({
+        db: suite.db,
+        node: suite.node,
+        ring,
+        nodeId: source,
+        modules: hoursFirst,
+        fetch,
+        stopped: () => false,
+      }),
+    ).toBe("hours-refused");
+    expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
+    expect(answers.map(({ status }) => status)).toEqual([200, 200, 409]);
+    expect(answers[2]!.body).toEqual({
+      error: { code: refusal.refusal, params: refusal.params ?? {} },
+    });
+    expect(received).toEqual(["invoice-1", "invoice-2", "hours-1"]);
+  },
+);
+
+it("keeps retrying, never hours-refused, while the main box lacks the working-hours module", async () => {
+  hoursRefusal = null;
+  const { sentModules, answers, fetch } = hoursDestination(
+    hoursFirst.filter(({ name }) => name !== "hours"),
+  );
+  const pause = vi.spyOn(loop, "realSleep");
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: hoursFirst,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch,
+  });
+  try {
+    await vi.waitFor(() => expect(pause).toHaveBeenCalledWith(30_000, expect.anything()));
+    expect(duty.state()).toBe("needs-attention");
+    expect(sentModules).toEqual(["invoices", "invoices", "hours"]);
+    expect(answers[2]).toEqual({
+      status: 409,
+      body: expect.objectContaining({
+        error: expect.objectContaining({
+          code: "handover.return_refused",
+          params: { reason: "module" },
+        }),
+      }),
+    });
+  } finally {
+    await duty.stop();
+    pause.mockRestore();
+  }
+});
+
+it("ends the duty on hours-refused, and passNow() still runs one pass", async () => {
+  hoursRefusal = workforceRefusals[0]!;
+  const { sentModules, fetch } = hoursDestination();
+  const pause = vi.spyOn(loop, "realSleep");
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: hoursFirst,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch,
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("hours-refused"));
+    // A pass scheduled after the first would reach its sleep before this settles.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pause).not.toHaveBeenCalled();
+    expect(sentModules).toHaveLength(3);
+    expect(await duty.passNow()).toBe("hours-refused");
+    expect(sentModules).toEqual(["invoices", "invoices", "hours", "invoices", "invoices", "hours"]);
+  } finally {
+    await duty.stop();
+    pause.mockRestore();
   }
 });
 
@@ -1243,6 +1432,55 @@ it("sends no receipt when closing the takeover fails, and the resend closes it",
   expect(await sendWatchingState(app, states)).toBe("confirmed");
   expect(states).toEqual(["return_complete", "return_complete"]);
   expect(await nodeDatabase.readOpenHandoverOperation(suite.node, receiver)).toBeNull();
+});
+
+it("answers a resend after the takeover closed as before, without checking completion again", async () => {
+  await completionBinding();
+  const app = destination();
+  const receipts = async () => {
+    const bodies: unknown[] = [];
+    expect(
+      await send(async (url, init) => {
+        const response = await app.request(String(url), init);
+        const { body } = (await response.clone().json()) as { body: Record<string, unknown> };
+        bodies.push({ status: response.status, body: { ...body, nonce: undefined } });
+        return response;
+      }),
+    ).toBe("confirmed");
+    return bodies;
+  };
+  const first = await receipts();
+  expect(await takeoverState()).toBe("return_complete");
+  vi.mocked(returnCompletedFor).mockClear();
+  expect(await receipts()).toEqual(first);
+  expect(returnCompletedFor).not.toHaveBeenCalled();
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("receiver-emergency"),
+  );
+});
+
+it("closes the takeover on a later batch once any inventory it holds is complete", async () => {
+  await completionBinding();
+  await suite.node.execute(
+    sql`create trigger refuse_return_complete before update on node_handover_operations when new.state = 'return_complete' begin select raise(abort, 'test node write failed'); end`,
+  );
+  const app = destination();
+  try {
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+  } finally {
+    await suite.node.execute(sql`drop trigger refuse_return_complete`);
+  }
+  expect(await takeoverState()).toBe("return_pending");
+  const read = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "read")
+    .mockResolvedValue(["first", "second", "third"]);
+  try {
+    const states: unknown[] = [];
+    expect(await sendWatchingState(app, states)).toBe("confirmed");
+    expect(states).toEqual(["return_complete", "return_complete", "return_complete"]);
+  } finally {
+    read.mockRestore();
+  }
 });
 
 it.each(["false", "refused"])("records no completion fact for a %s batch", async (outcome) => {

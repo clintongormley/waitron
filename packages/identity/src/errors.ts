@@ -65,6 +65,9 @@ declare module "@waitron/shared" {
     /** Telephone refused at a write boundary. */
     "person.telephone_invalid": Record<string, never>;
     "person.email_taken": { email: string };
+    /** An invitation was asked for a person with no login email, such as one an old main box
+     * returned. */
+    "person.email_missing": { personId: string };
     /** Another active or pending person already uses this display name. */
     "person.display_name_taken": { displayName: string };
     "person.last_admin": Record<string, never>;

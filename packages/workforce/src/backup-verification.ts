@@ -4,8 +4,9 @@ import type { BackupQuery, BackupRow, BackupValue } from "@waitron/store";
 import { SOURCES, type Source } from "@waitron/shared";
 import { WORKFORCE_OWN_CLASSIFICATION } from "./classification.js";
 import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
+import { verifiableEntry, type ChainedTimeEntry } from "./chain.js";
 import { verifyPayPeriodClosures } from "./pay-period-chain.js";
-import type { PayPeriodClosure, RecordExtension } from "./record-types.js";
+import type { PayPeriodClosure } from "./record-types.js";
 
 const immutableTables = ["time_entries", "pay_period_closures", "attendance_answers"];
 export const WORKFORCE_BACKUP_VERIFICATION: BackupVerificationContribution = {
@@ -87,34 +88,15 @@ function instant(row: BackupRow, field: string): string {
   if (!Number.isFinite(ms) || new Date(ms).toISOString() !== value) throw new InvalidEvidence();
   return value;
 }
+/** Each field read and checked as this untrusted copy holds it, then mapped as `readChain` maps it. */
 function entry(row: BackupRow): VerifiableEntry {
-  const selfApproved = flag(row, "self_approved");
-  const authorKind = nullable(row, "author_kind");
-  const direction = nullable(row, "correction_direction");
-  const missingEntryKind = nullable(row, "missing_entry_kind");
-  const respondsToEntryId = nullable(row, "responds_to_entry_id");
-  const payPeriodClosureId = nullable(row, "pay_period_closure_id");
   const source = text(row, "captured_by_source");
   if (!(SOURCES as readonly string[]).includes(source)) throw new InvalidEvidence();
-  const extension: RecordExtension | null =
-    !selfApproved &&
-    [authorKind, direction, missingEntryKind, respondsToEntryId, payPeriodClosureId].every(
-      (v) => v === null,
-    )
-      ? null
-      : {
-          selfApproved,
-          authorKind: authorKind as RecordExtension["authorKind"],
-          direction: direction as RecordExtension["direction"],
-          missingEntryKind: missingEntryKind as RecordExtension["missingEntryKind"],
-          respondsToEntryId,
-          payPeriodClosureId,
-        };
-  return {
+  return verifiableEntry({
     sequenceNo: integer(row, "sequence_no"),
     personId: text(row, "person_id"),
     nodeId: text(row, "node_id"),
-    entryKind: text(row, "entry_kind"),
+    entryKind: text(row, "entry_kind") as ChainedTimeEntry["entryKind"],
     eventAt: instant(row, "event_at"),
     recordedAt: instant(row, "recorded_at"),
     eventOffsetMinutes: integer(row, "event_offset_minutes"),
@@ -123,13 +105,21 @@ function entry(row: BackupRow): VerifiableEntry {
     capturedByDeviceId: nullable(row, "captured_by_device_id"),
     correctsEntryId: nullable(row, "corrects_entry_id"),
     correctionReason: nullable(row, "correction_reason"),
-    correctionStatus: nullable(row, "correction_status"),
+    correctionStatus: nullable(row, "correction_status") as ChainedTimeEntry["correctionStatus"],
     correctionActorId: nullable(row, "correction_actor_id"),
+    selfApproved: flag(row, "self_approved"),
+    authorKind: nullable(row, "author_kind") as ChainedTimeEntry["authorKind"],
+    correctionDirection: nullable(
+      row,
+      "correction_direction",
+    ) as ChainedTimeEntry["correctionDirection"],
+    missingEntryKind: nullable(row, "missing_entry_kind") as ChainedTimeEntry["missingEntryKind"],
+    respondsToEntryId: nullable(row, "responds_to_entry_id"),
+    payPeriodClosureId: nullable(row, "pay_period_closure_id"),
     prevEntryHash: nullable(row, "prev_entry_hash"),
     entryHash: text(row, "entry_hash"),
     isFirstEntry: flag(row, "is_first_entry"),
-    extension,
-  };
+  });
 }
 function chainScope(row: BackupRow): string {
   return JSON.stringify([text(row, "node_id")]);

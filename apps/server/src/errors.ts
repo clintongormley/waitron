@@ -52,7 +52,10 @@ declare module "@waitron/shared" {
      * it joined: the peer route answers no other old box's questions, so it would never collect it.
      */
     "handover.reset_not_previous_main": Record<string, never>;
-    /** A replaced old main box set aside, on its reset, invoice-record chains this box lacks. */
+    /**
+     * A replaced old main box set aside, on its reset, invoice-record or working-time chains this
+     * box lacks.
+     */
     "chain.set_aside_on_reset": { nodeId: string; orderId: string };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
@@ -1537,7 +1540,7 @@ declare module "@waitron/shared" {
     "membership.node_not_replaced": Record<string, never>;
     /**
      * The machine asked to be removed is a former main box (`sell-only`), this venue holds no
-     * completed return of its invoice records, and the request did not state, as exact `true`, that
+     * completed return of its records, and the request did not state, as exact `true`, that
      * it has been reset or will never be switched on again.
      */
     "membership.reset_statement_required": Record<string, never>;

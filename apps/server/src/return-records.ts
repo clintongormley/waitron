@@ -35,7 +35,14 @@ export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   lookup?: BoxLookup;
 }
 export type ReturnState =
-  "waiting" | "sending" | "needs-attention" | "clock" | "clash" | "record-clash" | "confirmed";
+  | "waiting"
+  | "sending"
+  | "needs-attention"
+  | "clock"
+  | "clash"
+  | "record-clash"
+  | "hours-refused"
+  | "confirmed";
 export const returnDigest = (value: CanonicalValue) => sha256Hex(canonicalize(value));
 
 export async function returnVenue(deps: Pick<ReturnRecordsDeps, "db">) {
@@ -63,7 +70,7 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   const held = await returnConfirmed(deps, operationId, inventory);
   // Sent even when held: a main box restored from an earlier copy lacks these records.
   const sent = await sendBatches(deps, chart, restriction, batches, inventory);
-  // An answer about the records themselves (clash, record-clash, clock) is never hidden by a held one.
+  // An answer about the records themselves is never hidden by a held one.
   if (sent.state === "waiting" || sent.state === "needs-attention")
     return held ? "confirmed" : sent.state;
   if (sent.state !== "confirmed") return sent.state;
@@ -87,8 +94,13 @@ export async function readReturnInventory(
   deps: Pick<ReturnRecordsDeps, "db" | "nodeId" | "modules">,
 ): Promise<{ batches: Batch[]; inventory: string }> {
   const batches: Batch[] = [];
+  // Invoice records go first, so a refusal of any other module's batch never holds them back.
+  const ordered = [
+    ...deps.modules.filter((module) => module.fiscal !== undefined),
+    ...deps.modules.filter((module) => module.fiscal === undefined),
+  ];
   // The restricted box reads without draining change_log or running a venue write turn.
-  for (const module of deps.modules) {
+  for (const module of ordered) {
     const seat = module.handover?.returnRecords;
     if (seat)
       for (const payload of await seat.read(deps.db, deps.nodeId))
@@ -196,6 +208,11 @@ function refusalState(text: string, fromRestriction: boolean): Exclude<ReturnSta
   if ((fromRestriction && reason === "binding") || reason === "activating") return "waiting";
   if (refusal?.error?.code === "fiscal.return_clock_ahead") return "clock";
   if (refusal?.error?.code === "fiscal.return_record_clash") return "record-clash";
+  if (
+    refusal?.error?.code === "attendance.return_entry_clash" ||
+    refusal?.error?.code === "attendance.return_entry_invalid"
+  )
+    return "hours-refused";
   return "needs-attention";
 }
 
@@ -242,7 +259,7 @@ export function startReturnRecordsDuty(
   const task = (async () => {
     while (!stopping.signal.aborted) {
       const ended = await pass();
-      if (ended === "confirmed" || ended === "clash") return;
+      if (ended === "confirmed" || ended === "clash" || ended === "hours-refused") return;
       await realSleep(30_000, stopping.signal);
     }
   })();

@@ -2,14 +2,14 @@ import { attendanceDays } from "../src/schema/attendance.js";
 import type { AttendanceDay } from "../src/attendance-types.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { attendanceMailKey, attendanceMailOutcome } from "../src/attendance-mail.js";
 import { outgoingMail, enqueueMail, MAIL_LIFETIME_MS, type OutgoingMailStatus } from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { WORKFORCE_PERMISSIONS } from "../src/permissions.js";
 import { hashPin, registerModulePermissions } from "@waitron/identity";
-import { appendToChain } from "../src/chain.js";
+import { appendToChain, type TimeEntryAppend } from "../src/chain.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 import type { WorkTimeRuleset } from "../src/ruleset.js";
 import { absences } from "../src/schema/absences.js";
@@ -60,6 +60,25 @@ export async function seedFixtureVenue(db: Database): Promise<void> {
       name: "Main",
       invoiceLocales: ["en"],
     });
+}
+
+/** Inserts `rows` into `table` of `db` as they are, column for column. */
+export async function copyRows(
+  db: Database,
+  table: string,
+  rows: Record<string, string | number | null>[],
+): Promise<void> {
+  for (const row of rows) {
+    const entries = Object.entries(row);
+    await db.run(sql`insert into ${sql.identifier(table)}
+      (${sql.join(
+        entries.map(([key]) => sql.identifier(key)),
+        sql`, `,
+      )}) values (${sql.join(
+        entries.map(([, value]) => sql`${value}`),
+        sql`, `,
+      )})`);
+  }
 }
 
 /** A person, PIN '1234'. Through the table definition for the same reason as {@link seedFixtureVenue}. */
@@ -290,6 +309,18 @@ export async function insertTimeEntry(
       },
     ),
   );
+}
+
+/** Appends each entry in turn to `nodeId`'s chain through the real append; returns their ids. */
+export async function appendChainEntries(
+  db: Database | Transaction,
+  nodeId: string,
+  entries: readonly TimeEntryAppend[],
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const entry of entries)
+    ids.push((await db.transaction((inner) => appendToChain(inner, { nodeId }, entry))).id);
+  return ids;
 }
 
 type AttendanceMailFields = Partial<{

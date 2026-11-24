@@ -146,7 +146,7 @@ against the saved switch, stop and keep both boxes’ data intact.
 
 When the venue has started, **This box now runs the venue** says not to reset the old main box: it
 may hold data this box does not have. When it is switched on again, it sends its invoice records
-here by itself and stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
+and working hours here by itself and stands down. Afterwards, choose [**Wipe and remove**](servers.md#old-box-returns) for it on this
 box's Servers page in the dashboard.
 
 If emergency hosting is available for your venue, the red screen also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
@@ -154,23 +154,33 @@ If emergency hosting is available for your venue, the red screen also offers **S
 ## Keep the failed box’s data {#old-box-returns}
 
 Use the new main box after it starts. Keep the failed box and its data for the return flow.
-Invoice records and their recorded payment facts can return to the new main box; this does not
-replay orders, stock changes, printing or drawer openings. Do not wipe the old box while you
+Invoice records with their recorded payment facts, and working hours, can return to the new main
+box; this does not replay orders, stock changes, printing or drawer openings. Do not wipe the old box while you
 still need its data.
 
-Switch the old box on and keep it connected: it returns its invoice records by itself. Until they
-arrive, its row in **System → Servers** on the new main box says **Waiting for the old main box to
-return its invoice records**, and the venue cannot be handed over again or that box removed.
+Switch the old box on and keep it connected: it returns its invoice records and working hours by
+itself. Until they arrive, its row in **System → Servers** on the new main box says **Waiting for
+the old main box to return its invoice records and working hours**, and the venue cannot be handed over again or that box removed.
+
+A person added on the old box after the copy comes back disabled, with their hours but no email
+address: add their first and last names and email address with **Edit…**, then
+[re-enable their account](staff.md#account-access) rather than adding them again. If you already
+added them again, leave the returned account disabled: Waitron refuses to re-enable it while
+another account has the same name. The working-time export lists both accounts' hours under that
+name.
+
+If someone clocked in or out on both boxes around the switch, check that person's hours for that
+day and fix them ([how](staff.md#hours)).
 
 If the old box will never come back with its data, choose **Will not return** in its row menu.
 
-While its invoice records are still awaited, or after **Will not return**, its row menu also offers
-**Wipe and remove**. Its dialog warns that the old box has not returned all its invoice records:
-before it wipes itself it tries once more to send them, then its databases are set aside on it
+While its invoice records and working hours are still awaited, or after **Will not return**, its row menu also offers
+**Wipe and remove**. Its dialog warns that the old box has not returned all its invoice records and
+working hours: before it wipes itself it tries once more to send them, then its databases are set aside on it
 instead of deleted, and are no longer used. Tick that you have downloaded its data, or that you
 accept this, before you confirm.
 
-Once its invoice records are back, **Wipe and remove** needs no tick. The dialog says the old
+Once its invoice records and working hours are back, **Wipe and remove** needs no tick. The dialog says the old
 main box may hold data that this box does not have and gives the old box's address when its row
 has one: open it and [download that data](servers.md#handed-over) before you confirm, because once
 the wipe starts it can no longer be downloaded. A **CAUTION** line in the dialog means the recovered
@@ -183,7 +193,7 @@ itself replaced before the old one has wiped itself, the old one never receives 
 **Remove from venue** on the new main box and wipe it from a terminal.
 
 To remove an old main box without wiping it, choose **Remove from venue** in its row menu. If it has
-not returned its invoice records, tick that it has been wiped or will never be switched on again. If
+not returned its invoice records and working hours, tick that it has been wiped or will never be switched on again. If
 it does come back, wipe it from a terminal, and never choose **Carry on as the main box** on it.
 
 ## Hand over to a spare box {#hand-over}
@@ -228,7 +238,7 @@ If the copy check keeps failing, read [how to switch to a spare](servers.md#emer
 
 Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
 handover on the spare. Keep the old box and its data, switched on and connected: it returns its
-invoice records to the new box by itself, and until they arrive the venue cannot be handed over
+invoice records and working hours to the new box by itself, and until they arrive the venue cannot be handed over
 again ([read more](servers.md#old-box-returns)).
 
 On a till, keep the screen open; it follows the main box once that box is taking sales.
@@ -244,7 +254,7 @@ While something needs you, the page also shows a line that says what to do. Whil
 [handover](servers.md#hand-over) is unfinished it can also offer **Progress**: use it to finish the
 handover on the spare.
 
-Keep this box running while it returns its invoice records to the main box. Filing with the tax
+Keep this box running while it returns its invoice records and working hours to the main box. Filing with the tax
 agency continues on the main box.
 
 Before the main box wipes this box, download its data under **Download this box's data**. Enter the
@@ -261,14 +271,20 @@ When someone chooses **Wipe and remove** on the main box, this box wipes itself.
 page then says so, and the box restarts shortly on setup's first page, ready to [join again as a
 spare](servers.md#adding-a-spare). The wipe removes this box's venue data, including sale lines
 and local backups, which this return does not carry; keep the old box's data if you need them. If Wipe and remove
-was chosen before its invoice records were all back, or the main box lacks invoice records this
-box holds, it sets its databases aside instead of deleting them.
+was chosen before its invoice records and working hours were all back, or the main box lacks invoice records or working
+hours this box holds, it sets its databases aside instead of deleting them.
 
 If the return stops because an invoice record clashes with one on the main box, continue using
 the main box and keep the old box's data if you still need it. The return is not confirmed.
 Once you have downloaded this box's data, you can still choose **Wipe and remove** on the main box:
 this box then sets its databases aside instead of deleting them, including the records it could
 not return.
+
+If the page says the main box could not store some of this box's working hours, its invoice
+records are back. Download this box's data before anyone chooses **Wipe and remove** on the main
+box: after an emergency switch, the file's **Working hours** tab lists this box's hours, from the
+time its first line gives when it gives one. Restarting this box does not help. The wipe then sets
+this box's databases aside instead of deleting them, so any earlier hours are kept there too.
 
 If other returned facts differ, keep both boxes running with their data intact. Only eligible
 payment differences can be accepted through the internal API. An administrator can inspect them
@@ -297,7 +313,8 @@ Use **Refresh intervals** to check the inventory receipt. **Inventory receipt co
 the new box accounted for all batches in an inventory advertised by the old box. It does not
 confirm missing activity or amounts, or reconstruct cash-ups. An unconfirmed receipt needs a
 complete return; if the old box already stopped sending, restart it while it remains restricted
-to resend.
+to resend. If the old box's page says the main box could not store some of its working hours,
+restarting does not help: download its data instead ([how](servers.md#handed-over)).
 
 Below the intervals, **Returned invoices** shows each newly received invoice with its source
 box, generating installation, original issue date and recorded amounts. Invoice rows show a

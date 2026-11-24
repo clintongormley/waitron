@@ -167,10 +167,11 @@ async function resetLine(
 
 /**
  * The taking-over box's page for an open planned handover, offered until this box sees that the
- * handover finished: a confirmed return or a payment-clash receipt (that box answers a return only
- * once activated, `return-records-api.ts`), a recorded `return_confirmed` event, or a held chart
- * naming a box other than this one main (the taking-over box names itself main in the transaction
- * that activates it, `handover-activation.ts`).
+ * handover finished: a confirmed return, a payment-clash receipt, or working hours refused after
+ * that box took every invoice batch (it answers a return only once activated,
+ * `return-records-api.ts`), a recorded `return_confirmed` event, or a held chart naming a box other
+ * than this one main (the taking-over box names itself main in the transaction that activates it,
+ * `handover-activation.ts`).
  */
 async function progressPage(
   deps: RestrictedPageDeps,
@@ -180,7 +181,8 @@ async function progressPage(
   returnState: ReturnState,
 ): Promise<string | undefined> {
   if (operation.scenario !== "controlled" || !isOpen(operation.state)) return undefined;
-  if (returnState === "confirmed" || returnState === "clash") return undefined;
+  if (returnState === "confirmed" || returnState === "clash" || returnState === "hours-refused")
+    return undefined;
   const confirmed = await readHandoverEvents(
     deps.node,
     deps.nodeId,

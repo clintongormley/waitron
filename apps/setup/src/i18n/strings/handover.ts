@@ -180,7 +180,7 @@ export const handoverEn = {
   "handover.emergency.done_heading": "This box now runs the venue",
   "handover.emergency.done_warning": "Do not reset the old main box!",
   "handover.emergency.done_old_box":
-    "It may hold data that this box still needs. When it is switched on again, it sends its invoice records to this box and then stands down.",
+    "It may hold data that this box still needs. When it is switched on again, it sends its invoice records and working hours to this box and then stands down.",
   "handover.emergency.done_afterwards":
     "Afterwards, you can choose {action} on the {page} in the dashboard.",
   "handover.emergency.done_action": "Wipe and remove",
@@ -374,7 +374,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.done_heading": "Este servidor lleva ahora el local",
   "handover.emergency.done_warning": "¡No restablezcas el servidor principal antiguo!",
   "handover.emergency.done_old_box":
-    "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará sus registros de facturación a este servidor y después se retirará.",
+    "Puede tener datos que este servidor todavía necesita. Cuando se vuelva a encender, enviará sus registros de facturación y sus horas trabajadas a este servidor y después se retirará.",
   "handover.emergency.done_afterwards": "Después, puedes elegir {action} en la {page} del panel.",
   "handover.emergency.done_action": "Borrar y retirar",
   "handover.emergency.done_servers": "página Servidores",

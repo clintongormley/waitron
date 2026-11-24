@@ -128,6 +128,7 @@ export {
   normalizeAndValidateEmail,
   reactivatePersonForInvitation,
   resetPersonLogin,
+  requireLoginEmail,
   deleteSignInRows,
   setPersonLocale,
   updatePersonDetails,

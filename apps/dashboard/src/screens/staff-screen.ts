@@ -531,6 +531,9 @@ export class StaffScreen extends LitElement {
   }
 
   override render() {
+    // Adding a missing email needs `person.email`, which the built-in Manager role lacks.
+    const emailNeedsAdmin =
+      this.rowAction !== null && this.errorKey === "person.email_missing" && !this.canChangeEmail;
     return html`
       <div class="header">
         <h1 class="title">${t("staff.title")}</h1>
@@ -695,9 +698,30 @@ export class StaffScreen extends LitElement {
               </p>`
             : nothing
         }
+        ${
+          emailNeedsAdmin
+            ? html`<wt-button
+                data-test="row-admin-sign-in"
+                @click=${() =>
+                  this.dispatchEvent(
+                    new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+                  )}
+                >${t("staff.sign_in_as_admin")}</wt-button
+              >`
+            : nothing
+        }
         <wt-form-actions
           slot="footer"
-          .error=${this.rowAction && this.errorKey ? codeMessage(this.errorKey) : ""}
+          .error=${
+            this.rowAction && this.errorKey
+              ? emailNeedsAdmin
+                ? t("staff.email_missing_needs_admin")
+                : this.rowAction.action === "reactivate" &&
+                    this.errorKey === "person.display_name_taken"
+                  ? t("staff.reactivate_name_taken")
+                  : codeMessage(this.errorKey)
+              : ""
+          }
         >
           <wt-button
             slot="cancel"

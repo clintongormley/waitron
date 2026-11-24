@@ -72,6 +72,7 @@ export type {
 export { appendToChain, readChainHead, readChain } from "./chain.js";
 export type { ChainHead, ChainKey, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
+export { WORKFORCE_HANDOVER } from "./handover-return.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { WorkforceBackend } from "./clocking.js";
 export { projectTimeRecord } from "./record-projection.js";

@@ -380,3 +380,68 @@ describe("cross-node correction precedence (reprojection)", () => {
     expect(await workedMinutes(personId)).toBe(570);
   });
 });
+
+describe("correction reason length", () => {
+  async function refusal(fn: () => Promise<unknown>): Promise<unknown> {
+    const error = await captureError(fn);
+    return error instanceof AppError ? [error.code, error.params] : error;
+  }
+
+  async function storedReason(id: string): Promise<string | null> {
+    const rows = await suite.db.execute<{ correction_reason: string | null }>(sql`
+      select correction_reason from time_entries where id = ${id}`);
+    return rows.rows[0]!.correction_reason;
+  }
+
+  function request(outEntryId: string, actorPersonId: string, reason: string) {
+    return {
+      nodeId,
+      correctsEntryId: outEntryId,
+      at: "2026-01-05T18:00:00Z",
+      offsetMinutes: 0,
+      reason,
+      actorPersonId,
+      origin: jobOrigin("dashboard"),
+    };
+  }
+
+  it("stores a 500-character request reason and refuses 501 with correction.invalid", async () => {
+    const { personId, outEntryId } = await nineToFive("len-req");
+    const id = await run((tx) =>
+      backend.requestCorrection(tx, request(outEntryId, personId, `  ${"r".repeat(500)}  `)),
+    );
+    expect(await storedReason(id)).toBe("r".repeat(500));
+    const other = await nineToFive("len-req-2");
+    expect(
+      await refusal(() =>
+        run((tx) =>
+          backend.requestCorrection(tx, request(other.outEntryId, other.personId, "r".repeat(501))),
+        ),
+      ),
+    ).toEqual(["correction.invalid", { reason: "reason_too_long" }]);
+  });
+
+  it("stores a 500-character disagreement reason and refuses 501 with correction.invalid", async () => {
+    const { personId, outEntryId } = await nineToFive("len-dis");
+    const manager = await supervisor("len-dis-sup");
+    const proposal = await run((tx) =>
+      backend.requestCorrection(tx, request(outEntryId, manager, "left at six")),
+    );
+    const disagree = (reason: string) =>
+      run((tx) =>
+        backend.disagreeCorrection(tx, {
+          nodeId,
+          correctionId: proposal,
+          actorPersonId: personId,
+          origin: jobOrigin("dashboard"),
+          reason,
+        }),
+      );
+    expect(await refusal(() => disagree("d".repeat(501)))).toEqual([
+      "correction.invalid",
+      { reason: "reason_too_long" },
+    ]);
+    const id = await disagree("d".repeat(500));
+    expect(await storedReason(id)).toBe("d".repeat(500));
+  });
+});
