@@ -1,13 +1,10 @@
 import {
   decodePDFRawStream,
-  ParseSpeeds,
   PDFArray,
-  type PDFContext,
   PDFDict,
   PDFDocument,
   PDFHexString,
   PDFName,
-  PDFParser,
   PDFRawStream,
   PDFString,
 } from "pdf-lib";
@@ -79,7 +76,7 @@ function onlyEmbeddedFile(pdf: PDFDocument): Entry | undefined {
   return entry;
 }
 
-function contents(spec: PDFDict, budget: Budget): Uint8Array {
+function contents(spec: PDFDict): Uint8Array {
   if (text(spec.lookup(PDFName.of("F"))) !== PACK_ATTACHMENT) refuse("carrier");
   const uf = spec.lookup(PDFName.of("UF"));
   if (uf && text(uf) !== PACK_ATTACHMENT) refuse("carrier");
@@ -91,16 +88,13 @@ function contents(spec: PDFDict, budget: Budget): Uint8Array {
   if (unicodeStream && unicodeStream !== stream) refuse("carrier");
   const size = stream.dict.lookupMaybe(PDFName.of("Params"), PDFDict)?.get(PDFName.of("Size"));
   if (size && Number(size.toString()) > MAX_PACK_FILE) refuse("size");
-  const bytes = new Uint8Array(boundedDecode(stream, budget).getBytes(MAX_PACK_FILE + 1));
+  const bytes = new Uint8Array(boundedDecode(stream).getBytes(MAX_PACK_FILE + 1));
   if (bytes.length > MAX_PACK_FILE) refuse("size");
   return bytes;
 }
 
-/** What one read may decode in all; see {@link boundedDecode}. */
+/** All the decoding stages together hold under twice this much; see {@link boundedDecode}. */
 const DECODE_BUDGET = 16 * MAX_PACK_FILE;
-
-/** Shared by every stream one read decodes, so many small streams cannot add up to a large one. */
-type Budget = { left: number; exceeded: boolean };
 
 type Stage = {
   buffer: Uint8Array;
@@ -112,13 +106,9 @@ type Stage = {
  * pdf-lib's decoders (pinned at 1.17.1) stop between Deflate blocks once `getBytes` has enough,
  * but finish a block once begun, and one block can inflate to gigabytes. Every stage grows its
  * buffer only through `ensureBuffer`, and holds the stage it reads from in `stream`, so refusing
- * growth once the stages sharing `budget` have grown by it in all bounds every chain they decode:
- * together they never hold twice the budget.
+ * growth past a shared budget bounds the whole chain.
  */
-export function boundedDecode(
-  raw: PDFRawStream,
-  budget: Budget = { left: DECODE_BUDGET, exceeded: false },
-) {
+export function boundedDecode(raw: PDFRawStream) {
   const decoder = decodePDFRawStream(raw);
   const stages: Stage[] = [];
   for (
@@ -130,45 +120,12 @@ export function boundedDecode(
   for (const stage of stages) {
     const grow = stage.ensureBuffer.bind(stage);
     stage.ensureBuffer = (requested) => {
-      const before = stage.buffer.byteLength;
-      if (requested > before && requested - before > budget.left) {
-        budget.exceeded = true;
-        refuse("size");
-      }
-      const buffer = grow(requested);
-      budget.left -= buffer.byteLength - before;
-      return buffer;
+      const held = stages.reduce((n, s) => n + s.buffer.byteLength, 0);
+      if (held - stage.buffer.byteLength + requested > DECODE_BUDGET) refuse("size");
+      return grow(requested);
     };
   }
   return decoder;
-}
-
-type Opening = new (
-  context: PDFContext,
-  ignoreEncryption: boolean,
-  updateMetadata: boolean,
-) => PDFDocument;
-
-/**
- * `PDFDocument.load`, except that the object and cross-reference streams its parser decodes whole
- * reach it already decoded within `budget`. Only this parser's `parseObject` is replaced, so no
- * other pdf-lib use in the process is affected.
- */
-async function load(bytes: Uint8Array, budget: Budget): Promise<PDFDocument> {
-  const parser = PDFParser.forBytesWithOptions(bytes, ParseSpeeds.Slow, true);
-  const parseObject = parser.parseObject.bind(parser);
-  parser.parseObject = () => {
-    const object = parseObject();
-    if (!(object instanceof PDFRawStream)) return object;
-    const type = object.dict.lookup(PDFName.of("Type"));
-    if (type !== PDFName.of("ObjStm") && type !== PDFName.of("XRef")) return object;
-    const dict = object.dict.clone();
-    dict.delete(PDFName.of("Filter"));
-    dict.delete(PDFName.of("DecodeParms"));
-    return PDFRawStream.of(dict, boundedDecode(object, budget).decode());
-  };
-  const context = await parser.parseDocument();
-  return new (PDFDocument as unknown as Opening)(context, false, false);
 }
 
 async function digest(bytes: Uint8Array): Promise<string> {
@@ -185,17 +142,17 @@ export async function readRecoveryPackPdf(bytes: Uint8Array): Promise<RecoveryPa
   if (bytes.length === 0 || bytes.length > MAX_PACK_PDF) refuse("size");
   if (!looksLikePdf(bytes)) refuse("not_a_pack");
   let found: { file: Uint8Array; claimed: unknown };
-  const budget: Budget = { left: DECODE_BUDGET, exceeded: false };
   try {
-    const pdf = await load(bytes, budget);
+    const pdf = await PDFDocument.load(bytes, {
+      throwOnInvalidObject: true,
+      updateMetadata: false,
+    });
     const entry = onlyEmbeddedFile(pdf);
     if (entry === undefined || entry.name !== PACK_ATTACHMENT) refuse("not_a_pack");
-    const file = contents(entry.spec, budget);
+    const file = contents(entry.spec);
     const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
     found = { file, claimed: info.lookup(PDFName.of("WaitronRecoveryDigest")) };
   } catch (error) {
-    // pdf-lib's parser turns a refusal inside it into an error of its own.
-    if (budget.exceeded) refuse("size");
     if (error instanceof RecoveryPackFileError) throw error;
     refuse("carrier");
   }
