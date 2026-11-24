@@ -1141,7 +1141,7 @@ their tests unchanged.
 
 **Files:** `apps/server/src/stream-api.ts` (the kit route), `backup-api.ts` (the archive pack
 route), `recovery-document-api.ts` (deleted) and its mount in `recovery-pack-api.ts:8-22` (the node
-recovery pack route `/api/box/recovery-pack` stays: design §9 leaves it open),
+recovery pack route `/api/box/recovery-pack` stays: design §9 leaves it open; 2026-11-24: A1323 PR 2c removed it),
 `packages/module/src/module.ts` (`recoveryDocument` removed),
 `packages/fiscal-verifactu/src/completed-recovery-document.ts` (`FISCAL_RECOVERY_DOCUMENT` removed),
 `packages/composition/src/modules.ts:308`, `apps/server/src/recovery-document.boot.test.ts` and

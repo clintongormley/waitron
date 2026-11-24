@@ -14,6 +14,9 @@
 > checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
 > `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
 
+> **2026-11-24, A1323 PR 2c:** the node recovery pack (Backups → Create pack) and the custodian's
+> `sign-register` command, whose output only that pack read, were removed.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one
