@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MASTER_KEY_DAMAGED_NO_SCAN, MASTER_KEY_FIELD_WORDS } from "./master-key-field.js";
+import * as table from "./master-key-field.js";
+import { MASTER_KEY_FIELD_WORDS } from "./master-key-field.js";
 
 describe("the master-key field's words", () => {
   it("names the key, the pack button and each refusal in English", () => {
@@ -7,12 +8,11 @@ describe("the master-key field's words", () => {
     expect(words.label).toBe("Master key");
     expect(words.button).toBe("Choose the recovery pack PDF");
     expect(words.notPack).toBe("This PDF is not a recovery pack.");
-    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key or scan it.");
+    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key.");
     expect(words.notWhole).toBe("Not a whole master key. Check it against the recovery pack.");
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Wrong master key. Use the one dated 2026-11-23 · QZJV.",
     );
-    expect(MASTER_KEY_DAMAGED_NO_SCAN.en).toBe("This recovery pack PDF is damaged. Type the key.");
   });
 
   it("names the key, the pack button and each refusal in Spanish", () => {
@@ -21,7 +21,7 @@ describe("the master-key field's words", () => {
     expect(words.button).toBe("Elegir el PDF del paquete de recuperación");
     expect(words.notPack).toBe("Este PDF no es un paquete de recuperación.");
     expect(words.damaged).toBe(
-      "Este PDF del paquete de recuperación está dañado. Escribe la clave o escanéala.",
+      "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     );
     expect(words.notWhole).toBe(
       "No es una clave maestra completa. Compárala con el paquete de recuperación.",
@@ -29,9 +29,10 @@ describe("the master-key field's words", () => {
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Clave maestra incorrecta. Usa la del 2026-11-23 · QZJV.",
     );
-    expect(MASTER_KEY_DAMAGED_NO_SCAN.es).toBe(
-      "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
-    );
+  });
+
+  it("offers one damaged-pack line for every page, never a Scan button the page lacks", () => {
+    expect(Object.keys(table)).toEqual(["MASTER_KEY_FIELD_WORDS"]);
   });
 
   it("says which pack holds the master key, when it is known", () => {

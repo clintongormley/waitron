@@ -16,7 +16,7 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
     label: "Master key",
     button: "Choose the recovery pack PDF",
     notPack: "This PDF is not a recovery pack.",
-    damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+    damaged: "This recovery pack PDF is damaged. Type the key.",
     notWhole: "Not a whole master key. Check it against the recovery pack.",
     wrongKey: (keyName) => `Wrong master key. Use the one dated ${keyName}.`,
     elsewhere: (heldBy) =>
@@ -28,7 +28,7 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
     label: "Clave maestra",
     button: "Elegir el PDF del paquete de recuperación",
     notPack: "Este PDF no es un paquete de recuperación.",
-    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave o escanéala.",
+    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     notWhole: "No es una clave maestra completa. Compárala con el paquete de recuperación.",
     wrongKey: (keyName) => `Clave maestra incorrecta. Usa la del ${keyName}.`,
     elsewhere: (heldBy) =>
@@ -36,10 +36,4 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
         ? "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave."
         : `Este paquete de recuperación no tiene la clave maestra. Está en el paquete de recuperación ${heldBy}: elige ese paquete o introduce su clave.`,
   },
-};
-
-/** `damaged` for a field that offers no Scan, such as the restore clock page's. */
-export const MASTER_KEY_DAMAGED_NO_SCAN: Record<PackLocale, string> = {
-  en: "This recovery pack PDF is damaged. Type the key.",
-  es: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
 };

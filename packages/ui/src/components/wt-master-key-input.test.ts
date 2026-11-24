@@ -18,7 +18,7 @@ const EN: MasterKeyInputCopy = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
   notPack: "This PDF is not a recovery pack.",
-  damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+  damaged: "This recovery pack PDF is damaged. Type the key.",
   notWhole: "Not a whole master key. Check it against the recovery pack.",
   wrongKey: (name) => `Wrong master key. Use the one dated ${name}.`,
   elsewhere: (heldBy) =>
