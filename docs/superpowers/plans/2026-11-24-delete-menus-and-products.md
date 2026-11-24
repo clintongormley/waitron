@@ -1,0 +1,23 @@
+# Permanent deletion for menus and products
+
+[Owner's design](../specs/2026-11-24-delete-menus-and-products-design.md). Deliver two pull requests by screen. Each uses Delete throughout its changed screens, keeps the existing refusals and choices, hides deleted rows from current management reads and configuration exports, and keeps their identities for historical reads. The existing `active` flag and deletion transactions stay. Work on the separate Set menus page follows both slices.
+
+## 1. Menus and set menus
+
+- In `packages/menu/src/{archive,operations,menu-copy,set-menus}.ts`, `packages/venue-service/src/{menu-timetable,service,errors}.ts`, `packages/shared/src/menu-document/menu-types.ts` and `apps/server/src/menu-api.ts`, reuse the archive transaction for Delete, including its permissions, replacements, dependency warnings and default-menu rules. Rename the two menu routes and their callers together. Filter current list, structure and detail reads where they serve management. Refuse copying deleted menus at the server. Count the products for the existing impact dialog from the menu's resolved structure.
+- In `apps/dashboard/src/{screens/menus-screen,widgets/menu-archive-dialog,api/client}.ts` and the locale files, open the list for deleted or unknown ids. Keep Copy for listed menus. Use All as the starting filter with Published and Requiring attention for full menus. Preserve the combined list until the separate page lands. Rename menu activity and error codes in their registries and displays.
+- Start with failing cases in `menu-api.archive.test.ts` for deleting a full menu and a set menu, hidden reads, and refused direct copy. Keep the existing replacement, permission and dependency cases. In `menus-screen.test.ts` and the dialog's unsaved tests, cover filters, deep links, the name and product count, and the existing choice flow.
+
+## 2. Products, variants and categories
+
+- In `packages/menu/src/{archive,operations,variants,product-editor,product-items,units}.ts` and their consumers, reuse the deletion checks and draft, menu-price and extras cleanup. Limit management list, editor and category counts to current rows. In `apps/dashboard/src/screens/{products-screen,units-screen}.ts` and the product browser, list, details and editor widgets, remove archived browsing, return deleted links to Products and use Delete for saved products, saved variants and all bulk selections. Keep Remove for unsaved variants and Keep for staged deletion. Rename the product routes, error and activity codes and the shared lifecycle names, including the remaining archive file and till, alerts and locale copies.
+- For separately deleting a unit or photo, hide deleted users in the impact read and release their references in the same transaction as that resource's deletion. Reuse the unit cleanup in `units.ts` and the image usage and delete paths in `packages/media/src/images.ts`; align the image library list and counts. Trace open orders, refunds, corrections, reprints and reports before releasing references. Keep active, shared and live or scheduled publication protections. Existing unit foreign keys and photo triggers stay.
+- Start with failing cases in `archive.db.test.ts`, `units.db.test.ts`, `image-references.test.ts` and `menu-api.test.ts` for hidden products and variants, their retained sale history and separately deletable units and photos. Exercise a live use that still refuses. Use existing product screen, editor, list and image library browser suites for the deep link, single and mixed bulk labels and staged variant deletion.
+
+## Both pull requests
+
+Add the corresponding `leaveBehindWhenFalse: "active"` declaration in `packages/db/src/configuration-transfer.ts`. Reuse the exporter’s foreign-key and declared JSON-reference pruning. In `apps/server/src/configuration-transfer.test.ts`, export real deleted rows and their dependencies beside live controls, import the result and check the remaining menu, items and choices. Run focused changed-file suites and code-registry guards, then the full cross-package review. No schema, fiscal or old-export conversion work is planned.
+
+Update both language guides, the design-system descriptions and the backlog as each slice lands. Send the owner's required screenshots before each merge: menu and set-menu delete windows and Menus filters in slice 1; product, variant and category delete windows and Products filters in slice 2. Capture both widths, both themes and both languages.
+
+Estimated changed lines (added plus removed): slice 1 about 425 product and 500 test; slice 2 about 700 product and 800 test, including renamed assertions and removal of archived-browsing cases.
