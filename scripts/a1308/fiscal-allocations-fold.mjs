@@ -4,8 +4,8 @@
 import { execFileSync } from "node:child_process";
 import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { isMainScript } from "../is-main-script.mjs";
 
 const oldName = /\b(?:fiscalAllocations|fiscal_allocations)\b/;
 const testHelper = "packages/fiscal-verifactu/test/allocation-rows.js";
@@ -114,5 +114,4 @@ function main(args) {
   return exitCode;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  process.exitCode = main(process.argv.slice(2));
+if (isMainScript(import.meta.url)) process.exitCode = main(process.argv.slice(2));
