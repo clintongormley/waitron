@@ -13,6 +13,7 @@ import type {
 import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { TenderRefundSession } from "../state/tender-refund.js";
+import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import "./give-back-under-way.js";
 import type { TillGiveBackUnderWay } from "./give-back-under-way.js";
 
@@ -781,6 +782,267 @@ describe("one step at a time, and what the till saved", () => {
     await vi.waitFor(() => expect(pin.error?.code).toBe("pin.invalid"));
     expect(root(el).querySelector("till-supervisor-override-dialog")).toBe(pin);
     expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledTimes(2);
+  });
+});
+
+const HAND_KEYED = [CASH_ROW, { ...CARD_ROW, manual: true }];
+/** Presses the hand-keyed card, says the terminal's refund is done and presses Record. */
+async function recordOnTerminal(el: TillGiveBackUnderWay) {
+  press(el, "card");
+  await vi.waitFor(() => expect(root(el).querySelector("[data-terminal]")).not.toBeNull());
+  root(el)
+    .querySelector("wt-switch[name=terminal-done]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await el.updateComplete;
+  root(el).querySelector<HTMLElement>("[data-record]")!.click();
+}
+const JOURNAL_KEY = `waitron.tender-refund:${JSON.stringify(["device-1", "staff-1"])}:${JSON.stringify("sale-1")}`;
+
+describe("a hand-keyed card's refusal is shown", () => {
+  it("shows the box's refusal after the PIN, leaving the terminal step", async () => {
+    const api = fakeApi();
+    api.getRefundableTenders.mockResolvedValue(HAND_KEYED);
+    api.refundTransaction.mockRejectedValueOnce(refused("invoice_correction.leg_too_large"));
+    const { el } = await mount(OPEN, api);
+
+    await recordOnTerminal(el);
+    signIn(await pinDialog(el));
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(codeMessage("invoice_correction.leg_too_large")),
+    );
+    expect(root(el).querySelector("[data-terminal]")).toBeNull();
+  });
+
+  it("says the approvers could not be read, leaving the terminal step", async () => {
+    const api = fakeApi();
+    api.getRefundableTenders.mockResolvedValue(HAND_KEYED);
+    api.listApprovers.mockRejectedValueOnce(lost());
+    const { el } = await mount(OPEN, api);
+
+    await recordOnTerminal(el);
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_approvers_failed")));
+    expect(root(el).querySelector("[data-terminal]")).toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("says this device could not save the card's part, leaving the terminal step", async () => {
+    localStorage.setItem(JOURNAL_KEY, "{not json");
+    const api = fakeApi();
+    api.getRefundableTenders.mockResolvedValue(HAND_KEYED);
+    const { el } = await mount(OPEN, api);
+
+    await recordOnTerminal(el);
+    signIn(await pinDialog(el));
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.storage")));
+    expect(root(el).querySelector("[data-terminal]")).toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the terminal step under a wrong PIN, which shows in the sign-in", async () => {
+    const api = fakeApi();
+    api.getRefundableTenders.mockResolvedValue(HAND_KEYED);
+    api.refundTransaction.mockRejectedValueOnce({ code: "pin.invalid", status: 401 });
+    const { el } = await mount(OPEN, api);
+
+    await recordOnTerminal(el);
+    const pin = await pinDialog(el);
+    signIn(pin);
+    await vi.waitFor(() => expect(pin.error?.code).toBe("pin.invalid"));
+    expect(root(el).querySelector("[data-terminal]")).not.toBeNull();
+  });
+});
+
+describe("only a card's part with no answer counts as lost", () => {
+  it("does not call a card refused for a right lost once the sign-in is cancelled", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    const first = await mount(OPEN, api);
+    press(first.el, "card");
+    const pin = await pinDialog(first.el);
+    pin.dispatchEvent(new CustomEvent("override-cancel"));
+    await first.el.updateComplete;
+    expect(root(first.el).querySelector("[data-lost]")).toBeNull();
+    first.el.remove();
+
+    const { el } = await mount(OPEN, api);
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
+    expect(shown(el, "card")).toBe(true);
+    expect(shown(el, "cancel")).toBe(true);
+  });
+
+  it("does not call a card refused for a right lost when the window closes during the sign-in", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    const first = await mount(OPEN, api);
+    press(first.el, "card");
+    await pinDialog(first.el);
+    first.el.remove();
+
+    const { el } = await mount(OPEN, api);
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
+    expect(shown(el, "card")).toBe(true);
+  });
+
+  it("does not call a card refused because another refund waits on it lost", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("tender.refund_in_progress", { tenderId: "card-1" }),
+    );
+    const first = await mount(OPEN, api);
+    press(first.el, "card");
+    await vi.waitFor(() => expect(bottom(first.el)).toBe(codeMessage("tender.refund_in_progress")));
+    first.el.remove();
+
+    const { el } = await mount(OPEN, api);
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
+    expect(shown(el, "card")).toBe(true);
+    expect(shown(el, "cancel")).toBe(true);
+  });
+
+  it("leaves out a card refund saved for something other than this correction", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(lost());
+    await new TenderRefundSession(SCOPE, api)
+      .submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      })
+      .catch(() => {});
+    const { el } = await mount(OPEN, api);
+
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
+    expect(root(el).querySelector("[data-send-again]")).toBeNull();
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, moneyBack: "1.00", left: "5.05" });
+    press(el, "check");
+    await vi.waitFor(() => expect(text(root(el).querySelector("[data-left]"))).toContain("€5.05"));
+    expect(api.refundTransaction).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-send-again]")).toBeNull();
+  });
+
+  it("words a card answer that does not match what was sent as an unknown answer", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    const { el } = await mount(OPEN, api);
+    press(el, "card");
+    await vi.waitFor(() => expect(api.refundTransaction).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    api.getTenderRefund.mockImplementation(async () => ({
+      ...refundOf("sale-1", api.refundTransaction.mock.calls[0]![1]),
+      tenderId: "card-9",
+    }));
+
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
+  });
+
+  it("hides Cancel this money back while a cash answer is unknown", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(lost());
+    const { el } = await mount(OPEN, api);
+    expect(shown(el, "cancel")).toBe(true);
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
+    expect(shown(el, "cancel")).toBe(false);
+  });
+});
+
+describe("what still works when a read fails", () => {
+  it("keeps offering the card when the payments cannot be read again after some cash is given", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockResolvedValueOnce({
+      correction: { ...OPEN, moneyBack: "3.00", left: "3.05" },
+      refunds: [],
+      replayed: false,
+    } as never);
+    const { el } = await mount(OPEN, api);
+    api.getRefundableTenders.mockRejectedValue(lost());
+    const reads = api.getRefundableTenders.mock.calls.length;
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(api.getRefundableTenders).toHaveBeenCalledTimes(reads + 1));
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-cash-given]"))).toBe(
+        t("give_back.uw_cash_given").replace("{amount}", "€6.05"),
+      ),
+    );
+    expect(text(root(el).querySelector("[data-choice=card]"))).toBe(
+      t("give_back.uw_card").replace("{amount}", "€3.05").replace("{card}", "···0042"),
+    );
+    expect(bottom(el)).toBe("");
+  });
+
+  it("offers the cash still left when the saved cash request cannot be read", async () => {
+    const other = new InvoiceCorrectionSession(SCOPE, {
+      openInvoiceCorrection: () => Promise.reject(lost()),
+      giveInvoiceCorrectionCash: () => Promise.reject(lost()),
+    });
+    await other.giveCash("correction-1", { amount: "2.00" }).catch(() => {});
+    const cashOffered = (el: TillGiveBackUnderWay) =>
+      text(root(el).querySelector("[data-choice=cash]"));
+    const saved = await mount();
+    expect(cashOffered(saved.el)).toBe(t("give_back.uw_cash").replace("{amount}", "€2.00"));
+    saved.el.remove();
+
+    const key = Object.keys(localStorage).find((k) => k.includes("invoice-correction-cash"))!;
+    localStorage.setItem(key, "{not json");
+    const { el } = await mount();
+
+    expect(cashOffered(el)).toBe(t("give_back.uw_cash").replace("{amount}", "€6.05"));
+  });
+
+  it("shows why the people who may sign in could not be read, offering no sign-in", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    api.listApprovers.mockRejectedValueOnce(refused("sale.correction_unsupported"));
+    const { el } = await mount(OPEN, api);
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(bottom(el)).toBe(codeMessage("sale.correction_unsupported")));
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+  });
+
+  it("gives up reading the people who may sign in at the time limit, offering no sign-in", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    api.listApprovers.mockImplementationOnce(
+      (_permission, options) =>
+        new Promise((_resolve, reject) =>
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          ),
+        ),
+    );
+    const { el } = await mount(OPEN, api);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      press(el, "cash");
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
+      await el.updateComplete;
+      expect(api.listApprovers).toHaveBeenCalledOnce();
+      expect(idle(el)).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await el.updateComplete;
+
+      expect(idle(el)).toBe(true);
+      expect(bottom(el)).toBe(t("give_back.uw_approvers_failed"));
+      expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

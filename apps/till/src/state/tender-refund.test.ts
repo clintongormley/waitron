@@ -704,3 +704,86 @@ it("resends the saved request with its cancellation ids after a lost answer", as
   expect(sent[0]!.cancellationIds).toEqual(ids);
   expect(sent[1]!.cancellationIds).toEqual(ids);
 });
+
+it("forgets on abandon a request only refusals for a right answered", async () => {
+  const api = {
+    refundTransaction: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toEqual({
+    code: "authorization.not_permitted",
+  });
+  await expect(session.retry("sale-1", { personId: "m", pin: "1" })).rejects.toEqual({
+    code: "authorization.not_permitted",
+  });
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).toBeNull();
+});
+
+it("keeps on abandon a request whose answer was ever lost", async () => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toThrow("Failed to fetch");
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).not.toBeNull();
+  await expect(session.retry("sale-1")).rejects.toEqual({ code: "authorization.not_permitted" });
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).not.toBeNull();
+});
+
+it("keeps on abandon a request while it is being sent", async () => {
+  let answer!: (error: unknown) => void;
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => (answer = reject))),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toBeTruthy();
+  const sending = session.retry("sale-1", { personId: "m", pin: "1" });
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).not.toBeNull();
+  answer(new TypeError("Failed to fetch"));
+  await expect(sending).rejects.toThrow("Failed to fetch");
+  expect(session.read("sale-1")).not.toBeNull();
+});
+
+it("forgets a first request refused because another refund on the payment waits", async () => {
+  const api = {
+    refundTransaction: vi.fn().mockRejectedValue({ code: "tender.refund_in_progress" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toEqual({
+    code: "tender.refund_in_progress",
+  });
+  expect(session.read("sale-1")).toBeNull();
+});
+
+it("keeps a request refused because another refund waits after its answer was lost", async () => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce({ code: "tender.refund_in_progress" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toThrow("Failed to fetch");
+  await expect(session.retry("sale-1")).rejects.toEqual({ code: "tender.refund_in_progress" });
+  expect(session.read("sale-1")).not.toBeNull();
+});

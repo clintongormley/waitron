@@ -86,6 +86,10 @@ export class TillGiveBackUnderWay extends LitElement {
     this.lostCard = this.#lostCard();
     void this.#readTenders();
   }
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#abandonCard();
+  }
   override updated(): void {
     if (this.#focused) return;
     const first = this.shadowRoot!.querySelector<LitElement>("[data-choice]");
@@ -104,12 +108,21 @@ export class TillGiveBackUnderWay extends LitElement {
       return false;
     }
   }
-  /** The card refund this till saved for the receipt, if one is still unsettled. */
+  /** The card refund this till saved for this correction, if one is still unsettled. */
   #savedCard(): SavedTenderRefund | null {
     try {
-      return this.refunds.read(this.saleId);
+      const saved = this.refunds.read(this.saleId);
+      return saved?.request.invoiceCorrectionId === this.correction.id.toLowerCase() ? saved : null;
     } catch {
       return null;
+    }
+  }
+  /** A card's part refused for a right whose sign-in is dropped moved nothing: forget it. */
+  #abandonCard(): void {
+    try {
+      this.refunds.abandon(this.saleId);
+    } catch {
+      // Unreadable storage: Check again or the next press says so.
     }
   }
   #lostCard(): SavedTenderRefund | null {
@@ -157,9 +170,11 @@ export class TillGiveBackUnderWay extends LitElement {
   async #failed(error: unknown, retry: Retry, approverId: string | undefined): Promise<void> {
     if (error instanceof TenderRefundAttemptError) {
       this.#settle();
+      this.terminal = null;
       this.lostCard = this.#lostCard();
       if (error.kind === "storage" || error.kind === "invalid")
         this.message = t("give_back.storage");
+      else if (error.kind === "mismatch") this.message = t("give_back.uw_unknown");
       else if (this.lostCard === null) this.message = t("give_back.uw_card_waiting");
       return;
     }
@@ -176,10 +191,10 @@ export class TillGiveBackUnderWay extends LitElement {
       return;
     }
     this.#settle();
+    this.terminal = null;
     if (refusal.code === "network") {
       this.lostCard = this.#lostCard();
       if (this.lostCard === null) this.message = t(retry.lost);
-      else this.terminal = null;
       return;
     }
     this.message = codeMessage(refusal.code, currentLocale(), refusal);
@@ -191,9 +206,14 @@ export class TillGiveBackUnderWay extends LitElement {
     try {
       this.approvers = await this.api.listApprovers(right, { signal: limit.signal });
       this.pinError = null;
-    } catch {
+    } catch (error) {
+      const read = refusalOf(error);
       this.#settle();
-      this.message = t("give_back.uw_approvers_failed");
+      this.terminal = null;
+      this.message =
+        read.code === "network"
+          ? t("give_back.uw_approvers_failed")
+          : codeMessage(read.code, currentLocale(), read);
     } finally {
       limit.done();
     }
@@ -380,7 +400,7 @@ export class TillGiveBackUnderWay extends LitElement {
         : nothing
     }
     ${
-      nothingBack && this.lostCard === null
+      nothingBack && this.lostCard === null && this.#savedCash() === null
         ? this.#choice("cancel", t("give_back.uw_cancel"), t("give_back.uw_cancel_hint"), end(null))
         : nothing
     }`;
@@ -486,6 +506,7 @@ export class TillGiveBackUnderWay extends LitElement {
                 event.stopPropagation();
                 if (this.busy) return;
                 this.#settle();
+                this.#abandonCard();
               }}
               @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) =>
                 this.#signedIn(event)}

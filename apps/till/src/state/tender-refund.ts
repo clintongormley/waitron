@@ -263,7 +263,8 @@ export class TenderRefundSession {
         this.attempts.refused(this.scope, sent);
       // A later refusal cannot establish what an earlier unknown call returned.
       else if (knownRefused) {
-        if (code === "tender.refund_exceeds_payment") this.attempts.refused(this.scope, sent);
+        if (code === "tender.refund_exceeds_payment" || code === "tender.refund_in_progress")
+          this.attempts.refused(this.scope, sent);
         else if (
           code === "authorization.not_permitted" ||
           code === "tender.refund_exceeds_cancelled" ||
@@ -299,6 +300,16 @@ export class TenderRefundSession {
       });
       return this.#send(sent, override, fresh);
     });
+  }
+
+  /** Forgets a saved request that only refusals have answered, so nothing moved under it. A
+   * request with an answer ever lost, or one being sent, is kept. */
+  abandon(saleId: string): void {
+    if (this.#busy) return;
+    const saved = this.read(saleId);
+    if (saved?.refundId !== null || !this.#refused.has(saved.request.submissionId)) return;
+    this.#refused.delete(saved.request.submissionId);
+    this.attempts.refused(this.scope, saved);
   }
 
   resume(saleId: string): Promise<TenderRefundView> {
