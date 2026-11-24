@@ -30,7 +30,7 @@ import { writePartyAllergy } from "@waitron/venue-service";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import type { ExtraSelection } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { saveDraft } from "./order-drafts.js";
 import { republishMenus } from "./testing/publish-menu.js";
 

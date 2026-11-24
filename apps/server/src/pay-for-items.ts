@@ -56,11 +56,11 @@ import {
   assertDistinctTransferLines,
   checkLinePart,
   splitLinesWithinOrder,
-  storedOrderTotal,
   type PartLine,
   type SplitRow,
-  type TillSaleDeps,
-} from "./working-order.js";
+} from "./working-order-transfer.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
+import { type TillSaleDeps } from "./working-order-context.js";
 import "./errors.js";
 
 /** A dish chosen to pay for: the whole line, or `quantity` of it. */

@@ -9,7 +9,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 let venue: BillVenue;

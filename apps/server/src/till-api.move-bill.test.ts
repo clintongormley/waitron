@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentLines, refunds as refundRows, saleLines, sales } from "@waitron/db";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {

@@ -4,7 +4,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { deploymentEnvironment } from "../config.js";
-import { parkOrder } from "../working-order.js";
+import { parkOrder } from "../working-order-open.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { deviceRequestCfg } from "./session-device.js";
 import { testTradingAdmission } from "./trading-admission.js";

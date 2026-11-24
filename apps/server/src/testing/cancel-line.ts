@@ -16,7 +16,7 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import { cancelItem, type CancelItemAsk } from "../line-cancel.js";
 import { readCancellationContext } from "../line-cancel-context.js";
 import { partyRevision } from "../parties.js";
-import type { OrderAttendance } from "../working-order.js";
+import type { OrderAttendance } from "../working-order-context.js";
 import { applyAdjustment } from "../adjustments-apply.js";
 import type { TradingContext } from "../trading-context.js";
 import { send, type BillVenue } from "./bill-venue.js";

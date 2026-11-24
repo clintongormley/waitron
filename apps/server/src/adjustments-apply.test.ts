@@ -63,12 +63,10 @@ import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readSettledTicket, type TillSaleResult } from "./till-sale.js";
-import {
-  advanceTicketItem,
-  parkOrder,
-  readOrderRevision,
-  splitLinesWithinOrder,
-} from "./working-order.js";
+import { splitLinesWithinOrder } from "./working-order-transfer.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { parkOrder } from "./working-order-open.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { send as rawPaymentSend } from "./testing/bill-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import {

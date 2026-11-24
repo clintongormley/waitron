@@ -45,7 +45,7 @@
   "apps/server/src/restore.ts": 1250,
   "apps/server/src/setup-api.ts": 2000,
   "apps/server/src/till-api.ts": 4750,
-  "apps/server/src/working-order.ts": 10000,
+  "apps/server/src/working-order-line-edits.ts": 1250,
   "apps/setup/src/api/client.ts": 1250,
   "apps/setup/src/screens/handover-screen.ts": 2250,
   "apps/setup/src/screens/venue-screen.ts": 1500,

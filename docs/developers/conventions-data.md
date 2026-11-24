@@ -596,7 +596,7 @@ before its in-memory line loop; the variants come from the offers it holds (`Liv
 it once. `fireLines` opens one routing snapshot. It groups dishes that need a station decision
 by their agreed period, with a group for dishes without an agreement, and asks `makers` about
 the distinct products in each group. The case "routes a round with repeated products from one
-venue-service snapshot" in `apps/server/src/working-order.test.ts` checks the snapshot count and
+venue-service snapshot" in `apps/server/src/working-order-kitchen-fire.test.ts` checks the snapshot count and
 the stations reached by three fired lines.
 
 ## Opening hours store "no claim" as no row
@@ -767,7 +767,7 @@ below.
 A period's menus can be picked and sent from its start until its end, one window for both: for
 Lunch 12:00–14:00, 14:00 itself is refused (`orderableMenuIds` in `resolveDepartmentService`,
 `packages/venue-service/src/menu-timetable.ts`). A dish line whose period has ended is refused
-`menu_period.not_running` (`apps/server/src/working-order.ts`); increasing a line already sent to
+`menu_period.not_running` (`apps/server/src/working-order-pricing.ts`); increasing a line already sent to
 an order is refused the same way, while unchanged lines, decreases and notes keep their stored-line
 behaviour. A new dish whose period ended earlier the same business day (`endedMenus`) is the
 exception: `priceOrderLines` accepts it at its taken price when a menu the running period offers
@@ -792,7 +792,7 @@ their own confirmation, never the dish's. Extras added to a dish not yet sent ar
 added; they are judged when the dish is sent, as below. Neither is refused
 `menu_period.not_running` or by a closed zone (A1085).
 A dish stored unsent on a parked counter order is judged again when it is
-sent, as entry judges it, unless already marked (`lateUnsentDishes`, `apps/server/src/working-order.ts`):
+sent, as entry judges it, unless already marked (`lateUnsentDishes`, `apps/server/src/working-order-late-send.ts`):
 by the menu it was stored from and the department of the order's zone at the send. A late dish's unmarked extras are marked with it, as entry marks them.
 An unmarked extra on a dish already marked was stored after the dish was judged, so it is judged on
 its own, by its dish's product, and a refusal names its dish's line. A dish whose menu the order's
@@ -856,7 +856,7 @@ remain separate.
 
 A closed zone refuses new service, new dish lines and quantity increases with `service_zone.closed`.
 `assertZoneTakesNewOrders` is called by
-`apps/server/src/table-actions.ts`, `working-order.ts` and `move-bill.ts`; the route cases in
+`apps/server/src/table-actions.ts`, `working-order-open.ts`, `working-order-pricing.ts` and `move-bill.ts`; the route cases in
 `apps/server/src/till-api.zone-closed.test.ts` check the resulting refusals. A move bringing an open
 bill or guests into that zone is refused. Accepting a department transfer into it is also refused,
 before resolving the request or changing its bill (`acceptDepartmentTransfer` in
@@ -872,7 +872,7 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 `apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
 `apps/server/src/kitchen-print.ts`.
 Pricing still reads static offer membership; zone closures do not change recorded prices.
-`working-order.ts` performs the zone check when adding lines, separately from its offer read.
+`working-order-pricing.ts` performs the zone check when adding lines, separately from its offer read.
 
 _2026-11-14: DEAD-CODE-1 retires the separate menu-week and closed-week HTTP routes
 named below. The season painter saves through `PUT …/seasons/:seasonId/weeks`;
@@ -1092,7 +1092,7 @@ calendar.
   `closeWholeVenue: false` (`firstMenuClash`, `packages/venue-service/src/menu-timetable-rules.ts`)
   and the resolver never reads `special_dates.close_whole_venue`.
 - A day's slots are replaced by deleting and inserting the whole set; nothing references a slot.
-- Pricing (`readBasketOffers` in `apps/server/src/working-order.ts`, `offersFor` in
+- Pricing (`readBasketOffers` in `apps/server/src/working-order-pricing.ts`, `offersFor` in
   `apps/server/src/order-drafts.ts`) passes `withDefault: false` to `listZoneOffers`, which then
   reads no timetable table. The case "price a basket's offers without reading the timetable at all"
   in `packages/venue-service/src/menu-timetable.test.ts` pins what `listZoneOffers` reads with that
@@ -1221,7 +1221,7 @@ all. Measured 2026-09-22 on Node v26.7.0, `select count(*)::int` is
 
 **A test asserting the stored COUNT is not reading an amount, and several cast to int.** The shape is
 `select cast(unit_price_gross as int) as unit_price_gross` followed by
-`expect(...).toEqual([{ unit_price_gross: 325 }])` (`apps/server/src/working-order.test.ts`);
+`expect(...).toEqual([{ unit_price_gross: 325 }])` (`apps/server/src/working-order-open.test.ts`);
 `till-api.test.ts` carries the same shape. Nothing converts, so there
 is no amount to get wrong, and the cast is there only to give the assertion a number.
 
@@ -1616,7 +1616,7 @@ installer at all, which is why the mismatch stayed invisible. Measured when the 
 the trigger set taken from the class, nine tables came back refusing an update and a delete that
 ordinary product code performs — `payments` (nine call sites in `packages/payments/src/store.ts`,
 a card payment's row moving through its states), `cadenas` and `registro_sif`
-(`packages/fiscal-verifactu`), `ticket_items` (`apps/server/src/working-order.ts`),
+(`packages/fiscal-verifactu`), `ticket_items` (`apps/server/src/working-order-serving.ts`),
 `daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat` and `envios` —
 and `order_amendments`, which must refuse both, came back with no trigger at all, because it is
 classified `state`. The class is wrong in both directions.
@@ -2542,7 +2542,7 @@ with guests waits and, once free, is marked whatever stands in its new place. On
 group's tables would move (taken off, say), the catch-up applies it as any other row. Back to its
 saved place on a table that needs moving is Mark moved (`backToSaved`). A table that needs moving is
 refused `table.needs_moving` when a tab is opened at it (`openTab`,
-`apps/server/src/working-order.ts`), a bill is moved to it (`readTargetTable`,
+`apps/server/src/working-order-open.ts`), a bill is moved to it (`readTargetTable`,
 `apps/server/src/move-bill.ts`) or it is merged (`apps/server/src/floor-today-merges.ts`).
 
 Automatic resets and catch-up keep a table in place while another staying on the map stands in

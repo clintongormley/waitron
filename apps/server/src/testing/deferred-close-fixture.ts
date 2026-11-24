@@ -15,7 +15,7 @@ import { partyFamily } from "../parties.js";
 import { systemClock } from "../till-backend.js";
 import { closeBillDeferredTx, type DeferredCloseDeps } from "../deferred-close.js";
 import type { CloseDeferredRequest } from "../deferred-close-types.js";
-import { parkOrder } from "../working-order.js";
+import { parkOrder } from "../working-order-open.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./bill-venue.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { placeOrder } from "./order-writer-fixture.js";

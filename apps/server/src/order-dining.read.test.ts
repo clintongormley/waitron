@@ -17,7 +17,7 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 
 // The till's order reads say how the order sells (its own stored way, whatever its department now
 // says) and whether staff may still switch it (A1522, Decision 10).

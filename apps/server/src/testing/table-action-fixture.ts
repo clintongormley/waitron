@@ -12,7 +12,7 @@ import {
   type TableActionOptions as Options,
 } from "../table-actions.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
-import type { OrderAttendance } from "../working-order.js";
+import type { OrderAttendance } from "../working-order-context.js";
 export * from "../table-actions.js";
 
 export type TableActionOptions = Omit<Options, "expectedEdits"> & {

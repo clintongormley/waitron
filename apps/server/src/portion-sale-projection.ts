@@ -1,6 +1,6 @@
 import type { LockedLine } from "@waitron/menu";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
-import type { OrderLineIdentity, StoredOrderLine } from "./working-order.js";
+import type { OrderLineIdentity, StoredOrderLine } from "./stored-order-lines.js";
 
 /** A dish line's place in its pricing cohort. */
 export interface PortionBinding {

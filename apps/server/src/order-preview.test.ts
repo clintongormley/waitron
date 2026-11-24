@@ -13,7 +13,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readOrderPreviewItems } from "./order-preview.js";
-import { listCounterWaiting, listHeldOrders } from "./working-order.js";
+import { listHeldOrders } from "./working-order-held-read.js";
+import { listCounterWaiting } from "./working-order-counter.js";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;

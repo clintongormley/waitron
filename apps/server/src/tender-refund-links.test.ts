@@ -43,7 +43,7 @@ import {
 } from "./testing/adjustment-venue.js";
 import { cashPayment, send } from "./testing/bill-venue.js";
 
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 
 let venue: AdjustmentVenue;
 useVenueDb({

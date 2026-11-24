@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrderLines } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertTabRound, priceTabRound, type TabRoundLine } from "../working-order.js";
+import { insertTabRound, priceTabRound, type TabRoundLine } from "../working-order-open.js";
 import {
   inTx,
   provisionAdjustmentVenue,

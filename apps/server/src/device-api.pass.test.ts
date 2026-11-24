@@ -38,13 +38,10 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
-import {
-  advanceTicketItem,
-  createOpenOrder,
-  fireableLineColumns,
-  fireLines,
-  markServed,
-} from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { fireableLineColumns, fireLines } from "./working-order-kitchen-fire.js";
+import { markServed } from "./working-order-serving.js";
 import { releasePassItems } from "./pass-release.js";
 import {
   OPERATOR,

@@ -25,7 +25,8 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { createOpenOrder, handOverOrder } from "./working-order.js";
+import { handOverOrder } from "./working-order-counter.js";
+import { createOpenOrder } from "./working-order-open.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

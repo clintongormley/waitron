@@ -25,7 +25,7 @@ import { readBillEditState } from "../bill-editing.js";
 import { endMeal } from "../meal-end.js";
 import { readDrafts, submitDraft } from "../order-drafts.js";
 import { setSetMenuCount } from "../set-menu-count.js";
-import { markServed } from "../working-order.js";
+import { markServed } from "../working-order-serving.js";
 import { expectedDraftEditForTest } from "./draft-command-fixture.js";
 import {
   commandFor,

@@ -6,7 +6,7 @@ import { passSees, type PassScope } from "./pass-board.js";
 import { canonicalJson } from "./parties.js";
 import { byText } from "./text-order.js";
 import { byMoment, earliestTime, latestTime } from "./time-order.js";
-import type { ExpoItem } from "./working-order.js";
+import type { ExpoItem } from "./working-order-pass.js";
 
 export type PassTarget =
   { kind: "group"; partyId: string; groupId: string } | { kind: "bill"; workingOrderId: string };

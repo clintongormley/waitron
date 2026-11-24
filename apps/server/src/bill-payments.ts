@@ -125,22 +125,28 @@ import {
 } from "./bill-payment-money.js";
 import { bumpPartyRevision, fingerprint } from "./parties.js";
 import {
-  bumpRevision,
-  captureOrderEdit,
-  createOpenOrder,
   filedLines,
-  moveOrderLines,
   priceOrderInvoice,
-  priceStoredOrderForIssuance,
-  readInvoiceNumber,
+  refuseUnavailableFullInvoice,
+} from "./working-order-invoice.js";
+import { saveHeldOrderIn } from "./working-order-held-write.js";
+import { moveOrderLines } from "./working-order-transfer.js";
+import {
+  bumpRevision,
   refusePaymentInFlight,
   refuseRefundInProgress,
-  refuseUnavailableFullInvoice,
-  saveHeldOrderIn,
+} from "./working-order-edit-state.js";
+import { createOpenOrder } from "./working-order-open.js";
+import {
+  priceStoredOrderForIssuance,
+  readInvoiceNumber,
   storedOrderTotal,
   toVatBreakdown,
-} from "./working-order.js";
-import type { GrossOrder, TillSaleDeps, UpdateHeldOrderRequest } from "./working-order.js";
+} from "./stored-order-lines.js";
+import { captureOrderEdit } from "./working-order-context.js";
+import type { UpdateHeldOrderRequest } from "./working-order-edit-state.js";
+import type { GrossOrder } from "./stored-order-lines.js";
+import type { TillSaleDeps } from "./working-order-context.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";

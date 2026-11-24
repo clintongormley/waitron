@@ -28,7 +28,7 @@ import { venueModuleConfig } from "./provision.js";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { loginWithPin } from "@waitron/identity";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";

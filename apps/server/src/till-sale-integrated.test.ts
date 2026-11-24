@@ -18,12 +18,9 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { billShare, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { takeReaderPaymentWithRecovery } from "./testing/bill-payment-fixture.js";
-import {
-  parkOrder,
-  priceForIssuance,
-  issueUnpaidInvoice,
-  markOrderPlaced,
-} from "./working-order.js";
+import { markOrderPlaced } from "./working-order-counter.js";
+import { priceForIssuance, issueUnpaidInvoice } from "./working-order-invoice.js";
+import { parkOrder } from "./working-order-open.js";
 import { decimal } from "@waitron/shared";
 
 describe("saved-zone payment transactions", () => {

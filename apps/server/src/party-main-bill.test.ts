@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, saleLines, sales, workingOrders } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
 
 import { placeGroups, submitGroups } from "./testing/group-submit-fixture.js";
 import {

@@ -31,7 +31,9 @@ import {
 } from "./testing/party-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { splitLinesWithinOrder, storedOrderTotal, type TabRoundLine } from "./working-order.js";
+import { splitLinesWithinOrder } from "./working-order-transfer.js";
+import { type TabRoundLine } from "./working-order-open.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
 import { moveItemsToNewBill, priceItemPicks, type ItemPick } from "./pay-for-items.js";
 import "./errors.js";
 

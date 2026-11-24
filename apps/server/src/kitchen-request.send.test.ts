@@ -30,7 +30,7 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { kitchenPhase } from "./kitchen-phase.js";
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady } from "./order-groups.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 

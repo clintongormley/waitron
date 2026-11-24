@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { setProfileServiceScope, replaceZoneClosedWeek } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import { createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { takeReaderBillPayment } from "./bill-payments.js";
 import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";

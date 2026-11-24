@@ -52,7 +52,8 @@ import {
   setReceiptLanguage,
 } from "./testing/bill-invoice-fixture.js";
 import { readLineCancellations } from "./line-service-state.js";
-import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
 import { readPaidQuantities } from "./bill-payments.js";
 import { releaseDeliveries } from "./delivery-release.js";
 import "./errors.js";

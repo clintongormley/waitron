@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { workingOrderLines, type Database } from "@waitron/db";
-import { fireLines, unsentDishLines } from "../working-order.js";
+import { fireLines, unsentDishLines } from "../working-order-kitchen-fire.js";
 import { inTx, seatWithNoAllergies, setupPartyVenue } from "./party-venue.js";
 import { addPortionRound } from "./portion-bill.js";
 import { seedBillSetMenu, setMenuOnFullMenu } from "./set-menu-bill-fixture.js";

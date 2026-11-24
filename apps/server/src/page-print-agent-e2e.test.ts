@@ -48,7 +48,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import type { TradingContext } from "./trading-context.js";
 import { createZone } from "./testing/service-zone.js";
 import { mountTillApi } from "./till-api.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";

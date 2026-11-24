@@ -15,7 +15,8 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { listCounterWaiting, listHeldOrders } from "./working-order.js";
+import { listHeldOrders } from "./working-order-held-read.js";
+import { listCounterWaiting } from "./working-order-counter.js";
 
 let venue: BillVenue;
 const suite = useVenueDb({

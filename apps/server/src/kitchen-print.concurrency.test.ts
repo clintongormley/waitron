@@ -11,7 +11,7 @@ import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 
 import { createStation } from "./kitchen.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";

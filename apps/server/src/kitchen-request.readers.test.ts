@@ -16,7 +16,9 @@ import { readOrderStateCounts } from "./order-state-counts.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import { readPartySignals } from "./table-signals.js";
 import type { FamilyBill } from "./parties.js";
-import { advanceTicketItem, markServed, type TableParty } from "./working-order.js";
+import { type TableParty } from "./working-order-table-state.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 const suite = useVenueDb({

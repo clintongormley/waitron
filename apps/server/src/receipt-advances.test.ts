@@ -7,7 +7,7 @@ import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.
 import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { formatReceipt } from "./receipt-ticket.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { readSettledTicket, type TillSaleLine, type TillSaleResult } from "./till-sale.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { RECIPIENT } from "./testing/deferred-close-fixture.js";

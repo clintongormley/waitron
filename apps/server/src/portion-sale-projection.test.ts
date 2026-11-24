@@ -42,7 +42,8 @@ import { splitPartyBill } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
-import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
+import { splitLinesWithinOrder } from "./working-order-transfer.js";
+import { readLockedLines, type StoredOrderLine } from "./stored-order-lines.js";
 
 registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
 

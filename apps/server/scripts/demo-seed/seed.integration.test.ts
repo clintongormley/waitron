@@ -20,7 +20,8 @@ import {
   MEDIA_FILENAME,
 } from "@waitron/shared";
 import type { OriginConfig } from "../../src/trading-context.js";
-import { getHeldOrder, parkOrder } from "../../src/working-order.js";
+import { getHeldOrder } from "../../src/working-order-held-read.js";
+import { parkOrder } from "../../src/working-order-open.js";
 import { readImageBytes } from "@waitron/media";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";

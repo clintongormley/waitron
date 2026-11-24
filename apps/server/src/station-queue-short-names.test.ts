@@ -29,7 +29,8 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { type StationQueueGroup, fireLines, listStationQueue } from "./working-order.js";
+import { type StationQueueGroup, listStationQueue } from "./working-order-station-queue.js";
+import { fireLines } from "./working-order-kitchen-fire.js";
 import "./errors.js";
 
 let v: PartyVenue;

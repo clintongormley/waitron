@@ -31,7 +31,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OriginConfig } from "./trading-context.js";
 
-import { createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import { createTable } from "./testing/live-table.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";

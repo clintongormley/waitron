@@ -36,7 +36,7 @@ import {
 } from "@waitron/node-db";
 import { seedNode as bareNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments, recordRefund } from "@waitron/payments";
-import { getHeldOrder, listHeldOrders } from "./working-order.js";
+import { getHeldOrder, listHeldOrders } from "./working-order-held-read.js";
 import { ALL_MODULES } from "@waitron/composition";
 import type { WaitronModule } from "@waitron/module";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";

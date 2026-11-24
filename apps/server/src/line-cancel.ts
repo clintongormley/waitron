@@ -58,17 +58,14 @@ import { holdPaperFor } from "./order-groups.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
+import { removeFromLine, removePortions, quantityOfLine } from "./working-order-removal.js";
+import { refusePaymentInFlight, bumpRevision } from "./working-order-edit-state.js";
+import { assertTabOpen } from "./stored-order-lines.js";
 import {
-  assertTabOpen,
   captureOrderEdit,
-  refusePaymentInFlight,
-  removeFromLine,
-  removePortions,
-  quantityOfLine,
-  bumpRevision,
   readOrderRevision,
   type OrderAttendance,
-} from "./working-order.js";
+} from "./working-order-context.js";
 import {
   serviceCancellationFamilies,
   enqueueServiceCancellation,

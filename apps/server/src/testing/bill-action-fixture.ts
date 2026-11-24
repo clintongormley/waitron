@@ -13,7 +13,8 @@ import {
 import type { BillEditExpected } from "../order-drafts.js";
 import type { TradingAdmission } from "../trading-admission.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
-import { splitLinesWithinOrder, type OrderAttendance } from "../working-order.js";
+import { splitLinesWithinOrder } from "../working-order-transfer.js";
+import { type OrderAttendance } from "../working-order-context.js";
 export * from "../bill-actions.js";
 
 export async function observedBillActionBody(

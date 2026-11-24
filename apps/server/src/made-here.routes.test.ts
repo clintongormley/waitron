@@ -51,7 +51,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { fireLines } from "./working-order.js";
+import { fireLines } from "./working-order-kitchen-fire.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: BillVenue;

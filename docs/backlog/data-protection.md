@@ -130,7 +130,7 @@ by the answers):
   **2026-11-14, A1532:** eligible print payloads are emptied after one week; their rows remain.
   Switching a bill back to a
   simplified invoice clears the staged customer (`setOrderInvoiceChoice`,
-  `apps/server/src/working-order.ts`). The README says the
+  `apps/server/src/working-order-invoice.ts`). The README says the
   box keeps such details and to ask the venue for them. Waits for the owner's answer below.
   Separately, Receipt Email keeps the destination in `invoice_deliveries.recipient` for a simplified
   receipt; the tax-identifier-only customer lookup cannot find that address. Include it when

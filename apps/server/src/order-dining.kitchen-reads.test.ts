@@ -7,7 +7,7 @@ import { departments, setDepartmentSalePolicyField } from "@waitron/venue-servic
 import { readScopedPassBoard } from "./pass-board.js";
 import { inTx, provisionBillVenue, seatedWith, type BillVenue } from "./testing/bill-venue.js";
 import { boardCards, EVERY } from "./testing/pass-board-probe.js";
-import { listStationQueues } from "./working-order.js";
+import { listStationQueues } from "./working-order-station-queue.js";
 
 // The station queue and the pass name each order's way of selling, so a takeaway order is packed
 // (A1522, Decision 12).

@@ -22,7 +22,7 @@ import {
 import { createTable } from "./testing/live-table.js";
 import { observedMoveBillBody, takeIntoParty } from "./testing/move-bill-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { createPrinter } from "@waitron/printing";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readKitchenLanguage } from "./kitchen-language.js";

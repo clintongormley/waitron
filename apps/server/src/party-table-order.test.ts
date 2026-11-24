@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { memberTables, partyZone } from "./parties.js";
 import { partyWatchZones } from "./watch-zones.js";
-import { listTablesWithState } from "./working-order.js";
+import { listTablesWithState } from "./working-order-table-state.js";
 import { inTx, OPERATOR, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 
 let v: PartyVenue;

@@ -25,7 +25,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
 import { departments } from "@waitron/venue-service";
 import * as selection from "./invoice-selection.js";
-import { issueUnpaidInvoice, priceForIssuance, readOrderRevision } from "./working-order.js";
+import { issueUnpaidInvoice, priceForIssuance } from "./working-order-invoice.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 

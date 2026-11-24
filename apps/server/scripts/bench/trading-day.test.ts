@@ -9,7 +9,7 @@ import { enqueueAttendanceDay } from "@waitron/workforce";
 import { readScopedPassBoard } from "../../src/pass-board.js";
 import { JOBS_WAITING_MS } from "../../src/print-job-trouble.js";
 import { stationPrintersDown } from "../../src/station-outputs-down.js";
-import { listStationQueues } from "../../src/working-order.js";
+import { listStationQueues } from "../../src/working-order-station-queue.js";
 import { installBenchClock, type BenchClock } from "./bench-clock.js";
 import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
 import { BENCH_PROFILE, PAYMENT_ROUTES } from "./profile.js";

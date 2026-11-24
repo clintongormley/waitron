@@ -14,7 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { fireGroup } from "./order-groups.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { moveDishesToStation } from "./testing/order-writer-fixture.js";

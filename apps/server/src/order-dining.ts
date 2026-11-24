@@ -8,7 +8,7 @@ import {
 import { AppError, DININGS, type Dining } from "@waitron/shared";
 import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { captureOrderEdit, type OrderAttendance } from "./working-order.js";
+import { captureOrderEdit, type OrderAttendance } from "./working-order-context.js";
 import { hasBillSetMenuLines } from "./set-menu-bill.js";
 import "./errors.js";
 

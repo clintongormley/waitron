@@ -40,7 +40,7 @@ import { printOrderForTest } from "./testing/issue-order.js";
 import { addFixtureExtra } from "./testing/portion-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 let venue: BillVenue;

@@ -38,7 +38,8 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 import type { TradingContext } from "./trading-context.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
-// screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
+// screens and the STATUS mapping. The coursing and fire logic is pinned in
+// `working-order-kitchen-service.test.ts` and `working-order-kitchen-fire.test.ts`.
 let cfg: TradingContext;
 let anna: { id: string };
 let starterCourseId: string;

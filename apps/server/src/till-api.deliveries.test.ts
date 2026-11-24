@@ -66,7 +66,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { TradingContext } from "./trading-context.js";
 
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";

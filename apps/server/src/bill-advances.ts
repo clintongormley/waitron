@@ -41,7 +41,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { TillSaleDeps } from "./working-order.js";
+import type { TillSaleDeps } from "./working-order-context.js";
 
 type PaymentRow = typeof billPayments.$inferSelect;
 

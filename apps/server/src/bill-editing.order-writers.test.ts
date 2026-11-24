@@ -9,7 +9,8 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraft, type BillEditExpected, type BillEditState } from "./order-drafts.js";
 import { readDrafts } from "./order-drafts.js";
-import { sendLines, setLineCourse, updateHeldOrder, updateOrderLine } from "./working-order.js";
+import { updateHeldOrder, updateOrderLine } from "./working-order-held-write.js";
+import { sendLines, setLineCourse } from "./working-order-kitchen-service.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;

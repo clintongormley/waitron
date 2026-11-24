@@ -79,13 +79,13 @@ import {
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
+import { type TicketState } from "./kitchen-print.js";
 import {
-  advanceTicketItem,
   listStationQueues,
   stationHasWork,
   type StationQueueGroup,
-  type TicketState,
-} from "./working-order.js";
+} from "./working-order-station-queue.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import {
   assertRequestDevice,
   assertStillSignedIn,

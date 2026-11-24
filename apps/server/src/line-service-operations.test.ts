@@ -16,16 +16,14 @@ import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.
 import { fireGroup, readCurrentOrders, readReleaseReminders } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { createStation } from "./kitchen.js";
+import { fireOrderLines } from "./working-order-kitchen-service.js";
+import { fireableLineColumns, fireLines, unsentDishLines } from "./working-order-kitchen-fire.js";
 import {
-  fireableLineColumns,
-  fireLines,
-  fireOrderLines,
   markGroupServed,
   markServed,
   ordersWithUnfiredDish,
   unmarkServed,
-  unsentDishLines,
-} from "./working-order.js";
+} from "./working-order-serving.js";
 import {
   billWith,
   inTx,

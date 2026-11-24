@@ -34,7 +34,7 @@ import { AppError, deviceOrigin, type DeleteImpact, type ResourceIdentity } from
 import { deploymentEnvironment } from "./config.js";
 import { VENUE_SERVICE } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";

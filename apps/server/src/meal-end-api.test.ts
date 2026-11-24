@@ -34,7 +34,7 @@ import {
 } from "./testing/session-device.js";
 import { startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import "./errors.js";
 
 let venue: BillVenue;

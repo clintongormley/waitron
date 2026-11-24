@@ -38,7 +38,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 

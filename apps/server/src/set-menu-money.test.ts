@@ -14,7 +14,8 @@ import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { issueIfFullyPaid, type BillPaymentRequest } from "./bill-payments.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
-import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
+import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   cashContribution,

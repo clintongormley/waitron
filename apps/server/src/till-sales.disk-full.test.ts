@@ -17,7 +17,7 @@ import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testi
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 let venue: BillVenue;

@@ -10,7 +10,7 @@ import { deploymentEnvironment } from "./config.js";
 import { systemClock } from "./till-backend.js";
 import { readDeferredClosure } from "./deferred-close.js";
 import type { CloseDeferredRequest } from "./deferred-close-types.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import {
   fiscalRecordCount,

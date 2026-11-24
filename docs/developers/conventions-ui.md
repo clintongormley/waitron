@@ -570,7 +570,7 @@ from 1.00 to 9.00 when the request reordered JSON keys and modifier entries: the
 reading how the request was written instead of what it said.
 
 Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
-(`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW,
+(`apps/server/src/working-order-held-write.ts`). It rebuilds what the request's answers would freeze NOW,
 each in the language the stored answer was frozen in (`editLineOptions`,
 `apps/server/src/modifier-selection.ts`), and compares that with what the stored line holds, by
 value. The helper this replaces, `sameModifierSelections`, no longer exists.
@@ -594,9 +594,10 @@ offering the same product, or two picks exchanging counts between them, pairs wi
 new pick, priced now; an unchanged pick keeps its child at its own list's stored price.
 `docs/developers/modifiers.md` has the detail.
 
-What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
+In `apps/server/src/working-order.test.ts`, "keeps extras rows and customisation on
 a quantity-only edit" raises the offer's price and the extra list item's price, republishes the
-menus, and asserts the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
+menus, and asserts the parent and its child keep their ids and locked prices. In
+`apps/server/src/working-order-held-write.test.ts`, "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
 change places" do the same across a reorder; "keeps an extra's list and stored price on a quantity-only
 edit when two lists offer it" pins the list pairing; "prices a pick now when it moves to another list
@@ -1069,7 +1070,7 @@ status, full JSON body and asynchronous scrypt count for unknown, suspended and 
 Those four route cases do not cover pending people or missing stored credentials. The waiting
 box's carry-on (`waiting-start.test.ts`) tries a wrong password and an unknown email, so it rests
 on identity's cases for a suspended or pending person. The unpaid-departure override
-(`apps/server/src/unpaid-departure.ts`) and cancel override (`apps/server/src/working-order.ts`)
+(`apps/server/src/unpaid-departure.ts`) and cancel override (`apps/server/src/working-order-counter.ts`)
 have wrong-PIN cases, and the cancel also tries a malformed PIN; they rest on identity's cases
 for unknown, suspended or pending people. No listed suite inventories new sign-in routes.
 

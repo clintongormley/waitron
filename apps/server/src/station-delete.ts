@@ -25,7 +25,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
-import { bumpRevisionKeepingPayment } from "./working-order.js";
+import { bumpRevisionKeepingPayment } from "./working-order-edit-state.js";
 import { kitchenWork } from "./kitchen-print.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {

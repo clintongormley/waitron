@@ -47,7 +47,8 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { deviceOrigin, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { printSaleReceipt } from "./till-sale.js";
-import { createOpenOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { setOrderInvoiceChoice } from "./working-order-invoice.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   cashPayment,

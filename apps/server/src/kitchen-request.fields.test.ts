@@ -11,7 +11,8 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { readCurrentOrders, type GroupRelease } from "./order-groups.js";
-import { advanceTicketItem, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order-station-queue.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import "./errors.js";
 
 const suite = useVenueDb({

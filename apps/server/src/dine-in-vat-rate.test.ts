@@ -40,7 +40,7 @@ import {
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 // The area's dine-in rate: 10%, and 4% from 1 January 2027.

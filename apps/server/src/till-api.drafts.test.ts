@@ -1,6 +1,6 @@
 import { readBillEditState } from "./bill-editing.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { randomUUID } from "node:crypto";

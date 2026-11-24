@@ -94,7 +94,7 @@ import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { printSaleReceipt, readSettledTicket, reprintSale } from "./till-sale.js";
-import { createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import { createTable } from "./testing/live-table.js";
 import {
   payCounterBasket,

@@ -64,7 +64,7 @@ Each stays open until the owner answers it. "The picture" was a mock-up, removed
 17. **A payment refunded by staff between the check's two transactions could still be held**: the
     check decides on its first read, as the existing refund-claim path does. Believed rare; not fixed.
 18. **A held payment whose order stops being abandoned** would be named by both the difference and
-    held alerts (`markOrderPlaced`, `apps/server/src/working-order.ts`, updates by id with no status
+    held alerts (`markOrderPlaced`, `apps/server/src/working-order-counter.ts`, updates by id with no status
     check): reported twice, never hidden. Callers not traced.
 19. **The held list leaves `label` out when an order has none**, where its sibling lists send
     `label: null` (`GET /management-api/payments/held`). A one-line change plus its test in
@@ -367,9 +367,9 @@ Remaining Stripe qualification and maintenance.
   the rows carrying its price: that is the lane's reading, not the owner's words. Moving a whole bill
   was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
   The writes allowed above count their write with `bumpRevisionKeepingPayment`
-  (`apps/server/src/working-order.ts`). Tests: the "card payment" and "refund" cases in
+  (`apps/server/src/working-order-edit-state.ts`). Tests: the "card payment" and "refund" cases in
   `apps/server/src/bill-editing.station-move.test.ts`, `order-groups.test.ts`,
-  `working-order.test.ts`, `till-api.unroutable-dish.test.ts` and `station-delete.test.ts`; the
+  `working-order-held-write.test.ts`, `till-api.unroutable-dish.test.ts` and `station-delete.test.ts`; the
   card-at-the-reader cases in `till-api.kitchen-note.test.ts` and `till-api.test.ts`.
 
 - **An uncertain bill payment keeps its original confirmation** (A1399, watcher answer,

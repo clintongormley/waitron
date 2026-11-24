@@ -28,7 +28,7 @@ import { partyRevisionOfOrder } from "./parties.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import "./errors.js";
 
 registerModulePermissions(ADJUSTMENTS_PERMISSIONS);

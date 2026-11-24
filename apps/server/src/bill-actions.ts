@@ -28,13 +28,12 @@ import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertDistinctTransferLines,
   assertServiceModesMatch,
-  bumpRevision,
   carveOffLines,
-  createOpenOrder,
   moveOrderLines,
-  refusePendingPartPayment,
-  type OrderAttendance,
-} from "./working-order.js";
+} from "./working-order-transfer.js";
+import { bumpRevision, refusePendingPartPayment } from "./working-order-edit-state.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { type OrderAttendance } from "./working-order-context.js";
 import "./errors.js";
 
 /**

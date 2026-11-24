@@ -26,7 +26,7 @@ import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capt
 import { submitDraft } from "./order-drafts.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
-import { type UpdateHeldOrderRequest } from "./working-order.js";
+import { type UpdateHeldOrderRequest } from "./working-order-edit-state.js";
 import { provisionBillVenue, seatedWith, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

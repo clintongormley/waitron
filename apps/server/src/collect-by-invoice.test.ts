@@ -23,7 +23,7 @@ import { loginWithPin } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import {
   closeZeroBill,
   takeBillPayment,

@@ -16,7 +16,8 @@ import {
   setupPartyVenue,
 } from "./testing/party-venue.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
-import { fireableLineColumns, fireLines, parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
+import { fireableLineColumns, fireLines } from "./working-order-kitchen-fire.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 

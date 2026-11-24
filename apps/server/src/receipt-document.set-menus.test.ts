@@ -10,7 +10,7 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket, type TillSaleLine } from "./till-sale.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { COMP_BILL_REASON, GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { decodeTicket } from "./testing/decode-ticket.js";

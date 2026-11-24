@@ -33,13 +33,10 @@ import {
   setMenuOnFullMenu,
 } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import {
-  readOrderRevision,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
-  type OrderLinePatch,
-} from "./working-order.js";
+import { updateHeldOrder, updateOrderLine } from "./working-order-held-write.js";
+import { setLineCourse } from "./working-order-kitchen-service.js";
+import { type OrderLinePatch } from "./working-order-edit-state.js";
+import { readOrderRevision } from "./working-order-context.js";
 
 let venue: PartyVenue;
 let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;

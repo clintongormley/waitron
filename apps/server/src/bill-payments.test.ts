@@ -94,7 +94,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { readSettledTicket, printSaleReceipt, reprintSale } from "./till-sale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import { moveOrderLines } from "./working-order.js";
+import { moveOrderLines } from "./working-order-transfer.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";

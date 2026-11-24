@@ -110,7 +110,7 @@ import {
   failBillPayment,
 } from "./bill-payments.js";
 import { previewAllocation, MONEY, ZERO } from "./bill-allocation.js";
-import { refuseRefundInProgress } from "./working-order.js";
+import { refuseRefundInProgress } from "./working-order-edit-state.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
 import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";

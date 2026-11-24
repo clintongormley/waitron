@@ -1799,7 +1799,7 @@ The two shapes we could build:
 - **(a) Invoice now, paid later.** Issue the invoice at once, unpaid; the bill closes owing the
   amount; the transfer is recorded against that invoice when it arrives. Much of this exists for
   F2: an order can file its invoice with no payment (`issueUnpaidInvoice`,
-  `apps/server/src/working-order.ts`), the amount due on each issued invoice (its total net of
+  `apps/server/src/working-order-invoice.ts`), the amount due on each issued invoice (its total net of
   corrections) is read in `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
   full amount, collected later (Q28, on the owner's 2026-10-01 decision); the dashboard's Orders
   screen filters unpaid orders and shows what each still owes (`apps/server/src/orders-list.ts`).
@@ -2849,7 +2849,7 @@ collection. The owner decided on 2026-09-27 how the two things that can change a
   affected.
 
 Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/shared/src/menu-document/vat-rates.ts`;
-the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order.ts`).
+the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order-invoice.ts`).
 The invoice is issued at payment on every path except orders invoiced when they are placed and paid
 on collection, where it is issued at placing, so there the placing day's rate applies.
 *2026-10-06 (#1285, A261-2c):* invoicing at placing is retired. Outside test helpers,
@@ -3000,7 +3000,7 @@ The original invoice is then settled at nothing owed. The same cancel reaches a 
 
 *2026-10-06 (#1285, A261-2c):* the zone that invoices first is retired, so the case above now
 arises only for a bill recorded as left without paying (Q28). `cancelPlacedOrder`
-(`apps/server/src/working-order.ts`) still credits an issued invoice whose bill holds no payment.
+(`apps/server/src/working-order-counter.ts`) still credits an issued invoice whose bill holds no payment.
 The case would return with Q42's shape (a) or Q27(c). The Word copy's 3.5 says so; the Spanish
 formulation below still opens with the retired case.
 

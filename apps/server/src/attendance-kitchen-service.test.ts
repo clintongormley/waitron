@@ -30,7 +30,8 @@ import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { bumpGroupReady, fireGroup } from "./order-groups.js";
 import { splitPartyBill } from "./testing/serve-line.js";
-import { advanceTicketItem, markServed } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { markServed } from "./working-order-serving.js";
 import {
   provisionBillVenue,
   seatedHeldWith,

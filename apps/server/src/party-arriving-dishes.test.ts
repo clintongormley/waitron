@@ -32,7 +32,8 @@ import {
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { fireOrderLines, parkOrder } from "./working-order.js";
+import { fireOrderLines } from "./working-order-kitchen-service.js";
+import { parkOrder } from "./working-order-open.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";

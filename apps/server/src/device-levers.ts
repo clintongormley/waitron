@@ -18,7 +18,7 @@ import { groupCommand, requirePartyParam } from "./till-api.js";
 import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
 import { passReleaseRefusal } from "./pass-release.js";
-import { bumpBillReady } from "./working-order.js";
+import { bumpBillReady } from "./working-order-kitchen-service.js";
 import { bumpGroupReady } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";

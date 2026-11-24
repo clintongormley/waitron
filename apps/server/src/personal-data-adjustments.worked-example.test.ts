@@ -32,7 +32,7 @@ import { readCancellationContext } from "./line-cancel-context.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
 import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { ALL_MODULES } from "./modules.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import {
   billWith,
   inTx,

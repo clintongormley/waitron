@@ -8,7 +8,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { inTx, seatedWith } from "./testing/bill-venue.js";
 import { credit } from "./testing/order-venue.js";

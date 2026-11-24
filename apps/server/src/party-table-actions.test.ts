@@ -38,7 +38,8 @@ import { attachPrinterToStation, detachPrinterFromStation } from "./station-prin
 import { printedLines } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { serveLine } from "./testing/serve-line.js";
-import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
+import { storedOrderTotal } from "./stored-order-lines.js";
 import { fireGroup } from "./order-groups.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";

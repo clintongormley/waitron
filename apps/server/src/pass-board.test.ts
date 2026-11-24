@@ -27,7 +27,9 @@ import {
   cardOf,
   EVERY,
 } from "./testing/pass-board-probe.js";
-import { carveOffLines, createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
+import { carveOffLines } from "./working-order-transfer.js";
+import { createOpenOrder } from "./working-order-open.js";
+import { fireableLineColumns, fireLines } from "./working-order-kitchen-fire.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";

@@ -19,7 +19,7 @@ import {
 } from "./testing/party-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { TabRoundLine } from "./working-order.js";
+import type { TabRoundLine } from "./working-order-open.js";
 import {
   payForItems,
   previewPayForItems,

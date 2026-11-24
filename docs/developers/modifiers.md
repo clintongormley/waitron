@@ -152,7 +152,7 @@ mark is for rows written some other way.
 ## Ordering and stored facts
 
 A requested line carries two optional fields, `options` and `extras`. These routes take them,
-each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`):
+each threading them into `priceOrderLines` (`apps/server/src/working-order-pricing.ts`):
 `POST /api/working-orders` to park an order, the held-order edit
 `PUT /api/working-orders/:id`, the one-line edit `PUT /api/working-orders/:id/lines/:lineNo`
 (through `applyLineEdits`) and a seated party's group submission `POST /api/parties/:id/groups`.
@@ -217,7 +217,7 @@ the basket resolved, and decides what is stored:
   own kitchen record at that station. Its `+` line on the dish becomes a cross-reference, retaining the extra's allergen
   and dietary marks on the kitchen screens; paper prints cross-references on `> ` lines with no
   allergens, and the extra's own ticket at its station carries its Contains line (`readQueueSubItems`,
-  `apps/server/src/working-order.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
+  `apps/server/src/working-order-station-queue.ts`; `buildTicketItems`, `apps/server/src/kitchen-print.ts`).
 - A list's own counts are enforced per list: too few picks for `minPicks`, too many for `maxPicks`,
   or more of one product than a non-null `maxQuantity` is `extras.limit_exceeded` carrying the list id. A
   malformed pick is `extras.invalid` naming the field.
@@ -226,15 +226,16 @@ the basket resolved, and decides what is stored:
   extras") — is refused with `extras.unsupported_product`, whose `soldBy` is `weight` (a scale),
   else `fraction` (decimal places), else `measure`: a child priced dish × pick would carry a weight,
   a fraction or a measure of an extra, not a number of them (`takesExtras`,
-  `apps/server/src/working-order.ts`). Its extras lists are checked with no minimum, so a required
-  list does not refuse an order of it with no picks (`extrasListsFor`, same file). An options
+  `packages/menu/src/unit-extras.ts`). Its extras lists are checked with no minimum, so a required
+  list does not refuse an order of it with no picks (`extrasListsFor`, `apps/server/src/working-order-pricing.ts`). An options
   answer on such a dish is still allowed. The server reads the switch from the unit frozen into the
   menu's published version, so turning it on or off takes effect when the menus selling that
   unit's dishes are next published.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
-`StationQueueItem` and `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
+`StationQueueItem` and `ExpoItem` in `stored-order-lines.ts`, `working-order-held-read.ts`,
+`working-order-station-queue.ts` and `working-order-pass.ts` in `apps/server/src/`, respectively. A held order's lines also carry an
 `extras` array holding what each CHILD line froze, with the list each pick was taken from
 (`listId`). The till rebuilds a selection from them against the dish's live offer: a pick goes back
 to its own list while that list still offers the product and the dish still takes extras
@@ -280,7 +281,7 @@ two prices, an edit keeps the child at the price its own list sold it at, whatev
 charges now, and whether or not that list still offers it (menus spec §11.7 example 7); a pick MOVED to the
 other list, or two picks that EXCHANGED counts between the two lists, pair with nothing and are new
 picks, priced from today's offers. A child stored before the column existed records no list and
-pairs with nothing either. Pinned in `apps/server/src/working-order.test.ts` by "keeps an extra's
+pairs with nothing either. Pinned in `apps/server/src/working-order-held-write.test.ts` by "keeps an extra's
 list and stored price on a quantity-only edit when two lists offer it", "keeps an extra from the
 list it was taken from, whatever that list later charges or offers", and by "prices a pick now when
 it moves to another list offering the same product: it is a new pick" and "prices both picks now
@@ -289,7 +290,7 @@ the BILL.
 
 If a save re-sends a list and label after a rename, an unsent dish takes the new wording and
 keeps its stored price. See "keeps the price of a held line whose options list was renamed between
-the two sends, freezing the new name" in `apps/server/src/working-order.test.ts`. A line already sent (it or one of its extras sent, or
+the two sends, freezing the new name" in `apps/server/src/working-order-held-write.test.ts`. A line already sent (it or one of its extras sent, or
 either's ticket fired) is different on a whole-order save (owner decision 2026-11-17, A1416):
 `updateHeldOrder` passes `keepRecordedAnswers` to `applyLineEdits`, which keeps that line's options
 answer as it was sent, neither checked against today's menu nor frozen again, while the request names
@@ -312,7 +313,7 @@ removed or its staff wording no longer matches an available label. An explicit c
 available label replaces the answer to that list. An explicit answer to a new list with the
 same staff name replaces the removed list's answer. The server requires an answer for every new
 active list and for every list whose recorded answer still matches. See "refuses a new Milk
-list even after the Cooking list is deleted" in `apps/server/src/working-order.test.ts`.
+list even after the Cooking list is deleted" in `apps/server/src/working-order-held-write.test.ts`.
 
 The till rebuilds each selection against its original list id and the recorded staff wording.
 It asks staff to reopen an unsent dish when a list on offer has no recorded answer of its own.
@@ -371,7 +372,7 @@ Six things it is worth knowing about that payload:
   (`buildMenuDocument`, `packages/menu/src/menu-document.ts`), with availability put back when
   it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
   version no longer offers checks that line's options answer against the dish's own current lists
-  (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
+  (`productOptionLists`, `apps/server/src/working-order-pricing.ts`), because no published list is left to
   check it against. A required list the picker never drew would refuse the order with
   `options.label_required` or `extras.limit_exceeded` — except an extras list on a dish not sold
   by the unit, which neither the till draws nor the server requires — and an offered list the server does not know
@@ -380,7 +381,7 @@ Six things it is worth knowing about that payload:
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
   `productId`), the same refusal as a pick the list never offered. That filter is the served
   version's `available` flag on each item (`applyLiveFields`), which the order path drops items by
-  (`offerModifiers`, `apps/server/src/working-order.ts`) for a basket priced afresh, which includes
+  (`offerModifiers`, `apps/server/src/working-order-pricing.ts`) for a basket priced afresh, which includes
   a new line or a new pick in an edit of a saved order. On the held-order edit path, a pick the stored
   line already holds is kept even when its product has since sold out, through an edit of a line
   the kitchen does not have, with two exceptions: a
@@ -395,7 +396,7 @@ Six things it is worth knowing about that payload:
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
-  (`apps/server/src/working-order.ts`). A pick of a variant
+  (`apps/server/src/working-order-pricing.ts`). A pick of a variant
   still sells, as does a product whose only variants are archived. The menu's own saves do
   not build that state: an extras list save naming such a product is refused
   `extras.product_has_variants` (`extras.ts`), and a save that would give a product an extras
@@ -407,7 +408,7 @@ Six things it is worth knowing about that payload:
   products with variants" in `apps/server/src/menu-api.test.ts`. Tests for the order path:
   "an extra that is a parent with Active variants" in `packages/menu/src/offered-modifiers.test.ts`; "refuses a
   menu offer's extras pick of a parent with an Active variant, and sells its variant" in
-  `apps/server/src/working-order.test.ts`; and "sells an extras pick of a product whose only
+  `apps/server/src/working-order-pricing.test.ts`; and "sells an extras pick of a product whose only
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
 - **An extras item carries the PRODUCT's facts**, not the row's: its three names, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
@@ -415,7 +416,7 @@ Six things it is worth knowing about that payload:
   except the names, which are always the variant's own. Taken away, its line files at the
   product's takeaway rate, or its parent's when a variant has none (`readLineVatRates`). The two declaration fields take the names
   a following CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`,
-  the field names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens —
+  the field names `readQueueSubItems` (`apps/server/src/working-order-station-queue.ts`) hands those screens —
   because a pick is what becomes such a line. A split-off child puts those same marks on the
   dish's cross-reference. That kitchen read took the product's RAW columns until #537
   (variants Task 5), so before it an extra that is a variant inheriting its parent's declarations
@@ -428,7 +429,7 @@ A filed sale is a snapshot and never holds a menu key (`packages/db/src/schema/s
 architecture §6), so the two kinds of answer land differently:
 
 - The dish's `sale_lines.option_snapshots` carries the six recorded names.
-  `toStoredLines` in `apps/server/src/working-order.ts` takes those names from the working
+  `toStoredLines` in `apps/server/src/stored-order-lines.ts` takes those names from the working
   order when it builds the lines used for payment.
 - An extras pick is already its own CHILD line, and that line IS the record: the picked product's
   frozen name, its quantity, the price it sold at and its own VAT rate. Like the open order's child

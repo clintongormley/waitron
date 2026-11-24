@@ -25,7 +25,7 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder } from "./working-order-open.js";
 import "./errors.js";
 
 // The area's dine-in rate: 21%, and 10% from Wednesday 18 March 2026.

@@ -31,7 +31,7 @@ import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.j
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import type { TradingContext } from "./trading-context.js";
-import { listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order-station-queue.js";
 import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import {
   inTx,

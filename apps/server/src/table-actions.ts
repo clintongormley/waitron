@@ -55,7 +55,7 @@ import {
   requireBillOfParty,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
-import type { OrderAttendance } from "./working-order.js";
+import type { OrderAttendance } from "./working-order-context.js";
 import "./errors.js";
 
 /**

@@ -46,7 +46,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mountTillApi } from "./till-api.js";
-import { readOrderRevision } from "./working-order.js";
+import { readOrderRevision } from "./working-order-context.js";
 import "./errors.js";
 
 // Pay for items on the card reader (A1515 D2): the items move to a bill of their own before the

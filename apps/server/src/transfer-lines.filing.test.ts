@@ -32,7 +32,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { transferItems } from "./testing/bill-action-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order-open.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";

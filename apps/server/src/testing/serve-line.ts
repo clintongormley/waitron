@@ -8,13 +8,9 @@ import { writePartyAllergy } from "@waitron/venue-service";
 import { splitBill } from "./bill-action-fixture.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
-import {
-  fireLines,
-  fireableLineColumns,
-  markServed,
-  openTab,
-  unmarkServed,
-} from "../working-order.js";
+import { openTab } from "../working-order-open.js";
+import { fireLines, fireableLineColumns } from "../working-order-kitchen-fire.js";
+import { markServed, unmarkServed } from "../working-order-serving.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
 

@@ -76,7 +76,7 @@ server switch, shows the ordinary unnamed message.
 - **A692 — Editing a sent dish decides its extras' "made here" again, by the device that edits
   (2026-10-15; open, owner decision).** When a waiter edits a sent dish, the till deletes its
   kitchen items and sends replacements. The dish keeps its earlier made-here choice
-  (`keepMadeHere`, `apps/server/src/working-order.ts`), but its extras are routed afresh in
+  (`keepMadeHere`, `apps/server/src/working-order-kitchen-fire.ts`), but its extras are routed afresh in
   `insertSplitExtras`, which reads the made-here stations of the sending device. So an extra the
   Quesos station already received can come back as made on the spot when a device that makes
   Quesos itself does the edit. Found by A687's review (#1720); its fifth case in

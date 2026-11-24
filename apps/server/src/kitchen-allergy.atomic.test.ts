@@ -8,7 +8,7 @@ import { parties, type Transaction } from "@waitron/db";
 import { inTx, OPERATOR } from "./testing/party-venue.js";
 import { allergyTargets, applyPartyAllergyPatch, readPartyAllergyView } from "./party-allergy.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
-import { markServed } from "./working-order.js";
+import { markServed } from "./working-order-serving.js";
 import { moveDishesToStation } from "./station-move.js";
 import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";

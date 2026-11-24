@@ -3,7 +3,7 @@ import { products, type Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/menu";
 import { VENUE_SERVICE } from "./modules.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
-import type { GrossOrder } from "./working-order.js";
+import type { GrossOrder } from "./stored-order-lines.js";
 
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product — the

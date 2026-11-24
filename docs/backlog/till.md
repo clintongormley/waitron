@@ -1234,7 +1234,8 @@ If the server requires an options list on a recalled dish absent from the live m
   leaves the origin of such a row in current use unverified. Move dishes between bills moves
   whole rows. A held-group move within a bill can carve an unbound row out of a measured or
   already grouped row. That split and the one used for repricing feed the receipt and sale lines.
-  [Order creation and edits](../../apps/server/src/working-order.ts),
+  [Order creation](../../apps/server/src/working-order-open.ts) and
+  [held order edits](../../apps/server/src/working-order-held-write.ts),
   [table rounds](../../apps/server/src/order-groups.ts),
   [Move dishes](../../apps/server/src/bill-actions.ts),
   [raise tests](../../apps/server/src/order-portions.filing.test.ts).
@@ -1245,7 +1246,7 @@ If the server requires an options list on a recalled dish absent from the live m
     unserved amount to cancellation with the charge kept. For a line with decimal places the
     server requires the whole available amount.
     [Till serve and undo](../../apps/till/src/screens/till-table-order-screen.ts),
-    [server serve and undo](../../apps/server/src/working-order.ts),
+    [server serve and undo](../../apps/server/src/working-order-serving.ts),
     [zero-decimal measure test](../../packages/menu/src/units.operations.test.ts),
     [Finish table](../../apps/server/src/finish-party-service.ts),
     [service cancellation](../../apps/server/src/line-cancel.ts).
@@ -1261,7 +1262,7 @@ If the server requires an options list on a recalled dish absent from the live m
 - **The till's `TableState.today` stays nullable, wider than what the server sends (watcher,
   2026-11-18, lane A, not the owner; the owner may overrule).** `/api/tables/state` lists only
   on-floor tables in switched-on zones (`packages/db/src/table-in-service.ts`), and
-  `readTodayTables` (`apps/server/src/working-order.ts`) reads a row for every one, so the server
+  `readTodayTables` (`apps/server/src/working-order-table-state.ts`) reads a row for every one, so the server
   never sends a table without today's row. Making the till's type required would rewrite 69
   fixtures in 55 till test files, most of which would need a placed row rather than a plain swap,
   for no change a venue would see.
@@ -2014,7 +2015,7 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   zone, as the till's zone limit does (`findOrderZones` via `apps/server/src/zone-access.ts`), so
   the two agree. Re-zoning a presented table bill into a counter zone whose orders are paid after
   sending (`ticket_then_pay`) would also let it be handed over before payment, as a counter order
-  sent and unpaid is (`sentUnpaidCounterOrder`, `apps/server/src/working-order.ts`).
+  sent and unpaid is (`sentUnpaidCounterOrder`, `apps/server/src/working-order-counter.ts`).
 
 - **Part of a weighed line stays refused (Task 11, owner 2026-09-30).** Part of a weighed line
   stays refused for a give-away or a discount (`adjustment.weighed_partial`); staff discount the

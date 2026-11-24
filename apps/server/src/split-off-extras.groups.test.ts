@@ -16,7 +16,7 @@ import {
 } from "./testing/group-composition-fixture.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { readBillSignals } from "./table-signals.js";
-import { advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import "./errors.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 

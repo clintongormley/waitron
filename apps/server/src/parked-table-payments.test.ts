@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { workingOrders } from "@waitron/db";
 import { eq } from "drizzle-orm";
-import type { HeldOrder } from "./working-order.js";
+import type { HeldOrder } from "./working-order-held-read.js";
 import { describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

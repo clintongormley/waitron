@@ -114,7 +114,7 @@ const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 
 // Counter deliveries are counted per table (`group by delivery_table_id`, `listTablesWithState`,
-// `apps/server/src/working-order.ts`), so a merge's add up.
+// `apps/server/src/working-order-table-state.ts`), so a merge's add up.
 const totalDeliveries = (members: readonly TableState[]): number =>
   members.reduce((sum, member) => sum + member.pendingDeliveries, 0);
 
