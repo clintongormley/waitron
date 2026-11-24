@@ -541,7 +541,7 @@ describe("readGiveBack: the lines", () => {
     expect(view.lines).toHaveLength(5);
   });
 
-  it("takes what went back for the cancel off its owed money and off the line's left (C1)", async () => {
+  it("takes what went back for the cancel off its owed money and off the line's left", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     const cancelId = await cancel(b, "Paella", "1", true);
@@ -585,7 +585,7 @@ describe("readGiveBack: the lines", () => {
     expect(lineOf(view, "Paella").givenFree).toBe(false);
   });
 
-  it("lists a receipt another box filed with each line's left at its gross (I3)", async () => {
+  it("lists a receipt another box filed with each line's left at its gross", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
     admittingNot("wrong_node");
@@ -595,7 +595,7 @@ describe("readGiveBack: the lines", () => {
     expect(view.choices.goodwill).toEqual({ available: true, reason: null });
   });
 
-  it("lists a receipt AEAT refused with each line's left at its gross (I3)", async () => {
+  it("lists a receipt AEAT refused with each line's left at its gross", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
@@ -990,7 +990,7 @@ const ask = (
 ): GiveBackRequest => ({ purpose, amount, extra: "0.00", way: "cash", ...more });
 
 describe("planGiveBack: cancelled and served dishes", () => {
-  it("pays the paella's cancel back first, then corrects the cheesecake, naming no lines past what the ticked lines hold (I2)", async () => {
+  it("pays the paella's cancel back first, then corrects the cheesecake, naming no lines past what the ticked lines hold", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     const cancelId = await cancel(b, "Paella", "1", true);
@@ -1546,7 +1546,7 @@ describe("POST …/give-back in cash", () => {
     expectRefusedUnwritten(changed, "give_back.changed", before);
   });
 
-  it("answers a resend with its first result, writing nothing and opening no drawer, and refuses the same ids with another amount (I1)", async () => {
+  it("answers a resend with its first result, writing nothing and opening no drawer, and refuses the same ids with another amount", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }], "3.00");
     await cancel(b, "Paella", "1", true);
@@ -1581,7 +1581,7 @@ describe("POST …/give-back in cash", () => {
     );
   });
 
-  it("refuses clock.unconfirmed on a give-back of a cancelled dish alone, writing nothing (I4)", async () => {
+  it("refuses clock.unconfirmed on a give-back of a cancelled dish alone, writing nothing", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     await cancel(b, "Paella", "1", true);
@@ -2322,7 +2322,7 @@ describe("POST …/give-back on a card reader", () => {
     ]);
   });
 
-  it("discards the correction when the card company declines its leg, leaving nothing open, and says why (I5)", async () => {
+  it("discards the correction when the card company declines its leg, leaving nothing open, and says why", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }]);
     const reader = await tenderOf(saleId, "card");
@@ -2382,7 +2382,7 @@ describe("POST …/give-back on a card reader", () => {
     expect((await refundRowsOf(saleId)).map((row) => row.state)).toEqual(["completed"]);
   });
 
-  it("answers a resend while the first part is pending with its state, sending and looking up nothing (I1)", async () => {
+  it("answers a resend while the first part is pending with its state, sending and looking up nothing", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
     const reader = await tenderOf(saleId, "card");

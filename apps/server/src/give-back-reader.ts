@@ -62,11 +62,13 @@ interface ReaderSequence {
  * Gives the press `ask` back on a card reader (5.3), each part in its own transaction followed by
  * the card company's answer. Splitting the press across transactions is a deliberate decision
  * (CLAUDE.md §3): the card company is asked between parts, and no transaction stays open across its
- * answer. A correction opens in the same transaction as its leg's reservation and is discarded if
- * that leg fails, so a refused card refund never leaves a correction open. A part left pending
- * stops the press, the answer's `rest` naming what was not sent. A part refused after an earlier
- * one moved money answers `refusal` and undoes nothing: that money is already back on the card.
- * A part another send of the same ids already wrote is never carried again (I1).
+ * answer. A correction opens in the same transaction as its leg's reservation and is discarded
+ * when the card company declines that leg; it stays open, shown under way, when the discard is
+ * refused or when the leg is left pending and later marked failed by the background recovery. A
+ * part left pending stops the press, the answer's `rest` naming what was not sent. A part refused
+ * after an earlier one moved money answers `refusal` and undoes nothing: that money is already back
+ * on the card.
+ * A part another send of the same ids already wrote is never carried again.
  */
 export async function giveBackOnReader(
   deps: TenderRefundDeps,
