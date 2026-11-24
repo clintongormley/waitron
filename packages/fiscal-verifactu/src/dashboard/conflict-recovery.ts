@@ -444,7 +444,6 @@ export class ConflictRecovery extends LitElement {
                 ${this.completed.series.map((series) => html`<p>${series.code}</p>`)}
               </section>`
             : html` <wt-master-key-input
-                  name="recoveryKey"
                   required
                   .copy=${keyWords}
                   .readPack=${readPack}
