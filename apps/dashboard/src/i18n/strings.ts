@@ -1669,8 +1669,7 @@ export const en = {
     "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
   "fresh_sign_in.retry": "Try again",
   "recovery_pack_dialog.heading": "Make recovery pack",
-  "recovery_pack_dialog.intro":
-    "The pack holds every key this venue has. It is made once, for this download; the box keeps no copy.",
+  "recovery_pack_dialog.intro": "The pack is made once, for this download; the box keeps no copy.",
   "recovery_pack_dialog.unreceived":
     "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack_dialog.make": "Make pack",
@@ -1683,7 +1682,7 @@ export const en = {
     "The box may have made a new master key that did not reach this browser. If it did, the only copy of your current master key is on a pack you do not have.",
   "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Make a new master key replaces the key again and shows it here; you sign in again first. Stop closes this window and changes nothing.",
+    "Make a new master key replaces the key again and shows it here. Stop closes this window and changes nothing.",
   "recovery_pack_dialog.lost":
     "The box may have made the recovery pack, but it did not reach this browser.",
   "recovery_pack_dialog.lost_choices":
@@ -1760,7 +1759,7 @@ export const en = {
   "master_key_dialog.heading": "Make a new master key?",
   "master_key_dialog.text":
     "Do this only if the master key is lost, or someone who should not have it may have seen it. Backups made before now still need the old key. Keep the old pack until {date}. The new key is shown once, in a new recovery pack.",
-  "master_key_dialog.note": "You will be asked to sign in again.",
+  "master_key_dialog.note": "You may be asked to sign in again.",
   "master_key_dialog.make": "Make a new master key",
   "master_key_dialog.stop": "Stop",
   "master_key_shown.heading": "Recovery pack",
@@ -6504,7 +6503,7 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.retry": "Volver a intentarlo",
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
-    "El paquete contiene todas las claves de este local. Se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
+    "El paquete se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
   "recovery_pack_dialog.unreceived":
     "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
@@ -6518,7 +6517,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.lost_new_key_named":
     "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Crear una clave maestra nueva vuelve a sustituir la clave y la muestra aquí; antes vuelves a iniciar sesión. Detener cierra esta ventana y no cambia nada.",
+    "Crear una clave maestra nueva vuelve a sustituir la clave y la muestra aquí. Parar cierra esta ventana y no cambia nada.",
   "recovery_pack_dialog.lost":
     "Puede que el servidor haya hecho el paquete de recuperación, pero no llegó a este navegador.",
   "recovery_pack_dialog.lost_choices":
@@ -6602,9 +6601,9 @@ export const es: Record<StringKey, string> = {
   "master_key_dialog.heading": "¿Crear una clave maestra nueva?",
   "master_key_dialog.text":
     "Hazlo solo si la clave maestra se ha perdido o si alguien que no debía ha podido verla. Las copias anteriores siguen necesitando la clave antigua. Guarda el paquete antiguo hasta el {date}. La clave nueva se muestra una sola vez, en un paquete de recuperación nuevo.",
-  "master_key_dialog.note": "Se te pedirá que vuelvas a iniciar sesión.",
+  "master_key_dialog.note": "Puede que se te pida volver a iniciar sesión.",
   "master_key_dialog.make": "Crear una clave maestra nueva",
-  "master_key_dialog.stop": "Detener",
+  "master_key_dialog.stop": "Parar",
   "master_key_shown.heading": "Paquete de recuperación",
   "master_key_shown.lead":
     "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",

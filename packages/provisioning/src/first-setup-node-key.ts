@@ -247,7 +247,7 @@ export function createFirstSetupNodeKeys(options: Options) {
                 { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
               ],
             });
-            // The first-hour step's "I kept it" confirmed this pack reached the person.
+            // The first-hour step's Continue confirmed this pack reached the person.
             await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
             await insertMasterKey(tx, {
               name: stage.masterKeyName,

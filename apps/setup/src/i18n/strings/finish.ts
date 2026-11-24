@@ -103,7 +103,7 @@ export const finishEn = {
   "done.break_glass.file_keep":
     "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
-    "The box key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new box key before taking your first bucket copy.",
+    "The box key was issued when setup finished. If you did not save it, sign in to Backups and choose Make a new master key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
   "done.joining.heading": "This box is joining",
   "done.joined.heading": "This box has joined",
@@ -247,7 +247,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.file_keep":
     "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
   "done.break_glass.replacement":
-    "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
+    "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y elige Crear una clave maestra nueva antes de hacer la primera copia en el bucket.",
   "done.break_glass.open_backups": "Abrir Copias de seguridad",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joined.heading": "Este servidor se ha unido",

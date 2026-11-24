@@ -6,7 +6,7 @@ Use **Backups** in the dashboard to choose where you keep copies and to prepare 
 
 Choose **Make recovery pack** and complete the sign-in it asks for. Use **Download PDF** or **Open to print**, then keep the pack locked away, off the box.
 
-If the master key is lost, or someone who should not have it may have seen it, choose **Make a new master key** and sign in again. Download, print or copy the new key, then choose **Continue**. Keep the old pack until the date the window gives.
+If the master key is lost, or someone who should not have it may have seen it, choose **Make a new master key** and sign in again if asked. Download, print or copy the new key, then choose **Continue**. Keep the old pack until the date the window gives.
 
 Check this card after changing backup settings or keys. Follow its instructions to make a new pack and keep any older packs it still names. For a lost or exposed pack, follow [Common losses](data-protection.md#breach-losses). For emergency start, see [Check emergency start in Cloud](servers.md#cloud-emergency).
 

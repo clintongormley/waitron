@@ -24,7 +24,7 @@ permission and a secure (HTTPS) connection to that box.
    use the new box key, and an older backup still needs the key it was made with. A new key cannot unlock an older
    backup whose matching key you have lost.
 
-For example, keep Monday's pack while you keep Monday's backup, even if you make a new box key
+For example, keep Monday's pack while you keep Monday's backup, even if you make a new master key
 on Tuesday. Check the key name on the selected copy when you [recover the box](hour-recovery.md).
 
 If the pack did not reach this browser, the dialog says so and explains each choice: make it again,
@@ -49,8 +49,9 @@ fresh identity just to obtain another pack.
 The dashboard card is [recovery-pack-card.ts](../../apps/dashboard/src/screens/recovery-pack-card.ts)
 and its dialog [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts).
 The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-api.ts) check
-`system.manage`, the secure connection and a fresh sign-in, make the replacement box key when
-asked, and keep a record of each pack, never its contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
+`system.manage`, the secure connection and a fresh sign-in, make the new master key and box key
+when asked, and keep a record of each pack and each master key's name and check value, never the
+key itself or the pack's contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
 cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
 and [card tests](../../apps/dashboard/src/screens/recovery-pack-card.test.ts) cover the actions.
 This procedure grants no restore or fiscal activation authority.

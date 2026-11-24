@@ -462,7 +462,7 @@ describe("the server key part", () => {
   it.each([
     [
       { kind: "pack" as const, number: 4, madeOn: "2026-10-01", received: false },
-      "The current box key is on recovery pack 4, made on 1 October 2026, but when this pack was made the box had not been told that pack 4 arrived. If you do not have pack 4, make a new pack with Also make a new box key ticked.",
+      "The current box key is on recovery pack 4, made on 1 October 2026, but when this pack was made the box had not been told that pack 4 arrived. If you do not have pack 4, choose Make a new master key on Backups.",
     ],
     [
       { kind: "sheet" as const, keyName: "2026-09-02 · OLD", madeOn: "2026-09-02" },

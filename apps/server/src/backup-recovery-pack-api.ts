@@ -433,7 +433,7 @@ export function mountBackupRecoveryPackMakeApi(
             return made;
           });
           // The request's last database write, so a failure before it leaves the old key current.
-          // It follows node.db's key save: the stated exception to venue.db first, ending in PR 2b.
+          // It follows node.db's key save, an exception listed in conventions-data.md.
           const masterKey =
             pack.replacement === undefined || newMasterKey === undefined
               ? undefined
