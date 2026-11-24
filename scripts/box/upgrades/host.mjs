@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  IDENTITY_CHANGE_FILE,
   recoverUpgrade,
   upgradeResultPath,
   upgradeStatus,
@@ -11,6 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
 import { createServer, createConnection } from "node:net";
 import { once } from "node:events";
+import { clearTimeout, setTimeout } from "node:timers";
 import { createHash } from "node:crypto";
 
 const execute = promisify(execFile);
@@ -233,6 +235,7 @@ export async function createUpgradeHost({
   }
   const tags = [];
   let releaseState;
+  let identityNote = null;
   return {
     paths,
     host: {
@@ -280,12 +283,14 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
+          identityNote = await identityChangeNote(old.app, next.app, paths[0], run);
           if (await appIsRunning(compose, run))
             await runOnlineTrial({
               work: trial,
               state: paths[0],
               image: next.app,
               environment: candidateConfig.services.app.environment,
+              identityNote,
               run,
             });
           else
@@ -310,6 +315,8 @@ export async function createUpgradeHost({
         await writeFileDurable(join(directory, "candidate-compose.json"), {
           compose: rawCandidate,
         });
+        if (identityNote !== null)
+          await writeFileDurable(join(directory, IDENTITY_CHANGE_FILE), identityNote);
         await stopUpgradeWriters({
           compose,
           run,
@@ -674,6 +681,80 @@ async function candidateReference(image, run) {
   return image.replace(/:[^/:]+$/, "") + "@" + descriptor.digest;
 }
 
+// Keep in step with scripts/box/release-list.mjs, which is not installed beside this file.
+const RELEASE_REF =
+  /^v(?=.{1,50}$)((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?)$/;
+const PRODUCER = "WAITRON_PRODUCER_TAX_ID=";
+
+const isText = (value) => typeof value === "string" && value !== "";
+
+/** The note an earlier upgrade left in the live state, if it has the shape the server reads. */
+async function liveIdentityNote(stateDirectory) {
+  let note;
+  try {
+    // The folder is the app's: a link there leads out of it, and a pipe would never answer.
+    const handle = await fs.open(
+      join(stateDirectory, IDENTITY_CHANGE_FILE),
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+    try {
+      note = JSON.parse(await handle.readFile("utf8"));
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+  if (note === null) return null;
+  const { version, ...texts } = note;
+  return version === 1 &&
+    Object.keys(texts).sort().join() === "fromProducerTaxId,producerTaxId,release" &&
+    Object.values(texts).every(isText)
+    ? note
+    : null;
+}
+
+export async function identityChangeNote(oldImage, nextImage, stateDirectory, run) {
+  const identityOf = async (image, name) => {
+    const { stdout } = await run("docker", [
+      "image",
+      "inspect",
+      image,
+      "--format",
+      "{{json .Config}}",
+    ]);
+    try {
+      const config = JSON.parse(stdout);
+      return {
+        release: RELEASE_REF.exec(config.Labels?.["org.opencontainers.image.ref.name"])?.[1],
+        // The server compares its setting trimmed (readSoftwareProducer), and otherwise exactly.
+        producerTaxId: config.Env?.find((entry) => entry.startsWith(PRODUCER))
+          ?.slice(PRODUCER.length)
+          .trim(),
+      };
+    } catch {
+      throw new Error(`${name} image has an unreadable configuration`);
+    }
+  };
+  const before = await identityOf(oldImage, "installed");
+  const { release, producerTaxId } = await identityOf(nextImage, "candidate");
+  if (!release || !before.producerTaxId || !producerTaxId) return null;
+  // While the installed release waits to open its installation, the latest record is still under
+  // the producer its note replaced. The server acts only on a note naming its own release.
+  const live = await liveIdentityNote(stateDirectory);
+  const fromProducerTaxId =
+    live?.producerTaxId === before.producerTaxId && live.release === before.release
+      ? live.fromProducerTaxId
+      : before.producerTaxId;
+  if (producerTaxId === fromProducerTaxId) return null;
+  return { version: 1, release, producerTaxId, fromProducerTaxId };
+}
+
+export async function writeIdentityNote(stateDirectory, note) {
+  const owner = await fs.stat(stateDirectory);
+  await writeFileDurable(join(stateDirectory, IDENTITY_CHANGE_FILE), note, owner);
+}
+
 async function removeImageTag(tag, run) {
   try {
     await run("docker", ["image", "rm", tag]);
@@ -693,9 +774,46 @@ export async function assertCopyRoom(paths, directory, { run = command, statfs =
     throw new Error("not enough room for the upgrade copy");
 }
 
-export async function clockStatusRelay({ directory, socketPath = "/run/waitron-box/box.sock" }) {
+const TOLD_SYNCHRONISED =
+  "The upgrade's checks were told that the box's time is synchronised; " +
+  "its time service did not say so.\n";
+// Under the server's wait for a status, DEFAULT_STATUS_MS in apps/server/src/box-host-client.ts.
+const HOST_ANSWER_MS = 1000;
+
+function saysSynchronised(reply) {
+  try {
+    const answer = JSON.parse(reply);
+    return answer.ok === true && answer.synchronised === true;
+  } catch {
+    return false;
+  }
+}
+
+const synchronisedReply = () =>
+  JSON.stringify({
+    ok: true,
+    service: "on",
+    unit: null,
+    synchronised: true,
+    lastSyncAt: null,
+    nowMs: Date.now(),
+  }) + "\n";
+
+/** `answerSynchronised` is for the stopped checks' copy alone: the live server asks the host. */
+export async function clockStatusRelay({
+  directory,
+  socketPath = "/run/waitron-box/box.sock",
+  answerSynchronised = false,
+}) {
   await fs.mkdir(directory, { mode: 0o755 });
   const clients = new Set();
+  let told = false;
+  const forCopy = (reply) => {
+    if (saysSynchronised(reply)) return reply;
+    if (!told) process.stderr.write(TOLD_SYNCHRONISED);
+    told = true;
+    return synchronisedReply();
+  };
   const server = createServer((client) => {
     clients.add(client);
     let source;
@@ -714,18 +832,28 @@ export async function clockStatusRelay({ directory, socketPath = "/run/waitron-b
         return;
       }
       source = createConnection(socketPath);
+      const limit = answerSynchronised && setTimeout(() => source.destroy(), HOST_ANSWER_MS);
+      let answered = false;
+      const answer = (reply) => {
+        if (answered) return;
+        answered = true;
+        client.end(answerSynchronised && !client.destroyed ? forCopy(reply) : reply);
+      };
       source.on("connect", () => source.write("clock.status\n"));
       let reply = "";
       source.on("data", (chunk) => {
         reply += chunk.toString();
         const end = reply.indexOf("\n");
         if (end >= 0) {
-          client.end(reply.slice(0, end + 1));
+          answer(reply.slice(0, end + 1));
           source.destroy();
         } else if (reply.length > 4096) source.destroy();
       });
-      source.on("error", () => client.end('{"ok":false,"reason":"unavailable"}\n'));
-      source.on("close", () => client.end());
+      source.on("error", () => answer('{"ok":false,"reason":"unavailable"}\n'));
+      source.on("close", () => {
+        clearTimeout(limit);
+        answer("");
+      });
     });
   });
   const path = join(directory, "box.sock");
@@ -755,7 +883,7 @@ export function upgradeEnvironment(environment = {}) {
   );
 }
 
-async function runOnlineTrial({ work, state, image, environment, run }) {
+async function runOnlineTrial({ work, state, image, environment, identityNote, run }) {
   const prefix =
     "waitron-upgrade-trial-" + createHash("sha256").update(work).digest("hex").slice(0, 16);
   const started = [];
@@ -770,6 +898,8 @@ async function runOnlineTrial({ work, state, image, environment, run }) {
     const envFile = join(work, "app.env");
     await writeFileDurable(envFile, upgradeEnvironment(environment));
     for (operation of ["capture", "trial"]) {
+      if (operation === "trial" && identityNote !== null)
+        await writeIdentityNote(copy, identityNote);
       const name = `${prefix}-${operation}`;
       started.push(name);
       const mounts =

@@ -513,7 +513,32 @@ The findings:
      running release and producer and nothing is left to open: the head is already under the running
      producer, the open installation holds no record yet (a crash between the opening and the first
      record), or the box is not production. So a preproduction box that files records deletes it too.
+   - **As built 2026-11-24, the note carried forward** (cleared by the watcher, 08:23, not the owner;
+     it goes past "When it is written" above): before the stop the host reads the live state folder's
+     note. When it is exactly the reader's shape, its `producerTaxId` is the old image's and its
+     `release` is the version in the old image's release label, the new note's `fromProducerTaxId`
+     is the live note's, and not the old image's. An old image without a numbered release's label
+     carries nothing, and then a note is written only if the two images' producers differ. So a
+     fixed release by the same producer is accepted while the first one's opening keeps failing, and
+     a third producer's note names the producer the latest record is under. There is still no note
+     when that producer is the candidate's own. A live note left over from an opening already made
+     (a crash before its deletion) opens nothing for a release by the same producer; a third
+     producer is refused until the running release's start deletes the note.
+   - **As built 2026-11-24, a failed read:** a refused or unreadable `docker image inspect` of either
+     image abandons the upgrade before anything stops. An image naming no producer, and a candidate
+     without a numbered release's label, still mean no note.
    - **Disclosed limit:** root on the box can write the note by hand, as root can edit the database.
+   - **Disclosed limit, a race:** if the running release (producer B) opens its installation,
+     deletes the note and files a record after the trial's copy is taken, the attempt still carries
+     "from A" and an upgrade to a third producer C is refused after the stop; an automatic one
+     restores, a manual one stays shut until Restore, and a retry then names B.
+   - **Disclosed limit:** going back to A over a waiting B note leaves that note in the state
+     folder; it is acted on only if that B release is installed again, and an upgrade to it writes
+     the same note itself, so it matters only to someone pinning that release by hand.
+   - **Disclosed limit:** the running release's start leaves a left-over note naming another release
+     alone (`boot.identity-change.test.ts`, "leaves a note naming another release alone"); it stays
+     until an upgrade replaces it with a note of its own, the release it names starts and uses or
+     deletes it, or a plain reset.
 7. ★ **New words are unavoidable on three screens; the upgrade's report gets none.**
    - **The upgrade's report: no new words.** A refused opening on a copy leaves the copy's start
      waiting, so its test sale answers 409 `clock.unconfirmed` and A950 reports
@@ -1061,6 +1086,9 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
   `cli.mjs` → `:227`). The message: "This upgrade changes the software producer, so it cannot be
   kept after a failed check. Run `waitron.sh restore` to put the selling version back, then try
   the upgrade again."
+  - **As built 2026-11-24:** the message says "so it cannot be kept.", without "after a failed
+    check": Keep is also refused after a power cut stopped the checks, when none had failed. It says
+    "the previous version", not "the selling version": one waiting to open its installation sells nothing.
 - Tests: `candidate.test.mjs`, `transaction.test.mjs`, `host.test.mjs`.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1089,6 +1117,12 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
   shape (`host.test.mjs:1100-1101` shows it) and writes one line saying so into the attempt
   directory. Every other request is still refused as `forbidden`, so the copy still cannot set or
   restart anything on the host.
+  - **As built 2026-11-24:** the line goes to the helper's stderr, once per attempt, not into the
+    attempt directory, which a finished attempt deletes. `waitron.sh` captures only the helper's
+    stdout (`cmd_checked_install`), so a manual install shows the line on its own stderr and an
+    automatic one passes it to whatever ran `install-offered-upgrade`; no unit in `deploy/box` runs
+    that today. With the option, a host that has not finished its line within a second counts as unavailable, since
+    the copy stops waiting after two.
 - Modify `scripts/box/upgrades/candidate.mjs:72`: the stopped checks' relay passes
   `answerSynchronised: true`. Nothing else starts a relay (`git grep -n clockStatusRelay`: only
   `candidate.mjs:8,72` and the host's own tests).

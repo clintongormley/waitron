@@ -79,9 +79,8 @@ Ninguna de las dos listas dice que falte una factura.
 
 - **Facturas que la AEAT tiene y este servidor no emitió**: cada factura que una comprobación con la
   AEAT encontró bajo una serie que este servidor ya no usa y que este servidor no emitió.
-- **Cambios de identidad sin traspaso**: cada vez que la identidad fiscal de este servidor cambió sin
-  un traspaso, por ejemplo tras una restauración, con la última factura que el servidor tiene bajo la
-  identidad anterior, si tiene alguna.
+- **Cambios de identidad sin traspaso**: por ejemplo tras una restauración, cada uno con la última
+  factura que el servidor tiene bajo la identidad anterior, si tiene alguna.
 
 Si alguna de las dos listas tiene una línea, elige **Exportar estos casos para tu asesor fiscal**: el
 archivo incluye las dos listas.

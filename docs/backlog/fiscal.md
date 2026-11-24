@@ -1129,6 +1129,30 @@ replacement and the invoice it replaces are read whatever their date. The purcha
 covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
 that period's return changes with it.
 
+### A993: a change of producer opens a new installation (owner and watcher, 2026-11-06 to 2026-11-24)
+
+The owner's constraint (2026-11-06, about 18:13): a start opens a new installation for a producer
+difference only when the upgrade's own marker names that same new producer; otherwise it keeps
+refusing. The choices below are in the
+[plan](../superpowers/plans/2026-11-11-a993-identity-change.md), by its decision numbers. The owner
+said "build it" (2026-11-21) and "yes" to who may open it (3) and to the four messages (7)
+(2026-11-22 12:52); the watcher cleared the plan, took 12, and cleared carrying a waiting note to a
+later release (6, 2026-11-24).
+
+- **1. Only the producer opens one, and no column stores it.** A chain's producer is its latest
+  record's. A change of the two-character code or of the fiscal mode opens nothing, and a preproduction box changes producer on the same chain (the owner
+  did not mind this before A993, since such a box can be reset; the plan keeps it).
+- **2. No check when a record is written, and no guard for an old release started by hand.** Between
+  the opening and its first record a start under any producer passes. The owner, 2026-11-22: "there
+  should be no releases started by hand, so no need for a guard".
+- **3. The new release opens it at its start, once the start's time is confirmed** by the time
+  service or by any person who confirms the time on a till or Box status. Two devices alone do not.
+- **4. No stuck page and no new clock route:** the start keeps waiting until the opening commits.
+- **7. Four waiting messages of its own;** the upgrade's report has none.
+- **12. The upgrade's copy is told its time is synchronised,** so a box whose time service is not
+  synchronised can still upgrade. Its test sale no longer proves that the new version can get through its own wait
+  for the time; an accepted upgrade has no Restore.
+
 ### A445: a free item on a ticket with two or more VAT rates takes its share of the price paid (owner and watcher, 2026-11-23)
 
 When a ticket mixing VAT rates holds an item given free (a comp, or a discount that takes it to
@@ -1645,65 +1669,24 @@ official image from repository secrets of the same names and never committed, so
 its own. A production start with none refuses (`sif.producer_unset`); since A940 slice 4, a bundle
 built without a release version refuses earlier, with `server.unreleased_build`, and a release image
 cannot be built without them; a partly set or malformed value refuses in every environment; and a production start
-whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993 can
-open the new installation, so a change of producer is blocked in production until A993 lands.
-The three secrets hold placeholder values for now (owner, 2026-11-08; `gh secret list` showed all three set that day); replacing them, with
+whose open chain was made under another tax number refuses (`sif.producer_changed`) unless the
+checked upgrade's note names the change, and then opens a new installation
+([decisions](#a993-a-change-of-producer-opens-a-new-installation-owner-and-watcher-2026-11-06-to-2026-11-24)).
+The three secrets hold placeholder values for now (owner, 2026-11-08; `gh secret list` showed all three set that day); replace them, with
 `gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`,
-is safe only while no box has started in production, because a production chain refuses a different producer tax number until A993 lands.
-Every full run's publish job fails while any is missing. Once an image carrying a placeholder is published, replacing its tax number also needs `WAITRON_PRODUCER_CHANGE_ALLOWED` set to the new number. Apart from replacing the placeholder, the tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
+before any box starts in production, because a later change opens a new fiscal installation on each production box.
+Every full run's publish job fails while any is missing. Once an image carrying a placeholder is published, replacing its tax number also needs `WAITRON_PRODUCER_CHANGE_ALLOWED` set to the new number. The publish job runs on every full run (the nightly, a
 manual run on `main`, a `v*` tag), so a changed name or address reaches boxes as they update, but a
 changed tax number fails the publish unless the repository variable
 `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish:
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) is still to do.
-Slice 2 landed (#2820, #2827 and #2836; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a940-2-release-declaration.md)): the text, its renderer, the A4 PDF's renderer, the package's `declaration` command (`show`, `write`, `check`), and `pnpm release prepare` and `pnpm release tag` with their [runbook](../operations/release.md). Both release commands run since the release-blocker line in `packages/fiscal-verifactu/declarations/template.md` was deleted on 22 November; version 0.1.0's item d) is Q53's draft (owner: "Just put in whatever we have for now, we can update it later"). Slice 3 landed (#2861, #2874, #2916, #2974; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a940-3-in-app-declaration.md)): every box answers `/legal/declaration` (and `.pdf`, `.txt`) and `/legal/about` on every listener, and says it has none when its image carries none; every terminal opens it — the dashboard, the till, a kitchen screen, the till's sign-in and join screens and the setup wizard — and the guide's About Waitron page says where. Slice 4 landed (#2987, #3001, #3014; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a940-4-release-image.md)): a `v1.2.3` tag on `main` publishes an image whose records say `1.2.3` and which holds that version's declaration in `/app/declaration/`, checked inside the built image with `node /app/server.js check-release 1.2.3`; CI refuses a tag that is not on `main`, is not a release version, whose declaration is missing, blocked or disagrees with the code, or whose version is already published; a `release` job attaches `waitron-1.2.3-declaration.pdf` and `.txt`, copied out of the published image, to the GitHub Release; `waitron.sh install v1.2.3` pulls the published images; a production start of a bundle built without a release version stops on the recovery page with `server.unreleased_build` ("This box is running a test build."), while a start from source is not refused; and a root guard (`scripts/released-declarations.mjs`) fails when a released version's declaration changes or its tag is missing. So an official image refuses a production start unless it was built from a release tag (a start from source is not refused). Open point, for the owner: the recovery page's action "Install a release." (the design's §5.1 wording) offers no way to do that from the page, whose only button retries the same build; the page cannot offer one until a release can be installed without a terminal (B3's installer, A950's upgrades). Slice 5 landed (#3051; [plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a940-5-kept-declarations.md)): a box that starts selling keeps the declaration of the release it runs in the venue database, and the declaration page every About screen opens lists each earlier version it has kept under «Versiones anteriores», each opening that version's text. Slice 6's library half landed (waitron-io/verifactu#152); releasing 0.3.0 and moving Waitron to `^0.3.0`, with item d) saying again that the library has its own declaration, remain. 1b (A993) is being built.
+Slice 2 landed (#2820, #2827 and #2836; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a940-2-release-declaration.md)): the text, its renderer, the A4 PDF's renderer, the package's `declaration` command (`show`, `write`, `check`), and `pnpm release prepare` and `pnpm release tag` with their [runbook](../operations/release.md). Both release commands run since the release-blocker line in `packages/fiscal-verifactu/declarations/template.md` was deleted on 22 November; version 0.1.0's item d) is Q53's draft (owner: "Just put in whatever we have for now, we can update it later"). Slice 3 landed (#2861, #2874, #2916, #2974; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-11-a940-3-in-app-declaration.md)): every box answers `/legal/declaration` (and `.pdf`, `.txt`) and `/legal/about` on every listener, and says it has none when its image carries none; every terminal opens it — the dashboard, the till, a kitchen screen, the till's sign-in and join screens and the setup wizard — and the guide's About Waitron page says where. Slice 4 landed (#2987, #3001, #3014; [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a940-4-release-image.md)): a `v1.2.3` tag on `main` publishes an image whose records say `1.2.3` and which holds that version's declaration in `/app/declaration/`, checked inside the built image with `node /app/server.js check-release 1.2.3`; CI refuses a tag that is not on `main`, is not a release version, whose declaration is missing, blocked or disagrees with the code, or whose version is already published; a `release` job attaches `waitron-1.2.3-declaration.pdf` and `.txt`, copied out of the published image, to the GitHub Release; `waitron.sh install v1.2.3` pulls the published images; a production start of a bundle built without a release version stops on the recovery page with `server.unreleased_build` ("This box is running a test build."), while a start from source is not refused; and a root guard (`scripts/released-declarations.mjs`) fails when a released version's declaration changes or its tag is missing. So an official image refuses a production start unless it was built from a release tag (a start from source is not refused). Open point, for the owner: the recovery page's action "Install a release." (the design's §5.1 wording) offers no way to do that from the page, whose only button retries the same build; the page cannot offer one until a release can be installed without a terminal (B3's installer, A950's upgrades). Slice 5 landed (#3051; [plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a940-5-kept-declarations.md)): a box that starts selling keeps the declaration of the release it runs in the venue database, and the declaration page every About screen opens lists each earlier version it has kept under «Versiones anteriores», each opening that version's text. Slice 6's library half landed (waitron-io/verifactu#152); releasing 0.3.0 and moving Waitron to `^0.3.0`, with item d) saying again that the library has its own declaration, remain.
 Still needed from outside, for the next version's declaration: the asesor's answer to Q53, now question 9 of the
 [19 November adviser sheet](../compliance/2026-11-19-adviser-meeting.md); the owner's answers
 of 18 November leave items d) and f) to be confirmed. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
-
-## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.
-
-AEAT identifies an invoicing system by the taxpayer's NIF,
-the two-character code and the installation number, and the code counts only together with its
-producer's NIF, so a new producer (the owner → a future Waitron company), a new code, or a move
-to another fiscal policy (the owner: one installation, one policy) makes a different system.
-Each chain stores the producer and compliance mode it was opened under (today `verifactu_identities`
-stores neither, `packages/fiscal-verifactu/src/schema/verifactu-identities.ts:20-22`); the upgrade's step and
-every start compare them with the running release's and, on a difference, open a new installation, series and chain in
-one transaction, on the filing node only, through a new `identity-change` activation that only
-the upgrade's step, or a start that finds the change not made, can authorise (A947's slice 4a
-amends CLAUDE.md §5's "does not mint an installation number" sentence; A993 adds the one
-allocation no person asks for); a guard, proven by deletion, refuses to add a record to a chain
-opened under another identity. Corrections of invoices issued before the change join the new
-chain; the design asks for asesor Q53(d)(2) to be widened to cover that. The name is A947's
-five-symbol UTC minute (A947 §6.5), so A947's slice 4a lands first; no new recovery sheet is
-asked for. Because A947 needs a second clock for every name and, without a synchronised internet time
-service, a start has nobody present to give one, the design has the upgrade check the clock while the old release still serves, and make
-the change only once that check passes — otherwise the old release never stops. A sale can still
-wait on the internet after a crash between the migration and the change, or when the new release
-is started by hand; and a power cut during the upgrade's stop leaves no app running until the
-upgrade runs again, until the restart-at-boot step the design adds is built. Chosen by the owner
-on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
-case the page the box shows instead of trading also accepts a phone's or a till's clock under
-A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
-picture 6). **Being built** (owner, 2026-11-21, "build it"; on 2026-11-11 the owner had said "Later") in three
-pull requests from the plan, `docs/superpowers/plans/2026-11-11-a993-identity-change.md`; PR 1 gives
-the fiscal module a way to open the new installation, and PR 2 makes a start that finds the upgrade's
-note open it; nothing writes that note until PR 3. Where the plan's decisions depart from the design described here,
-the plan is current. Asesor
-Q53(d)(2) is widened to ask whether the new system may cancel or correct the old one's invoices. A move between fiscal modules stays a refused start
-until the first non-Veri\*Factu mode. Since 2026-11-06 the producer is a setting each image
-carries (A940 Task 8), so a start that opened a new installation on any producer difference would
-let a hand override do it with nobody present; Task 8 refuses instead. **Constraint on A993's
-plan, decided by the owner on 2026-11-06** (about 18:13, relayed by the watcher; recorded in the
-A940 plan's "What A993 inherits" and design §5.6): (1) a change of producer stays blocked in
-production until A993 exists; (2) once it exists, a start opens a new installation for a producer
-difference only when the upgrade's own marker names that same new producer; otherwise it keeps
-refusing. What a preproduction box does before A993 (it trades on, the new producer on the same
-chain) is settled as built: the owner does not mind, since such a box can be reset.
-[Design](../superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md#56-when-the-systems-identity-changes-a-new-installation-by-itself-a993)
 
 ## Retire the historical allocation formats from `fiscal-verifactu`
 

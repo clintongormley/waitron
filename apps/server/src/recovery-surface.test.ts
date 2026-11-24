@@ -441,23 +441,23 @@ describe("a chain recorded under another producer", () => {
     const english = await pageFor("sif.producer_changed", undefined, "en-GB");
     expect(english).toContain(
       escapeHtml(
-        "This box has been given a different software producer from the one its invoices were recorded under. A new producer needs a new fiscal installation, and this version of Waitron cannot open one, so the box will not sell.",
+        "This box has been given a different software producer from the one its invoices were recorded under, without the upgrade that opens a new fiscal installation for it, so the box will not sell.",
       ),
     );
     expect(english).toContain(
       escapeHtml(
-        "Install a Waitron version that names the same producer as this box's invoices. Changing the producer needs a Waitron version that can open a new fiscal installation, which does not exist yet.",
+        "Install a Waitron version that names the same producer as this box's invoices. A version with a new producer opens its new fiscal installation by itself when it is installed as an upgrade.",
       ),
     );
     const spanish = await pageFor("sif.producer_changed", undefined, SPANISH);
     expect(spanish).toContain(
       escapeHtml(
-        "Este servidor tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el servidor no venderá.",
+        "Este servidor tiene un productor del software distinto del de sus facturas registradas, sin la actualización que le abre una nueva instalación fiscal, así que el servidor no venderá.",
       ),
     );
     expect(spanish).toContain(
       escapeHtml(
-        "Instala una versión de Waitron que indique el mismo productor que las facturas de este servidor. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este servidor. Una versión con un productor nuevo abre su nueva instalación fiscal por sí sola cuando se instala como actualización.",
       ),
     );
   });

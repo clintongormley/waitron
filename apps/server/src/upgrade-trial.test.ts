@@ -178,7 +178,10 @@ const OTHER_PRODUCER_TAX_ID = "11111111H";
  * A copy of a production venue whose latest record was filed under `TEST_PRODUCER`, checked as the
  * trial of a release that files under another producer, with `noted` as the copy's note.
  */
-async function trialUnderAnotherProducer(noted: Record<string, unknown> | null) {
+async function trialUnderAnotherProducer(
+  noted: Record<string, unknown> | null,
+  runningProducer: string = OTHER_PRODUCER_TAX_ID,
+) {
   const { captureUpgradeTrial } = await import("./upgrade-trial.js");
   const { runUpgradeChecks } = await import("./upgrade-check-entry.js");
   const { seedModuleSettings } = await import("../test/module-settings.js");
@@ -209,12 +212,12 @@ async function trialUnderAnotherProducer(noted: Record<string, unknown> | null) 
   const migrations = join(root, "migrations");
   await copyMigrationsRoot(migrations);
   // The backend reads its producer from the process's environment.
-  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", OTHER_PRODUCER_TAX_ID);
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", runningProducer);
   try {
     return await runUpgradeChecks(
       {
         ...TEST_PRODUCER,
-        WAITRON_PRODUCER_TAX_ID: OTHER_PRODUCER_TAX_ID,
+        WAITRON_PRODUCER_TAX_ID: runningProducer,
         WAITRON_ENV: "production",
         WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
         WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
@@ -260,5 +263,119 @@ describe("a copy whose record another producer filed", () => {
     await expect(
       trialUnderAnotherProducer({ ...matchingNote(), release: "9.9.9" }),
     ).rejects.toMatchObject({ code: "sif.producer_changed" });
+  });
+});
+
+describe("the note an upgrade's host works out over a live one, judged by the new release's trial", () => {
+  useTestProducer();
+  const FIRST = TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID;
+  const THIRD_PRODUCER_TAX_ID = "22222222J";
+
+  /** The host names the new release 1.4.1; a server run from source calls itself something else. */
+  async function hostNote(running: string, next: string, live: Record<string, unknown> | null) {
+    const { identityChangeNote } = (await import(
+      new URL("../../../scripts/box/upgrades/host.mjs", import.meta.url).href
+    )) as {
+      identityChangeNote: (
+        oldImage: string,
+        nextImage: string,
+        stateDirectory: string,
+        run: (file: string, args: string[]) => Promise<{ stdout: string }>,
+      ) => Promise<Record<string, unknown> | null>;
+    };
+    const stateDir = join(root, "live");
+    await mkdir(stateDir);
+    if (live !== null)
+      await writeFile(join(stateDir, "identity-change.json"), JSON.stringify(live));
+    const images: Record<string, { producer: string; ref: string }> = {
+      "sha256:old": { producer: running, ref: "v1.4.0" },
+      "sha256:next": { producer: next, ref: "v1.4.1" },
+    };
+    const note = await identityChangeNote(
+      "sha256:old",
+      "sha256:next",
+      stateDir,
+      async (_file, args) => ({
+        stdout: JSON.stringify({
+          Env: [`WAITRON_PRODUCER_TAX_ID=${images[args[2]!]!.producer}`],
+          Labels: { "org.opencontainers.image.ref.name": images[args[2]!]!.ref },
+        }),
+      }),
+    );
+    if (note === null) return null;
+    expect(note.release).toBe("1.4.1");
+    return { ...note, release: softwareVersion() };
+  }
+  const leftBy = (release: string, producerTaxId: string, fromProducerTaxId: string) => ({
+    version: 1,
+    release,
+    producerTaxId,
+    fromProducerTaxId,
+  });
+  const waiting = () => leftBy("1.4.0", OTHER_PRODUCER_TAX_ID, FIRST);
+
+  it("accepts a fixed release by the producer still waiting, as a change from the first one", async () => {
+    const note = await hostNote(OTHER_PRODUCER_TAX_ID, OTHER_PRODUCER_TAX_ID, waiting());
+    expect(await trialUnderAnotherProducer(note)).toMatchObject({ identityChange: "pending" });
+  });
+
+  it.each([
+    ["with no live note", () => null],
+    [
+      "with a live note naming another producer than the running one",
+      () => leftBy("1.4.0", THIRD_PRODUCER_TAX_ID, FIRST),
+    ],
+    [
+      "with a live note naming another release than the running one",
+      () => leftBy("1.3.0", OTHER_PRODUCER_TAX_ID, FIRST),
+    ],
+    ["with a misshapen live note", () => ({ ...waiting(), more: "x" })],
+  ])("refuses that release %s, which gives it no note", async (_label, live) => {
+    const note = await hostNote(OTHER_PRODUCER_TAX_ID, OTHER_PRODUCER_TAX_ID, live());
+    expect(note).toBeNull();
+    await expect(trialUnderAnotherProducer(note)).rejects.toMatchObject({
+      code: "sif.producer_changed",
+    });
+  });
+
+  it("accepts a third producer over the one waiting, as a change from the first one", async () => {
+    const note = await hostNote(OTHER_PRODUCER_TAX_ID, THIRD_PRODUCER_TAX_ID, waiting());
+    expect(await trialUnderAnotherProducer(note, THIRD_PRODUCER_TAX_ID)).toMatchObject({
+      identityChange: "pending",
+    });
+  });
+
+  it("refuses that third producer as a change from the one waiting, which filed nothing", async () => {
+    const note = leftBy(softwareVersion(), THIRD_PRODUCER_TAX_ID, OTHER_PRODUCER_TAX_ID);
+    await expect(trialUnderAnotherProducer(note, THIRD_PRODUCER_TAX_ID)).rejects.toMatchObject({
+      code: "sif.producer_changed",
+    });
+  });
+
+  describe("a live note left over, the latest record already under its producer", () => {
+    const leftOver = () => leftBy("1.4.0", FIRST, OTHER_PRODUCER_TAX_ID);
+
+    it("opens nothing for a release by the same producer", async () => {
+      const note = await hostNote(FIRST, FIRST, leftOver());
+      expect(note).toMatchObject({ fromProducerTaxId: OTHER_PRODUCER_TAX_ID });
+      const report = await trialUnderAnotherProducer(note, FIRST);
+      expect(report).toMatchObject({ mode: "trading", fiscalRecords: 2 });
+      expect(report).not.toHaveProperty("identityChange");
+    });
+
+    it("refuses a third producer until the running release's start deletes it", async () => {
+      const note = await hostNote(FIRST, THIRD_PRODUCER_TAX_ID, leftOver());
+      expect(note).toMatchObject({ fromProducerTaxId: OTHER_PRODUCER_TAX_ID });
+      await expect(trialUnderAnotherProducer(note, THIRD_PRODUCER_TAX_ID)).rejects.toMatchObject({
+        code: "sif.producer_changed",
+      });
+    });
+
+    it("accepts that third producer once it is deleted", async () => {
+      const note = await hostNote(FIRST, THIRD_PRODUCER_TAX_ID, null);
+      expect(await trialUnderAnotherProducer(note, THIRD_PRODUCER_TAX_ID)).toMatchObject({
+        identityChange: "pending",
+      });
+    });
   });
 });

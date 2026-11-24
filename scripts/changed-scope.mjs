@@ -105,6 +105,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/box/name-tag.mjs", ["apps/server"]],
   ["scripts/box/wifi-record.mjs", ["apps/server"]],
   ["scripts/box/wifi-boot-copy.mjs", ["apps/server"]],
+  ["scripts/box/upgrades/host.mjs", ["apps/server"]],
   [
     "scripts/vitest-shard-coverage-merge.mjs",
     ["apps/dashboard", "apps/till", "packages/fiscal-verifactu", "packages/venue-service"],

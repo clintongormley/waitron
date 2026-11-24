@@ -69,8 +69,8 @@ declare module "@waitron/shared" {
       setting: "WAITRON_PRODUCER_NAME" | "WAITRON_PRODUCER_TAX_ID";
       reason: "too_long" | "wrong_length" | "check_failed" | "rejected";
     };
-    /** A production node's open chain was filed under another producer's tax number
-     * (./producer-change.ts). */
+    /** A production node's open chain was filed under another producer's tax number, and no upgrade's
+     * note names the change (./producer-change.ts). */
     "sif.producer_changed": Record<string, never>;
     /** A new installation for a changed producer cannot open yet (./identity-change.ts). */
     "sif.identity_change_waiting": { reason: string };

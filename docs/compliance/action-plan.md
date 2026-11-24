@@ -218,6 +218,10 @@ We offered reciprocity in the message. Send it.
 > replace it, which is safe only while no box has started in production. Apart from that
 > replacement, the tax number must not change until A993 lands.
 >
+> **2026-11-24:** A993 is built: a production box upgraded to a release with another producer opens
+> a new installation by itself ([runbook](../operations/release.md#when-the-producer-or-the-system-code-changes)).
+> Two-box venues wait for paired upgrades.
+>
 > **2026-11-22:** the owner decided that 0.1.0's item d) is Q53's draft; the asesor's answer goes
 > into a later version.
 

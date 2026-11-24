@@ -4494,7 +4494,9 @@ synchronised, a start, or a clock jump of over a minute once the clock watch's n
 after the last ends) finds it, waits for two devices or a person to confirm its time before any
 later payment (owner, 2026-11-10; the jump, 2026-11-11; [below](#every-start-confirms-the-boxs-time-before-it-trades)),
 and AEAT refusing as dated in the future (`1112`) a record written since its time was last confirmed
-makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's): records chain locally
+makes it wait for a person or its time service (owner, 2026-11-10 and 2026-11-11; that two devices do not end it, A1420 D9, the watcher's),
+and a producer change makes the start wait until its new installation is open
+([below](#a-change-of-producer-opens-a-new-installation)): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
@@ -4515,6 +4517,37 @@ passed on 23 November 2026; what the real-box runs did not show is in the
 open in A1188. Do not read the local test as Cloud or disconnected-internet qualification.
 
 **Provisioning and boot**
+
+## A change of producer opens a new installation
+
+Built by A993 ([plan](../superpowers/plans/2026-11-11-a993-identity-change.md); runbook:
+[release.md](../operations/release.md#when-the-producer-or-the-system-code-changes)). The checked
+upgrade writes `identity-change.json` when the candidate is a numbered release whose producer tax
+number differs from the running image's. It goes into the copies the checks run on and, once every
+stopped check has passed, into the live state folder (`scripts/box/upgrades/host.mjs`,
+`candidate.mjs`). While it waits, a fixed release by the same producer, or by a third one, gets a
+note that starts from the producer the chain was filed under. Keep refuses an attempt that has a
+note (`transaction.mjs`). The start reads the note only on a box that files records
+(`apps/server/src/boot.ts`). The opening refuses unless the box is the venue's only box and its
+serving primary, and the server deletes the note once it commits
+(`apps/server/src/identity-change-opening.ts`). How the wait ends is under
+[Every start confirms the box's time](#every-start-confirms-the-boxs-time-before-it-trades).
+
+Who decided: a producer difference opens an installation only when the upgrade's own note names it
+(owner, 2026-11-06); any person who confirms the time on a till or Box status may open it, two
+devices alone may not, and the four waiting messages (owner, 2026-11-22); single boxes first, and no
+guard for a release started by hand (owner, 2026-11-22). That the upgrade's copy is told its time is
+synchronised, and the plan as a whole, are the watcher's (2026-11-22), and so is carrying a waiting
+note forward (2026-11-24).
+
+The confirmation is weaker than a restore's or a promotion's: it needs no setup password, recovery
+key or `node.manage` sign-in; **The box** on a till, and Box status's confirmations, carry no
+second clock; and a till's reading agrees within 60 seconds, not 30.
+
+What the guards miss: between the opening and the first record a start under any producer passes,
+since the open chain names none; root on the box can write the note by hand; a development or
+preproduction box changes producer on the same chain; the host's cases run against a stand-in
+`docker`, never a real image or a real publish.
 
 ## A restore names a fresh minute; the working-time chain continues
 
@@ -6432,7 +6465,9 @@ unverifiable under the other environment.
 ### Restore and promotion start a new chain under a new installation name.
 
 **Restore and promotion start a new chain under a new installation name.** A working box keeps its
-identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
+identity and chain except through a [producer change by upgrade](#a-change-of-producer-opens-a-new-installation)
+or the [conflict switch](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict).
+A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after the box's
 internet time service says it is synchronised, or a clock on another machine agrees within 30
 seconds and the person on that page confirms both times or sets the box's clock from that machine;

@@ -1,9 +1,26 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { execFile, execFileSync } from "node:child_process";
+import {
+  lstat,
+  mkdtemp,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { createConnection, createServer } from "node:net";
+import { once } from "node:events";
+import { clearInterval, setInterval } from "node:timers";
+import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
@@ -25,6 +42,10 @@ import { PAYMENTS_MIGRATIONS } from "../../../packages/payments/src/migrations.j
 import { payments } from "../../../packages/payments/src/schema/payments.js";
 import { runUpgradeCli } from "./cli.mjs";
 import { offerTrustFixture } from "./offers.test-support.mjs";
+import { isNumberedVersion } from "../release-list.mjs";
+import { IDENTITY_CHANGE_FILE } from "../../../packages/store/src/state-layout.js";
+import { boxHostClient } from "../../../apps/server/src/box-host-client.js";
+import { readIdentityChangeNote } from "../../../apps/server/src/identity-change-note.js";
 
 async function mountVenue(suite, boxDirectory) {
   const path = join(boxDirectory, "state", "venue", "venue.db");
@@ -424,6 +445,9 @@ async function imageFixture({
   beforeAutomaticStop,
   writers = false,
   onlineTrial,
+  imageConfigs = {},
+  onOnlineRun,
+  stoppable = Boolean(beforeAutomaticStop),
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -462,7 +486,7 @@ async function imageFixture({
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
   const resolved = new Map();
-  const shutdown = beforeAutomaticStop ? dockerFixture() : null;
+  const shutdown = stoppable ? dockerFixture() : null;
   let opened = false;
   const run = async (file, args, input, options) => {
     calls.push([file, ...args]);
@@ -476,6 +500,7 @@ async function imageFixture({
     if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
       expect(options.timeout).toBe(180_000);
       const mode = args.includes("capture") ? "capture" : "trial";
+      await onOnlineRun?.(mode, args);
       if (onlineTrial === "maxbuffer")
         throw Object.assign(new Error("output limit"), {
           killed: true,
@@ -578,6 +603,8 @@ async function imageFixture({
       };
     if (args[0] === "image" && args[1] === "inspect") {
       if (args[2] === "tunnel:dev") throw new Error("tunnel is not installed");
+      if (args.at(-1) === "{{json .Config}}")
+        return { stdout: imageConfigs[args[2]]?.() ?? '{"Env":["PATH=/usr/bin"],"Labels":null}' };
       return {
         stdout: realCompose
           ? `sha256:${"1".repeat(64)}\n`
@@ -1132,6 +1159,156 @@ it("relays only the real clock status line and refuses a clock change without co
   }
 });
 
+describe("the clock relay told to answer synchronised", () => {
+  const LINE =
+    "The upgrade's checks were told that the box's time is synchronised; its time service did not say so.\n";
+  const reply = (synchronised) =>
+    `{"ok":true,"service":"on","unit":"chrony.service","synchronised":${synchronised},"lastSyncAt":null,"nowMs":1795420800000}\n`;
+
+  async function relayed({ answer, host = answer !== undefined, ...told }) {
+    const root = await mkdtemp(join(tmpdir(), "upgrade-relay-"));
+    onTestFinished(() => rm(root, { recursive: true, force: true }));
+    const log = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    onTestFinished(() => log.mockRestore());
+    const source = join(root, "host.sock");
+    const received = [];
+    const connections = new Set();
+    if (host) {
+      const upstream = createServer((socket) => {
+        connections.add(socket);
+        socket.on("error", () => {});
+        socket.on("data", (bytes) => {
+          received.push(bytes.toString());
+          answer?.(socket);
+        });
+      });
+      await new Promise((done) => upstream.listen(source, done));
+      onTestFinished(async () => {
+        for (const socket of connections) socket.destroy();
+        await new Promise((done) => upstream.close(done));
+      });
+    }
+    const { clockStatusRelay } = await import("./host.mjs");
+    const relay = await clockStatusRelay({
+      directory: join(root, "relay"),
+      socketPath: source,
+      answerSynchronised: true,
+      ...told,
+    });
+    onTestFinished(() => relay.close().catch(() => {}));
+    const socketPath = join(root, "relay", "box.sock");
+    const exchange = (line) =>
+      new Promise((done, reject) => {
+        const socket = createConnection(socketPath);
+        let text = "";
+        socket.on("connect", () => socket.write(line));
+        socket.on("data", (bytes) => {
+          text += bytes.toString();
+        });
+        socket.on("end", () => done(text));
+        socket.on("error", reject);
+      });
+    const lines = () => log.mock.calls.map(([text]) => text);
+    return { relay, received, exchange, lines, client: boxHostClient({ socketPath }) };
+  }
+
+  it.each([
+    ["answers not synchronised", (socket) => socket.end(reply(false))],
+    ["refuses", (socket) => socket.end('{"ok":false,"reason":"host_failed"}\n')],
+    [
+      "says synchronised in a refusal",
+      (socket) => socket.end('{"ok":false,"synchronised":true}\n'),
+    ],
+    ["answers something else", (socket) => socket.end('"synchronised":true\n')],
+    ["answers null", (socket) => socket.end("null\n")],
+    ["names the flag as text", (socket) => socket.end(reply('"true"'))],
+    ["answers part of a line", (socket) => socket.end(reply(true).slice(0, -1))],
+    ["answers too much", (socket) => socket.end(" ".repeat(5000))],
+    ["hangs up", (socket) => socket.end()],
+    ["never answers", () => {}],
+    [
+      "keeps sending without finishing a line",
+      (socket) => {
+        const drip = setInterval(() => socket.write(" "), 300);
+        socket.on("close", () => clearInterval(drip));
+      },
+    ],
+    ["is not there", undefined],
+  ])(
+    "tells the copy its time is synchronised, and says so once, when the host %s",
+    async (_, answer) => {
+      const t = await relayed({ answer });
+      for (let read = 0; read < 2; read += 1)
+        expect(await t.client.clockStatus()).toEqual({
+          available: true,
+          service: "on",
+          unit: null,
+          synchronised: true,
+          lastSyncAt: null,
+        });
+      expect(t.received).toEqual(answer ? ["clock.status\n", "clock.status\n"] : []);
+      expect(t.lines()).toEqual([LINE]);
+    },
+  );
+
+  it("passes a synchronised host's own answer on unchanged, and writes nothing", async () => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(true)) });
+    expect(await t.exchange("clock.status\n")).toBe(reply(true));
+    expect(t.received).toEqual(["clock.status\n"]);
+    expect(t.lines()).toEqual([]);
+  });
+
+  it.each([
+    'clock.set {"targetMs":1}\n',
+    "clock.sync-on\n",
+    "clock.retry\n",
+    "clock.status\nclock.retry\n",
+    "upgrade.status\n",
+  ])("refuses %j without contacting the host", async (line) => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
+    expect(await t.exchange(line)).toBe('{"ok":false,"reason":"forbidden"}\n');
+    expect(t.received).toEqual([]);
+    expect(t.lines()).toEqual([]);
+  });
+
+  it("passes the host's own answer on, and writes nothing, without the option", async () => {
+    const t = await relayed({
+      answer: (socket) => socket.end(reply(false)),
+      answerSynchronised: undefined,
+    });
+    expect(await t.exchange("clock.status\n")).toBe(reply(false));
+    expect(t.lines()).toEqual([]);
+  });
+
+  it("cuts no host short without the option", async () => {
+    const t = await relayed({ answer: () => {}, answerSynchronised: undefined });
+    expect(await t.client.clockStatus()).toMatchObject({ available: false, reason: "timeout" });
+  });
+
+  it("answers two reads at once", async () => {
+    const t = await relayed({ answer: (socket) => socket.end(reply(false)) });
+    const answers = await Promise.all([t.client.clockStatus(), t.client.clockStatus()]);
+    expect(answers.map(({ synchronised }) => synchronised)).toEqual([true, true]);
+    expect(t.lines()).toEqual([LINE]);
+  });
+
+  it("writes nothing for a copy that stopped waiting", async () => {
+    let asked;
+    const waiting = new Promise((done) => {
+      asked = done;
+    });
+    const t = await relayed({ answer: (socket) => asked(socket) });
+    const answered = t.exchange("clock.status\n");
+    const host = await waiting;
+    const left = once(host, "close");
+    await t.relay.close();
+    expect(await answered).toBe("");
+    await left;
+    await delay(200);
+    expect(t.lines()).toEqual([]);
+  });
+});
+
 it.each([false, true])(
   "disables container restart before the marker and restores policies on reopen (%s)",
   async (realCompose) => {
@@ -1400,4 +1577,591 @@ describe("the installed venue time zone", () => {
       expect(await installedVenueTimeZone(state, run)).toBe(timeZone);
     },
   );
+});
+
+describe("the note of a change of producer", () => {
+  const imageConfig = (ref, ...env) =>
+    JSON.stringify({
+      Env: ["PATH=/usr/bin", "WAITRON_PRODUCER_NAME=Producer", ...env, "NODE_ENV=production"],
+      Labels: { "org.opencontainers.image.ref.name": ref },
+    });
+  const producer = (taxId) => `WAITRON_PRODUCER_TAX_ID=${taxId}`;
+  const FROM = "B00000001";
+  const TO = "B00000002";
+  const OLD = imageConfig("v1.3.0", producer(FROM));
+  const NEXT = imageConfig("v1.4.0", producer(TO));
+  const NOTE = {
+    version: 1,
+    release: "1.4.0",
+    producerTaxId: TO,
+    fromProducerTaxId: FROM,
+  };
+
+  async function upgrade({ old = OLD, next = NEXT, onRun, live, beforeStop } = {}) {
+    const seen = {};
+    const t = await imageFixture({
+      prepare: false,
+      onlineTrial: "pass",
+      stoppable: true,
+      imageConfigs: {
+        // The id this fixture gives the image of any running container.
+        "sha256:running-tunnel": typeof old === "function" ? old : () => old,
+        "sha256:app:new": typeof next === "function" ? next : () => next,
+      },
+      onOnlineRun: async (mode, args) => {
+        const copy = args
+          .find((arg) => arg.startsWith("type=bind,") && !arg.endsWith(",readonly"))
+          .match(/src=([^,]+),/)[1];
+        await onRun?.(mode, copy);
+        seen[mode] = {
+          args,
+          environment: await readFile(args[args.indexOf("--env-file") + 1], "utf8"),
+          names: await readdir(copy),
+        };
+        if (mode === "capture" || !seen[mode].names.includes(IDENTITY_CHANGE_FILE)) return;
+        const path = join(copy, IDENTITY_CHANGE_FILE);
+        const entry = await lstat(path);
+        seen[mode].note = JSON.parse(await readFile(path, "utf8"));
+        seen[mode].read = await readIdentityChangeNote(copy);
+        seen[mode].regularFile = entry.isFile();
+        seen[mode].mode = entry.mode & 0o777;
+        seen[mode].owner = { uid: entry.uid, gid: entry.gid };
+        const folder = await stat(copy);
+        seen[mode].folder = { uid: folder.uid, gid: folder.gid };
+      },
+    });
+    const livePath = join(t.root, "state", IDENTITY_CHANGE_FILE);
+    if (typeof live === "function") await live(livePath);
+    else if (live !== undefined) await writeFile(livePath, live);
+    const images = await t.f.host.prepareImages();
+    await beforeStop?.(livePath);
+    await mkdir(t.directory, { recursive: true });
+    await t.f.host.stop();
+    onTestFinished(() => t.f.host.resume(images.old));
+    return { ...t, images, seen, livePath };
+  }
+
+  it("gives a release by another producer the note, in the trial's copy and the attempt", async () => {
+    const t = await upgrade();
+    expect(t.seen.capture.names).toEqual([]);
+    expect(t.seen.trial.note).toEqual(NOTE);
+    expect(t.seen.trial.read).toEqual({
+      release: "1.4.0",
+      producerTaxId: TO,
+      fromProducerTaxId: FROM,
+    });
+    expect(JSON.parse(await readFile(join(t.directory, IDENTITY_CHANGE_FILE), "utf8"))).toEqual(
+      NOTE,
+    );
+    expect(await readIdentityChangeNote(t.directory)).toEqual(t.seen.trial.read);
+    expect(await readdir(join(t.root, "state"))).not.toContain(IDENTITY_CHANGE_FILE);
+    expect((await readdir(t.directory)).sort()).toEqual([
+      "candidate-compose.json",
+      IDENTITY_CHANGE_FILE,
+    ]);
+  });
+
+  it("reads the producers from the two images' own configuration", async () => {
+    const t = await upgrade();
+    expect(t.calls.filter((args) => args.at(-1) === "{{json .Config}}")).toEqual(
+      [t.images.old.app, t.images.candidate.app].map((id) => [
+        "docker",
+        "image",
+        "inspect",
+        id,
+        "--format",
+        "{{json .Config}}",
+      ]),
+    );
+  });
+
+  it("gives the trial's note the copy's owner, and nobody else access", async () => {
+    const probe = await open(join(tmpdir(), "."), "r");
+    const chown = vi.spyOn(Object.getPrototypeOf(probe), "chown");
+    onTestFinished(() => chown.mockRestore());
+    await probe.close();
+    let chowned;
+    const t = await upgrade({
+      onRun: async (mode) => {
+        if (mode === "trial") chowned = [...chown.mock.calls];
+      },
+    });
+    const { trial } = t.seen;
+    expect(trial.owner).toEqual(trial.folder);
+    expect(trial.mode).toBe(0o600);
+    expect(chowned).toEqual([[trial.folder.uid, trial.folder.gid]]);
+  });
+
+  it("does not write through a link the captured copy holds under the note's names", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "upgrade-note-outside-"));
+    onTestFinished(() => rm(outside, { recursive: true, force: true }));
+    const kept = join(outside, "kept");
+    await writeFile(kept, "kept");
+    const t = await upgrade({
+      onRun: async (mode, copy) => {
+        if (mode !== "capture") return;
+        await symlink(kept, join(copy, IDENTITY_CHANGE_FILE));
+        await symlink(kept, join(copy, `${IDENTITY_CHANGE_FILE}.tmp`));
+      },
+    });
+    expect(await readFile(kept, "utf8")).toBe("kept");
+    expect(t.seen.trial.regularFile).toBe(true);
+    expect(t.seen.trial.note).toEqual(NOTE);
+    expect(t.seen.trial.names).toEqual([IDENTITY_CHANGE_FILE]);
+  });
+
+  it("keeps the trial without a network or a clock relay", async () => {
+    const { args } = (await upgrade()).seen.trial;
+    expect(args[args.indexOf("--network") + 1]).toBe("none");
+    expect(args.filter((arg) => arg === "--mount")).toHaveLength(1);
+    expect(args.some((arg) => arg.includes("/run/waitron-box"))).toBe(false);
+  });
+
+  it.each([
+    ["the same producer", { next: imageConfig("v1.4.0", producer(FROM)) }],
+    [
+      "a producer differing only in the spaces around it",
+      { next: imageConfig("v1.4.0", producer(` ${FROM} `)) },
+    ],
+    ["a candidate built from main", { next: imageConfig("main", producer(TO)) }],
+    ["a candidate whose label has no v", { next: imageConfig("1.4.0", producer(TO)) }],
+    ["a candidate from a branch named like a release", { next: imageConfig("v1.4", producer(TO)) }],
+    ["a candidate with no label", { next: imageConfig(undefined, producer(TO)) }],
+    ["a candidate with no labels", { next: JSON.stringify({ Env: [producer(TO)] }) }],
+    ["a candidate naming no producer", { next: imageConfig("v1.4.0") }],
+    ["a candidate naming an empty producer", { next: imageConfig("v1.4.0", producer("")) }],
+    ["a candidate naming a blank producer", { next: imageConfig("v1.4.0", producer("  ")) }],
+    ["an old image naming no producer", { old: imageConfig("v1.3.0") }],
+    ["an old image naming an empty producer", { old: imageConfig("v1.3.0", producer("")) }],
+    ["an old image with no environment", { old: JSON.stringify({ Env: null, Labels: null }) }],
+  ])("writes no note for %s", async (_case, configs) => {
+    const t = await upgrade(configs);
+    expect(t.seen.trial.names).toEqual([]);
+    expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
+  });
+
+  const OLD_UNREADABLE = /^installed image has an unreadable configuration$/;
+  const NEXT_UNREADABLE = /^candidate image has an unreadable configuration$/;
+  const refusedInspect = () => {
+    throw new Error("No such image");
+  };
+  it.each([
+    ["an old image's answer that is not JSON", { old: "not json" }, OLD_UNREADABLE],
+    ["a candidate's answer that is not JSON", { next: "not json" }, NEXT_UNREADABLE],
+    ["an old image's answer that is null", { old: "null" }, OLD_UNREADABLE],
+    ["a candidate's answer that is null", { next: "null" }, NEXT_UNREADABLE],
+    ["an old image's environment that is no list", { old: '{"Env":"x"}' }, OLD_UNREADABLE],
+    ["a candidate's environment that is no list", { next: '{"Env":"x"}' }, NEXT_UNREADABLE],
+    ["a refused inspect of the old image", { old: refusedInspect }, "No such image"],
+    ["a refused inspect of the candidate", { next: refusedInspect }, "No such image"],
+  ])("abandons the upgrade before any stop for %s", async (_case, configs, failure) => {
+    const t = await imageFixture({
+      prepare: false,
+      onlineTrial: "pass",
+      writers: true,
+      imageConfigs: {
+        "sha256:running-tunnel": () => OLD,
+        "sha256:app:new": () => NEXT,
+        ...Object.fromEntries(
+          Object.entries(configs).map(([key, value]) => [
+            key === "old" ? "sha256:running-tunnel" : "sha256:app:new",
+            typeof value === "function" ? value : () => value,
+          ]),
+        ),
+      },
+    });
+    await expect(t.f.host.prepareImages()).rejects.toThrow(failure);
+    const ran = (...words) => t.calls.filter((args) => words.every((word) => args.includes(word)));
+    expect(ran("tag").length).toBeGreaterThan(0);
+    expect(ran("image", "rm")).toHaveLength(ran("tag").length);
+    for (const word of ["stop", "run", "update"]) expect(ran(word)).toEqual([]);
+  });
+
+  it.each([
+    ["letter case", "b00000001"],
+    ["inner spacing", "B 00000001"],
+  ])("names a producer that differs in %s, as the running producer does", async (_case, taxId) => {
+    const t = await upgrade({ next: imageConfig("v1.4.0", producer(taxId)) });
+    expect(t.seen.trial.note).toEqual({ ...NOTE, producerTaxId: taxId });
+  });
+
+  it("names the producers as the running producer reads them, without the spaces around", async () => {
+    const t = await upgrade({
+      old: imageConfig("v1.3.0", producer(` ${FROM}`)),
+      next: imageConfig("v1.4.0", producer(`${TO} `)),
+    });
+    expect(t.seen.trial.note).toEqual(NOTE);
+  });
+
+  it.each([
+    "1.4.0",
+    "1.4.0-rc.2",
+    "0.0.1-alpha.0",
+    "01.4.0",
+    "1.4.0-dev.1",
+    "1.4.0\n",
+    "1.4.0+abc",
+    `1.4.${"1".repeat(46)}`,
+    `1.4.${"1".repeat(47)}`,
+  ])("takes %j as a release exactly as the release list does", async (version) => {
+    const t = await upgrade({ next: imageConfig(`v${version}`, producer(TO)) });
+    expect(t.seen.trial.note?.release).toBe(isNumberedVersion(version) ? version : undefined);
+  });
+
+  describe("over a live note whose installation has not opened", () => {
+    const THIRD = "B00000003";
+    const SAME = {
+      old: imageConfig("v1.4.0", producer(TO)),
+      next: imageConfig("v1.4.1", producer(TO)),
+    };
+    const FURTHER = { ...SAME, next: imageConfig("v1.5.0", producer(THIRD)) };
+    const LIVE = JSON.stringify(NOTE) + "\n";
+    const given = async (options) => (await upgrade(options)).seen.trial.note;
+
+    it("gives a fixed release by the same producer a note from the producer first replaced", async () => {
+      const t = await upgrade({ ...SAME, live: LIVE });
+      const carried = { ...NOTE, release: "1.4.1" };
+      expect(t.seen.trial.note).toEqual(carried);
+      expect(JSON.parse(await readFile(join(t.directory, IDENTITY_CHANGE_FILE), "utf8"))).toEqual(
+        carried,
+      );
+      expect(await readFile(t.livePath, "utf8")).toBe(LIVE);
+    });
+
+    it("gives a release by a third producer a note from the producer first replaced", async () => {
+      expect(await given({ ...FURTHER, live: LIVE })).toEqual({
+        version: 1,
+        release: "1.5.0",
+        producerTaxId: THIRD,
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("compares the live note with the running producer as that producer reads it", async () => {
+      expect(
+        await given({ ...SAME, old: imageConfig("v1.4.0", producer(` ${TO} `)), live: LIVE }),
+      ).toEqual({ ...NOTE, release: "1.4.1" });
+    });
+
+    it.each([
+      ["once the installation has opened, the note gone", SAME, undefined],
+      ["for a live note naming another producer", SAME, { ...NOTE, producerTaxId: THIRD }],
+      [
+        "for a live note whose producer differs in letter case",
+        SAME,
+        { ...NOTE, producerTaxId: TO.toLowerCase() },
+      ],
+      ["back to the producer first replaced", { ...SAME, next: OLD }, NOTE],
+      [
+        "for a candidate built from main",
+        { ...SAME, next: imageConfig("main", producer(TO)) },
+        NOTE,
+      ],
+      ["for a candidate naming no producer", { ...SAME, next: imageConfig("v1.4.1") }, NOTE],
+      ["for an old image naming no producer", { ...SAME, old: imageConfig("v1.4.0") }, NOTE],
+    ])("writes no note %s", async (_case, configs, note) => {
+      const live = note && JSON.stringify(note);
+      const t = await upgrade({ ...configs, live });
+      expect(t.seen.trial.names).toEqual([]);
+      expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
+      if (live) expect(await readFile(t.livePath, "utf8")).toBe(live);
+    });
+
+    it("names the running producer to a third one, for a live note naming another", async () => {
+      const live = JSON.stringify({ ...NOTE, producerTaxId: FROM, fromProducerTaxId: "B00000009" });
+      expect(await given({ ...FURTHER, live })).toMatchObject({ fromProducerTaxId: TO });
+    });
+
+    it.each([
+      ["of another release", "v1.4.1"],
+      ["built from main", "main"],
+      ["with no label", undefined],
+      ["whose label has no v", "1.4.0"],
+    ])("carries nothing for a running image %s", async (_case, ref) => {
+      const old = imageConfig(ref, producer(TO));
+      expect(await given({ ...SAME, old, live: LIVE })).toBeUndefined();
+      expect(await given({ ...FURTHER, old, live: LIVE })).toEqual({
+        version: 1,
+        release: "1.5.0",
+        producerTaxId: THIRD,
+        fromProducerTaxId: TO,
+      });
+    });
+
+    it("carries nothing for a running image with no labels", async () => {
+      const old = JSON.stringify({ Env: [producer(TO)], Labels: null });
+      expect(await given({ ...SAME, old, live: LIVE })).toBeUndefined();
+    });
+
+    it("writes no note for an unlabelled running image with no live note", async () => {
+      const old = imageConfig(undefined, producer(TO));
+      expect(await given({ ...SAME, old })).toBeUndefined();
+    });
+
+    it.each([
+      ["exactly the server's shape", LIVE, true],
+      [
+        "its keys in another order",
+        JSON.stringify(Object.fromEntries(Object.entries(NOTE).reverse())),
+        true,
+      ],
+      ["nothing", "", false],
+      ["not JSON", LIVE.slice(0, -3), false],
+      ["null", "null", false],
+      ["text", JSON.stringify(LIVE), false],
+      ["a list", JSON.stringify([NOTE]), false],
+      ["another version", JSON.stringify({ ...NOTE, version: 2 }), false],
+      ["its version as text", JSON.stringify({ ...NOTE, version: "1" }), false],
+      ["a key too many", JSON.stringify({ ...NOTE, more: "x" }), false],
+      ...Object.keys(NOTE).flatMap((key) => [
+        [`no ${key}`, JSON.stringify({ ...NOTE, [key]: undefined }), false],
+        [`an empty ${key}`, JSON.stringify({ ...NOTE, [key]: "" }), false],
+        [`a listed ${key}`, JSON.stringify({ ...NOTE, [key]: [NOTE[key]] }), false],
+        [`a null ${key}`, JSON.stringify({ ...NOTE, [key]: null }), false],
+      ]),
+    ])(
+      "takes a live file holding %s as a note exactly as the server does",
+      async (_case, live, noted) => {
+        const t = await upgrade({ ...SAME, live });
+        expect((await readIdentityChangeNote(join(t.root, "state"))) !== null).toBe(noted);
+        expect(t.seen.trial.names).toEqual(noted ? [IDENTITY_CHANGE_FILE] : []);
+        const further = await given({ ...FURTHER, live });
+        expect(further).toMatchObject({ fromProducerTaxId: noted ? FROM : TO });
+      },
+    );
+
+    it.each([
+      ["a folder", (path) => mkdir(path)],
+      [
+        "a link to a note elsewhere",
+        async (path) => {
+          const outside = await mkdtemp(join(tmpdir(), "upgrade-note-outside-"));
+          onTestFinished(() => rm(outside, { recursive: true, force: true }));
+          await writeFile(join(outside, "note"), LIVE);
+          await symlink(join(outside, "note"), path);
+        },
+      ],
+      ["a pipe nobody writes to", (path) => promisify(execFile)("mkfifo", [path])],
+    ])("takes %s under the note's name as no note", async (_case, live) => {
+      expect(await given({ ...SAME, live })).toBeUndefined();
+      expect(await given({ ...FURTHER, live })).toMatchObject({ fromProducerTaxId: TO });
+    });
+
+    it("reads the live note before the stop", async () => {
+      const t = await upgrade({ ...SAME, live: LIVE, beforeStop: (path) => rm(path) });
+      expect(await readIdentityChangeNote(t.directory)).toMatchObject({
+        release: "1.4.1",
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("replaces the live note with the carried one once every check has passed", async () => {
+      const t = await apply({ ...SAME, live: LIVE });
+      expect(t.result).toMatchObject({ phase: "committed", target: "candidate" });
+      expect(await readIdentityChangeNote(t.state)).toEqual({
+        release: "1.4.1",
+        producerTaxId: TO,
+        fromProducerTaxId: FROM,
+      });
+    });
+
+    it("leaves the live note as it was when the fixed release's sale is refused", async () => {
+      const t = await apply({
+        ...SAME,
+        live: LIVE,
+        sale: () => {
+          throw new Error("sale refused");
+        },
+      });
+      expect(t.result).toMatchObject({ phase: "awaiting-choice" });
+      expect(await readFile(join(t.state, IDENTITY_CHANGE_FILE), "utf8")).toBe(LIVE);
+    });
+  });
+
+  it("saves the note for an app already stopped, which runs no trial", async () => {
+    const t = await imageFixture({
+      prepare: false,
+      imageConfigs: { "sha256:app:old": () => OLD, "sha256:app:new": () => NEXT },
+    });
+    const images = await t.f.host.prepareImages();
+    expect(t.calls.some((args) => args.includes("trial"))).toBe(false);
+    await mkdir(t.directory, { recursive: true });
+    await t.f.host.stop();
+    await t.f.host.resume(images.old);
+    expect(await readIdentityChangeNote(t.directory)).toMatchObject({ release: "1.4.0" });
+  });
+
+  async function apply({
+    sale = () => ({ stdout: '[{"name":"sale","ok":true}]' }),
+    old = OLD,
+    next = NEXT,
+    live,
+  } = {}) {
+    const { runUpgradeCli } = await import("./cli.mjs");
+    const t = await imageFixture({
+      prepare: false,
+      imageConfigs: { "sha256:app:old": () => old, "sha256:app:new": () => next },
+    });
+    t.candidate.services["print-agent"].healthcheck = { test: ["CMD", "true"] };
+    const state = join(t.root, "state");
+    await writeFile(join(state, "retained"), "intact source");
+    if (live !== undefined) await writeFile(join(state, IDENTITY_CHANGE_FILE), live);
+    // From another process: in this one SQLite answers "locked" even once the OS lock is gone.
+    const held = () =>
+      JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            "-e",
+            `const { DatabaseSync } = require("node:sqlite");
+            const held = process.argv.slice(1).map((path) => {
+              const contender = new DatabaseSync(path);
+              try {
+                contender.exec("pragma busy_timeout = 0; begin immediate");
+                return false;
+              } catch (error) {
+                if (!/locked/.test(error.message)) throw error;
+                return true;
+              } finally {
+                contender.close();
+              }
+            });
+            process.stdout.write(JSON.stringify(held));`,
+            ...[RECOVERY_LOCK_FILE, `${VENUE_DIR_NAME}/${VENUE_LOCK_FILE}`].map((name) =>
+              join(state, name),
+            ),
+          ],
+          { encoding: "utf8" },
+        ),
+      );
+    const seen = [];
+    const record = async (step) => {
+      seen.push({
+        step,
+        held: held(),
+        note: (await readdir(state)).includes(IDENTITY_CHANGE_FILE),
+      });
+    };
+    const run = async (file, args, input) => {
+      if (file === "prepare-fixture")
+        return { stdout: JSON.stringify({ compose: JSON.stringify(t.candidate) }) };
+      if (["readiness", "sale"].includes(args.at(-1))) await record(args.at(-1));
+      if (args.at(-1) === "readiness") return { stdout: '[{"name":"readiness","ok":true}]' };
+      if (args.at(-1) === "sale") return sale();
+      if (args[0] === "rm") await record("remove");
+      if (args.includes("up")) await record("open");
+      if (args[0] === "inspect" && !args.includes("--format"))
+        return {
+          stdout: JSON.stringify([{ State: { Running: true, Health: { Status: "healthy" } } }]),
+        };
+      if (["run", "exec", "rm", "stop"].includes(args[0])) return { stdout: "" };
+      return t.run(file, args, input);
+    };
+    const probe = await open(join(tmpdir(), "."), "r");
+    const prototype = Object.getPrototypeOf(probe);
+    await probe.close();
+    const { chown } = prototype;
+    const spy = vi.spyOn(prototype, "chown").mockImplementation(function (...args) {
+      // The hold's own lock files are made, and given their owner, before it begins.
+      if (seen.length > 0) seen.push({ step: "write", held: held() });
+      return chown.apply(this, args);
+    });
+    onTestFinished(() => spy.mockRestore());
+    const result = await runUpgradeCli(["apply", t.root, "prepare-fixture", "candidate-ref"], {
+      run,
+    });
+    return { ...t, state, held, seen, result };
+  }
+
+  it("holds the venue from the stop to the live note, and lets go only to open it", async () => {
+    const t = await apply();
+    expect(t.result).toMatchObject({ phase: "committed", target: "candidate" });
+    const HELD = [true, true];
+    const before = (step) => ({ step, held: HELD, note: false });
+    expect(t.seen).toEqual([
+      before("readiness"),
+      before("sale"),
+      before("remove"),
+      before("remove"),
+      before("remove"),
+      { step: "write", held: HELD },
+      { step: "open", held: [false, false], note: true },
+      { step: "open", held: [false, false], note: true },
+    ]);
+    expect(await readIdentityChangeNote(t.state)).toMatchObject({ release: "1.4.0" });
+    expect(await readdir(`${t.root}.upgrades`)).toEqual([]);
+  });
+
+  it("goes on holding the venue, with no live note, after a refused sale", async () => {
+    const t = await apply({
+      sale: () => {
+        throw new Error("sale refused");
+      },
+    });
+    expect(t.result).toMatchObject({ phase: "awaiting-choice", failure: "sale refused" });
+    expect(t.held()).toEqual([true, true]);
+    expect(await readdir(t.state)).not.toContain(IDENTITY_CHANGE_FILE);
+    expect(t.seen.some(({ step }) => ["write", "open"].includes(step))).toBe(false);
+  });
+
+  it.each(["manual", "automatic"])(
+    "puts the copy back without the live note when the %s upgrade stopped before it was recorded complete",
+    async (mode) => {
+      const { runUpgradeCli } = await import("./cli.mjs");
+      const { copyStoppedTree } = await import("./copy.mjs");
+      const { f, root, directory, images, run: hostRun } = await imageFixture();
+      const state = join(root, "state");
+      await writeFile(join(state, "retained"), "original state");
+      await mkdir(join(directory, "copies"));
+      for (const [index, path] of f.paths.entries())
+        await copyStoppedTree(path, join(directory, "copies", String(index)));
+      const note = JSON.stringify(NOTE) + "\n";
+      for (const folder of [directory, state])
+        await writeFile(join(folder, IDENTITY_CHANGE_FILE), note);
+      await writeFile(
+        join(directory, "attempt.json"),
+        JSON.stringify({ mode, phase: "candidate", copied: true, paths: f.paths, images }),
+      );
+      const run = async (file, args, input) => {
+        if (args[0] === "inspect" && args[2]?.includes("Config.Labels"))
+          throw Object.assign(new Error("missing"), { code: 1, stderr: "No such container" });
+        return hostRun(file, args, input);
+      };
+
+      let result = await runUpgradeCli(["recover", root], { run });
+      if (mode === "manual") {
+        expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
+        await expect(runUpgradeCli(["keep", root], { run })).rejects.toThrow(
+          "This upgrade changes the software producer, so it cannot be kept.",
+        );
+        expect(await readdir(directory)).toContain("copies");
+        result = await runUpgradeCli(["restore", root], { run });
+      }
+
+      expect(result).toMatchObject({ phase: "committed", target: "old" });
+      expect((await readdir(state)).sort()).toEqual([RECOVERY_LOCK_FILE, "retained", "venue"]);
+      expect(await readFile(join(state, "retained"), "utf8")).toBe("original state");
+      const installed = JSON.parse(await readFile(join(root, "compose.yml"), "utf8"));
+      expect(installed.services.app.image).toBe(images.old.app);
+    },
+  );
+
+  it("never puts the note in Compose, .env, an environment file or a command", async () => {
+    const t = await upgrade();
+    await t.f.host.installCandidate(t.images.candidate);
+    await t.f.host.resume(t.images.candidate);
+    expect(t.calls.some((args) => args.includes("up"))).toBe(true);
+    const written = {
+      compose: await readFile(join(t.root, "compose.yml"), "utf8"),
+      env: await readFile(join(t.root, ".env"), "utf8"),
+      saved: await readFile(join(t.directory, "candidate-compose.json"), "utf8"),
+      captureEnvironment: t.seen.capture.environment,
+      trialEnvironment: t.seen.trial.environment,
+      commands: JSON.stringify(t.calls),
+    };
+    for (const text of Object.values(written))
+      for (const word of [FROM, TO, "fromProducerTaxId", IDENTITY_CHANGE_FILE])
+        expect(text).not.toContain(word);
+    expect(written.trialEnvironment).toContain("UPGRADE_SETTING");
+  });
 });

@@ -182,5 +182,5 @@ through the read-only Linux mount and a successful disposable-copy sale, then ex
 Keep after an owned port blocker refuses readiness, then checks a normal reboot and the
 restored container restart policies. The power-cut case kills QEMU during
 the initial copy and during restore, then checks the held boot and repeated restore.
-The guest needs real internet time synchronisation; no clock confirmation is fabricated.
+The guest needs real internet time synchronisation.
 These current-build synthetic checks create no qualified historical release in the index.

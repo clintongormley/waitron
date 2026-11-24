@@ -24,6 +24,10 @@
 > watcher's instructions cut its cloud-server phrase and the library's own-declaration clause; the
 > asesor's answer goes into a later version ([runbook](../../operations/release.md#the-declarations-item-d)).
 
+> **2026-11-24, A993 (§5.6):** the [A993 plan](../plans/2026-11-11-a993-identity-change.md) opens the
+> installation at the new release's first start whose time is confirmed, through the existing
+> start-clock confirmation, in place of the stuck page and the clock reading carried across the stop.
+
 > **W41s-7 owner decision, 2026-11-01:** [Task 7's current plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-01-w41s-7-conflict-recovery.md) replaces the automatic conflict-switch requirements below. Stop issuance on the clashing active identity, then require an administrator procedure with fresh current recovery-key authentication. Automatic conflict switching is excluded permanently; Task 7 no longer requires outside sole-seller grants, fence acknowledgement, outside switch history or a 24-hour automatic limit. This pointer changes no runtime behaviour or other task's authority.
 
 > **A950 pointer, 29 October 2026:** the current update design is in the

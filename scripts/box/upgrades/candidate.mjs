@@ -5,8 +5,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { copyStoppedTree } from "./copy.mjs";
-import { clockStatusRelay, upgradeEnvironment } from "./host.mjs";
-import { upgradeStatus, writeFileDurable } from "./transaction.mjs";
+import { clockStatusRelay, upgradeEnvironment, writeIdentityNote } from "./host.mjs";
+import {
+  checksPassed,
+  savedIdentityNote,
+  upgradeStatus,
+  writeFileDurable,
+} from "./transaction.mjs";
 
 const execute = promisify(execFile);
 const command = (file, args) => execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
@@ -39,6 +44,7 @@ export async function removeUpgradeCheckContainers(directory, run = command) {
 
 export async function checkUpgradeCandidate({ boxDirectory, directory, run = command }) {
   const marker = await upgradeStatus(directory);
+  const identityNote = await savedIdentityNote(directory);
   const config = JSON.parse(
     (
       await run("docker", [
@@ -63,13 +69,17 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
   try {
     for (const [index, name] of ["state", "agent"].entries())
       await copyStoppedTree(join(directory, "copies", String(index)), join(work, name));
+    if (identityNote !== null) await writeIdentityNote(join(work, "state"), identityNote);
     const owner = await fs.stat(join(work, "state"));
     for (const name of ["logs", "backups", "tunnel"]) {
       const path = join(work, name);
       await fs.mkdir(path, { mode: 0o750 });
       await fs.chown(path, owner.uid, owner.gid);
     }
-    relay = await clockStatusRelay({ directory: join(work, "clock") });
+    relay = await clockStatusRelay({
+      directory: join(work, "clock"),
+      answerSynchronised: true,
+    });
     const environment = upgradeEnvironment(config.services.app.environment);
     const envFile = join(work, "app.env");
     await writeFileDurable(envFile, environment);
@@ -90,10 +100,18 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
       envFile,
       ...mounts,
     ];
-    const result = (stdout) => JSON.parse(stdout.trim().split("\n").at(-1));
+    const result = (check, stdout) => {
+      const report = JSON.parse(stdout.trim().split("\n").at(-1));
+      if (!Array.isArray(report) || report.length === 0)
+        throw new Error(`the ${check} check reported nothing`);
+      if (report.length !== 1 || report[0].name !== check)
+        throw new Error(`the ${check} check did not report itself`);
+      return report;
+    };
     started.push(readiness);
     reports.push(
       ...result(
+        "readiness",
         (
           await run("docker", [
             "run",
@@ -168,6 +186,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
     await run("docker", ["stop", "--time", "10", agent]);
     reports.push(
       ...result(
+        "sale",
         (await run("docker", ["exec", app, "node", "/app/upgrade-checks.js", "sale"])).stdout,
       ),
     );
@@ -191,5 +210,8 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
     failure ??= cleanups[0];
   }
   if (failure) throw failure;
+  // Last, under the hold taken at the stop: a live note says every stopped check passed.
+  if (identityNote !== null && checksPassed(reports))
+    await writeIdentityNote(marker.paths[0], identityNote);
   return reports;
 }
