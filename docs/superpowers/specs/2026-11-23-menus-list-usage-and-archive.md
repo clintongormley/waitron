@@ -35,6 +35,9 @@ available for the staff", then "maybe with links to the periods".
 
 ## Part 2: archiving a menu
 
+_2026-11-24: the owner replaced Archive with Delete; see
+[Delete, not Archive](2026-11-24-delete-menus-and-products-design.md)._
+
 Owner's choices (2026-11-23): "Archive, like Products", "Pick a replacement", and, after weighing
 restore against copy, "Copy under a new name". The owner also asked for filters like other lists
 rather than a separate control, and decided against an extra "needs attention" filter because

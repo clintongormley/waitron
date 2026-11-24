@@ -1,6 +1,8 @@
 # Menus list: one tab for menus, one for set menus
 
-Status: approved by the owner, 2026-11-24 (interactive design session, choices quoted below).
+Status: approved by the owner, 2026-11-24 (interactive design session, choices quoted below). Later the
+same day the owner replaced Archive with Delete
+([spec](2026-11-24-delete-menus-and-products-design.md)), which lands first; the filters below follow it.
 
 ## Why
 
@@ -40,7 +42,7 @@ the pictures: "y".
 ### The Menus tab
 
 Name, Status, Main menu, Staff menus and the row menu, as today, with no Kind column and no set
-menus. The Status filter keeps its five choices.
+menus. The Status filter offers All, Published and Requiring attention, starting on All.
 
 ### The Set menus tab
 
@@ -52,9 +54,8 @@ menus. The Status filter keeps its five choices.
   **Not on any menu**, muted. The menus list read does not carry this today, so it needs adding there,
   in one read for the whole list rather than one per set menu, and it must refresh when a set menu is
   placed in, or taken off, a menu.
-- The Status filter offers Active, Archived and All. An archived set menu must still be told apart
-  from an active one under All: its Offered on cell says **Archived**, muted, as Status does on the
-  Menus tab (**my call**: not in the pictures).
+- There is no Status filter, so the Filters button in the picture goes: a deleted set menu is not
+  listed, and nothing else is left to filter by.
 - Sorting: by name and by price. A click on a link opens only that link.
 - The row menu keeps today's actions for a set menu.
 
