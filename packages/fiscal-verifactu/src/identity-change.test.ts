@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { sql } from "drizzle-orm";
 import type { SistemaInformatico } from "@waitron/verifactu";
 import { captureError, invoiceSeries, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -237,6 +238,16 @@ describe("planIdentityChange", () => {
       kind: "open",
       minuteMs: NOW_MINUTE,
       sourceSifId: sifId,
+    });
+  });
+
+  it("refuses the history when the taxpayer row is missing", async () => {
+    await seedChain();
+    await suite.db.execute(sql`delete from taxpayer`);
+
+    expect(await captureError(() => plan(timeService(true).clock))).toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "history_invalid" },
     });
   });
 

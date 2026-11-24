@@ -83,8 +83,7 @@ declare module "@waitron/shared" {
     /** A production node's open chain was filed under another producer's tax number
      * (./producer-change.ts). */
     "sif.producer_changed": Record<string, never>;
-    /** A new installation for a changed producer cannot open yet (./identity-change.ts):
-     * `reason` is the clock's refusal, `confirmation_stale`, `history_invalid` or `minute_in_use`. */
+    /** A new installation for a changed producer cannot open yet (./identity-change.ts). */
     "sif.identity_change_waiting": { reason: string };
 
     /**

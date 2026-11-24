@@ -1,15 +1,15 @@
 import { eq } from "drizzle-orm";
-import { readDeploymentEnvironment, withTransaction, type Database } from "@waitron/db";
+import {
+  readDeploymentEnvironment,
+  readTaxpayer,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import type { IdentityChangeNote, SecondClock } from "@waitron/fiscal";
 import { AppError, type NodeId } from "@waitron/shared";
 import type { SistemaInformatico } from "@waitron/verifactu";
 import { readChainHead } from "./chain.js";
-import {
-  canSelectHour,
-  clockRefusal,
-  compareHourClocks,
-  type HourClockObservation,
-} from "./hour-clock.js";
+import { boxClockSample, canSelectHour, clockRefusal, compareHourClocks } from "./hour-clock.js";
 import { observeTimeServiceHourClock } from "./hour-clock-time-service.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory } from "./hour-history.js";
@@ -28,20 +28,7 @@ function waiting(reason: string): never {
   throw new AppError("sif.identity_change_waiting", { reason });
 }
 
-function boxSample(): HourClockObservation {
-  const instantMs = Date.now();
-  const measured = performance.now();
-  return {
-    source: "box",
-    result: "usable",
-    instantMs,
-    uncertaintyMs: 0,
-    wallStartedMs: instantMs,
-    wallFinishedMs: instantMs,
-    monotonicStartedMs: measured,
-    monotonicFinishedMs: measured,
-  };
-}
+const boxSample = () => boxClockSample(Date.now, () => performance.now());
 
 /**
  * Whether `nodeId`'s open chain, filed under the producer `note` moves from, should open a new
@@ -68,7 +55,10 @@ export async function planIdentityChange(
       .select({ software: verifactuRecords.sistemaInformatico })
       .from(verifactuRecords)
       .where(eq(verifactuRecords.id, ultimoRegistroId));
-    return { nif: (record!.software as SistemaInformatico).NIF, sif: await currentSif(tx, nodeId) };
+    return {
+      nif: (record!.software as SistemaInformatico).NIF,
+      sifId: (await currentSif(tx, nodeId)).id,
+    };
   });
   if (head === null || head.nif === producerTaxId) return { kind: "nothing-to-open" };
   if (head.nif !== note.fromProducerTaxId) return { kind: "not-named" };
@@ -87,12 +77,12 @@ export async function planIdentityChange(
 
   const history = await withTransaction(db, async (tx) =>
     projectHourHistory({
-      scope: { taxpayerNif: head.sif.nif, environment },
+      scope: { taxpayerNif: (await readTaxpayer(tx))?.taxId, environment },
       sources: [await readHourHistory(tx, environment)],
     }),
   );
   if (history.contradictions.length > 0) waiting("history_invalid");
   const minute = Math.floor((nowMs - EPOCH_MS) / MINUTE_MS);
   if (history.usedMinutes.includes(minute)) waiting("minute_in_use");
-  return { kind: "open", minuteMs: EPOCH_MS + minute * MINUTE_MS, sourceSifId: head.sif.id };
+  return { kind: "open", minuteMs: EPOCH_MS + minute * MINUTE_MS, sourceSifId: head.sifId };
 }

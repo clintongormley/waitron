@@ -31,6 +31,25 @@ export type HourClockObservation =
       uncertaintyMs?: null;
     };
 
+/** The box's own clock, read once. */
+export function boxClockSample(
+  wall: () => number,
+  monotonic: () => number,
+): Extract<HourClockObservation, { result: "usable" }> {
+  const instantMs = wall();
+  const measured = monotonic();
+  return {
+    source: "box",
+    result: "usable",
+    instantMs,
+    uncertaintyMs: 0,
+    wallStartedMs: instantMs,
+    wallFinishedMs: instantMs,
+    monotonicStartedMs: measured,
+    monotonicFinishedMs: measured,
+  };
+}
+
 export interface HourClockDecision {
   readonly usable: readonly { source: HourClockSource; lowerMs: number; upperMs: number }[];
   readonly unavailable: readonly Extract<HourClockObservation, { result: "unavailable" }>[];
