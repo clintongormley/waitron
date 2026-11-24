@@ -189,8 +189,9 @@ copy or archives
 stays separate. Keep an older pack or recovery sheet while you retain backups that need its key.
 The box stores a verifier for the key; it cannot recover the old secret from that verifier.
 
-You can select the saved pack, or an older sheet, during recovery or type its grouped key. The
-typing check catches mistakes; opening the selected backup still authenticates the complete secret.
+During recovery, select the recovery pack that holds this backup's master key, or type the master
+key. The typing check catches mistakes; opening the selected backup still authenticates the
+complete secret.
 See [recovering a box](hour-recovery.md).
 
 When the box's time service is not synchronised, keep the box switched on, Waitron running and the

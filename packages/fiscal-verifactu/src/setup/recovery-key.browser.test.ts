@@ -79,11 +79,11 @@ it("the key field takes the 28-symbol form and refuses the 41-symbol one", async
   expect(keyError(el)).toBe("");
   expect(el.shadowRoot!.querySelector('[name="printed-recovery-check"]')).toBeNull();
   expect(native(el, "printed-recovery-key").type).toBe("password");
+  expect(el.outerHTML).not.toContain(masterKey);
+  expect(el.shadowRoot!.textContent).not.toContain(masterKey);
 
   type(el, "printed-recovery-key", "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c");
-  await vi.waitFor(() =>
-    expect(keyError(el)).toBe("Check the key from your recovery pack or older sheet."),
-  );
+  await vi.waitFor(() => expect(keyError(el)).toBe("Check the key from your recovery pack."));
   expect(seen.at(-1)).toBeUndefined();
   expect(seen.filter((secret) => secret !== undefined)).toEqual([masterKey]);
 
@@ -103,6 +103,32 @@ it.each(["O", "0", "I", "1", "L", "o", "i", "l"])(
     expect(seen.every((secret) => secret === undefined)).toBe(true);
   },
 );
+it("refuses ſ in place of the key's S, though it upper-cases to S", async () => {
+  const at = masterKey.indexOf("S");
+  expect(at).toBeGreaterThanOrEqual(0);
+  const el = await mount();
+  const seen = secrets(el);
+  type(el, "printed-recovery-key", masterKey.toLowerCase());
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
+  type(el, "printed-recovery-key", withSymbol(masterKey.toLowerCase(), at, "ſ"));
+  await vi.waitFor(() => expect(keyError(el)).not.toBe(""));
+  expect(native(el, "printed-recovery-key").value[at]).toBe("ſ");
+  expect(seen.at(-1)).toBeUndefined();
+  expect(seen.filter((secret) => secret !== undefined)).toEqual([masterKey]);
+});
+it("reads a key typed with dashes, tabs and line breaks", async () => {
+  const el = await mount();
+  const seen = secrets(el);
+  const groups = masterKey.toLowerCase().split(" ");
+  type(
+    el,
+    "printed-recovery-key",
+    `${groups.slice(0, 3).join("-")}\n${groups.slice(3, 5).join("\t")}\r\n${groups.slice(5).join(" - ")}`,
+  );
+  await vi.waitFor(() => expect(seen.at(-1)).toBe(masterKey));
+  await vi.waitFor(() => expect(native(el, "printed-recovery-key").value).toBe(masterKey));
+  expect(keyError(el)).toBe("");
+});
 it("accepts U, which is one of the key's symbols", async () => {
   const withU = Array.from({ length: 256 }, (_, n) =>
     encodeMasterKeyCode(new Uint8Array(16).fill(n)),
@@ -135,13 +161,18 @@ it("choosing a pack PDF fills the key field from the pack's masterKey", async ()
   expect(el.shadowRoot!.textContent).toContain("Key loaded");
   expect(native(el, "printed-recovery-key").value).toBe("");
   expect(native(el, "printed-recovery-key").required).toBe(false);
+  expect(el.outerHTML).not.toContain(masterKey);
+  expect(el.shadowRoot!.textContent).not.toContain(masterKey);
 });
 
 // A pack carries no tax id, environment, software id or node id, so only the key name is checked.
-it("refuses a pack for another master key name", async () => {
+it.each([
+  ["holds", {}],
+  ["does not hold", { masterKey: null, masterKeyHeldBy: 1 }],
+] as const)("refuses a pack that %s another master key", async (_, held) => {
   const el = await mount();
   const seen = secrets(el);
-  await upload(el, await recoveryPack({ masterKeyName: "2026-09-02 · ABCD" }));
+  await upload(el, await recoveryPack({ ...held, masterKeyName: "2026-09-02 · ABCD" }));
   await vi.waitFor(() =>
     expect(fileError(el.shadowRoot!.querySelector("wt-file-input")!)?.textContent).toBe(
       "Choose the recovery PDF for this backup's named key.",
@@ -357,8 +388,8 @@ it("groups pasted and middle-edited key text while preserving the native selecti
 });
 
 it.each([
-  ["en", "Check the key from your recovery pack or older sheet."],
-  ["es", "Revisa la clave de tu paquete de recuperación o de la hoja antigua."],
+  ["en", "Check the key from your recovery pack."],
+  ["es", "Revisa la clave de tu paquete de recuperación."],
 ] as const)("shows a malformed key refusal once beside the %s field", async (locale, error) => {
   const el = await mount();
   el.locale = locale;

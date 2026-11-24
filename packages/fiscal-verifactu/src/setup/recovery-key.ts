@@ -4,7 +4,7 @@ import { baseStyles, draftScopeFor, visuallyHiddenStyles, type DraftScope } from
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import { fileInputCopy } from "../file-input-copy.js";
-import { MAX_RECOVERY_PDF, RecoveryPackWithoutKeyError } from "../recovery-document.js";
+import { MAX_RECOVERY_PDF } from "../recovery-document.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 
 import type { RecoveryKeySelection } from "@waitron/module/src/setup-contract.js";
@@ -13,29 +13,6 @@ interface Draft {
   file?: File;
 }
 const empty = (): Draft => ({ value: "" });
-export function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
-  const held = error.heldBy;
-  if (held) {
-    const day = new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
-      timeZone: "UTC",
-      dateStyle: "long",
-    }).format(new Date(`${held.madeOn}T00:00:00.000Z`));
-    const where = en
-      ? `This recovery pack does not hold the box key. It is on recovery pack ${held.number}, made on ${day}: choose that pack, or type the key from it.`
-      : `Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación ${held.number}, hecho el ${day}: elige ese paquete o introduce su clave.`;
-    if (held.received) return where;
-    return en
-      ? `${where} When this pack was made, the box that made it had not been told that pack ${held.number} arrived: if you do not have it, the key cannot be read from any pack.`
-      : `${where} Cuando se hizo este paquete, el servidor que lo hizo no había recibido la confirmación de que el paquete ${held.number} había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.`;
-  }
-  if (error.serverKeyName !== null)
-    return en
-      ? `This recovery pack does not hold the box key: choose the pack or sheet whose key name is ${error.serverKeyName}.`
-      : `Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja cuyo nombre de clave es ${error.serverKeyName}.`;
-  return en
-    ? "This recovery pack does not hold the box key: choose the pack or sheet that holds it, or type the key from it."
-    : "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.";
-}
 export function masterKeyElsewhere(heldBy: number | null, en: boolean): string {
   if (heldBy !== null)
     return en
@@ -45,8 +22,10 @@ export function masterKeyElsewhere(heldBy: number | null, en: boolean): string {
     ? "This recovery pack does not hold the master key: choose the pack that holds it, or type the key from it."
     : "Este paquete de recuperación no tiene la clave maestra: elige el paquete que la tiene o introduce su clave.";
 }
+// Upper-cases ASCII only: `toUpperCase` turns some other letters (such as `ſ`) into key symbols,
+// which the decoder refuses as typed.
 function normaliseTyped(value: string): string {
-  return value.replace(/[ \t\r\n-]/g, "").toUpperCase();
+  return value.replace(/[ \t\r\n-]/g, "").replace(/[a-z]+/g, (letters) => letters.toUpperCase());
 }
 @customElement("vf-recovery-key")
 export class RecoveryKeyEntry extends LitElement {
@@ -185,12 +164,16 @@ export class RecoveryKeyEntry extends LitElement {
       if (!current()) return;
       const pack = await readRecoveryPackPdf(new Uint8Array(await file.arrayBuffer()));
       if (!current()) return;
-      if (pack.masterKey === null) {
-        this.pdfError = { heldBy: pack.masterKeyHeldBy };
+      if (
+        this.selection !== undefined &&
+        pack.masterKeyName !== null &&
+        pack.masterKeyName !== this.selection.keyName
+      ) {
+        this.pdfError = "mismatch";
         return;
       }
-      if (this.selection !== undefined && pack.masterKeyName !== this.selection.keyName) {
-        this.pdfError = "mismatch";
+      if (pack.masterKey === null) {
+        this.pdfError = { heldBy: pack.masterKeyHeldBy };
         return;
       }
       this.loaded = true;
@@ -203,8 +186,8 @@ export class RecoveryKeyEntry extends LitElement {
     const en = this.locale === "en";
     const error = this.invalid
       ? en
-        ? "Check the key from your recovery pack or older sheet."
-        : "Revisa la clave de tu paquete de recuperación o de la hoja antigua."
+        ? "Check the key from your recovery pack."
+        : "Revisa la clave de tu paquete de recuperación."
       : (this.errorMessage ?? "");
     const pdfError =
       typeof this.pdfError === "object"

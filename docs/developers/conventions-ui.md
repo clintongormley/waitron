@@ -1729,10 +1729,10 @@ Each guard below reads named string tables or rendered pages, and each is weaker
 - `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts` reads English and Spanish:
   `serverKeyPageWords` (the recovery pack's box key page), `checkVenueStrings`, `clockWaitStrings`,
   `firstHourStrings`, `recoveryHourStrings`, `promotionWords`, `fiscalSetupStrings`, and the
-  sentences `keyElsewhere` builds in four cases and `masterKeyElsewhere` in two. In English it
-  allows "time server"; in Spanish it refuses every "equipo". It does not read words written
-  inside a component (the recovery-key field's label among them), the series register PDF's or
-  the emergency record's inline sentences, or the offline custody tool.
+  sentences `masterKeyElsewhere` builds in two cases. In English it allows "time server"; in
+  Spanish it refuses every "equipo". It does not read words written inside a component (the
+  recovery-key field's label among them), the series register PDF's or the emergency record's
+  inline sentences, or the offline custody tool.
 - `apps/server/src/guide-box-word.test.ts` reads English and Spanish: the text of every user guide
   page in `apps/server/src/guide/en/` and `apps/server/src/guide/es/`. In English it allows "mail
   server", "email server", "SMTP server" and "time server" (singular or plural, across a line

@@ -129,9 +129,8 @@ At the end of Preparation, the **Recovery pack** step shows the master key once.
 other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose the recovery pack that holds this backup's
-master key in **Recovery PDF**; or type the master key printed on it in **Box key**. If the pack
-does not hold the master key, the page says so and, when the pack records it, names the pack
-that holds it. A pack with a newer master key does not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
+master key in **Recovery PDF**; or type the master key printed on it in **Box key**. A pack with
+a newer master key does not open an older backup. Tick "The old box is stopped and will stay offline.", "I am the only
 person recovering this taxpayer, across all venues." and "These details are correct."
 
 If **Backups** cannot confirm the saved key, keep both the previous key and the key you just

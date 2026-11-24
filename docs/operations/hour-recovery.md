@@ -1,8 +1,8 @@
-# Recover a box with its recovery pack or older sheet
+# Recover a box with its recovery pack
 
-Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack or older sheet whose
-key name matches that copy. A newer pack may contain a replacement key that an older backup
-does not accept. Keep the archive password or Cloud login separate from the box key.
+Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack that
+holds that copy's master key. A pack made with a newer master key does not open an older
+backup. Keep the archive password or Cloud login separate from the box key.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -57,9 +57,9 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Use a saved PDF through the recovery
-picker or enter its grouped key. There is no installation code to type: the form has no field for
-one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
+and key name. Keep production and preproduction separate. Choose the recovery pack that holds
+this backup's master key in the recovery picker, or type the master key. There is no
+installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
 authenticate the selected backup; its short typing check is not authentication.
 
