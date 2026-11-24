@@ -140,8 +140,8 @@ async function readOtherBoxesBatches(
   destinationNodeId: string | undefined,
 ): Promise<Batch[] | null> {
   const heard = destinationNodeId === undefined ? null : (deps.mainHoldings?.() ?? null);
-  // A restricted box neither sells nor files (`restricted-start.ts`), so its invoice records, sales
-  // and delivery states stay as they are, and the same main box and summary pick the same batches; the summary is heard afresh every 30 seconds, mostly unchanged.
+  // A restricted box neither sells nor files (`restricted-start.ts`), so the same main box and
+  // summary pick the same batches; the summary is heard afresh every 30 seconds, mostly unchanged.
   const key = canonicalize([destinationNodeId ?? null, heard?.holdings ?? null]);
   const kept = deps.othersRead;
   if (kept?.key === key) return kept.batches!;

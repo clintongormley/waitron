@@ -2217,16 +2217,16 @@ it("a record clash on one earlier box's batch still sends the next, and confirms
   }
 });
 
-it("an earlier chain split over two batches, each refused as a record clash, is sent whole and the pass confirms", async () => {
-  const oneChain = (held: CanonicalValue | undefined) =>
-    held === undefined ? null : ["chain-start", "chain-rest"];
+it("two earlier-box batches both refused as a record clash are both sent and the pass confirms", async () => {
+  const twoClashes = (held: CanonicalValue | undefined) =>
+    held === undefined ? null : ["clash-1", "clash-2"];
   const receive = receiveByPart(async () => ({ refusal: "fiscal.return_record_clash" }));
   try {
     const app = destination();
-    expect(await sendBoth(async (url, init) => app.request(String(url), init), oneChain)).toBe(
+    expect(await sendBoth(async (url, init) => app.request(String(url), init), twoClashes)).toBe(
       "confirmed",
     );
-    expect(received).toEqual(["chain-start", "chain-rest", "first", "second"]);
+    expect(received).toEqual(["clash-1", "clash-2", "first", "second"]);
   } finally {
     receive.restore();
   }

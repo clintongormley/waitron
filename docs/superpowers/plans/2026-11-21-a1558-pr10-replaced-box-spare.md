@@ -26,7 +26,7 @@
 1. **A replaced box runs only the return.**
    - A box holding a `node_handover_restriction` row starts restricted (`apps/server/src/boot.ts:2225-2227`), as does a box found superseded at start (`:2348-2356`).
    - The restricted start mounts only the restricted page, peer status, membership, handover status and handover source (`boot.ts:2141-2196`), and runs only the return sender (`restricted-start.ts:44-59`). In particular it serves no recovery page, so no environment Move can be chosen while it runs.
-   - It sells nothing, files nothing, and writes no venue data (`restricted-start.ts:37-43`).
+   - It sells nothing, files nothing, and writes no venue data (`restricted-start.ts:37-43`). (2026-11-24: the last part is false — it saves a newer membership chart; see A1558's other-chains pull request.)
 2. **How its records return.**
    - The fiscal module (`fiscal-verifactu`) is the only module with a return seat: its handover contribution fills `returnRecords` (`packages/fiscal-verifactu/src/handover-summary.ts:129-133`, composed at `packages/composition/src/modules.ts:325`; the contract is `packages/module/src/handover.ts:19-38`). The payments module's contribution, at `modules.ts:285`, only summarises (`packages/payments/src/handover-summary.ts:85-87`).
    - Its batches hold every invoice record **carrying this box's own id**, plus their sales, payments, refunds, filings with AEAT (the Spanish tax agency) and chain heads (`packages/fiscal-verifactu/src/handover-return.ts:50-125`; the record read is `where node_id = ${sourceNodeId}` at `:72-73`). Records of any other box it holds are not sent. The only orders the batches carry are those behind a card refund still pending (`:67-71`).

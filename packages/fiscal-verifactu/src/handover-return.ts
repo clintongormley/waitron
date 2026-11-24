@@ -373,8 +373,8 @@ export async function receiveReturnedOriginals(
         : undefined
       : collision;
     const previous = Number(record.secuencia) - 1;
-    // A batch is cut by size, so an earlier batch may have held back this record's predecessor on
-    // a clash; the record would then sit on a gap and fail the chain check below.
+    // A record whose previous position is neither held nor in this batch would fail the chain
+    // check below (an earlier batch's clash leaves such a gap), so its box is held back.
     const gap =
       others &&
       previous > 0 &&
