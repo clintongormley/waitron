@@ -26,7 +26,7 @@ export async function fixtureSifIdentities(tx: Transaction) {
   return tx.select({ identity: verifactuIdentities.numeroInstalacion }).from(verifactuIdentities);
 }
 
-export function sifIdentityFields(row: SifRegistration) {
+export function sifIdentityFields(row: typeof verifactuIdentities.$inferSelect) {
   const { nodeId, nif, idSistemaInformatico, numeroInstalacion } = row;
   return { nodeId, nif, idSistemaInformatico, numeroInstalacion };
 }
