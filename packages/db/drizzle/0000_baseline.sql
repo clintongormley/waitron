@@ -1225,6 +1225,7 @@ CREATE TABLE `products` (
 	`color` text,
 	`allergens` text,
 	`diet_override` text,
+	`custom_item_key` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
@@ -1242,6 +1243,7 @@ CREATE TABLE `products` (
 CREATE INDEX `products_image_idx` ON `products` (`image`) WHERE "products"."image" is not null;--> statement-breakpoint
 CREATE INDEX `products_unit_idx` ON `products` (`unit_id`);--> statement-breakpoint
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `products_custom_item_key` ON `products` (`custom_item_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
 CREATE TABLE `purchase_invoice_vat` (
 	`id` text PRIMARY KEY NOT NULL,

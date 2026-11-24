@@ -87,6 +87,11 @@ export async function insertFirstTakeawayVatRate(
     .values({ productId, startsOn: null, rate: stringToBasisPoints(rate) });
 }
 
+/** Leaves a top-level product with no takeaway rate, which {@link setTakeawayVatRate} refuses. */
+export async function clearTakeawayVatRates(tx: Transaction, productId: string): Promise<void> {
+  await tx.delete(productTakeawayVatRates).where(eq(productTakeawayVatRates.productId, productId));
+}
+
 /**
  * Each named product's takeaway rates, oldest first, in one query. A variant without rows has its
  * parent's; a product left with none is absent from the map.

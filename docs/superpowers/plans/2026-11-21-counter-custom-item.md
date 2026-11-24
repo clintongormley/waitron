@@ -203,6 +203,7 @@ test, `packages/menu/src/index.ts`; changed checks below.
 - `clearTakeawayVatRates(tx, productId)` in `takeaway-vat-rates.ts`, used for `"unchosen"` only.
 - `notCustomItem: SQL` — `products.custom_item_key is null`; `unchosenCustomLines(tx, workingOrderId):
   Promise<string[]>` — the order's line ids on `"unchosen"` (used in 7b).
+- As built (2026-11-24): `unchosenCustomLines` is left to 7b, its only user.
 
 - [ ] **Failing tests** (`custom-item-products.test.ts`, `useVenueDb`, a Spanish venue seeded as in
   `takeaway-vat-rates.test.ts`): "creates the hidden product once and finds it after" (two calls with

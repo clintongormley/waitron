@@ -13,6 +13,8 @@ export const en = {
     "Refund payments and authorise removing charges for dishes already sent or served. Refunding money during an invoice correction needs this permission too.",
   "permission.sale.rectify.help":
     "Authorise correcting an issued invoice, including cancelling an invoiced order. Refunding its payment is a separate permission.",
+  "permission.order.custom_item.help":
+    "Ring up something that is not on the menu, with a name and price typed at the till. Without this, a person who has it can enter their PIN.",
   "permission.cash.drawer.help":
     "Open a cash drawer manually from the till or Printers. Opening the drawer this way records who requested and authorised it. Using Printers also needs Manage devices and printers.",
   "permission.adjustment.apply.help":
@@ -96,6 +98,7 @@ export const en = {
   "permission.sale.void": "Void sales",
   "permission.sale.refund": "Refund payments",
   "permission.sale.rectify": "Correct invoices",
+  "permission.order.custom_item": "Add custom items",
   "permission.cash.drawer": "Open cash drawers",
   "permission.adjustment.apply": "Apply comps",
   "permission.adjustment.approve": "Approve comps",
@@ -4803,6 +4806,8 @@ export const es: Record<StringKey, string> = {
     "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. También necesitas este permiso para devolver dinero durante una rectificación de factura.",
   "permission.sale.rectify.help":
     "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver su pago requiere un permiso aparte.",
+  "permission.order.custom_item.help":
+    "Cobra algo que no está en la carta, con un nombre y un precio escritos en la caja. Sin este permiso, una persona que lo tenga puede introducir su PIN.",
   "permission.cash.drawer.help":
     "Abre un cajón de efectivo manualmente desde la caja o Impresoras. Esta apertura registra quién la pidió y quién la autorizó. Para usar Impresoras también necesitas Gestionar dispositivos e impresoras.",
   "permission.adjustment.apply.help":
@@ -4885,6 +4890,7 @@ export const es: Record<StringKey, string> = {
   "permission.sale.void": "Anular ventas",
   "permission.sale.refund": "Devolver pagos",
   "permission.sale.rectify": "Rectificar facturas",
+  "permission.order.custom_item": "Añadir artículos libres",
   "permission.cash.drawer": "Abrir cajones",
   "permission.adjustment.apply": "Aplicar invitaciones",
   "permission.adjustment.approve": "Aprobar invitaciones",

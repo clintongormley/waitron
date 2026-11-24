@@ -79,6 +79,12 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("supervisor", "sale.rectify")).toBe(true);
     expect(roleHasPermission("supervisor", "person.manage")).toBe(false);
   });
+  it("lets supervisors, managers and admins add a custom item, not staff", () => {
+    expect(PERMISSIONS).toContain("order.custom_item");
+    expect(roleHasPermission("staff", "order.custom_item")).toBe(false);
+    for (const role of ["supervisor", "manager", "admin"] as const)
+      expect(roleHasPermission(role, "order.custom_item"), role).toBe(true);
+  });
   // A cash invoice correction asks one approver for both (A802); it adds no refusal of its own.
   it("gives sale.refund and sale.rectify to the same roles", () => {
     for (const role of ["staff", "supervisor", "manager", "admin"] as const)
@@ -278,6 +284,7 @@ describe("explicit permission declarations", () => {
       "sale.void": supervisors,
       "sale.refund": supervisors,
       "sale.rectify": supervisors,
+      "order.custom_item": supervisors,
       "cash.drawer": all,
       "report.view": supervisors,
       "venue.view": supervisors,

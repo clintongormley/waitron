@@ -13,6 +13,7 @@ export {
 } from "@waitron/shared";
 export { isProductOrdering, PRODUCT_ORDERINGS, type ProductOrdering } from "@waitron/shared";
 export * from "./units.js";
+export { customItemProduct, notCustomItem } from "./custom-item-products.js";
 export {
   dineInVatRateToday,
   readTakeawayVatSchedules,

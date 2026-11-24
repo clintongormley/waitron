@@ -28,6 +28,11 @@ export const PERMISSION_TEXT: Readonly<Record<string, PermissionText>> = {
     label: "permission.sale.rectify",
     help: "permission.sale.rectify.help",
   },
+  "order.custom_item": {
+    area: "sales",
+    label: "permission.order.custom_item",
+    help: "permission.order.custom_item.help",
+  },
   "cash.drawer": {
     area: "sales",
     label: "permission.cash.drawer",
