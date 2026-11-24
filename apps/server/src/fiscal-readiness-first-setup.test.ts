@@ -143,7 +143,7 @@ it.each([true, false])(
     const directory = await root();
     const stateDir = join(directory, "state");
     await mkdir(stateDir);
-    let production: InitialVenueInput = await initialSetupInput(stateDir, request, "production");
+    let production: InitialVenueInput = initialSetupInput(request, "production");
     const [port] = await freePorts(1);
     const migrationsRoot = join(directory, "migrations");
     await copyMigrationsRoot(migrationsRoot);
@@ -298,7 +298,7 @@ it.each([true, false])(
 
 it("direct readiness refuses an uploaded production allocation without an owned hour session", async () => {
   const stateDir = await root();
-  const initialOperations = await initialSetupInput(stateDir, request, "production");
+  const initialOperations = initialSetupInput(request, "production");
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   await expect(
     submitFiscalReadiness({

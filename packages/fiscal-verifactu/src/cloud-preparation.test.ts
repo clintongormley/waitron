@@ -14,7 +14,10 @@ import { seedFixtureSif } from "../test/sif-fixture.js";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import * as fiscal from "./index.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { configuredOperations } from "./allocation-configuration.js";
+import {
+  configuredOperations,
+  type HistoricalAllocationPaths,
+} from "./allocation-configuration.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -273,7 +276,7 @@ const requiredCloudPaths = [
   "cloudFingerprint",
   "confirmationFile",
   "cloudReceiptDirectory",
-] as const;
+] as const satisfies readonly (keyof HistoricalAllocationPaths)[];
 it.each(requiredCloudPaths)("requires %s outside submitted input", async (field) => {
   const paths = await configure();
   await expect(

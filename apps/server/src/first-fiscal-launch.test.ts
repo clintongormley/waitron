@@ -132,8 +132,7 @@ async function launchFixture(ownerSetup = false) {
   dirs.push(root);
   const stateDir = join(root, "state");
   await mkdir(stateDir);
-  const input = await initialSetupInput(stateDir, request);
-  vi.unstubAllEnvs();
+  const input = initialSetupInput(request);
   const [port] = await freePorts(1);
   const migrationsRoot = join(root, "migrations");
   for (const [i, set] of manifestSets().entries())
