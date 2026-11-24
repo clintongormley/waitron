@@ -198,8 +198,8 @@ if [ "$scope_kind" = "root" ]; then
 fi
 
 if [ "$range_unknown" -eq 0 ]; then
-  run_step "English-only check" 'pnpm --dir apps/server exec tsx ../../scripts/check-english-only.ts "$PWD" path/to/file' \
-    check_changed pnpm --dir apps/server exec tsx ../../scripts/check-english-only.ts "$PWD"
+  run_step "English-only check" 'pnpm --dir apps/server exec node --import tsx ../../scripts/check-english-only.ts "$PWD" path/to/file' \
+    check_changed pnpm --dir apps/server exec node --import tsx ../../scripts/check-english-only.ts "$PWD"
 fi
 
 # An empty pnpm selection exits successfully, so validate it before running scoped typechecks.

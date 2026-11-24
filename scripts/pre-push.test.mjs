@@ -99,14 +99,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.PUSH_LOG, JSON.stringify(args) + "\\n");
-const kind = args[3] === "tsx" ? "English-only check" : args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
+const isEnglish = args.includes("../../scripts/check-english-only.ts");
+const kind = isEnglish ? "English-only check" : args.includes("ls") ? "ls" : args.includes("vitest") ? "root-tests" : args.includes("prettier") ? "format:check" : args.includes("eslint") ? "lint" : args.at(-1);
 if (process.env.PUSH_FAIL === kind) process.exit(17);
 if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
   const result = require("node:child_process").spawnSync(process.execPath,
     [${JSON.stringify(join(root, "node_modules/prettier/bin/prettier.cjs"))}, ...(args[0] === "exec" ? args.slice(2) : ["--check", "."])], { stdio: "inherit" });
   process.exit(result.status ?? 1);
 }
-if (process.env.PUSH_REAL_ENGLISH === "1" && args[3] === "tsx") {
+if (process.env.PUSH_REAL_ENGLISH === "1" && isEnglish) {
   const result = require("node:child_process").spawnSync("pnpm", args, {
     cwd: ${JSON.stringify(root)}, stdio: "inherit",
     env: { ...process.env, PATH: ${JSON.stringify(env.PATH)} },
@@ -214,6 +215,8 @@ const english = (...paths) => [
   "--dir",
   "apps/server",
   "exec",
+  "node",
+  "--import",
   "tsx",
   "../../scripts/check-english-only.ts",
   expect.any(String),
