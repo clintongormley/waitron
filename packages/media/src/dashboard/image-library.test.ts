@@ -1353,8 +1353,8 @@ it("confirms the image asked about last when an earlier usage lookup fails late"
 
 it.each([
   ["en-GB", "Old toast (Deleted product)"],
-  ["es-ES", `Old toast (${ES["image.archived_product"]})`],
-])("in %s, marks an archived product among an image's blocking uses", async (locale, marked) => {
+  ["es-ES", `Old toast (${ES["image.deleted_product"]})`],
+])("in %s, marks a deleted product among an image's blocking uses", async (locale, marked) => {
   setLocale(locale);
   const client = api();
   client.getImage.mockResolvedValue({
