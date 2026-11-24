@@ -639,6 +639,11 @@ async function activationSnapshot() {
 describe("atomic allocation activation", () => {
   it("commits the exact outside identity, complete series and audit result together", async () => {
     const result = await activate();
+    expect([result.sifId, ...result.series.map((s) => s.id)].map((id) => id[14])).toEqual([
+      "4",
+      "4",
+      "4",
+    ]);
     expect(result.activationEventId).toBe("event-42");
     expect(result.series.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: "A-P000042", purpose: "standard" },

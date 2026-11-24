@@ -12,7 +12,7 @@ export function descendingIds() {
     `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
 }
 
-/** Give row IDs the same minting millisecond, with their tie-breakers in a prescribed order. */
+/** Freeze the minting millisecond and prescribe the ID order. Start after any wait on Date.now(). */
 export function mockRowIdOrder(order: "ascending" | "descending"): () => void {
   const random = globalThis.crypto.randomUUID();
   const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());

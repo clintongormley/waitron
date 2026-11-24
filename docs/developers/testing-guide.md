@@ -227,13 +227,14 @@ the ones whose fixes are on `main`.
   everything before the event too; that fix made it 30 seconds.
 - **"The latest row" picked by time alone.** Rows written in the same millisecond share a time, so
   a read ordered by time alone returns them in either order. A tie broken by id does not help here:
-  older IDs are random UUIDs, and time-ordered IDs still have random ties within a millisecond. A846 (#1896,
+  older IDs are random UUIDs, and time-ordered IDs still have random ties within a millisecond.
+  A846 (#1896,
   inner commit "Pick the newer of two alerts handled at the same moment as the last one handled"):
   ordering by handling time then id sometimes picked the older alert. A533 (#1606, "Orders:
   same-moment rows keep their writing order, …") breaks such ties with SQLite's `rowid`, the order
-  the rows were written in. Order by time, then by something that follows writing order; in the
-  test, write the rows with one time and ids made to sort against the writing order
-  (`apps/server/src/testing/descending-ids.ts`), so the test fails if the tie-break goes.
+  the rows were written in. Order by time, then by something that follows writing order. In the
+  test, use `mockRowIdOrder` in `apps/server/src/testing/descending-ids.ts` to make minted IDs sort
+  against the writing order. For fixture-supplied IDs, use `descendingIds`.
 - **The edges of the day and the hour.** A test that compares "now" with a stored time can pass
   all day and fail in the minutes around midnight, the venue's business-day change, the hour or a
   summer-time change. A1117 (#2100, "test(server): floor suites keep their till API on a fixed clock
