@@ -339,6 +339,16 @@ export function mountBillPaymentsApi(
     };
   }
 
+  function logCollectionFailed(requestId: string, orderId: string, outcome: string): void {
+    if (
+      outcome === "declined" ||
+      outcome === "failed" ||
+      outcome === "timeout" ||
+      outcome === "network_unavailable"
+    )
+      log("warn", "payment.collection_failed", { requestId, orderId, outcome });
+  }
+
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -451,18 +461,7 @@ export function mountBillPaymentsApi(
           basket === undefined ? undefined : { ...basket, lateSend: late },
         ),
       ).finally(reading.done);
-      if (
-        outcome.outcome === "declined" ||
-        outcome.outcome === "failed" ||
-        outcome.outcome === "timeout" ||
-        outcome.outcome === "network_unavailable"
-      ) {
-        log("warn", "payment.collection_failed", {
-          requestId: c.get("requestId"),
-          orderId: id,
-          outcome: outcome.outcome,
-        });
-      }
+      logCollectionFailed(c.get("requestId"), id, outcome.outcome);
       return c.json(outcome);
     }),
   );
@@ -505,9 +504,11 @@ export function mountBillPaymentsApi(
         `${id}/${request.submissionId}`,
         undefined,
       );
-      return c.json(
-        await payForItems(reading.deps, saleCfg, id, request, operator).finally(reading.done),
+      const paid = await payForItems(reading.deps, saleCfg, id, request, operator).finally(
+        reading.done,
       );
+      logCollectionFailed(c.get("requestId"), id, paid.payment.outcome);
+      return c.json(paid);
     }),
   );
 

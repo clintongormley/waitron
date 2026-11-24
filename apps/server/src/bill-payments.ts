@@ -2515,9 +2515,25 @@ async function putItemsBack(tx: Transaction, cfg: TradingContext, failed: Paymen
       }
     });
   } catch (error) {
-    // Only a refusal whose savepoint rolled back is absorbed; a store error that ended the whole
-    // transaction is a different error and escapes.
-    if (error !== bodyError || !isAppError(error)) throw error;
+    // Only a domain refusal whose savepoint rolled back is absorbed; a storage refusal, a full disk
+    // included, or a store error that ended the whole transaction escapes.
+    if (
+      error !== bodyError ||
+      !isAppError(error) ||
+      error.code.startsWith("storage.") ||
+      diskFullIn(error)
+    )
+      throw error;
+    try {
+      console.warn("payment.items_put_back_refused", {
+        billPaymentId: failed.id,
+        workingOrderId: billId,
+        itemsPaidFrom: sourceId,
+        code: error.code,
+      });
+    } catch {
+      // Reporting must not undo the payment's failure.
+    }
   }
 }
 
@@ -2706,7 +2722,7 @@ export async function collectBegunReaderPayment(
   const slip = { frozen: begun.slip, log: deps.log };
   if (deps.disk?.noted() === true) {
     // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
-    // disk stops the till's writes"); only the reservation is released.
+    // disk stops the till's writes").
     await withTransaction(deps.db, (tx) =>
       failBillPayment(tx, cfg, payment.id, deps.clock.now().instant, undefined),
     );
