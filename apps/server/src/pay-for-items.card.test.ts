@@ -1,13 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { sales, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  sales,
+  workingOrderLines,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { centsToDecimal, decimal } from "@waitron/shared";
+import { AppError, centsToDecimal, decimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { failBillPayment } from "./bill-payments.js";
 import {
   cashPayment,
   inTx,
@@ -34,6 +42,21 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    // The end-meal route prints the bill only on a till allowed to print receipts.
+    await inTx(venue, async (tx) => {
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, venue.deviceId));
+      const [profile] = await tx
+        .select({ capabilities: deviceProfiles.capabilities })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, device!.profileId!));
+      await tx
+        .update(deviceProfiles)
+        .set({ capabilities: [...(profile!.capabilities as string[]), "print-receipt"] })
+        .where(eq(deviceProfiles.id, device!.profileId!));
+    });
   },
 });
 
@@ -71,6 +94,23 @@ async function tartaByReaderBody(sourceId: string) {
     applied: "18.00",
     tip: "0.00",
   };
+}
+
+/** Prints the bill through the till's end-meal route, which places it. */
+async function printBill(billId: string) {
+  const [bill] = await inTx(venue, (tx) =>
+    tx
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId)),
+  );
+  return send(venue.app, venue.cookie, "POST", `/api/parties/${bill!.partyId}/end-meal`, {
+    billId,
+    expectedPartyRevision: await partyRevisionOf(venue, billId),
+    expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, billId))],
+    submissionId: randomUUID(),
+    printAnyway: true,
+  });
 }
 
 function sendItemsPayment(sourceId: string, body: unknown, app = venue.app) {
@@ -253,10 +293,11 @@ describe("A1515 pay for items on the card reader", () => {
   it.each([
     [
       "printed",
-      (sourceId: string) =>
-        inTx(venue, (tx) =>
-          tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, sourceId)),
-        ).then(() => "placed"),
+      async (sourceId: string) => {
+        const printed = await printBill(sourceId);
+        expect(printed.status).toBe(200);
+        return "placed";
+      },
     ],
     [
       "paid",
@@ -352,5 +393,36 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await statusOf(venue, newBill)).toBe("open");
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
     expect(await lineTotals(sourceId)).toEqual(["3.00"]);
+  });
+
+  it("a full disk during the put-back escapes, never absorbed as a refusal", async () => {
+    const sourceId = await canaAndTarta();
+    const { newBill, paymentId } = await stuckThenFailed(sourceId);
+
+    const failing = inTx(venue, (tx) => {
+      let inSavepoint = false;
+      const full = new Proxy(tx, {
+        get(target, prop) {
+          if (prop === "transaction")
+            return (...args: Parameters<Transaction["transaction"]>) => {
+              inSavepoint = true;
+              return target.transaction(...args);
+            };
+          if (prop === "update" && inSavepoint)
+            return () => {
+              throw new AppError("storage.disk_full", {});
+            };
+          const value: unknown = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      return failBillPayment(full, venue.cfg, paymentId, venue.clock.now().instant);
+    });
+
+    await expect(failing).rejects.toMatchObject({ code: "storage.disk_full" });
+    expect((await paymentRows(venue, newBill)).find((row) => row.id === paymentId)).toMatchObject({
+      state: "pending",
+    });
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
   });
 });
