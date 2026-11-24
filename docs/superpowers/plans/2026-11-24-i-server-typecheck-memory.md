@@ -24,8 +24,8 @@ runners. [GitHub runner specifications](https://docs.github.com/en/actions/refer
 
 These are frozen installs and successful `/usr/bin/time -l pnpm --filter @waitron/server typecheck
 --extendedDiagnostics` runs. Intermediate samples put the largest observed jump between
-`519f7f1f7ebb` (19 Nov, 9.07 GiB) and `260e14bbb481` (20 Nov, 11.20 GiB). Repeat those
-endpoints, then sample commits between them if the gap persists. On current main,
+`519f7f1f7ebb` (19 Nov, 9.07 GiB) and `260e14bbb481` (20 Nov, 11.20 GiB). The 20 November
+revision peaked at 5.91 and 9.93 GiB on the two later runs. On current main,
 `--generateTrace` showed four workers creating types from shared libraries, and the heap profile
 put about 1.1 GiB under symbol-table instantiation. Leave the cause of growth open if the
 measurements do not isolate it. Logs and profile summaries are in Lane I's
@@ -49,5 +49,10 @@ cleared the 6 GiB setting with a Server comment change to select typecheck on th
 Verify a deliberately mistyped test file still fails and the existing whole-workspace guard
 passes. A workflow-only PR and merge skip typecheck. Record their exact checks and follow the
 first code-selected disposable main run with the change. The stopgap is two workflow lines plus
-a short CI guide receipt and backlog pointer, with no committed tests. The item remains open until
-the Mac comparison identifies what grew and why it stays or how to fix it.
+a short CI guide receipt and backlog pointer, with no committed tests.
+
+On 24 November at 22:53 the watcher ended the search for one commit because the measured peaks
+varied between runs of the same revision. After the setting lands, use `--generateTrace` to name
+the two or three heaviest type areas in Server. Make one small change if three measurements show
+it cuts peak memory by at least a fifth. Otherwise record the trace findings in the CI guide and
+close the investigation.
