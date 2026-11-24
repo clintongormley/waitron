@@ -688,7 +688,7 @@ it.each(["prepare", "marker"])(
 
 describe("an attempt that changes the producer", () => {
   const REFUSAL =
-    "This upgrade changes the software producer, so it cannot be kept after a failed check. " +
+    "This upgrade changes the software producer, so it cannot be kept. " +
     "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.";
   const tree = async (folder) =>
     Object.fromEntries(

@@ -241,7 +241,7 @@ export async function recoverUpgrade({ directory, host, choice, resultPath }) {
     if (!marker.copied) throw new Error("candidate was not installed");
     if ((await savedIdentityNote(directory)) !== null)
       throw new Error(
-        "This upgrade changes the software producer, so it cannot be kept after a failed check. " +
+        "This upgrade changes the software producer, so it cannot be kept. " +
           "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.",
       );
     await host.stop();

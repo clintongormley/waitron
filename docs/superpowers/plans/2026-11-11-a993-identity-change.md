@@ -1073,6 +1073,8 @@ Result: the outcome. About 100 production lines and 250 test lines, plus documen
   `cli.mjs` → `:227`). The message: "This upgrade changes the software producer, so it cannot be
   kept after a failed check. Run `waitron.sh restore` to put the selling version back, then try
   the upgrade again."
+  - **As built 2026-11-24:** the message says "so it cannot be kept.", without "after a failed
+    check": Keep is also refused after a power cut stopped the checks, when none had failed.
 - Tests: `candidate.test.mjs`, `transaction.test.mjs`, `host.test.mjs`.
 
 - [ ] **Step 1: Write the failing tests.**

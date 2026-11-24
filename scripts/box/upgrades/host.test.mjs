@@ -1,7 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import {
   lstat,
   mkdtemp,
@@ -1812,7 +1812,6 @@ describe("the note of a change of producer", () => {
     next = NEXT,
     live,
   } = {}) {
-    const { DatabaseSync } = await import("node:sqlite");
     const { runUpgradeCli } = await import("./cli.mjs");
     const t = await imageFixture({
       prepare: false,
@@ -1822,19 +1821,34 @@ describe("the note of a change of producer", () => {
     const state = join(t.root, "state");
     await writeFile(join(state, "retained"), "intact source");
     if (live !== undefined) await writeFile(join(state, IDENTITY_CHANGE_FILE), live);
+    // From another process: in this one SQLite answers "locked" even once the OS lock is gone.
     const held = () =>
-      [RECOVERY_LOCK_FILE, `${VENUE_DIR_NAME}/${VENUE_LOCK_FILE}`].map((name) => {
-        const contender = new DatabaseSync(join(state, name));
-        try {
-          contender.exec("pragma busy_timeout = 0; begin immediate");
-          return false;
-        } catch (error) {
-          expect(error.message).toMatch(/locked/);
-          return true;
-        } finally {
-          contender.close();
-        }
-      });
+      JSON.parse(
+        execFileSync(
+          process.execPath,
+          [
+            "-e",
+            `const { DatabaseSync } = require("node:sqlite");
+            const held = process.argv.slice(1).map((path) => {
+              const contender = new DatabaseSync(path);
+              try {
+                contender.exec("pragma busy_timeout = 0; begin immediate");
+                return false;
+              } catch (error) {
+                if (!/locked/.test(error.message)) throw error;
+                return true;
+              } finally {
+                contender.close();
+              }
+            });
+            process.stdout.write(JSON.stringify(held));`,
+            ...[RECOVERY_LOCK_FILE, `${VENUE_DIR_NAME}/${VENUE_LOCK_FILE}`].map((name) =>
+              join(state, name),
+            ),
+          ],
+          { encoding: "utf8" },
+        ),
+      );
     const seen = [];
     const record = async (step) => {
       seen.push({
@@ -1933,7 +1947,7 @@ describe("the note of a change of producer", () => {
       if (mode === "manual") {
         expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
         await expect(runUpgradeCli(["keep", root], { run })).rejects.toThrow(
-          "This upgrade changes the software producer, so it cannot be kept after a failed check.",
+          "This upgrade changes the software producer, so it cannot be kept.",
         );
         expect(await readdir(directory)).toContain("copies");
         result = await runUpgradeCli(["restore", root], { run });
