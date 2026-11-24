@@ -2641,6 +2641,19 @@ cause: a shard holding one slow file (split the file or find why it is slow), to
 package, or slow setup. Never cut what a test checks to save time, and never move coverage or
 mutation out of CI.
 
+**Root guards, 2026-11-24.** The slower GitHub baseline was 372 s (335 s in the test step).
+The split coverage job took 254 s on GitHub, a gain of 118 s and 14 s above the four-minute
+target. Its 440 s of summed Vitest file time was close to the 444 s those same suites took in
+the slower baseline. The seven process suites passed all 606 cases in two hosted samples of
+118 and 115 s. The original run on the PR base took 220 s on the server. In the split PR run,
+the server coverage job took 146 s and the two jobs spanned 234 s from first start to last finish.
+The coverage job waited 91 s after planning and the process job waited 3 s. Across both jobs,
+225 suite paths and all 24,059 original cases matched the PR base, with three new workflow
+cases. The coverage job passed all four root thresholds.
+[Slow baseline](https://github.com/clintongormley/waitron/actions/runs/45421132097/job/138541017574),
+[PR-base server run](https://github.com/clintongormley/waitron/actions/runs/45441367402/job/138613457274),
+[split PR run and targeted hosted attempts](https://github.com/clintongormley/waitron/actions/runs/45442753900).
+
 **Provisioning, 2026-10-19:** run `39267628062`, job `118111582827`, starts provisioning
 at14:19:38Z and still starts another file at14:28:27Z, before cancellation at14:28:28Z.
 Its log records70 completed files totalling520.5seconds. The largest is
@@ -3315,7 +3328,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | ------------------ | --------------------------------- | ------------------------------ | ----- |
 | ci.yml             | changes                           | 0.9                            | 5     |
 | ci.yml             | lint                              | 5.1 (root guards then included) | 8     |
-| ci.yml             | root-guards, root-process-guards  | not yet measured after split   | 8     |
+| ci.yml             | root-guards, root-process-guards  | 4.23 and 1.97 (24 November split) | 8     |
 | ci.yml             | typecheck                         | 2.1                            | 5     |
 | ci.yml             | mutation-shared                   | 3.1                            | 10    |
 | ci.yml             | ci                                | 0.7                            | 15    |
