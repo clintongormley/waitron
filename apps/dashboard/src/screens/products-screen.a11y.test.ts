@@ -338,9 +338,7 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
           await modal.updateComplete;
           const native = modal.shadowRoot!.querySelector("dialog")!;
           expect(native.open).toBe(true);
-          expect(modal.heading).toBe(
-            t("product.archive_named").replace("{name}", "Ham croquettes"),
-          );
+          expect(modal.heading).toBe(t("product.delete_named").replace("{name}", "Ham croquettes"));
           const confirm = modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
           expect(confirm.textContent!.trim()).toBe(t("action.delete"));
           for (const state of ["confirm", "refusal"]) {
@@ -493,10 +491,10 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
             await modal.updateComplete;
             const native = modal.shadowRoot!.querySelector("dialog")!;
             expect(native.open).toBe(true);
-            expect(modal.querySelector("[data-test=archive-extra-lists]")!.textContent).toContain(
+            expect(modal.querySelector("[data-test=delete-extra-lists]")!.textContent).toContain(
               names[0],
             );
-            expect(modal.querySelector("[data-test=archive-extra-lists]")!.textContent).toContain(
+            expect(modal.querySelector("[data-test=delete-extra-lists]")!.textContent).toContain(
               locale === "en"
                 ? "Removed from these extras lists:"
                 : "Sale de estas listas de extras:",

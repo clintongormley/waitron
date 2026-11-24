@@ -1,4 +1,4 @@
-import { assertMenuWritable } from "./archive.js";
+import { assertMenuWritable } from "./delete.js";
 import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
 import { menuReleases, menuVersions, now, recordActivity, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";

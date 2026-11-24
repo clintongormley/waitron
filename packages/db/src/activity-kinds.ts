@@ -30,7 +30,7 @@ export interface ActivityKindData {
   };
   readonly "menu_edition.rescheduled": { readonly from: string; readonly to: string };
   readonly "menu.deleted": { readonly name: string };
-  readonly "product.archived": { readonly name: string; readonly variantIds: readonly string[] };
+  readonly "product.deleted": { readonly name: string; readonly variantIds: readonly string[] };
   readonly "credentials.saved": { readonly keyVersion: number };
   readonly "credentials.removed": { readonly keyVersion: number };
   /** The taxpayer-name exception in slice 2 registry rule 1. */
@@ -169,7 +169,7 @@ export const ACTIVITY_KINDS = {
   "photo.deleted": { subject: "media_image" },
   "menu_edition.rescheduled": { subject: "menu_version" },
   "menu.deleted": { subject: "menu" },
-  "product.archived": { subject: "product" },
+  "product.deleted": { subject: "product" },
   "credentials.saved": { subject: "credential" },
   "credentials.removed": { subject: "credential" },
   "taxpayer.legal_name_changed": { subject: "taxpayer" },

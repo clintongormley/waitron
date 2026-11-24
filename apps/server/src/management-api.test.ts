@@ -2965,7 +2965,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
-  it("PUT /products/:id/course refuses an archived product with 409 product.archived and retains its course", async () => {
+  it("PUT /products/:id/course refuses an archived product with 409 product.deleted and retains its course", async () => {
     const courseId = await createCourse(unique("Archive course"));
     const productId = await withTransaction(suite.db, async (tx) => {
       const product = await createProduct(tx, {
@@ -2989,7 +2989,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       );
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
-        error: { code: "product.archived", params: { productId } },
+        error: { code: "product.deleted", params: { productId } },
       });
       expect(
         await suite.db

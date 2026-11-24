@@ -659,7 +659,7 @@ it.each(["target", "each"])(
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "product.archived", params: { productId: archived } },
+      error: { code: "product.deleted", params: { productId: archived } },
     });
     const rows = await suite.db
       .select({ productId: products.id, unitId: products.unitId })

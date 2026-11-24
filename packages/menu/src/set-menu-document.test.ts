@@ -13,7 +13,7 @@ import {
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
-import { assertOffPublishedMenus } from "./archive.js";
+import { assertOffPublishedMenus } from "./delete.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import {

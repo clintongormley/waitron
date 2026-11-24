@@ -211,7 +211,7 @@ describe("a product made Inactive comes off every menu", () => {
     await app((tx) => updateProduct(tx, r.omelette, { active: false }));
     await expect(
       app((tx) => updateProduct(tx, r.omelette, { active: true })),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.omelette } });
+    ).rejects.toMatchObject({ code: "product.deleted", params: { productId: r.omelette } });
     await expectOffEveryMenu(r, r.omelette);
   });
 
@@ -538,7 +538,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
           "en",
         );
       }),
-    ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.omeletteHalf } });
+    ).rejects.toMatchObject({ code: "product.deleted", params: { productId: r.omeletteHalf } });
 
     for (const menuId of [r.tapas, r.terrace]) {
       expect(await variantsPriced(menuId)).toEqual([{ variantId: r.omeletteWhole, price: "6.00" }]);
@@ -580,7 +580,7 @@ describe("saving a product or variant that was Inactive already", () => {
 
       await editorSave(r.croquette);
       await expect(editorSave(r.croquetteHalf)).rejects.toMatchObject({
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: r.croquetteHalf },
       });
       await keepOnlyWhole();
@@ -593,19 +593,19 @@ describe("saving a product or variant that was Inactive already", () => {
       lists.mockClear();
       prices.mockClear();
       await expect(editorSave(r.croquette)).rejects.toMatchObject({
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: r.croquette },
       });
       await expect(
         app((tx) => updateProduct(tx, r.croquette, { active: false })),
-      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquette } });
+      ).rejects.toMatchObject({ code: "product.deleted", params: { productId: r.croquette } });
       await expect(editorSave(r.croquetteHalf)).rejects.toMatchObject({
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: r.croquetteHalf },
       });
       await expect(
         app((tx) => updateProduct(tx, r.croquetteHalf, { active: false })),
-      ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.croquetteHalf } });
+      ).rejects.toMatchObject({ code: "product.deleted", params: { productId: r.croquetteHalf } });
       await keepOnlyWhole();
       expect(lists).not.toHaveBeenCalled();
       expect(prices).not.toHaveBeenCalled();

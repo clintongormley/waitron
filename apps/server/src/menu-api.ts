@@ -415,7 +415,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.name_taken": 409,
   "category.contents_changed": 409,
   "product.name_taken": 409,
-  "product.archived": 409,
+  "product.deleted": 409,
   "product.on_live_menu": 409,
 };
 

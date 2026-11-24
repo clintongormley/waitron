@@ -71,7 +71,7 @@ import { batches } from "./batches.js";
 import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
-import { archiveProducts, assertMenuWritable } from "./archive.js";
+import { deleteProducts, assertMenuWritable } from "./delete.js";
 import {
   refuseSetMenu,
   requireSetMenu,
@@ -1198,9 +1198,9 @@ async function patchProduct(
   const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
   const row = await readUpdatedName(tx, id);
   if (row !== undefined && (!row.active || row.parentActive === false))
-    throw new AppError("product.archived", { productId: id });
+    throw new AppError("product.deleted", { productId: id });
   const deleting = patch.active === false && row?.active === true;
-  if (deleting) await archiveProducts(tx, [id], personId);
+  if (deleting) await deleteProducts(tx, [id], personId);
   if (patch.active === true && row?.parentId != null)
     await assertNotOfferedAsExtra(tx, row.parentId, "active");
   if (namesChange && row !== undefined)
@@ -1266,7 +1266,7 @@ export async function deactivateProduct(
   id: string,
   personId: string | null = null,
 ): Promise<void> {
-  await archiveProducts(tx, [id], personId);
+  await deleteProducts(tx, [id], personId);
 }
 
 export async function readDefaultMenuId(tx: Transaction): Promise<string | null> {

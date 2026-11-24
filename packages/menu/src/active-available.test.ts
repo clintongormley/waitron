@@ -120,7 +120,7 @@ describe("Active and Available", () => {
     await save({ active: true, available: false });
     await save({ active: false, available: false });
     await expect(save({ active: true, available: true })).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId },
     });
     const archived = {

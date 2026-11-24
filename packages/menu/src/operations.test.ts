@@ -736,7 +736,7 @@ describe("menu operations", () => {
       return { cat, p };
     });
     await expect(asVenue((tx) => updateProduct(tx, p.id, { active: true }))).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: p.id },
     });
     expect((await asVenue((tx) => listProducts(tx))).find((x) => x.id === p.id)).toBeUndefined();

@@ -27,7 +27,7 @@ interface VariantRow {
  * not an administrative collection to sort and search.
  *
  * The host owns the variants. Every row action leaves as an event carrying the row's INDEX, which
- * is the same index in the array the host handed over — archived rows included.
+ * is the same index in the array the host handed over — deleted rows included.
  *
  * The name shown is the STAFF name. The customer-facing name belongs to a receipt or a menu.
  */
@@ -215,12 +215,12 @@ export class VariantTable extends LitElement {
   /** A problem with one row, keyed by that row's index in `variants`. The host validates; this
    * only shows what it reports, beside the row it belongs to. */
   @property({ attribute: false }) errors: Record<number, string> = {};
-  @property({ attribute: false }) archivedIds: ReadonlySet<string> = new Set();
+  @property({ attribute: false }) deletedIds: ReadonlySet<string> = new Set();
   /** Every row in list order, hidden ones included. A reorder rewrites this before the host
    * confirms it. */
   @state() private rows: VariantRow[] = [];
   #nextKey = 0;
-  /** The row whose Archive, Remove or Keep was just chosen. The host hands that variant back as a new
+  /** The row whose Delete, Remove or Keep was just chosen. The host hands that variant back as a new
    * object, which re-keys the row and destroys the control holding focus, so focus is put back once
    * the new variants arrive. */
   #refocus: number | null = null;
@@ -230,7 +230,7 @@ export class VariantTable extends LitElement {
     {
       order: () => this.#visible().map((row) => row.key),
       move: (key, to) => this.#move(key, to),
-      // The archived rows left off the screen would otherwise make Escape put the row back on the
+      // The deleted rows left off the screen would otherwise make Escape put the row back on the
       // wrong side of them.
       keepPlace: (key) => {
         const at = this.rows.findIndex((row) => row.key === key);
@@ -260,7 +260,7 @@ export class VariantTable extends LitElement {
   }
 
   #shows(variant: ProductEditorVariant): boolean {
-    return variant.id === undefined || !this.archivedIds.has(variant.id);
+    return variant.id === undefined || !this.deletedIds.has(variant.id);
   }
 
   #visible(): VariantRow[] {
@@ -384,7 +384,7 @@ export class VariantTable extends LitElement {
           variant.active
             ? nothing
             : html`<span class="muted" data-test=${`inactive-${index}`}
-                >${t("product.variant_archive_pending_badge")}</span
+                >${t("product.variant_delete_pending_badge")}</span
               >`
         }
         ${
@@ -504,7 +504,7 @@ export class VariantTable extends LitElement {
       ${
         visible.length
           ? nothing
-          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_archived")}</p>`
+          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_deleted")}</p>`
       }
       ${
         this.openBlocked && visible.some(({ row }) => row.variant.id !== undefined)

@@ -425,7 +425,7 @@ export class UnitsScreen extends LitElement {
         key: "status",
         label: t("units.status"),
         cell: (product) =>
-          product.active ? t("product.active_badge") : t("product.archived_badge"),
+          product.active ? t("product.active_badge") : t("product.deleted_badge"),
         sortValue: (product) => (product.active ? 1 : 0),
       },
       {

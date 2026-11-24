@@ -42,8 +42,8 @@ import { acceptsMenuDrop, type CategoryNameDraft, type ProductList } from "./pro
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
-import { refusalText } from "./archive-refusal.js";
-import { archiveExtraListWarning } from "./archive-extra-lists.js";
+import { refusalText } from "./delete-refusal.js";
+import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 import { countOf } from "./count-text.js";
 
@@ -92,7 +92,7 @@ export class ProductBrowser extends LitElement {
         margin: 0;
         accent-color: var(--wt-color-primary);
       }
-      .archive-extra-lists {
+      .delete-extra-lists {
         overflow-wrap: anywhere;
       }
       .error {
@@ -146,9 +146,9 @@ export class ProductBrowser extends LitElement {
   @state() private summaries: FolderSummary[] = [];
   @state() private summaryLoading = false;
   @state() private summaryFailed = false;
-  @state() private archivingMenus: number | null = null;
-  #archivingRead = 0;
-  #archivingProductIds: string[] = [];
+  @state() private affectedMenuCount: number | null = null;
+  #deleteImpactRead = 0;
+  #productsToDelete: string[] = [];
   @state() private operationBusy = false;
   @state() private operationError = "";
   @state() private routingPreview: ProductItemsRoutingPreview | null = null;
@@ -261,7 +261,7 @@ export class ProductBrowser extends LitElement {
         (key) => changed.has(key),
       )
     )
-      this.#syncArchivingMenus();
+      this.#syncDeleteImpact();
     if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories"))
@@ -460,14 +460,14 @@ export class ProductBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  #syncArchivingMenus(): void {
-    const archiving = this.operation === "delete";
-    const active = archiving ? this.products.filter((product) => product.active) : [];
+  #syncDeleteImpact(): void {
+    const deleting = this.operation === "delete";
+    const active = deleting ? this.products.filter((product) => product.active) : [];
     const activeIds = new Set(active.map(({ id }) => id));
     const productIds = new Set(
       this.operationSelection.productIds.filter((id) => activeIds.has(id)),
     );
-    if (archiving && this.#contentsChoice() === "delete") {
+    if (deleting && this.#contentsChoice() === "delete") {
       const subtree = new Set(
         this.operationSelection.categoryIds.flatMap((id) => [
           ...categoryWithDescendants(id, this.categories),
@@ -477,24 +477,24 @@ export class ProductBrowser extends LitElement {
         if (primaryCategoryId !== null && subtree.has(primaryCategoryId)) productIds.add(id);
     }
     if (
-      productIds.size === this.#archivingProductIds.length &&
-      this.#archivingProductIds.every((id) => productIds.has(id))
+      productIds.size === this.#productsToDelete.length &&
+      this.#productsToDelete.every((id) => productIds.has(id))
     )
       return;
-    this.#archivingProductIds = [...productIds];
-    void this.#readArchivingMenus(this.#archivingProductIds);
+    this.#productsToDelete = [...productIds];
+    void this.#readDeleteImpact(this.#productsToDelete);
   }
-  async #readArchivingMenus(productIds: string[]): Promise<void> {
-    const read = ++this.#archivingRead;
-    this.archivingMenus = null;
+  async #readDeleteImpact(productIds: string[]): Promise<void> {
+    const read = ++this.#deleteImpactRead;
+    this.affectedMenuCount = null;
     if (!productIds.length) return;
     let menus: number | null = null;
     try {
       menus = await (this.api.background ?? this.api).countProductMenus(productIds);
     } catch {
-      // An unavailable count must not prevent an archive attempt.
+      // An unavailable count must not block deletion.
     }
-    if (read === this.#archivingRead) this.archivingMenus = menus;
+    if (read === this.#deleteImpactRead) this.affectedMenuCount = menus;
   }
   get #deleteWaiting(): boolean {
     return !this.selected.length || this.summaryLoading;
@@ -712,19 +712,19 @@ export class ProductBrowser extends LitElement {
         ? "folders.move_heading"
         : selection.categoryIds.length
           ? "folders.delete_heading"
-          : "folders.archive_products_heading",
+          : "folders.delete_products_heading",
       count,
     );
     const deletesContents = this.#contentsChoice() === "delete";
-    const archivingCount = this.#archivingProductIds.length;
-    const offMenus = archivingCount
+    const deletingCount = this.#productsToDelete.length;
+    const offMenus = deletingCount
       ? offMenusSentence(
           deletesContents
             ? "folders.delete_off_menus"
             : selection.productIds.length === 1
               ? "product.off_menus"
               : "folders.off_menus",
-          this.archivingMenus,
+          this.affectedMenuCount,
         )
       : "";
     const blocked =
@@ -789,8 +789,7 @@ export class ProductBrowser extends LitElement {
                 ${
                   selection.productIds.length
                     ? html`<p>
-                        ${t("folders.archive_products_body")}
-                        ${deletesContents ? nothing : offMenus}
+                        ${t("folders.delete_products_body")} ${deletesContents ? nothing : offMenus}
                       </p>`
                     : nothing
                 }
@@ -849,8 +848,8 @@ export class ProductBrowser extends LitElement {
                                 >
                               </fieldset>
                               ${
-                                deletesContents && archivingCount
-                                  ? html`${!selection.productIds.length ? html`<p>${t("folders.archive_products_body")}</p>` : nothing}
+                                deletesContents && deletingCount
+                                  ? html`${!selection.productIds.length ? html`<p>${t("folders.delete_products_body")}</p>` : nothing}
                                     ${offMenus ? html`<p>${offMenus}</p>` : nothing}`
                                   : nothing
                               }`
@@ -863,7 +862,7 @@ export class ProductBrowser extends LitElement {
         }
         ${
           this.operation === "delete"
-            ? archiveExtraListWarning(this.products, this.#archivingProductIds, this.extraLists)
+            ? deleteExtraListWarning(this.products, this.#productsToDelete, this.extraLists)
             : nothing
         }
         <div data-test="folder-routing-preview">

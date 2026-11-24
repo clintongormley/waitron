@@ -180,7 +180,7 @@ declare module "@waitron/shared" {
     /** A request field is missing or malformed; `field` names it. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
-    "product.archived": { productId: string; field?: string };
+    "product.deleted": { productId: string; field?: string };
     "product.on_live_menu": {
       products: { id: string; name: string }[];
       menus: { id: string; name: string }[];

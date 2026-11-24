@@ -1,4 +1,4 @@
-import { assertMenuWritable } from "./archive.js";
+import { assertMenuWritable } from "./delete.js";
 import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import {

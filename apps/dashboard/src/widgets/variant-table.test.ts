@@ -118,7 +118,7 @@ const unitButton = (el: VariantTable) =>
 it("draws no status dropdown or show/hide toggle for archived variants", async () => {
   const el = await mountTable({
     variants: withRemoved(),
-    archivedIds: new Set([threeVariants()[1]!.id!]),
+    deletedIds: new Set([threeVariants()[1]!.id!]),
   });
   expect(el.shadowRoot!.querySelector("wt-combobox[name=variant-status]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=show-inactive]")).toBeNull();
@@ -495,7 +495,7 @@ it.each([
       ]);
       expect(label("inactive-1")).toBe(badge);
       el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
-      el.archivedIds = new Set(el.variants.map((variant) => variant.id!));
+      el.deletedIds = new Set(el.variants.map((variant) => variant.id!));
       await el.updateComplete;
       expect(label("no-variants")).toBe(none);
     } finally {
@@ -507,7 +507,7 @@ it.each([
 it("never draws a row whose id was archived before this draft, even with a row error", async () => {
   const el = await mountTable({
     variants: threeVariants(),
-    archivedIds: new Set([threeVariants()[1]!.id!]),
+    deletedIds: new Set([threeVariants()[1]!.id!]),
   });
   expect(cells(el, 1)).toEqual(["Half", "Double"]);
   el.errors = { 1: "Introduce un nombre" };
@@ -520,11 +520,11 @@ it("says so when every variant was archived before and keeps those rows hidden",
   const el = await mountTable();
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')).toBeNull();
   el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
-  el.archivedIds = new Set(el.variants.map((variant) => variant.id!));
+  el.deletedIds = new Set(el.variants.map((variant) => variant.id!));
   await el.updateComplete;
   expect(rows(el)).toHaveLength(0);
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')!.textContent!.trim()).toBe(
-    t("editor.variants_all_archived"),
+    t("editor.variants_all_deleted"),
   );
   el.variants = [...el.variants];
   await el.updateComplete;
@@ -534,7 +534,7 @@ it("says so when every variant was archived before and keeps those rows hidden",
 it("names each row by its place in the whole list, hidden rows included", async () => {
   const el = await mountTable({
     variants: withRemoved(),
-    archivedIds: new Set([threeVariants()[1]!.id!]),
+    deletedIds: new Set([threeVariants()[1]!.id!]),
   });
   const edit = listen(el, "wt-edit");
   const remove = listen(el, "wt-remove");
@@ -602,7 +602,7 @@ it("opens a saved variant's own page, and offers nothing to open for one never s
 it("moves a row among the rows on screen and reports the move in the whole list", async () => {
   const el = await mountTable({
     variants: withRemoved(),
-    archivedIds: new Set([threeVariants()[1]!.id!]),
+    deletedIds: new Set([threeVariants()[1]!.id!]),
   });
   const reordered = listen(el, "wt-reorder");
   handles(el)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -624,7 +624,7 @@ it("moves a row among the rows on screen and reports the move in the whole list"
 it("puts the whole list back, hidden rows included, when Escape cancels a drag", async () => {
   const el = await mountTable({
     variants: withRemoved(),
-    archivedIds: new Set([threeVariants()[1]!.id!]),
+    deletedIds: new Set([threeVariants()[1]!.id!]),
   });
   // What the host's list becomes as it applies each move the table reports.
   let list = withRemoved();

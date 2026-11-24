@@ -657,8 +657,8 @@ export class ImageLibrary extends LitElement {
             use.kind === "department_receipt"
               ? "image.deleted_department"
               : use.kind === "variant" && use.productActive
-                ? "image.archived_variant"
-                : "image.archived_product",
+                ? "image.deleted_variant"
+                : "image.deleted_product",
           )})`
         : "";
     if (use.kind === "department_receipt" && !use.active)

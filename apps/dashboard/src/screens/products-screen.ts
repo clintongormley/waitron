@@ -50,8 +50,8 @@ import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
-import { archiveExtraListWarning } from "../widgets/archive-extra-lists.js";
-import { refusalText } from "../widgets/archive-refusal.js";
+import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
+import { refusalText } from "../widgets/delete-refusal.js";
 
 @customElement("dashboard-products-screen")
 export class ProductsScreen extends LitElement {
@@ -74,7 +74,7 @@ export class ProductsScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
-      .archive-extra-lists {
+      .delete-extra-lists {
         overflow-wrap: anywhere;
       }
       .error {
@@ -774,9 +774,7 @@ export class ProductsScreen extends LitElement {
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
         heading=${fill(
-          this.deletingProduct?.isVariant
-            ? "product.archive_variant_named"
-            : "product.archive_named",
+          this.deletingProduct?.isVariant ? "product.delete_variant_named" : "product.delete_named",
           { name: this.deletingProduct?.name ?? "" },
         )}
         @wt-close=${(event: Event) => {
@@ -787,12 +785,12 @@ export class ProductsScreen extends LitElement {
         <p>
           ${t(
             this.deletingProduct?.isVariant
-              ? "product.archive_variant_warning"
-              : "product.archive_warning",
+              ? "product.delete_variant_warning"
+              : "product.delete_warning",
           )}
           ${offMenusSentence("product.off_menus", this.deletingMenus)}
         </p>
-        ${archiveExtraListWarning(this.products, this.deletingProduct ? [this.deletingProduct.id] : [], this.extraLists)}
+        ${deleteExtraListWarning(this.products, this.deletingProduct ? [this.deletingProduct.id] : [], this.extraLists)}
         <wt-form-actions
           slot="footer"
           .error=${this.deleteErrorKey ? refusalText(this.deleteErrorKey, this.deleteErrorParams) : ""}

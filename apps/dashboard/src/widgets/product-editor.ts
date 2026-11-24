@@ -1660,7 +1660,7 @@ export class ProductEditor extends LitElement {
                 .busy=${this.suspended}
                 .openBlocked=${unsaved}
                 .errors=${this.#rowsNow}
-                .archivedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}
+                .deletedIds=${new Set((this.value?.variants ?? []).filter((v) => !v.active).map((v) => v.id))}
                 @wt-unit-click=${(event: Event) => {
                   event.stopPropagation();
                   this.openUnits("heading");

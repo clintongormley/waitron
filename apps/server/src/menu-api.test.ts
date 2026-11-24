@@ -1128,14 +1128,14 @@ async function createNamedProductVia(app: Hono, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("product archive route boundaries", () => {
+describe("product deletion route boundaries", () => {
   beforeEach(async () => {
     await suite.db.execute(
       sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
     );
   });
 
-  async function archive(app: Hono, productId: string) {
+  async function deleteThroughFolders(app: Hono, productId: string) {
     const response = await send(app, "POST", "/management-api/folders/delete", {
       body: { productIds: [productId], categoryIds: [], contents: "delete" },
     });
@@ -1158,21 +1158,21 @@ describe("product archive route boundaries", () => {
     return { productId, name, menuId, menuName };
   }
 
-  it("answers an editor restore of an archived product with 409 product.archived", async () => {
+  it("answers an editor restore of a deleted product with 409 product.deleted", async () => {
     const app = mountApp();
     const productId = await createNamedProductVia(app, `Archived ${crypto.randomUUID()}`);
-    await archive(app, productId);
+    await deleteThroughFolders(app, productId);
     expect(
       (
         await suite.db.execute(
-          sql`select person_id from activity_log where kind = 'product.archived' and subject_id = ${productId}`,
+          sql`select person_id from activity_log where kind = 'product.deleted' and subject_id = ${productId}`,
         )
       ).rows,
     ).toEqual([{ person_id: managerPersonId }]);
     const response = await saveEditorFixture(app, productId, { active: true });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "product.archived", params: { productId } },
+      error: { code: "product.deleted", params: { productId } },
     });
     expect(
       (await suite.db.execute(sql`select active from products where id = ${productId}`)).rows,
@@ -1180,7 +1180,7 @@ describe("product archive route boundaries", () => {
   });
 
   it.each(["editor", "folders"] as const)(
-    "answers a %s archive on a published menu with 409 and its menu name",
+    "answers a %s deletion on a published menu with 409 and its menu name",
     async (route) => {
       const app = mountApp();
       const { productId, name, menuId, menuName } = await publishedProduct(app);
@@ -1206,7 +1206,7 @@ describe("product archive route boundaries", () => {
     },
   );
 
-  it("archives through the editor while preserving its stored disabled course", async () => {
+  it("deletes through the editor while preserving its stored disabled course", async () => {
     const app = mountApp();
     const productId = await createNamedProductVia(app, `Course archive ${crypto.randomUUID()}`);
     const { courseId } = await seedRouting();
@@ -1218,7 +1218,7 @@ describe("product archive route boundaries", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select person_id from activity_log where kind = 'product.archived' and subject_id = ${productId}`,
+          sql`select person_id from activity_log where kind = 'product.deleted' and subject_id = ${productId}`,
         )
       ).rows,
     ).toEqual([{ person_id: managerPersonId }]);
@@ -1228,16 +1228,16 @@ describe("product archive route boundaries", () => {
     ).toEqual([{ active: 0, course_id: courseId }]);
   });
 
-  it("answers an extras-list create naming an archived product with 409 product.archived", async () => {
+  it("answers an extras-list create naming a deleted product with 409 product.deleted", async () => {
     const app = mountApp();
     const productId = await createNamedProductVia(app, `Archived extra ${crypto.randomUUID()}`);
-    await archive(app, productId);
+    await deleteThroughFolders(app, productId);
     const response = await send(app, "POST", "/management-api/modifiers/extras", {
       body: { name: "Archived extras", items: [{ productId }] },
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "product.archived", params: { productId, field: "items.0.productId" } },
+      error: { code: "product.deleted", params: { productId, field: "items.0.productId" } },
     });
   });
 });
@@ -1678,7 +1678,7 @@ describe("unique category and product names", () => {
     const restore = await saveEditorFixture(app, inactiveId, { active: true });
     expect(restore.status).toBe(409);
     expect(await restore.json()).toEqual({
-      error: { code: "product.archived", params: { productId: inactiveId } },
+      error: { code: "product.deleted", params: { productId: inactiveId } },
     });
   });
 
@@ -2568,7 +2568,7 @@ describe("mountMenuApi — products", () => {
       const restored = await put(true);
       expect(restored.status).toBe(409);
       expect(await restored.json()).toEqual({
-        error: { code: "product.archived", params: { productId: variantId } },
+        error: { code: "product.deleted", params: { productId: variantId } },
       });
       expect(await storedCategory()).toBe(ownCategoryId);
     });
@@ -2635,7 +2635,7 @@ describe("mountMenuApi — products", () => {
       const restored = await put(true);
       expect(restored.status).toBe(409);
       expect(await restored.json()).toEqual({
-        error: { code: "product.archived", params: { productId: variantId } },
+        error: { code: "product.deleted", params: { productId: variantId } },
       });
       expect(await storedUnit()).toEqual({ unit_id: kgUnitId });
     });
@@ -2705,7 +2705,7 @@ describe("mountMenuApi — products", () => {
     expect(restored.status).toBe(409);
     expect(await restored.json()).toEqual({
       error: {
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: saved.variants[1]!.id, field: "variants.1.active" },
       },
     });
@@ -2798,7 +2798,7 @@ describe("mountMenuApi — products", () => {
       const refused = await put(active);
       expect(refused.status).toBe(409);
       expect(await refused.json()).toEqual({
-        error: { code: "product.archived", params: { productId: id } },
+        error: { code: "product.deleted", params: { productId: id } },
       });
     }
     expect(await editor(id)).toEqual(own);
@@ -4497,7 +4497,7 @@ describe("mountMenuApi — extras lists and products with variants", () => {
     });
     expect(fromOwnPage.status).toBe(409);
     expect(await fromOwnPage.json()).toEqual({
-      error: { code: "product.archived", params: { productId: variantId } },
+      error: { code: "product.deleted", params: { productId: variantId } },
     });
 
     expect(

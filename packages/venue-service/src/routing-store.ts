@@ -495,7 +495,7 @@ export async function previewProductItemsRouting(
     ),
   };
   const compared = (await activeProducts(tx)).filter(
-    (row) => !projected.archivedProductIds.has(row.routedId),
+    (row) => !projected.deletedProductIds.has(row.routedId),
   );
   const moves = await compareRoutingChange(
     tx,

@@ -339,7 +339,7 @@ export {
   countOwnedMenuProducts,
   deleteMenu,
   menusDependingOnDelete,
-} from "./archive.js";
+} from "./delete.js";
 
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
 

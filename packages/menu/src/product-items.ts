@@ -4,7 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
-import { archiveProducts } from "./archive.js";
+import { deleteProducts } from "./delete.js";
 import {
   isTopLevelProduct,
   parentJoin,
@@ -187,7 +187,7 @@ export async function projectProductItems(tx: Transaction, change: ProductItemsC
   const direct = new Set(selection.productIds);
   const categoryOf = new Map<string, string | null>();
   // Top-level ids exclude whole families when routing resolves variants through their parent.
-  const archivedProductIds = new Set(change.kind === "delete" ? selection.productIds : []);
+  const deletedProductIds = new Set(change.kind === "delete" ? selection.productIds : []);
   for (const row of await tx
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)
@@ -196,7 +196,7 @@ export async function projectProductItems(tx: Transaction, change: ProductItemsC
     if (change.kind === "move") {
       if (direct.has(row.id)) category = change.to;
     } else if (category !== null && removed.has(category)) {
-      if (change.contents === "delete") archivedProductIds.add(row.id);
+      if (change.contents === "delete") deletedProductIds.add(row.id);
       else category = tree.survivingParent(category, removed);
     }
     categoryOf.set(row.id, category);
@@ -214,7 +214,7 @@ export async function projectProductItems(tx: Transaction, change: ProductItemsC
             : tree.survivingParent(folder.id, removed),
       })),
     categoryOf,
-    archivedProductIds,
+    deletedProductIds,
   };
 }
 
@@ -238,7 +238,7 @@ export async function deleteProductItems(
         .from(products)
         .where(and(inArray(products.categoryId, batch), isTopLevelProduct)))
         reached.push(row.id);
-  await archiveProducts(tx, reached, personId);
+  await deleteProducts(tx, reached, personId);
   if (contents === "move_up") {
     for (const id of tree.byDepth(selection.categoryIds, "deepest"))
       await removeFolder(tx, id, tree.parent(id));

@@ -3395,9 +3395,9 @@ it.each([1, 2])(
 );
 const ARCHIVE_PRODUCTS =
   "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept.";
-const archiveBody = (el: ProductBrowser) =>
+const deleteBody = (el: ProductBrowser) =>
   dialog(el)!.querySelector("form > p")!.textContent!.replace(/\s+/g, " ").trim();
-async function openArchiveProducts(keys: string[], menus: () => Promise<number>) {
+async function openBulkDelete(keys: string[], menus: () => Promise<number>) {
   const el = await mountBrowser();
   vi.mocked(el.api.countProductMenus).mockImplementation(menus);
   await toggleCategory(el, "d");
@@ -3414,29 +3414,29 @@ it.each([
 ] as const)(
   "says how many menus the products come off when they are on %i",
   async (menus, body) => {
-    const el = await openArchiveProducts(["bread", "cola"], () => Promise.resolve(menus));
+    const el = await openBulkDelete(["bread", "cola"], () => Promise.resolve(menus));
     expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["bread", "cola"]);
-    expect(archiveBody(el)).toBe(body);
+    expect(deleteBody(el)).toBe(body);
   },
 );
 it("says the menus one selected product comes off with the product as the subject", async () => {
-  const el = await openArchiveProducts(["bread"], () => Promise.resolve(2));
-  expect(archiveBody(el)).toBe(
+  const el = await openBulkDelete(["bread"], () => Promise.resolve(2));
+  expect(deleteBody(el)).toBe(
     "This can't be undone. The till stops selling the products, and they come off the extras lists that offer them. Their past sales are kept. It comes off the 2 menus it is on.",
   );
 });
 it("says every menu while the products' count loads and when it cannot be read, and Archive still works", async () => {
   let fail!: (reason: unknown) => void;
-  const el = await openArchiveProducts(
+  const el = await openBulkDelete(
     ["bread", "cola"],
     () => new Promise<number>((_, reject) => (fail = reject)),
   );
   const unknown = `${ARCHIVE_PRODUCTS} They come off every menu they are on.`;
-  expect(archiveBody(el)).toBe(unknown);
+  expect(deleteBody(el)).toBe(unknown);
   fail({ code: "server.internal" });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(archiveBody(el)).toBe(unknown);
+  expect(deleteBody(el)).toBe(unknown);
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   await press(el, "confirm");
   await vi.waitFor(() =>
@@ -3449,7 +3449,7 @@ it("says every menu while the products' count loads and when it cannot be read, 
 });
 it("never shows an earlier Archive dialog's late count in the next one", async () => {
   const answers: Array<(menus: number) => void> = [];
-  const el = await openArchiveProducts(
+  const el = await openBulkDelete(
     ["bread", "cola"],
     () => new Promise<number>((resolve) => answers.push(resolve)),
   );
@@ -3461,18 +3461,18 @@ it("never shows an earlier Archive dialog's late count in the next one", async (
   answers[0]!(4);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(archiveBody(el)).toBe(ARCHIVE_PRODUCTS);
+  expect(deleteBody(el)).toBe(ARCHIVE_PRODUCTS);
 });
 it("forgets the last Archive dialog's count while the next one's is still being read", async () => {
   const answers: Array<(menus: number) => void> = [];
-  const el = await openArchiveProducts(
+  const el = await openBulkDelete(
     ["bread", "cola"],
     () => new Promise<number>((resolve) => answers.push(resolve)),
   );
   answers[0]!(4);
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(archiveBody(el)).toContain("the 4 menus");
+  expect(deleteBody(el)).toContain("the 4 menus");
   dialog(el)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
   (await tableOf(el))
@@ -3481,12 +3481,12 @@ it("forgets the last Archive dialog's count while the next one's is still being 
   await el.updateComplete;
   await press(el, "delete");
   expect(el.api.countProductMenus).toHaveBeenLastCalledWith(["bread"]);
-  expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
+  expect(deleteBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("in Spanish, says how many cartas the products come off", async () => {
   setLocale("es");
-  const el = await openArchiveProducts(["bread", "cola"], () => Promise.resolve(2));
-  expect(archiveBody(el)).toBe(
+  const el = await openBulkDelete(["bread", "cola"], () => Promise.resolve(2));
+  expect(deleteBody(el)).toBe(
     "No se puede deshacer. La caja deja de vender los productos y estos salen de las listas de extras que los ofrecen. Sus ventas pasadas se conservan. Salen de las 2 cartas en las que están.",
   );
 });
@@ -3544,7 +3544,7 @@ it("counts a directly selected product once and drops a late count after switchi
   await selectKeys(el, ["cola", "folder:d"]);
   await press(el, "delete");
   const keepCount = "It comes off the 2 menus it is on.";
-  await vi.waitFor(() => expect(archiveBody(el)).toContain(keepCount));
+  await vi.waitFor(() => expect(deleteBody(el)).toContain(keepCount));
   expect(el.api.countProductMenus).toHaveBeenCalledExactlyOnceWith(["cola"]);
 
   dialog(el)!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
@@ -3554,11 +3554,11 @@ it("counts a directly selected product once and drops a late count after switchi
   expect(dialog(el)!.textContent).not.toContain(keepCount);
 
   dialog(el)!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
-  await vi.waitFor(() => expect(archiveBody(el)).toContain(keepCount));
+  await vi.waitFor(() => expect(deleteBody(el)).toContain(keepCount));
   answerForDelete(4);
   await Promise.resolve();
   await el.updateComplete;
-  expect(archiveBody(el)).toContain(keepCount);
+  expect(deleteBody(el)).toContain(keepCount);
 });
 it("shows one count below Delete contents when the folder holds only empty subfolders", async () => {
   const el = await mountBrowser({
@@ -3577,7 +3577,7 @@ it("shows one count below Delete contents when the folder holds only empty subfo
   expect(choice.nextElementSibling?.textContent?.trim()).toBe(
     "Deleted products come off the 2 menus they are on.",
   );
-  expect(archiveBody(el)).toBe(ARCHIVE_PRODUCTS);
+  expect(deleteBody(el)).toBe(ARCHIVE_PRODUCTS);
 });
 it("says products picked beside a category come off every menu when their count cannot be read", async () => {
   const el = await mountBrowser();
@@ -3589,7 +3589,7 @@ it("says products picked beside a category come off every menu when their count 
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
-  expect(archiveBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
+  expect(deleteBody(el)).toBe(`${ARCHIVE_PRODUCTS} It comes off every menu it is on.`);
 });
 it("says Delete for products alone and with categories in Spanish", async () => {
   setLocale("es");
@@ -4766,7 +4766,7 @@ it("names active descendant and variant extras only when deleting folder content
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull(),
   );
-  const warning = () => dialog(el)!.querySelector("[data-test=archive-extra-lists]")!.textContent;
+  const warning = () => dialog(el)!.querySelector("[data-test=delete-extra-lists]")!.textContent;
   expect(warning()).toContain("Selected product extras");
   expect(warning()).not.toContain("Descendant extras");
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
@@ -4781,7 +4781,7 @@ it("names active descendant and variant extras only when deleting folder content
   expect(warning()).not.toContain("Variant extras");
   el.extraLists = [];
   await el.updateComplete;
-  expect(dialog(el)!.querySelector("[data-test=archive-extra-lists]")).toBeNull();
+  expect(dialog(el)!.querySelector("[data-test=delete-extra-lists]")).toBeNull();
 });
 
 it("A461 gathers Products ticks across searches and only selects shown rows", async () => {

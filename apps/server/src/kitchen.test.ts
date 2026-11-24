@@ -936,7 +936,7 @@ describe("product-course config", () => {
       await expect(
         asApp((tx) => setProductCourse(tx, variantId, null, "any")),
       ).rejects.toMatchObject({
-        code: "product.archived",
+        code: "product.deleted",
         params: { productId: variantId },
       });
       expect(await productCourse(variantId)).toBe(courseId);
@@ -950,7 +950,7 @@ describe("product-course config", () => {
     await db.update(products).set({ active: false }).where(eq(products.id, productId));
     const before = await db.select().from(products).where(eq(products.id, variantId));
     await expect(asApp((tx) => setProductCourse(tx, variantId, null))).rejects.toMatchObject({
-      code: "product.archived",
+      code: "product.deleted",
       params: { productId: variantId },
     });
     expect(await db.select().from(products).where(eq(products.id, variantId))).toEqual(before);

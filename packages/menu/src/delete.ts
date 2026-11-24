@@ -197,10 +197,10 @@ export async function removeFromExtraLists(
 export async function assertProductWritable(tx: Transaction, productId: string): Promise<void> {
   const row = await readUpdatedName(tx, productId);
   if (row !== undefined && (!row.active || row.parentActive === false))
-    throw new AppError("product.archived", { productId });
+    throw new AppError("product.deleted", { productId });
 }
 
-export async function archiveProducts(
+export async function deleteProducts(
   tx: Transaction,
   ids: readonly string[],
   personId: string | null = null,
@@ -240,7 +240,7 @@ export async function archiveProducts(
   await dropMenuPrices(tx, [...variants]);
   for (const row of named.filter((row) => row.active && !dishIds.has(row.parentId ?? "")))
     await recordActivity(tx, {
-      kind: "product.archived",
+      kind: "product.deleted",
       subjectId: row.id,
       personId,
       data: {

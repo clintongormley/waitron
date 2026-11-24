@@ -842,7 +842,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That reason no longer exists. Reload and choose another",
     es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",
   },
-  "product.archived": {
+  "product.deleted": {
     en: "This dish or size has been deleted. Close this window and choose another dish or size.",
     es: "Este plato o tamaño se ha eliminado. Cierra esta ventana y elige otro plato o tamaño.",
   },
