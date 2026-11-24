@@ -10,8 +10,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { nodeId } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
+import * as authentication from "./operation-authentication.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
@@ -27,7 +28,7 @@ afterEach(() => vi.restoreAllMocks());
 beforeEach(async () => {
   logs.length = 0;
   await stampDeployment(suite.db, "preproduction");
-  secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  secret = (await mintMasterKey(suite.db)).secret;
   await withTransaction(suite.db, async (tx) => {
     for (const role of ["manager", "staff"] as const) {
       const [person] = await seedPersons(tx, {
@@ -107,11 +108,11 @@ it.each([
   },
 );
 
-it("derives a node key for only one concurrent authorised download at a time", async () => {
-  const verify = identity.verifySecretAsync;
+it("checks the master key for only one concurrent authorised download at a time", async () => {
+  const verify = authentication.masterKeyAuthorising;
   let active = 0;
   let peak = 0;
-  vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
+  vi.spyOn(authentication, "masterKeyAuthorising").mockImplementation(async (...args) => {
     active++;
     peak = Math.max(peak, active);
     try {
@@ -131,12 +132,12 @@ it("derives a node key for only one concurrent authorised download at a time", a
   expect(active).toBe(0);
 });
 
-it("rechecks permission in the transaction after the key derivation", async () => {
+it("rechecks permission in the transaction after the master key check", async () => {
   const { personId } = await identity.resolveManagementSession(suite.db, managerToken, {
     touch: false,
   });
-  const verify = identity.verifySecretAsync;
-  vi.spyOn(identity, "verifySecretAsync").mockImplementation(async (...args) => {
+  const verify = authentication.masterKeyAuthorising;
+  vi.spyOn(authentication, "masterKeyAuthorising").mockImplementation(async (...args) => {
     const matches = await verify(...args);
     await withTransaction(suite.db, (tx) => setBuiltInRoleForTest(tx, personId, "staff"));
     return matches;

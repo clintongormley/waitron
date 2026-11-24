@@ -22,7 +22,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { mintBreakGlassKey } from "../break-glass.js";
+import { mintMasterKey } from "./master-key.js";
 import { ALL_MODULES } from "../modules.js";
 import { buildManifest } from "../backup-manifest.js";
 import { packArchive } from "../backup-archive.js";
@@ -89,7 +89,7 @@ export async function stagedHourRestore(
   try {
     await seedTaxpayers(db);
     await stampDeployment(db, "preproduction");
-    const key = await mintBreakGlassKey({ venue: db, node: nodeDb }, TAXPAYER_A.nodeId);
+    const key = await mintMasterKey(db);
     const node = { nodeId: TAXPAYER_A.nodeId };
     const initial: OperationBinding = {
       module: "fiscal-verifactu",

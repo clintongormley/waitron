@@ -1,7 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPassword } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { sql } from "drizzle-orm";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { stageStreamRestore } from "./restore-request.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
@@ -13,8 +12,15 @@ import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, openVenueDatabase, nodes, taxpayer, stampDeployment } from "@waitron/db";
-import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
+import {
+  CORE_MIGRATIONS,
+  openVenueDatabase,
+  nodes,
+  readCurrentMasterKey,
+  taxpayer,
+  stampDeployment,
+} from "@waitron/db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -27,7 +33,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { copyFile } from "node:fs/promises";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { validateArtifact } from "./restore.js";
 import type { StartedServer } from "./boot.js";
@@ -83,8 +89,7 @@ beforeEach(async () => {
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, name: "Old node" });
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  oldName = await readRecoveryKeyName(suite.node, NODE);
+  oldName = (await mintMasterKey(suite.db)).name;
   artifact = await packSelected();
 });
 
@@ -145,9 +150,10 @@ function args(key = "archive-key-separate") {
   };
 }
 
-it("reads the selected copy's node-key name after the live box has replaced its key", async () => {
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  expect(await readRecoveryKeyName(suite.node, NODE)).not.toBe(oldName);
+it("the backup preview names the copy's master key, not the live venue's newer one", async () => {
+  const newer = await mintMasterKey(suite.db);
+  expect((await readCurrentMasterKey(suite.db))?.name).toBe(newer.name);
+  expect(newer.name).not.toBe(oldName);
   expect(await previewRecoveryArchive(args())).toEqual({
     sourceId: createHash("sha256").update(artifact).digest("hex"),
     createdAt: "2026-10-01T08:00:00.000Z",
@@ -158,18 +164,6 @@ it("reads the selected copy's node-key name after the live box has replaced its 
     venueName: "Old venue",
   });
   expect(await readdir(scratch)).toEqual(["selected.db"]);
-});
-
-it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {
-  suite.db.run(
-    sql`create table box (node_id text primary key, recovery_key_verifier text not null, recovery_key_name text not null, recovery_key_changed_at text not null)`,
-  );
-  suite.db.run(
-    sql`insert into box values (${NODE}, 'venue-held recovery_key_verifier', 'Venue-held name', '2026-10-01T08:00:00.000Z')`,
-  );
-  artifact = await packSelected();
-  expect(oldName).not.toBeNull();
-  expect(await previewRecoveryArchive(args())).toMatchObject({ nodeRecoveryKeyName: oldName });
 });
 
 it("a validated archive's staged folder holds its node copy beside its venue copy", async () => {
@@ -207,7 +201,7 @@ it("refuses a wrong archive encryption key without treating it as the node crede
 });
 
 it("the real setup listener previews the selected copy without restarting or publishing its identity", async () => {
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  await mintMasterKey(suite.db);
   const stateDir = join(scratch, "replacement");
   await copyMigrationsRoot(join(scratch, "migrations"));
   const configuredPort = await occupiedPort();
@@ -292,8 +286,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   );
   const database = join(scratch, "bucket-copy.db");
   await suite.db.archiveTo(database);
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
-  const liveName = await readRecoveryKeyName(suite.node, NODE);
+  const liveName = (await mintMasterKey(suite.db)).name;
   const stateDir = join(scratch, "bucket-preview");
   const preview = (
     previewModule as unknown as { previewRecoveryStream: (deps: unknown) => Promise<unknown> }
@@ -349,7 +342,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     nodeRecoveryKeyName: oldName,
     taxpayer: { legalName: "Old venue", taxId: "89890001K" },
   });
-  expect(await readRecoveryKeyName(suite.node, NODE)).toBe(liveName);
+  expect((await readCurrentMasterKey(suite.db))?.name).toBe(liveName);
   expect(await readdir(stateDir)).toEqual(["scratch"]);
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   const recoveryOperation = {

@@ -731,7 +731,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         { modules: ALL_MODULES, migrationsRoot: null },
       ),
     ).toMatchObject({
-      nodeRecoveryKeyName: breakGlassKeyName,
+      nodeRecoveryKeyName: shownMasterKeyName,
       fiscalSelection: {
         country: "ES",
         fiscalTerritory: "ES-common",

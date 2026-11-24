@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { stagedHourRestore } from "./testing/staged-hour-restore.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -18,7 +18,7 @@ it.each(["archive", "stream"] as const)(
   async (kind) => {
     f = await stagedHourRestore(suite, kind, "paper-offline-restore");
     const retained = f.journal();
-    await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TAXPAYER_A.nodeId);
+    await mintMasterKey(suite.db);
     const log = vi.fn();
     expect(await f.run(log)).toBe(true);
     const rows = await f.snapshot();

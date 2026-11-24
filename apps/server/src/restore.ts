@@ -49,13 +49,14 @@ import {
   withTransaction,
   workingOrders,
   readVenueSettings,
+  readCurrentMasterKey,
   type Database,
   type NodeDatabase,
   type Transaction,
   type VenueDatabase,
   type VenueLock,
 } from "@waitron/db";
-import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   applyMigrations,
   expectedSchemaVersion,
@@ -460,8 +461,8 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
       const node = await resolveArtifactNode(opened.db, validated.secretEntries);
-      const name = await readRecoveryKeyName(opened.node, node.nodeId);
-      if (name !== null) log("info", "restore.recovery_key_selected", { name });
+      const name = (await readCurrentMasterKey(opened.db))?.name;
+      if (name !== undefined) log("info", "restore.recovery_key_selected", { name });
       await runRestoreHooks({
         db: opened.db,
         nodeDb: opened.node,

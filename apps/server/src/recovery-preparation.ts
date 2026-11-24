@@ -1,10 +1,10 @@
 import {
   lockVenueDatabase,
   openVenueDatabase,
+  readCurrentMasterKey,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { readRecoveryKeyName } from "@waitron/node-db";
 import {
   configureModuleOperations,
   type ModuleClockSetRequest,
@@ -68,7 +68,6 @@ interface BaseOptions {
   node: ProvisionedNode;
   secret: unknown;
   database(): Database;
-  /** node.db beside {@link BaseOptions.database}, which holds the recovery-key check. */
   nodeDatabase(): NodeDatabase;
   selected: RecoveryBackupPreview;
   testClock?: ModuleOperationHost["testClock"];
@@ -151,8 +150,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
     checkSelection();
     if (!isDeepStrictEqual(held, binding)) refuse();
     const db = database();
-    if ((await readRecoveryKeyName(nodeDatabase(), node.nodeId)) !== selected.nodeRecoveryKeyName)
-      refuse();
+    if (((await readCurrentMasterKey(db))?.name ?? null) !== selected.nodeRecoveryKeyName) refuse();
     await withRecoveryKeyAuthority(
       { db, node: nodeDatabase(), nodeId: node.nodeId },
       binding,

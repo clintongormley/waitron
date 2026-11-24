@@ -20,7 +20,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 
@@ -64,7 +64,7 @@ it("the actual trading listener makes a recovery pack from the first-setup sourc
     await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });
-  const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
+  const { secret } = await mintMasterKey(suite.db);
   const fixture = allocationFixture({ node, bases, identity: "P000042" });
   const keys = generateKeyPairSync("ed25519");
   const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
