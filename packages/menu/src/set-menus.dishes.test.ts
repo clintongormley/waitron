@@ -13,7 +13,7 @@ import {
 import { useMenuDb } from "../test/fixtures.js";
 import { duplicateMenu } from "./menu-copy.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { createMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
+import { createMenu, deactivateMenu, updateMenuDetails, updateMenuItem } from "./operations.js";
 import { addMember, addProducts, moveMember, removeMember, replaceMember } from "./sections.js";
 import {
   addSetMenuDishes,
@@ -255,6 +255,8 @@ it("reads the full menus holding the draft as well as its own names and terms", 
     vatClass: "reduced",
     heldBy: [{ id: full.id, name: "Dinner" }],
   });
+  await app((tx) => deactivateMenu(tx, full.id));
+  expect((await reading()).heldBy).toEqual([]);
 });
 
 it("reports missing dishes, missing lines and a line with no active course", async () => {

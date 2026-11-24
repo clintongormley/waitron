@@ -60,7 +60,12 @@ import { readServiceDay } from "./day-resolver.js";
 import { dueFloorLayouts } from "./floor-layout-due.js";
 import { readFloorPlanSets } from "./floor-plan-set-store.js";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
-import { resolveDefaultMenu, resolveDepartmentService } from "./menu-timetable.js";
+import {
+  archivePeriodMenus,
+  readMenuArchivePeriods,
+  resolveDefaultMenu,
+  resolveDepartmentService,
+} from "./menu-timetable.js";
 import {
   copyOrderServiceContext,
   findOrderServiceContext,
@@ -130,6 +135,8 @@ import { readDeviceZoneSelection, setDeviceZoneSelection } from "./device-zone-s
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  readMenuArchivePeriods,
+  archivePeriodMenus,
   dueFloorLayouts,
   readServiceDay,
   readFloorPlanSets,

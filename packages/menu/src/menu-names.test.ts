@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { menus, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
-import { createMenu, listMenus, updateMenuDetails } from "./operations.js";
+import { createMenu, deactivateMenu, listMenus, updateMenuDetails } from "./operations.js";
 import { readMenuStructure } from "./menu-structure.js";
 
 const fx = useMenuDb();
@@ -20,19 +20,26 @@ describe("menu names on creation and rename", () => {
       await seedTaxpayer(fx.db);
       const held = await app((tx) => createMenu(tx, { name: "Café" }));
       const other = await app((tx) => createMenu(tx, { name: "Dinner" }));
-      await fx.db.update(menus).set({ active: false }).where(eq(menus.id, held.id));
       const before = await app(listMenus);
       const structure = await app((tx) => readMenuStructure(tx, other.id));
-      const write =
+      const write = () =>
         mode === "create"
           ? app((tx) => createMenu(tx, { name }))
           : app((tx) => updateMenuDetails(tx, other.id, { name, names: { en: "Changed" } }));
-      await expect(write).rejects.toMatchObject({
+      await expect(write()).rejects.toMatchObject({
         code: "menu.name_taken",
         params: { field: "name" },
       });
       expect(await app(listMenus)).toEqual(before);
       expect(await app((tx) => readMenuStructure(tx, other.id))).toEqual(structure);
+      await app((tx) => deactivateMenu(tx, held.id));
+      await write();
+      expect(await app(listMenus)).toContainEqual(
+        expect.objectContaining({
+          active: true,
+          name: name.trim(),
+        }),
+      );
     },
   );
 

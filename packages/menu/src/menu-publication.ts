@@ -1,3 +1,4 @@
+import { assertMenuWritable } from "./archive.js";
 import { navigateMenuChanges } from "./menu-navigation.js";
 import { and, asc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import {
@@ -498,7 +499,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     const live = await allLive();
     const { menus: built } = await buildMenuDocuments(
       tx,
-      [...live.keys()].filter((other) => other !== menuId),
+      [...live.keys()].filter((other) => other !== menuId && graph.menu(other)?.active),
       graph,
     );
     const others = [...built]
@@ -665,6 +666,7 @@ export async function buildPublishableMenu(
   tx: Transaction,
   menuId: string,
 ): Promise<{ document: MenuDocument; workingHash: string }> {
+  await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
   const built = await buildMenuDocument(tx, menuId);
   const first = built.setMenuProblems[0];
@@ -768,6 +770,7 @@ export async function patchLiveMenu(
   personId: string,
   options: { at?: Date; fallbackLanguage?: string } = {},
 ): Promise<MenuPatchResult> {
+  await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
   const at = options.at ?? now();
   await settleDue(tx, at, [menuId]);

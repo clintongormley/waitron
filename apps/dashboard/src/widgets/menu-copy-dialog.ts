@@ -94,7 +94,7 @@ export class MenuCopyDialog extends LitElement {
   }
   private get ownError(): string {
     if (!this.name.trim()) return t("menus.name_required");
-    if (this.menus.some((menu) => foldName(menu.name) === foldName(this.name)))
+    if (this.menus.some((menu) => menu.active && foldName(menu.name) === foldName(this.name)))
       return t("menus.name_taken");
     return "";
   }

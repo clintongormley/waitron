@@ -39,7 +39,7 @@ import {
 import { variantsOfProducts } from "./variants.js";
 import "./errors.js";
 
-async function setMenuRow(tx: Transaction, menuId: string) {
+async function setMenuRow(tx: Transaction, menuId: string, includeArchived = false) {
   const [menu] = await tx
     .select({
       name: menus.name,
@@ -48,7 +48,13 @@ async function setMenuRow(tx: Transaction, menuId: string) {
       takeawayVatClass: menus.setTakeawayVatClass,
     })
     .from(menus)
-    .where(and(eq(menus.id, menuId), eq(menus.active, true), eq(menus.kind, "set_menu")));
+    .where(
+      and(
+        eq(menus.id, menuId),
+        includeArchived ? undefined : eq(menus.active, true),
+        eq(menus.kind, "set_menu"),
+      ),
+    );
   if (menu === undefined) throw new AppError("set_menu.not_found", { menuId });
   return {
     name: menu.name,
@@ -389,8 +395,9 @@ export async function readSetMenu(
   tx: Transaction,
   menuId: string,
   graph?: SectionGraph,
+  includeArchived = false,
 ): Promise<SetMenuDetails> {
-  const menu = await setMenuRow(tx, menuId);
+  const menu = await setMenuRow(tx, menuId, includeArchived);
   const root = await requireMenuRoot(tx, menuId);
   graph ??= await loadSectionGraph(tx);
   const courses = await activeCourses(tx);
@@ -403,7 +410,7 @@ export async function readSetMenu(
     courses,
     heldBy: menusContaining(graph, root).flatMap((id) => {
       const parent = graph.menu(id);
-      return parent?.kind === "menu" ? [{ id, name: parent.name }] : [];
+      return parent?.kind === "menu" && parent.active ? [{ id, name: parent.name }] : [];
     }),
   };
   return { ...details, problems: setMenuProblems(details) };

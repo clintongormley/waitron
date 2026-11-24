@@ -297,6 +297,10 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
+Para retirar una carta, elige **Archivar…** en el menú de su fila y selecciona las sustitutas que te pida la ventana. En **Filtros**, elige **Archivadas** en **Estado** para consultarla o elige **Copiar…** para crear una carta sin publicar.
+
+**Publicadas** y **Requieren atención** muestran cartas completas. Encontrarás los menús en **Activas**, **Archivadas** y **Todas**.
+
 Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
 
 Consulta **Carta principal** para ver qué periodos empiezan con esa carta y **Cartas del personal** para ver en cuáles puede seleccionarla el personal. Pulsa el nombre de un periodo para abrir sus ajustes si tienes permiso para editarlo.
@@ -363,14 +367,14 @@ sección que esta carta muestre.
 
 Si tu próxima carta se parece a una que ya tienes, empieza con una copia. En **Productos y
 cartas → Cartas**, abre el ⋮ de la carta y elige **Copiar…**. Introduce un nombre nuevo y pulsa
-**Copiar**. El nombre no puede estar usado por otra carta; las mayúsculas y las minúsculas cuentan
+**Copiar**. Usa un nombre que ninguna carta activa tenga. Las mayúsculas y las minúsculas cuentan
 como el mismo nombre. **Cancelar** descarta el nombre sin preguntar y no crea nada. Si ya has
 escrito un nombre, Escape te pregunta si quieres seguir editándolo o descartarlo.
 
-Usa un nombre diferente también al crear o renombrar una carta. Si otra carta ya lo tiene, el
-mensaje aparece debajo de Nombre. Los espacios al principio y al final y las mayúsculas no
-distinguen nombres, tampoco en cartas inactivas. Las cartas que ya comparten nombre lo conservan
-hasta que renombres una; puedes seguir editando sus nombres para clientes, color e imagen.
+La misma regla se aplica al crear una carta o cambiarle el nombre. Los espacios al principio y al
+final no distinguen nombres. Si una carta activa ya tiene ese nombre, el mensaje aparece debajo de
+Nombre.
+Las cartas que ya comparten nombre lo conservan hasta que renombres una.
 
 La copia empieza sin publicar, con las secciones de trabajo, los precios y los ajustes de la
 página de inicio de la carta original. Las versiones publicadas y las publicaciones programadas

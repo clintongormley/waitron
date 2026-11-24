@@ -142,9 +142,11 @@ function structuresIn(graph: SectionGraph): (menuId: string) => MenuStructure {
   const roots = new Map(graph.roots().map((root) => [root.menuId, root.sectionId]));
   const includedBy = new Map<string, { id: string; name: string }[]>();
   for (const { menuId } of graph.roots()) {
+    const menu = graph.menu(menuId);
+    if (!menu?.active) continue;
     for (const included of directIncludedMenus(graph, menuId)) {
       const holders = includedBy.get(included) ?? [];
-      holders.push({ id: menuId, name: graph.menu(menuId)!.name });
+      holders.push({ id: menuId, name: menu.name });
       includedBy.set(included, holders);
     }
   }

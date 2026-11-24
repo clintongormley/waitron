@@ -206,3 +206,19 @@ export interface OfferedOptionsList {
  * all — not where it sits.
  */
 export type OfferedModifier = OfferedExtrasList | OfferedOptionsList;
+
+export interface MenuArchivePeriod {
+  id: string;
+  name: string;
+  departmentName: string;
+  starting: boolean;
+  replacement: "starting" | "staff" | null;
+  requiresSellable: boolean;
+  choices: { id: string; name: string }[];
+}
+
+export interface MenuArchiveImpact {
+  dependants: { id: string; name: string }[];
+  periods: MenuArchivePeriod[];
+  defaultChoices: { id: string; name: string }[] | null;
+}

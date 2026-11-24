@@ -435,11 +435,11 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("accepts product tiles on an inactive menu, reached by its structure", async () => {
+  it("keeps product tiles on an archived menu readable through its structure", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => deactivateMenu(tx, f.lunch));
     await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
     await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
+    await app((tx) => deactivateMenu(tx, f.lunch));
     const { shortcuts } = await app((tx) => readMenuHome(tx, f.lunch));
     expect(shortcuts.map(({ ref, reachable }) => [ref, reachable])).toEqual([
       [product(f.soup), true],

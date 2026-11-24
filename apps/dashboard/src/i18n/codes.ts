@@ -578,6 +578,18 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "That person could not be found",
     es: "No se ha encontrado a esa persona",
   },
+  "menu.archived": {
+    en: "This menu is archived. You can view it or copy it into a new menu.",
+    es: "Esta carta está archivada. Puedes consultarla o copiarla en una nueva.",
+  },
+  "menu.archive_default": {
+    en: "The venue default menu changed or its replacement is no longer available. Close this window and open Archive again.",
+    es: "La carta predeterminada del local cambió o su sustituta ya no está disponible. Cierra esta ventana y vuelve a pulsar Archivar.",
+  },
+  "menu_period.archive_replacement": {
+    en: "The period or the available menus changed. Close this window and open Archive again.",
+    es: "El periodo o las cartas disponibles han cambiado. Cierra esta ventana y vuelve a pulsar Archivar.",
+  },
   "menu.not_found": {
     en: "That menu could not be found",
     es: "No se ha encontrado esa carta",

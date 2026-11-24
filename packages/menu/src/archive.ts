@@ -13,14 +13,66 @@ import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import type { MenuDocument } from "@waitron/shared";
 import { documentSetMenuOffers } from "./menu-document.js";
+import { directMenuChildren } from "./menu-inclusion.js";
+import { loadSectionGraph } from "./section-graph.js";
 import { liveVersions } from "./menu-publication.js";
 import { takeOffMenus, dropMenuPrices } from "./menu-removal.js";
 import { readUpdatedName } from "./product-names.js";
 import "./errors.js";
 
+export async function assertMenuWritable(tx: Transaction, menuId: string): Promise<void> {
+  const [menu] = await tx.select({ active: menus.active }).from(menus).where(eq(menus.id, menuId));
+  if (menu === undefined) throw new AppError("menu.not_found", { menuId });
+  if (!menu.active) throw new AppError("menu.archived", { menuId });
+}
+
 export interface HoldingMenu {
   id: string;
   name: string;
+}
+
+export async function menusDependingOnArchive(
+  tx: Transaction,
+  menuId: string,
+  at: Date = now(),
+): Promise<HoldingMenu[]> {
+  const graph = await loadSectionGraph(tx);
+  const working = new Set([menuId]);
+  const parents = new Map<string, Set<string>>();
+  for (const root of graph.roots()) {
+    const menu = graph.menu(root.menuId);
+    if (menu?.active !== true || menu.kind !== "menu") continue;
+    const { included, setMenus } = directMenuChildren(graph, root.menuId);
+    for (const id of [...included, ...setMenus]) {
+      const held = parents.get(id) ?? new Set<string>();
+      held.add(root.menuId);
+      parents.set(id, held);
+    }
+  }
+  for (const id of working) for (const parent of parents.get(id) ?? []) working.add(parent);
+
+  const documents = [...(await liveVersions(tx, undefined, "document", at)).values()].map(
+    (version) => version.document!,
+  );
+  for (const row of await tx
+    .select({ document: menuVersions.document })
+    .from(menuReleases)
+    .innerJoin(menuVersions, eq(menuVersions.id, menuReleases.versionId))
+    .where(and(eq(menuReleases.state, "queued"), gt(menuReleases.activatesAt, at))))
+    documents.push(row.document);
+  for (const document of documents)
+    if (
+      Object.hasOwn(document.includedMenuHashes ?? {}, menuId) ||
+      Object.hasOwn(document.setMenus ?? {}, menuId)
+    )
+      working.add(document.menuId);
+  working.delete(menuId);
+  return [...working]
+    .flatMap((id) => {
+      const menu = graph.menu(id);
+      return menu?.active && menu.kind === "menu" ? [{ id, name: menu.name }] : [];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function documentProductIds(document: MenuDocument): Set<string> {

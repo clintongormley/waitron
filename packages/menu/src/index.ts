@@ -331,7 +331,7 @@ export * from "./content-suggestion-jobs.js";
 export * from "./content-suggestion-store.js";
 export type * from "./content-suggestion-types.js";
 
-export { assertProductWritable } from "./archive.js";
+export { assertMenuWritable, assertProductWritable, menusDependingOnArchive } from "./archive.js";
 
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
 

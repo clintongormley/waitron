@@ -281,6 +281,10 @@ product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
+To retire a menu, choose **Archive…** from its row menu and select any replacements the window asks for. Under **Filters**, choose **Archived** in **Status** to view it or choose **Copy…** to make a new unpublished menu.
+
+**Published** and **Requiring attention** show full menus. Find set menus under **Active**, **Archived**, and **All**.
+
 Use **Search menus** on the Menus list to find a menu by name.
 
 Check **Main menu** to see which periods open on a menu and **Staff menus** to see where staff can select it. Choose a period name to open its settings if you can edit periods.
@@ -342,14 +346,13 @@ that this menu shows.
 
 When your next menu is similar to one you already have, start with a copy. In **Products and
 menus → Menus**, open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
-You must use a name no menu already holds; upper and lower case count as the same name. **Cancel**
+Use a name no active menu holds. Upper and lower case count as the same name. **Cancel**
 discards the name without asking and creates nothing. Escape still asks whether to keep editing
 or discard a name you have typed.
 
-Use a different name when you create or rename a menu too. If another menu already has it, the
-message appears under Name. Names ignore surrounding spaces and case, including on inactive
-menus. Menus that already share a name keep it until you rename one; you can still edit their
-customer names, colour and image.
+The same rule applies when you create or rename a menu. Names ignore surrounding spaces. If an
+active menu already holds the name, the message appears under Name.
+Menus that already share a name keep it until you rename one.
 
 The copy starts unpublished, with the source menu's working sections, prices and Home page
 settings. Published versions and scheduled publications stay with the source. Editing the copy's

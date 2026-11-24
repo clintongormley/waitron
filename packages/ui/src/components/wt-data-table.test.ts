@@ -2617,6 +2617,23 @@ test("a filter on its initial choice counts in the panel badge and can be cleare
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
+test("opens a standalone slotted filter when no rows are shown", async () => {
+  const el = await tableS({ rows: [] });
+  const control = document.createElement("button");
+  control.slot = "filters-start";
+  control.textContent = "Show archived";
+  el.append(control);
+  el.requestUpdate();
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger");
+  expect(trigger).not.toBeNull();
+  trigger!.click();
+  await el.updateComplete;
+  expect(control.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(document.activeElement).toBe(control);
+});
+
 test("a control slotted into filters-start shows in the open panel, above the first filter", async () => {
   const el = await tableS({ columns: withStatus });
   const control = document.createElement("button");
@@ -2654,6 +2671,31 @@ test("Filters shows plain named sections with choices always available and no pe
   await clickFilterRow(filter, "Any status");
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2"]);
+});
+
+test("wraps Tab from the last column filter on a narrow local table with a slotted control", async () => {
+  await inWindow(1280, 900, async () => {
+    const { el, root, trigger, panel } = await filteredTable<RowS>(500, {
+      rows: rowsS,
+      columns: withStatus,
+    });
+    const control = document.createElement("button");
+    control.slot = "filters-start";
+    el.append(control);
+    await userEvent.click(trigger);
+    await el.updateComplete;
+    const filter = firstChoice(panel);
+    const last = filter.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+    last.focus();
+    const tab = new KeyboardEvent("keydown", {
+      key: "Tab",
+      cancelable: true,
+      bubbles: true,
+      composed: true,
+    });
+    last.dispatchEvent(tab);
+    expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
+  });
 });
 
 test("a hidden column's filter remains in the panel and clear all restores every row", async () => {

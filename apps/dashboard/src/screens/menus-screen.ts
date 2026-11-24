@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   tableNoMatches,
+  type DashboardPermissionContinuation,
   type MenuPeriodUsage,
   type MenuPeriodUsageProvider,
 } from "@waitron/dashboard-kit";
@@ -55,6 +56,7 @@ import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
 import "../widgets/menu-patch-dialog.js";
 import "../widgets/menu-copy-dialog.js";
+import "../widgets/menu-archive-dialog.js";
 import "../widgets/set-menu-editor.js";
 import "../widgets/guest-menu-preview.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
@@ -130,6 +132,25 @@ type PeriodUses = Record<PeriodUse, MenuPeriodUsage[]>;
 const PERIOD_LABELS = { starts: "menus.period_starts", staff: "menus.period_staff" } as const;
 
 /** Sorted by status, the menus needing a publish come first. */
+const MENU_STATUS_FILTERS = {
+  active: "menus.filter_active",
+  published: "menus.filter_published",
+  attention: "menus.filter_attention",
+  archived: "menus.filter_archived",
+  all: "menus.filter_all",
+} as const;
+type MenuStatusFilter = keyof typeof MENU_STATUS_FILTERS;
+
+function matchesMenuStatus(menu: MenuRow, filter: MenuStatusFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "archived") return !menu.active;
+  if (!menu.active) return false;
+  if (filter === "active") return true;
+  if (typeof menu.status === "string") return false;
+  if (filter === "published") return menu.status.state !== "unpublished";
+  return menu.status.state !== "current" || menu.status.clashes > 0;
+}
+
 const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 
 /** The live version and when it went live; a menu never published says so instead. */
@@ -666,6 +687,7 @@ export class MenusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
   @property({ attribute: false }) menuPeriodUsage?: MenuPeriodUsageProvider;
   @state() private periodUses?: ReadonlyMap<string, PeriodUses> | null;
   #followedUsage?: MenuPeriodUsageProvider;
@@ -673,6 +695,8 @@ export class MenusScreen extends LitElement {
   /** Replaced by a test, so how long ago a menu was published reads the same on any day. */
   @property({ attribute: false }) now = (): Date => new Date();
   @state() private menus: MenuSummary[] = [];
+  @state() private statusFilter: MenuStatusFilter = "active";
+  @state() private archivingMenu: MenuSummary | null = null;
   private get sections(): SectionDetails[] {
     const result: SectionDetails[] = [];
     const walk = (nodes: MenuStructureNode[]) => {
@@ -956,11 +980,18 @@ export class MenusScreen extends LitElement {
     // replaces the link a person may already have focused.
     if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
       this.layout = this.#measuredLayout();
-    if (changed.has("menus") || changed.has("statuses") || changed.has("statusesError"))
-      this.#rows = this.menus.map((menu) => ({
-        ...menu,
-        status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
-      }));
+    if (
+      changed.has("menus") ||
+      changed.has("statuses") ||
+      changed.has("statusesError") ||
+      changed.has("statusFilter")
+    )
+      this.#rows = this.menus
+        .map((menu): MenuRow => ({
+          ...menu,
+          status: this.statusesError ? "failed" : (this.statuses?.[menu.id] ?? "loading"),
+        }))
+        .filter((menu) => matchesMenuStatus(menu, this.statusFilter));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
@@ -1158,6 +1189,7 @@ export class MenusScreen extends LitElement {
   }
 
   #menuReadParts(): MenuReadPart[] {
+    if (this.#selectedMenu()?.active === false) return ["structure"];
     return [
       "structure",
       ...(this.view === "home" ? ["home" as const] : []),
@@ -1455,7 +1487,7 @@ export class MenusScreen extends LitElement {
     const view =
       menu?.kind === "set_menu" || (!menu && addressView === "set-menu")
         ? "set-menu"
-        : isTab(addressView)
+        : menu?.active !== false && isTab(addressView)
           ? addressView
           : TABS[0];
     this.showPriceClashes = view === "prices" && priceFilter === "clashes";
@@ -2348,6 +2380,8 @@ export class MenusScreen extends LitElement {
    * and a menu with clashing prices a link to them. */
   #statusCell(menu: MenuRow) {
     const test = `status-${menu.id}`;
+    if (!menu.active)
+      return html`<span part="status muted" data-test=${test}>${t("menus.archived")}</span>`;
     if (menu.kind === "set_menu")
       return html`<span part="status muted" data-test=${test}>${t("menus.set_menu_status")}</span>`;
     if (typeof menu.status === "string")
@@ -2436,7 +2470,7 @@ export class MenusScreen extends LitElement {
   }
 
   #periodCell(menu: MenuRow, role: PeriodUse, stacked = false) {
-    if (!this.menuPeriodUsage || menu.kind === "set_menu") return nothing;
+    if (!this.menuPeriodUsage || !menu.active || menu.kind === "set_menu") return nothing;
     const uses = this.periodUses?.get(menu.id);
     const periods = uses?.[role];
     if (periods?.length) {
@@ -2463,7 +2497,7 @@ export class MenusScreen extends LitElement {
   }
 
   #listColumns(): DataTableColumn<MenuRow>[] {
-    const kinds = this.menus.some((menu) => menu.kind === "set_menu");
+    const kinds = this.#rows.some((menu) => menu.kind === "set_menu");
     if (this.menuPeriodUsage && this.layout === "wide")
       return kinds ? this.#usageColumnsWithKind : this.#usageColumns;
     return (kinds ? this.#columnsWithKind : this.#columns)[this.layout];
@@ -2506,9 +2540,11 @@ export class MenusScreen extends LitElement {
               label: t("menus.status"),
               activatesRow: false as const,
               sortValue: (menu: MenuRow) =>
-                STATUS_ORDER.indexOf(
-                  typeof menu.status === "string" ? menu.status : menu.status.state,
-                ),
+                menu.active
+                  ? STATUS_ORDER.indexOf(
+                      typeof menu.status === "string" ? menu.status : menu.status.state,
+                    )
+                  : STATUS_ORDER.length,
               cell: (menu: MenuRow) => this.#statusCell(menu),
             },
           ]),
@@ -2530,9 +2566,9 @@ export class MenusScreen extends LitElement {
               icon="menu-open"
               data-test=${`edit-${menu.id}`}
               @click=${() => this.#open(menu.id)}
-              >${t("menus.open")}</wt-button
+              >${t(menu.active ? "menus.open" : "product.view")}</wt-button
             >${
-              menu.kind === "set_menu"
+              !menu.active || menu.kind === "set_menu"
                 ? nothing
                 : html`<wt-button
                     icon="menu-rename"
@@ -2548,7 +2584,18 @@ export class MenusScreen extends LitElement {
                 if (!this.copyingMenu) this.copyingMenu = menu;
               }}
               >${t("menus.copy")}</wt-button
-            ></wt-row-actions
+            >${
+              menu.active
+                ? html`<wt-button
+                    icon="menu-archive"
+                    data-test=${`archive-${menu.id}`}
+                    @click=${() => {
+                      this.archivingMenu = menu;
+                    }}
+                    >${t("menus.archive")}</wt-button
+                  >`
+                : nothing
+            }</wt-row-actions
           >`,
       },
     ];
@@ -2628,7 +2675,8 @@ export class MenusScreen extends LitElement {
       .validateName=${(name: string) => {
         if (this.menuForm?.id && name === this.menuForm.name) return "";
         return this.menus.some(
-          (menu) => menu.id !== this.menuForm?.id && foldName(menu.name) === foldName(name),
+          (menu) =>
+            menu.active && menu.id !== this.menuForm?.id && foldName(menu.name) === foldName(name),
         )
           ? t("menus.name_taken")
           : "";
@@ -2757,9 +2805,18 @@ export class MenusScreen extends LitElement {
 
   #renderList() {
     const loaded = !this.loading && !this.loadError;
+    const waitingForStatuses =
+      this.statuses === null &&
+      (this.statusFilter === "published" || this.statusFilter === "attention");
+    const emptyMessage =
+      this.menus.length === 0
+        ? t("menus.empty")
+        : waitingForStatuses
+          ? t(this.statusesError ? "menus.status_error" : "menus.status_loading")
+          : tableNoMatches();
     return html`<div class="header">
         <h1>${t("menus.title")}</h1>
-        ${loaded && this.menus.length ? this.#renderAddMenu() : nothing}
+        ${loaded && (this.#rows.length || this.statusFilter !== "active") ? this.#renderAddMenu() : nothing}
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${loaded && this.statusesError ? this.#renderStatusesError() : nothing}
@@ -2792,9 +2849,29 @@ export class MenusScreen extends LitElement {
                 .columns=${this.#listColumns()}
                 .rowKey=${(menu: MenuRow) => menu.id}
                 .rowClick=${(menu: MenuRow) => this.#open(menu.id)}
-                .rowClickLabel=${(menu: MenuRow) => `${t("menus.open")}: ${menu.name}`}
-                .emptyMessage=${t("menus.empty")}
-                >${this.#rows.length === 0 ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
+                .rowClickLabel=${(menu: MenuRow) => `${t(menu.active ? "menus.open" : "product.view")}: ${menu.name}`}
+                .emptyMessage=${emptyMessage}
+                filtersLabel=${t("table.filters")}
+                filtersClearAllLabel=${t("table.filters_clear_all")}
+                filtersCloseLabel=${t("table.filters_close")}
+                .externalFilterCount=${Number(this.statusFilter !== "active")}
+                @wt-filters-clear=${() => {
+                  this.statusFilter = "active";
+                }}
+                ><wt-combobox
+                  slot="filters-start"
+                  name="menu-status"
+                  label=${t("menus.status")}
+                  search="never"
+                  preserve-order
+                  .value=${this.statusFilter}
+                  .options=${Object.entries(MENU_STATUS_FILTERS).map(([value, label]) => ({ value, label: t(label) }))}
+                  @wt-change=${(event: CustomEvent<{ value: MenuStatusFilter }>) => {
+                    event.stopPropagation();
+                    this.statusFilter = event.detail.value;
+                  }}
+                ></wt-combobox
+                >${this.#rows.length === 0 && this.statusFilter === "active" ? this.#renderAddMenu("empty-action") : nothing}</wt-data-table
               >
             </div>`
           : nothing
@@ -2815,7 +2892,26 @@ export class MenusScreen extends LitElement {
           await this.#watchMenus().catch(() => undefined);
           this.#followStatus(true);
         }}
-      ></dashboard-menu-copy-dialog>`;
+      ></dashboard-menu-copy-dialog>
+      ${
+        this.archivingMenu
+          ? html`<dashboard-menu-archive-dialog
+              .menu=${this.archivingMenu}
+              .api=${this.api}
+              .permissionContinuation=${this.permissionContinuation}
+              @menu-archive-close=${() => {
+                this.archivingMenu = null;
+              }}
+              @menu-archived=${async () => {
+                this.archivingMenu = null;
+                await this.#watchMenus().catch(() => {
+                  this.loadError = true;
+                });
+                this.#followStatus(true);
+              }}
+            ></dashboard-menu-archive-dialog>`
+          : nothing
+      }`;
   }
 
   #renderLoadState() {
@@ -4123,6 +4219,49 @@ export class MenusScreen extends LitElement {
     </wt-modal>`;
   }
 
+  #renderArchivedMenu(menu: MenuSummary) {
+    const names = new Map(this.products.map(({ id, name }) => [id, name]));
+    const contents = (nodes: readonly MenuStructureNode[]): unknown =>
+      nodes.length
+        ? html`<ul>
+            ${nodes.map(
+              ({ ref, children }) =>
+                html`<li>
+                  ${
+                    ref.kind === "set_menu"
+                      ? (this.menus.find((entry) => entry.id === ref.menuId)?.name ??
+                        t("members.missing"))
+                      : memberName(ref, names, this.#sectionNames)
+                  }
+                  ${contents(children ?? [])}
+                </li>`,
+            )}
+          </ul>`
+        : nothing;
+    return html`<div data-test="archived-menu">
+      <p>${codeMessage("menu.archived")}</p>
+      ${
+        menu.kind === "set_menu"
+          ? keyed(
+              menu.id,
+              html`<dashboard-set-menu-editor
+                .api=${this.api}
+                .menuId=${menu.id}
+                .readOnly=${true}
+              ></dashboard-set-menu-editor>`,
+            )
+          : this.structureError
+            ? html`<p role="alert">${t("menus.load_error")}</p>
+                <wt-button variant="secondary" @click=${() => void this.#watchStructure()}
+                  >${t("menus.retry")}</wt-button
+                >`
+            : this.structure
+              ? contents(this.structure.nodes)
+              : html`<p role="status">${t("menus.loading")}</p>`
+      }
+    </div>`;
+  }
+
   #renderEditor(menuId: string) {
     const menu = this.#selectedMenu();
     const name = menu?.name ?? "";
@@ -4151,33 +4290,37 @@ export class MenusScreen extends LitElement {
                   guide-label=${t("menus.set_menu_help_guide")}
                   >${t("menus.set_menu_help")}</wt-help-tooltip
                 >`
-              : this.#renderLiveWords()
+              : menu?.active === false
+                ? nothing
+                : this.#renderLiveWords()
           }
         </div>
       </div>
       ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${
-        menu === undefined && this.view === "set-menu"
-          ? nothing
-          : setMenu
-            ? html`<wt-tabs
-                data-test="menu-tabs"
-                label=${menu.name}
-                value="set-menu"
-                .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
-              >
-                <div slot="set-menu">
-                  ${keyed(
-                    menuId,
-                    html`<dashboard-set-menu-editor
-                      .api=${this.api}
-                      .menuId=${menuId}
-                      @set-menu-terms-saved=${() => void this.#watchMenus().catch(() => undefined)}
-                    ></dashboard-set-menu-editor>`,
-                  )}
-                </div>
-              </wt-tabs>`
-            : this.#renderFullMenuEditor(menuId, name)
+        menu?.active === false
+          ? this.#renderArchivedMenu(menu)
+          : menu === undefined && this.view === "set-menu"
+            ? nothing
+            : setMenu
+              ? html`<wt-tabs
+                  data-test="menu-tabs"
+                  label=${menu.name}
+                  value="set-menu"
+                  .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
+                >
+                  <div slot="set-menu">
+                    ${keyed(
+                      menuId,
+                      html`<dashboard-set-menu-editor
+                        .api=${this.api}
+                        .menuId=${menuId}
+                        @set-menu-terms-saved=${() => void this.#watchMenus().catch(() => undefined)}
+                      ></dashboard-set-menu-editor>`,
+                    )}
+                  </div>
+                </wt-tabs>`
+              : this.#renderFullMenuEditor(menuId, name)
       }`;
   }
 

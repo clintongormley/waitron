@@ -16,26 +16,56 @@ import {
 } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { saveBodyOf } from "../test/save-body.js";
-import { menusFixture, product } from "../test/menus-fixture.js";
+import { menusFixture, product, section } from "../test/menus-fixture.js";
 import {
   archiveProducts,
+  menusDependingOnArchive,
   assertProductWritable,
   assertOffPublishedMenus,
   publishedMenusHolding,
 } from "./archive.js";
-import { addMember, removeMember } from "./sections.js";
+import {
+  addMember,
+  createSectionIn,
+  deleteSections,
+  removeMember,
+  updateSection,
+} from "./sections.js";
 import { readMenuStructure } from "./menu-structure.js";
-import { insertVersion, previewMenu, publishMenu } from "./menu-publication.js";
-import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
+import {
+  insertVersion,
+  patchLiveMenu,
+  previewMenu,
+  publishMenu,
+  readLiveMenu,
+} from "./menu-publication.js";
+import {
+  cancelMenuPublication,
+  queueMenuPublication,
+  rescheduleMenuPublication,
+} from "./menu-schedule.js";
 import { eq } from "drizzle-orm";
-import { listProductVariants, setProductVariants } from "./variants.js";
+import { listProductVariants, setMenuVariants, setProductVariants } from "./variants.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { moveProductItems, deleteProductItems } from "./product-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
-import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.js";
+import {
+  createMenu,
+  deactivateMenu,
+  deactivateProduct,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
 
 import { createCategory, setMainReportingCategory } from "./categories.js";
+import {
+  addShortcut,
+  moveShortcut,
+  removeShortcut,
+  replaceShortcut,
+  setHomeDisplay,
+} from "./menu-home.js";
 
 const fx = useMenuDb();
 beforeEach(async () => {
@@ -56,6 +86,130 @@ async function queue(menuId: string, activatesAt: Date) {
 }
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
 const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
+
+it.each(["published", "queued"])(
+  "names a %s parent after its draft drops the include",
+  async (edition) => {
+    const f = await menusFixture(fx.db);
+    const member = await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
+    if (edition === "published") await publish(f.dinner);
+    else await queue(f.dinner, later);
+    await app((tx) => removeMember(tx, f.dinnerRoot, member.id));
+    expect(await app((tx) => menusDependingOnArchive(tx, f.lunch, T0))).toEqual([
+      { id: f.dinner, name: "Dinner Menu" },
+    ]);
+  },
+);
+
+it("names a set menu's direct holder and the menu that includes it", async () => {
+  const f = await menusFixture(fx.db);
+  const holders = await app(async (tx) => {
+    const set = await createMenu(tx, {
+      name: "Daily",
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "general",
+    });
+    await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
+    await addMember(tx, f.dinnerRoot, section(f.lunchRoot));
+    return menusDependingOnArchive(tx, set.id, T0);
+  });
+  expect(holders).toEqual([
+    { id: f.dinner, name: "Dinner Menu" },
+    { id: f.lunch, name: "Lunch Menu" },
+  ]);
+});
+
+it("excludes archived parents from the draft structure and publication advice", async () => {
+  const f = await menusFixture(fx.db);
+  const read = () => app((tx) => readMenuStructure(tx, f.lunch));
+  await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
+  await publish(f.lunch);
+  await publish(f.dinner);
+  await app(async (tx) =>
+    updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "9.00" }),
+  );
+  const alsoOn = async () => (await app((tx) => previewMenu(tx, f.lunch))).changes[0]?.alsoOn;
+  const parents = (await read()).includedBy;
+  expect([parents, await alsoOn()]).toEqual([
+    [{ id: f.dinner, name: "Dinner Menu" }],
+    ["Dinner Menu"],
+  ]);
+  await app((tx) => deactivateMenu(tx, f.dinner));
+  expect([(await read()).includedBy, await alsoOn()]).toEqual([[], undefined]);
+});
+
+it("keeps a published include until the parent is republished after archive", async () => {
+  const f = await menusFixture(fx.db);
+  const parent = await app((tx) => createMenu(tx, { name: "Evening" }));
+  const root = (await app((tx) => readMenuStructure(tx, parent.id))).rootSectionId;
+  await app((tx) => addMember(tx, root, section(f.lunchRoot)));
+  const live = await publish(parent.id);
+  await app((tx) => deactivateMenu(tx, f.lunch));
+  const at = new Date(T0.getTime() + 1000);
+  const correction = await app(async (tx) =>
+    patchLiveMenu(
+      tx,
+      parent.id,
+      live.versionId,
+      [
+        {
+          target: { kind: "offer", menuItemId: await offerOf(tx, parent.id, f.soup) },
+          field: "price",
+          value: "8.00",
+        },
+      ],
+      "person-1",
+      { at },
+    ),
+  );
+  const saved = await app((tx) => readLiveMenu(tx, parent.id, at));
+  expect(saved?.versionId).toBe(correction.versionId);
+  expect(saved?.document.includedMenuHashes).toHaveProperty(f.lunch);
+  await publish(parent.id, new Date(at.getTime() + 1000));
+  const replaced = await app((tx) => readLiveMenu(tx, parent.id, later));
+  expect(replaced?.document.includedMenuHashes).not.toHaveProperty(f.lunch);
+});
+
+it("refuses changes to an archived menu's draft, device home and publications", async () => {
+  const f = await menusFixture(fx.db);
+  const live = await publish(f.lunch);
+  const { offer, variantOffer, list, shortcut } = await app(async (tx) => {
+    const offer = await offerOf(tx, f.lunch, f.soup);
+    const variantOffer = await offerOf(tx, f.lunch, f.lemonade);
+    const list = await createSectionIn(tx, f.lunchRoot, { internalName: "Sides" });
+    const shortcut = await addShortcut(tx, f.lunch, product(f.soup));
+    return { offer, variantOffer, list, shortcut };
+  });
+  const queued = await queue(f.lunch, later);
+  await app(async (tx) => {
+    await deactivateMenu(tx, f.lunch);
+    for (const write of [
+      () => createSectionIn(tx, f.lunchRoot, { internalName: "Desserts" }),
+      () => updateSection(tx, list.id, { internalName: "Mains" }),
+      () => deleteSections(tx, [list.id]),
+      () => updateMenuItem(tx, f.lunch, offer, { grossPrice: "9.00" }),
+      () => setMenuVariants(tx, variantOffer, [{ variantId: f.large, price: "8.00" }]),
+      () => setHomeDisplay(tx, f.lunch, "till", { columns: 2 }),
+      () => addShortcut(tx, f.lunch, product(f.lemonade)),
+      () => replaceShortcut(tx, f.lunch, shortcut.id, product(f.lemonade)),
+      () => moveShortcut(tx, f.lunch, shortcut.id, 1),
+      () => removeShortcut(tx, f.lunch, shortcut.id),
+      () => cancelMenuPublication(tx, f.lunch, queued.versionId, "person-1", T0),
+      () => rescheduleMenuPublication(tx, f.lunch, queued.versionId, later, "person-1", { at: T0 }),
+      () =>
+        patchLiveMenu(
+          tx,
+          f.lunch,
+          live.versionId,
+          [{ target: { kind: "offer", menuItemId: offer }, field: "price", value: "8.00" }],
+          "person-1",
+          { at: T0 },
+        ),
+    ])
+      await expect(write()).rejects.toMatchObject({ code: "menu.archived" });
+  });
+});
 
 describe("publishedMenusHolding", () => {
   it("names the live menu for a dish, its variant and an extras item", async () => {
