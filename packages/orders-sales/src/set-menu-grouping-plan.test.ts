@@ -13,6 +13,13 @@ import {
   type GroupingLine,
 } from "./set-menu-grouping-plan.js";
 
+/** The plan, and the input it handed the calculation. */
+function planWithInput(...[lines, frozen, copies, newId]: Parameters<typeof planBillGrouping>) {
+  const calculate = vi.fn(groupSetMenus);
+  const plan = planBillGrouping(lines, frozen, copies, newId, calculate);
+  return { plan, input: calculate.mock.calls[0]![0] };
+}
+
 const portion: ServedSetMenuOffer["unit"] = {
   id: "each",
   staffName: "Each",
@@ -170,60 +177,60 @@ const none = new Set<string>();
 describe("planBillGrouping", () => {
   it("puts Soup and Hake into one Daily at 14.00, the dishes included at 0", () => {
     const lines = [dish("soup", 1, "soup"), dish("hake", 2, "hake")];
-    const plan = planBillGrouping(lines, none, [daily], ids("menu-a"));
-    expect(plan).toEqual({
-      input: {
-        offers: [
-          {
-            id: "daily:v1-hash",
-            priceCents: 1400,
-            lines: dailyCopy.terms.lines,
-            dishes: [
-              {
-                productId: "soup",
-                variantId: null,
-                countsAsCourseId: "starters",
-                surchargeCents: 0,
-              },
-              { productId: "hake", variantId: null, countsAsCourseId: "mains", surchargeCents: 0 },
-              {
-                productId: "sirloin",
-                variantId: null,
-                countsAsCourseId: "mains",
-                surchargeCents: 500,
-              },
-            ],
-          },
-        ],
-        dishes: [
-          {
-            id: "soup",
-            productId: "soup",
-            variantId: null,
-            courseId: "starters",
-            aLaCarteCents: 600,
-            extrasCents: 0,
-            eligible: true,
-          },
-          {
-            id: "hake",
-            productId: "hake",
-            variantId: null,
-            courseId: "mains",
-            aLaCarteCents: 1200,
-            extrasCents: 0,
-            eligible: true,
-          },
-        ],
-        discounts: [],
-        previous: {
-          setMenus: [],
+    const { plan, input } = planWithInput(lines, none, [daily], ids("menu-a"));
+    expect(input).toEqual({
+      offers: [
+        {
+          id: "daily:v1-hash",
+          priceCents: 1400,
+          lines: dailyCopy.terms.lines,
           dishes: [
-            { id: "soup", place: null },
-            { id: "hake", place: null },
+            {
+              productId: "soup",
+              variantId: null,
+              countsAsCourseId: "starters",
+              surchargeCents: 0,
+            },
+            { productId: "hake", variantId: null, countsAsCourseId: "mains", surchargeCents: 0 },
+            {
+              productId: "sirloin",
+              variantId: null,
+              countsAsCourseId: "mains",
+              surchargeCents: 500,
+            },
           ],
         },
+      ],
+      dishes: [
+        {
+          id: "soup",
+          productId: "soup",
+          variantId: null,
+          courseId: "starters",
+          aLaCarteCents: 600,
+          extrasCents: 0,
+          eligible: true,
+        },
+        {
+          id: "hake",
+          productId: "hake",
+          variantId: null,
+          courseId: "mains",
+          aLaCarteCents: 1200,
+          extrasCents: 0,
+          eligible: true,
+        },
+      ],
+      discounts: [],
+      previous: {
+        setMenus: [],
+        dishes: [
+          { id: "soup", place: null },
+          { id: "hake", place: null },
+        ],
       },
+    });
+    expect(plan).toEqual({
       exact: true,
       inserts: [{ id: "menu-a", lineNo: 3, copy: daily, priceCents: 1400, creditedTo: "ana" }],
       menuUpdates: [],
@@ -282,8 +289,8 @@ describe("planBillGrouping", () => {
       placed(dish("hake", 2, "hake"), "menu-a", 1),
       menuRow("menu-a", 3),
     ];
-    const plan = planBillGrouping(lines, none, [daily], ids());
-    expect(plan.input.previous).toEqual({
+    const { plan, input } = planWithInput(lines, none, [daily], ids());
+    expect(input.previous).toEqual({
       setMenus: [{ id: "menu-a", offerId: "daily:v1-hash", discountId: null }],
       dishes: [
         { id: "soup", place: { setMenuId: "menu-a", lineIndex: 0 } },
@@ -418,8 +425,8 @@ describe("planBillGrouping", () => {
 
   it("leaves a frozen dish out of the calculation and the writes (D2)", () => {
     const lines = [dish("soup", 1, "soup"), dish("hake", 2, "hake")];
-    const plan = planBillGrouping(lines, new Set(["soup"]), [daily], ids("unused"));
-    expect(plan.input.dishes.map(({ id }) => id)).toEqual(["hake"]);
+    const { plan, input } = planWithInput(lines, new Set(["soup"]), [daily], ids("unused"));
+    expect(input.dishes.map(({ id }) => id)).toEqual(["hake"]);
     expect(plan.inserts).toEqual([]);
     expect(plan.dishUpdates).toEqual([]);
   });
@@ -432,8 +439,8 @@ describe("planBillGrouping", () => {
       dish("soup-2", 4, "soup"),
     ];
     const frozen = new Set(["menu-a", "soup"]);
-    const plan = planBillGrouping(lines, frozen, [daily], ids("menu-b"));
-    expect(plan.input.previous).toEqual({
+    const { plan, input } = planWithInput(lines, frozen, [daily], ids("menu-b"));
+    expect(input.previous).toEqual({
       setMenus: [],
       dishes: [
         { id: "hake", place: null },
@@ -453,8 +460,8 @@ describe("planBillGrouping", () => {
 
   it("leaves out a row holding two portions (D13)", () => {
     const lines = [dish("soup", 1, "soup", { quantity: 2000 }), dish("hake", 2, "hake")];
-    const plan = planBillGrouping(lines, none, [daily], ids("unused"));
-    expect(plan.input.dishes.map(({ id }) => id)).toEqual(["hake"]);
+    const { plan, input } = planWithInput(lines, none, [daily], ids("unused"));
+    expect(input.dishes.map(({ id }) => id)).toEqual(["hake"]);
     expect(plan.inserts).toEqual([]);
     expect(plan.dishUpdates).toEqual([]);
   });
@@ -466,8 +473,8 @@ describe("planBillGrouping", () => {
       dish("soup-3", 3, "soup", { aLaCarteUnitPrice: null }),
       dish("hake", 4, "hake"),
     ];
-    const plan = planBillGrouping(lines, none, [daily], ids("unused"));
-    expect(plan.input.dishes.map(({ id }) => id)).toEqual(["hake"]);
+    const { plan, input } = planWithInput(lines, none, [daily], ids("unused"));
+    expect(input.dishes.map(({ id }) => id)).toEqual(["hake"]);
     expect(plan.inserts).toEqual([]);
   });
 
@@ -479,12 +486,12 @@ describe("planBillGrouping", () => {
       dish("soup-2", 4, "soup", { menuItemId: null }),
     ];
     lines[0] = { ...lines[0]!, countsAsCourseId: null };
-    const plan = planBillGrouping(lines, none, [daily], ids());
-    expect(plan.input.dishes.find(({ id }) => id === "soup")).toMatchObject({
+    const { plan, input } = planWithInput(lines, none, [daily], ids());
+    expect(input.dishes.find(({ id }) => id === "soup")).toMatchObject({
       courseId: "",
       eligible: false,
     });
-    expect(plan.input.dishes.find(({ id }) => id === "soup-2")?.eligible).toBe(false);
+    expect(input.dishes.find(({ id }) => id === "soup-2")?.eligible).toBe(false);
     expect(plan.deletes).toEqual(["menu-a"]);
     expect(plan.dishUpdates).toEqual([
       {
@@ -516,8 +523,8 @@ describe("planBillGrouping", () => {
         aLaCarteUnitPrice: 450,
       }),
     ];
-    const plan = planBillGrouping(lines, none, [daily], ids());
-    expect(plan.input.dishes).toEqual([
+    const { input } = planWithInput(lines, none, [daily], ids());
+    expect(input.dishes).toEqual([
       {
         id: "wine",
         productId: "wine",
@@ -536,8 +543,8 @@ describe("planBillGrouping", () => {
       placed(dish("hake", 2, "hake"), "menu-old", 1),
       menuRow("menu-old", 3, { setMenuVersionId: "v0" }),
     ];
-    const plan = planBillGrouping(lines, none, [daily], ids("menu-a"));
-    expect(plan.input.previous?.setMenus).toEqual([
+    const { plan, input } = planWithInput(lines, none, [daily], ids("menu-a"));
+    expect(input.previous?.setMenus).toEqual([
       { id: "menu-old", offerId: "unrecorded:v0:daily", discountId: null },
     ]);
     expect(plan.inserts).toEqual([
@@ -563,7 +570,7 @@ describe("planBillGrouping", () => {
       exact: false,
     }));
     const plan = planBillGrouping(lines, none, [daily], ids("menu-a"), calculate);
-    expect(calculate).toHaveBeenCalledWith(plan.input);
+    expect(calculate).toHaveBeenCalledOnce();
     expect(plan.exact).toBe(false);
     expect(plan.inserts).toEqual([
       { id: "menu-a", lineNo: 3, copy: daily, priceCents: 1400, creditedTo: "ana" },
@@ -578,9 +585,9 @@ describe("planBillGrouping", () => {
       extra("cheese", 3, "soup", 100),
       dish("hake", 4, "hake"),
     ];
-    const plan = planBillGrouping(lines, none, [daily], ids("menu-a"));
-    expect(plan.input.discounts).toEqual([]);
-    expect(plan.input.dishes.map(({ id, extrasCents }) => [id, extrasCents])).toEqual([
+    const { plan, input } = planWithInput(lines, none, [daily], ids("menu-a"));
+    expect(input.discounts).toEqual([]);
+    expect(input.dishes.map(({ id, extrasCents }) => [id, extrasCents])).toEqual([
       ["soup", 250],
       ["hake", 0],
     ]);
@@ -588,9 +595,9 @@ describe("planBillGrouping", () => {
   });
 
   it("passes no previous grouping when the bill has no dish to group and no set menu", () => {
-    const plan = planBillGrouping([extra("bread", 1, "gone", 150)], none, [daily], ids());
-    expect(plan.input.previous).toBeNull();
-    expect(plan.input.dishes).toEqual([]);
+    const { input } = planWithInput([extra("bread", 1, "gone", 150)], none, [daily], ids());
+    expect(input.previous).toBeNull();
+    expect(input.dishes).toEqual([]);
   });
 });
 

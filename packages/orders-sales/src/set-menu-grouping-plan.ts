@@ -49,7 +49,6 @@ export interface GroupingDishUpdate {
 }
 
 export interface GroupingPlan {
-  input: SetMenuGroupingInput;
   exact: boolean;
   inserts: {
     id: string;
@@ -211,31 +210,29 @@ export function planBillGrouping(
 
   const dishUpdates = result.dishes.flatMap(({ id, place, chargeCents }) => {
     const line = byId.get(id)!;
-    const update: GroupingDishUpdate = place
-      ? {
-          id,
-          setMenuRole: "dish",
-          setMenuLineId: rowIds.get(place.setMenuId)!,
-          setMenuPlace: place.lineIndex,
-          setMenuCountsAsCourseId: line.countsAsCourseId,
-          unitPriceGross: chargeCents,
-          lineTotal: chargeCents,
-        }
-      : {
-          id,
-          setMenuRole: null,
-          setMenuLineId: null,
-          setMenuPlace: null,
-          setMenuCountsAsCourseId: null,
-          unitPriceGross: chargeCents,
-          lineTotal: chargeCents,
-        };
+    const update: GroupingDishUpdate = {
+      id,
+      unitPriceGross: chargeCents,
+      lineTotal: chargeCents,
+      ...(place
+        ? {
+            setMenuRole: "dish",
+            setMenuLineId: rowIds.get(place.setMenuId)!,
+            setMenuPlace: place.lineIndex,
+            setMenuCountsAsCourseId: line.countsAsCourseId,
+          }
+        : {
+            setMenuRole: null,
+            setMenuLineId: null,
+            setMenuPlace: null,
+            setMenuCountsAsCourseId: null,
+          }),
+    };
     return sameDish(line, update) ? [] : [update];
   });
 
   const kept = new Set(result.setMenus.map(({ id }) => id));
   return {
-    input,
     exact: result.exact,
     inserts,
     dishUpdates,
