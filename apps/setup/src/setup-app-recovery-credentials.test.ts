@@ -305,11 +305,7 @@ const KEY_MISSING = "Enter the selected backup’s master key.";
 const WRONG_KEY = "Wrong master key. Use the one dated 2026-11-02 · QZJV.";
 it.each([
   ["archive", {}, KEY_MISSING],
-  [
-    "bucket",
-    {},
-    "The copy could not be restored. (promotion.break_glass_invalid) If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.",
-  ],
+  ["bucket", {}, KEY_MISSING],
   ["cloud", {}, KEY_MISSING],
   ["archive", { keyName: "2026-11-02 · QZJV" }, WRONG_KEY],
   ["bucket", { keyName: "2026-11-02 · QZJV" }, WRONG_KEY],

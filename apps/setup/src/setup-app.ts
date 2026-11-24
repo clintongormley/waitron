@@ -2421,9 +2421,11 @@ export class SetupApp extends LitElement {
         // The kit's and environment's own refusals already say what is wrong with that field.
         this.bucketRestoreError =
           keyNamedInRefusal(code, params) ??
-          (code === "setup.request_invalid" && this.bucketInvalidField !== undefined
-            ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
-            : describeBucketRefusal(code, params));
+          (code === "promotion.break_glass_invalid"
+            ? say(BUCKET_FIELD_CHECKS.nodeRecoverySecret)
+            : code === "setup.request_invalid" && this.bucketInvalidField !== undefined
+              ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
+              : describeBucketRefusal(code, params));
       }
       this.screen = "restore-bucket";
     }
