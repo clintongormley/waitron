@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import {
   AppError,
@@ -8,18 +8,17 @@ import {
   decimalToThousandths,
   divideDecimal,
   multiplyDecimal,
-  subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { moveDishes, type BillCommand } from "./bill-actions.js";
+import { guardPathParty, moveDishes, refuseClosedBill, type BillCommand } from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
 import { money } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { TillSaleResult } from "./till-sale.js";
-import type { TradingAdmission } from "./trading-admission.js";
+import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import {
   splitLinesWithinOrder,
@@ -38,7 +37,7 @@ export interface ItemPick {
 interface PickedLine {
   id: string;
   lineNo: number;
-  /** The dish's line total and its extras', in cents. */
+  /** The dish's line total and its extras', in cents; a set menu's adds its dishes' and theirs. */
   familyCents: number;
   /** The part of the line chosen, when less than all of it. */
   part?: { quantity: string; ofQuantity: number };
@@ -48,12 +47,13 @@ async function readPicks(
   tx: Transaction,
   billId: string,
   picks: readonly ItemPick[],
-): Promise<{ picked: PickedLine[]; dishes: number }> {
+): Promise<PickedLine[]> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      setMenuLineId: workingOrderLines.setMenuLineId,
       quantity: workingOrderLines.quantity,
       lineTotal: workingOrderLines.lineTotal,
     })
@@ -65,6 +65,16 @@ async function readPicks(
     if (row.parentLineId === null) continue;
     extrasCents.set(row.parentLineId, (extrasCents.get(row.parentLineId) ?? 0) + row.lineTotal);
   }
+  const ownCents = (id: string) => byId.get(id)!.lineTotal + (extrasCents.get(id) ?? 0);
+  // A set menu's dishes move with it (`resolveMoveLines`), so they are priced with it.
+  const dishesCents = new Map<string, number>();
+  for (const row of rows) {
+    if (row.setMenuLineId === null || row.parentLineId !== null) continue;
+    dishesCents.set(
+      row.setMenuLineId,
+      (dishesCents.get(row.setMenuLineId) ?? 0) + ownCents(row.id),
+    );
+  }
   const seen = new Set<string>();
   const picked = picks.map((pick): PickedLine => {
     const row = byId.get(pick.lineId);
@@ -75,7 +85,7 @@ async function readPicks(
     if (seen.has(row.id))
       throw new AppError("tab.transfer_duplicate_line", { tabId: billId, lineNo: row.lineNo });
     seen.add(row.id);
-    const familyCents = row.lineTotal + (extrasCents.get(row.id) ?? 0);
+    const familyCents = ownCents(row.id) + (dishesCents.get(row.id) ?? 0);
     if (pick.quantity === undefined) return { id: row.id, lineNo: row.lineNo, familyCents };
     const quantity = pickedThousandths(pick.quantity);
     if (quantity === null || quantity <= 0 || quantity > row.quantity) {
@@ -94,7 +104,7 @@ async function readPicks(
           part: { quantity: pick.quantity, ofQuantity: row.quantity },
         };
   });
-  return { picked, dishes: rows.filter((row) => row.parentLineId === null).length };
+  return picked;
 }
 
 function pickedThousandths(quantity: string): number | null {
@@ -125,7 +135,26 @@ export async function priceItemPicks(
   fromBillId: string,
   picks: readonly ItemPick[],
 ): Promise<Decimal> {
-  return priceOf((await readPicks(tx, fromBillId, picks)).picked);
+  return priceOf(await readPicks(tx, fromBillId, picks));
+}
+
+/**
+ * Refuse a choice that left the bill with no dish (D7) or owing less than its advances credit (D4).
+ * Checked on the bill as the move left it, so a set menu's dishes, which move with it, count.
+ */
+async function refuseBillLeft(tx: Transaction, billId: string): Promise<void> {
+  const [dish] = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+    )
+    .limit(1);
+  if (dish === undefined) throw new AppError("bill.all_items_chosen", {});
+  const advances = await readBillAdvances(tx, [billId]);
+  const credited = sumDecimals((advances.credits.get(billId) ?? []).map((credit) => credit.gross));
+  if (compareDecimal(await storedOrderTotal(tx, billId), credited) < 0)
+    throw new AppError("bill.below_advances", { advances: money(credited) });
 }
 
 /**
@@ -143,17 +172,12 @@ export async function moveItemsToNewBill(
   sale: { deps: TillSaleDeps; cfg: DeviceRequestConfig },
 ): Promise<{ billId: string; invoice?: TillSaleResult }> {
   if (picks.length === 0) throw new AppError("sale.empty_basket", {});
-  const { picked, dishes } = await readPicks(tx, fromBillId, picks);
-  if (picked.filter((line) => line.part === undefined).length === dishes)
-    throw new AppError("bill.all_items_chosen", {});
-  const advances = await readBillAdvances(tx, [fromBillId]);
-  const credited = sumDecimals(
-    (advances.credits.get(fromBillId) ?? []).map((credit) => credit.gross),
-  );
-  const left = subtractDecimal(await storedOrderTotal(tx, fromBillId), priceOf(picked));
-  if (compareDecimal(left, credited) < 0)
-    throw new AppError("bill.below_advances", { advances: money(credited) });
-
+  // `moveDishes` runs these too; here they come before the split, so a stale or closed bill gets
+  // its own refusal.
+  await requireEconomicWrite(tx, cfg, command.admission);
+  const path = await guardPathParty(tx, fromBillId, command, { bump: false });
+  refuseClosedBill(fromBillId, path.status);
+  const picked = await readPicks(tx, fromBillId, picks);
   const parts = picked.flatMap((line) =>
     line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part.quantity }],
   );
@@ -172,6 +196,7 @@ export async function moveItemsToNewBill(
     .update(workingOrders)
     .set({ itemsPaidFrom: fromBillId })
     .where(eq(workingOrders.id, billId));
+  await refuseBillLeft(tx, fromBillId);
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);
   return { billId, ...(invoice === null ? {} : { invoice }) };
 }

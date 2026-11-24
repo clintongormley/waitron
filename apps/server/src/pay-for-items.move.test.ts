@@ -17,6 +17,8 @@ import { readBillEditState } from "./bill-editing.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { placeGrouped, REASONS } from "./testing/adjustment-venue.js";
+import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import { setMenuBill } from "./testing/set-menu-readers-fixture.js";
 import {
   OPERATOR,
   commandFor,
@@ -36,6 +38,7 @@ let v: PartyVenue;
 let offers: ZoneOffers;
 let ids: Record<"soup" | "hake" | "beer" | "salad" | "burger" | "cheese" | "toppings", string>;
 let houseReason: string;
+let setMenu: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 
 useVenueDb({
   resetPerTest: false,
@@ -44,6 +47,7 @@ useVenueDb({
   setup: async (db) => {
     registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
     v = await setupPartyVenue(db);
+    setMenu = await inTx(v, (tx) => setMenuOnFullMenu(tx, v.tables.menuId, v.productId("Flan")));
     await inTx(v, async (tx) => {
       const category = (
         await tx.all<{ categoryId: string }>(
@@ -96,6 +100,12 @@ type Line = { product: keyof typeof ids; quantity?: string; cheese?: number };
 /** A party at a fresh table whose bill holds `lines` sent, each one stored row of its count. */
 async function seatedBill(...lines: Line[]): Promise<{ partyId: string; billId: string }> {
   const seated = await seat(v, await v.table(`Pay ${randomUUID().slice(0, 8)}`));
+  await place(seated, lines);
+  return { partyId: seated.partyId, billId: seated.tabId };
+}
+
+/** `lines` sent onto the party's bill, each one stored row of its count. */
+async function place(seated: { partyId: string; tabId: string }, lines: Line[]) {
   const round: TabRoundLine[] = offers.toOfferLines(
     lines.map((line) => ({
       productId: ids[line.product],
@@ -110,7 +120,16 @@ async function seatedBill(...lines: Line[]): Promise<{ partyId: string; billId: 
     })),
   );
   await inTx(v, (tx) => placeGrouped(tx, v.cfg, seated, round, "fire", OPERATOR));
-  return { partyId: seated.partyId, billId: seated.tabId };
+}
+
+/** A party whose bill holds the set menu (14.00) and its Flan, the Flan carrying a 2.00 supplement. */
+async function setMenuParty() {
+  const bill = await setMenuBill({ venue: v, copy: setMenu });
+  await v.db
+    .update(workingOrderLines)
+    .set({ unitPriceGross: 200, lineTotal: 200 })
+    .where(eq(workingOrderLines.id, bill.dishId));
+  return bill;
 }
 
 function rowsOf(billId: string) {
@@ -310,6 +329,80 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
       payFor(partyId, billId, [{ lineId: await lineOf(billId, "salad") }]),
     ).rejects.toMatchObject({ code: "bill.below_advances", params: { advances: "15.00" } });
     expect(await billsNaming(billId)).toEqual([]);
+  });
+
+  it("refuses choosing a set menu that is everything on the bill, moving nothing", async () => {
+    const { partyId, billId, menuLineId } = await setMenuParty();
+    const before = await rowsOf(billId);
+
+    await expect(payFor(partyId, billId, [{ lineId: menuLineId }])).rejects.toMatchObject({
+      code: "bill.all_items_chosen",
+    });
+    expect(await billsNaming(billId)).toEqual([]);
+    expect(await rowsOf(billId)).toEqual(before);
+  });
+
+  it("prices a chosen set menu with its dishes' supplements, and moves them with it", async () => {
+    const { partyId, billId, menuLineId, dishId } = await setMenuParty();
+    await place({ partyId, tabId: billId }, [
+      { product: "soup" },
+      { product: "beer", quantity: "3" },
+    ]);
+    const picks = [{ lineId: menuLineId }, { lineId: await lineOf(billId, "beer"), quantity: "1" }];
+
+    expect(await inTx(v, (tx) => priceItemPicks(tx, billId, picks))).toBe("18.50");
+    const moved = await payFor(partyId, billId, picks);
+
+    const ids = (await rowsOf(moved.billId)).map((row) => row.id);
+    expect(ids).toEqual(expect.arrayContaining([menuLineId, dishId]));
+    expect(ids).toHaveLength(3);
+    expect(await dishesOf(billId)).toEqual([
+      ["soup", "1.000", "6.00"],
+      ["beer", "2.000", "5.00"],
+    ]);
+  });
+
+  it("accepts leaving the bill owing exactly its advances", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "salad" },
+      { product: "beer", quantity: "4" },
+    );
+    await receive(billId, "10.00", true);
+
+    const moved = await payFor(partyId, billId, [{ lineId: await lineOf(billId, "salad") }]);
+
+    expect(await dishesOf(moved.billId)).toEqual([["salad", "1.000", "10.00"]]);
+    expect(await dishesOf(billId)).toEqual([["beer", "4.000", "10.00"]]);
+  });
+
+  it("answers a stale party's refusal before looking at the items", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "soup" },
+      { product: "beer", quantity: "3" },
+    );
+    const command = await commandOf(partyId, billId);
+    const { expectedPartyRevision } = await commandFor(v, partyId);
+    const stale = { ...command, expectedPartyRevision: expectedPartyRevision - 1 };
+    const beer = await lineOf(billId, "beer");
+
+    await expect(
+      inTx(v, (tx) =>
+        moveItemsToNewBill(tx, v.cfg, billId, [{ lineId: beer, quantity: "9" }], stale, sale()),
+      ),
+    ).rejects.toMatchObject({ code: "party.out_of_date" });
+    // The same choice under the party's revision is refused for its quantity.
+    await expect(payFor(partyId, billId, [{ lineId: beer, quantity: "9" }])).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+    });
+  });
+
+  it("answers a presented bill's refusal, not the every-item one", async () => {
+    const { partyId, billId } = await seatedBill({ product: "soup" });
+    await v.db.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, billId));
+
+    await expect(
+      payFor(partyId, billId, [{ lineId: await lineOf(billId, "soup") }]),
+    ).rejects.toMatchObject({ code: "bill.presented" });
   });
 
   it("refuses every dish", async () => {
