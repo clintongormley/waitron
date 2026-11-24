@@ -489,9 +489,8 @@ it("a real pointer drop previews a product's station change before moving it", a
   const table = await tableOf(el);
   await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
   await userEvent.dragAndDrop(
-    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="bread"] .row-activate')!,
-    (await tableOf(el)).shadowRoot!.querySelector('tr[data-row-key="folder:f"] .row-activate')!,
-    { sourcePosition: { x: 4, y: 4 }, targetPosition: { x: 4, y: 4 } },
+    table.shadowRoot!.querySelector('tr[data-row-key="bread"] .drag-grip')!,
+    await nameCell(el, "folder:f"),
   );
   await el.updateComplete;
   expect(el.api.moveProductItems).not.toHaveBeenCalled();
