@@ -277,22 +277,17 @@ supervisada, espera a que vuelva a arrancar con la versión anterior.
 
 ## Pon la hora desde tu propio dispositivo {#clock-own-device}
 
-El permiso de administración del servidor, que tiene Admin de forma predeterminada, te permite poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
+Con **Gestionar servidores** (Admin de forma predeterminada), puedes ajustar la hora desde tu propio dispositivo o aprobar el ajuste en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
 
 Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran
 **No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
 con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la hora.
 La salida es poner la hora bien. Si el [servicio de hora](box-status.md#clock-service) del servidor
 funciona, corrige la hora en cuanto contacta con un servidor de hora por internet; mientras tanto, o
-si el servicio no funciona, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
-durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
-
-La fila **Reloj** muestra entonces a los administradores un botón
-**Comprobar con la hora de este dispositivo**. Cualquier otra persona que pueda abrir esta página ve
-**Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar
-sesión como administrador cierra primero tu sesión aquí.** y un botón **Iniciar sesión como
-administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del servidor marca …
-Este dispositivo marca …**
+si el servicio no funciona, usa **Comprobar con la hora de este dispositivo** en la fila **Reloj**,
+o pon la hora desde una caja durante el [arranque](box-status.md#clock-at-start). Si tu cuenta no tiene
+**Gestionar servidores**, elige **Iniciar sesión como administrador**. Esto cierra primero tu sesión.
+La comprobación abre un diálogo con la hora del servidor y la de tu dispositivo.
 
 - Cuando están más separadas y el servidor puede poner su reloj en hora, el diálogo pregunta **El
   reloj del servidor marca … Tu dispositivo marca … ¿Usar la hora de tu dispositivo?** Pulsa **Usar
@@ -389,7 +384,7 @@ contacta con un servidor de hora por internet, o, salvo si espera por una venta
 rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 
-Un administrador puede confirmarla antes en esta página:
+Con **Gestionar servidores** puedes confirmarla antes en esta página.
 
 - Si la fecha y la hora que muestra la fila **Reloj** son correctas, pulsa **La fecha y la hora son
   correctas**.

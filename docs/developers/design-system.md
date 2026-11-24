@@ -6935,7 +6935,7 @@ alert list.
   "Last accepted {time}" or "None accepted yet", then "Unsent since {time}" while the
   `fiscal.records_unsent` notice carries `since`, and nothing while `outbox` is `null`.
 - **Check with this device's time.** On the Clock row, a `secondary` "Check with this device's
-  time" button, drawn only for a person with `system.box_admin` and only while the box carries a
+  time" button, drawn only for a person with `node.manage` and only while the box carries a
   `clock.unusable` notice. It opens a dialog headed with the same words that asks the box for its
   time. When the two differ by more than a minute, counting half the round trip, and the box runs a
   time service it can set that is not in time, it asks "The box's clock says {box}. Your device

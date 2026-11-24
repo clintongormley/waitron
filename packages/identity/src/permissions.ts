@@ -28,7 +28,6 @@ export const CORE_PERMISSIONS = [
   { permission: "hardware.manage", defaultHolders: ["manager"] },
   { permission: "cash.drawer", defaultHolders: ["staff", "supervisor", "manager"] },
   { permission: "node.manage", defaultHolders: [] },
-  { permission: "system.box_admin", defaultHolders: [] },
   { permission: "fiscal.view", defaultHolders: ["manager"] },
   { permission: "invoice.inspect", defaultHolders: ["manager"] },
 ] as const satisfies readonly PermissionDeclaration[];

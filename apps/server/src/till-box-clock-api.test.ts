@@ -1,15 +1,18 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { devices, withTransaction, type Transaction } from "@waitron/db";
+import { devices, personRoles, roles, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   createPinThrottle,
   deviceProfileAdmissionRoles,
+  hashPin,
+  loginWithPin,
   type PinThrottle,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -23,6 +26,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountTillApi } from "./till-api.js";
 import { systemClock } from "./till-backend.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import "./errors.js";
 
@@ -42,6 +46,7 @@ let dishId = "";
 let profileId = "";
 /** Anna, the provisioned staff member, PIN 5555. */
 let staffCookie = "";
+let clockHolder: { id: string; cookie: string };
 
 useVenueDb({
   resetPerTest: false,
@@ -62,6 +67,29 @@ useVenueDb({
       dishId = dish.id;
       await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, { productIds: [dishId] });
+    });
+    clockHolder = await inTx(venue, async (tx) => {
+      const [person] = await seedPersons(tx, {
+        displayName: "Clock operator",
+        pinHash: hashPin("1234"),
+      });
+      const [role] = await tx
+        .insert(roles)
+        .values({
+          name: "Clock operator",
+          nameFolded: "clock operator",
+          permissions: ["node.manage"],
+        })
+        .returning({ id: roles.id });
+      await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
+      await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
+      const session = await loginWithPin(tx, {
+        deviceId: venue.device2Id,
+        personId: person!.id,
+        pin: "1234",
+      });
+      const [, deviceCookie] = venue.cookie2.split("; ");
+      return { id: person!.id, cookie: `${SESSION_COOKIE}=${session.token}; ${deviceCookie}` };
     });
     staffCookie = venue.cookie;
     const [till] = await db
@@ -406,6 +434,47 @@ it("sets a clock that reads before 28-10-2024 from a staff member's till", async
     source: "staff",
     reason: "unusable",
   });
+});
+
+it("records a signed-in Manage boxes holder as an administrator when setting the clock", async () => {
+  const box = await stoppedBox(0, { at: IN_2001 });
+
+  const answer = await check(box, clockHolder.cookie, Date.now() + DAY - IN_2001);
+
+  expect(answer.status).toBe(200);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "admin",
+    person_id: clockHolder.id,
+  });
+});
+
+it("accepts a Manage boxes holder's PIN to approve a clock set on another person's till", async () => {
+  const box = await stoppedBox(0, { at: IN_2001 });
+
+  const answer = await check(box, staffCookie, Date.now() + DAY - IN_2001, {
+    override: { personId: clockHolder.id, pin: "1234" },
+  });
+
+  expect(answer.status).toBe(200);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "admin",
+    person_id: clockHolder.id,
+  });
+});
+
+it("refuses approval with a correct PIN from a person who lacks Manage boxes", async () => {
+  const box = await stoppedBox(0, { at: IN_2001 });
+  const [nonHolder] = await inTx(venue, (tx) =>
+    seedPersons(tx, { displayName: "Another operator", pinHash: hashPin("5678") }),
+  );
+  await expectRefused(
+    box,
+    check(box, staffCookie, Date.now() + DAY - IN_2001, {
+      override: { personId: nonHolder!.id, pin: "5678" },
+    }),
+    403,
+    { code: "authorization.not_permitted", params: { permission: "node.manage" } },
+  );
 });
 
 it("refuses both routes without a session", async () => {

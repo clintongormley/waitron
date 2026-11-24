@@ -60,11 +60,9 @@ export const en = {
   "permission.booking.manage.help":
     "Create and change reservations on Bookings. Seat guests, cancel a reservation or mark it as completed or a no-show.",
   "permission.system.manage.help":
-    "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions; changing the clock or mail server needs Administer this box.",
-  "permission.system.box_admin.help":
-    "Confirm or correct the box’s clock and change the mail server. Opening Box status and reading mail-server settings also needs Manage the system.",
+    "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions. Changing the clock or mail server needs Manage boxes.",
   "permission.node.manage.help":
-    "Manage the venue’s boxes: prepare a spare or mirror, hand over service, promote a spare and remove a box. Follow the Servers page for the steps each operation needs.",
+    "Prepare a spare or mirror, hand over service, take over with a spare, or remove, wipe or reset a box. Confirm or correct the clock and change the mail server. Opening Box status needs Manage the system. To open Email, you need Manage staff details. Its Mail server section also needs Manage the system.",
 
   "access_roles.reload": "Reload",
   "access_roles.delete_message_one": "1 person holds {role}. Deleting it takes it away from them.",
@@ -122,7 +120,6 @@ export const en = {
   "permission.adjustment.manage": "Manage comps",
   "permission.booking.manage": "Manage bookings",
   "permission.system.manage": "Manage the system",
-  "permission.system.box_admin": "Administer this box",
   "permission.node.manage": "Manage boxes",
 
   "handover_warning.unconfirmed":
@@ -4763,7 +4760,7 @@ export const en = {
   "box_status.clock.admin.confirmed": "This device agrees, so the box's time is confirmed.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.sign_in_hint":
-    "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
+    "Confirming or correcting the box's date and time needs Manage boxes. Signing in again signs you out here first.",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.differ":
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, the box's time service may still put its clock right by itself once it reaches a time server over the internet.",
@@ -4900,11 +4897,9 @@ export const es: Record<StringKey, string> = {
   "permission.booking.manage.help":
     "Crea y cambia reservas en Reservas. Sienta a los clientes, cancela una reserva o márcala como finalizada o no presentada.",
   "permission.system.manage.help":
-    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales; cambiar el reloj o el servidor de correo requiere Administrar esta caja.",
-  "permission.system.box_admin.help":
-    "Confirma o corrige el reloj del servidor y cambia el servidor de correo. Para abrir Estado del servidor y consultar los ajustes del correo también necesitas Gestionar el sistema.",
+    "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales. Para cambiar el reloj o el servidor de correo necesitas Gestionar servidores.",
   "permission.node.manage.help":
-    "Gestiona los servidores del local: prepara uno de reserva o un espejo, traspasa el servicio, activa una reserva y retira un servidor. Sigue la página Servidores para los pasos de cada operación.",
+    "Prepara un servidor de reserva o un espejo, traspasa el servicio, toma el relevo con un servidor de reserva o retira, borra o restablece un servidor. Confirma o corrige el reloj y cambia el servidor de correo. Para abrir Estado del servidor necesitas Gestionar el sistema. Para abrir Correo necesitas Gestionar datos del personal. Su sección Servidor de correo también requiere Gestionar el sistema.",
 
   "access_roles.reload": "Recargar",
   "access_roles.delete_message_one": "1 persona tiene {role}. Al eliminarlo se le quita.",
@@ -4961,7 +4956,6 @@ export const es: Record<StringKey, string> = {
   "permission.adjustment.manage": "Gestionar invitaciones",
   "permission.booking.manage": "Gestionar reservas",
   "permission.system.manage": "Gestionar el sistema",
-  "permission.system.box_admin": "Administrar este servidor",
   "permission.node.manage": "Gestionar servidores",
 
   "handover_warning.unconfirmed":
@@ -9697,7 +9691,7 @@ export const es: Record<StringKey, string> = {
     "Este dispositivo coincide, así que la hora del servidor queda confirmada.",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
-    "Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar sesión como administrador cierra primero tu sesión aquí.",
+    "Para confirmar o corregir la fecha y la hora del servidor necesitas Gestionar servidores. Si vuelves a iniciar sesión, primero se cierra tu sesión aquí.",
   "box_status.clock.admin.times":
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.differ":

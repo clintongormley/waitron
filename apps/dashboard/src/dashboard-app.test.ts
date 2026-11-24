@@ -8223,13 +8223,13 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   });
 
   it.each([false, true])(
-    "lets Box status check the box's clock only for an administrator (%s)",
-    async (admin) => {
+    "lets Box status check the box's clock only with Manage boxes (%s)",
+    async (canManageBoxes) => {
       history.replaceState(null, "", "/box-status");
       const api = Object.assign(faceApi(), {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
-          permissions: ["system.manage", ...(admin ? ["system.box_admin"] : [])],
+          permissions: ["system.manage", ...(canManageBoxes ? ["node.manage"] : [])],
         }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -8238,7 +8238,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       });
       await flush(el);
       const face = el.shadowRoot!.querySelector("dashboard-box-status-screen")!;
-      expect(face.canCheckClock).toBe(admin);
+      expect(face.canCheckClock).toBe(canManageBoxes);
     },
   );
 

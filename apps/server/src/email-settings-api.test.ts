@@ -711,7 +711,7 @@ it("refuses a manager replacing the relay that delivers admin password resets", 
     delivery: { mode: "unconfigured" },
   });
   expect(await response.json()).toMatchObject({
-    error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+    error: { code: "authorization.not_permitted", params: { permission: "node.manage" } },
   });
   expect(await suite.db.select().from(venueCredentials)).toEqual([]);
 });
@@ -721,6 +721,28 @@ it("keeps SMTP settings read-only for a manager", async () => {
   const response = await request(mount(), venue.manager);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
+});
+
+it("lets a delegated Manage boxes holder read, save and remove the mail server", async () => {
+  const { manager } = await setupVenue();
+  await withTransaction(suite.db, async (tx) => {
+    await tx.execute(
+      sql`update roles set permissions = '["node.manage","system.manage"]' where built_in_key = 'manager'`,
+    );
+    await setFreshManagementSignIn(tx, manager.slice(MANAGEMENT_COOKIE.length + 1));
+  });
+  const app = mount("live");
+
+  const read = await request(app, manager);
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual({ mode: "unconfigured", editable: true, settings: null });
+  expect((await request(app, manager, settings)).status).toBe(200);
+  const removed = await app.request("/management-api/email/settings", {
+    method: "DELETE",
+    headers: { cookie: manager },
+  });
+  expect(removed.status).toBe(200);
+  expect(await removed.json()).toEqual({ removed: true });
 });
 
 it("reads stored settings and delivery mode from the same turn before a queued removal", async () => {
@@ -792,7 +814,7 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
     const refused = await request(app, venue.manager, settings);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+      error: { code: "authorization.not_permitted", params: { permission: "node.manage" } },
     });
     const tested = await app.request(path + "/test", {
       method: "POST",
@@ -910,7 +932,7 @@ describe("removing saved SMTP settings", () => {
       expect(await suite.db.select().from(venueCredentials)).toEqual(before);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({
-        error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+        error: { code: "authorization.not_permitted", params: { permission: "node.manage" } },
       });
     },
   );
@@ -963,7 +985,7 @@ describe("removing saved SMTP settings", () => {
             ? { code: "management_session.required", params: {} }
             : role === "suspended"
               ? { code: "person.suspended", params: { personId: admin!.id } }
-              : { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
+              : { code: "authorization.not_permitted", params: { permission: "node.manage" } },
       });
       expect(await suite.db.select().from(venueCredentials)).toEqual(before);
     },

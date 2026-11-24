@@ -8971,9 +8971,9 @@ it.each([true, false])(
   },
 );
 
-it.each([false, true])(
-  "imports access-role memberships and validates declared permissions (unknown: %s)",
-  async (unknown) => {
+it.each(["report.view", "access_test.unknown", "system.box_admin"])(
+  "imports access-role memberships and validates declared permissions (%s)",
+  async (permission) => {
     const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -8985,7 +8985,7 @@ it.each([false, true])(
     });
     await suite.db
       .update(roles)
-      .set({ permissions: [unknown ? "access_test.unknown" : "report.view"] })
+      .set({ permissions: [permission] })
       .where(eq(roles.builtInKey, "supervisor"));
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
@@ -9011,7 +9011,7 @@ it.each([false, true])(
         await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
       },
     });
-    if (unknown) {
+    if (permission !== "report.view") {
       await expect(imported).rejects.toMatchObject({
         code: "setup.request_invalid",
         params: { field: "roles.permissions" },

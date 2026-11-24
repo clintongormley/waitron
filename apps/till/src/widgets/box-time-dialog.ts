@@ -26,7 +26,7 @@ export interface BoxTimeApi {
     override?: Override;
   }): Promise<BoxClockConfirmed>;
   listApprovers(
-    permission: "adjustment.approve" | "sale.refund" | "system.box_admin",
+    permission: "adjustment.approve" | "sale.refund" | "node.manage",
     options?: ReadOptions,
   ): Promise<StaffMember[]>;
 }
@@ -238,7 +238,7 @@ export class TillBoxTimeDialog extends LitElement {
   async #askAdmin(): Promise<void> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      this.admins = await this.api.listApprovers("system.box_admin", { signal: limit.signal });
+      this.admins = await this.api.listApprovers("node.manage", { signal: limit.signal });
     } catch (error) {
       this.#refused(error);
     } finally {

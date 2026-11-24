@@ -98,7 +98,6 @@ describe("roleHasPermission", () => {
     // Pin every row: a MANAGER that dropped the ...SUPERVISOR spread would pass the two above.
     const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
       "node.manage",
-      "system.box_admin",
       "person.email",
       "personal_data.export",
     ]);
@@ -223,14 +222,6 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "system.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "system.manage")).toBe(false);
   });
-  it("grants system.box_admin to admin only (authenticated mirror→primary promotion)", () => {
-    expect(PERMISSIONS).toContain("system.box_admin");
-    expect(roleHasPermission("admin", "system.box_admin")).toBe(true);
-    expect(roleHasPermission("admin", "node.manage")).toBe(true);
-    expect(roleHasPermission("manager", "system.box_admin")).toBe(false);
-    expect(roleHasPermission("supervisor", "system.box_admin")).toBe(false);
-    expect(roleHasPermission("staff", "system.box_admin")).toBe(false);
-  });
   it("grants personal_data.export to admin only (another person's data download)", () => {
     expect(PERMISSIONS).toContain("personal_data.export");
     expect(roleHasPermission("admin", "personal_data.export")).toBe(true);
@@ -302,7 +293,6 @@ describe("explicit permission declarations", () => {
       "person.email": [],
       "personal_data.export": [],
       "node.manage": [],
-      "system.box_admin": [],
     });
     expect(defaultPermissionsFor("staff")).toEqual(["payment.take", "cash.drawer"]);
     expect(isDeclaredPermission("payment.take")).toBe(true);
@@ -326,7 +316,12 @@ describe("explicit permission declarations", () => {
     expect(roleHasPermission("staff", "payment.take")).toBe(true);
   });
   it("no longer declares retired permissions", () => {
-    for (const permission of ["sale.discount", "mirror.create", "node.promote"]) {
+    for (const permission of [
+      "sale.discount",
+      "mirror.create",
+      "node.promote",
+      "system.box_admin",
+    ]) {
       expect(declaredPermissions()).not.toContain(permission);
     }
   });

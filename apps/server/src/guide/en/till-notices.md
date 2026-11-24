@@ -35,7 +35,7 @@ notice stays, also after a restart, until about 24 MB is free again.
 
 **Sales can't be recorded: the box's clock is wrong · See Box status in the dashboard** is red. The box's clock is
 set too far in the past to record a sale for the tax agency. Until it is fixed, the box also
-refuses payments and refunds. An administrator can set the clock from their own phone or computer,
+refuses payments and refunds. With **Manage boxes**, you can set the clock from your phone or computer
 on the [Box status page](box-status.md#clock-own-device). Just after the box starts, the hint can read
 **Check the time** instead, as described below.
 
@@ -86,8 +86,8 @@ open **Check the time** again: the dialog reads the till's time afresh each time
 The people who manage the system are told when the box's clock is set from a till. If the box refuses,
 the dialog says why above its buttons and, where trying again can help, offers **Check again**.
 If the box's [start-up](box-status.md#clock-at-start) ends while the dialog is open, and the internet has confirmed the box's time, a staff member can no longer set the clock from a till:
-the dialog says so and offers **Administrator sign-in**, so that an administrator can sign in there
-with their PIN and set the clock from the same till.
+the dialog offers **Administrator sign-in**. Choose someone with **Manage boxes** and ask them to
+enter their PIN to set the clock from that till.
 
 **This device's time is wrong · Correct it in this device's settings** is amber: the box keeps its
 time over the internet, and this till's clock is more than a minute away from it.

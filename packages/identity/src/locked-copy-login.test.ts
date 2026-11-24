@@ -99,7 +99,7 @@ it.each([
   });
   expect(verifyPassword).toHaveBeenCalledTimes(1);
 });
-it("refuses correct factors without Box administration", async () => {
+it("refuses correct factors without Manage boxes", async () => {
   await fixture("staff");
   await expect(check()(await readCopy(), input())).rejects.toMatchObject({
     code: "authorization.not_permitted",

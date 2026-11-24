@@ -124,7 +124,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
     run(c, log, () =>
       withTransaction(deps.db, async (tx) => {
         const actor = await authorize(tx, c);
-        const canEdit = editable && holds(actor.authority, "system.box_admin");
+        const canEdit = editable && holds(actor.authority, "node.manage");
         if (!editable) return c.json({ mode: "local_capture", editable: false, settings: null });
         const saved = await readSavedSmtp(tx, deps.ring);
         const delivery = await resolveEmailDeliveryIn(tx, deps.ring, false);
@@ -157,7 +157,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       const body = await readJsonBody<Record<string, unknown>>(c);
       await withTransaction(deps.db, async (tx) => {
         // The relay carries account-reset links as well as invoice mail.
-        const { authorizedBy } = await authorize(tx, c, "system.box_admin");
+        const { authorizedBy } = await authorize(tx, c, "node.manage");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         await requireFreshManagementSignIn(tx, requireManagementSession(c));
         const value = parseEmailSettings(body);
@@ -169,7 +169,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
   app.delete("/management-api/email/settings", (c) =>
     run(c, log, async () => {
       const removed = await withTransaction(deps.db, async (tx) => {
-        const { authorizedBy } = await authorize(tx, c, "system.box_admin");
+        const { authorizedBy } = await authorize(tx, c, "node.manage");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         await requireFreshManagementSignIn(tx, requireManagementSession(c));
         const credentialRemoved = await deleteCredential(tx, {

@@ -100,7 +100,7 @@ it.each(["manager", "delegated box permission", "no management permission"] as c
         const [role] = await tx.select().from(roles).where(eq(roles.builtInKey, "manager"));
         await tx
           .update(roles)
-          .set({ permissions: [...role!.permissions, "system.box_admin"] })
+          .set({ permissions: [...role!.permissions, "node.manage"] })
           .where(eq(roles.id, role!.id));
       });
     if (kind === "no management permission")
