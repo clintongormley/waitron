@@ -461,6 +461,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
+- **The Products list: dishes first, a List and a Tree, and a switch for Available (owner,
+  2026-11-24).** Approved design, in seven pieces, with the faults a critique found.
+  [Design](superpowers/specs/2026-11-24-products-list-redesign-design.md)
+
 - **A670 — the customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
   tab with Online and Print, named styles, and a customer page the box serves through Cloud; today's
   Guest menu preview and the hosted copy go.

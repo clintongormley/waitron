@@ -514,6 +514,7 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
   Course column and a Course filter join the list, and "Default course" is "Course". (2026-11-15: a
   read refused because the person may not see routing shows no line.)
+  (2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: which columns start shown, and Availability becomes a switch named Available.)
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;
@@ -671,6 +672,7 @@ Closing a branch closes its descendants, including hidden paths. Preview keeps E
 Structure uses one Select mode for checkboxes and drag handles. Search openings and their parents
 survive clearing unless deliberately closed; after clearing, a closed current Structure path
 returns editing to its nearest open parent. Products remembers deliberate closures across reloads.
+(2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: filters open the Products categories that match.)
 [Implementation plan](https://github.com/clintongormley/waitron/blob/f2e5e9fb5976f4c5f63cf1143b9befa22fe2cd12/docs/superpowers/plans/2026-10-10-a462-table-toolbars.md).
 
 **Product search (A461, owner 2026-10-10).** Products and Menu Structure show flat own matches
@@ -717,6 +719,7 @@ product has no replacement for; the backlog entry marked that matching "assumed,
 choices. The switched-off-station example above records A463's earlier decision; Task 9's
 integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
 column and filter were deleted.)
+(2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: Unavailable is a label beside the name, and Available a switch.)
 **2026-11-24 update:** The permanent Delete design removes Show archived and its View action.
 Availability stays on Products for current products and variants.
 
