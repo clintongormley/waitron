@@ -6394,4 +6394,37 @@ describe("A1515 pay for items over HTTP", () => {
     });
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
   });
+
+  it.each([
+    [
+      "item payments refuse which-machine details for cash",
+      { method: "cash", tendered: "20.00", externalProvider: "other" },
+      "externalProvider",
+    ],
+    [
+      "item payments refuse an operation number for a reader card",
+      { method: "card", entry: "reader", externalRef: "4471" },
+      "externalRef",
+    ],
+  ] as const)("%s", async (_, pay, field) => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+
+    const refused = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks: [{ lineId: salad, quantity: "1" }],
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      applied: "12.00",
+      tip: "0.00",
+      ...pay,
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
+    });
+    expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
+  });
 });

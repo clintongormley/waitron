@@ -3,10 +3,11 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { billPayments, sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createProduct } from "@waitron/menu";
+import { createProduct, writeContentLanguages } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
+import { getBillBalance } from "./bill-payments.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
@@ -351,4 +352,78 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       expect(await billsNaming(billId)).toEqual([]);
     },
   );
+});
+
+describe("A1515 pay for items: what the new bill keeps", () => {
+  it("a hand-keyed card's operation number and machine are kept on the new bill's payment", async () => {
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+      method: "card",
+      applied: "15.00",
+      tip: "0.00",
+    });
+
+    const paid = await payForItems(
+      deps(),
+      v.cfg,
+      billId,
+      { ...req, externalRef: "4471", externalProvider: "other", externalMachine: "Bar terminal" },
+      v.operator,
+    );
+
+    const details = {
+      externalRef: "4471",
+      externalProvider: "other",
+      externalMachine: "Bar terminal",
+    };
+    expect(paid.payment.payment).toMatchObject(details);
+    expect((await getBillBalance(deps(), paid.billId)).payments).toEqual([
+      expect.objectContaining({ method: "card", entry: "manual", ...details }),
+    ]);
+  });
+
+  it("the same submission with another operation number is not a replay", async () => {
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    const req = {
+      ...(await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+        method: "card",
+        applied: "15.00",
+        tip: "0.00",
+      })),
+      externalRef: "4471",
+    };
+    await payForItems(deps(), v.cfg, billId, req, v.operator);
+
+    await expect(
+      payForItems(deps(), v.cfg, billId, { ...req, externalRef: "4472" }, v.operator),
+    ).rejects.toMatchObject({ code: "submission.id_reused" });
+    expect(await billsNaming(billId)).toHaveLength(1);
+  });
+
+  // Spain never offers English on a receipt, so Catalan stands for "a language not the venue's".
+  it("the new bill prints in the table's bill's receipt language", async () => {
+    await inTx(v, (tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca"] }),
+    );
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    await v.db
+      .update(workingOrders)
+      .set({ receiptLocale: "ca-ES" })
+      .where(eq(workingOrders.id, billId));
+    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+      method: "cash",
+      applied: "15.00",
+      tip: "0.00",
+      tendered: "15.00",
+    });
+
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+
+    const [newBill] = await v.db
+      .select({ receiptLocale: workingOrders.receiptLocale })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, paid.billId));
+    expect(newBill!.receiptLocale).toBe("ca-ES");
+    expect(paid.payment.invoice?.locale).toBe("ca-ES");
+  });
 });

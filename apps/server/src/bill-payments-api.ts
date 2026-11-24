@@ -236,6 +236,12 @@ function parseItemsPayment(body: Record<string, unknown>): PayForItemsRequest {
     if (request.method !== "card") throw invalid("entry");
     request.entry = oneOf(body.entry, ["reader"] as const, "entry");
   }
+  const handKeyed = request.method === "card" && request.entry === undefined;
+  Object.assign(request, readOutsideCardDetails(body, handKeyed));
+  if (body.externalRef !== undefined) {
+    if (!handKeyed || typeof body.externalRef !== "string") throw invalid("externalRef");
+    request.externalRef = body.externalRef;
+  }
   if (request.entry === "reader") {
     if (body.simulationOutcome !== undefined)
       request.simulationOutcome = oneOf(
