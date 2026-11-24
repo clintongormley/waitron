@@ -1,5 +1,8 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> **2026-11-24.** The [server error registry](../../../apps/server/src/errors.ts) now names
+> the error below `credentials.unusable`.
+
 > **2026-11-01 (A1301 S5).** The four location menu routes moved to
 > `/management-api/venue/catalogues`, `/management-api/venue/catalogues/:catalogueId` and
 > `/management-api/venue/default-catalogue`; `location.not_found` is deleted. Text below naming them, or the location-named catalogue

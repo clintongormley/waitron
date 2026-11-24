@@ -171,7 +171,7 @@ export async function refuseIfArchiveSourceLive(args: {
     const ring = loadKeyRing(parseEnvFile(Buffer.from(secrets.bytes).toString("utf8")));
     settings = await readStreamSettings(copy.venue, ring);
   } catch (error) {
-    if (isAppError(error) && hasCode(error, "server.credential_unusable")) {
+    if (isAppError(error) && hasCode(error, "credentials.unusable")) {
       throw new AppError("restore.stream_source_unchecked", { reason: "bucket" });
     }
     throw error;

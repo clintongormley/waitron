@@ -26,19 +26,14 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     "fiscal.certificate_diagnosis_busy": Record<string, never>;
     "fiscal.certificate_diagnosis_unavailable": Record<string, never>;
-    /**
-     * Thrown by ./aeat-transport.ts when a decrypted `fiscal.aeat` payload's `certKind`,
-     * `pfxBase64` or `passphrase` is absent or unusable. `apps/server/src/errors.ts` declares it
-     * too. The two declarations carry identical params so TypeScript's declaration merging accepts
-     * both when `apps/server` compiles them together.
-     */
-    "server.credential_unusable": { purpose: string; field: string };
+    /** Keep these params identical to `apps/server/src/errors.ts` so the server can merge both declarations. */
+    "credentials.unusable": { purpose: string; field: string };
 
     /**
      * Thrown by ./provisioning-secret.ts for a malformed AEAT-cert blob, and by ./venue-fields.ts
      * for operator-typed fiscal text that would build a record AEAT cannot accept. Names the
      * offending field, never its value. Declared with identical params in
-     * `apps/server/src/errors.ts`, like `server.credential_unusable` above.
+     * `apps/server/src/errors.ts`, like `credentials.unusable` above.
      */
     "setup.request_invalid": { field: string };
     "setup.certificate_refused": { field: string; reason: string };

@@ -239,7 +239,7 @@ declare module "@waitron/shared" {
      * declares is absent from the sealed row, or its value is not one of the accepted ones. `field`
      * is a name from `PURPOSES`, so it is ours to echo.
      */
-    "server.credential_unusable": { purpose: string; field: string };
+    "credentials.unusable": { purpose: string; field: string };
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     "node.read_only": Record<string, never>;

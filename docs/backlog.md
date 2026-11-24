@@ -1521,7 +1521,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index and key names that
-  still read `tenant`, and the prefix for `server.credential_unusable`.
+  still read `tenant`.
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)
 
 - **Go-live day steps.**

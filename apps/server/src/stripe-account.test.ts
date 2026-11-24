@@ -74,7 +74,7 @@ describe("stripeSecretKeyFrom", () => {
   // missing `secretKey`, and the pure function IS the read-side guard.
   it("fails loudly on a payload sealed without a secretKey, rather than passing undefined to Stripe", () => {
     expect(() => stripeSecretKeyFrom({ webhookSecret: "whsec_x" }, REF, "production")).toThrow(
-      /server.credential_unusable/,
+      /credentials\.unusable/,
     );
   });
 

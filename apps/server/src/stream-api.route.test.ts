@@ -1307,7 +1307,7 @@ describe("stream settings routes", () => {
       ["credentials.decrypt_failed", sealedUnder("1")],
       ["credentials.key_version_unknown", sealedUnder("2")],
       ["credentials.malformed_payload", () => storeRawArchive("not json")],
-      ["server.credential_unusable", () => storeRawArchive("{}")],
+      ["credentials.unusable", () => storeRawArchive("{}")],
     ];
 
     for (const [code, store] of UNREADABLE) {

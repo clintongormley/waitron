@@ -123,7 +123,7 @@ describe("node identity establishment", () => {
       );
 
     const error = await captureError(() => readNodeIdentityKey(node, RING, nodeId));
-    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.code).toBe("credentials.unusable");
     expect(isAppError(error) && error.params).toEqual({
       purpose: "membership.node_key",
       field: "privateKey",

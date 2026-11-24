@@ -128,7 +128,7 @@ describe("resolveEmailDelivery", () => {
       );
 
     const error = await captureError(() => resolveEmailDelivery(suite.db, ring, false));
-    expect(isAppError(error) && error.code).toBe("server.credential_unusable");
+    expect(isAppError(error) && error.code).toBe("credentials.unusable");
     expect(isAppError(error) && error.params).toEqual({ purpose: "email.smtp", field });
   });
 });

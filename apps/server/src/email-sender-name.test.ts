@@ -30,7 +30,7 @@ describe("venue SMTP sender", () => {
   ])("refuses unusable stored sender %j", (stored) => {
     expect(() => venueSmtpFrom(stored, "Venue")).toThrowError(
       expect.objectContaining({
-        code: "server.credential_unusable",
+        code: "credentials.unusable",
         params: { purpose: "email.smtp", field: "from" },
       }),
     );

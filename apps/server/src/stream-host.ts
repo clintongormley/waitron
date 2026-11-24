@@ -123,7 +123,7 @@ export async function readStreamSettingsIn(
   const value = await tryGetCredential(tx, ring, { purpose: STREAM_PURPOSE });
   if (doc.stream === null) {
     if (value !== null)
-      throw new AppError("server.credential_unusable", {
+      throw new AppError("credentials.unusable", {
         purpose: STREAM_PURPOSE,
         field: "stream",
       });
@@ -132,13 +132,13 @@ export async function readStreamSettingsIn(
   const field = (name: "endpoint" | "region" | "bucket" | "prefix") => {
     const value = doc.stream![name];
     if (value === undefined)
-      throw new AppError("server.credential_unusable", { purpose: STREAM_PURPOSE, field: name });
+      throw new AppError("credentials.unusable", { purpose: STREAM_PURPOSE, field: name });
     return value;
   };
   const endpoint = field("endpoint");
   const streamId = await readStreamId(tx);
   if (streamId === null)
-    throw new AppError("server.credential_unusable", {
+    throw new AppError("credentials.unusable", {
       purpose: STREAM_PURPOSE,
       field: "streamId",
     });

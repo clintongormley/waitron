@@ -796,9 +796,9 @@ The ones worth grepping for:
   reset failed before any work was looked for, and the cause is the database, not the credential.
   There is at most one of these per pass: one database files for one taxpayer. This line is the
   ONLY place this fact exists outside `/health`'s `skipped` count — a skipped drain has no ledger
-  row (`drain` has no table of its own) and raises no incident. `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
-  credential exists but a declared field — most often `certKind`, absent from a row sealed before
-  that field joined the purpose registry — is missing or unusable) or a credential-store code from
+  row (`drain` has no table of its own) and raises no incident. `errorCode` is `credentials.unusable`
+  when the saved AEAT certificate material has a missing field, an unrecognised certificate kind or
+  base64 data that decodes to zero bytes. It can also carry a code thrown by
   `getCredential` (`credentials.missing` — no row for that purpose at all,
   `credentials.decrypt_failed`, `credentials.key_version_unknown`, `credentials.malformed_payload`).
   The event NAME still reads `taxpayer`, and stays that way: a log event is a name operators grep

@@ -543,7 +543,7 @@ describe("SMTP settings boundary cases", () => {
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({
         error: {
-          code: "server.credential_unusable",
+          code: "credentials.unusable",
           params: { purpose: "email.smtp", field: "url" },
         },
       });

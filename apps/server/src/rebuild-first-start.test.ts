@@ -732,7 +732,7 @@ describe("runFirstStart", () => {
         failedSince: NOW.toISOString(),
       });
       expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
-        errorCode: "server.credential_unusable",
+        errorCode: "credentials.unusable",
       });
       expect(openStore).not.toHaveBeenCalled();
       await stat(join(stateDir, RESTORE_RECORD));

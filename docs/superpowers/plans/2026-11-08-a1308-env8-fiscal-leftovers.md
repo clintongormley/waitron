@@ -1,5 +1,8 @@
 # A1308 environment, PR 8 of 8: the two leftovers on the fiscal path — implementation plan
 
+> **2026-11-24.** The [server error registry](../../../apps/server/src/errors.ts) now names
+> the error below `credentials.unusable`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **OWNER LANDS THIS PULL REQUEST** (rules §6): Task 1 changes where AEAT sending learns which host to
