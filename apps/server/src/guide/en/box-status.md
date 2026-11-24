@@ -263,14 +263,10 @@ box's clock is wrong**, and the bell says so too, with the date the box's clock 
 Nothing can confirm the clock then. The way out is to set the
 clock right. If the box's [time service](box-status.md#clock-service) is running, it puts the clock
 right once it reaches a time server over the internet; until then, or if the service is not running,
-an administrator sets it with **Check with this device's time**, or, during
-[start-up](box-status.md#clock-at-start), a staff member from a till.
-
-The **Clock** row then shows administrators a **Check with this device's time** button.
-Anyone else who can open this page sees **Only an administrator can confirm or correct the box's
-date and time. Signing in as one signs you out here first.** and a **Sign in as an
-administrator** button. The button opens a dialog that shows both times: **The box's clock says …
-This device says …**
+use **Check with this device's time** on the **Clock** row, or set the time from a till during
+[start-up](box-status.md#clock-at-start). If you need **Manage boxes**, use **Sign in as an
+administrator** to switch accounts. The clock check shows both times, **The box's clock says …
+This device says …**.
 
 - When they are further apart and the box can set its clock, the dialog asks **The box's clock
   says … Your device says … Use your device's time?** Press **Use this time**, and the box sets its

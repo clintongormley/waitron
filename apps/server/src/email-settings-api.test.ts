@@ -723,6 +723,28 @@ it("keeps SMTP settings read-only for a manager", async () => {
   expect(await response.json()).toEqual({ mode: "unconfigured", editable: false, settings: null });
 });
 
+it("lets a delegated Manage boxes holder read, save and remove the mail server", async () => {
+  const { manager } = await setupVenue();
+  await withTransaction(suite.db, async (tx) => {
+    await tx.execute(
+      sql`update roles set permissions = '["node.manage","system.manage"]' where built_in_key = 'manager'`,
+    );
+    await setFreshManagementSignIn(tx, manager.slice(MANAGEMENT_COOKIE.length + 1));
+  });
+  const app = mount("live");
+
+  const read = await request(app, manager);
+  expect(read.status).toBe(200);
+  expect(await read.json()).toEqual({ mode: "unconfigured", editable: true, settings: null });
+  expect((await request(app, manager, settings)).status).toBe(200);
+  const removed = await app.request("/management-api/email/settings", {
+    method: "DELETE",
+    headers: { cookie: manager },
+  });
+  expect(removed.status).toBe(200);
+  expect(await removed.json()).toEqual({ removed: true });
+});
+
 it("reads stored settings and delivery mode from the same turn before a queued removal", async () => {
   const venue = await setupVenue();
   const app = mount("live");

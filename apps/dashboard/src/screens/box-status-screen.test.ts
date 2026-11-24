@@ -842,7 +842,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(openButton(el)).toBeNull();
     expect(text(signIn(el))).toBe(t("staff.sign_in_as_admin"));
     expect(text(q(el, "[data-test=row-clock] [data-test=clock-admin-hint]"))).toBe(
-      "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
+      "Confirming or correcting the box's date and time needs Manage boxes. Signing in again signs you out here first.",
     );
     const asked = vi.fn();
     document.body.addEventListener("admin-sign-in", asked);

@@ -62,7 +62,7 @@ export const en = {
   "permission.system.manage.help":
     "Manage backups and the Cloud connection, download recovery files, read diagnostics and restart the box. Install tax certificates and retry fiscal submissions. Changing the clock or mail server needs Manage boxes.",
   "permission.node.manage.help":
-    "Prepare a spare or mirror, hand over service, take over with a spare, or remove, wipe or reset a box. Confirm or correct the clock and change the mail server. Opening Box status and reading mail settings also need Manage the system. Opening Email needs Manage staff details.",
+    "Prepare a spare or mirror, hand over service, take over with a spare, or remove, wipe or reset a box. Confirm or correct the clock and change the mail server. Opening Box status and using the mail settings page also need Manage the system. Opening Email needs Manage staff details.",
 
   "access_roles.reload": "Reload",
   "access_roles.delete_message_one": "1 person holds {role}. Deleting it takes it away from them.",
@@ -4760,7 +4760,7 @@ export const en = {
   "box_status.clock.admin.confirmed": "This device agrees, so the box's time is confirmed.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.sign_in_hint":
-    "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
+    "Confirming or correcting the box's date and time needs Manage boxes. Signing in again signs you out here first.",
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.differ":
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, the box's time service may still put its clock right by itself once it reaches a time server over the internet.",
@@ -4899,7 +4899,7 @@ export const es: Record<StringKey, string> = {
   "permission.system.manage.help":
     "Gestiona copias de seguridad y la conexión a Cloud, descarga archivos de recuperación, consulta diagnósticos y reinicia el servidor. Instala certificados fiscales y reintenta envíos fiscales. Para cambiar el reloj o el servidor de correo necesitas Gestionar servidores.",
   "permission.node.manage.help":
-    "Prepara un servidor de reserva o un espejo, traspasa el servicio, toma el relevo con un servidor de reserva o retira, borra o restablece un servidor. Confirma o corrige el reloj y cambia el servidor de correo. Para abrir Estado del servidor y consultar los ajustes del correo también necesitas Gestionar el sistema. Para abrir Correo necesitas Gestionar datos del personal.",
+    "Prepara un servidor de reserva o un espejo, traspasa el servicio, toma el relevo con un servidor de reserva o retira, borra o restablece un servidor. Confirma o corrige el reloj y cambia el servidor de correo. Para abrir Estado del servidor y usar la página de ajustes del correo también necesitas Gestionar el sistema. Para abrir Correo necesitas Gestionar datos del personal.",
 
   "access_roles.reload": "Recargar",
   "access_roles.delete_message_one": "1 persona tiene {role}. Al eliminarlo se le quita.",
@@ -9691,7 +9691,7 @@ export const es: Record<StringKey, string> = {
     "Este dispositivo coincide, así que la hora del servidor queda confirmada.",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
-    "Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar sesión como administrador cierra primero tu sesión aquí.",
+    "Para confirmar o corregir la fecha y la hora del servidor necesitas Gestionar servidores. Si vuelves a iniciar sesión, primero se cierra tu sesión aquí.",
   "box_status.clock.admin.times":
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.differ":

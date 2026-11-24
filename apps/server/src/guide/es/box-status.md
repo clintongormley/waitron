@@ -284,15 +284,10 @@ Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales mu
 con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la hora.
 La salida es poner la hora bien. Si el [servicio de hora](box-status.md#clock-service) del servidor
 funciona, corrige la hora en cuanto contacta con un servidor de hora por internet; mientras tanto, o
-si el servicio no funciona, un administrador la pone con **Comprobar con la hora de este dispositivo** o,
-durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
-
-La fila **Reloj** muestra entonces a los administradores un botón
-**Comprobar con la hora de este dispositivo**. Cualquier otra persona que pueda abrir esta página ve
-**Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar
-sesión como administrador cierra primero tu sesión aquí.** y un botón **Iniciar sesión como
-administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del servidor marca …
-Este dispositivo marca …**
+si el servicio no funciona, usa **Comprobar con la hora de este dispositivo** en la fila **Reloj**,
+o pon la hora desde una caja durante el [arranque](box-status.md#clock-at-start). Si necesitas
+**Gestionar servidores**, usa **Iniciar sesión como administrador** para cambiar de cuenta.
+La comprobación muestra las dos horas, **El reloj del servidor marca … Este dispositivo marca …**.
 
 - Cuando están más separadas y el servidor puede poner su reloj en hora, el diálogo pregunta **El
   reloj del servidor marca … Tu dispositivo marca … ¿Usar la hora de tu dispositivo?** Pulsa **Usar
