@@ -268,10 +268,9 @@ interface BoxRequest {
   onHandshake?: (address: string) => void;
 }
 
-/** Thrown when a connection failed before its handshake finished, so another address may be tried. */
-/** A box's answer ran past the cap its caller set. */
 export class AnswerTooLarge extends Error {}
 
+/** Thrown when a connection failed before its handshake finished, so another address may be tried. */
 class NotConnected extends Error {
   constructor(readonly failure: unknown) {
     super("not connected");
