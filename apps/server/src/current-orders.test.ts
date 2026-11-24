@@ -62,17 +62,16 @@ import {
   bumpGroupReady,
   fireGroup,
   fireHeldLine,
-  moveLinesToGroup,
   readCurrentOrders,
   listOrderGroups,
   releaseReminder,
   reorderHeldGroups,
   snoozeReminder,
-  submitGroups,
   unsnoozeReminder,
   type GroupLine,
   type GroupRelease,
-} from "./testing/group-composition-fixture.js";
+} from "./order-groups.js";
+import { moveLinesToGroup, submitGroups } from "./testing/group-composition-fixture.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";

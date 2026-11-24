@@ -21,7 +21,6 @@ import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-servi
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   refunds,
   billPayments,
@@ -88,14 +87,16 @@ import {
   fireGroup,
   fireHeldLine,
   listOrderGroups,
-  placeGroupedRound,
   readCurrentOrders,
-  moveLinesToGroup,
-  splitHeldLineIntoUnits,
   reorderHeldGroups,
-  submitGroups,
   type GroupLine,
   type GroupRelease,
+} from "./order-groups.js";
+import {
+  placeGroupedRound,
+  moveLinesToGroup,
+  splitHeldLineIntoUnits,
+  submitGroups,
 } from "./testing/group-composition-fixture.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

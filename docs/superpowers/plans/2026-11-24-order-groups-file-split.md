@@ -45,11 +45,14 @@ delete the old product file. Keep route, storage and fiscal behaviour as it is.
    old entry in `apps/server/test-durations.json` with measured times. Require all Server test shards
    on the current PR head.
 5. The same tool kept edited declarations byte for byte on real PR #4238 in the working-order trial.
-   The open-branch scan found no edits to these declarations. Rehearse the order-group map once on
-   a disposable copy of PR #4258 at `fb5199ce336a80c67b28d8b2fb6df5bd6123b5b5`, using its own fork.
-   Check that its pricing edits in `working-order-line-edits.ts` and `set-menu-period.test.ts` survive
-   and that Server typecheck passes. Recheck open branches before opening the split PR and name any
-   affected ones. If a branch starts changing a moved declaration, use that branch for the rehearsal.
+   Recheck open branches before opening and landing the split PR. If a branch edits a moved
+   declaration by then, rehearse the map on a disposable copy of that branch. Lane F's kitchen-print
+   split also rewrites imports in the group code. Whichever lands second runs its map on the new main.
+6. On landing, send lanes B, C, F and L the map command and the recipe in
+   [Carry an open branch across the split](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
+   Substitute `order-groups.ts`, `order-groups.test.ts` and `scripts/order-groups-split.json` for
+   the corresponding working-order paths. The `jq '.moves |= .[:1]'` command moves product code
+   only. Move edits to test cases by hand using the map.
 
 Expect about 2,900 product and 6,300 test or fixture lines to move, plus 700–1,000 changed import
 lines and around 150 map and duration lines. The existing tests retain their assertions. The till

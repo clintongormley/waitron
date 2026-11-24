@@ -35,14 +35,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { readPartyBills, seatTable } from "./parties.js";
-import {
-  fireGroup,
-  listOrderGroups,
-  moveLinesToGroup,
-  submitGroups,
-  type GroupLine,
-  type GroupRelease,
-} from "./testing/group-composition-fixture.js";
+import { fireGroup, listOrderGroups, type GroupLine, type GroupRelease } from "./order-groups.js";
+import { moveLinesToGroup, submitGroups } from "./testing/group-composition-fixture.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { JOBS_WAITING_MS, printersInTrouble } from "./print-job-trouble.js";
