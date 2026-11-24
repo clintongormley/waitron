@@ -252,11 +252,7 @@ describe("reset this box", () => {
     request.finish();
     expect(await readReplacedResetMarker(p.stateDir)).toBeNull();
     expect(p.restart).not.toHaveBeenCalled();
-    const listing = await p.app.request(
-      "/management-api/servers",
-      { headers: { cookie: p.adminCookie } },
-      { remoteStaff },
-    );
+    const listing = await list(p, p.adminCookie, remoteStaff);
     expect((await listing.json()).resetThisBox).toBe(listed);
   });
 
@@ -334,10 +330,10 @@ async function clear(p: Primary, nodeId: string, cookie?: string): Promise<Respo
   return p.app.request(`/management-api/servers/${nodeId}/clear`, { method: "POST", headers });
 }
 
-async function list(p: Primary, cookie?: string): Promise<Response> {
+async function list(p: Primary, cookie?: string, remoteStaff = false): Promise<Response> {
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers["cookie"] = cookie;
-  return p.app.request("/management-api/servers", { method: "GET", headers });
+  return p.app.request("/management-api/servers", { method: "GET", headers }, { remoteStaff });
 }
 
 async function errorOf(res: Response): Promise<{ code: string; params: unknown }> {

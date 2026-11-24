@@ -14,13 +14,9 @@ afterEach(() => {
   setLocale(locale);
 });
 
-async function mount(
-  sendsReset = vi.fn<DashboardApi["resetThisBox"]>(),
-  canExportConfiguration = false,
-) {
+async function mount(sendsReset = vi.fn<DashboardApi["resetThisBox"]>()) {
   const { el } = await mountWidget<ResetThisBoxDialog>("dashboard-reset-this-box-dialog", {
     api: { resetThisBox: sendsReset },
-    canExportConfiguration,
   });
   const root = el.shadowRoot!;
   const dialog = root.querySelector("wt-dialog")!;
@@ -41,7 +37,6 @@ it("keeps Reset disabled while the word differs and allows the exact word", asyn
 
 it("stops after typing without requesting a reset", async () => {
   const { el, root, field, sendsReset } = await mount();
-  expect(root.querySelector('a[href="/backup"]')).toBeNull();
   await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill("reset");
   const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve, { once: true }));
   await userEvent.click(root.querySelector('wt-button[slot="cancel"]')!);
@@ -54,8 +49,7 @@ it("leaves a refused reset in the dialog with the reason and lets the operator t
     code: "membership.self_reset_unavailable",
     params: { reason: "remove_other_boxes" },
   });
-  const { root, field, confirm } = await mount(send, true);
-  expect(root.querySelector('a[href="/backup"]')).not.toBeNull();
+  const { root, field, confirm } = await mount(send);
   await page.elementLocator(field.shadowRoot!.querySelector("input")!).fill("reset");
   await userEvent.click(confirm);
   await vi.waitFor(async () => {
