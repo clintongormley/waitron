@@ -4,6 +4,7 @@ import { foldForUniqueness, type Database, type Transaction } from "@waitron/db"
 import type { ModuleHandoverContribution } from "@waitron/module";
 import { AppError, type ErrorCode } from "@waitron/shared";
 import { computeEntryHash } from "./chain-hash.js";
+import { workforceHoldings, workforceLacking } from "./handover-holdings.js";
 import { verifiableEntry, type ChainedTimeEntry } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { markAttendanceEntry } from "./staff-activity.js";
@@ -313,4 +314,6 @@ export const WORKFORCE_HANDOVER: ModuleHandoverContribution = {
     receive: (tx, source, batch, now) =>
       receiveWorkforceBatch(tx, source, readWorkforceBatch(batch), now),
   },
+  holdings: workforceHoldings,
+  lacking: workforceLacking,
 };
