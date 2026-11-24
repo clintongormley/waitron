@@ -19,7 +19,7 @@ import { request, firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fis
 import type { ModuleOperationHost } from "@waitron/module";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 
-let evidenceFiles: readonly string[];
+const evidenceNames = ["evidence-source.json", "evidence-history.json"] as const;
 
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
@@ -34,13 +34,19 @@ vi.mock("@waitron/composition", async (original) => {
               ...module.provisioning,
               initialSetup: {
                 ...module.provisioning!.initialSetup!,
-                configure: (bound: ModuleOperationHost) => ({
-                  ...module.provisioning!.initialSetup!.configure!(bound),
-                  resolutionEvidence: () => ({
-                    files: evidenceFiles,
-                    directories: [],
-                  }),
-                }),
+                configure: (bound: ModuleOperationHost) => {
+                  const stateDir = bound.environment.WAITRON_STATE_DIR;
+                  return {
+                    ...module.provisioning!.initialSetup!.configure!(bound),
+                    resolutionEvidence: () => ({
+                      files:
+                        stateDir === undefined
+                          ? []
+                          : evidenceNames.map((name) => join(stateDir, name)),
+                      directories: [],
+                    }),
+                  };
+                },
               },
             },
             fiscal: {
@@ -127,7 +133,7 @@ async function launchFixture(ownerSetup = false) {
   const stateDir = join(root, "state");
   await mkdir(stateDir);
   const input = await initialSetupInput(stateDir, request);
-  evidenceFiles = [join(stateDir, "evidence-source.json"), join(stateDir, "evidence-history.json")];
+  vi.unstubAllEnvs();
   const [port] = await freePorts(1);
   const migrationsRoot = join(root, "migrations");
   for (const [i, set] of manifestSets().entries())
@@ -148,11 +154,12 @@ async function launchFixture(ownerSetup = false) {
   return { root, stateDir, input, base, port };
 }
 it.each(["direct", "supervised"])(
-  "%s launch retains module evidence and activates owned hour setup",
+  "%s launch gives the module its passed state path and activates owned hour setup",
   async (kind) => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime("2026-10-16T11:38:00Z");
     const f = await launchFixture(true);
+    vi.stubEnv("WAITRON_STATE_DIR", join(f.root, "ambient-state"));
     let server: StartedServer | undefined;
     const killed = vi.spyOn(process, "kill").mockReturnValue(true);
     let agent: Agent | undefined;
@@ -266,7 +273,8 @@ it.each(["direct", "supervised"])(
         ...(await post("reconfirm", { password: PASSWORD, purpose: "activation" })),
       });
       const outside = ['{"synthetic":"public-source"}', '{"synthetic":"outside-history"}'];
-      for (const [index, file] of evidenceFiles.entries()) await writeFile(file, outside[index]!);
+      for (const [index, name] of evidenceNames.entries())
+        await writeFile(join(f.stateDir, name), outside[index]!);
       const inspected = await fetch(
         `https://127.0.0.1:${f.port}/setup-api/first-setup/resolution`,
         { dispatcher: agent } as RequestInit,

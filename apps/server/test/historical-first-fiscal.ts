@@ -18,7 +18,7 @@ export function historicalFirstFiscalDocuments(
             ...module.provisioning,
             initialSetup: {
               ...FISCAL_INITIAL_SETUP,
-              configure: (host) => configureHistoricalInitialSetup(host, paths),
+              configure: () => configureHistoricalInitialSetup(paths),
             },
           },
         }

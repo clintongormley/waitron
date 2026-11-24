@@ -296,7 +296,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       environment: {},
       readPublicEvidence: async () => ({ trust: null, current }),
     };
-    const seat = configureHistoricalInitialSetup(host, paths);
+    const seat = configureHistoricalInitialSetup(paths);
     return { ...f, root, host, paths, current, seat };
   }
   it.each(["missing fingerprint", "directory", "oversized", "unknown trust field"])(
@@ -313,7 +313,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
         const trust = JSON.parse(await readFile(path, "utf8"));
         await writeFile(path, JSON.stringify({ ...trust, approved: true }));
       }
-      const seat = configureHistoricalInitialSetup(f.host, paths);
+      const seat = configureHistoricalInitialSetup(paths);
       expect(() => seat.inspect(f.held, f.input)).toThrowError(
         expect.objectContaining({
           code: "sif.allocation_invalid",
@@ -696,17 +696,21 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
 });
 
 it("retains independently configured public evidence roots for setup resolution", () => {
-  const configured = configureHistoricalInitialSetup(
-    { environment: {}, readPublicEvidence: async () => undefined },
-    {
-      cloudTrustFile: "/outside/trust.json",
-      confirmationFile: "/outside/current.json",
-      paperHistoryFile: "/outside/history.json",
-      cloudReceiptDirectory: "/outside/receipts",
-    },
-  );
+  const configured = configureHistoricalInitialSetup({
+    custodianFile: "/outside/custodian.json",
+    cloudTrustFile: "/outside/trust.json",
+    confirmationFile: "/outside/current.json",
+    paperHistoryFile: "/outside/history.json",
+    cloudReceiptDirectory: "/outside/receipts",
+    emergencyDirectory: "/outside/incidents",
+  });
   expect(configured.resolutionEvidence?.()).toEqual({
-    files: ["/outside/trust.json", "/outside/current.json", "/outside/history.json"],
-    directories: ["/outside/receipts"],
+    files: [
+      "/outside/custodian.json",
+      "/outside/trust.json",
+      "/outside/current.json",
+      "/outside/history.json",
+    ],
+    directories: ["/outside/receipts", "/outside/incidents"],
   });
 });

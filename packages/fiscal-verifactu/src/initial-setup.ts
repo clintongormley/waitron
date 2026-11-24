@@ -7,11 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { nodes } from "@waitron/db";
 import { AppError, nodeId } from "@waitron/shared";
-import type {
-  InitialSetupContext,
-  InitialSetupContribution,
-  ModuleOperationHost,
-} from "@waitron/module";
+import type { InitialSetupContext, InitialSetupContribution } from "@waitron/module";
 import type { HistoricalAllocationPaths } from "./allocation-configuration.js";
 import {
   validateAllocationEnvelope,
@@ -625,7 +621,6 @@ function createInitialSetup(
 export const FISCAL_INITIAL_SETUP = createInitialSetup(() => null);
 
 export function configureHistoricalInitialSetup(
-  _host: ModuleOperationHost,
   paths: HistoricalAllocationPaths,
 ): InitialSetupContribution {
   const present = (path: string | undefined): path is string => Boolean(path?.trim());

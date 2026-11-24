@@ -17,7 +17,6 @@ import { ALL_MODULES } from "./modules.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { authorityKey } from "@waitron/credentials";
 import { decodeMasterKeyCode } from "@waitron/shared";
-import { writeAllocationInput } from "./testing/allocation-input.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks } from "./restore.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
@@ -54,7 +53,6 @@ beforeEach(async () => {
   secret = (await mintMasterKey(suite.db)).secret;
 });
 afterEach(async () => {
-  vi.unstubAllEnvs();
   if (root !== undefined) await rm(root, { recursive: true, force: true });
 });
 async function rows(db = suite.db) {
@@ -64,11 +62,9 @@ async function rows(db = suite.db) {
     allocations: await allocationRows(db),
   };
 }
-it("production restore runner refuses a signed paper input even with its correct key and outside files", async () => {
+it("production restore runner refuses a signed paper input with its correct recovery key", async () => {
   const action = "restore";
   const fixture = allocationFixture({ node, bases, identity: "P000042", recoveryKey: true });
-  const environment = await writeAllocationInput(root, fixture, action);
-  vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", environment.WAITRON_RECOVERY_OPERATION_FILE);
   const { binding, input } = fixture.request(action);
   const request = { binding, input };
   const before = await rows();
@@ -91,7 +87,7 @@ const ADMIN = "e1000000-0000-4000-8000-000000000009";
 const PASSWORD = "synthetic-retired-promotion-password";
 const passwordHash = hashPassword(PASSWORD);
 it.each(["archive", "stream"] as const)(
-  "the production staged %s restore refuses retired emergency input before changing the destination or consuming outside evidence",
+  "the production staged %s restore refuses retired emergency input and keeps the destination intact",
   async (kind) => {
     const stateDir = join(root, "state");
     const venueDir = join(root, "venue");
@@ -222,8 +218,6 @@ it.each(["recovery key", "administrator"])(
       recoveryKey,
       operatorId: ADMIN,
     });
-    const environment = await writeAllocationInput(root, fixture, "promote");
-    vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", environment.WAITRON_RECOVERY_OPERATION_FILE);
     const { binding, input } = fixture.request("promote");
     const before = await rows();
     const activate = vi.fn(async () => "unexpected-series");

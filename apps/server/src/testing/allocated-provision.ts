@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import { nodeId } from "@waitron/shared";
@@ -10,7 +12,6 @@ import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { DEFAULT_SERIES_CODES, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../modules.js";
 import { provisionVenue, type ProvisionDeps, type ProvisionRequest } from "../provision.js";
-import { writeAllocationInput } from "./allocation-input.js";
 import { createHourTestClock, selectPastWaits, type HourTestClock } from "./hour-test-clock.js";
 
 export async function initialSetupInput(
@@ -46,8 +47,9 @@ export async function initialSetupInput(
     ],
   });
   const held = fixture.request("setup");
-  const configuration = await writeAllocationInput(directory, fixture, "setup");
-  vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", configuration.WAITRON_RECOVERY_OPERATION_FILE);
+  const operationFile = join(directory, "operation.json");
+  await writeFile(operationFile, JSON.stringify({ binding: held.binding, input: held.input }));
+  vi.stubEnv("WAITRON_RECOVERY_OPERATION_FILE", operationFile);
   return {
     nodeId: targetNodeId,
     administratorId,

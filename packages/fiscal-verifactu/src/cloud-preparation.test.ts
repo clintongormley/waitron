@@ -268,24 +268,27 @@ it("passes a Cloud manual packet through the default configured module preparati
     "RF-C000042",
   ]);
 });
-it.each(["cloudTrustFile", "cloudFingerprint", "confirmationFile", "cloudReceiptDirectory"])(
-  "requires explicit %s outside submitted input",
-  async (field) => {
-    const paths = await configure();
-    await expect(
-      withOperationAuthority(binding, operatorId, (authority) =>
-        configuredOperations({ ...paths, [field]: "" }).prepare(
-          { binding, input: input(), authority },
-          async () => "unverified",
-        ),
+const requiredCloudPaths = [
+  "cloudTrustFile",
+  "cloudFingerprint",
+  "confirmationFile",
+  "cloudReceiptDirectory",
+] as const;
+it.each(requiredCloudPaths)("requires %s outside submitted input", async (field) => {
+  const paths = await configure();
+  await expect(
+    withOperationAuthority(binding, operatorId, (authority) =>
+      configuredOperations({ ...paths, [field]: "" }).prepare(
+        { binding, input: input(), authority },
+        async () => "unverified",
       ),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "outside_confirmation_missing" },
-    });
-    expect(await readdir(receiptDirectory)).toEqual([]);
-  },
-);
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "outside_confirmation_missing" },
+  });
+  expect(await readdir(receiptDirectory)).toEqual([]);
+});
 it("requires the independently confirmed signer fingerprint", async () => {
   const paths = await configure();
   await expect(
