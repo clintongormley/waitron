@@ -1206,7 +1206,8 @@ Tab button and no side drawer.
   it reads "Bills". Its `label` is "Bills: " and the closed label. The list is a `role="menu"` of
   `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background
   differs from the open list's and an unchecked row's in both themes. Each row holds the bill's
-  short label, what it owes or "Paid ✓" ("Deferred payment" for a bill closed that way), and one line per person with unsent dishes on it ("Ana has
+  short label, what it owes, "€5.00 over" for a bill paid over its total, or "Paid ✓" ("Deferred
+  payment" for a bill closed that way), and one line per person with unsent dishes on it ("Ana has
   an unsent order: 3 items"). When another shown bill than the one on screen holds the signed-in
   person's unsent dishes (A797 slice 11), the closed trigger adds, after its ▾, the `floor-unsent`
   icon (`aria-hidden`) and "Bill 2 unsent", or "2 bills unsent" for two or more, which may wrap
@@ -1244,8 +1245,12 @@ Tab button and no side drawer.
   pointing to Record unpaid departure, brought into view at 1024×768 and at 390×844); Print the
   bill's answer, either a `role="status"` "Bill issued" line or the not-served list
   (`role="alert"`, with Mark served where it applies, Cancel and Print anyway, brought into view
-  the same way); this bill's total; "Still to pay at this table" with the party's
-  outstanding, only with a party; then the pay section. Both desktop and handheld show one Pay for an open owing bill, followed by the bill's
+  the same way); `screens/bill-money-notice.ts`'s `role="status"` notices: "Being paid on Bill 3"
+  while the bill's chosen items wait for their card on a bill of their own, and, for a bill paid over
+  its total, "Paid €5.00 more than this bill comes to" with Give back €5.00 and, where the venue takes
+  tips, the person takes payments and the bill comes to more than nothing, Keep €5.00 as tip; this
+  bill's total; "Still to pay at this table" with the party's
+  outstanding, only with a party; then the pay section. Both desktop and handheld show one Pay for an open owing bill not paid over its total, followed by the bill's
   Full invoice choice (with a saved customer's name and identifier below it) and its receipt
   language when several are offered. A part-paid bill also shows what it has received and still
   owes. The [shared bill payment window](#shared-bill-payment-window) owns the amount choices.
@@ -7042,7 +7047,8 @@ Counter bills use the same window for their first and remaining payments.
 Whole bill asks the server for one share of the current balance. Its confirmation heading and
 receipt guest-count prompt use that preview, even while the opening balance is still shown.
 Items groups matching whole portions with the bill screen's grouping key and a count control;
-the request carries the selected members' line numbers. Successful table-bill reads refresh idle
+the request carries the selected members' line numbers on a printed bill, and their line ids
+(`ItemPick.lineId`) on any other, where Pay for items moves them to a bill of their own. Successful table-bill reads refresh idle
 item choices, retaining valid selections and tender input. A selected member that leaves is dropped,
 never replaced by another portion. Idle Pay closes when its bill moves or merges away, including
 its refund child. A pending card or payment/refund send keeps its window on the original bill. Unanswered

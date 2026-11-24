@@ -437,6 +437,8 @@ comes to says so, offers **Give back** and (with tips on) **Keep as tip**, and o
 26,250; `bill-pay-dialog.ts` 2,420 of 2,500; `client.ts` 5,694 of 5,750; `till-table-order-screen.ts`
 7,516 of 7,750; every other product file 1,000. New logic goes in new files; each task says what
 grows. No cap is raised: a task that would pass one moves code into its new file instead.
+(2026-11-24: main later lowered `till-app.ts`'s cap to 26,000; this branch put it back to 26,250
+with the watcher's leave, "WATCHER 2026-11-24 20:01" in lane C's `questions.md`.)
 
 **Lane B (A1515-3 PR 2) works in the same screen.** PR 2 does not touch
 `apps/till/src/widgets/menu-browser.ts`. In `apps/till/src/screens/till-table-order-screen.ts` it

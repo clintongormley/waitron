@@ -5,7 +5,7 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /**
      * A payment was asked of a bill with nothing left to pay and no card pending on it, or Print
-     * the bill of a bill its payments already cover, that has no dishes, or that was cancelled.
+     * the bill of a bill its payments exactly cover, that has no dishes, or that was cancelled.
      */
     "bill.nothing_outstanding": { workingOrderId: string };
     /**
