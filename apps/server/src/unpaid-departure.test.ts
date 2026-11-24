@@ -2466,6 +2466,28 @@ describe("left unpaid with part paid", () => {
     expect((await partyState(party.partyId)).state).toBe("open");
   });
 
+  it("refuses a printed bill whose corrective leaves exactly what was paid, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await printOrderForTest(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      party.tabId,
+      venue.operatorId,
+    );
+    expect((await payInCash(party.tabId, "20.00")).status).toBe(200);
+    await credit(venue, party.tabId, "9.09", "-10.00");
+
+    const answer = await departNow(party.partyId);
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.nothing_outstanding", params: { partyId: party.partyId } },
+    });
+    expect(await departuresOf(party.tabId)).toEqual([]);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+    expect((await partyState(party.partyId)).state).toBe("open");
+  });
+
   function pendingCard(billId: string) {
     return inTx(venue, (tx) =>
       tx.insert(billPayments).values({
