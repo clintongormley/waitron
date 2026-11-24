@@ -7026,6 +7026,8 @@ A positive-total Counter basket offers Pay beside Park. Pay opens the shared bil
 with Whole bill selected. After a partial payment, its balance and Cash/Card choices stay in that
 window; reopening Pay uses the remaining balance. A placed order without an invoice uses the same
 window; issued-invoice collection and zero-total completion keep their existing whole-order controls.
+A Counter order paid more than it comes to shows the overpaid notice in place of Pay: **Give back**,
+and **Keep as tip** where tips are on and the person may take payment.
 Full-invoice and receipt-language entry stay available. In practice, Approve, Decline and No answer
 are offered before Card; No answer leaves recovery to a manager. Practice phones use the simulator
 without selecting a hardware reader. Pay and Park use the shared medium button size; Send fills its

@@ -516,7 +516,7 @@ controls or the "No place" question.
   and, when one payment can be refunded, its Refund window opens on the excess. With several, staff
   choose **Refund** beside one. Added 2026-11-25: the Counter shows the same overpaid notice in place
   of Pay, its amount read from the order's bill balance, and a give-back or Keep as tip that settles
-  a Counter order prints its receipt and starts a new sale.
+  a Counter order asks for its receipt and starts a new sale.
 - **PR2-D9. No PIN to give back money just taken** (owner, watcher note 2026-11-24 10:42; built in
   PR 1, `bill-refunds.ts`'s `refundPermission`). Traced: a refund is sent in the operator's own name
   and the PIN is asked only on `authorization.not_permitted` (`till-app.ts:24090-24100`), so cash and
@@ -932,9 +932,9 @@ the pending reread reads `paidOn`. Every branch rereads the table's bill without
   back; **Being paid on Bill N** while a card for them is out; on a printed bill, items are still
   paid on that bill, as before. Add a short paragraph: a bill paid more than it comes to says so;
   **Give back** returns it (no manager's PIN for that amount) and **Keep as tip** keeps it, after
-  which the bill's receipt prints. Cut, do not reword, any sentence Step 1 proved wrong. The
-  paid-mark sentences (en `:263-264`, `:749`, `:763-767`) stay for PR 3, which removes the marks they
-  describe.
+  which the till asks for the bill's receipt. Cut, do not reword, any sentence Step 1 proved wrong.
+  The paid-mark sentences (en `:263-264`, `:749`, `:763-767`) stay for PR 3, which removes the marks
+  they describe.
 - [ ] **Step 3: Update the backlog**: A1515's piece 1 line says the till now pays for items on a
   bill of their own (pull request 2 of 4), and pull requests 4 (printed bills) then 3 (removing the
   old items payment) follow.
