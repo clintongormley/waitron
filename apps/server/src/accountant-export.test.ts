@@ -1354,13 +1354,14 @@ describe("refunds without a corrective invoice", () => {
     );
 
     const rows = (await list()).refundsWithoutCorrective;
-    expect(rows.map((row) => [row.id, row.customer])).toEqual([
-      [named, "Acme SL, B12345678"],
-      [taxNumberOnly, "B87654321"],
-      [emptyName, "B11111111"],
-      [simplified, undefined],
+    expect(rows.map((row) => [row.id, row.customerName, row.customerTaxId])).toEqual([
+      [named, "Acme SL", "B12345678"],
+      [taxNumberOnly, undefined, "B87654321"],
+      [emptyName, undefined, "B11111111"],
+      [simplified, undefined, undefined],
     ]);
-    expect(rows.find((row) => row.id === simplified)).not.toHaveProperty("customer");
+    expect(rows.find((row) => row.id === simplified)).not.toHaveProperty("customerName");
+    expect(rows.find((row) => row.id === simplified)).not.toHaveProperty("customerTaxId");
   });
 
   it("lists a plain refund of an ordinary card payment, but not a Correct invoice's refund nor one completed outside the period", async () => {
@@ -1504,7 +1505,7 @@ describe("refunds without a corrective invoice", () => {
       new RegExp(`<Relationship Id="${relationshipId}"[^>]*Target="([^"]+)"`),
     )?.[1];
     const xml = strFromU8(files[`xl/${target}`]!);
-    const common = ["Cold food", "Ana", "Bea", "sale-1", "A/1", "", ""];
+    const common = ["Cold food", "Ana", "Bea", "sale-1", "A/1", "", "", ""];
     expect(row(xml, 3)).toEqual([
       "refund-1",
       refund.refundedAt,
@@ -1699,7 +1700,8 @@ describe("refunds without a corrective invoice", () => {
                 authorizedBy: "Luis",
                 saleId: "sale-1",
                 invoiceNumber: "A/1",
-                customer: "Acme SL, B12345678",
+                customerName: "Acme SL",
+                customerTaxId: "B12345678",
                 takenOffBy: "A/2",
                 vat: [
                   { rate: "10.00", base: decimal("4.55"), tax: decimal("0.46") },
@@ -1721,15 +1723,28 @@ describe("refunds without a corrective invoice", () => {
           : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
       ]);
       expect(row(xml, 2)).toEqual(words.refundColumns);
-      expect(row(xml, 2)).toHaveLength(15);
-      expect(row(xml, 2)[10]).toBe(
+      expect(row(xml, 2)).toHaveLength(16);
+      expect(row(xml, 2).slice(10, 12)).toEqual(
         language === "en"
-          ? "Customer on the invoice"
-          : ACCOUNTANT_EXPORT_WORDS.es.refundColumns[10],
+          ? ["Customer", "Customer tax number"]
+          : [
+              ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.customerName,
+              ACCOUNTANT_EXPORT_WORDS.es.invoiceColumns.customerTaxId,
+            ],
       );
       const card = words.paymentMethods.card;
       const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
-      const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "Acme SL, B12345678", "A/2"];
+      const tail = [
+        card,
+        "Goodwill",
+        "Ana",
+        "Luis",
+        "sale-1",
+        "A/1",
+        "Acme SL",
+        "B12345678",
+        "A/2",
+      ];
       expect(row(xml, 3)).toEqual([...shared, "10.01", "0.50", ...tail, "10.00", "4.55", "0.46"]);
       expect(row(xml, 4)).toEqual([...shared, "", "", ...tail, "21.00", "4.13", "0.87"]);
     },
