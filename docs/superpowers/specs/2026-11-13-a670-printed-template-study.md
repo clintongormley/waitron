@@ -1,5 +1,7 @@
 # A670: printed menus that look like your restaurant
 
+**24 November 2026:** replaced by the [customer menu design](2026-11-24-customer-menu-design.md).
+
 **13 November decision pointer:** WATCHER 22:31 in Lane D `questions.md` records the owner's
 "Presets first (Recommended)": fixed A4 presets, without blocks or uploads in the first build.
 See the [build plan](../plans/2026-11-13-a670-guest-menu-build.md), reviewed by Claude and awaiting watcher clearance.

@@ -461,11 +461,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
-- **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
-  The 23 November rehearsal passed 12 checks of Cloud’s hosted guest menu. Before public rollout
-  and QR sharing, verify that the same link survives a takeover and that it works on a phone using
-  mobile data while the box is disconnected.
+- **A670 — the customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
+  tab with Online and Print, named styles, and a customer page the box serves through Cloud; today's
+  Guest menu preview and the hosted copy go.
+  [Design](superpowers/specs/2026-11-24-customer-menu-design.md) ·
   [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
+- **Allergens and diets are published with the menu (owner, 2026-11-24), replacing A1150.** Piece 2 of
+  the same design, section 8; it stands alone.
 
 - **Product names on phones and sold-out tiles** (bundle of 2, size M, needs the owner). [Detail](backlog/menu.md#bundle-product-names-on-phones-and-sold-out-tiles)
 
@@ -709,8 +711,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A1513. Take orders from the delivery apps: Glovo, Uber Eats, Just Eat (owner, 2026-11-11).**
   After go-live, not at it. Today staff would type each app order into the till by hand. Needs a
-  design, including whether to connect each app or one service that gathers them all. Not started.
-  A delivery-app order is always taken away.
+  design, including whether to connect each app or one service that gathers them all, and sending
+  them the menu (owner, 2026-11-24). Not started. A delivery-app order is always taken away.
 
 - **A1514. Share bookings with TheFork and Reserve with Google (owner, 2026-11-11).** Later: Waitron's
   own booking system, including online booking (A1013), works first. Without it, a venue taking

@@ -1,5 +1,7 @@
 # A670: designed guest menus
 
+**24 November 2026:** replaced by the [customer menu design](2026-11-24-customer-menu-design.md).
+
 **13 November update:** the owner's 12 November 20:45 answer changes the proposed sequence:
 read-only online browsing comes around go-live, separately from ordering. Read the
 [read-only online go-live study](2026-11-13-a670-online-go-live-study.md) and

@@ -1,5 +1,7 @@
 # A670: an online menu from day one
 
+**24 November 2026:** replaced by the [customer menu design](2026-11-24-customer-menu-design.md).
+
 **13 November decision pointer:** WATCHER 22:31 in Lane D `questions.md` records the owner's
 choice of Cloud forwarding to the box with a hosted published read-only copy when unreachable,
 and customer-name fallback through guest language, venue default, then internal name, never kitchen.

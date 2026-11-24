@@ -278,31 +278,11 @@ Choices, all in `wt-tabs`, the screen otherwise unchanged:
 
 ## A670 — guest-menu sharing and fixed A4 presets
 
-The 23 November 2026 rehearsal passed 12 external HTTPS checks on a synthetic venue. Cloud served
-the last delivered edition while the box was disconnected, updated it after reconnection and
-when a scheduled edition became due, and kept serving it while a disable was pending offline.
-Cloud takedown returned 404 while the box was offline and after it reconnected. The retired link
-also returned 404. The guest address refused staff, media and write requests.
-
-Two checks remain before public rollout and QR sharing under the watcher-cleared
-[build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md).
-
-1. **Takeover.** Pair a main and spare for a synthetic venue and verify a temporary test Billing
-   grant before starting the trial. Publish and wait for Cloud to confirm delivery. Open the guest
-   HTTPS link without signing in and note the edition and publication date. Hand over to the spare
-   and turn off the old main. Reload the same URL and verify that it still shows that edition and
-   date. Publish a visibly different edition from the new main, wait for delivery confirmation,
-   then verify that the same URL shows the new edition and date. The 23 November takeover attempt
-   stopped before the trial because the Billing grant could not be verified.
-2. **Phone on mobile data.** With a delivered edition, turn off Wi-Fi and open the guest HTTPS link
-   in a private phone tab using mobile data. Note the edition and publication date. Disconnect the
-   box from Cloud, reload the same URL, and check that the edition and date match. The owner's
-   earlier mobile-data check covered the connected box.
-
-Reconnect the box after the phone check. After each rehearsal, retire the synthetic venue, verify
-the guest URL returns 404, and have Lane G restore the original test Billing settings.
-
-Ordering and choosing a guest menu independently of the default menu remain separate work.
+_2026-11-24: the owner replaced this with the
+[customer menu design](../superpowers/specs/2026-11-24-customer-menu-design.md): each menu's own tab for
+online and print, served by the box through Cloud, and no copy kept in Cloud. The two checks that remained,
+a takeover and a phone on mobile data, are dropped with the hosted copy; the design's piece 6 qualifies its
+own path. What follows records decisions about today's version until piece 1 removes it._
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
 forwarding to the box with a hosted published read-only copy when unreachable, fixed presets
@@ -413,8 +393,8 @@ fixed by #3502.
 
 ## A1517. Allergen points to revisit before go-live
 
-The remaining guest-menu work is qualification through takeover and on mobile data with the box
-disconnected, tracked under [A670](#a670--guest-menu-sharing-and-fixed-a4-presets).
+The customer menu's allergen work is in its
+[design](../superpowers/specs/2026-11-24-customer-menu-design.md).
 
 The [11 November proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 original checks and their limits. The owner accepted its recommendations at 22:01; the
@@ -469,7 +449,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
 
 - **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. Remaining Spanish horizontal scrolling is accepted. The 390 px read-outs cases in `station-table.test.ts` check that headings wrap, names and read-outs stay within their cells, and Actions stays reachable; they do not pin a width or promise no scrolling for arbitrary names.
 
-- **Live declarations (A1150, owner 2026-10-27).** Allergens and diet labels take their source
+- **Live declarations (A1150, owner 2026-10-27; to be replaced by published ones, owner 2026-11-24,
+  [section 8](../superpowers/specs/2026-11-24-customer-menu-design.md)).** Allergens and diet labels take their source
   from the live product without publishing the menu. Sent till/history declarations follow A1517
   decision 6 below. [Design](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md).
 
@@ -867,7 +848,7 @@ _2026-11-24: Set menus are to have a page of their own beside Menus, approved by
 
 _2026-11-24: Menus and set menus use permanent Delete. Products and variants still need their own Delete slice before the Set menus page. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The Home page tab has its own design, the Device home page, approved the same day: [spec](../superpowers/specs/2026-11-24-device-home-page-design.md). The guest menu preview gets its own design round with the owner; nothing is queued for it._
+_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The Home page tab has its own design, the Device home page, approved the same day: [spec](../superpowers/specs/2026-11-24-device-home-page-design.md). The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 
