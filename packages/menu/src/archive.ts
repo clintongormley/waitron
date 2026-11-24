@@ -1,9 +1,11 @@
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, countDistinct, eq, gt, inArray, ne } from "drizzle-orm";
 import {
   menus,
   extraListItems,
   menuReleases,
   menuVersions,
+  sectionMembers,
+  sections,
   now,
   recordActivity,
   products,
@@ -15,15 +17,42 @@ import type { MenuDocument } from "@waitron/shared";
 import { documentSetMenuOffers } from "./menu-document.js";
 import { directMenuChildren } from "./menu-inclusion.js";
 import { loadSectionGraph } from "./section-graph.js";
-import { liveVersions } from "./menu-publication.js";
+import { liveVersions, settleDue } from "./menu-publication.js";
 import { takeOffMenus, dropMenuPrices } from "./menu-removal.js";
 import { readUpdatedName } from "./product-names.js";
+import { deactivateMenu } from "./operations.js";
+import { detachMenuSections } from "./sections.js";
 import "./errors.js";
 
 export async function assertMenuWritable(tx: Transaction, menuId: string): Promise<void> {
   const [menu] = await tx.select({ active: menus.active }).from(menus).where(eq(menus.id, menuId));
   if (menu === undefined) throw new AppError("menu.not_found", { menuId });
-  if (!menu.active) throw new AppError("menu.archived", { menuId });
+  if (!menu.active) throw new AppError("menu.deleted", { menuId });
+}
+
+export async function deleteMenu(tx: Transaction, menuId: string, personId: string): Promise<void> {
+  await assertMenuWritable(tx, menuId);
+  const at = now();
+  await settleDue(tx, at, [menuId]);
+  await tx
+    .update(menuReleases)
+    .set({ state: "superseded" })
+    .where(and(eq(menuReleases.menuId, menuId), eq(menuReleases.state, "live")));
+  await tx
+    .update(menuReleases)
+    .set({ state: "cancelled", cancelledAt: at, cancelledBy: personId })
+    .where(and(eq(menuReleases.menuId, menuId), eq(menuReleases.state, "queued")));
+  await detachMenuSections(tx, menuId);
+  await deactivateMenu(tx, menuId, personId);
+}
+
+export async function countOwnedMenuProducts(tx: Transaction, menuId: string): Promise<number> {
+  const [row] = await tx
+    .select({ count: countDistinct(sectionMembers.productId) })
+    .from(sectionMembers)
+    .innerJoin(sections, eq(sections.id, sectionMembers.sectionId))
+    .where(and(eq(sections.ownerMenuId, menuId), ne(sections.role, "home_layout")));
+  return row!.count;
 }
 
 export interface HoldingMenu {
@@ -31,7 +60,7 @@ export interface HoldingMenu {
   name: string;
 }
 
-export async function menusDependingOnArchive(
+export async function menusDependingOnDelete(
   tx: Transaction,
   menuId: string,
   at: Date = now(),

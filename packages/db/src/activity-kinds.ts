@@ -29,7 +29,7 @@ export interface ActivityKindData {
     readonly names: Readonly<Record<string, string>>;
   };
   readonly "menu_edition.rescheduled": { readonly from: string; readonly to: string };
-  readonly "menu.archived": { readonly name: string };
+  readonly "menu.deleted": { readonly name: string };
   readonly "product.archived": { readonly name: string; readonly variantIds: readonly string[] };
   readonly "credentials.saved": { readonly keyVersion: number };
   readonly "credentials.removed": { readonly keyVersion: number };
@@ -168,7 +168,7 @@ export const ACTIVITY_KINDS = {
   "dashboard.signed_out": { subject: "person" },
   "photo.deleted": { subject: "media_image" },
   "menu_edition.rescheduled": { subject: "menu_version" },
-  "menu.archived": { subject: "menu" },
+  "menu.deleted": { subject: "menu" },
   "product.archived": { subject: "product" },
   "credentials.saved": { subject: "credential" },
   "credentials.removed": { subject: "credential" },

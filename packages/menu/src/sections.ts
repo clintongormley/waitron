@@ -101,7 +101,7 @@ function requireWritableList(graph: SectionGraph, sectionId: string): void {
   if (role === undefined) throw new AppError("menu_section.not_found", { sectionId });
   if (role === "home_layout") throw new AppError("menu_section.wrong_role", { sectionId, role });
   const menuId = graph.ownerMenu(sectionId)!;
-  if (graph.menu(menuId)?.active === false) throw new AppError("menu.archived", { menuId });
+  if (graph.menu(menuId)?.active === false) throw new AppError("menu.deleted", { menuId });
 }
 
 export function writableMember(
@@ -251,17 +251,7 @@ export async function deleteSections(tx: Transaction, ids: readonly string[]): P
   for (const id of named) collect(id);
   for (const target of deleted)
     for (const parent of graph.parents(target))
-      if (graph.role(parent) === "home_layout")
-        await tx
-          .update(sectionMembers)
-          .set({
-            productId: null,
-            childSectionId: null,
-            missingName: sectionPathName(graph, target),
-          })
-          .where(
-            and(eq(sectionMembers.sectionId, parent), eq(sectionMembers.childSectionId, target)),
-          );
+      if (graph.role(parent) === "home_layout") await keepMissingTile(tx, graph, parent, target);
   for (const batch of batches([...deleted]))
     await tx.delete(sections).where(inArray(sections.id, batch));
   const lists = new Set<string>();
@@ -276,6 +266,52 @@ export async function deleteSections(tx: Transaction, ids: readonly string[]): P
         .filter((member) => !(member.ref.kind === "section" && deleted.has(member.ref.sectionId))),
     );
   await writeStructureChange(tx, graph, named);
+}
+
+async function keepMissingTile(
+  tx: Transaction,
+  graph: SectionGraph,
+  parent: string,
+  target: string,
+): Promise<void> {
+  await tx
+    .update(sectionMembers)
+    .set({ childSectionId: null, missingName: sectionPathName(graph, target) })
+    .where(and(eq(sectionMembers.sectionId, parent), eq(sectionMembers.childSectionId, target)));
+}
+
+export async function detachMenuSections(tx: Transaction, menuId: string): Promise<void> {
+  const owned = await tx
+    .select({ id: sections.id })
+    .from(sections)
+    .where(eq(sections.ownerMenuId, menuId));
+  const graph = await loadSectionGraph(tx);
+  const placements: MemberAt[] = [];
+  for (const { id } of owned) {
+    for (const parent of graph.parents(id)) {
+      const owner = graph.ownerMenu(parent);
+      if (owner === null || owner === menuId || !graph.menu(owner)?.active) continue;
+      if (graph.role(parent) === "home_layout") {
+        await keepMissingTile(tx, graph, parent, id);
+      } else {
+        const member = graph
+          .children(parent)
+          .find(({ ref }) =>
+            ref.kind === "section"
+              ? ref.sectionId === id
+              : ref.kind === "set_menu" && graph.role(id) === "menu_root" && ref.menuId === menuId,
+          );
+        if (member !== undefined) placements.push({ listId: parent, memberId: member.id });
+      }
+    }
+  }
+  if (placements.length > 0) await removeMembers(tx, placements);
+  await tx.update(sections).set({ image: null }).where(eq(sections.ownerMenuId, menuId));
+  for (const ids of batches(owned.map(({ id }) => id)))
+    await tx
+      .update(sectionMembers)
+      .set({ folderImage: null })
+      .where(inArray(sectionMembers.sectionId, ids));
 }
 
 /** Appends the member, or puts it at `position` and renumbers the list. */

@@ -189,7 +189,7 @@ export function validateCoreConfiguration(
 export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "menus" },
+    { name: "menus", leaveBehindWhenFalse: "active" },
     {
       name: "kitchen_stations",
       jsonReferences: [{ column: "printer_ids", paths: [["*"]] }],

@@ -51,6 +51,22 @@ describe("permanent course deletion", () => {
       await tx.execute(sql`
         insert into set_menu_dish_courses (menu_item_id, course_id) values ('offer', ${starter})
       `);
+      await tx.execute(sql`
+        insert into menus (id, name, kind, set_price, set_vat_class, active, created_at, updated_at)
+        values ('winter', 'Winter', 'set_menu', 1400, 'reduced', 0,
+                '2026-11-18T12:00:00Z', '2026-11-18T12:00:00Z')
+      `);
+      await tx.insert(menuItems).values({ id: "winter-offer", menuId: "winter", productId });
+      await tx.execute(sql`
+        insert into set_menu_lines (id, menu_id, position, count)
+        values ('winter-line', 'winter', 0, 1)
+      `);
+      await tx.execute(sql`
+        insert into set_menu_line_courses (line_id, course_id) values ('winter-line', ${starter})
+      `);
+      await tx.execute(sql`
+        insert into set_menu_dish_courses (menu_item_id, course_id) values ('winter-offer', ${starter})
+      `);
     });
     const removes = [
       { key: "course_set_menu_lines", count: 2, targets: [] },
@@ -58,9 +74,13 @@ describe("permanent course deletion", () => {
     ];
     expect((await inTx(v, (tx) => readCourseDeleteImpact(tx, starter))).removes).toEqual(removes);
     expect((await inTx(v, (tx) => deleteCourse(tx, starter))).removes).toEqual(removes);
-    expect((await v.db.execute(sql`select id from set_menu_lines order by position`)).rows).toEqual(
-      [{ id: "first" }, { id: "second" }],
-    );
+    expect(
+      (
+        await v.db.execute(
+          sql`select id from set_menu_lines where menu_id = 'lunch' order by position`,
+        )
+      ).rows,
+    ).toEqual([{ id: "first" }, { id: "second" }]);
     expect(
       (await v.db.execute(sql`select line_id, course_id from set_menu_line_courses`)).rows,
     ).toEqual([{ line_id: "second", course_id: main }]);

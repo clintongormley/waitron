@@ -19,7 +19,8 @@ import { saveBodyOf } from "../test/save-body.js";
 import { menusFixture, product, section } from "../test/menus-fixture.js";
 import {
   archiveProducts,
-  menusDependingOnArchive,
+  deleteMenu,
+  menusDependingOnDelete,
   assertProductWritable,
   assertOffPublishedMenus,
   publishedMenusHolding,
@@ -95,7 +96,7 @@ it.each(["published", "queued"])(
     if (edition === "published") await publish(f.dinner);
     else await queue(f.dinner, later);
     await app((tx) => removeMember(tx, f.dinnerRoot, member.id));
-    expect(await app((tx) => menusDependingOnArchive(tx, f.lunch, T0))).toEqual([
+    expect(await app((tx) => menusDependingOnDelete(tx, f.lunch, T0))).toEqual([
       { id: f.dinner, name: "Dinner Menu" },
     ]);
   },
@@ -112,12 +113,35 @@ it("names a set menu's direct holder and the menu that includes it", async () =>
     });
     await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
     await addMember(tx, f.dinnerRoot, section(f.lunchRoot));
-    return menusDependingOnArchive(tx, set.id, T0);
+    return menusDependingOnDelete(tx, set.id, T0);
   });
   expect(holders).toEqual([
     { id: f.dinner, name: "Dinner Menu" },
     { id: f.lunch, name: "Lunch Menu" },
   ]);
+});
+
+it("removes a deleted set menu’s placement from the holder’s draft", async () => {
+  const f = await menusFixture(fx.db);
+  const set = await app(async (tx) => {
+    const set = await createMenu(tx, {
+      name: "Daily",
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "general",
+    });
+    await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
+    return set;
+  });
+  const read = () => app((tx) => readMenuStructure(tx, f.lunch));
+  expect((await read()).nodes.map(({ ref }) => ref)).toContainEqual({
+    kind: "set_menu",
+    menuId: set.id,
+  });
+  await app((tx) => deleteMenu(tx, set.id, "person-1"));
+  const draft = await read();
+  expect(draft.nodes.some(({ ref }) => ref.kind === "set_menu")).toBe(false);
+  expect(draft.nodes.map(({ ref }) => ref)).toContainEqual(product(f.soup));
 });
 
 it("excludes archived parents from the draft structure and publication advice", async () => {
@@ -207,7 +231,7 @@ it("refuses changes to an archived menu's draft, device home and publications", 
           { at: T0 },
         ),
     ])
-      await expect(write()).rejects.toMatchObject({ code: "menu.archived" });
+      await expect(write()).rejects.toMatchObject({ code: "menu.deleted" });
   });
 });
 

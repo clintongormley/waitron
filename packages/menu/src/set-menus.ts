@@ -39,7 +39,7 @@ import {
 import { variantsOfProducts } from "./variants.js";
 import "./errors.js";
 
-async function setMenuRow(tx: Transaction, menuId: string, includeArchived = false) {
+async function setMenuRow(tx: Transaction, menuId: string) {
   const [menu] = await tx
     .select({
       name: menus.name,
@@ -48,13 +48,7 @@ async function setMenuRow(tx: Transaction, menuId: string, includeArchived = fal
       takeawayVatClass: menus.setTakeawayVatClass,
     })
     .from(menus)
-    .where(
-      and(
-        eq(menus.id, menuId),
-        includeArchived ? undefined : eq(menus.active, true),
-        eq(menus.kind, "set_menu"),
-      ),
-    );
+    .where(and(eq(menus.id, menuId), eq(menus.active, true), eq(menus.kind, "set_menu")));
   if (menu === undefined) throw new AppError("set_menu.not_found", { menuId });
   return {
     name: menu.name,
@@ -395,9 +389,8 @@ export async function readSetMenu(
   tx: Transaction,
   menuId: string,
   graph?: SectionGraph,
-  includeArchived = false,
 ): Promise<SetMenuDetails> {
-  const menu = await setMenuRow(tx, menuId, includeArchived);
+  const menu = await setMenuRow(tx, menuId);
   const root = await requireMenuRoot(tx, menuId);
   graph ??= await loadSectionGraph(tx);
   const courses = await activeCourses(tx);

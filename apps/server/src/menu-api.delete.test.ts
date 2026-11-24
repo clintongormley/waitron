@@ -3,8 +3,11 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions } from "@waitron/identity";
 import {
+  addMember,
   createMenu,
-  deactivateMenu,
+  createProduct,
+  createSectionIn,
+  requireMenuRoot,
   previewMenu,
   publishMenu,
   readDefaultMenuId,
@@ -36,7 +39,6 @@ async function fixture(permissions = fullAccess) {
       setPrice: "14.00",
       setVatClass: "general",
     });
-    await deactivateMenu(tx, set.id);
     const [period] = await tx
       .insert(menuPeriods)
       .values({
@@ -65,16 +67,46 @@ async function fixture(permissions = fullAccess) {
 
 it("withholds period impact from a manager without permission to view periods", async () => {
   const { send } = await fixture(["menu.manage"]);
-  const response = await send("GET", "/archive-impact");
+  const response = await send("GET", "/delete-impact");
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({
     error: { code: "authorization.not_permitted", params: { permission: "venue.view" } },
   });
 });
 
+it("reports distinct products placed in the menu’s own sections in the delete impact", async () => {
+  const { send, old, next } = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    const oldRoot = await requireMenuRoot(tx, old.id);
+    const nextRoot = await requireMenuRoot(tx, next.id);
+    const own = await createProduct(tx, {
+      categoryId: null,
+      name: "Soup",
+      pricingUnit: "each",
+      unitPrice: "6.00",
+      vatClass: "reduced",
+    });
+    const included = await createProduct(tx, {
+      categoryId: null,
+      name: "Bread",
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const ownSection = await createSectionIn(tx, oldRoot, { internalName: "Specials" });
+    await addMember(tx, oldRoot, { kind: "product", productId: own.id });
+    await addMember(tx, ownSection.id, { kind: "product", productId: own.id });
+    await addMember(tx, nextRoot, { kind: "product", productId: included.id });
+    await addMember(tx, oldRoot, { kind: "section", sectionId: nextRoot });
+  });
+  const impact = await send("GET", "/delete-impact");
+  expect(impact.status).toBe(200);
+  expect(await impact.json()).toMatchObject({ productCount: 1 });
+});
+
 it("requires permission to change an affected period", async () => {
   const { send, next, period } = await fixture(["menu.manage", "venue.view"]);
-  const response = await send("POST", "/archive", {
+  const response = await send("POST", "/delete", {
     replacements: { [period.id]: next.id },
     defaultMenuId: next.id,
   });
@@ -86,41 +118,41 @@ it("requires permission to change an affected period", async () => {
 
 it("keeps the default and period if there is no valid published replacement", async () => {
   const { send, old, next, period } = await fixture();
-  const impact = await send("GET", "/archive-impact");
+  const impact = await send("GET", "/delete-impact");
   expect(impact.status).toBe(200);
   expect(await impact.json()).toMatchObject({ defaultChoices: [] });
   for (const defaultMenuId of [old.id, next.id]) {
-    const response = await send("POST", "/archive", {
+    const response = await send("POST", "/delete", {
       replacements: { [period.id]: next.id },
       defaultMenuId,
     });
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: { code: "menu.archive_default" } });
+    expect(await response.json()).toMatchObject({ error: { code: "menu.delete_default" } });
   }
   const [stored] = await suite.db.select().from(menuPeriods).where(eq(menuPeriods.id, period.id));
   expect(stored?.menuId).toBe(old.id);
   expect(await withTransaction(suite.db, readDefaultMenuId)).toBe(old.id);
 });
 
-it("archives alongside the period and default changes and keeps read and copy available", async () => {
+it("deletes alongside the period and default changes", async () => {
   const { send, old, next, period, publish } = await fixture();
   await publish(old.id);
   await publish(next.id);
-  const impact = await send("GET", "/archive-impact");
+  const impact = await send("GET", "/delete-impact");
   expect(impact.status).toBe(200);
   expect(await impact.json()).toMatchObject({
     periods: [{ id: period.id, name: "Evening", replacement: "starting", requiresSellable: false }],
     defaultChoices: [{ id: next.id, name: next.name }],
   });
-  const self = await send("POST", "/archive", {
+  const self = await send("POST", "/delete", {
     replacements: { [period.id]: next.id },
     defaultMenuId: old.id,
   });
   expect(self.status).toBe(409);
-  expect(await self.json()).toMatchObject({ error: { code: "menu.archive_default" } });
+  expect(await self.json()).toMatchObject({ error: { code: "menu.delete_default" } });
   expect(
     (
-      await send("POST", "/archive", {
+      await send("POST", "/delete", {
         replacements: { [period.id]: next.id },
         defaultMenuId: next.id,
       })
@@ -132,19 +164,16 @@ it("archives alongside the period and default changes and keeps read and copy av
   expect((await send("GET", "/structure")).status).toBe(200);
   const edited = await send("PATCH", "", { name: "Back" });
   expect(edited.status).toBe(409);
-  expect(await edited.json()).toMatchObject({ error: { code: "menu.archived" } });
+  expect(await edited.json()).toMatchObject({ error: { code: "menu.deleted" } });
   const published = await send("POST", "/publish", { expectedHash: "irrelevant" });
   expect(published.status).toBe(409);
-  expect(await published.json()).toMatchObject({ error: { code: "menu.archived" } });
-  const copied = await send("POST", "/duplicate", { name: "Next winter" });
-  expect(copied.status).toBe(201);
-  expect(await copied.json()).toMatchObject({ active: true, name: "Next winter" });
+  expect(await published.json()).toMatchObject({ error: { code: "menu.deleted" } });
 });
 
-it("reads the archived set menu's saved terms without reopening its write routes", async () => {
+it("hides a deleted set menu’s saved terms without reopening its write routes", async () => {
   const { send, set } = await fixture();
-  const response = await send("GET", "/set-menu", undefined, set.id);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ id: set.id, price: "14.00", vatClass: "general" });
+  expect((await send("GET", "/set-menu", undefined, set.id)).status).toBe(200);
+  expect((await send("POST", "/delete", { replacements: {} }, set.id)).status).toBe(204);
+  expect((await send("GET", "/set-menu", undefined, set.id)).status).toBe(404);
   expect((await send("PUT", "/set-menu/lines", { lines: [] }, set.id)).status).toBe(404);
 });

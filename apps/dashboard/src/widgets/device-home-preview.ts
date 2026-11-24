@@ -443,8 +443,6 @@ export class DeviceHomePreview extends LitElement {
 
   @property({ type: Boolean }) removeDisabled = false;
 
-  @property({ attribute: false }) disabledIncludeProducts: ReadonlySet<string> = new Set();
-
   @state() private announcement = "";
 
   /** The shortcuts' member ids after moves the host has not answered with a new list yet. */
@@ -688,10 +686,8 @@ export class DeviceHomePreview extends LitElement {
           ? "home.not_shown_nothing_to_order"
           : "home.not_shown_disabled_menu",
       );
-    if (ref.kind === "product") {
-      if (placed.products.has(ref.productId)) return t("home.not_shown_extra_only");
-      if (this.disabledIncludeProducts.has(ref.productId)) return t("home.not_shown_disabled_menu");
-    }
+    if (ref.kind === "product" && placed.products.has(ref.productId))
+      return t("home.not_shown_extra_only");
     return t("home.not_shown_not_on_sale");
   }
 

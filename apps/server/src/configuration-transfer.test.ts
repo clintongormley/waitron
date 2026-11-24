@@ -35,6 +35,7 @@ import {
   addMember,
   addShortcut,
   deleteSection,
+  deleteMenu,
   readMenuHome,
   createMenu,
   createMenuShell,
@@ -1846,6 +1847,49 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const extras = coffee.offeredModifiers[0]!;
     if (extras.kind !== "extras") throw new Error("expected the extras list first");
     expect(extras.items.map((item) => item.price)).toEqual(["0.90"]);
+  });
+});
+
+it("round-trips current menus and their Home positions while leaving deleted menus behind", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const removed = await withTransaction(suite.db, async (tx) => {
+    const current = await createMenu(tx, { name: "Current menu" });
+    const omitted = await createMenu(tx, { name: "Removed menu" });
+    const { rootSectionId } = await readMenuStructure(tx, omitted.id);
+    const currentRoot = (await readMenuStructure(tx, current.id)).rootSectionId;
+    await addMember(tx, currentRoot, { kind: "section", sectionId: rootSectionId });
+    await addShortcut(tx, current.id, { kind: "section", sectionId: rootSectionId });
+    const actor = await seedPerson(tx, { displayName: "Menu manager" });
+    await deleteMenu(tx, omitted.id, actor);
+    return omitted.id;
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date(),
+    versions,
+  );
+  expect(bundle.tables.menus!.map(({ id }) => id)).not.toContain(removed);
+  expect(bundle.tables.sections!.map(({ owner_menu_id }) => owner_menu_id)).not.toContain(removed);
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const [live] = await tx
+      .select({ id: menus.id })
+      .from(menus)
+      .where(eq(menus.name, "Current menu"));
+    const { shortcuts } = await readMenuHome(tx, live!.id);
+    expect(shortcuts.map(({ position, missingName }) => [position, missingName])).toEqual([
+      [0, "Removed menu"],
+    ]);
   });
 });
 

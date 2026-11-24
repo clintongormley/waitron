@@ -336,7 +336,7 @@ import type {
   MenuDocument,
   MenuPreview,
   MenuPublicationsAnswer,
-  MenuArchiveImpact,
+  MenuDeleteImpact,
   MenuStatus,
   ProductChangeField,
   PublishedMenuVersion,
@@ -3693,19 +3693,19 @@ export class DashboardApi {
     return this.addSectionMember(sectionId, { kind: "set_menu", menuId });
   }
 
-  getMenuArchiveImpact(id: string): Promise<MenuArchiveImpact> {
-    return this.#request<MenuArchiveImpact>(
-      `/management-api/menus/${encodeURIComponent(id)}/archive-impact`,
+  getMenuDeleteImpact(id: string): Promise<MenuDeleteImpact> {
+    return this.#request<MenuDeleteImpact>(
+      `/management-api/menus/${encodeURIComponent(id)}/delete-impact`,
       "GET",
     );
   }
 
-  archiveMenu(
+  deleteMenu(
     id: string,
     body: { replacements: Record<string, string>; defaultMenuId?: string },
   ): Promise<void> {
     return this.#request<void>(
-      `/management-api/menus/${encodeURIComponent(id)}/archive`,
+      `/management-api/menus/${encodeURIComponent(id)}/delete`,
       "POST",
       body,
     );

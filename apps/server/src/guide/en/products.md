@@ -282,9 +282,9 @@ product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
-To retire a menu, choose **Archive…** from its row menu and select any replacements the window asks for. Under **Filters**, choose **Archived** in **Status** to view it or choose **Copy…** to make a new unpublished menu.
+To permanently remove a menu or set menu, choose **Delete…** from its row menu, check the product count and choose any replacements the window asks for.
 
-**Published** and **Requiring attention** show full menus. Find set menus under **Active**, **Archived**, and **All**.
+Under **Filters**, **Status** starts on **All**. Choose **Published** or **Requiring attention** to narrow the list to full menus.
 
 Use **Search menus** on the Menus list to find a menu by name.
 

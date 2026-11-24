@@ -476,7 +476,7 @@ describe("duplicateMenu", () => {
       expect(await rowsOf(f.desserts)).toEqual(other);
     },
   );
-  it("reserves the composed name of an active menu until archive", async () => {
+  it("reserves the composed name of an active menu until deletion and refuses copying the deleted menu", async () => {
     const f = await fixture();
     const held = await app((tx) => createMenu(tx, { name: "Caf\u00e9" }));
     const before = await fx.db.select().from(menus);
@@ -488,8 +488,11 @@ describe("duplicateMenu", () => {
     const distinct = await app((tx) => duplicateMenu(tx, f.lunch, "Cafe"));
     expect(distinct.name).toBe("Cafe");
     await app((tx) => deactivateMenu(tx, held.id));
-    const copied = await app((tx) => duplicateMenu(tx, held.id, "  CAFE\u0301  "));
-    expect(copied.id).not.toBe(held.id);
-    expect(copied).toMatchObject({ active: true, name: "CAFE\u0301" });
+    await expect(app((tx) => duplicateMenu(tx, held.id, "Fresh menu"))).rejects.toMatchObject({
+      code: "menu.deleted",
+    });
+    expect((await app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).name).toBe(
+      "CAFE\u0301",
+    );
   });
 });

@@ -298,9 +298,9 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
-Para retirar una carta, elige **Archivar…** en el menú de su fila y selecciona las sustitutas que te pida la ventana. En **Filtros**, elige **Archivadas** en **Estado** para consultarla o elige **Copiar…** para crear una carta sin publicar.
+Para eliminar definitivamente una carta o un menú, elige **Eliminar…** en el menú de su fila, revisa cuántos productos contiene y elige las sustitutas que te pida la ventana.
 
-**Publicadas** y **Requieren atención** muestran cartas completas. Encontrarás los menús en **Activas**, **Archivadas** y **Todas**.
+En **Filtros**, **Estado** empieza en **Todas**. Elige **Publicadas** o **Requieren atención** para ver solo cartas completas.
 
 Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
 

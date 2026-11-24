@@ -2795,12 +2795,12 @@ describe("copying a menu from the list", () => {
       "edit-menu-lunch",
       "rename-menu-lunch",
       "duplicate-menu-lunch",
-      "archive-menu-lunch",
+      "delete-menu-lunch",
     ]);
     expect(items.map((item) => text(item))).toEqual(
       currentLocale().split("-")[0] === "en"
-        ? ["Open", "Rename…", "Copy…", "Archive…"]
-        : ["Abrir", "Cambiar nombre…", "Copiar…", "Archivar…"],
+        ? ["Open", "Rename…", "Copy…", "Delete…"]
+        : ["Abrir", "Cambiar nombre…", "Copiar…", "Eliminar…"],
     );
     expect(text(items[2]!)).toBe(t("menus.copy"));
     expect(items[2]!.variant).toBe("secondary");
@@ -13686,17 +13686,17 @@ it.each(
   },
 );
 
-it("opens the archive window for the chosen menu", async () => {
+it("opens the delete window for the chosen menu", async () => {
   const client = api({
-    getMenuArchiveImpact: vi
+    getMenuDeleteImpact: vi
       .fn()
-      .mockResolvedValue({ periods: [], dependants: [], defaultChoices: null }),
+      .mockResolvedValue({ periods: [], dependants: [], defaultChoices: null, productCount: 0 }),
   });
   const el = await mount(client);
-  await inTable(el, "archive-menu-lunch");
-  const dialog = el.shadowRoot!.querySelector("dashboard-menu-archive-dialog")!;
+  await inTable(el, "delete-menu-lunch");
+  const dialog = el.shadowRoot!.querySelector("dashboard-menu-delete-dialog")!;
   expect(dialog.menu.id).toBe("menu-lunch");
-  await vi.waitFor(() => expect(client.getMenuArchiveImpact).toHaveBeenCalledWith("menu-lunch"));
+  await vi.waitFor(() => expect(client.getMenuDeleteImpact).toHaveBeenCalledWith("menu-lunch"));
 });
 
 it("shows status checking while the Published filter is waiting for statuses", async () => {
@@ -13714,14 +13714,13 @@ it("shows status checking while the Published filter is waiting for statuses", a
   );
 });
 
-it("filters menus by status and opens an archived menu read-only", async () => {
-  const retired = { ...menus[0]!, id: "menu-winter", name: "Winter menu", active: false };
+it("starts on All and offers only the current menu status filters", async () => {
   const draft = { ...menus[0]!, id: "menu-draft", name: "Spring draft" };
   const clash = { ...menus[0]!, id: "menu-clash", name: "Late lunch" };
   const set = { ...menus[0]!, id: "menu-set", name: "Daily set", kind: "set_menu" };
   const el = await mount(
     api({
-      listMenus: vi.fn().mockResolvedValue([...menus, retired, draft, clash, set]),
+      listMenus: vi.fn().mockResolvedValue([...menus, draft, clash, set]),
       getMenuStatuses: vi.fn().mockResolvedValue({
         ...statuses(),
         [draft.id]: { state: "unpublished", clashes: 0 },
@@ -13729,7 +13728,6 @@ it("filters menus by status and opens an archived menu read-only", async () => {
       }),
     }),
   );
-  const row = (id: string) => table(el)?.shadowRoot.querySelector(`[data-row-key="${id}"]`);
   const rows = () =>
     [...table(el).shadowRoot.querySelectorAll("tr[data-row-key]")]
       .map((r) => r.getAttribute("data-row-key"))
@@ -13743,13 +13741,8 @@ it("filters menus by status and opens an archived menu read-only", async () => {
     'wt-combobox[name="menu-status"]',
   );
   expect(filter).not.toBeNull();
-  expect(filter!.options.map(({ value }) => value)).toEqual([
-    "active",
-    "published",
-    "attention",
-    "archived",
-    "all",
-  ]);
+  expect(filter!.value).toBe("all");
+  expect(filter!.options.map(({ value }) => value)).toEqual(["all", "published", "attention"]);
   const choose = (value: string) =>
     filter!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -13757,8 +13750,6 @@ it("filters menus by status and opens an archived menu read-only", async () => {
   for (const [value, expected] of [
     ["published", ["menu-clash", "menu-dinner", "menu-lunch"]],
     ["attention", ["menu-clash", "menu-draft", "menu-lunch"]],
-    ["all", ["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set", "menu-winter"]],
-    ["archived", ["menu-winter"]],
   ] as const) {
     choose(value);
     await vi.waitFor(() => expect(rows()).toEqual(expected));
@@ -13766,16 +13757,8 @@ it("filters menus by status and opens an archived menu read-only", async () => {
   const root = table(el).shadowRoot;
   expect(text(root.querySelector(".filters-trigger"))).toContain("1");
   root.querySelector<HTMLButtonElement>(".filters-clear-all")!.click();
-  await vi.waitFor(() => expect(rows()).not.toContain(retired.id));
-  expect(filter!.value).toBe("active");
-  choose("archived");
-  await vi.waitFor(() => expect(rows()).toEqual([retired.id]));
-  expect(text(row(retired.id))).toContain(t("menus.archived"));
-  expect(row(retired.id)?.querySelector('[data-test="rename-menu-winter"]')).toBeNull();
-  expect(row(retired.id)?.querySelector('[data-test="duplicate-menu-winter"]')).not.toBeNull();
-  row(retired.id)?.querySelector<HTMLElement>('[data-test="open-menu-winter"]')!.click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot?.querySelector('[data-test="archived-menu"]')).not.toBeNull(),
+    expect(rows()).toEqual(["menu-clash", "menu-dinner", "menu-draft", "menu-lunch", "menu-set"]),
   );
-  expect(el.shadowRoot?.querySelector("wt-tabs")).toBeNull();
+  expect(filter!.value).toBe("all");
 });
