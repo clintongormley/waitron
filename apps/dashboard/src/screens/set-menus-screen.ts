@@ -180,22 +180,20 @@ export class SetMenusScreen extends LitElement {
       !this.#queries.failing("listMenus") &&
       !this.rows.some(({ id }) => id === this.menuId)
     ) {
-      const guard = navigationGuardFor(window);
-      if (!guard) {
-        this.#open(null, true);
-        return;
-      }
       // This editor can no longer save, so correct the current address without a leave question.
       this.menuId = null;
-      const address = new URL(guard.href);
-      address.pathname = "/set-menus";
-      guard.rewrite(address);
+      const guard = navigationGuardFor(window);
+      if (guard) {
+        const address = new URL(guard.href);
+        address.pathname = "/set-menus";
+        guard.rewrite(address);
+      } else this.#url.write({ setMenu: null }, true);
     }
   }
 
-  #open(id: string | null, replace = false): void {
+  #open(id: string | null): void {
     if (!navigationGuardFor(window)) this.menuId = id;
-    void this.#url.write({ dashboard: "set-menus", setMenu: id }, replace);
+    void this.#url.write({ dashboard: "set-menus", setMenu: id });
   }
 
   #price(menu: DashboardMenuSummary) {

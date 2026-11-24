@@ -147,7 +147,8 @@ it("shows only set menus, their prices and their offering menus on the new list"
   await expect.element(holder).toHaveAttribute("href", "/menus/menu/lunch/view/structure");
   await expect.element(page.getByText("Not on any menu")).toBeVisible();
   expect(page.getByRole("button", { name: /Filters/ }).elements()).toHaveLength(0);
-  holder.element().closest("td")!.click();
+  const cell = holder.element().closest("td")!;
+  await userEvent.click(cell, { position: { x: cell.offsetWidth - 4, y: 4 }, force: true });
   expect(location.pathname).toBe("/set-menus");
   await holder.click();
   expect(location.pathname).toBe("/menus/menu/lunch/view/structure");

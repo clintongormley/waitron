@@ -70,6 +70,7 @@ it("remembers a hidden price column for the Set menus list", async () => {
   await table.updateComplete;
   const hidePrice = table.shadowRoot!.querySelector<HTMLInputElement>('[data-column="price"]');
   expect(hidePrice).not.toBeNull();
+  expect(table.shadowRoot!.querySelector('[data-column="offered-on"]')).not.toBeNull();
   hidePrice!.click();
   await expect.poll(() => table.shadowRoot!.querySelector('[data-sort="price"]')).toBeNull();
   cleanupWidgets();
