@@ -1045,8 +1045,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   confirms that start or during start-up; a Box administration holder's while the start waits or
   the clock reads before 28-10-2024), a Box administration holder's own device, the device showing
   the clock step of the setup page (under its owner's pass), the restore page (under its recovery
-  key or kit), the done screen or waiting page while that restore's start waits (under the node
-  recovery key) or the handover page (signed in as a `node.manage` holder), when that person chooses
+  key or kit), the done screen or waiting page while that restore's start waits (under the backup's
+  master key) or the handover page (signed in as a `node.manage` holder), when that person chooses
   **This device** (**Your device is correct** on the emergency switch) (owner, 2026-11-10; 2026-11-12) — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a
   second, is alerted and emailed (a step made before the venue exists, at its first full start that
@@ -1072,11 +1072,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
   on by itself, and AEAT's time is not read for it (owner, 2026-11-11; 2026-11-13);
   another machine's clock counts only once the person proved on that page (the setup password on
-  setup, the backup's node recovery key on restore, a `node.manage` sign-in on promotion, the box's
-  current recovery key on the conflict switch) confirms both times or sets the box's clock from that
+  setup, the backup's master key on restore, a `node.manage` sign-in on promotion, the venue's
+  current master key on the conflict switch) confirms both times or sets the box's clock from that
   machine (owner, 2026-11-13; the conflict switch's proof is not owner-approved). A restore's start uses the restore page's choice while the box's boot id
   is unchanged and its clock has not been stepped since. Otherwise it waits until the time service
-  synchronises or the node recovery key confirms again, held by the browser that pressed Restore
+  synchronises or the master key confirms again, held by the browser that pressed Restore
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
   person confirmed on that page, while the box has not rebooted, the server has not restarted and
   its clock has not been stepped (the watcher's choice, 2026-11-17, not the owner's); on a development box, for a preproduction setup, Provision takes the box's own clock instead, also after a restart or a clock step (the lane's choice, 2026-11-17, not the owner's).
