@@ -81,17 +81,10 @@ it("uses current installation proof and renews the same capture without saving u
 it("falls back once on the exact reservation refusal from older Cloud versions", async () => {
   let status = 400;
   let body: string | undefined;
-  let malformedCredentials = false;
+  let legacyPatch: Record<string, unknown> = {};
   const f = await installationFixture(async (v, s, _req, res) => {
     if (v[7] === "{}" && body === undefined) {
-      const reply = grant(v, s);
-      res.end(
-        JSON.stringify(
-          malformedCredentials
-            ? { ...reply, credentials: { accessKeyId: "x", secretAccessKey: "y" } }
-            : reply,
-        ),
-      );
+      res.end(JSON.stringify({ ...grant(v, s), ...legacyPatch }));
     } else res.writeHead(status).end(body ?? '{"error":"invalid_metadata"}');
   });
   const sent = (id: string) =>
@@ -107,10 +100,15 @@ it("falls back once on the exact reservation refusal from older Cloud versions",
       },
     });
     expect(sent(id)).toEqual([signedRequest, "{}"]);
-    malformedCredentials = true;
-    await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
-      code: "cloud.unavailable",
-    });
+    for (const patch of [
+      { credentials: { accessKeyId: "x", secretAccessKey: "y" } },
+      { uploadUrl: `https://storage.test/venue-one/incoming/${id}?token=x` },
+    ]) {
+      legacyPatch = patch;
+      await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+        code: "cloud.unavailable",
+      });
+    }
     for (const refusal of [
       [400, '{"error":"different"}', [signedRequest]],
       [400, "{", [signedRequest]],

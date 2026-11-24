@@ -10,18 +10,21 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { uploadCloudCapture, uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import type { CloudCaptureGrant } from "./cloud-backup.js";
 it("sends a signed conditional PUT for bytes and reopens the full file after an upload failure", async () => {
-  const tls = mintSelfSignedServerCert({
-    hostnames: ["localhost"],
-    ipAddresses: ["127.0.0.1"],
-    now: new Date(),
-  });
-  const bytes = randomBytes(1024 * 1024);
+  const certificate = () =>
+    mintSelfSignedServerCert({
+      hostnames: ["localhost"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+  const tls = certificate();
+  const bytes = randomBytes(16 * 1024 * 1024);
   const receipt = { size: bytes.length, digest: createHash("sha256").update(bytes).digest("hex") };
   const root = await mkdtemp(join(tmpdir(), "cloud-signed-upload-"));
   const file = join(root, "archive.enc");
   await writeFile(file, bytes);
   let status = 200;
-  let stall = false;
+  let stall = false,
+    earlyClosed = false;
   let received!: (response: ServerResponse) => void;
   const arrived = new Promise<ServerResponse>((resolve) => {
     received = resolve;
@@ -40,6 +43,10 @@ it("sends a signed conditional PUT for bytes and reopens the full file after an 
         req.headers.authorization,
       ]);
       if (status === 412 || status === 307) {
+        if (status === 412)
+          req.socket.once("close", () => {
+            earlyClosed = true;
+          });
         res.writeHead(status, { location: "/redirect-target" }).end();
         return;
       }
@@ -66,45 +73,42 @@ it("sends a signed conditional PUT for bytes and reopens the full file after an 
     expiresAt: new Date(Date.now() + 900000).toISOString(),
   };
   const options = { ca: tls.caCertPem };
+  const refuse = (upload: Promise<unknown>) =>
+    expect(upload).rejects.toMatchObject({ code: "cloud.unavailable" });
   try {
     await expect(uploadCloudCapture(grant, bytes, options)).resolves.toEqual(receipt);
     status = 503;
-    await expect(uploadCloudCaptureFile(grant, file, receipt, options)).rejects.toMatchObject({
-      code: "cloud.unavailable",
-    });
+    await refuse(uploadCloudCaptureFile(grant, file, receipt, options));
     status = 201;
     await expect(uploadCloudCaptureFile(grant, file, receipt, options)).resolves.toEqual(receipt);
     expect(digests).toEqual(Array(3).fill(receipt.digest));
     status = 412;
     await expect(uploadCloudCaptureFile(grant, file, receipt, options)).resolves.toEqual(receipt);
+    await vi.waitFor(() => expect(earlyClosed).toBe(true), { timeout: 1000 });
     status = 307;
-    await expect(uploadCloudCapture(grant, bytes, options)).rejects.toMatchObject({
-      code: "cloud.unavailable",
-    });
-    await expect(uploadCloudCapture(grant, bytes)).rejects.toMatchObject({
-      code: "cloud.unavailable",
-    });
+    await refuse(uploadCloudCapture(grant, bytes, options));
+    status = 200;
+    vi.stubEnv("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+    await refuse(uploadCloudCapture(grant, bytes, { ca: certificate().caCertPem }));
     const wrongObject = { ...grant, uploadUrl: grant.uploadUrl.replace("/incoming/", "/other/") };
-    await expect(uploadCloudCapture(wrongObject, bytes, options)).rejects.toMatchObject({
-      code: "cloud.unavailable",
-    });
+    await refuse(uploadCloudCapture(wrongObject, bytes, options));
     expect(requests).toEqual(
       Array.from({ length: 5 }, () => ["PUT", target, host, String(bytes.length), "*", undefined]),
     );
 
-    status = 200;
     stall = true;
     const controller = new AbortController();
     const upload = uploadCloudCaptureFile(grant, file, receipt, {
       ...options,
       signal: controller.signal,
     });
-    const refusal = expect(upload).rejects.toMatchObject({ code: "cloud.unavailable" });
+    const refusal = refuse(upload);
     const closed = once(await arrived, "close");
     controller.abort();
     await refusal;
     await closed;
   } finally {
+    vi.unstubAllEnvs();
     server.closeAllConnections();
     await new Promise<void>((r) => server.close(() => r()));
     await rm(root, { recursive: true, force: true });
