@@ -516,6 +516,15 @@ describe("till-held-orders: moving a counter order to a table", () => {
     );
   });
 
+  it("says nothing is left to pay on an order paid over its total", async () => {
+    const overpaid = { ...labeledOrder, outstanding: "-5.00", hasPayments: true };
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [overpaid] });
+
+    expect(el.shadowRoot!.querySelector(".order")!.textContent).toContain(
+      t("table.bill_to_pay").replace("{amount}", formatMoney("0.00", currentLocale())),
+    );
+  });
+
   it("asks the app for the floor, and lists every table with its condition under the order it moves", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],

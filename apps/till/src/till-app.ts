@@ -369,6 +369,7 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import {
+  amountToPay,
   billLabel,
   billLabelInText,
   billName,
@@ -8224,7 +8225,7 @@ export class TillApp extends LitElement {
   /** The single payment refuses a bill with a payment on it, so the till says to take the rest as a
    * bill payment instead of sending one. */
   #sayBillPayments(outstanding: string): void {
-    this.errorKey = { billPayments: outstanding };
+    this.errorKey = { billPayments: amountToPay(outstanding) };
   }
 
   #refusePaidInPart(): boolean {

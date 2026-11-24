@@ -3,7 +3,7 @@ import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/pr
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { BillBalance, MenuState } from "../api/client.js";
 import { billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
-import { overpaidOf } from "../state/bill-state.js";
+import { amountToPay, overpaidOf } from "../state/bill-state.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, floorChipStyles } from "@waitron/ui";
@@ -430,7 +430,7 @@ export class TillCounterScreen extends LitElement {
   #takeRest(outstanding: string): TemplateResult {
     return html`<section class="pay-rest" data-counter-bill-payments>
       <p>
-        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(outstanding, currentLocale()))}
+        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(amountToPay(outstanding), currentLocale()))}
       </p>
     </section>`;
   }

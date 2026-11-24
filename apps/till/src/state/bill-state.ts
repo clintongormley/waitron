@@ -119,6 +119,14 @@ export function stillOwed(bill: Pick<PartyBill, "total" | "outstanding" | "amoun
   return toScale(subtractDecimal(decimal(bill.amountDue), received), MONEY_SCALE);
 }
 
+/** What a held-list row's `outstanding` leaves to pay: the list gives an order paid over its total a
+ * negative outstanding, where the party bills read gives zero. */
+export function amountToPay(outstanding: string): string {
+  return compareDecimal(decimal(outstanding), decimal("0")) < 0
+    ? toScale(decimal("0"), MONEY_SCALE)
+    : outstanding;
+}
+
 /**
  * An open bill holding a payment, which the single payment refuses (`bill.payments_received`), so
  * the rest is taken as a bill payment. A held-list row has no `status`: the list holds open orders

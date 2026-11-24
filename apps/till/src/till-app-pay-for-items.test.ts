@@ -809,6 +809,33 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       return el;
     }
 
+    it("at the Counter retrieving an order paid over its total says nothing negative is to pay", async () => {
+      const el = await retrieved({
+        listWorkingOrders: vi
+          .fn()
+          .mockResolvedValue([
+            { ...heldWo1, total: "90.00", outstanding: "-5.00", hasPayments: true },
+          ]),
+        getBillBalance: vi
+          .fn()
+          .mockResolvedValue(
+            balanceOf({
+              workingOrderId: "wo-1",
+              total: "90.00",
+              received: "95.00",
+              overpaid: "5.00",
+            }),
+          ),
+      });
+
+      expect(text(el.shadowRoot!.querySelector(".error"))).toBe(
+        [
+          t("table.bill_to_pay").replace("{amount}", money("0.00")),
+          t("bill.pay_with_bill_payments"),
+        ].join(". "),
+      );
+    });
+
     async function chooseFirst(el: TillApp): Promise<string> {
       emit(counter(el), "counter-bill-pay", {});
       await flush(el);
