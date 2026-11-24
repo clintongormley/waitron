@@ -1154,17 +1154,19 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "Print this box's label",
-      "Stick it on this box. Every box in the restaurant has one: if the main box fails, scan the label on a spare with any till or phone on the venue's network to switch to that spare.",
+      "Print the QR code for this box",
+      "Print the QR code and attach it to this box. Every box in the restaurant has one: if the main box fails, scan the QR code on a spare with a till or phone on the venue's network to switch to that spare.",
+      "Print QR code",
     ],
     [
       "es-ES",
-      "Imprimir la etiqueta de este servidor",
-      "Pégala en este servidor. Cada servidor del restaurante tiene una: si el servidor principal falla, escanea la etiqueta de un servidor de reserva con cualquier caja o móvil conectado a la red del local para cambiar a ese servidor.",
+      "Imprimir el código QR de este servidor",
+      "Imprime el código QR y pégalo en este servidor. Cada servidor del restaurante tiene uno: si el servidor principal falla, escanea el código QR de un servidor de reserva con una caja o un móvil de la red del local para cambiar a ese servidor.",
+      "Imprimir código QR",
     ],
   ] as const)(
     "offers this box's own label on a new restaurant's finished page (%s)",
-    async (locale, heading, why) => {
+    async (locale, heading, why, button) => {
       setLocale(locale);
       const printFrame = vi.fn<(view: Window) => void>();
       const el = await mountDone(() => new Promise(() => {}), {
@@ -1182,6 +1184,7 @@ describe("setup-done-screen", () => {
       expect(preview.address).toBe("https://box-7c21.waitron.local");
       expect(preview.children).toHaveLength(0);
       const print = preview.shadowRoot!.querySelector<HTMLElement>("[data-test=print-label]")!;
+      expect(print.textContent!.trim()).toBe(button);
       await vi.waitFor(() =>
         expect((print as HTMLElement & { disabled: boolean }).disabled).toBe(false),
       );
@@ -2014,7 +2017,6 @@ describe("the joining page", () => {
       startDelayMs: 0,
       pollIntervalMs: 3,
       mirrorJoin: true,
-      breakGlassSecret: "key-on-paper",
       contactUrl: SPARE,
       drawQr: async () => PIXEL,
       ...extra,
@@ -2028,10 +2030,6 @@ describe("the joining page", () => {
     await vi.waitFor(() => expect(done(mounted.el, "join")).toBe("true"));
     return mounted;
   }
-  const press = async (el: SetupDoneScreen, test: string) => {
-    await userEvent.click(q(el, `[data-test=${test}]`)!);
-    await el.updateComplete;
-  };
   const taskIds = (el: SetupDoneScreen) =>
     [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")].map((task) =>
       task.getAttribute("data-test"),
@@ -2158,28 +2156,22 @@ describe("the joining page", () => {
     expect(link.textContent!.trim()).toBe("Servers page");
     expect(done(el, "join")).toBe("false");
     expect(stateText(el, "join")).toBe("In progress");
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
-    expect(q(el, "[data-test=task-key] [data-test=break-glass-secret]")!.textContent).toBe(
-      "key-on-paper",
-    );
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
     probe = () => Promise.resolve(json(JOINED_PROBE));
     await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
     expect(q(el, "[data-test=joining-status]")).toBeNull();
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
   });
 
-  it("keeps the key task shown once it has lost the box, even when the box answers again as joining", async () => {
+  it("keeps the label task shown once it has lost the box, even when the box answers again as joining", async () => {
     let probe: () => Promise<Response> = unreachable;
     const { el } = await mountJoining([() => probe()], { lostAfterMs: 20, lostPollIntervalMs: 6 });
     await vi.waitFor(() => expect(statusText(el)).toBe(LOST_EN));
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
     probe = notFound;
     await vi.waitFor(() => expect(statusText(el)).toBe(JOINING_STATUS_EN));
     expect(done(el, "join")).toBe("false");
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
-    await press(el, "key-wrote");
-    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
+    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
   });
 
   it("goes back to the joining status when the box answers again", async () => {
@@ -2277,128 +2269,28 @@ describe("the joining page", () => {
     expect(fetchImpl.mock.calls.length).toBe(settled);
   });
 
-  it("once joined, ticks the join task and shows only the key task next, with its words, name, key and both buttons", async () => {
-    const { el } = await mountJoined({ breakGlassKeyName: "2026-10-15 · K7QF" });
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
-    expect(stateText(el, "join")).toBe("Done");
-    expect(q(el, "[data-test=task-join]")!.querySelector("p")).toBeNull();
-    expect(done(el, "key")).toBe("false");
-    expect(stateText(el, "key")).toBe("To do");
-    const key = q(el, "[data-test=task-key]")!;
-    expect(key.querySelector(".task-label")!.textContent!.trim()).toBe("Download the box key");
-    expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "Save it as a file or write it down, and keep it off this computer.",
-    );
-    expect(key.querySelector("[data-test=break-glass-key-name]")!.textContent!.trim()).toBe(
-      "Box key 15 Oct 2026 · K7QF",
-    );
-    expect(key.querySelector("[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
-    expect(key.querySelector("[data-test=break-glass-save]")!.textContent!.trim()).toBe(
-      "Save as a file",
-    );
-    expect(key.querySelector("[data-test=key-wrote]")!.textContent!.trim()).toBe("I wrote it down");
-    expect(q(el, "[data-test=break-glass]")).toBeNull();
-    expect(el.shadowRoot!.textContent!).not.toMatch(/encryption key|promote|primary/);
-  });
-
-  it("Save as a file saves the key without the backup sentence, completes the task and reveals the label task", async () => {
-    const blobs: Blob[] = [];
-    const realURL = URL.createObjectURL.bind(URL);
-    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
-      blobs.push(blob as Blob);
-      return realURL(blob);
+  it("the joining page shows no key task", async () => {
+    const { el } = await mountJoined({
+      breakGlassSecret: "key-on-paper",
+      breakGlassKeyName: "2026-10-15 · K7QF",
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const { el } = await mountJoined();
-    await press(el, "break-glass-save");
-    expect((await blobs[0]!.text()).split("\n")).toEqual([
-      "Waitron box key",
-      "",
-      "key-on-paper",
-      "",
-      "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
-      "",
-    ]);
-    expect(done(el, "key")).toBe("true");
-    expect(stateText(el, "key")).toBe("Done");
-    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
-    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
-    expect(done(el, "label")).toBe("false");
-  });
-
-  it("I wrote it down completes the key task and reveals the label task, saving nothing", async () => {
-    const createObjectURL = vi.spyOn(URL, "createObjectURL");
-    const { el } = await mountJoined();
-    await press(el, "key-wrote");
-    expect(createObjectURL).not.toHaveBeenCalled();
-    expect(done(el, "key")).toBe("true");
-    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
-    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
-  });
-
-  it("Show the key again reopens the key task and hides the label task until it is done again", async () => {
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const { el } = await mountJoined();
-    await press(el, "break-glass-save");
-    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
-    const again = q(el, "[data-test=task-key] [data-test=key-again]")!;
-    expect(again.textContent!.trim()).toBe("Show the key again");
-    expect(again.getAttribute("variant")).toBe("ghost");
-    await press(el, "key-again");
-    expect(done(el, "key")).toBe("false");
-    expect(stateText(el, "key")).toBe("To do");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
-    expect(q(el, "[data-test=key-again]")).toBeNull();
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
-    await press(el, "key-wrote");
-    expect(done(el, "key")).toBe("true");
-    expect(taskIds(el)).toEqual(["task-join", "task-key", "task-label"]);
-  });
-
-  it("keeps the key task open, with the key, when the file cannot be saved", async () => {
-    vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
-      throw new Error("Download refused");
-    });
-    const { el } = await mountJoined();
-    await press(el, "break-glass-save");
-    const error = q(el, "[data-test=task-key] [data-test=break-glass-save-error]")!;
-    expect(error.getAttribute("role")).toBe("alert");
-    expect(error.textContent!.trim()).toBe(
-      "The file could not be saved. Write the key down instead.",
-    );
-    expect(done(el, "key")).toBe("false");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
-    expect(taskIds(el)).toEqual(["task-join", "task-key"]);
-  });
-
-  it("drops an earlier failed save's message when the key is shown again", async () => {
-    vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
-      throw new Error("Download refused");
-    });
-    const { el } = await mountJoined();
-    await press(el, "break-glass-save");
-    expect(q(el, "[data-test=break-glass-save-error]")).not.toBeNull();
-    await press(el, "key-wrote");
-    await press(el, "key-again");
-    expect(done(el, "key")).toBe("false");
-    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
-  });
-
-  it("goes straight to the label task once joined when there is no key to save", async () => {
-    const { el } = await mountJoined({ breakGlassSecret: undefined });
     expect(taskIds(el)).toEqual(["task-join", "task-label"]);
+    expect(q(el, "[data-test=break-glass-secret]")).toBeNull();
+    expect(q(el, "[data-test=key-wrote]")).toBeNull();
   });
 
   it("shows this box's label in the label task, printing it once its QR is drawn", async () => {
     let finish!: (qr: string) => void;
     const drawQr = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
     const printFrame = vi.fn<(view: Window) => void>();
-    const { el } = await mountJoined({ breakGlassSecret: undefined, drawQr, printFrame });
+    const { el } = await mountJoined({ drawQr, printFrame });
     const task = q(el, "[data-test=task-label]")!;
-    expect(task.querySelector(".task-label")!.textContent!.trim()).toBe("Print this box's label");
+    expect(task.querySelector(".task-label")!.textContent!.trim()).toBe(
+      "Print the QR code for this box",
+    );
     expect(stateText(el, "label")).toBe("To do");
     expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(
-      "Stick it on this box. If the main box fails, scan it with any till or phone on the venue's network to switch to this box.",
+      "Print the QR code and attach it to this box. If the main box fails, you can scan the QR code with a till or phone on the venue's network to promote this box from spare to be the new main box.",
     );
     const preview = label(el)!;
     expect(preview.address).toBe(SPARE);
@@ -2416,38 +2308,88 @@ describe("the joining page", () => {
     const view = printFrame.mock.calls[0]![0];
     expect(view.document.body.textContent).toContain(SWITCH_PAGE);
     view.dispatchEvent(new Event("afterprint"));
-    expect(done(el, "label")).toBe("false");
+    expect(done(el, "label")).toBe("true");
   });
 
-  it("ticks the label task when the person says it is stuck on", async () => {
-    const { el } = await mountJoined({ breakGlassSecret: undefined, drawQr: undefined });
-    await vi.waitFor(() =>
-      expect(label(el)!.shadowRoot!.querySelector("[data-test=label-qr]")).not.toBeNull(),
-    );
-    const stuck = q(el, "[data-test=label-stuck]")!;
-    expect(stuck.textContent!.trim()).toBe("I've stuck it on");
-    expect(stuck.parentElement).toBe(label(el));
-    await press(el, "label-stuck");
-    expect(done(el, "label")).toBe("true");
-    expect(stateText(el, "label")).toBe("Done");
-    expect(label(el)).toBeNull();
-    expect(taskIds(el)).toEqual(["task-join", "task-label"]);
+  it.each([
+    [
+      "en-GB",
+      "Print the QR code for this box",
+      "Print the QR code and attach it to this box. If the main box fails, you can scan the QR code with a till or phone on the venue's network to promote this box from spare to be the new main box.",
+      "Print QR code",
+      "To do",
+      "Done",
+    ],
+    [
+      "es-ES",
+      "Imprimir el código QR de este servidor",
+      "Imprime el código QR y pégalo en este servidor. Si el servidor principal falla, puedes escanear el código QR con una caja o un móvil de la red del local para convertir este servidor de reserva en el nuevo servidor principal.",
+      "Imprimir código QR",
+      "Pendiente",
+      "Hecho",
+    ],
+  ] as const)(
+    "the QR code task has one button, Print QR code, and asks for no confirmation (%s)",
+    async (locale, heading, why, button, toDo, doneWord) => {
+      setLocale(locale);
+      const printFrame = vi.fn<(view: Window) => void>();
+      const { el } = await mountJoined({ printFrame });
+      const task = q(el, "[data-test=task-label]")!;
+      expect(task.querySelector(".task-label")!.textContent!.trim()).toBe(heading);
+      expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(why);
+      expect(stateText(el, "label")).toBe(toDo);
+      const buttons = () => [
+        ...task.querySelectorAll("wt-button, button"),
+        ...label(el)!.shadowRoot!.querySelectorAll("wt-button, button"),
+      ];
+      const print = label(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=print-label]",
+      )!;
+      expect(buttons()).toEqual([print]);
+      expect(print.textContent!.trim()).toBe(button);
+      expect(q(el, "[data-test=label-stuck]")).toBeNull();
+      await vi.waitFor(() => expect(print.disabled).toBe(false));
+      await userEvent.click(print);
+      await el.updateComplete;
+      await vi.waitFor(() => expect(printFrame).toHaveBeenCalledTimes(1));
+      printFrame.mock.calls[0]![0].dispatchEvent(new Event("afterprint"));
+      expect(done(el, "label")).toBe("true");
+      expect(stateText(el, "label")).toBe(doneWord);
+      expect(label(el)!.shadowRoot!.querySelector("[data-test=print-label]")).toBe(print);
+      expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(why);
+    },
+  );
+
+  it("pressing Print QR code before the QR is drawn ticks nothing", async () => {
+    const printFrame = vi.fn<(view: Window) => void>();
+    const { el } = await mountJoined({
+      drawQr: () => new Promise<string>(() => {}),
+      printFrame,
+    });
+    const print = label(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=print-label]",
+    )!;
+    expect(print.disabled).toBe(true);
+    print.click();
+    print.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(printFrame).not.toHaveBeenCalled();
+    expect(done(el, "label")).toBe("false");
+    expect(stateText(el, "label")).toBe("To do");
   });
 
   it("offers no label task when this box's address is not known", async () => {
-    const { el } = await mountJoined({ breakGlassSecret: undefined, contactUrl: undefined });
+    const { el } = await mountJoined({ contactUrl: undefined });
     expect(taskIds(el)).toEqual(["task-join"]);
   });
 
   it("shows no Servers page link on the page once the box answers", async () => {
-    const { el } = await mountJoined({ serversUrl: SERVERS, breakGlassSecret: undefined });
+    const { el } = await mountJoined({ serversUrl: SERVERS });
     expect(el.shadowRoot!.querySelector("a")).toBeNull();
-    expect(el.shadowRoot!.textContent!).not.toContain("Print switch label");
   });
 
-  it.each(["join", "key", "label"])("shows the %s task's state as visible words", async (task) => {
+  it.each(["join", "label"])("shows the %s task's state as visible words", async (task) => {
     const { el } = await mountJoined();
-    if (task === "label") await press(el, "key-wrote");
     const state = q(el, `[data-test=task-${task}-state]`)!;
     const box = state.getBoundingClientRect();
     expect(box.width).toBeGreaterThan(8);
@@ -2474,28 +2416,14 @@ describe("the joining page", () => {
     probe = () => Promise.resolve(json(JOINED_PROBE));
     await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se ha unido");
-    const key = q(el, "[data-test=task-key]")!;
-    expect(key.querySelector(".task-label")!.textContent!.trim()).toBe(
-      "Descargar la clave del servidor",
-    );
-    expect(key.querySelector("[data-test=key-why]")!.textContent!.trim()).toBe(
-      "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador.",
-    );
-    expect(q(el, "[data-test=break-glass-save]")!.textContent!.trim()).toBe(
-      "Guardar en un archivo",
-    );
-    expect(q(el, "[data-test=key-wrote]")!.textContent!.trim()).toBe("La he anotado");
-    expect(stateText(el, "key")).toBe("Pendiente");
-    await press(el, "key-wrote");
-    expect(q(el, "[data-test=key-again]")!.textContent!.trim()).toBe("Mostrar la clave de nuevo");
+    expect(stateText(el, "label")).toBe("Pendiente");
     const task = q(el, "[data-test=task-label]")!;
     expect(task.querySelector(".task-label")!.textContent!.trim()).toBe(
-      "Imprimir la etiqueta de este servidor",
+      "Imprimir el código QR de este servidor",
     );
     expect(task.querySelector("[data-test=label-why]")!.textContent!.trim()).toBe(
-      "Pégala en este servidor. Si el servidor principal falla, escanéala con cualquier caja o móvil conectado a la red del local para cambiar a este servidor.",
+      "Imprime el código QR y pégalo en este servidor. Si el servidor principal falla, puedes escanear el código QR con una caja o un móvil de la red del local para convertir este servidor de reserva en el nuevo servidor principal.",
     );
-    expect(q(el, "[data-test=label-stuck]")!.textContent!.trim()).toBe("Ya la he pegado");
   });
 
   it("says in Spanish when it has lost the box", async () => {

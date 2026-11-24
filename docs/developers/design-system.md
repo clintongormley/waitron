@@ -133,9 +133,8 @@ inside its own (`applyTokens(document.documentElement)`, `apps/dashboard/src/mai
 Appearance page's preview makes each of its two panels one inside its shadow root, with
 `data-theme="light"` and `"dark"` (`apps/dashboard/src/widgets/theme-preview.ts`), and the label
 print frame the dashboard and setup share is one (`packages/ui/src/print-label.ts:23`). The label takes
-its typeface, sizes and Bold weight, and the recovery sheet its typeface and sizes, from Waitron's
-own token file (`WAITRON_DEFAULTS.structure`), never from the page; the sheet sets no weight, so it
-draws the browser's own. A venue's text size, typeface and weights therefore do not reach paper.
+its typeface, sizes and Bold weight from Waitron's own token file (`WAITRON_DEFAULTS.structure`),
+never from the page. A venue's text size, typeface and weights therefore do not reach paper.
 
 **Before any code runs, each app's `index.html` declares `<meta name="color-scheme" content="light
 dark">`**, so a device set to dark paints the empty page dark rather than white. Once the tokens
@@ -694,7 +693,7 @@ weight is set there and not on each component's host, so a component drawn insid
 bold. `baseStyles` also gives `strong`, `b`,
 `h1`–`h6` and `th` the Bold weight (`--wt-font-weight-bold`, 600) wherever a component sets none of
 its own, so a theme's Bold reaches them; components that include `baseStyles` no longer use the browser's own bold,
-700 (pages built without `baseStyles` still do: the custodian's offline page, the printed recovery sheet and the server's own pages, such as the help guide). A size in `rem` follows the browser's root text size. The three apps leave that root to the
+700 (pages built without `baseStyles` still do: the custodian's offline page and the server's own pages, such as the help guide). A size in `rem` follows the browser's root text size. The three apps leave that root to the
 browser and opt into native OS scaling with `<meta name="text-scale" content="scale">` where
 supported. Safari and Firefox ignore this opt-in, so this change does not follow an iPhone or
 iPad's system Text Size setting; browser zoom remains available. No real iPhone focus-zoom or
@@ -6278,7 +6277,7 @@ bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala
 accepts the scroll on a short phone, and moves the chooser off a handheld's bar: build plan slice 3,
 D5–D6.) A theme pick applies at once and never asks about unsaved work, unlike a language pick on
 the till. The dashboard banner's lockup (`wt-waitron-lockup`) follows the choice through the theme's
-tokens, and the printable node recovery page takes the screen's resolved `color-scheme` rather than `light dark`.
+tokens.
 
 A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
 scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers

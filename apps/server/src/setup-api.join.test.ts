@@ -405,10 +405,9 @@ describe("the setup page's join routes", () => {
     identity: { nodeId: "aaaa0000-0000-4000-8000-000000000000" },
     storeUrl: "https://box-aaaa.waitron.local:7600",
   } as unknown as JoinedBox;
-  const ADOPTED = { breakGlassSecret: "the-server-key", breakGlassKeyName: "Spare key" };
 
   function mountAdopt(deps: Partial<SetupDeps> = {}) {
-    const adoptJoined = vi.fn<NonNullable<SetupDeps["adoptJoined"]>>(async () => ADOPTED);
+    const adoptJoined = vi.fn<NonNullable<SetupDeps["adoptJoined"]>>(async () => undefined);
     const requestRestart = vi.fn();
     const stageReset = vi.fn<NonNullable<SetupDeps["stageReset"]>>(async () => {});
     mount({ adoptJoined, requestRestart, stageReset, ...deps });
@@ -434,7 +433,7 @@ describe("the setup page's join routes", () => {
     fake.approve(JOINED);
     const response = await post("adopt", { handle });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ adopted: true, ...ADOPTED, restarting: true });
+    expect(await response.json()).toEqual({ adopted: true, restarting: true });
     expect(adoptJoined).toHaveBeenCalledWith(JOINED, expect.anything());
     await vi.advanceTimersByTimeAsync(0);
     expect(requestRestart).toHaveBeenCalledOnce();

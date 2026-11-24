@@ -118,16 +118,6 @@ export class SetupDoneScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .tasks .key-name {
-        color: var(--wt-color-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .task-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-        margin-block-start: var(--wt-space-3);
-      }
       .card-heading {
         margin: 0 0 var(--wt-space-2);
         font-size: var(--wt-font-size-lg);
@@ -269,15 +259,13 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private breakGlassSaveFailed = false;
 
-  @state() private keyConfirmed = false;
-
-  @state() private labelStuck = false;
+  @state() private labelPrinted = false;
 
   @state() private joined = false;
 
   @state() private lost = false;
 
-  /** Set the first time the box joins or is lost, and never cleared: the key lives only in this tab. */
+  /** Never cleared, so the QR code task stays offered after a lost box answers as joining again. */
   @state() private revealed = false;
 
   @state() private copyStage?: JoinCopyStage;
@@ -728,13 +716,15 @@ export class SetupDoneScreen extends LitElement {
       : nothing;
   }
 
-  #boxLabel(extra: TemplateResult | typeof nothing = nothing): TemplateResult {
+  #boxLabel(): TemplateResult {
     return html`<setup-box-label
       .address=${this.contactUrl!}
       .drawQr=${this.drawQr}
       .printFrame=${this.printFrame}
-      >${extra}</setup-box-label
-    >`;
+      @label-printed=${() => {
+        this.labelPrinted = true;
+      }}
+    ></setup-box-label>`;
   }
 
   #mainLabel(): TemplateResult | typeof nothing {
@@ -878,9 +868,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #renderJoining(): TemplateResult {
-    const secret = this.breakGlassSecret;
-    const keyOpen = this.revealed && secret !== undefined && !this.keyConfirmed;
-    const labelShown = this.revealed && !keyOpen && this.contactUrl !== undefined;
+    const labelShown = this.revealed && this.contactUrl !== undefined;
     return html`
       <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
       <ul class="tasks" data-test="joining-tasks">
@@ -893,82 +881,18 @@ export class SetupDoneScreen extends LitElement {
             : html`<p data-test="joining-status" role="status">${this.#joiningStatus()}</p>`,
         )}
         ${
-          !this.revealed || secret === undefined
-            ? nothing
-            : this.#task(
-                "key",
-                keyOpen ? "to_do" : "done",
-                t("done.task.key"),
-                keyOpen
-                  ? this.#keyTask(secret)
-                  : html`<div class="task-actions">
-                      <wt-button
-                        variant="ghost"
-                        data-test="key-again"
-                        @click=${() => {
-                          this.breakGlassSaveFailed = false;
-                          this.keyConfirmed = false;
-                        }}
-                        >${t("done.task.key_again")}</wt-button
-                      >
-                    </div>`,
-              )
-        }
-        ${
           labelShown
             ? this.#task(
                 "label",
-                this.labelStuck ? "done" : "to_do",
+                this.labelPrinted ? "done" : "to_do",
                 t("done.task.label"),
-                this.labelStuck
-                  ? nothing
-                  : html`<p data-test="label-why">${t("done.task.label_why")}</p>
-                      ${this.#boxLabel(
-                        html`<wt-button
-                          variant="secondary"
-                          data-test="label-stuck"
-                          @click=${() => {
-                            this.labelStuck = true;
-                          }}
-                          >${t("done.task.label_stuck")}</wt-button
-                        >`,
-                      )}`,
+                html`<p data-test="label-why">${t("done.task.label_why")}</p>
+                  ${this.#boxLabel()}`,
               )
             : nothing
         }
       </ul>
     `;
-  }
-
-  #keyTask(secret: string): TemplateResult {
-    return html`<p data-test="key-why">${t("done.task.key_why")}</p>
-      ${
-        this.breakGlassKeyName === undefined
-          ? nothing
-          : html`<p class="key-name" data-test="break-glass-key-name">
-              ${this.#keyName(this.breakGlassKeyName)}
-            </p>`
-      }
-      <code class="break-glass-secret" data-test="break-glass-secret">${secret}</code>
-      <div class="task-actions">
-        <wt-button
-          variant="primary"
-          data-test="break-glass-save"
-          @click=${() => {
-            if (this.#saveBreakGlass(secret)) this.keyConfirmed = true;
-          }}
-          >${t("done.break_glass.save")}</wt-button
-        >
-        <wt-button
-          variant="secondary"
-          data-test="key-wrote"
-          @click=${() => {
-            this.keyConfirmed = true;
-          }}
-          >${t("done.task.key_wrote")}</wt-button
-        >
-      </div>
-      ${this.#saveFailed()}`;
   }
 
   #joiningStatus(): TemplateResult | string {

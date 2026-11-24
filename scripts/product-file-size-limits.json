@@ -47,7 +47,6 @@
   "apps/server/src/till-api.ts": 4750,
   "apps/server/src/working-order.ts": 10000,
   "apps/setup/src/api/client.ts": 1250,
-  "apps/setup/src/screens/done-screen.ts": 1250,
   "apps/setup/src/screens/handover-screen.ts": 2250,
   "apps/setup/src/screens/venue-screen.ts": 1500,
   "apps/setup/src/setup-app.ts": 3500,

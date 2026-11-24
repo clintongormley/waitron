@@ -35,7 +35,6 @@ import {
 import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -83,8 +82,8 @@ export interface AdoptDeps {
   /** Writes `deployment`. Nothing in the engine refuses this write;
    * `scripts/write-path-tables.test.ts` is what keeps it in named files. */
   ownerDb: Database;
-  /** This box's node.db, where its role, its mirror link, its signing key, its recovery-key check
-   * and the main box's public key are written. */
+  /** This box's node.db, where its role, its mirror link, its signing key and the main box's public
+   * key are written. */
   ownerNode: NodeDatabase;
   /** The ring this box booted with. Adopt replaces it with the bundle's and seals nothing under it. */
   ring: KeyRing;
@@ -126,7 +125,7 @@ export async function adoptFromPrimary(
   deps: AdoptDeps,
   joined: JoinedBox,
   hooks: AdoptHooks,
-): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
+): Promise<void> {
   const { identity: standby, bundle, storeUrl } = joined;
   const { designated } = bundle;
 
@@ -185,7 +184,6 @@ export async function adoptFromPrimary(
     if (set !== bundleRead[name]) throw new AppError("mirror.vault_key_differs", {});
   }
   const ring = loadKeyRing(bundleEnv);
-  const recovery = await makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite(bundle.environment);
   // Before the main box's ring replaces this box's, so a join stopped at any later point leaves
@@ -203,7 +201,7 @@ export async function adoptFromPrimary(
   // One transaction, so node.db never holds a mirror with no link, key or pin. The key is sealed
   // here, before the main box records its public half in venue.db (`spare-join.ts`), as everywhere
   // a signing key is first made: a public key with no private half could never sign as this box.
-  const recoveryKeyName = await withNodeTransaction(deps.ownerNode, async (tx) => {
+  await withNodeTransaction(deps.ownerNode, async (tx) => {
     for (const { table } of NODE_CLASSIFICATION) {
       await ABANDONED_ROW_SWEEPS[table]?.(tx, standby.nodeId);
     }
@@ -224,12 +222,10 @@ export async function adoptFromPrimary(
       storeUrl,
       ...bundle.store,
     });
-    const { name } = await mintBreakGlassKeyTx(deps.ownerDb, tx, standby.nodeId, recovery);
     await pinPrimaryKeyTx(tx, standby.nodeId, {
       primaryNodeId: designated.nodeId,
       publicKey: bundle.primaryPublicKey,
     });
-    return name;
   });
   // Unconditional, even `{}` or `null`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);
@@ -247,6 +243,4 @@ export async function adoptFromPrimary(
     nodeId: standby.nodeId,
     environment: bundle.environment,
   });
-  // Returned exactly once and never logged; only its verifier is stored.
-  return { breakGlassSecret: recovery.secret, breakGlassKeyName: recoveryKeyName };
 }

@@ -217,7 +217,7 @@ describe("servers screen list", () => {
     for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
   });
 
-  it("offers a switch label for the main box and the spare, and opens the row's label", async () => {
+  it("offers a QR code for the main box and the spare, and opens the row's QR code", async () => {
     const el = await mount();
     for (const other of [FORMER, REMOVED]) expect(inTable(el, `switch-label-${other}`)).toBeNull();
     const order = [...rowMenu(el, STANDBY)!.querySelectorAll("wt-button")].map((button) =>

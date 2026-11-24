@@ -291,7 +291,7 @@ export class RecoveryPackCard extends LitElement {
     this.dialog?.show(this.failed ? null : this.status, "pack");
   }
 
-  /** Offered only once a status has loaded: its keep date and its box key come from that status. */
+  /** Offered only once a status has loaded: the dialog's keep date comes from that status. */
   #makeMasterKey(): void {
     if (this.status === null || this.failed) return;
     this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
@@ -330,7 +330,7 @@ export class RecoveryPackCard extends LitElement {
             : nothing
         }
         ${
-          this.status?.serverKey === "set" && !this.failed
+          this.status !== null && !this.failed
             ? html`<wt-button
                 data-test="make-master-key"
                 variant="ghost"

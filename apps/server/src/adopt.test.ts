@@ -2,10 +2,19 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { X509Certificate } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { readDeploymentEnvironment, stampDeployment, taxpayer, withTransaction } from "@waitron/db";
+import { Hono } from "hono";
+import {
+  masterKeys,
+  readDeploymentEnvironment,
+  stampDeployment,
+  taxpayer,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -15,11 +24,11 @@ import {
   readNodeMode,
   readPairLink,
   readPinnedPrimaryKey,
-  readRecoveryKeyName,
+  readRecoveryKey,
 } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, nodeId as asNodeId } from "@waitron/shared";
 import {
   loadKeyRing,
   nodeSigningPublicKey,
@@ -40,7 +49,6 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { StandbyIdentity } from "./reserved-identity.js";
 import type { PendingAdoption } from "./finish-adoption.js";
-import { boxKeyStored } from "./testing/box-key.js";
 
 import { writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
@@ -54,6 +62,15 @@ import { readBackupSettings } from "./backup-env-writer.js";
 import { readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mountPromoteApi } from "./promote-api.js";
+import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
+import { createTurns } from "./backup-turns.js";
+import { loadRecoveryPackFonts } from "./invoice-font.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -184,11 +201,11 @@ function deps(
 }
 
 describe("adoptFromPrimary (mirror adopt)", () => {
-  it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
+  it("stamps the mirror and writes its config", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];
 
-    const result = await adoptFromPrimary(
+    await adoptFromPrimary(
       deps({
         persistTrading: async (a) => {
           persistedTrading.push(a);
@@ -238,17 +255,129 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
-    expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
+  });
+
+  it("a spare with no key of its own promotes with the venue's master key, then makes a new master key", async () => {
+    let ownNodeId = "";
+    const answer = await adoptFromPrimary(
+      deps({
+        persistTrading: async (args) => {
+          ownNodeId = args.nodeId;
+        },
+      }),
+      joined(),
+      NO_HOOKS,
+    );
+    expect(answer).toBeUndefined();
+    expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
+
+    // Stands for the master key row the spare's copy of venue.db carries.
+    const { secret: key, name: firstMasterKey } = await mintMasterKey(suite.db);
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeDb: suite.node,
+      nodeId: ownNodeId,
+      run,
+      credentialKeyRing: TOTP_KEY_RING,
+      requestFromBox: () => false,
+    });
+    const socket = new TLSSocket(new Socket());
+    const promote = async (breakGlass: string) =>
+      app.request(
+        "https://box.test/management-api/promote",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ oldNodeNeutralised: true, breakGlass }),
+        },
+        { incoming: { socket } },
+      );
+    try {
+      const refused = await promote(WRONG_MASTER_KEY);
+      expect([refused.status, await refused.json()]).toEqual([
+        401,
+        { error: { code: "promotion.break_glass_invalid", params: {} } },
+      ]);
+      expect(run).not.toHaveBeenCalled();
+
+      const promoted = await promote(key);
+      expect([promoted.status, await promoted.json()]).toEqual([
+        200,
+        { alreadyPrimary: false, restarting: true },
+      ]);
+      expect(run).toHaveBeenCalledTimes(1);
+
+      // Backups' Make a new master key on the promoted box, which still holds no box key.
+      expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
+      await seedVenue(suite.db, { name: "Sala" });
+      const admin = await openManagementSession(suite.db, "admin");
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));
+      const backups = new Hono();
+      mountBackupRecoveryPackMakeApi(
+        backups,
+        {
+          db: suite.db,
+          nodeDb: suite.node,
+          ring: RING,
+          node: { nodeId: asNodeId(ownNodeId) },
+          modules: [
+            {
+              ...fakeModule("test-regime"),
+              backup: {
+                recoveryPackPage: async () => ({ page: { title: "", rows: [], notes: [] } }),
+              },
+            },
+          ],
+          turns: createTurns(),
+          readBoxEnv: async () => ({}),
+          backups: () => ({ schedule: undefined, retention: undefined, recoveryKey: undefined }),
+          documentEvidence: async () => ({}),
+          loadFonts: loadRecoveryPackFonts,
+          now: () => new Date("2026-11-24T09:00:00.000Z"),
+        },
+        () => {},
+      );
+      const made = await backups.request(
+        "https://box.test/api/backup/recovery-pack",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `waitron_management_session=${admin.token}`,
+          },
+          body: JSON.stringify({ locale: "en", newServerKey: true }),
+        },
+        { incoming: { socket } },
+      );
+      expect(made.status).toBe(200);
+      const shownName = decodeURIComponent(made.headers.get("x-waitron-master-key-name") ?? "");
+      expect(made.headers.get("x-waitron-master-key")).toMatch(/^(?:\S{4} ){6}\S{4}$/);
+      await made.arrayBuffer();
+      expect(
+        (await suite.db.select().from(masterKeys).orderBy(masterKeys.number)).map((row) => [
+          row.number,
+          row.name,
+        ]),
+      ).toEqual([
+        [1, firstMasterKey],
+        [2, shownName],
+      ]);
+      expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
+    } finally {
+      socket.destroy();
+    }
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
     await suite.node.execute(
-      sql.raw(`create trigger refuse_mirror_link before insert on box
+      sql.raw(`create trigger refuse_mirror_link before update of mirror_origin_url on box
+        when new.mirror_origin_url is not null
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
-      await expect(adoptFromPrimary(deps(), joined(), NO_HOOKS)).rejects.toThrow();
+      await expect(adoptFromPrimary(deps(), joined(), NO_HOOKS)).rejects.toThrow("refused by test");
       const roles = await suite.node.execute(sql`select node_id, mode from box`);
       expect(roles.rows).toEqual([]);
     } finally {
@@ -258,37 +387,16 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
   it("leaves no mirror role or link behind when its signing key cannot be sealed", async () => {
     await suite.node.execute(
-      sql.raw(`create trigger refuse_signing_key before insert on box
+      sql.raw(`create trigger refuse_signing_key before update of signing_key_ciphertext on box
+        when new.signing_key_ciphertext is not null
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
       await expect(adoptFromPrimary(deps(), joined(), NO_HOOKS)).rejects.toThrow("refused by test");
       expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
-      expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
     } finally {
       await suite.node.execute(sql`drop trigger if exists refuse_signing_key`);
     }
-  });
-
-  it("hands over the stored name with the recovery key", async () => {
-    let ownNodeId = "";
-    const result = await adoptFromPrimary(
-      deps({
-        persistTrading: async (args) => {
-          ownNodeId = args.nodeId;
-        },
-      }),
-      joined(),
-      NO_HOOKS,
-    );
-    expect(result).toHaveProperty(
-      "breakGlassKeyName",
-      await readRecoveryKeyName(suite.node, ownNodeId),
-    );
-    expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
-      /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
-    );
-    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {
@@ -370,7 +478,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     );
     await adoptFromPrimary(deps(), joined(), NO_HOOKS);
 
-    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
+    for (const table of ["box", "node_pair_link"]) {
       expect(
         (await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows,
         table,
@@ -792,14 +900,12 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     ).catch((e: unknown) => e);
     expect((error as Error).message).toBe("disk refused");
-    for (const table of ["box", "box", "box"]) {
-      expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
-    }
+    expect((await suite.node.execute(sql`select node_id from box`)).rows).toEqual([]);
   });
 
   async function writtenNothing(): Promise<void> {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
-    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
+    for (const table of ["box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
     expect(await readdir(stateDir)).toEqual([]);
@@ -1053,7 +1159,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await expect(adoptFromPrimary(deps(), joined(), NO_HOOKS)).rejects.toMatchObject({
       code: "EEXIST",
     });
-    for (const table of ["box", "box", "box", "box", "box", "node_pair_link"]) {
+    for (const table of ["box", "node_pair_link"]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
   });
@@ -1073,14 +1179,17 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     }
   });
 
-  it("leaves no role, signing key, recovery key or link behind when the main box's key cannot be pinned", async () => {
+  it("leaves no role, signing key or link behind when the main box's key cannot be pinned", async () => {
+    // Refuses only the pin: the role, signing key and links are written first and must roll back.
     await suite.node.execute(
-      sql.raw(`create trigger refuse_pin before insert on box
+      sql.raw(`create trigger refuse_pin before update of primary_node_id on box
+        when new.primary_node_id is not null
         begin select raise(abort, 'refused by test'); end`),
     );
     try {
       await expect(adoptFromPrimary(deps(), joined(), NO_HOOKS)).rejects.toThrow("refused by test");
-      for (const table of ["box", "box", "box", "box", "node_pair_link"]) {
+      // The role, signing key, mirror link and pin are all columns of the one `box` row.
+      for (const table of ["box", "node_pair_link"]) {
         expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual(
           [],
         );

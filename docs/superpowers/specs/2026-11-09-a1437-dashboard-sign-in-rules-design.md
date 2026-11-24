@@ -70,7 +70,8 @@ is on it:
    plain text (`GET /api/backup/recovery-key`, `backup-api.ts:512`); changing where backups go or
    turning them off (`backup-api.ts` apply, disable, rotate; `stream-api.ts`); retiring the box
    (`POST /api/box/retire`). Why: each one either hands out everything needed to read the venue's
-   data, or sends it somewhere else.
+   data, or sends it somewhere else. (2026-11-24: `POST /api/box/recovery-pack` was removed in
+   A1323 PR 2c.)
 2. **Exports.** The configuration export (`configuration-export-api.ts:36`) and another person's
    personal data (`personal-data-export-api.ts:129`). Why: a copy of the business or of someone's
    data leaves the box.

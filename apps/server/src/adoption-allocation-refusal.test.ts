@@ -146,9 +146,9 @@ async function fiscalState() {
 it("adopts with the allocation-dependent module enabled, writing no fiscal row", async () => {
   const before = await fiscalState();
   expect(Object.values(before).every((rows) => Array.isArray(rows))).toBe(true);
-  await expect(adoptJoined(bundle(), { beforeFirstWrite: async () => {} })).resolves.toMatchObject({
-    breakGlassKeyName: expect.any(String),
-  });
+  await expect(
+    adoptJoined(bundle(), { beforeFirstWrite: async () => {} }),
+  ).resolves.toBeUndefined();
   expect(await fiscalState()).toEqual(before);
   expect(await readPendingAdoption(stateDir)).toMatchObject({
     originNodeId: PRIMARY,
@@ -158,10 +158,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
 it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
-  const adopted = adoptJoined(value, { beforeFirstWrite: async () => {} });
-  await expect(adopted).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
-  const result = await adopted;
-  expect(result.breakGlassKeyName).toMatch(/^\d{4}-\d{2}-\d{2} · /);
+  await expect(adoptJoined(value, { beforeFirstWrite: async () => {} })).resolves.toBeUndefined();
   expect(await suite.db.select().from(deployment)).toEqual([
     { id: 1, environment: "preproduction", stampedAt: expect.any(Date) },
   ]);

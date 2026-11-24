@@ -25,7 +25,7 @@ import {
   withStrong,
 } from "./recovery-pack-words.js";
 
-/** A plain pack, or a new master key (with a new box key, until the box key goes) and its pack. */
+/** A plain pack, or a new master key (with a new box key when the box has one) and its pack. */
 export type RecoveryPackDialogKind = "pack" | "master-key";
 
 /** The detail of `recovery-pack-made`: the pack's PDF, and whether the box has it marked received. */
@@ -308,7 +308,7 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
   }
 
-  /** Copy does not count: the pack also holds the new box key, which Copy leaves out. */
+  /** Copy does not count: the pack can hold more than the key, such as a new box key. */
   #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
     if (event.detail.action === "copy") return;
     this.used = true;

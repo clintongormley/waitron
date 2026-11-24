@@ -495,7 +495,6 @@ import { venueDiskFullMiddleware } from "./boot-failure.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
-import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import {
   readRecoveryDocumentEvidence,
@@ -4232,17 +4231,6 @@ async function bootServer(
     log,
   );
 
-  mountRecoveryPackApi(
-    app,
-    {
-      db,
-      nodeDb: store.node,
-      node: tradingContext,
-      modules: enabledAtStart,
-      now,
-    },
-    log,
-  );
   if (cloudConnection) {
     readCloudEmergency = () => cloudConnection.emergencyHints(config.managementOrigin);
     await cloudConnection

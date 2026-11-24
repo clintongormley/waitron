@@ -1225,10 +1225,6 @@ export const en = {
   "form.password_required": "Enter a password",
   "form.factor_required": "Enter your authenticator or recovery code",
   "form.confirm_password_required": "Confirm the password",
-  "file_input.drop": "Drop a file here",
-  "file_input.choose": "Choose file",
-  "file_input.replace": "Choose another file",
-  "file_input.preview": "Selected file preview",
   "nav.sections": "Sections",
   // The next two label icon-only buttons, so each is the button's accessible name.
   "nav.toggle": "Toggle navigation",
@@ -2396,8 +2392,8 @@ export const en = {
   "diagnostics.filter.search": "Search log",
   "servers.title": "Servers",
   "servers.hand_over": "Hand over the venue",
-  "servers.switch_label": "Print switch label",
-  "servers.switch_label_title": "Switch label: {name}",
+  "servers.switch_label": "Print QR code",
+  "servers.switch_label_title": "QR code: {name}",
   "servers.switch_label_qr_alt": "QR code that opens this box's switch page",
   "servers.switch_label_words":
     "If the main box fails, scan this with any till or phone on the venue's network",
@@ -2490,26 +2486,6 @@ export const en = {
     "Clearing frees the place it takes on the list of boxes. If it tries to come back under its old identity, this main box refuses it. To use that machine again, reset it and add it as a new spare. This cannot be undone.",
   "backup.title": "Backups",
   "backup.guide": "Backups guide",
-  "node_pack.create": "Create pack",
-  "node_pack.key_error": "The box key is not valid.",
-  "node_pack.title": "Node recovery pack",
-  "node_pack.key": "Box key",
-  "node_pack.register": "Allocation register",
-  "node_pack.secret_warning": "Keep this secret pack outside the box and its backups.",
-  "node_pack.old_key_warning":
-    "Older backups restore their older box key. Keep that paper until no older backup remains.",
-  "node_pack.archive_key_warning":
-    "This is the box key. The backup file opens with the separate backup encryption key.",
-  "node_pack.snapshot_warning":
-    "This register is a snapshot and may be out of date. Reprinting never frees used names. Consult the current outside register before recovery.",
-  "node_pack.file": "Signed allocation register",
-  "node_pack.file_error": "Choose a valid signed register file.",
-  "node_pack.download": "Download pack",
-  "node_pack.print": "Printable copy",
-  "node_pack.failed": "The recovery pack could not be created.",
-  "node_pack.intro":
-    "Use the current box key and the signed register from its custodian. No bucket or subscription is needed.",
-  "node_pack.clear": "Clear pack",
   "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
     "Download an encrypted copy of menus, layouts, staff profiles and settings to set up a new venue. Sales, fiscal records and credentials stay behind.",
@@ -6087,10 +6063,6 @@ export const es: Record<StringKey, string> = {
   "form.password_required": "Introduce una contraseña",
   "form.factor_required": "Introduce el código del autenticador o de recuperación",
   "form.confirm_password_required": "Confirma la contraseña",
-  "file_input.drop": "Suelta aquí un archivo",
-  "file_input.choose": "Elegir archivo",
-  "file_input.replace": "Elegir otro archivo",
-  "file_input.preview": "Vista previa del archivo elegido",
   "nav.sections": "Secciones",
   "nav.toggle": "Mostrar u ocultar la navegación",
   "nav.account_menu": "Menú de cuenta",
@@ -7285,8 +7257,8 @@ export const es: Record<StringKey, string> = {
   "diagnostics.filter.search": "Buscar en el registro",
   "servers.title": "Servidores",
   "servers.hand_over": "Traspasar el local",
-  "servers.switch_label": "Imprimir etiqueta de cambio",
-  "servers.switch_label_title": "Etiqueta de cambio: {name}",
+  "servers.switch_label": "Imprimir código QR",
+  "servers.switch_label_title": "Código QR: {name}",
   "servers.switch_label_qr_alt": "Código QR que abre la página de cambio de este servidor",
   "servers.switch_label_words":
     "Si el servidor principal falla, escanea esto con cualquier caja o móvil conectado a la red del local",
@@ -7384,27 +7356,6 @@ export const es: Record<StringKey, string> = {
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor de reserva. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "backup.guide": "Guía de copias de seguridad",
-  "node_pack.create": "Crear kit",
-  "node_pack.key_error": "La clave del servidor no es válida.",
-  "node_pack.title": "Kit de recuperación del nodo",
-  "node_pack.key": "Clave del servidor",
-  "node_pack.register": "Registro de asignaciones",
-  "node_pack.secret_warning":
-    "Guarda este kit secreto fuera del servidor y de sus copias de seguridad.",
-  "node_pack.old_key_warning":
-    "Las copias antiguas restauran la clave del servidor de entonces. Conserva ese papel hasta que no quede ninguna copia antigua.",
-  "node_pack.archive_key_warning":
-    "Esta es la clave del servidor. El archivo de copia se abre con la clave de cifrado de copias, que es otra.",
-  "node_pack.snapshot_warning":
-    "Este registro es una instantánea y puede estar desactualizado. Reimprimirlo no libera nombres usados. Consulta el registro externo actual antes de recuperar.",
-  "node_pack.file": "Registro de asignaciones firmado",
-  "node_pack.file_error": "Elige un archivo de registro firmado válido.",
-  "node_pack.download": "Descargar kit",
-  "node_pack.print": "Copia para imprimir",
-  "node_pack.failed": "No se pudo crear el kit de recuperación.",
-  "node_pack.intro":
-    "Usa la clave actual del servidor y el registro firmado de su custodio. No necesitas un bucket ni una suscripción.",
-  "node_pack.clear": "Borrar kit",
   "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":
     "Descarga una copia cifrada de cartas, planos, perfiles del personal y ajustes para crear un local nuevo. Las ventas, los registros fiscales y las credenciales no se copian.",

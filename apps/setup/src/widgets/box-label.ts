@@ -7,8 +7,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
 
-/** This box's label: scanned when the main box fails, it opens this box's switch page. Anything
- * placed inside sits beside Print label. */
+/** This box's label: scanned when the main box fails, it opens this box's switch page. Says
+ * `label-printed` each time Print QR code is pressed once the QR code is drawn. */
 @customElement("setup-box-label")
 export class SetupBoxLabel extends LitElement {
   static override styles = [
@@ -111,10 +111,10 @@ export class SetupBoxLabel extends LitElement {
               { qr: this.qr, name, code: page, note: t("done.label.words") },
               this.printFrame,
             );
+            this.dispatchEvent(new Event("label-printed", { bubbles: true, composed: true }));
           }}
           >${t("done.label.print")}</wt-button
         >
-        <slot></slot>
       </div>`;
   }
 }

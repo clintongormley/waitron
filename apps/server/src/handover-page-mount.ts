@@ -25,7 +25,7 @@ export function mountHandoverPage(
     if (match === null || match[1]!.length > 64) return c.notFound();
     if (match[1] === "emergency") {
       if ((await readNodeMode(deps.node, deps.nodeId)).mode !== "mirror") {
-        // The selling box's own switch label is scanned too; Servers is where its manager hands over.
+        // The selling box's own QR code is scanned too; Servers is where its manager hands over.
         if (
           deps.servesDashboard === true &&
           (await readHandoverRestriction(deps.node, deps.nodeId)) === null

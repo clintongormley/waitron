@@ -64,7 +64,7 @@ export async function makeBreakGlassSecret(): Promise<BreakGlassSecret> {
 }
 
 /** Saves `made`'s verifier under a fresh key name inside the caller's node transaction. */
-export async function mintBreakGlassKeyTx(
+async function mintBreakGlassKeyTx(
   venue: Database | Transaction,
   tx: NodeTransaction,
   nodeId: string,

@@ -146,10 +146,6 @@ export interface ProvisionResult {
 
 export interface AdoptOutcome {
   adopted: true;
-  /** The offline promote fallback. The server returns it once, so the wizard must show it before
-   * the box restarts. */
-  breakGlassSecret?: string;
-  breakGlassKeyName?: string;
   /** This box's own address, which its label's QR opens. */
   contactUrl?: string;
   restarting: true;

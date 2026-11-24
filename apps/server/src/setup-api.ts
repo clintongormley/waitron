@@ -167,12 +167,8 @@ export interface SetupDeps {
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. */
   seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
-  /** Adopts the main box's bundle that the join attempt holds once approved. The returned
-   * `breakGlassSecret` is surfaced ONCE in the Finish joining response and never logged. */
-  adoptJoined?: (
-    joined: JoinedBox,
-    hooks: AdoptHooks,
-  ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
+  /** Adopts the main box's bundle that the join attempt holds once approved. */
+  adoptJoined?: (joined: JoinedBox, hooks: AdoptHooks) => Promise<void>;
   joinAttempt?: BoxJoinAttempt;
   /** This box's configured origin; provision and Finish joining answer `labelContactUrl` of it,
    * which setup prints on the box's label. */
@@ -1389,7 +1385,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       mustRestart: () => void,
       operation?: ActiveSetupOperation,
     ) => {
-      const secret = await adoptJoined(joined, {
+      await adoptJoined(joined, {
         // Past "started", the store keeps the record, so a different request cannot run over a
         // half-adopted node.
         beforeFirstWrite: async (environment) => {
@@ -1398,10 +1394,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           await operation?.advance("venue_committed", { environment });
         },
       });
-      // The operator's only chance to record the offline promote fallback. It is NEVER logged.
       const contactUrl = labelContactUrl(deps.advertisedOrigin, joined.identity.nodeId);
       mustRestart();
-      return c.json({ adopted: true, ...secret, restarting: true, ...contactUrl }, 200);
+      return c.json({ adopted: true, restarting: true, ...contactUrl }, 200);
     };
     return runAdopt(c, log, () =>
       restartAfterReply(c, requestRestart, async (mustRestart) => {

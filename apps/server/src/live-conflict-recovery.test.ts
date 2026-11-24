@@ -15,6 +15,7 @@ import { invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
+import { readRecoveryKey } from "@waitron/node-db";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
@@ -30,7 +31,7 @@ import { parseConflictResult } from "@waitron/fiscal-verifactu/src/conflict-reco
 import { ALL_MODULES } from "./modules.js";
 import { createLiveModuleOperation } from "./live-module-operation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
@@ -299,6 +300,21 @@ it.each([
   },
 );
 
+it("the conflict switch on a spare takes the master key", async () => {
+  // A promoted spare holds no key of its own in node.db.
+  expect(await readRecoveryKey(suite.node, node.nodeId)).toBeNull();
+  const m = mounted();
+  const refused = await m.send(request({ recoveryKey: WRONG_MASTER_KEY }));
+  expect([refused.status, await refused.json()]).toEqual([
+    401,
+    { error: { code: "promotion.break_glass_invalid", params: {} } },
+  ]);
+  const input = await selected(m);
+  expect(
+    await publicAnswer(await m.send(request({ command: { kind: "activate", input } }))),
+  ).toMatchObject({ kind: "committed", result: { activationEventId: "conflict-event-1" } });
+  expect(await allocationRows(suite.db)).toHaveLength(2);
+});
 it("the real admission gate bounds wrong-key work before parsing, master-key reads and decoding", async () => {
   const m = mounted();
   const hashes = vi.spyOn(shared, "decodeMasterKeyCode");

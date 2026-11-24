@@ -207,7 +207,7 @@ type Adopt = NonNullable<SetupDeps["adoptJoined"]>;
 /** Join and Finish joining on the setup routes, with `joined` what the approved join holds. */
 async function postAdopt(
   stateDir: string,
-  adopt: Adopt = vi.fn(async () => ({ breakGlassSecret: "secret", breakGlassKeyName: "key" })),
+  adopt: Adopt = vi.fn(async () => undefined),
   joined: () => JoinedBox = () => {
     throw new Error("no join was approved");
   },
@@ -482,10 +482,7 @@ describe("runStagedReset", () => {
         storeUrl: spareStoreUrl("https://standby.example", identity.nodeId, 7443),
       });
       expect(await postAdopt(stateDir, adopt, joined)).toBe(200);
-      expect(await adopt.mock.results[0]?.value).toEqual({
-        breakGlassSecret: expect.any(String),
-        breakGlassKeyName: expect.stringMatching(/\S/),
-      });
+      expect(await adopt.mock.results[0]?.value).toBeUndefined();
       expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
       const trading = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
       expect(trading.WAITRON_NODE_ID).toBe(standbyNodeId);

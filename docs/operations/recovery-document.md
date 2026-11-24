@@ -34,13 +34,13 @@ or stop and change nothing.
 ## Make a new master key
 
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
-choose **Make a new master key** and confirm it is you as above. It makes a new master key and a
-new box key together, in a new pack. The dialog then shows the master key with its name: use
-**Download** or **Print**, then **Continue**. **Copy** copies the master key alone, which is not
-enough while the pack also holds the new box key. It is shown only this once, so **Stop**
-and Escape do nothing while the box is making it. The button is offered only once the card has read
-the box's status and the box has a box key, since the master key is made with the box key's
-replacement until the box key goes.
+choose **Make a new master key** and confirm it is you as above. It makes a new master key in a
+new pack, and a new box key with it when the box has one (a spare that joined and was promoted has
+none). The dialog then shows the master key with its name: use **Download** or **Print**, then
+**Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
+**Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
+it. The button is offered once the card has read the box's status. If the box key's page fails, no
+new master key is made either.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
@@ -51,8 +51,8 @@ fresh identity just to obtain another pack.
 The dashboard card is [recovery-pack-card.ts](../../apps/dashboard/src/screens/recovery-pack-card.ts)
 and its dialog [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts).
 The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-api.ts) check
-`system.manage`, the secure connection and a fresh sign-in, make the new master key and box key
-when asked, and keep a record of each pack and each master key's name and check value, never the
+`system.manage`, the secure connection and a fresh sign-in, make a new master key when asked,
+with a new box key when the box has one, and keep a record of each pack and each master key's name and check value, never the
 key itself or the pack's contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
 cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
 and [card tests](../../apps/dashboard/src/screens/recovery-pack-card.test.ts) cover the actions.

@@ -114,9 +114,8 @@ grande ocurre más a menudo.
 Un tamaño de texto guardado llega a los paneles y las cajas igual que los colores de un tema guardado
 (consulta [Guarda un tema](appearance.md#save)).
 
-El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de estación, la etiqueta
-del equipo y el kit de recuperación del nodo. El botón de inicio de sesión de Google conserva el
-tamaño de Google.
+El papel impreso conserva los tamaños de Waitron: los recibos, las comandas de estación y la
+etiqueta del equipo. El botón de inicio de sesión de Google conserva el tamaño de Google.
 
 Un tamaño fijado a mano también crece con el control, como explica [Fija el texto a
 mano](appearance.md#text-by-hand).

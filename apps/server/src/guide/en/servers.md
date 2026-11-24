@@ -51,8 +51,8 @@ request. If both boxes show the same code, choose **Join** on the new box and **
 main box, in either order. If the codes differ, choose **No**.
 
 Leave the new box's join page open. The new box then takes its first copy over the venue's network
-and restarts as the spare. Its page asks you to save the box key, then to print its own
-[switch label](servers.md#switch-label) and stick it on the box.
+and restarts as the spare. Its page asks you to print its [QR code](servers.md#switch-label) and
+attach it to the box.
 
 On the main box, open **System → Servers** and find the **Main box** and **Spare box** rows. On the spare's row, check its delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,
@@ -61,11 +61,10 @@ check that the spare is connected to the restaurant's network. **Rebuilding the 
 A switch first brings this spare's copy up to date. Check the copy offered on the handover page before switching.
 The bell and **Box status** warn when sending or applying changes is delayed, or the spare cannot be reached for two minutes.
 
-## Print a switch label for each box {#switch-label}
+## Print a QR code for each box {#switch-label}
 
-A new restaurant's box offers its label on its **Setup complete** page, and a spare on its own page:
-choose **Print label** and stick the label on that box. To print one again, open **System → Servers** on the main box, open the box's row menu, choose
-**Print switch label**, then **Print**. If the main box fails, scan the spare's label with any till or phone on the venue's
+A new restaurant's box offers its QR code on its **Setup complete** page, and a spare on its own page:
+choose **Print QR code** and attach it to that box. To print one again, open **System → Servers** on the main box, open the box's row menu, choose **Print QR code**, then **Print**. If the main box fails, scan the spare's QR code with any till or phone on the venue's
 network to open its [switch page](servers.md#emergency).
 
 ## Remove a spare box {#remove-a-spare}
@@ -90,7 +89,7 @@ box that restarts for longer than about 20 seconds, during an update for example
 reloading device here too; if you did not mean to switch, do not switch, and reload the
 page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
-`https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label).
+`https://spare.example/handover/emergency`, or scan the spare's [QR code](servers.md#switch-label).
 
 The page first checks whether the main box answers your device. If it does, the page says **The
 main box is answering**: choose **Go back to the till** (**Go back** when you did not come from a

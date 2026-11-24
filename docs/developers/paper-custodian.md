@@ -18,6 +18,9 @@
 > checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
 > `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
 
+> **2026-11-24, A1323 PR 2c:** the node recovery pack (Backups → Create pack) and the custodian's
+> `sign-register` command, whose output only that pack read, were removed.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one
@@ -195,38 +198,6 @@ The flag records your confirmation that reservation happened outside the venue. 
 not check or write the master register. Its output contains the validated payload and signature.
 It refuses an existing output file. Reprinting it does not create fresh names or clear consumption
 marks; the pack still identifies its generation and block and states that its snapshot may be stale.
-
-## Download and print a node recovery pack
-
-To give the venue a signed register file it can upload, use the same reserved block and signing
-key on the custodian's machine:
-
-```sh
-node packages/fiscal-verifactu/dist/paper-custodian.js sign-register \
-  --key /secure/master/custodian-2026.pem \
-  --input block.json --output recovery-register.json --reserved-outside
-```
-
-The output combines the signed block with the custodian's public key and fingerprint. Keep the
-private signing key with the custodian. This command signs the reserved block again; it does not
-allocate another block or clear any entry's consumption history.
-
-In the dashboard, open **Backups**, enter the current **Box key**, choose
-`recovery-register.json`, and select **Create pack**. You need management permission and the node
-key you already hold. You do not need bucket settings or a subscription. A wrong node key or a
-register for a different taxpayer, environment, venue or series set is refused.
-
-Download the JSON pack and the **Printable copy**. Open the downloaded HTML file in your browser
-and print it using the browser's Print action. It has no external assets. It includes the node
-key's stored name and secret, the signed register and the custodian's public fingerprint. Keep
-both downloads and the paper outside the box and its backups. Choose **Clear pack** to remove
-the screen's download links; this does not delete files you already downloaded.
-
-The printed register is a snapshot. Compare its custodian fingerprint with the current outside
-master before trusting it for recovery, and consult that master before consuming an entry.
-Reprinting a pack cannot establish that a name remains free. Keep paper keys needed by older
-backups even after you replace the live node key. The archive encryption key opens a backup file;
-the node recovery key authenticates the node operation. They remain separate credentials.
 
 ## Reserve an entry for a named standby
 

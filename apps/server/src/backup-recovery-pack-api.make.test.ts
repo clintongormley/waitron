@@ -716,6 +716,83 @@ describe("a made pack", () => {
     );
   });
 
+  it("with no box key in force, Make a new master key saves and answers the master key, and its pack shows it", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    suite.node.run(sql`delete from box`);
+    const response = await fixture().make(true);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
+    const shown = shownMasterKey(response);
+    expect(shown.masterKey).not.toBeNull();
+    const key = decodeMasterKeyCode(shown.masterKey!);
+    expect(shown.masterKeyName).toBe(masterKeyName(sealingPublicKey(key), "2026-10-30"));
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: old.name },
+      {
+        number: 2,
+        name: shown.masterKeyName,
+        checkValue: masterKeyCheckValue(key),
+        madeAt: new Date("2026-10-30T09:00:00.000Z"),
+        madeBy: admin.personId,
+      },
+    ]);
+    const bytes = await response.arrayBuffer();
+    const file = await readRecoveryPackPdf(new Uint8Array(bytes));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
+      shown.masterKey,
+      shown.masterKeyName,
+      null,
+    ]);
+    expect(file.serverKey).toBeNull();
+    expect(await firstPageText(bytes)).toBe(
+      `Waitron recovery pack · Sala Master key · ${shown.masterKeyName} ${shown.masterKey} Master key`,
+    );
+    expect(await readRecoveryKeyVerifier(suite.node, node.nodeId)).toBeNull();
+    const [record] = await packs();
+    expect(record!.parts[3]).toEqual({ part: "server-key", state: "not-set-up" });
+  });
+
+  it("with no box key in force, a refused master_keys save answers an error and keeps the old master key current", async () => {
+    const old = {
+      name: "2026-10-01 · AAAA",
+      checkValue: "a".repeat(64),
+      publicKey: Buffer.alloc(44, 1),
+      madeAt: new Date("2026-10-01T09:00:00.000Z"),
+      madeBy: null,
+    };
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, old));
+    suite.node.run(sql`delete from box`);
+    suite.db.run(
+      sql`create trigger refuse_master_key before insert on master_keys begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await fixture().make(true);
+    } finally {
+      suite.db.run(sql`drop trigger refuse_master_key`);
+    }
+    expect(refused.status).toBe(500);
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: old.name }]);
+  });
+
+  it("on a venue that files no invoices, Make a new master key saves and answers the master key", async () => {
+    const response = await fixture({ seat: null }).make(true);
+    expect(response.status).toBe(200);
+    const shown = shownMasterKey(response);
+    expect(shown.masterKey).not.toBeNull();
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: shown.masterKeyName }]);
+    const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    expect(file.masterKey).toBe(shown.masterKey);
+  });
+
   it("a pack made without a new master key names the pack that holds the current one", async () => {
     const f = fixture();
     const first = shownMasterKey(await f.make(true));
