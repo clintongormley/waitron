@@ -8,7 +8,7 @@ export const restoreEn = {
   "restore.allocation_placeholder": "Paste the recovery record from your custodian or phone.",
   "restore.allocation_node_key": "Selected backup’s box key",
   "restore.allocation_invalid": "Check the recovery record and its selected backup.",
-  "restore.allocation_key_missing": "Enter the selected backup’s box key.",
+  "restore.allocation_key_missing": "Enter the selected backup’s master key.",
   "restore.allocation_isolated": "The old machine is offline and no other recovery is running.",
   "restore.allocation_isolation_missing": "Confirm that this is the only recovery.",
   "restore.allocation_retained": "I have kept this request with the outside recovery records.",
@@ -201,7 +201,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.allocation_placeholder": "Pega el registro de recuperación de tu custodio o teléfono.",
   "restore.allocation_node_key": "Clave del servidor de la copia elegida",
   "restore.allocation_invalid": "Revisa el registro de recuperación y la copia elegida.",
-  "restore.allocation_key_missing": "Introduce la clave del servidor de la copia elegida.",
+  "restore.allocation_key_missing": "Introduce la clave maestra de la copia elegida.",
   "restore.allocation_isolated":
     "El servidor anterior está desconectado y no hay otra recuperación en curso.",
   "restore.allocation_isolation_missing": "Confirma que esta es la única recuperación.",
