@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backupAuditDay } from "./backup-audit-day.js";
+import { backupAuditDay, pairedAuditRuns } from "./backup-audit-day.js";
 
 const charge = (id: string, settledAt: string) => ({ id, settledAt });
 const run = (day: string, generation: number, matches: ReturnType<typeof charge>[]) => ({
@@ -58,5 +58,43 @@ describe("backup audits on the venue's calendar day", () => {
         charge("last", "2026-10-25T22:59:59.999Z"),
       ],
     });
+  });
+});
+
+describe("saved paired-reader evidence", () => {
+  const bounds = {
+    startAt: "2026-11-13T23:00:00.000Z",
+    endAt: "2026-11-14T23:00:00.000Z",
+  };
+  const saved = (day: string, generation: number) => ({
+    ...run(day, generation, []),
+    summary: { chargeAudit: { matches: [], missingLocal: [] } },
+  });
+  const first = saved("2026-11-13", 1);
+  const second = saved("2026-11-14", 0);
+
+  it("covers a Madrid day with the newest evidence from two runs", () => {
+    const old = { ...saved("2026-11-13", 0), summary: null };
+    expect(pairedAuditRuns(bounds, [first, old, second])).toEqual({
+      complete: true,
+      runs: [first, second],
+    });
+  });
+
+  it("marks unreadable SumUp charges as incomplete even when both runs succeeded", () => {
+    const missingLocal = [{ workingOrderId: null }];
+    const audit = (unlinkedCharges: number) =>
+      pairedAuditRuns(bounds, [
+        first,
+        { ...second, summary: { ...second.summary, unlinkedCharges, missingLocal } },
+      ]);
+    expect(audit(1).complete).toBe(true);
+    expect(audit(2).complete).toBe(false);
+  });
+
+  it("reports a gap or a latest run without paired charge evidence", () => {
+    const old = { ...saved("2026-11-14", 1), summary: null };
+    expect(pairedAuditRuns(bounds, [first]).complete).toBe(false);
+    expect(pairedAuditRuns(bounds, [first, second, old]).complete).toBe(false);
   });
 });

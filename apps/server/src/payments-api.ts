@@ -2,6 +2,7 @@ import { MODULES_SETTINGS } from "./modules.js";
 import { resolveVenueClock } from "@waitron/reporting";
 import { refundAudit, type RefundAuditRun } from "./refund-audit.js";
 import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
+import { readPairedReaderAudit, type PairedAuditRun } from "./paired-reader-audit.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
@@ -757,6 +758,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             periodFrom: reconciliationRuns.periodFrom,
             periodTo: reconciliationRuns.periodTo,
             generation: reconciliationRuns.generation,
+            startedAt: reconciliationRuns.startedAt,
+            finishedAt: reconciliationRuns.finishedAt,
             summary: reconciliationRuns.summary,
           })
           .from(reconciliationRuns)
@@ -851,12 +854,20 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             },
           });
         }
+        const standalone = backupAuditDay(
+          day,
+          clock.timeZone,
+          runs as BackupAuditRun<BackupPaymentMatch | BackupPaymentUnmatched>[],
+        );
+        const paired = await readPairedReaderAudit(
+          tx,
+          bounds,
+          runs as PairedAuditRun[],
+          standalone,
+        );
         return {
-          ...backupAuditDay(
-            day,
-            clock.timeZone,
-            runs as BackupAuditRun<BackupPaymentMatch | BackupPaymentUnmatched>[],
-          ),
+          ...standalone,
+          ...paired,
           refundAudit: refundAudit(period, summaries, await readRows()),
         };
       });

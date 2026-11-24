@@ -1,13 +1,18 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-data-table.js";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BackupAuditView, DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+
+type PairedRow = BackupAuditView["pairedAudit"]["rows"][number];
+const statusFilters = ["problem", "matched", "resolved", "all"] as const;
 
 @customElement("dashboard-backup-audit")
 export class BackupAudit extends LitElement {
@@ -31,12 +36,20 @@ export class BackupAudit extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      wt-combobox {
+        margin-block: var(--wt-space-2);
+        width: max-content;
+      }
+      wt-data-table {
+        --wt-table-cell-padding-inline: var(--wt-space-2);
+      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @state() private audit?: BackupAuditView;
   @state() private day?: string;
   @state() private error = "";
+  @state() private statusFilter: string = "problem";
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -61,6 +74,96 @@ export class BackupAudit extends LitElement {
         { passive: true },
       )
       .catch(() => undefined);
+  }
+  #paired(audit: BackupAuditView) {
+    const paired = audit.pairedAudit;
+    const locale = currentLocale();
+    const time = new Intl.DateTimeFormat(locale, {
+      timeZone: audit.timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const columns: DataTableColumn<PairedRow>[] = [
+      {
+        key: "time",
+        label: t("payments.paired.time"),
+        cell: (row) => time.format(new Date(row.settledAt)),
+      },
+      {
+        key: "bill",
+        label: t("orders.col.bill"),
+        choosable: "shown",
+        cell: ({ tableName, billNumber, orderNumber }) => {
+          const label = fill(
+            billNumber === null ? "payments.stuck.order" : "payments.paired.bill_number",
+            {
+              number: String(billNumber ?? orderNumber),
+            },
+          );
+          return tableName ? `${tableName} · ${label}` : label;
+        },
+      },
+      {
+        key: "reader",
+        label: t("payments.paired.reader"),
+        choosable: "shown",
+        cell: (row) => row.readerName,
+      },
+      {
+        key: "amount",
+        label: t("payments.stuck.amount"),
+        align: "end",
+        cell: (row) => formatMoney(decimal(row.amount), locale),
+      },
+      {
+        key: "status",
+        label: t("payments.reader_col_status"),
+        cell: (row) => row.statuses.map((status) => t(`payments.paired.${status}`)).join(" · "),
+      },
+    ];
+    const rows = paired.rows.filter(({ statuses }) => {
+      const group = statuses.includes("resolved")
+        ? "resolved"
+        : statuses.includes("matched") || statuses.includes("refunded_before_check")
+          ? "matched"
+          : "problem";
+      return this.statusFilter === "all" || this.statusFilter === group;
+    });
+    return html`
+      <h3>${t("payments.paired.title")}</h3>
+      <p>
+        ${fill("payments.paired.totals", { matched: String(paired.matched), toCheck: String(paired.toCheck) })}
+      </p>
+      ${paired.complete ? nothing : html`<p role="status">${t("payments.paired.incomplete")}</p>`}
+      <wt-combobox
+        name="paired-status"
+        label=${t("payments.reader_col_status")}
+        preserve-order
+        .value=${this.statusFilter}
+        .options=${statusFilters.map((value) => ({ value, label: t(`payments.paired.${value}`) }))}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.statusFilter = event.detail.value;
+        }}
+      ></wt-combobox>
+      <wt-data-table
+        wrap-to-fit
+        aria-label=${t("payments.paired.title")}
+        viewKey="waitron.payments.paired-audit.table"
+        customiseColumnsLabel=${t("table.customise_columns")}
+        customiseLabel=${t("table.customise")}
+        restoreColumnsLabel=${t("table.restore_columns")}
+        doneLabel=${t("table.done")}
+        moveColumnLabel=${t("table.move_column")}
+        showColumnLabel=${t("table.show_column")}
+        hideColumnLabel=${t("table.hide_column")}
+        alwaysShownColumnLabel=${t("table.column_always_shown")}
+        lastShownColumnLabel=${t("table.column_last_shown")}
+        columnPositionLabel=${t("table.column_position")}
+        .rows=${rows}
+        .columns=${columns}
+        .emptyMessage=${t("payments.paired.empty")}
+      ></wt-data-table>
+    `;
   }
   override render() {
     const audit = this.audit;
@@ -101,6 +204,7 @@ export class BackupAudit extends LitElement {
         audit
           ? html`
               <p>${audit.day} · ${audit.timeZone}</p>
+              ${this.#paired(audit)}
               ${audit.complete ? nothing : html`<p role="status">${t("payments.backup.incomplete")}</p>`}
               ${
                 refunds
@@ -117,7 +221,7 @@ export class BackupAudit extends LitElement {
                                 html`<li>
                                   <p>${t(`payments.refunds.${row.reason}`)}</p>
                                   ${row.providerAt === null && row.localAt === null ? html`<p>${t("payments.refunds.unknown_date")}</p>` : nothing}
-                                  ${row.charge ? html`<p>${t("payments.backup.exceptions")}: ${formatMoney(decimal(row.charge.amount), currentLocale())} · ${new Date(row.charge.settledAt).toLocaleString(currentLocale(), { timeZone: audit.timeZone })}</p>` : nothing}
+                                  ${row.charge ? html`<p>${t("payments.refunds.charge")} · ${formatMoney(decimal(row.charge.amount), currentLocale())} · ${new Date(row.charge.settledAt).toLocaleString(currentLocale(), { timeZone: audit.timeZone })}</p>` : nothing}
                                   <p>
                                     ${[row.processorRef, row.providerRefundRef, row.paymentRef, row.workingOrderId, row.externalMachine, row.externalRef].filter(Boolean).join(" · ")}
                                   </p>

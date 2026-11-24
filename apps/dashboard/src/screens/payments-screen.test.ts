@@ -1967,6 +1967,7 @@ it("opens the backup comparison from Check card payments", async () => {
       complete: false,
       backupMatches: [],
       backupUnmatched: [],
+      pairedAudit: { complete: false, matched: 0, toCheck: 0, rows: [] },
       refundAudit: {
         complete: false,
         checkedAt: [],
