@@ -355,6 +355,17 @@ describe("replaceTransferredSettings", () => {
     defaults: () => ({}),
     parse: (doc: unknown) => ({ ok: true as const, doc: doc as object }),
   });
+  const PARTIAL = defineSettingsDocument({
+    module: "partial",
+    version: 1,
+    transfers: ["menu", "theme"],
+    defaults: () => ({ menu: "starter", theme: "light", printer: "none" }),
+    parse: (doc: unknown) => ({ ok: true as const, doc: doc as Record<string, string> }),
+  });
+  const savePartial = (doc: Record<string, string>) =>
+    withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PARTIAL, { doc, expectedRevision: 0, personId: null }),
+    );
   it("replaces only the named documents, resetting revision and saver, and clears an omitted document", async () => {
     const [person] = await suite.db
       .insert(persons)
@@ -398,6 +409,49 @@ describe("replaceTransferredSettings", () => {
     ).rejects.toThrow("rollback");
     expect(await readSettings(suite.db, PROBE)).toEqual({ doc: {}, revision: 0 });
     expect(await readActivityForSubject(suite.db, { kind: "settings", id: "probe" })).toEqual([]);
+  });
+  it("imports only a partly transferred document's listed fields and keeps the destination's own", async () => {
+    await savePartial({ menu: "old", theme: "dark", printer: "kitchen" });
+    await withTransaction(suite.db, (tx) =>
+      replaceTransferredSettings(
+        tx,
+        [PARTIAL],
+        new Map([["partial", { menu: "new", theme: "light", printer: "bar" }]]),
+      ),
+    );
+    expect(await readSettings(suite.db, PARTIAL)).toEqual({
+      doc: { menu: "new", theme: "light", printer: "kitchen" },
+      revision: 2,
+    });
+  });
+  it("imports a never-saved partly transferred document's listed fields over its defaults", async () => {
+    await withTransaction(suite.db, (tx) =>
+      replaceTransferredSettings(
+        tx,
+        [PARTIAL],
+        new Map([["partial", { menu: "new", theme: "dark", printer: "bar" }]]),
+      ),
+    );
+    expect(await readSettings(suite.db, PARTIAL)).toEqual({
+      doc: { menu: "new", theme: "dark", printer: "none" },
+      revision: 1,
+    });
+  });
+  it("leaves a never-saved partly transferred document unsaved when nothing is imported for it", async () => {
+    await withTransaction(suite.db, (tx) => replaceTransferredSettings(tx, [PARTIAL], new Map()));
+    expect(await readSettings(suite.db, PARTIAL)).toEqual({
+      doc: { menu: "starter", theme: "light", printer: "none" },
+      revision: 0,
+    });
+    expect(suite.db.execute(sql`select module from settings`).rows).toEqual([]);
+  });
+  it("puts a saved partly transferred document's listed fields back to their defaults when nothing is imported for it", async () => {
+    await savePartial({ menu: "old", theme: "dark", printer: "kitchen" });
+    await withTransaction(suite.db, (tx) => replaceTransferredSettings(tx, [PARTIAL], new Map()));
+    expect(await readSettings(suite.db, PARTIAL)).toEqual({
+      doc: { menu: "starter", theme: "light", printer: "kitchen" },
+      revision: 2,
+    });
   });
   it("refuses an unknown key before deleting existing rows", async () => {
     await withTransaction(suite.db, (tx) =>

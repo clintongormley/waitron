@@ -9,6 +9,7 @@ import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import {
   readVenue,
+  readVenueAndBankAccount,
   readVenueClock,
   readVenueClockAndPlace,
   readVenueInvoiceLocales,
@@ -72,6 +73,23 @@ describe("the venue accessor", () => {
       timeZone: "Atlantic/Canary",
       dayCutover: "04:30:00",
     });
+  });
+
+  it("reads the venue and its saved bank account together", async () => {
+    await insertVenue({
+      name: "Bar Tenerife",
+      timeZone: "Atlantic/Canary",
+      dayCutover: "04:30:00",
+    });
+    expect(await withTransaction(suite.db, readVenueAndBankAccount)).toEqual({
+      venue: await withTransaction(suite.db, readVenue),
+      bankAccount: null,
+    });
+    const bankAccount = { iban: "ES9121000418450200051332", bankName: "Openbank" };
+    await seedVenueSettings(suite.db, { bankAccount });
+    const read = await withTransaction(suite.db, readVenueAndBankAccount);
+    expect(read).toEqual({ venue: await withTransaction(suite.db, readVenue), bankAccount });
+    expect(read.venue.name).toBe("Bar Tenerife");
   });
 
   it("reads the clock as stored, cutovers in date order as HH:MM", async () => {
