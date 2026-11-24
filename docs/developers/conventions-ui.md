@@ -356,9 +356,10 @@ carries this Content-Security-Policy, which lets that one script run by its hash
 else. The "sends no-cache and a policy that allows only the page's own script" case in
 `guide-pages.test.ts` hashes the page's script and compares the whole header.
 
-`BOX_FORM_STYLE` (in `guide-pages.ts`) draws the two server-drawn box forms in the dashboard's
-field look, with each label above its field: the replaced box's download form on the restricted
-page, and the waiting page's Carry on form. Only those two pages carry it. Both are drawn by
+`BOX_FORM_STYLE` (in `guide-pages.ts`) draws the server-drawn box forms in the dashboard's field
+look, with each label above its field: the replaced box's download form, on the restricted page and
+below the Carry on form on the waiting page, and the waiting page's Carry on form. Only those two
+pages carry it. Both are drawn by
 `renderLogoBoxPage`, so the waiting page has the download page's logo, centred column and theme;
 the carry-on flow's own pages in `carry-on.ts` (already handed over, restarting, carrying on, the
 other box answered) are drawn by it too, without the form style. Unlike the download page's answer,
@@ -508,7 +509,7 @@ These serve them:
 
 - the main app, in every mode, from `bootServer` beside the guides (`apps/server/src/boot.ts:1412`),
   before the first branch on the box's mode and before the spare and read-only gates;
-- the waiting start, while a box waits for its peer (`apps/server/src/waiting-start.ts:107`);
+- the waiting start, while a box waits for its peer (`apps/server/src/waiting-start.ts:128`);
 - the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:29`);
 - the recovery listener (`apps/server/src/recovery-listener.ts:128`);
 - the Waitron Cloud staff entrance, which passes `/legal/` reads, beside `/help/`, to the main app

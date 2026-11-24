@@ -21,6 +21,7 @@ import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import type { PasswordThrottle } from "./password-throttle.js";
+import { restrictedDownloadDeps } from "./restricted-page.js";
 import { enrolAuthenticator, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { row, sheetNamed } from "./testing/xlsx-rows.js";
 
@@ -74,14 +75,15 @@ function appWith(
   } = {},
 ) {
   const app = new Hono();
+  const page = {
+    venue: suite.db,
+    node: suite.node,
+    nodeId: options.nodeId ?? NODE_ID,
+    log,
+    resetOrdered: options.resetOrdered,
+  };
   oldBoxDataRoute({
-    page: {
-      venue: suite.db,
-      node: suite.node,
-      nodeId: options.nodeId ?? NODE_ID,
-      log,
-      resetOrdered: options.resetOrdered,
-    },
+    ...restrictedDownloadDeps(page),
     modules: options.modules ?? [fiscal],
     totpKeyRing: TOTP_KEY_RING,
     throttle: options.throttle,

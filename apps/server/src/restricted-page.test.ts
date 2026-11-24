@@ -925,13 +925,15 @@ describe("the restricted page's download section", () => {
       emergency:
         "This box may hold data that the new main box does not have. To keep it, download it here before this box is wiped.",
       planned: "Download the invoice records this box holds that the new main box does not.",
+      waiting:
+        "If another box took over running the venue while this box was off or out of reach, this box may hold data that box does not have. To keep it, download it here before this box is wiped.",
       email: "Email",
       password: "Password",
       totp: "Authenticator code",
       action: "Download",
       insecure: "To download this box's data, open this page at its https:// address.",
       signInRefused:
-        "That email and password do not match an account on this box. This box knows the accounts as they were when it stopped running the venue. Nothing was changed.",
+        "That email and password do not match an account on this box. This box knows the accounts as they were when it last ran the venue. Nothing was changed.",
       notPermitted:
         "This account cannot download this box's data. Sign in here with an administrator's account, or one with Manage boxes. Nothing was changed.",
       busy: "This box is already making the file. Try again in a minute.",
@@ -951,6 +953,8 @@ describe("the restricted page's download section", () => {
         "Este servidor puede tener datos que el nuevo servidor principal no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
       planned:
         "Descarga los registros de facturación que tiene este servidor y que el nuevo servidor principal no tiene.",
+      waiting:
+        "Si otro servidor pasó a llevar el local mientras este estaba apagado o sin conexión, este servidor puede tener datos que ese no tiene. Para conservarlos, descárgalos aquí antes de borrarlo.",
       email: "Correo electrónico",
       password: "Contraseña",
       totp: "Código del autenticador",
@@ -958,7 +962,7 @@ describe("the restricted page's download section", () => {
       insecure:
         "Para descargar los datos de este servidor, abre esta página en su dirección https://.",
       signInRefused:
-        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban cuando dejó de llevar el local. No se ha cambiado nada.",
+        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban la última vez que llevó el local. No se ha cambiado nada.",
       notPermitted:
         "Esta cuenta no puede descargar los datos de este servidor. Inicia sesión aquí con la cuenta de un administrador o con una que tenga Gestionar servidores. No se ha cambiado nada.",
       busy: "Este servidor ya está creando el archivo. Vuelve a intentarlo en un minuto.",
@@ -1040,6 +1044,7 @@ describe("the restricted page's download section", () => {
         heading: words.heading,
         emergency: words.emergency,
         planned: words.planned,
+        waiting: words.waiting,
         email: words.email,
         password: words.password,
         totp: words.totp,

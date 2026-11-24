@@ -249,7 +249,7 @@ agency continues on the main box.
 
 Before the main box wipes this box, download its data under **Download this box's data**. Enter the
 email and password of an administrator, or of an account with **Manage boxes**, as they were when
-this box stopped running the venue, and the authenticator code if the account uses one; passkeys and
+this box last ran the venue, and the authenticator code if the account uses one; passkeys and
 Google sign-in do not work here. Choose **Download**. The file's **Invoices** tab lists the invoice
 records; its first line says whether they are only those the main box did not have or every one this
 box holds. After an [emergency handover](servers.md#emergency), the file also has **Orders**,
@@ -331,6 +331,9 @@ once this box is running, so it stops waiting for that spare at each start.
 
 If the other box answers first, its answer wins. A box that has already handed over cannot carry
 on; its page says so instead of showing the form.
+
+Below the form, the page also offers **Download this box's data**, the same download and sign-in
+as on [a box that no longer runs the venue](servers.md#handed-over).
 
 If the backup confirms that another box has taken over, this box refuses to carry on. Open the
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
