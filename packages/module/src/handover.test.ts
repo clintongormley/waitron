@@ -48,6 +48,16 @@ describe("collectHandoverSummaries", () => {
     expect(await collectHandoverSummaries(modules, query)).toEqual({ payments: null });
   });
 
+  it("skips a module whose contribution has no summary", async () => {
+    const modules = [
+      withHandover("workforce", {
+        returnRecords: { read: async () => [], receive: async () => true },
+      }),
+      withHandover("payments", { summarise: async () => null }),
+    ];
+    expect(await collectHandoverSummaries(modules, query)).toEqual({ payments: null });
+  });
+
   it("a module that throws fails the whole collection with handover.summary_failed naming it", async () => {
     const modules = [
       withHandover("fiscal-verifactu", { summarise: async () => 1 }),

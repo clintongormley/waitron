@@ -42,7 +42,7 @@ export class MalformedHoldingsError extends Error {}
 
 /** What a module vouches for, and checks, in a copy of the venue database handed to another box. */
 export interface ModuleHandoverContribution {
-  summarise(query: BackupQuery): Promise<CanonicalValue>;
+  summarise?(query: BackupQuery): Promise<CanonicalValue>;
   returnRecords?: {
     read(tx: Transaction, sourceNodeId: string): Promise<CanonicalValue[]>;
     acceptPermission?: string;
@@ -90,9 +90,10 @@ export async function collectHandoverSummaries(
 ): Promise<Record<string, CanonicalValue>> {
   const summaries: Record<string, CanonicalValue> = {};
   for (const m of byName(modules)) {
-    if (m.handover === undefined) continue;
+    const handover = m.handover;
+    if (handover?.summarise === undefined) continue;
     try {
-      summaries[m.name] = await m.handover.summarise(query);
+      summaries[m.name] = await handover.summarise(query);
     } catch (e) {
       throw new AppError(
         "handover.summary_failed",
