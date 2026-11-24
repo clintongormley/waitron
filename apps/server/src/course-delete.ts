@@ -3,6 +3,9 @@ import { and, count, eq } from "drizzle-orm";
 import { AppError, type DeleteImpact } from "@waitron/shared";
 import {
   kitchenCourses,
+  menus,
+  menuItems,
+  setMenuLines,
   departmentCourses,
   orderDraftLines,
   products,
@@ -55,11 +58,15 @@ async function courseDeleteRules(
   const [lines] = await tx
     .select({ count: count() })
     .from(setMenuLineCourses)
-    .where(eq(setMenuLineCourses.courseId, id));
+    .innerJoin(setMenuLines, eq(setMenuLines.id, setMenuLineCourses.lineId))
+    .innerJoin(menus, eq(menus.id, setMenuLines.menuId))
+    .where(and(eq(setMenuLineCourses.courseId, id), eq(menus.active, true)));
   const [dishes] = await tx
     .select({ count: count() })
     .from(setMenuDishCourses)
-    .where(eq(setMenuDishCourses.courseId, id));
+    .innerJoin(menuItems, eq(menuItems.id, setMenuDishCourses.menuItemId))
+    .innerJoin(menus, eq(menus.id, menuItems.menuId))
+    .where(and(eq(setMenuDishCourses.courseId, id), eq(menus.active, true)));
   const settings = await readCourseDeleteSettings(tx, id);
   return {
     retained,

@@ -14,6 +14,12 @@ it("resolves a known code to its Spanish copy", () => {
   expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");
 });
 
+it("names the deleted menu and menu list in the shared Spanish refusal", () => {
+  const message = codeMessage("menu.deleted", "es");
+  expect(message).toContain("esta carta o este menú");
+  expect(message).toContain("la lista de cartas");
+});
+
 it("explains each emergency closure and the code-read wait in both languages", () => {
   for (const locale of ["en", "es"] as const) {
     for (const reason of [

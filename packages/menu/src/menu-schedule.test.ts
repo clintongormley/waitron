@@ -27,6 +27,7 @@ import {
   previewMenu,
   publishMenu,
   readLiveDocuments,
+  readRecordedDocuments,
   settleDue,
 } from "./menu-publication.js";
 import {
@@ -39,6 +40,7 @@ import {
 import { BATCH_SIZE } from "./batches.js";
 import { addMember } from "./sections.js";
 import { updateMenuItem, updateProduct } from "./operations.js";
+import { deleteMenu } from "./archive.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useMenuDb();
@@ -80,6 +82,30 @@ async function queue(activatesAt: Date, at = NOW) {
   const hash = await hashOf(f.lunch);
   return app((tx) => queueMenuPublication(tx, f.lunch, hash, activatesAt, ANA, { at }));
 }
+
+it("ends the edition already due, cancels the future edition and retains the recorded versions on deletion", async () => {
+  await setSoup("6.50");
+  const due = await queue(day(8));
+  await setSoup("7.00");
+  const future = await queue(day(10));
+  vi.setSystemTime(day(9));
+  await app((tx) => deleteMenu(tx, f.lunch, ANA));
+
+  expect(await scheduleRow(v1)).toMatchObject({ state: "superseded" });
+  expect(await scheduleRow(due.versionId)).toMatchObject({
+    state: "superseded",
+    cancelledAt: null,
+  });
+  expect(await scheduleRow(future.versionId)).toMatchObject({
+    state: "cancelled",
+    cancelledAt: day(9),
+    cancelledBy: ANA,
+  });
+  const recorded = await app((tx) =>
+    readRecordedDocuments(tx, [v1, due.versionId, future.versionId]),
+  );
+  expect([...recorded.keys()].sort()).toEqual([v1, due.versionId, future.versionId].sort());
+});
 
 async function cancel(versionId: string, menuId = f.lunch) {
   return app((tx) => cancelMenuPublication(tx, menuId, versionId, ANA, NOW));

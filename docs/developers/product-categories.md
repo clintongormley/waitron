@@ -155,7 +155,7 @@ unknown menu answers `menu.not_found` (404).
 
 Creating a menu (`POST /management-api/menus`) and renaming one
 (`PATCH /management-api/menus/:id`, with `{ name }`) also refuse a name held by another menu
-with `menu.name_taken` (409, `field: "name"`). Inactive menus hold their names too. Comparisons
+with `menu.name_taken` (409, `field: "name"`). You can reuse a deleted menu's name. Comparisons
 ignore case, Unicode composition and surrounding whitespace, but retain accents and interior
 spacing. Existing duplicate names do not block presentation edits that keep the stored name;
 changing that name must pass the check.
@@ -573,8 +573,11 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 
 `categories` holds each category's name, parent and colour in core's set. Its parent key refuses
 deleting a category while a child still names it. `menus` holds its display settings, and
-`sections` holds the root and Home roles. Archiving through `deactivateMenu` writes
-`menu.archived` once for the active-to-inactive transition, with its name and the supplied person.
+`sections` holds the root and Home roles. `deleteMenu` detaches a menu from working menus, keeps
+its Home positions as named missing shortcuts, and ends its own live and scheduled editions.
+`menu.deleted` records the menu name and person. The menu and recorded editions stay in the database.
+Configuration export omits the menu and rows that reference it. Reset a test venue to clear photo
+references from menus archived before this change.
 
 Before opening a development venue on this branch, run `wa-wt reset demo <worktree-name>` (from
 Claude, for its own copy: `wa-wt reset own demo <worktree-name>`).

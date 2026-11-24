@@ -453,52 +453,21 @@ describe("the Home page tab's shortcuts", () => {
     expect(inPreview(el, "grip-t-burger")).not.toBeNull();
   });
 
-  it.each(["disabled only", "nested disabled", "enabled alternate", "inactive product"])(
-    "uses the structure for a hidden product's reason: %s",
-    async (scenario) => {
-      const document = menuDocument([], {});
-      const nodes: MenuStructureNode[] = [
-        {
-          memberId: "m-off",
-          ref: { kind: "section", sectionId: "root-off" },
-          includedMenuId: "menu-off",
-          children: [productNode("m-burger", "p-burger")],
-        },
-      ];
-      if (scenario === "nested disabled")
-        nodes[0]!.children = [
-          {
-            memberId: "m-inner",
-            ref: { kind: "section", sectionId: "s-inner" },
-            children: [productNode("m-burger", "p-burger")],
-          },
-        ];
-      if (scenario === "enabled alternate") nodes.push(productNode("m-own-burger", "p-burger"));
-      const client = api({
-        listMenus: vi
-          .fn()
-          .mockResolvedValue([...menus, { id: "menu-off", name: "Drinks", active: false }]),
-        listLibraryProducts: vi
-          .fn()
-          .mockResolvedValue(
-            products.map((p) => ({ ...p, active: scenario !== "inactive product" })),
-          ),
-        getMenuStructure: vi.fn().mockResolvedValue({ ...structureOf("menu-lunch"), nodes }),
-        getMenuPreview: vi.fn().mockResolvedValue({ ...previewOf("menu-lunch"), document }),
-        getMenuHome: vi.fn().mockResolvedValue(homeWith("t-burger")),
-      });
-      const el = await mountHome(client);
-      const hidden = preview(el)!.shadowRoot!.querySelector('.tile[data-state="hidden"]')!;
-      expect(text(hidden)).toContain(
-        t(
-          scenario === "disabled only" || scenario === "nested disabled"
-            ? "home.not_shown_disabled_menu"
-            : "home.not_shown_not_on_sale",
-        ),
-      );
-      expect(client.listMenus).toHaveBeenCalledTimes(1);
-    },
-  );
+  it("marks a shortcut hidden when the product is no longer on sale", async () => {
+    const client = api({
+      listLibraryProducts: vi
+        .fn()
+        .mockResolvedValue(products.map((p) => ({ ...p, active: false }))),
+      getMenuPreview: vi
+        .fn()
+        .mockResolvedValue({ ...previewOf("menu-lunch"), document: menuDocument([], {}) }),
+      getMenuHome: vi.fn().mockResolvedValue(homeWith("t-burger")),
+    });
+    const el = await mountHome(client);
+    const hidden = preview(el)!.shadowRoot!.querySelector('.tile[data-state="hidden"]')!;
+    expect(text(hidden)).toContain(t("home.not_shown_not_on_sale"));
+    expect(client.listMenus).toHaveBeenCalledTimes(1);
+  });
 
   it("keeps an unchanged menu preview from rendering on unrelated screen updates", async () => {
     const el = await mountHome();

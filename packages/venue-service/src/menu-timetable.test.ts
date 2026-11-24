@@ -42,11 +42,11 @@ import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
-  archivePeriodMenus,
+  replaceDeletedPeriodMenus,
   readRoutingUses,
   placeOpenPeriod,
   readOpeningHoursModel,
-  readMenuArchivePeriods,
+  readMenuDeletePeriods,
   replaceMenuWeek,
   resolveDefaultMenu,
   resolveDepartmentService,
@@ -132,7 +132,7 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
 
-describe("archiving a period menu", () => {
+describe("deleting a period menu", () => {
   it("promotes a staff choice and removes the retired menu from other periods", async () => {
     const v = await venue();
     const { Breakfast, Lunch, Dinner } = v.menus;
@@ -141,12 +141,12 @@ describe("archiving a period menu", () => {
       await updateMenuPeriod(tx, mornings, { staffMenuIds: [Lunch, Dinner] });
       await updateMenuPeriod(tx, supper, { staffMenuIds: [Breakfast] });
       await expect(
-        archivePeriodMenus(tx, Breakfast, { [mornings]: Lunch, [supper]: Lunch }),
+        replaceDeletedPeriodMenus(tx, Breakfast, { [mornings]: Lunch, [supper]: Lunch }),
       ).rejects.toMatchObject({
-        code: "menu_period.archive_replacement",
+        code: "menu_period.delete_replacement",
         params: { periodId: supper },
       });
-      await archivePeriodMenus(tx, Breakfast, { [mornings]: Lunch });
+      await replaceDeletedPeriodMenus(tx, Breakfast, { [mornings]: Lunch });
       expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, mornings))).toEqual([
         expect.objectContaining({ name: "Mornings", menuId: Lunch, staffMenuIds: [Dinner] }),
       ]);
@@ -161,10 +161,10 @@ describe("archiving a period menu", () => {
     const periodId = v.periods!.mornings;
     await scoped(async (tx) => {
       await expect(
-        archivePeriodMenus(tx, v.menus.Breakfast, {
+        replaceDeletedPeriodMenus(tx, v.menus.Breakfast, {
           [periodId]: v.menus.Breakfast,
         }),
-      ).rejects.toMatchObject({ code: "menu_period.archive_replacement", params: { periodId } });
+      ).rejects.toMatchObject({ code: "menu_period.delete_replacement", params: { periodId } });
     });
   });
 
@@ -184,12 +184,12 @@ describe("archiving a period menu", () => {
       await publish(tx, Lunch);
       await updateMenuPeriod(tx, v.periods!.noon, { menuId: Dinner });
       await updateMenuPeriod(tx, periodId, { staffMenuIds: [Lunch] });
-      expect(await readMenuArchivePeriods(tx, Lunch)).toMatchObject([
+      expect(await readMenuDeletePeriods(tx, Lunch)).toMatchObject([
         { id: periodId, requiresSellable: true, choices: [] },
       ]);
       for (const replacements of [{}, { [periodId]: Dinner }]) {
-        await expect(archivePeriodMenus(tx, Lunch, replacements)).rejects.toMatchObject({
-          code: "menu_period.archive_replacement",
+        await expect(replaceDeletedPeriodMenus(tx, Lunch, replacements)).rejects.toMatchObject({
+          code: "menu_period.delete_replacement",
           params: { periodId },
         });
       }
@@ -225,7 +225,7 @@ describe("archiving a period menu", () => {
       await publish(tx, Lunch);
       await addProductToMenu(tx, { menuId: Breakfast, productId: dish!.id });
       await publish(tx, Breakfast);
-      await archivePeriodMenus(tx, Breakfast, { [periodId]: Lunch });
+      await replaceDeletedPeriodMenus(tx, Breakfast, { [periodId]: Lunch });
       const [stored] = await tx.select().from(menuPeriods).where(eq(menuPeriods.id, periodId));
       expect(stored?.menuId).toBe(Lunch);
     });

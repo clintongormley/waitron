@@ -20,6 +20,7 @@ export async function duplicateMenu(
 ): Promise<Menu> {
   const [details] = await tx.select().from(menus).where(eq(menus.id, sourceMenuId));
   if (details === undefined) throw new AppError("menu.not_found", { menuId: sourceMenuId });
+  if (!details.active) throw new AppError("menu.deleted", { menuId: sourceMenuId });
   const { internalName } = await sectionPatchValues(tx, { internalName: name });
   const owned = await tx.select().from(sections).where(eq(sections.ownerMenuId, sourceMenuId));
   const members = [];

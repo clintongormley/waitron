@@ -435,7 +435,7 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("keeps product tiles on an archived menu readable through its structure", async () => {
+  it("keeps product tiles on an inactive menu readable through its structure", async () => {
     const f = await menusFixture(fx.db);
     await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
     await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));

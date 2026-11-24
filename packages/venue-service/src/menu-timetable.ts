@@ -29,7 +29,7 @@ import {
   AppError,
   createLabelComparator,
   type BusinessDayClock,
-  type MenuArchivePeriod,
+  type MenuDeletePeriod,
 } from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
@@ -451,7 +451,7 @@ export async function updateMenuPeriod(
   });
 }
 
-async function menuArchiveChanges(tx: Transaction, menuId: string) {
+async function menuDeleteChanges(tx: Transaction, menuId: string) {
   const periods = (await readActivePeriods(tx)).filter(
     (period) => period.menuId === menuId || period.staffMenuIds.includes(menuId),
   );
@@ -479,7 +479,7 @@ async function menuArchiveChanges(tx: Transaction, menuId: string) {
     const losesLastChoice =
       sellable(menuId) &&
       !(starting ? staffMenuIds : [period.menuId, ...staffMenuIds]).some(sellable);
-    const impact: MenuArchivePeriod = {
+    const impact: MenuDeletePeriod = {
       id: period.id,
       name: period.name,
       departmentName: departmentNames.get(period.departmentId)!,
@@ -492,26 +492,26 @@ async function menuArchiveChanges(tx: Transaction, menuId: string) {
   });
 }
 
-export async function readMenuArchivePeriods(
+export async function readMenuDeletePeriods(
   tx: Transaction,
   menuId: string,
-): Promise<MenuArchivePeriod[]> {
-  return (await menuArchiveChanges(tx, menuId)).map(({ impact }) => impact);
+): Promise<MenuDeletePeriod[]> {
+  return (await menuDeleteChanges(tx, menuId)).map(({ impact }) => impact);
 }
 
-export async function archivePeriodMenus(
+export async function replaceDeletedPeriodMenus(
   tx: Transaction,
   menuId: string,
   replacements: Readonly<Record<string, string>>,
 ): Promise<void> {
-  const changes = await menuArchiveChanges(tx, menuId);
+  const changes = await menuDeleteChanges(tx, menuId);
   for (const periodId of Object.keys(replacements))
     if (!changes.some(({ impact }) => impact.id === periodId && impact.replacement !== null))
-      throw new AppError("menu_period.archive_replacement", { periodId });
+      throw new AppError("menu_period.delete_replacement", { periodId });
   for (const { period, staffMenuIds, impact } of changes) {
     const selected = replacements[period.id];
     if (impact.replacement !== null && !impact.choices.some((choice) => choice.id === selected))
-      throw new AppError("menu_period.archive_replacement", { periodId: period.id });
+      throw new AppError("menu_period.delete_replacement", { periodId: period.id });
     await updateMenuPeriod(tx, period.id, {
       menuId: impact.starting ? selected : period.menuId,
       staffMenuIds: impact.starting

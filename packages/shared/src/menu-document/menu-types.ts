@@ -207,7 +207,7 @@ export interface OfferedOptionsList {
  */
 export type OfferedModifier = OfferedExtrasList | OfferedOptionsList;
 
-export interface MenuArchivePeriod {
+export interface MenuDeletePeriod {
   id: string;
   name: string;
   departmentName: string;
@@ -217,8 +217,9 @@ export interface MenuArchivePeriod {
   choices: { id: string; name: string }[];
 }
 
-export interface MenuArchiveImpact {
+export interface MenuDeleteImpact {
+  productCount: number;
   dependants: { id: string; name: string }[];
-  periods: MenuArchivePeriod[];
+  periods: MenuDeletePeriod[];
   defaultChoices: { id: string; name: string }[] | null;
 }

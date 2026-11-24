@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { DashboardPermissionContinuation } from "@waitron/dashboard-kit";
-import type { MenuArchiveImpact } from "@waitron/shared";
+import type { MenuDeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -17,10 +17,10 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 
-type Choices = NonNullable<MenuArchiveImpact["defaultChoices"]>;
+type Choices = NonNullable<MenuDeleteImpact["defaultChoices"]>;
 
-@customElement("dashboard-menu-archive-dialog")
-export class MenuArchiveDialog extends LitElement {
+@customElement("dashboard-menu-delete-dialog")
+export class MenuDeleteDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
@@ -36,10 +36,10 @@ export class MenuArchiveDialog extends LitElement {
     `,
   ];
 
-  @property({ attribute: false }) menu!: Pick<MenuSummary, "id" | "name">;
-  @property({ attribute: false }) api!: Pick<DashboardApi, "getMenuArchiveImpact" | "archiveMenu">;
+  @property({ attribute: false }) menu!: Pick<MenuSummary, "id" | "name" | "kind">;
+  @property({ attribute: false }) api!: Pick<DashboardApi, "getMenuDeleteImpact" | "deleteMenu">;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
-  @state() private impact?: MenuArchiveImpact;
+  @state() private impact?: MenuDeleteImpact;
   @state() private draft: Record<string, string> = {};
   @state() private busy = false;
   @state() private problem = "";
@@ -76,7 +76,7 @@ export class MenuArchiveDialog extends LitElement {
     const code = codeOf(error);
     const permission = (error as { params?: { permission?: string } })?.params?.permission;
     this.permission = code === "authorization.not_permitted" ? (permission ?? "") : "";
-    this.problem = this.permission ? t("menus.archive_permission") : codeMessage(code);
+    this.problem = this.permission ? t("menus.delete_permission") : codeMessage(code);
   }
 
   private async load(): Promise<void> {
@@ -84,7 +84,7 @@ export class MenuArchiveDialog extends LitElement {
     this.problem = "";
     this.permission = "";
     try {
-      const impact = await this.api.getMenuArchiveImpact(this.menu.id);
+      const impact = await this.api.getMenuDeleteImpact(this.menu.id);
       if (!this.isConnected) return;
       const draft: Record<string, string> = {};
       for (const { id, choices, replacement } of impact.periods) {
@@ -131,13 +131,13 @@ export class MenuArchiveDialog extends LitElement {
     if (result === "signed-in" && !signal.aborted) void this.load();
   }
 
-  private async archive(): Promise<void> {
+  private async deleteMenu(): Promise<void> {
     if (!this.ready || this.busy || this.permission) return;
     this.busy = true;
     this.problem = "";
     const { default: defaultMenuId, ...replacements } = this.draft;
     try {
-      await this.api.archiveMenu(this.menu.id, {
+      await this.api.deleteMenu(this.menu.id, {
         replacements,
         ...(defaultMenuId ? { defaultMenuId } : {}),
       });
@@ -150,7 +150,7 @@ export class MenuArchiveDialog extends LitElement {
     if (!this.isConnected) return;
     this.scope?.commit(this.draft);
     this.renderRoot.querySelector("wt-modal")!.closeAfter("saved");
-    this.dispatchEvent(new CustomEvent("menu-archived", { bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent("menu-deleted", { bubbles: true, composed: true }));
   }
 
   private choice(key: string, label: string, choices: Choices) {
@@ -176,49 +176,58 @@ export class MenuArchiveDialog extends LitElement {
     return html`<wt-modal
       open
       size="compact"
-      heading=${fill("menus.archive_heading", { name: this.menu.name })}
+      heading=${fill("menus.delete_heading", { name: this.menu.name })}
       .beforeClose=${this.beforeClose}
       .dismissible=${!this.busy}
       @wt-close=${(event: Event) => {
         if (event.target !== event.currentTarget) return;
         event.stopPropagation();
-        this.dispatchEvent(
-          new CustomEvent("menu-archive-close", { bubbles: true, composed: true }),
-        );
+        this.dispatchEvent(new CustomEvent("menu-delete-close", { bubbles: true, composed: true }));
       }}
     >
       <div class="body">
-        <p data-test="archive-warning">${t("menus.archive_warning")}</p>
+        ${
+          impact
+            ? html`<p data-test="delete-product-count">
+                ${
+                  impact.productCount === 1
+                    ? t("menus.delete_product_count_one")
+                    : fill("menus.delete_product_count", { count: String(impact.productCount) })
+                }
+              </p>`
+            : nothing
+        }
+        <p data-test="delete-warning">${t("menus.delete_warning")}</p>
         ${!impact && !this.problem ? html`<p role="status">${t("menus.loading")}</p>` : nothing}
         ${impact?.periods.map((period) => {
           const name = `${period.departmentName} · ${period.name}`;
           if (period.replacement === null)
-            return html`<p>${fill("menus.archive_remove_staff", { name })}</p>`;
+            return html`<p>${fill("menus.delete_remove_staff", { name })}</p>`;
           if (period.choices.length === 0)
             return html`<p>
               ${fill(
                 period.requiresSellable
-                  ? "menus.archive_period_publish"
-                  : "menus.archive_period_blocked",
+                  ? "menus.delete_period_publish"
+                  : "menus.delete_period_blocked",
                 { name },
               )}
             </p>`;
           return this.choice(
             period.id,
-            fill(period.starting ? "menus.archive_starting" : "menus.archive_staff", { name }),
+            fill(period.starting ? "menus.delete_starting" : "menus.delete_staff", { name }),
             period.choices,
           );
         })}
         ${
           impact?.defaultChoices != null
             ? html`
-                <p>${t("menus.archive_default_reason")}</p>
+                <p>${t("menus.delete_default_reason")}</p>
                 ${
                   impact.defaultChoices.length === 0
-                    ? html`<p>${t("menus.archive_default_blocked")}</p>`
+                    ? html`<p>${t("menus.delete_default_blocked")}</p>`
                     : this.choice(
                         "default",
-                        t("menus.archive_default_choice"),
+                        t("menus.delete_default_choice"),
                         impact.defaultChoices,
                       )
                 }
@@ -227,7 +236,13 @@ export class MenuArchiveDialog extends LitElement {
         }
         ${
           impact?.dependants.length
-            ? html`<p>${t("menus.archive_dependants")}</p>
+            ? html`<p>
+                  ${t(
+                    this.menu.kind === "set_menu"
+                      ? "menus.delete_set_menu_dependants"
+                      : "menus.delete_dependants",
+                  )}
+                </p>
                 <ul>
                   ${impact.dependants.map(({ name }) => html`<li>${name}</li>`)}
                 </ul>`
@@ -252,12 +267,12 @@ export class MenuArchiveDialog extends LitElement {
                   >${t("menus.retry")}</wt-button
                 >`
               : html`<wt-button
-                  data-test="archive"
+                  data-test="delete"
                   variant=${this.ready ? "danger" : "secondary"}
                   ?disabled=${!this.ready || this.busy || !!this.permission}
                   ?loading=${this.busy}
-                  @click=${() => void this.archive()}
-                  >${t("product.archive")}</wt-button
+                  @click=${() => void this.deleteMenu()}
+                  >${t("action.delete")}</wt-button
                 >`
         }
       </wt-form-actions>
@@ -267,6 +282,6 @@ export class MenuArchiveDialog extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-menu-archive-dialog": MenuArchiveDialog;
+    "dashboard-menu-delete-dialog": MenuDeleteDialog;
   }
 }

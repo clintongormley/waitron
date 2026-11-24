@@ -55,7 +55,7 @@ export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, Home
 async function requireMenuHome(tx: Transaction, menuId: string, writing = false): Promise<HomeRow> {
   const [row] = await tx.select().from(menus).where(eq(menus.id, menuId));
   if (row === undefined) throw new AppError("menu.not_found", { menuId: menuId });
-  if (writing && !row.active) throw new AppError("menu.archived", { menuId });
+  if (writing && !row.active) throw new AppError("menu.deleted", { menuId });
   return {
     rootSectionId: await requireMenuRoot(tx, menuId),
     homeSectionId: (await menuHome(tx, menuId))!,

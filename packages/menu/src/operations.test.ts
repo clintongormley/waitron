@@ -8,6 +8,7 @@ import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.
 import { menusFixture } from "../test/menus-fixture.js";
 import {
   menuItems,
+  menus,
   products,
   productTakeawayVatRates,
   sections,
@@ -2069,55 +2070,55 @@ describe("declared product facts", () => {
   });
 });
 
-it("frees a name for a new menu after the old menu is archived", async () => {
+it("frees a deleted menu’s name and leaves only the replacement in the list", async () => {
   await withTransaction(fx.db, async (tx) => {
     const old = await createMenu(tx, { name: "Winter" });
     await deactivateMenu(tx, old.id);
     const replacement = await createMenu(tx, { name: "winter" });
     expect(replacement.id).not.toBe(old.id);
-    expect(new Map((await listMenus(tx)).map(({ id, active }) => [id, active]))).toEqual(
-      new Map([
-        [old.id, false],
-        [replacement.id, true],
-      ]),
-    );
+    expect((await listMenus(tx)).map(({ id }) => id)).toEqual([replacement.id]);
+    const [retained] = await tx
+      .select({ active: menus.active })
+      .from(menus)
+      .where(eq(menus.id, old.id));
+    expect(retained).toEqual({ active: false });
   });
 });
 
-it("clears an archived menu's default and refuses to set it again", async () => {
+it("clears an inactive menu's default and refuses to set it again", async () => {
   await withTransaction(fx.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Winter" });
     await setVenueDefaultMenu(tx, menu.id);
     await deactivateMenu(tx, menu.id);
     expect(await readDefaultMenuId(tx)).toBeNull();
     await expect(setVenueDefaultMenu(tx, menu.id)).rejects.toMatchObject({
-      code: "menu.archived",
+      code: "menu.deleted",
     });
   });
 });
 
-it("refuses edits to archived menu details", async () => {
+it("refuses edits to inactive menu details", async () => {
   await withTransaction(fx.db, async (tx) => {
     const menu = await createMenu(tx, { name: "Winter" });
     await deactivateMenu(tx, menu.id);
     await expect(updateMenuDetails(tx, menu.id, { name: "Summer" })).rejects.toMatchObject({
-      code: "menu.archived",
+      code: "menu.deleted",
     });
   });
 });
 
-it("records an archived menu once with its name and the given person", async () => {
+it("records menu deletion once with the name and the given person", async () => {
   const personId = await seedPerson(fx.db);
-  const menu = await withTransaction(fx.db, (tx) => createMenu(tx, { name: "Archive menu" }));
+  const menu = await withTransaction(fx.db, (tx) => createMenu(tx, { name: "Winter lunch" }));
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   const entries = await readActivityForSubject(fx.db, { kind: "menu", id: menu.id });
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({
-    kind: "menu.archived",
+    kind: "menu.deleted",
     subjectKind: "menu",
     subjectId: menu.id,
     personId,
-    data: { name: "Archive menu" },
+    data: { name: "Winter lunch" },
   });
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   expect(await readActivityForSubject(fx.db, { kind: "menu", id: menu.id })).toEqual(entries);

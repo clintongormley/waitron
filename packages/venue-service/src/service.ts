@@ -61,8 +61,8 @@ import { dueFloorLayouts } from "./floor-layout-due.js";
 import { readFloorPlanSets } from "./floor-plan-set-store.js";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 import {
-  archivePeriodMenus,
-  readMenuArchivePeriods,
+  replaceDeletedPeriodMenus,
+  readMenuDeletePeriods,
   resolveDefaultMenu,
   resolveDepartmentService,
 } from "./menu-timetable.js";
@@ -134,8 +134,8 @@ import { readDeviceZoneSelection, setDeviceZoneSelection } from "./device-zone-s
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
-  readMenuArchivePeriods,
-  archivePeriodMenus,
+  readMenuDeletePeriods,
+  replaceDeletedPeriodMenus,
   dueFloorLayouts,
   readServiceDay,
   readFloorPlanSets,

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   mediaBlobs,
+  mediaImages,
   menus,
   products,
   withTransaction,
@@ -17,6 +18,7 @@ import {
   createMenu,
   createProduct,
   createSectionIn,
+  deleteMenu,
   menuVersionImages,
   menuReleases,
   menuVersions,
@@ -31,6 +33,7 @@ import {
 } from "@waitron/menu";
 import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { deleteImage } from "./images.js";
 
 /**
  * `products.image`, `sections.image`, `section_members.folder_image` and
@@ -113,6 +116,25 @@ async function imageCount(): Promise<number> {
 let ids: Fixture;
 beforeEach(async () => {
   ids = await fixture(suite.db);
+});
+
+it("releases a deleted menu’s own section and folder photos for separate deletion", async () => {
+  await suite.db.update(sections).set({ image: PRESENT }).where(eq(sections.id, ids.sectionId));
+  await suite.db.insert(sectionMembers).values({
+    sectionId: ids.sectionId,
+    productId: ids.productId,
+    position: 0,
+    folderImage: PRESENT,
+    folderImageFixed: true,
+  });
+  const [image] = await suite.db
+    .select({ id: mediaImages.id })
+    .from(mediaImages)
+    .where(eq(mediaImages.filename, PRESENT));
+  const remove = () => withTransaction(suite.db, (tx) => deleteImage(tx, image!.id, "manager-ana"));
+  expect(await remove()).toMatchObject({ deleted: false });
+  await withTransaction(suite.db, (tx) => deleteMenu(tx, ids.menuId, "manager-ana"));
+  expect(await remove()).toEqual({ deleted: true, uses: [] });
 });
 
 it("creates the triggers that stand in for the foreign keys", async () => {

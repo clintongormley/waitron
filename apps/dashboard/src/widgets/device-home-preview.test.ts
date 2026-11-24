@@ -1050,22 +1050,10 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(es);
   });
 
-  it("explains a product behind a disabled include; a visible placement still wins", async () => {
+  it("shows a shortcut again after its product returns to the published preview", async () => {
     const document = lunch([], [documentProduct("mi-water", "p-water")]);
-    const { el } = await mount({
-      document,
-      shortcuts: [LEMONADE],
-      disabledIncludeProducts: new Set(["p-lemonade"]),
-    });
+    const { el } = await mount({ document, shortcuts: [LEMONADE] });
     expect(tiles(el, "shortcuts")[0]!.dataset.state).toBe("hidden");
-    expect(tiles(el, "shortcuts")[0]!.textContent).toContain(
-      "Not shown: in a disabled included menu",
-    );
-    setLocale("es-ES");
-    await el.updateComplete;
-    expect(tiles(el, "shortcuts")[0]!.textContent).toContain(
-      "No se muestra: en una carta incluida deshabilitada",
-    );
     el.document = {
       ...document,
       root: { ...document.root, members: [documentProduct("included-lemonade", "p-lemonade")] },

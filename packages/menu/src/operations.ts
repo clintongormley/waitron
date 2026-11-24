@@ -408,9 +408,12 @@ export async function insertMenu(
 }
 
 export async function listMenus(tx: Transaction): Promise<Menu[]> {
-  return (await tx.select(MENU_COLUMNS).from(menus).orderBy(menus.createdAt, menus.id)).map(
-    menuSummary,
-  );
+  const rows = await tx
+    .select(MENU_COLUMNS)
+    .from(menus)
+    .where(eq(menus.active, true))
+    .orderBy(menus.createdAt, menus.id);
+  return rows.map(menuSummary);
 }
 
 const MENU_ITEM_COLUMNS = {
@@ -966,7 +969,7 @@ export async function deactivateMenu(
     .returning({ name: menus.name });
   if (row !== undefined)
     await recordActivity(tx, {
-      kind: "menu.archived",
+      kind: "menu.deleted",
       subjectId: id,
       personId,
       data: { name: row.name },

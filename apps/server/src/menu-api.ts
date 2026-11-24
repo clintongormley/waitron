@@ -13,7 +13,7 @@ import {
   FALLBACK_LOCALE,
   VAT_CLASSES,
   type ContentLanguageRules,
-  type MenuArchiveImpact,
+  type MenuDeleteImpact,
   type VatClass,
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -36,8 +36,9 @@ import {
   writeContentLanguages,
   createMenu,
   assertMenuWritable,
-  deactivateMenu,
-  menusDependingOnArchive,
+  countOwnedMenuProducts,
+  deleteMenu,
+  menusDependingOnDelete,
   readDefaultMenuId,
   readLiveDocuments,
   duplicateMenu,
@@ -372,9 +373,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
-  "menu.archived": 409,
-  "menu.archive_default": 409,
-  "menu_period.archive_replacement": 409,
+  "menu.deleted": 409,
+  "menu.delete_default": 409,
+  "menu_period.delete_replacement": 409,
   "menu.clashes_unresolved": 409,
   "menu_publication.overtakes_queued": 409,
   "menu_publication.not_found": 404,
@@ -862,7 +863,7 @@ function mountSetMenuRoutes(app: Hono, gated: GatedWork, log: Logger): void {
   app.get(draft, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      return c.json(await gated(c, session, (tx) => readSetMenu(tx, menu(c), undefined, true)));
+      return c.json(await gated(c, session, (tx) => readSetMenu(tx, menu(c))));
     }),
   );
   app.put(`${draft}/lines`, (c) =>
@@ -973,7 +974,7 @@ export function translationContextFor(
   };
 }
 
-async function archiveDefaultChoices(tx: Transaction, menuId: string) {
+async function deleteDefaultChoices(tx: Transaction, menuId: string) {
   if ((await readDefaultMenuId(tx)) !== menuId) return null;
   const alternatives = (await listMenus(tx)).filter(
     (menu) => menu.id !== menuId && menu.active && menu.kind === "menu",
@@ -1199,28 +1200,29 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     }),
   );
 
-  const archivePeriods = async (tx: Transaction, menuId: string, sessionId: string) => {
+  const deletePeriods = async (tx: Transaction, menuId: string, sessionId: string) => {
     await assertMenuWritable(tx, menuId);
-    const periods = await VENUE_SERVICE.readMenuArchivePeriods(tx, menuId);
+    const periods = await VENUE_SERVICE.readMenuDeletePeriods(tx, menuId);
     if (periods.length > 0)
       await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
     return periods;
   };
 
-  app.get("/management-api/menus/:id/archive-impact", (c) =>
+  app.get("/management-api/menus/:id/delete-impact", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const impact = await gated(c, sessionId, async (tx): Promise<MenuArchiveImpact> => ({
-        periods: await archivePeriods(tx, menuId, sessionId),
-        defaultChoices: await archiveDefaultChoices(tx, menuId),
-        dependants: await menusDependingOnArchive(tx, menuId),
+      const impact = await gated(c, sessionId, async (tx): Promise<MenuDeleteImpact> => ({
+        periods: await deletePeriods(tx, menuId, sessionId),
+        defaultChoices: await deleteDefaultChoices(tx, menuId),
+        dependants: await menusDependingOnDelete(tx, menuId),
+        productCount: await countOwnedMenuProducts(tx, menuId),
       }));
       return c.json(impact);
     }),
   );
 
-  app.post("/management-api/menus/:id/archive", (c) =>
+  app.post("/management-api/menus/:id/delete", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
@@ -1241,21 +1243,21 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       )
         throw new AppError("management.request_invalid", { field: "defaultMenuId" });
       await gated(c, sessionId, async (tx, personId) => {
-        const periods = await archivePeriods(tx, menuId, sessionId);
+        const periods = await deletePeriods(tx, menuId, sessionId);
         if (periods.length > 0)
           await authorizeManager(tx, {
             managementSessionId: sessionId,
             permission: "venue.configure",
           });
-        await VENUE_SERVICE.archivePeriodMenus(tx, menuId, replacements);
-        const choices = await archiveDefaultChoices(tx, menuId);
+        await VENUE_SERVICE.replaceDeletedPeriodMenus(tx, menuId, replacements);
+        const choices = await deleteDefaultChoices(tx, menuId);
         if (
           (choices !== null && !choices.some(({ id }) => id === defaultMenuId)) ||
           (choices === null && defaultMenuId !== undefined)
         )
-          throw new AppError("menu.archive_default", { menuId });
+          throw new AppError("menu.delete_default", { menuId });
         if (defaultMenuId !== undefined) await setVenueDefaultMenu(tx, defaultMenuId);
-        await deactivateMenu(tx, menuId, personId);
+        await deleteMenu(tx, menuId, personId);
       });
       return c.body(null, 204);
     }),

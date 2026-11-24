@@ -1076,7 +1076,7 @@ it("finds a menu's root and Home sections by role without a side row", async () 
 });
 
 describe("all menu structures", () => {
-  it("keeps included, inactive and empty menus while loading one section graph", async () => {
+  it("keeps included and empty menus while loading one section graph", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await addMember(tx, f.lunchRoot, section(f.drinks));
@@ -1084,7 +1084,8 @@ describe("all menu structures", () => {
       await deactivateMenu(tx, f.dinner);
       const expected = [];
       for (const menu of await listMenus(tx))
-        expected.push({ menu, structure: await readMenuStructure(tx, menu.id) });
+        if (menu.id !== f.dinner)
+          expected.push({ menu, structure: await readMenuStructure(tx, menu.id) });
       const load = vi.spyOn(sectionGraph, "loadSectionGraph");
       try {
         expect(await menuStructure.readMenuStructures(tx)).toEqual(expected);

@@ -1611,6 +1611,11 @@ straight away. A menu with clashing prices has a line after that: a "2 price cla
 `--wt-color-danger` (clashes stop it being published), named "2 price clashes: <menu>", that opens
 its Price overrides tab filtered to the clashes (`/menus/menu/<id>/view/prices/filter/clashes`).
 Both links are a tap target tall, and a click on either with a modifier key is left to the browser.
+The Status filter starts on **All**. **Published** and **Requiring attention** filter full menus.
+Both kinds of menu offer **Copy…** and **Delete…** in their row actions. The Delete window names the menu,
+counts its own products, asks for any menu replacements and names the menus that will drop it on their
+next publication. A deleted menu disappears from the list.
+
 A set menu's Status says, in muted text, that it goes live with the menus that offer it. While
 the states are read, or after their read fails, every menu says so in muted text and has neither
 link; a failed read also puts one message above the list, with the server's reason when it gave
