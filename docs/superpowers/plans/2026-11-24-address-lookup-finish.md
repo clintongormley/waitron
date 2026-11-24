@@ -78,7 +78,8 @@ What ADDRESS-SERVICE adds, the watcher's choices:
 3. **The total is also a daily one**: at most a tenth of the month's total in a day, so a bad day costs
    a day of suggestions, not the month.
 4. **No single slot.** Today one lookup runs at a time for all of Cloud and any other is refused; one
-   busy box would turn the others away. Limit each box to one at a time instead.
+   busy box would turn the others away. That slot was the private trial's own, not Google's. Lookups
+   run side by side, limited only by requests a minute per box, network and account.
 5. **Turn one venue off** from the operator screen, and tell the operator once when a venue or the
    total reaches its limit.
 6. **Google's side:** the key works only from Cloud's own server address and only for the two
@@ -89,9 +90,9 @@ use, and people filling a real form may have to type an address for a day. No mo
 
 ## The owner's part
 
-- **How many per venue:** 100 chosen addresses a month, and a total for Cloud that cannot cost over
-  about EUR 10 a month (the watcher's numbers, for the owner to change), shared as the section above
-  says. ADDRESS-SERVICE builds them as settings.
+- **How many:** 100 chosen addresses a month for each paying venue, and a total for Cloud that cannot
+  cost over about EUR 10 a month (owner, 24 November: "yes"), shared as the section above says. Both
+  are settings.
 - **Geoapify:** left out (owner, 24 November: "agree"). When Google fails people type the address.
 - **Before 14 January 2027**, when Google's trial ends: upgrade the billing account, then set a daily
   cap on each of the two services and a EUR 10 budget alert before anything else uses the key.
