@@ -31,9 +31,9 @@ export const restoreEn = {
   "restore.preview_no_master_key":
     "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
   "restore.preview_older_key": "An older backup reinstates its older box key.",
-  "restore.preview_keep_keys": "Keep older box keys until no older backup remains.",
+  "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
   "restore.preview_key_separate":
-    "The backup encryption key opens the copy. The box key authorises recovery.",
+    "The backup encryption key opens the copy. The master key authorises recovery.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
   "restore.preview_key_error": "Check the backup encryption key.",
   "restore.preview_environment_error": "Check the backup environment.",
@@ -228,9 +228,9 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Esta copia no contiene clave maestra, así que no se puede restaurar. Elige una copia más reciente.",
   "restore.preview_older_key": "Una copia antigua restablece la clave del servidor de entonces.",
   "restore.preview_keep_keys":
-    "Conserva las claves del servidor antiguas mientras queden copias que las necesiten.",
+    "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate":
-    "La clave de cifrado de copias abre la copia. La clave del servidor autoriza la restauración.",
+    "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore.preview_key_error": "Revisa la clave de cifrado de copias.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",

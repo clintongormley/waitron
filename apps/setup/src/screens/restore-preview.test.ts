@@ -56,10 +56,48 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("Saved venue");
   expect(text).toContain("89890001K");
   expect(text).toContain("Saved venue");
-  expect(text).toContain("Keep older box keys until no older backup remains.");
+  expect(text).not.toContain(t("restore.preview_keep_keys"));
+  expect(text).not.toContain(t("restore.preview_key_separate"));
   expect(text).not.toContain("archive-secret");
   expect(child(el)!.outerHTML).not.toContain("archive-secret");
 });
+it.each([
+  [
+    "en-GB",
+    "Keep older master keys until no older backup remains.",
+    "The backup encryption key opens the copy. The master key authorises recovery.",
+  ],
+  [
+    "es-ES",
+    "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
+    "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
+  ],
+] as const)(
+  "tells the %s review of a filing backup that the master key authorises recovery",
+  async (locale, keep, separate) => {
+    setLocale(locale);
+    const { el } = await mount(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...saved,
+            fiscalSelection: {
+              module: "fiscal-verifactu",
+              country: "ES",
+              fiscalTerritory: "common",
+              timeZone: "Europe/Madrid",
+            },
+          }),
+        ),
+    );
+    await fill(el);
+    review(el);
+    await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
+    const text = child(el)!.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(keep);
+    expect(text).toContain(separate);
+  },
+);
 it("waits for a file and encryption key before it can review", async () => {
   const transport = vi.fn(async () => new Response(JSON.stringify(saved)));
   const { el } = await mount(transport);

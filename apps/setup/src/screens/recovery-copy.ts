@@ -424,8 +424,12 @@ export class SetupRecoveryCopy extends LitElement {
                 }
               </dl>
               <p>${t("restore.preview_older_key")}</p>
-              <p>${t("restore.preview_keep_keys")}</p>
-              <p>${t("restore.preview_key_separate")}</p>
+              ${
+                preview.fiscalSelection === undefined
+                  ? nothing
+                  : html`<p>${t("restore.preview_keep_keys")}</p>
+                      <p>${t("restore.preview_key_separate")}</p>`
+              }
               <setup-recovery-allocation
                 @recovery-edit-details=${(event: Event) => {
                   event.stopPropagation();
