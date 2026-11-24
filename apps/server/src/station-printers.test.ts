@@ -11,10 +11,8 @@ import type { Database, Transaction } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 
-import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { eq } from "drizzle-orm";
 import { deletePrinter } from "./printer-delete.js";
@@ -33,17 +31,12 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(): Promise<TradingContext> {
+async function setupVenue(): Promise<void> {
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: [LOCALE],
   });
-  const nodeId = await seedNode(db);
-  return {
-    nodeId: brandNodeId(nodeId),
-    locale: LOCALE,
-    simplifiedInvoiceLimit: null,
-  };
+  await seedNode(db);
 }
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -52,12 +45,12 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
-function station(cfg: TradingContext, name: string): Promise<string> {
+function station(name: string): Promise<string> {
   return asApp((tx) => createStation(tx, { name })).then((r) => r.id);
 }
 
 /** `cloud_poll` needs only a `poll_id`, no agent to seed. */
-function printer(cfg: TradingContext, name: string): Promise<string> {
+function printer(name: string): Promise<string> {
   return asApp((tx) =>
     createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${name}` }),
   ).then((r) => r.id);
@@ -65,9 +58,9 @@ function printer(cfg: TradingContext, name: string): Promise<string> {
 
 describe("station→printer mapping verbs", () => {
   it("attaches a mapping, lists it, and is idempotent on a repeat attach", async () => {
-    const cfg = await setupVenue();
-    const s1 = await station(cfg, "Main kitchen");
-    const p1 = await printer(cfg, "Kitchen");
+    await setupVenue();
+    const s1 = await station("Main kitchen");
+    const p1 = await printer("Kitchen");
 
     await asApp((tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp((tx) => listStationPrinters(tx))).toEqual([
@@ -81,9 +74,9 @@ describe("station→printer mapping verbs", () => {
   });
 
   it("detaches a mapping and is idempotent on a repeat detach on a live station", async () => {
-    const cfg = await setupVenue();
-    const s1 = await station(cfg, "Main kitchen");
-    const p1 = await printer(cfg, "Kitchen");
+    await setupVenue();
+    const s1 = await station("Main kitchen");
+    const p1 = await printer("Kitchen");
     await asApp((tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
 
     await asApp((tx) => detachPrinterFromStation(tx, { stationId: s1, printerId: p1 }));
@@ -94,8 +87,8 @@ describe("station→printer mapping verbs", () => {
   });
 
   it("rejects an attach to a station that is not live (station.not_found)", async () => {
-    const cfg = await setupVenue();
-    const p1 = await printer(cfg, "Kitchen");
+    await setupVenue();
+    const p1 = await printer("Kitchen");
     const missing = randomUUID();
     await expect(
       asApp((tx) =>
@@ -108,8 +101,8 @@ describe("station→printer mapping verbs", () => {
   });
 
   it("rejects an attach to a printer that is not live (printer.not_found)", async () => {
-    const cfg = await setupVenue();
-    const s1 = await station(cfg, "Main kitchen");
+    await setupVenue();
+    const s1 = await station("Main kitchen");
     const missing = randomUUID();
     await expect(
       asApp((tx) =>
@@ -122,8 +115,8 @@ describe("station→printer mapping verbs", () => {
   });
 
   it("refuses attaching an office printer", async () => {
-    const cfg = await setupVenue();
-    const stationId = await station(cfg, "Main kitchen");
+    await setupVenue();
+    const stationId = await station("Main kitchen");
     const printerId = await asApp(insertA4Printer);
     await expect(
       asApp((tx) => attachPrinterToStation(tx, { stationId, printerId })),
@@ -131,11 +124,11 @@ describe("station→printer mapping verbs", () => {
   });
 
   it("filters the listing by stationId and by printerId", async () => {
-    const cfg = await setupVenue();
-    const s1 = await station(cfg, "Main kitchen");
-    const s2 = await station(cfg, "Griddle");
-    const p1 = await printer(cfg, "Kitchen");
-    const p2 = await printer(cfg, "Pass");
+    await setupVenue();
+    const s1 = await station("Main kitchen");
+    const s2 = await station("Griddle");
+    const p1 = await printer("Kitchen");
+    const p2 = await printer("Pass");
     // A group printer (p1) on both stations; a station-local printer (p2) on s1 only.
     for (const [stationId, printerId] of [
       [s1, p1],
@@ -165,14 +158,14 @@ describe("station→printer mapping verbs", () => {
 
 describe("station→printer mapping verbs naming a deleted printer", () => {
   async function venueWithLinks() {
-    const cfg = await setupVenue();
-    const s1 = await station(cfg, "Main kitchen");
-    const gone = await printer(cfg, "Gone");
-    const kept = await printer(cfg, "Kept");
+    await setupVenue();
+    const s1 = await station("Main kitchen");
+    const gone = await printer("Gone");
+    const kept = await printer("Kept");
     for (const printerId of [gone, kept]) {
       await asApp((tx) => attachPrinterToStation(tx, { stationId: s1, printerId }));
     }
-    return { cfg, s1, gone, kept };
+    return { s1, gone, kept };
   }
 
   const allLinks = () =>
@@ -185,8 +178,8 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
       .orderBy(stationPrinterPairs.stationId, stationPrinterPairs.printerId);
 
   it("refuses attaching, detaching and listing by it with printer.not_found, changing nothing", async () => {
-    const { cfg, s1, gone } = await venueWithLinks();
-    const s2 = await station(cfg, "Griddle");
+    const { s1, gone } = await venueWithLinks();
+    const s2 = await station("Griddle");
     await asApp((tx) => deletePrinter(tx, gone));
     const before = await allLinks();
 
@@ -206,8 +199,8 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
   });
 
   it("refuses a replacement list still naming one it already stores, changing nothing", async () => {
-    const { cfg, s1, gone, kept } = await venueWithLinks();
-    const fresh = await printer(cfg, "Fresh");
+    const { s1, gone, kept } = await venueWithLinks();
+    const fresh = await printer("Fresh");
     // Only the tombstone: a real delete removes the link, so this pins a backstop for a state it
     // never leaves.
     await db
@@ -247,9 +240,9 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
 });
 
 it("configuration printer lists hide removed stations", async () => {
-  const cfg = await setupVenue();
-  const stationId = await station(cfg, "Removed mapping");
-  const printerId = await printer(cfg, "Removed mapping printer");
+  await setupVenue();
+  const stationId = await station("Removed mapping");
+  const printerId = await printer("Removed mapping printer");
   await asApp((tx) => attachPrinterToStation(tx, { stationId, printerId }));
   await asApp((tx) =>
     tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, stationId)),
@@ -268,13 +261,9 @@ it("configuration printer lists hide removed stations", async () => {
 });
 
 it("attaches one sorted copy and replaces it with exactly the requested sorted list", async () => {
-  const cfg = await setupVenue();
-  const id = await station(cfg, "Sorted links");
-  const ids = [
-    await printer(cfg, "One"),
-    await printer(cfg, "Two"),
-    await printer(cfg, "Three"),
-  ].sort();
+  await setupVenue();
+  const id = await station("Sorted links");
+  const ids = [await printer("One"), await printer("Two"), await printer("Three")].sort();
   const stored = async () =>
     (await db.select().from(kitchenStations).where(eq(kitchenStations.id, id)))[0]!.printerIds;
   for (const printerId of [ids[1]!, ids[0]!, ids[1]!])
@@ -285,9 +274,9 @@ it("attaches one sorted copy and replaces it with exactly the requested sorted l
 });
 
 it("refuses a newly attached switched-off printer without changing the list", async () => {
-  const cfg = await setupVenue();
-  const stationId = await station(cfg, "Off printer");
-  const printerId = await printer(cfg, "Off");
+  await setupVenue();
+  const stationId = await station("Off printer");
+  const printerId = await printer("Off");
   await asApp((tx) => updatePrinter(tx, printerId, { active: false }));
   await expect(
     asApp((tx) => attachPrinterToStation(tx, { stationId, printerId })),
@@ -299,11 +288,11 @@ it("refuses a newly attached switched-off printer without changing the list", as
 });
 
 it("deleting a printer removes it from every station's stored list and reports both", async () => {
-  const cfg = await setupVenue();
-  const first = await station(cfg, "First");
-  const second = await station(cfg, "Second");
-  const removed = await printer(cfg, "Removed");
-  const kept = await printer(cfg, "Keep");
+  await setupVenue();
+  const first = await station("First");
+  const second = await station("Second");
+  const removed = await printer("Removed");
+  const kept = await printer("Keep");
   await db
     .update(kitchenStations)
     .set({ printerIds: [removed, kept].sort() })

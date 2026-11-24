@@ -3584,11 +3584,7 @@ describe("A773 fire paper: course headings", () => {
   });
 
   /** The headings of the Grill printer's jobs enqueued since `seen`, which this call then extends. */
-  async function newGrillHeadings(
-    v: PartyVenue,
-    printerId: string,
-    seen: Set<string>,
-  ): Promise<string[]> {
+  async function newGrillHeadings(printerId: string, seen: Set<string>): Promise<string[]> {
     const jobs = (await asApp((tx) => printJobsFor(tx))).filter(
       (job) => job.printerId === printerId && !seen.has(job.id),
     );
@@ -3618,7 +3614,7 @@ describe("A773 fire paper: course headings", () => {
     );
     const word = kitchenTicketWords("es").group;
     const seen = new Set<string>();
-    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAINS`]);
+    expect(await newGrillHeadings(printerId, seen)).toEqual([`${word} 1 · MAINS`]);
 
     await inTx(v, (tx) => updateCourse(tx, courseId, { name: "Main courses" }));
     const expectedPartyRevision = await revisionOf(v, partyId);
@@ -3629,7 +3625,7 @@ describe("A773 fire paper: course headings", () => {
         expectedPartyRevision,
       }),
     );
-    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
+    expect(await newGrillHeadings(printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
 
     await inTx(v, async (tx) => {
       await deleteCourse(tx, courseId);
@@ -3642,7 +3638,7 @@ describe("A773 fire paper: course headings", () => {
         .where(eq(kitchenCourses.id, courseId)),
     );
     expect(kept).toEqual([{ active: false }]);
-    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
+    expect(await newGrillHeadings(printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
   });
 
   it("A773 fire paper: a heading lists its dishes' courses in display order, not name order", async () => {
@@ -3677,7 +3673,7 @@ describe("A773 fire paper: course headings", () => {
         expectedPartyRevision,
       }),
     );
-    expect(await newGrillHeadings(v, printerId, new Set())).toEqual([
+    expect(await newGrillHeadings(printerId, new Set())).toEqual([
       `${kitchenTicketWords("es").group} 1 · STARTERS, MAINS`,
     ]);
   });
@@ -3728,7 +3724,7 @@ describe("A773 fire paper: course headings", () => {
         expectedPartyRevision,
       }),
     );
-    expect(await newGrillHeadings(v, printerId, seen)).toEqual([
+    expect(await newGrillHeadings(printerId, seen)).toEqual([
       `${kitchenTicketWords("es").group} 2 · DESSERTS`,
     ]);
 
@@ -3740,7 +3736,7 @@ describe("A773 fire paper: course headings", () => {
         expectedPartyRevision: mainsRevision,
       }),
     );
-    expect(await newGrillHeadings(v, printerId, seen)).toEqual([
+    expect(await newGrillHeadings(printerId, seen)).toEqual([
       `${kitchenTicketWords("es").group} 1 · MAINS`,
     ]);
   });

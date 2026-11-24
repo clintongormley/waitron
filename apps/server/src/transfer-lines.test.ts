@@ -349,7 +349,6 @@ describe("transfer — extras children", () => {
    *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
   async function addExtra(
     tx: Transaction,
-    cfg: OriginConfig,
     dishId: string,
     extraProductId: string,
   ): Promise<string> {
@@ -416,7 +415,7 @@ describe("transfer — extras children", () => {
   it("carries a parent dish's extras children along on a whole-line transfer", async () => {
     const { cfg, coffeeId, waterId, baconId, tableAId, zoneId, coffeeOffer, waterOffer } =
       await setupVenue();
-    const extraListId = await asApp((tx) => addExtra(tx, cfg, coffeeId, baconId));
+    const extraListId = await asApp((tx) => addExtra(tx, coffeeId, baconId));
     const partyId = await partyAt(cfg, tableAId);
     const tabA = await openExtrasTab(cfg, zoneId, partyId, [
       {
@@ -445,7 +444,7 @@ describe("transfer — extras children", () => {
   it("refuses transferring an extra's CHILD line on its own (tab.transfer_modifier_line)", async () => {
     const { cfg, coffeeId, waterId, baconId, tableAId, zoneId, coffeeOffer, waterOffer } =
       await setupVenue();
-    const extraListId = await asApp((tx) => addExtra(tx, cfg, coffeeId, baconId));
+    const extraListId = await asApp((tx) => addExtra(tx, coffeeId, baconId));
     const partyId = await partyAt(cfg, tableAId);
     const tabA = await openExtrasTab(cfg, zoneId, partyId, [
       {

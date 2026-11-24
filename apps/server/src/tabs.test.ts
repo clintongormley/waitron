@@ -202,7 +202,6 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
 /** `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
 async function attachExtras(
   tx: Transaction,
-  cfg: OriginConfig,
   dishId: string,
   extraProductId: string,
 ): Promise<string> {
@@ -431,7 +430,7 @@ describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with extras no cell decides as parent + child lines, firing only the parent", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
     // Two different products, so an assertion about which one a row carries can fail.
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
 
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
@@ -705,7 +704,7 @@ describe("markServed / unmarkServed", () => {
 describe("readTabLines", () => {
   it("carries the effective dish nutrition on held table lines without an extras overlay", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     await suite.db.execute(
       sql`update products set allergens = ${JSON.stringify({ milk: {} })}, dietary_declarations = ${JSON.stringify(["no_meat"])} where id = ${coffeeId}`,
     );
@@ -856,7 +855,7 @@ describe("readTabLines", () => {
   it("carries state: null for the child line of an extra no cell decides", async () => {
     // Distinct from a held parent, which has a ticket item in state "queued".
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
 
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
@@ -881,7 +880,7 @@ describe("readTabLines", () => {
 
   it("returns a child line's frozen priced portion to the till", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -936,7 +935,7 @@ describe("readTabLines", () => {
   it("names a child extras line's parent by LINE NUMBER, and leaves the dish's own null", async () => {
     // A child carries the picked product, so `productId` cannot tell it from a dish.
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
 
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
@@ -959,7 +958,7 @@ describe("readTabLines", () => {
 
   it("carries the dish's note and offer, and the list a child extras row was picked from", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
 
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
@@ -992,7 +991,7 @@ describe("readTabLines", () => {
 
   it("names each line, a child extras line too, by its stored row id", async () => {
     const { cfg, coffeeId, waterId, tableId, coffeeOffer } = await setupVenue();
-    const extraListId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const extraListId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1615,7 +1614,7 @@ async function ticketOfLine(
 }
 
 /** A station's notices, as the fields a cook reads. */
-async function noticesAt(cfg: OriginConfig, stationId: string) {
+async function noticesAt(stationId: string) {
   return (await asApp((tx) => listStationNotices(tx, stationId))).map((notice) => ({
     kind: notice.kind,
     lineName: notice.lineName,
@@ -1655,7 +1654,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
     expect(await linesOf(tabId)).toEqual([]);
     // The notice keeps the line's name after the line is gone.
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee de cocina", quantity: "1.000", wasStarted: true },
     ]);
     // This venue's station has no printer: the notice is the only correction.
@@ -1672,12 +1671,12 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
     await asApp((tx) => cancelLine(tx, cfg, tabId, 1));
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("a partial void removes that quantity only, from the line, its extras and its ticket, and says so", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addGroupedTabRound(tx, cfg, tabId, [
@@ -1700,7 +1699,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       expect.objectContaining({ lineNo: 2, quantity: 4000, lineTotal: 200 }),
     ]);
     expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
@@ -1716,7 +1715,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     await asApp((tx) => cancelLine(tx, cfg, tabId, 1, "2"));
 
     expect(await linesOf(tabId)).toEqual([]);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
     ]);
   });
@@ -1736,7 +1735,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
         params: { workingOrderId: tabId, lineNo: 1, quantity },
       });
       expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
-      expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+      expect(await noticesAt(ticket.stationId)).toEqual([]);
     },
   );
 
@@ -1754,12 +1753,12 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     });
     expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
     expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("refuses to cancel part of an extras line, whose quantity follows its dish", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addGroupedTabRound(tx, cfg, tabId, [
@@ -1869,7 +1868,7 @@ describe("when a station does not allow changes after sending", () => {
     await asApp((tx) => cancelLine(tx, cfg, tabId, 1));
 
     expect(await linesOf(tabId)).toEqual([]);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
@@ -1878,7 +1877,7 @@ describe("when a station does not allow changes after sending", () => {
 describe("recorded lines can be sent after sold out but not archival", () => {
   it("refuses selected held line release when its extra was archived", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const course = await asApp((tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
@@ -1903,7 +1902,7 @@ describe("recorded lines can be sent after sold out but not archival", () => {
 
   it("sends a held dish and its extra after both sell out", async () => {
     const { cfg, tableId, coffeeOffer, coffeeId, waterId } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1981,7 +1980,7 @@ describe("editing a line the kitchen has and has not started", () => {
       ),
     );
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     const fresh = await ticketRow(tabId, 1);
@@ -2002,7 +2001,7 @@ describe("editing a line the kitchen has and has not started", () => {
       ],
     });
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     const fresh = await ticketRow(tabId, 1);
@@ -2036,7 +2035,7 @@ describe("editing a line the kitchen has and has not started", () => {
     const added = await ticketRow(tabId, 2);
     expect(added).toMatchObject({ quantity: 1000, state: "queued" });
     expect(added!.firedAt).not.toBeNull();
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("Cancel item removes the difference: a VOID notice, and the ticket's quantity follows", async () => {
@@ -2048,7 +2047,7 @@ describe("editing a line the kitchen has and has not started", () => {
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
     ]);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
@@ -2067,7 +2066,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("Cancel item removing a sent, not-started line voids it with a notice", async () => {
@@ -2084,7 +2083,7 @@ describe("editing a line the kitchen has and has not started", () => {
     await asApp((tx) => cancelItemForTest(tx, cfg, tabId, 1, undefined, OPERATOR));
 
     expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([2]);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     // The tab has work sent, so the new line goes to the kitchen as a round's would.
@@ -2120,7 +2119,7 @@ describe("editing a line the kitchen has and has not started", () => {
       expect(added).toMatchObject({ quantity: 1000, state: "queued" });
       expect(added!.firedAt).not.toBeNull();
     }
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("raising a started line through the one-line edit leaves it preparing and sends the extra one", async () => {
@@ -2147,7 +2146,7 @@ describe("editing a line the kitchen has and has not started", () => {
     const added = await ticketRow(tabId, 2);
     expect(added).toMatchObject({ quantity: 1000, state: "queued" });
     expect(added!.firedAt).not.toBeNull();
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("at a Not allowed station, refuses raising a started line as fired, changing nothing", async () => {
@@ -2172,7 +2171,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("refuses raising a started line with a note and lowering its count through Change dish", async () => {
@@ -2211,7 +2210,7 @@ describe("editing a line the kitchen has and has not started", () => {
       quantity: 2000,
       state: "preparing",
     });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("refuses a change to a started line, and its removal, changing nothing", async () => {
@@ -2245,7 +2244,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("at a Not allowed station, refuses an edit of a sent line, changing nothing", async () => {
@@ -2276,7 +2275,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("a started line is refused as started at a While held and at a Not allowed station", async () => {
@@ -2305,7 +2304,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
       expect(await linesOf(tabId)).toEqual(before);
       expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
-      expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+      expect(await noticesAt(ticket.stationId)).toEqual([]);
     }
   });
 
@@ -2331,7 +2330,7 @@ describe("editing a line the kitchen has and has not started", () => {
       }),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
     expect(await linesOf(tabId)).toEqual(before);
-    expect(await noticesAt(cfg, waiting.stationId)).toEqual([]);
+    expect(await noticesAt(waiting.stationId)).toEqual([]);
 
     const [coffee] = await db
       .select({ id: workingOrderLines.id })
@@ -2348,9 +2347,8 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([1, 3]);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: waiting.id });
-    expect(await noticesAt(cfg, waiting.stationId)).toEqual([]);
-    if (held.stationId !== waiting.stationId)
-      expect(await noticesAt(cfg, held.stationId)).toEqual([]);
+    expect(await noticesAt(waiting.stationId)).toEqual([]);
+    if (held.stationId !== waiting.stationId) expect(await noticesAt(held.stationId)).toEqual([]);
   });
 
   it("at a Not allowed station Cancel item still removes a held dish and a waiting dish, with the waiting one's VOID notice", async () => {
@@ -2394,11 +2392,10 @@ describe("editing a line the kitchen has and has not started", () => {
     });
 
     expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([3]);
-    expect(await noticesAt(cfg, waiting.stationId)).toEqual([
+    expect(await noticesAt(waiting.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
-    if (held.stationId !== waiting.stationId)
-      expect(await noticesAt(cfg, held.stationId)).toEqual([]);
+    if (held.stationId !== waiting.stationId) expect(await noticesAt(held.stationId)).toEqual([]);
   });
 
   it("at a Not allowed station the whole-order save still refuses to remove a started dish", async () => {
@@ -2420,7 +2417,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, state: "preparing" });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("Cancel item removes part of a waiting dish at a Not allowed station", async () => {
@@ -2433,7 +2430,7 @@ describe("editing a line the kitchen has and has not started", () => {
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
     ]);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, quantity: 1000 });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
@@ -2476,7 +2473,7 @@ describe("editing a line the kitchen has and has not started", () => {
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: held.id, firedAt: null, note: "later" });
     expect(await ticketRow(tabId, 2)).toBeNull();
     expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([1000, 2000]);
-    expect(await noticesAt(cfg, held.stationId)).toEqual([]);
+    expect(await noticesAt(held.stationId)).toEqual([]);
   });
 
   it("refuses an edit made from a copy another edit has since changed, changing nothing", async () => {
@@ -2525,7 +2522,7 @@ describe("editing a line the kitchen has and has not started", () => {
       ),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: coffeeId } });
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, note: null });
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
   });
 
   it("Cancel item refuses a fractional whole-unit quantity and a non-positive quantity", async () => {
@@ -2545,7 +2542,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
   it("an extra added to a sent line is priced now, and the line moves after the highest number with its extras", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer, waterOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -2579,7 +2576,7 @@ describe("editing a line the kitchen has and has not started", () => {
       expect.objectContaining({ lineNo: 4, parentLineId: null, quantity: 1000, lineTotal: 150 }),
       expect.objectContaining({ lineNo: 5, quantity: 2000, lineTotal: 160 }),
     ]);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect((await ticketRow(tabId, 4))!.firedAt).not.toBeNull();
@@ -2597,7 +2594,7 @@ describe("editing a line the kitchen has and has not started", () => {
       }),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await noticesAt(ticket.stationId)).toEqual([]);
     expect(await linesOf(tabId)).toEqual(before);
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
   });
@@ -2615,7 +2612,7 @@ describe("editing a line the kitchen has and has not started", () => {
     });
     await asApp((tx) => cancelItemForTest(tx, cfg, tabId, 1, undefined, OPERATOR));
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect(await linesOf(tabId)).toEqual([expect.objectContaining({ lineNo: 2, lineTotal: 200 })]);
@@ -2637,7 +2634,7 @@ describe("editing a line the kitchen has and has not started", () => {
       ),
     );
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
+    expect(await noticesAt(ticket.stationId)).toEqual([
       { kind: "recalled", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
     expect(await linesOf(tabId)).toEqual([
@@ -2654,7 +2651,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
   it("a sent line's extras follow it: kept through a change, and copied onto a rise's new line at today's price", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -2707,7 +2704,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
   it("refuses to copy an extra that records no list onto a rise's new line", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -2742,7 +2739,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
   it("keeps an extra whose product sold out on a line the kitchen does not have, and refuses to send it again on one it has", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const withWater = [{ listId, picks: [{ productId: waterId, quantity: 1 }] }];
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     // Dishes at lines 1 (held), 3 (two, fired) and 5 (held), each followed by its
@@ -2801,7 +2798,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
   it("refuses an unknown line, and an extras line, which follows its dish", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
-    const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+    const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -2884,7 +2881,7 @@ describe("editing a line the kitchen has and has not started", () => {
       expect(recalledSlips).toHaveLength(1);
       expect(recalledSlips[0]).toContain("2 x ES coffee");
 
-      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([
+      expect(await noticesAt(tickets[0]!.stationId)).toEqual([
         { kind: "recalled", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
       ]);
       for (const [index, lineNo] of [1, 2].entries()) {
@@ -2918,7 +2915,7 @@ describe("editing a line the kitchen has and has not started", () => {
       const added = await ticketRow(tabId, 3);
       expect(added).toMatchObject({ quantity: 1000, state: "queued" });
       expect(added!.firedAt).not.toBeNull();
-      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+      expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
     });
 
     it("accepts a total equal to the row's count with a change, adding no dish", async () => {
@@ -2949,12 +2946,12 @@ describe("editing a line the kitchen has and has not started", () => {
       expect(await linesOf(tabId)).toEqual(before);
       expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
       expect(await ticketRow(tabId, 2)).toMatchObject({ id: tickets[1]!.id, state: "preparing" });
-      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+      expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
     });
 
     it("refuses a lower or fractional total, and any dish that is not another of this row's, changing nothing", async () => {
       const { cfg, tableId, coffeeId, waterId, coffeeOffer, waterOffer } = await setupVenue();
-      const listId = await asApp((tx) => attachExtras(tx, cfg, coffeeId, waterId));
+      const listId = await asApp((tx) => attachExtras(tx, coffeeId, waterId));
       const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
       // 1 and 2 the row's cafés; 3 a water; 4 a café with an extra at 5; 6 a café with a note.
       await asApp((tx) =>
@@ -3012,7 +3009,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
       expect(await linesOf(tabId)).toEqual(before);
       expect(await revisionOf(tabId)).toBe(revision);
-      expect(await noticesAt(cfg, stationId)).toEqual([]);
+      expect(await noticesAt(stationId)).toEqual([]);
     });
 
     it("compares the row's options answers by value, not by key order", async () => {
@@ -3084,7 +3081,7 @@ describe("editing a line the kitchen has and has not started", () => {
 
       expect(await linesOf(tabId)).toEqual(before);
       expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
-      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual([]);
+      expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
     });
   });
 });
