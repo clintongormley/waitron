@@ -83,6 +83,8 @@ interface Arc {
 
 const SCALE = 10_000;
 const PLACEMENT_LIMIT = 300;
+const REFINEMENT_LIMIT = 100;
+const REFINEMENTS_PER_MIX = 20;
 const FALLBACK_LIMIT = 100;
 
 function byId(a: { readonly id: string }, b: { readonly id: string }): number {
@@ -502,7 +504,10 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     let current = materialize(menus, assigned, "all");
     const closed = new Set<number>();
     for (const [menu, { option }] of menus.entries()) {
-      if (!assigned.some((place) => place?.[0] === menu)) continue;
+      if (!assigned.some((place) => place?.[0] === menu)) {
+        closed.add(menu);
+        continue;
+      }
       const released = assigned.map((place) => (place?.[0] === menu ? undefined : place));
       const alternative = materialize(menus, released, {
         changedOfferId: choices[option]!.offer.id,
@@ -590,6 +595,8 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   const constant = aLaCarte.reduce((sum, cents) => sum + cents, 0) - eligibleCost;
   const placement = { uncoveredCost: 0, classes: [...classesByKey.values()] };
   let solves = 0;
+  let refinements = 0;
+  let unfinishedFloor = Infinity;
 
   function refine(menus: readonly Menu[], priceFloor: number): boolean {
     const layout = menuPlacement(menus);
@@ -612,12 +619,13 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     });
     const fixed: (Assignment | undefined)[] = [];
     const available = layout.slots.map(({ capacity }) => capacity);
+    const limit = Math.min(refinements + REFINEMENTS_PER_MIX, REFINEMENT_LIMIT);
     function visit(at: number): boolean {
       if (best.totalCents <= priceFloor) return true;
-      if (solves >= PLACEMENT_LIMIT) return false;
+      if (refinements >= limit) return false;
       const item = pending[at];
       if (!item) {
-        solves++;
+        refinements++;
         consider(materialize(menus, fresh(fixed)));
         return true;
       }
@@ -636,7 +644,7 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     return pending.length === 0 || visit(0);
   }
 
-  const exact = searchMixVectors({
+  const finished = searchMixVectors({
     offerCount: choices.length,
     pairOffer: pairs.map(({ choice }) => choice),
     pairPlaces: pairs.map(({ capacity }) => capacity),
@@ -656,10 +664,21 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     accept: ({ counts, cost }) => {
       solves++;
       const menus = candidates(counts);
-      return menus.length === 0 || refine(menus, Math.ceil(cost / SCALE) + extras + constant);
+      const floor = Math.ceil(cost / SCALE) + extras + constant;
+      if (menus.length > 0 && !refine(menus, floor))
+        unfinishedFloor = Math.min(unfinishedFloor, floor);
+      return true;
     },
   });
-  if (exact) return { ...best, exact };
+  const exact = finished && unfinishedFloor >= best.totalCents;
+  if (exact) {
+    if (pins.some((pin) => pin !== undefined) && discounts.length > 0) {
+      // A grant can move to a better holder without moving the saved dishes.
+      const savedWithNewDishes = assign(savedFit, savedLayout, pins);
+      consider(materialize(savedFit, savedWithNewDishes, "all"));
+    }
+    return { ...best, exact };
+  }
   const anchored = fallback();
   return pins.every((pin) => pin === undefined) && best.totalCents < anchored.totalCents
     ? best

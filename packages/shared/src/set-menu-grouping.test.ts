@@ -180,30 +180,25 @@ it("keeps only the more valuable discount when one of two menus closes", () => {
   });
 });
 
-it("groups takeaway dishes with different VAT rates into the same set menu", () => {
-  const starter = { ...dish("starter", "starter", 1000), takeawayRateBps: 1000 };
-  const main = { ...dish("main", "main", 1000), takeawayRateBps: 2100 };
+it("forms two set menus from two starters and two mains", () => {
+  const starter = dish("starter", "starter", 1000);
+  const main = dish("main", "main", 1000);
   const lunch = offer("lunch", 1400, [starter, main]);
-  expect(group({ offers: [lunch], dishes: [starter, main] })).toMatchObject({
-    exact: true,
-    totalCents: 1400,
-    setMenus: [{ offerId: "lunch" }],
-    dishes: [
-      { id: "main", place: { lineIndex: 1 } },
-      { id: "starter", place: { lineIndex: 0 } },
-    ],
-  });
-  const fourDishes = [
+  const dishes = [
     starter,
     main,
-    { ...starter, id: "starter-high", takeawayRateBps: 2100 },
-    { ...main, id: "main-low", takeawayRateBps: 1000 },
+    { ...starter, id: "second-starter" },
+    { ...main, id: "second-main" },
   ];
-  expect(group({ offers: [lunch], dishes: fourDishes })).toMatchObject({
+  const result = group({ offers: [lunch], dishes });
+  expect(result).toMatchObject({
     exact: true,
     totalCents: 2800,
     setMenus: [{ offerId: "lunch" }, { offerId: "lunch" }],
   });
+  expect(result.dishes.every(({ place, chargeCents }) => place !== null && chargeCents === 0)).toBe(
+    true,
+  );
 });
 
 it("keeps the intact saved menu after cancellation at the same price", () => {
@@ -283,22 +278,6 @@ it("keeps equal-priced dish places and the saved discount holder on a repeat", (
     totalCents: 2100,
     setMenus: [{ id: "B", discountId: "grant" }],
     dishes: [previous.dishes[0], previous.dishes[2], previous.dishes[1]],
-  });
-});
-
-it("charges one discount on a mixed-rate menu and its supplement", () => {
-  const starter = { ...dish("starter", "starter", 1800), takeawayRateBps: 1000 };
-  const main = { ...dish("main", "main", 2200), takeawayRateBps: 2100 };
-  const lunch = offer("lunch", 1401, [starter, main], { main: 300 });
-  const result = group({
-    offers: [lunch],
-    dishes: [starter, main],
-    discounts: [{ id: "grant", offerId: "lunch", kind: "percent", basisPoints: 5000 }],
-  });
-  expect(result).toMatchObject({
-    exact: true,
-    totalCents: 850,
-    setMenus: [{ offerId: "lunch", discountId: "grant", discountCents: 851 }],
   });
 });
 
@@ -463,4 +442,79 @@ it("keeps the larger discount on the surviving menu at the limit", () => {
     { id: "A", discountId: "more", discountCents: 500 },
   ]);
   expect(result.unusedDiscountIds).toEqual(["less"]);
+});
+
+it("retains every saved dish place when shifting a discount achieves the cheapest price", () => {
+  const first = dish("first", "starter", 1800);
+  const second = { ...first, id: "second" };
+  const plain = dish("plain", "main", 1800);
+  const premium = dish("premium", "main", 1800);
+  const dishes = [first, second, plain, premium];
+  const lunch = offer("lunch", 1400, [first, plain, premium], { premium: 300 });
+  const discounts = [
+    { id: "grant", offerId: "lunch", kind: "percent", basisPoints: 5000 },
+  ] as const;
+  const previous = {
+    setMenus: [savedMenu("A", "lunch", "grant"), savedMenu("B", "lunch")],
+    dishes: [
+      savedDish(first.id, "A", 0),
+      savedDish(second.id, "B", 0),
+      savedDish(plain.id, "A", 1),
+    ],
+  };
+  const result = group({ offers: [lunch], dishes, discounts, previous });
+  expect(result).toMatchObject({
+    exact: true,
+    totalCents: 2250,
+    setMenus: [
+      { id: "A", discountId: null },
+      { id: "B", discountId: "grant" },
+    ],
+    dishes: [
+      previous.dishes[0],
+      previous.dishes[2],
+      savedDish(premium.id, "B", 1),
+      previous.dishes[1],
+    ],
+  });
+});
+
+it("leaves enough search to price an eight-diner bill with two percentage discounts", () => {
+  const input = {
+    ...table(8, 2),
+    discounts: [
+      { id: "first", offerId: "offer-0", kind: "percent", basisPoints: 1000 },
+      { id: "second", offerId: "offer-1", kind: "percent", basisPoints: 1500 },
+    ] as const,
+  };
+  const first = group(input);
+  expect(first.exact).toBe(true);
+  expect(first.totalCents).toBeLessThanOrEqual(16934);
+  expect(group({ ...input, previous: first }).totalCents).toBe(first.totalCents);
+});
+
+it("keeps a free place usable when a saved menu empties at the limit", () => {
+  const large = table(40, 5);
+  const comped = { ...dish("a1", "starter", 0), eligible: false };
+  const starter = dish("b1", "starter", 1800);
+  const inexpensive = dish("c1", "starter", 300);
+  const main = dish("zd", "main", 900);
+  const input = {
+    offers: [
+      ...large.offers,
+      offer("a", 1400, [comped, inexpensive]),
+      offer("b", 1400, [starter, main]),
+    ],
+    dishes: [...large.dishes, comped, starter, inexpensive, main],
+    previous: {
+      setMenus: [savedMenu("A", "a"), savedMenu("B", "b")],
+      dishes: [savedDish(comped.id, "A", 0), savedDish(starter.id, "B", 0)],
+    },
+  };
+  const result = group(input);
+  expect(result.exact).toBe(false);
+  expect(result.dishes.find(({ id }) => id === main.id)).toMatchObject({
+    place: { setMenuId: "B", lineIndex: 1 },
+    chargeCents: 0,
+  });
 });

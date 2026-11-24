@@ -350,9 +350,8 @@ receipt and invoice layout, the kitchen behaviour, reports, and VAT as the VAT r
 Pieces 1, 3 and 4 touch amounts on invoices, so they take the full review and the owner lands them.
 No venue is live, so the stored set-menu data is reset, not carried over.
 
-**Lane L's VAT piece B** (set menus lose their own VAT fields; a mixed-rate set menu cannot be taken
-away) still fits. Its "cannot be taken away" refusal becomes section 4's rule that such dishes stay
-à la carte; whichever lands second adapts.
+**Lane L's VAT piece B** removes the set menu's own VAT fields and handles the takeaway price
+division in section 4. The owner's 24 November decision retires the mixed-rate refusal.
 
 ## Left to the builder
 
