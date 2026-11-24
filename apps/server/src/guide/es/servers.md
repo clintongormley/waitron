@@ -401,8 +401,7 @@ Si el otro servidor responde antes, manda su respuesta. Un servidor que ya ha pa
 seguir; su página lo indica en lugar de mostrar el formulario.
 
 Debajo del formulario, la página también ofrece **Descargar los datos de este servidor**, la misma
-descarga que en [un servidor que ya no lleva el local](servers.md#handed-over), solo con el inicio de
-sesión con correo electrónico y contraseña.
+descarga que en [un servidor que ya no lleva el local](servers.md#handed-over).
 
 Si la copia de seguridad confirma que otro servidor ha pasado a llevar el local, este servidor se
 niega a seguir como principal. Abre el otro servidor con el enlace. Si esa información aparece después

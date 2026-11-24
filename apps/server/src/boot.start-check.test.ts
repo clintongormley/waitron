@@ -27,7 +27,8 @@ import {
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { Hono } from "hono";
-import { persons, startManagementSession } from "@waitron/identity";
+import { persons, startManagementSession, webauthnCredentials } from "@waitron/identity";
+import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import type { WaitronModule } from "@waitron/module";
 import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
@@ -217,6 +218,7 @@ async function boot(
   const env: Record<string, string> = {
     ...tradingBootEnv(suite.db, dir, nodeId, migrationsRoot),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
+    WAITRON_MANAGEMENT_RP_ID: "dashboard.example",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
@@ -851,6 +853,51 @@ describe("the start check on a real start", () => {
       expect(await carryOnFrom("https://dashboard.example", "cross-site")).toMatchObject({
         refused: false,
       });
+      expect(await acceptingSales()).toBe(false);
+    }, 60_000);
+
+    it("the waiting page's download takes a passkey made at the dashboard's name", async () => {
+      const passkey = signingPasskey("dashboard.example");
+      await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: { ...seams(waitThen()), waitingStart: { intervalMs: 60_000, secure: () => true } },
+        beforeStart: async () => {
+          const [admin] = await suite.db
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.email, "owner@example.test"));
+          await withTransaction(suite.db, (tx) =>
+            tx.insert(webauthnCredentials).values({
+              personId: admin!.id,
+              credentialId: passkey.credentialId,
+              publicKey: passkey.publicKey,
+              counter: 0,
+            }),
+          );
+        },
+      });
+      const options = await fetch(`http://127.0.0.1:${httpPort()}/old-box-data/passkey-options`, {
+        method: "POST",
+      });
+      expect(options.status).toBe(200);
+      const { challenge, rpId } = (await options.json()) as { challenge: string; rpId: string };
+      expect(rpId).toBe("dashboard.example");
+      const answer = passkey.assert(challenge, "https://dashboard.example");
+      const response = await fetch(`http://127.0.0.1:${httpPort()}/old-box-data`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ passkey: JSON.stringify(answer) }),
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      expect(
+        Buffer.from(await response.arrayBuffer())
+          .subarray(0, 2)
+          .toString(),
+      ).toBe("PK");
       expect(await acceptingSales()).toBe(false);
     }, 60_000);
 

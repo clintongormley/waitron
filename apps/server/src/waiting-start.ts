@@ -20,7 +20,7 @@ import { RESTRICTED_DOWNLOAD_WORDS } from "./i18n/restricted-page.js";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import type { Logger } from "./logger.js";
 import { mountNodeApi } from "./node-api.js";
-import { oldBoxDataRoute } from "./old-box-data-page.js";
+import { oldBoxDataRoute, type OldBoxDataDeps } from "./old-box-data-page.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { downloadForm, type OldBoxDownloadState } from "./restricted-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
@@ -72,6 +72,11 @@ export interface WaitingStartDeps {
     readNewerMain?: () => Promise<NewerBucketMain | null>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;
+    /**
+     * Offers the download's passkey sign-in; without it the download asks for email and password
+     * only.
+     */
+    passkey?: OldBoxDataDeps["passkey"];
   };
   /** The peer routes, mounted on the waiting start's own app. */
   routes: ((app: Hono, hooks: WaitingHooks) => void)[];
@@ -171,7 +176,10 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       if (typeof drawn !== "string") return drawn;
       const intro = RESTRICTED_DOWNLOAD_WORDS[locale].waiting;
       const secure = (carryOn.secure ?? isSecure)(c);
-      return drawn + downloadForm(intro, locale, secure, download, destination);
+      return (
+        drawn +
+        downloadForm(intro, locale, secure, download, destination, carryOn.passkey !== undefined)
+      );
     };
     section = below;
     oldBoxDataRoute({
@@ -180,6 +188,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       modules: carryOn.modules,
       totpKeyRing: carryOn.credentialKeyRing,
       secure: carryOn.secure,
+      passkey: carryOn.passkey,
       throttle,
       // A waiting box holds no handover restriction: it did not hand over in a planned handover.
       planned: async () => false,
