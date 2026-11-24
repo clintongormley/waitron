@@ -803,3 +803,33 @@ test("pdfRead still resolves when the host takes the words away during a read", 
   finish(reading());
   await expect(read).resolves.toBeUndefined();
 });
+
+test("a new key name after a refused PDF forgets the PDF and tells the host", async () => {
+  const { el, seen } = await field();
+  el.readPack = async () => async () => Promise.reject(packRefusal("not_a_pack"));
+  await choose(el);
+  await el.pdfRead;
+  expect(message(el)).toBe(EN.notPack);
+  seen.length = 0;
+  el.keyName = "2026-01-02 · AAAA";
+  await el.updateComplete;
+  expect(seen).toStrictEqual([{}]);
+  await settled(el, undefined);
+});
+
+test("a new key name alone clears a refusal set directly on the field", async () => {
+  const { el, seen } = await field();
+  el.wrongKey = true;
+  await settled(el, EN.wrongKey(KEY_NAME));
+  el.keyName = "2026-01-02 · AAAA";
+  await el.updateComplete;
+  expect(el.wrongKey).toBe(false);
+  expect(seen).toStrictEqual([{}]);
+  await settled(el, undefined);
+});
+
+test("a field starts with no refusal", async () => {
+  const { el } = await field({ keyName: undefined, error: "Host line" });
+  expect(el.wrongKey).toBe(false);
+  expect(message(el)).toBe("Host line");
+});
