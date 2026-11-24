@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -118,6 +118,8 @@ describe("till-menu-switcher", () => {
     const field = picker(el);
     expect(field).not.toBeNull();
     await field.updateComplete;
+    const leakedChange = vi.fn();
+    host.addEventListener("wt-change", leakedChange);
     const events: CustomEvent<{ id: string }>[] = [];
     host.addEventListener("menu-selected", (event) => {
       events.push(event as CustomEvent<{ id: string }>);
@@ -127,6 +129,7 @@ describe("till-menu-switcher", () => {
     await userEvent.keyboard("{End}{Enter}");
     await field.updateComplete;
     expect(events.map(({ detail }) => detail)).toEqual([{ id: "cat-drinks" }]);
+    expect(leakedChange).not.toHaveBeenCalled();
     expect(events[0]!.composed).toBe(true);
     expect(events[0]!.bubbles).toBe(true);
     expect(field.shadowRoot!.querySelector("button .value")!.textContent?.trim()).toBe("Food");
