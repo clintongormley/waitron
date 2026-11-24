@@ -5,8 +5,13 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { copyStoppedTree } from "./copy.mjs";
-import { clockStatusRelay, upgradeEnvironment } from "./host.mjs";
-import { upgradeStatus, writeFileDurable } from "./transaction.mjs";
+import { clockStatusRelay, upgradeEnvironment, writeIdentityNote } from "./host.mjs";
+import {
+  checksPassed,
+  savedIdentityNote,
+  upgradeStatus,
+  writeFileDurable,
+} from "./transaction.mjs";
 
 const execute = promisify(execFile);
 const command = (file, args) => execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
@@ -39,6 +44,7 @@ export async function removeUpgradeCheckContainers(directory, run = command) {
 
 export async function checkUpgradeCandidate({ boxDirectory, directory, run = command }) {
   const marker = await upgradeStatus(directory);
+  const identityNote = await savedIdentityNote(directory);
   const config = JSON.parse(
     (
       await run("docker", [
@@ -63,6 +69,7 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
   try {
     for (const [index, name] of ["state", "agent"].entries())
       await copyStoppedTree(join(directory, "copies", String(index)), join(work, name));
+    if (identityNote !== null) await writeIdentityNote(join(work, "state"), identityNote);
     const owner = await fs.stat(join(work, "state"));
     for (const name of ["logs", "backups", "tunnel"]) {
       const path = join(work, name);
@@ -191,5 +198,8 @@ export async function checkUpgradeCandidate({ boxDirectory, directory, run = com
     failure ??= cleanups[0];
   }
   if (failure) throw failure;
+  // Last, under the hold taken at the stop: a live note says every stopped check passed.
+  if (identityNote !== null && checksPassed(reports))
+    await writeIdentityNote(marker.paths[0], identityNote);
   return reports;
 }

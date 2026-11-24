@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  IDENTITY_CHANGE_FILE,
   recoverUpgrade,
   upgradeResultPath,
   upgradeStatus,
@@ -683,8 +684,6 @@ async function candidateReference(image, run) {
 const RELEASE_REF =
   /^v(?=.{1,50}$)((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.(?:0|[1-9]\d*))?)$/;
 const PRODUCER = "WAITRON_PRODUCER_TAX_ID=";
-// The name and shape apps/server/src/identity-change-note.ts reads.
-const IDENTITY_CHANGE_FILE = "identity-change.json";
 
 async function identityChangeNote(oldImage, nextImage, run) {
   const configOf = async (image) =>
@@ -711,7 +710,7 @@ async function identityChangeNote(oldImage, nextImage, run) {
   }
 }
 
-async function writeIdentityNote(stateDirectory, note) {
+export async function writeIdentityNote(stateDirectory, note) {
   const owner = await fs.stat(stateDirectory);
   await writeFileDurable(join(stateDirectory, IDENTITY_CHANGE_FILE), note, owner);
 }

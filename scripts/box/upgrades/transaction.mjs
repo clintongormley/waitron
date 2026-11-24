@@ -80,6 +80,22 @@ async function record(directory, marker) {
   return marker;
 }
 
+// The name and shape apps/server/src/identity-change-note.ts reads.
+export const IDENTITY_CHANGE_FILE = "identity-change.json";
+
+/** The note saved with an attempt that changes the producer; `null` for any other attempt. */
+export async function savedIdentityNote(directory) {
+  try {
+    return await fs.readFile(join(directory, IDENTITY_CHANGE_FILE), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export const checksPassed = (checks) =>
+  Array.isArray(checks) && checks.length > 0 && checks.every((check) => check.ok === true);
+
 export const upgradeResultPath = (boxDirectory) => `${boxDirectory}.upgrade-result.json`;
 
 export function offeredUpgradeOutcome(marker) {
@@ -186,13 +202,7 @@ export async function applyUpgrade({ directory, paths, mode, host, versions, res
     await host.installCandidate(images.candidate);
     const checks = await host.checkCandidate();
     marker = { ...marker, checks };
-    if (
-      !Array.isArray(checks) ||
-      checks.length === 0 ||
-      checks.some((check) => check.ok !== true)
-    ) {
-      throw new Error("candidate checks failed");
-    }
+    if (!checksPassed(checks)) throw new Error("candidate checks failed");
   } catch (error) {
     marker = await record(directory, {
       ...marker,
@@ -229,6 +239,11 @@ export async function recoverUpgrade({ directory, host, choice, resultPath }) {
   }
   if (choice === "keep") {
     if (!marker.copied) throw new Error("candidate was not installed");
+    if ((await savedIdentityNote(directory)) !== null)
+      throw new Error(
+        "This upgrade changes the software producer, so it cannot be kept after a failed check. " +
+          "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.",
+      );
     await host.stop();
     await host.installCandidate(marker.images.candidate);
     return commit(directory, host, marker, "candidate", resultPath);

@@ -2,10 +2,14 @@ import * as fs from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
-import { expect, it, onTestFinished, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { applyUpgrade, recoverUpgrade, upgradeStatus } from "./transaction.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
-import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
+import {
+  IDENTITY_CHANGE_FILE,
+  RECOVERY_LOCK_FILE,
+  VENUE_DIR_NAME,
+} from "../../../packages/store/src/state-layout.js";
 
 const gnuCopy =
   process.platform === "darwin"
@@ -681,3 +685,98 @@ it.each(["prepare", "marker"])(
     await expect(fs.stat(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
+
+describe("an attempt that changes the producer", () => {
+  const REFUSAL =
+    "This upgrade changes the software producer, so it cannot be kept after a failed check. " +
+    "Run `waitron.sh restore` to put the selling version back, then try the upgrade again.";
+  const tree = async (folder) =>
+    Object.fromEntries(
+      await Promise.all(
+        (await fs.readdir(folder)).map(async (name) => [
+          name,
+          await fs.readFile(join(folder, name), "utf8"),
+        ]),
+      ),
+    );
+
+  async function noted(checkCandidate) {
+    const f = await fixture();
+    const stop = f.host.stop;
+    f.host.stop = async () => {
+      await stop();
+      await fs.writeFile(join(f.directory, IDENTITY_CHANGE_FILE), "{}\n");
+    };
+    f.host.checkCandidate = checkCandidate ?? (async () => [{ name: "sale", ok: false }]);
+    return { ...f, live: join(f.state, IDENTITY_CHANGE_FILE) };
+  }
+
+  it("cannot be kept after a failed check, and is left held for Restore", async () => {
+    const f = await noted();
+    const before = await tree(f.state);
+    const held = await applyUpgrade({ ...f.input, mode: "manual" });
+    const events = f.events.length;
+    const failed = await tree(f.state);
+
+    await expect(recoverUpgrade({ ...f.input, choice: "keep" })).rejects.toThrow(
+      expect.objectContaining({ message: REFUSAL }),
+    );
+
+    expect(f.events).toHaveLength(events);
+    expect(await upgradeStatus(f.directory)).toEqual(held);
+    expect(await tree(f.state)).toEqual(failed);
+    await recoverUpgrade({ ...f.input, choice: "restore" });
+    expect(await tree(f.state)).toEqual(before);
+    expect(f.events.find((event) => event.resume)).toMatchObject({ resume: { app: "sha256:old" } });
+  });
+
+  it("cannot be kept when its note cannot be read", async () => {
+    const f = await noted();
+    await applyUpgrade({ ...f.input, mode: "manual" });
+    await fs.rm(join(f.directory, IDENTITY_CHANGE_FILE));
+    await fs.mkdir(join(f.directory, IDENTITY_CHANGE_FILE));
+    await expect(recoverUpgrade({ ...f.input, choice: "keep" })).rejects.toMatchObject({
+      code: "EISDIR",
+    });
+    expect(f.events.filter((event) => event.resume)).toEqual([]);
+  });
+
+  it("can be kept as before when only the live state holds an earlier upgrade's note", async () => {
+    const f = await fixture();
+    f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+    await fs.writeFile(join(f.state, IDENTITY_CHANGE_FILE), "earlier");
+    await applyUpgrade({ ...f.input, mode: "manual" });
+    expect(await recoverUpgrade({ ...f.input, choice: "keep" })).toMatchObject({
+      phase: "committed",
+      target: "candidate",
+    });
+    expect(await fs.readFile(join(f.state, IDENTITY_CHANGE_FILE), "utf8")).toBe("earlier");
+  });
+
+  it.each(["manual", "automatic"])(
+    "stopped after its live note and before it was recorded complete, is put back without the note (%s)",
+    async (mode) => {
+      const f = await noted(async () => {
+        await fs.writeFile(f.live, "{}\n");
+        await fs.mkdir(join(f.directory, "attempt.json.tmp"));
+        return [{ name: "sale", ok: true }];
+      });
+      const before = await tree(f.state);
+      await expect(applyUpgrade({ ...f.input, mode })).rejects.toMatchObject({ code: "EISDIR" });
+      await fs.rmdir(join(f.directory, "attempt.json.tmp"));
+      expect(await upgradeStatus(f.directory)).toMatchObject({ phase: "candidate", copied: true });
+      expect(await fs.readdir(f.state)).toContain(IDENTITY_CHANGE_FILE);
+
+      let result = await recoverUpgrade(f.input);
+      if (mode === "manual") {
+        expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
+        await expect(recoverUpgrade({ ...f.input, choice: "keep" })).rejects.toThrow(REFUSAL);
+        expect(f.events.filter((event) => event.resume)).toEqual([]);
+        result = await recoverUpgrade({ ...f.input, choice: "restore" });
+      }
+
+      expect(result).toMatchObject({ phase: "committed", target: "old" });
+      expect(await tree(f.state)).toEqual(before);
+    },
+  );
+});

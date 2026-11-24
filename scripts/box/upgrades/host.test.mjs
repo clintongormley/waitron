@@ -1633,6 +1633,141 @@ describe("the note of a change of producer", () => {
     expect(await readIdentityChangeNote(t.directory)).toMatchObject({ release: "1.4.0" });
   });
 
+  async function apply({ sale = () => ({ stdout: '[{"name":"sale","ok":true}]' }) } = {}) {
+    const { DatabaseSync } = await import("node:sqlite");
+    const { runUpgradeCli } = await import("./cli.mjs");
+    const t = await imageFixture({
+      prepare: false,
+      imageConfigs: { "sha256:app:old": () => OLD, "sha256:app:new": () => NEXT },
+    });
+    t.candidate.services["print-agent"].healthcheck = { test: ["CMD", "true"] };
+    const state = join(t.root, "state");
+    await writeFile(join(state, "retained"), "intact source");
+    const held = () =>
+      [RECOVERY_LOCK_FILE, `${VENUE_DIR_NAME}/${VENUE_LOCK_FILE}`].map((name) => {
+        const contender = new DatabaseSync(join(state, name));
+        try {
+          contender.exec("pragma busy_timeout = 0; begin immediate");
+          return false;
+        } catch (error) {
+          expect(error.message).toMatch(/locked/);
+          return true;
+        } finally {
+          contender.close();
+        }
+      });
+    const seen = [];
+    const record = async (step) => {
+      seen.push({
+        step,
+        held: held(),
+        note: (await readdir(state)).includes(IDENTITY_CHANGE_FILE),
+      });
+    };
+    const run = async (file, args, input) => {
+      if (file === "prepare-fixture")
+        return { stdout: JSON.stringify({ compose: JSON.stringify(t.candidate) }) };
+      if (["readiness", "sale"].includes(args.at(-1))) await record(args.at(-1));
+      if (args.at(-1) === "readiness") return { stdout: '[{"name":"readiness","ok":true}]' };
+      if (args.at(-1) === "sale") return sale();
+      if (args[0] === "rm") await record("remove");
+      if (args.includes("up")) await record("open");
+      if (args[0] === "inspect" && !args.includes("--format"))
+        return {
+          stdout: JSON.stringify([{ State: { Running: true, Health: { Status: "healthy" } } }]),
+        };
+      if (["run", "exec", "rm", "stop"].includes(args[0])) return { stdout: "" };
+      return t.run(file, args, input);
+    };
+    const probe = await open(join(tmpdir(), "."), "r");
+    const prototype = Object.getPrototypeOf(probe);
+    await probe.close();
+    const { chown } = prototype;
+    const spy = vi.spyOn(prototype, "chown").mockImplementation(function (...args) {
+      // The hold's own lock files are made, and given their owner, before it begins.
+      if (seen.length > 0) seen.push({ step: "write", held: held() });
+      return chown.apply(this, args);
+    });
+    onTestFinished(() => spy.mockRestore());
+    const result = await runUpgradeCli(["apply", t.root, "prepare-fixture", "candidate-ref"], {
+      run,
+    });
+    return { ...t, state, held, seen, result };
+  }
+
+  it("holds the venue from the stop to the live note, and lets go only to open it", async () => {
+    const t = await apply();
+    expect(t.result).toMatchObject({ phase: "committed", target: "candidate" });
+    const HELD = [true, true];
+    const before = (step) => ({ step, held: HELD, note: false });
+    expect(t.seen).toEqual([
+      before("readiness"),
+      before("sale"),
+      before("remove"),
+      before("remove"),
+      before("remove"),
+      { step: "write", held: HELD },
+      { step: "open", held: [false, false], note: true },
+      { step: "open", held: [false, false], note: true },
+    ]);
+    expect(await readIdentityChangeNote(t.state)).toMatchObject({ release: "1.4.0" });
+    expect(await readdir(`${t.root}.upgrades`)).toEqual([]);
+  });
+
+  it("goes on holding the venue, with no live note, after a refused sale", async () => {
+    const t = await apply({
+      sale: () => {
+        throw new Error("sale refused");
+      },
+    });
+    expect(t.result).toMatchObject({ phase: "awaiting-choice", failure: "sale refused" });
+    expect(t.held()).toEqual([true, true]);
+    expect(await readdir(t.state)).not.toContain(IDENTITY_CHANGE_FILE);
+    expect(t.seen.some(({ step }) => ["write", "open"].includes(step))).toBe(false);
+  });
+
+  it.each(["manual", "automatic"])(
+    "puts the copy back without the live note when the %s upgrade stopped before it was recorded complete",
+    async (mode) => {
+      const { runUpgradeCli } = await import("./cli.mjs");
+      const { copyStoppedTree } = await import("./copy.mjs");
+      const { f, root, directory, images, run: hostRun } = await imageFixture();
+      const state = join(root, "state");
+      await writeFile(join(state, "retained"), "original state");
+      await mkdir(join(directory, "copies"));
+      for (const [index, path] of f.paths.entries())
+        await copyStoppedTree(path, join(directory, "copies", String(index)));
+      const note = JSON.stringify(NOTE) + "\n";
+      for (const folder of [directory, state])
+        await writeFile(join(folder, IDENTITY_CHANGE_FILE), note);
+      await writeFile(
+        join(directory, "attempt.json"),
+        JSON.stringify({ mode, phase: "candidate", copied: true, paths: f.paths, images }),
+      );
+      const run = async (file, args, input) => {
+        if (args[0] === "inspect" && args[2]?.includes("Config.Labels"))
+          throw Object.assign(new Error("missing"), { code: 1, stderr: "No such container" });
+        return hostRun(file, args, input);
+      };
+
+      let result = await runUpgradeCli(["recover", root], { run });
+      if (mode === "manual") {
+        expect(result).toMatchObject({ phase: "awaiting-choice", failure: "checks interrupted" });
+        await expect(runUpgradeCli(["keep", root], { run })).rejects.toThrow(
+          "This upgrade changes the software producer, so it cannot be kept after a failed check.",
+        );
+        expect(await readdir(directory)).toContain("copies");
+        result = await runUpgradeCli(["restore", root], { run });
+      }
+
+      expect(result).toMatchObject({ phase: "committed", target: "old" });
+      expect((await readdir(state)).sort()).toEqual([RECOVERY_LOCK_FILE, "retained", "venue"]);
+      expect(await readFile(join(state, "retained"), "utf8")).toBe("original state");
+      const installed = JSON.parse(await readFile(join(root, "compose.yml"), "utf8"));
+      expect(installed.services.app.image).toBe(images.old.app);
+    },
+  );
+
   it("never puts the note in Compose, .env, an environment file or a command", async () => {
     const t = await upgrade();
     await t.f.host.installCandidate(t.images.candidate);
