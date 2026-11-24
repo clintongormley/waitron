@@ -29,6 +29,7 @@ import { Router } from "./router.js";
 /** Failed pulls and active discovery passes use this interval. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
+const JOIN_RETRY_INTERVAL_MS = 30_000;
 /** After a failed ask of its own box, an agent whose box, at its loopback address, answers as the
  * spare, or a halted one, asks again at most this often: two asks a minute against the enrol limit
  * of 30 a minute (`ENROL_RATE_MAX`, `apps/server/src/enrol-rate-limit.ts`), which every spare's
@@ -110,6 +111,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let selfEnrolAt = 0;
+  let retryJoinAt: number | undefined;
   let running = false;
   let pullController: AbortController | undefined;
   // Set by stop() and cleared by start(): a job still out then reports, but nothing new is claimed.
@@ -184,6 +186,7 @@ export function createAgent(opts: AgentOptions): Agent {
     approved = false;
     halted = false;
     selfEnrolAt = 0;
+    retryJoinAt = undefined;
     outOfTouch = false;
     resetDeadline = undefined;
     discoveryUntil = 0;
@@ -238,8 +241,12 @@ export function createAgent(opts: AgentOptions): Agent {
     outOfTouch = false;
     resetDeadline = undefined;
     await host.saveToken(null);
-    if (config.pendingVerificationNumber !== undefined) {
-      await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
+    if (config.pendingVerificationNumber !== undefined || config.previouslyDenied !== undefined) {
+      await host.saveConfig({
+        ...config,
+        pendingVerificationNumber: undefined,
+        previouslyDenied: undefined,
+      });
     }
     report({
       phase: "unauthorized",
@@ -609,7 +616,12 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     if (resetDeadline !== undefined && outOfTouch && steady() >= resetDeadline) {
       await host.saveToken(null);
-      config = { ...config, servers: undefined };
+      config = {
+        ...config,
+        servers: undefined,
+        pendingVerificationNumber: undefined,
+        previouslyDenied: undefined,
+      };
       await host.saveConfig(config);
       resetRuntimeState();
       report({
@@ -636,7 +648,18 @@ export function createAgent(opts: AgentOptions): Agent {
       loopback.hostname = "127.0.0.1";
       const self = await client.enrolSelf(loopback.origin, config.name);
       if (self.ok) {
+        if (
+          config.pendingVerificationNumber !== undefined ||
+          config.previouslyDenied !== undefined
+        ) {
+          await host.saveConfig({
+            ...config,
+            pendingVerificationNumber: undefined,
+            previouslyDenied: undefined,
+          });
+        }
         await host.saveToken(self.value.token);
+        retryJoinAt = undefined;
         halted = false;
         approved = true;
         outOfTouch = false;
@@ -693,7 +716,12 @@ export function createAgent(opts: AgentOptions): Agent {
         report({ phase: "spare_box", serverUrl: config.serverUrl, current, lastError: undefined });
         return false;
       }
-      const joined = await client.join(current, config.name);
+      if (retryJoinAt !== undefined && steady() < retryJoinAt) return false;
+      if (retryJoinAt !== undefined || config.previouslyDenied)
+        retryJoinAt = steady() + JOIN_RETRY_INTERVAL_MS;
+      const joined = config.previouslyDenied
+        ? await client.join(current, config.name, true)
+        : await client.join(current, config.name);
       if (!joined.ok) {
         if (joined.failure.kind === "pairing_closed") {
           report({ phase: "pairing_closed", serverUrl: config.serverUrl, current });
@@ -712,6 +740,7 @@ export function createAgent(opts: AgentOptions): Agent {
       await host.saveConfig(config);
       token = joined.value.token;
       await host.saveToken(token);
+      retryJoinAt = undefined;
       approved = false;
       report({
         phase: "pending",
@@ -742,13 +771,30 @@ export function createAgent(opts: AgentOptions): Agent {
         });
         return false;
       }
-      if (s.value === "not_approved") {
-        await halt(config, current);
+      if (s.value !== "approved") {
+        if (s.value === "revoked" || config.pendingVerificationNumber === undefined) {
+          await halt(config, current);
+          return false;
+        }
+        retryJoinAt = steady() + JOIN_RETRY_INTERVAL_MS;
+        if (s.value === "denied" && !config.previouslyDenied) {
+          config = { ...config, previouslyDenied: true };
+          await host.saveConfig(config);
+        }
+        await host.saveToken(null);
+        await host.saveConfig({ ...config, pendingVerificationNumber: undefined });
+        report({
+          phase: "pairing_closed",
+          serverUrl: config.serverUrl,
+          current,
+          verificationCode: undefined,
+          lastError: undefined,
+        });
         return false;
       }
       approved = true;
-      if (config.pendingVerificationNumber !== undefined) {
-        config = { ...config, pendingVerificationNumber: undefined };
+      if (config.pendingVerificationNumber !== undefined || config.previouslyDenied !== undefined) {
+        config = { ...config, pendingVerificationNumber: undefined, previouslyDenied: undefined };
         await host.saveConfig(config);
       }
     }

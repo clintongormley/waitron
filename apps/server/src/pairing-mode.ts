@@ -7,8 +7,8 @@ import { steadyNow } from "@waitron/shared";
  * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: a restart or a promotion forgets every hold
  * and claim, so the window starts shut. `boot.ts` builds ONE holder for the device, join and print
  * mounts. Holds lapse on the `steady` clock; the times answered, and `openSince`, are wall-clock.
- * `openSince` follows a backward wall step, never a forward one: `discardLapsedDeviceRequests`
- * deletes a device request stamped before it, and the knock route reads it before stamping, so a
+ * `openSince` follows a backward wall step, never a forward one: `discardLapsedRequests`
+ * deletes a request stamped before it, and the knock route reads it before stamping, so a
  * request made after the step is kept. `opening` counts the times the window went from shut to
  * open, so the knock route tells openings apart.
  */
@@ -35,6 +35,10 @@ export interface PairingMode {
   claimOf(requestId: string): PairingClaim | undefined;
   orphanedClaims(): string[];
   dropClaim(requestId: string): void;
+  markPreviouslyDenied(id: string): void;
+  wasPreviouslyDenied(id: string): boolean;
+  rememberDeniedAgent(id: string, tokenHash: string): () => void;
+  deniedAgentHash(id: string): string | undefined;
 }
 
 export function createPairingMode(
@@ -55,6 +59,8 @@ export function createPairingMode(
   } = opts;
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
+  const previouslyDenied = new Set<string>();
+  const deniedAgents = new Map<string, { tokenHash: string }>();
   let openSinceMs: number | null = null;
   let openings = 0;
   let lapse: ReturnType<typeof setTimeout> | undefined;
@@ -76,8 +82,12 @@ export function createPairingMode(
     const t = steady();
     const before = holds.size;
     for (const [id, until] of holds) if (until <= t) holds.delete(id);
-    if (holds.size === 0) openSinceMs = null;
-    else if (openSinceMs !== null) openSinceMs = Math.min(openSinceMs, now());
+    if (holds.size === 0) {
+      openSinceMs = null;
+      previouslyDenied.clear();
+    } else if (openSinceMs !== null) {
+      openSinceMs = Math.min(openSinceMs, now());
+    }
     if (holds.size !== before) {
       arm();
       changed?.();
@@ -150,6 +160,25 @@ export function createPairingMode(
     },
     dropClaim(requestId) {
       if (claims.delete(requestId)) changed?.();
+    },
+    markPreviouslyDenied(id) {
+      previouslyDenied.add(id);
+      if (previouslyDenied.size > 100)
+        previouslyDenied.delete(previouslyDenied.values().next().value!);
+    },
+    wasPreviouslyDenied(id) {
+      return previouslyDenied.has(id);
+    },
+    rememberDeniedAgent(id, tokenHash) {
+      const denial = { tokenHash };
+      deniedAgents.set(id, denial);
+      if (deniedAgents.size > 100) deniedAgents.delete(deniedAgents.keys().next().value!);
+      return () => {
+        if (deniedAgents.get(id) === denial) deniedAgents.delete(id);
+      };
+    },
+    deniedAgentHash(id) {
+      return deniedAgents.get(id)?.tokenHash;
     },
   };
 }

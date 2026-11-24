@@ -1925,6 +1925,42 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=join-origin]")).toBe(window.location.origin);
   });
 
+  it.each([
+    ["en", en["printers.join_previously_denied"], en["printers.join_review"]],
+    ["es-ES", es["printers.join_previously_denied"], es["printers.join_review"]],
+  ] as const)(
+    "shows a previously denied agent below new requests in %s",
+    async (locale, label, letIn) => {
+      setLocale(locale);
+      const api = stubApi({
+        joinRequests: vi.fn().mockResolvedValue([
+          {
+            id: "new",
+            kind: "print_agent",
+            label: "Counter agent",
+            createdAt: "2026-09-08T10:02:00Z",
+          },
+          {
+            id: "denied",
+            kind: "print_agent",
+            label: "Kitchen agent",
+            createdAt: "2026-09-08T10:01:00Z",
+            previouslyDenied: true,
+          },
+        ]),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      const rows = [...q(el, "[data-test=join-panel]")!.querySelectorAll("li")];
+      expect(rows.map((row) => row.dataset.test)).toEqual(["join-row-new", "join-row-denied"]);
+      expect(rows[0]!.textContent).not.toContain(label);
+      expect(rows[1]!.textContent).toContain(label);
+      expect(text(el, "[data-test=join-review-denied]")).toBe(letIn);
+    },
+  );
+
   it("never renders the request's verification number in the pending list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -2035,6 +2071,46 @@ describe("printers-screen", () => {
     await flush(el);
     expect(q(el, "[data-test=join-dialog]")).toBeNull();
   });
+
+  it.each(["approval", "denial"])(
+    "lets an in-flight agent %s finish before releasing the pairing hold",
+    async (decision) => {
+      let answer!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      const api = stubApi({
+        acceptPrintAgentJoinRequest: vi.fn().mockReturnValue(pending),
+        denyJoinRequest: vi.fn().mockReturnValue(pending),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      await selectTab(el, "agents");
+      try {
+        await userEvent.click(q(el, "[data-test=open-add-agent]")!);
+        await flush(el);
+        if (decision === "approval") {
+          await userEvent.click(q(el, "[data-test=join-review-j1]")!);
+          await flush(el);
+          await userEvent.click(q(el, `[data-choice="${REAL_NUMBER}"]`)!);
+          expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledOnce();
+          await userEvent.click(q(el, "[data-test=join-cancel]")!);
+          await flush(el);
+        } else {
+          await userEvent.click(q(el, "[data-test=join-deny-j1]")!);
+          await flush(el);
+          await userEvent.click(q(el, "[data-test=join-deny-j1]")!);
+          expect(api.denyJoinRequest).toHaveBeenCalledOnce();
+        }
+        await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
+        expect(api.releasePairingHold).not.toHaveBeenCalled();
+      } finally {
+        answer();
+        await flush(el);
+      }
+      expect(api.releasePairingHold).toHaveBeenCalledOnce();
+    },
+  );
 
   // A wrong tap has already denied the request server-side.
   it("treats a mismatch as terminal: the row goes, and the banner tells them to ask again", async () => {

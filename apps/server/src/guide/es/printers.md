@@ -118,7 +118,9 @@ Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **A
 
 Un agente marcado **En otro servidor** pertenece a otro servidor del local, como el de reserva. Imprime a través del servidor principal, así que consérvalo mientras ese servidor siga en uso.
 
-Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.
+Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Si cierras el diálogo antes de darlo de alta, ábrelo de nuevo y espera a que el agente solicite un número nuevo. Tras vincularlo, busca y añade de nuevo sus impresoras A4.
+
+Si rechazas una solicitud, el agente puede volver a aparecer debajo de las demás solicitudes como **Rechazado anteriormente**. Si quieres darlo de alta, elige **Dar de alta** y comprueba su número actual.
 
 ## Lectores de tarjetas {#card-readers}
 

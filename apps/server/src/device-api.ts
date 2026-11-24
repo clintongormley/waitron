@@ -72,7 +72,7 @@ import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
   createJoinRequest,
-  discardLapsedDeviceRequests,
+  discardLapsedRequests,
   provenDisabledDevice,
   readJoinStatus,
 } from "./join-requests.js";
@@ -308,7 +308,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           throw new AppError("device.pairing_closed", {});
         }
         // Before the cap is counted, so requests a shut window stranded do not hold places in it.
-        dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+        dropped = await discardLapsedRequests(tx, deps.cfg, deps.pairingMode);
         const request = await createJoinRequest(tx, deps.cfg, {
           kind: "device",
           label: name,

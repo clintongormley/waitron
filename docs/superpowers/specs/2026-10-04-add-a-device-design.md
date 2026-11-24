@@ -108,6 +108,8 @@ device and cannot be changed.
   its own setup page (`packages/print-agent/src/agent.ts`, the `not_approved` branch), so discarding
   its request when the window shuts would strand it. Its request survives a shut window, as now.
   Finding a way to apply the device rule to agents is A269.
+  Update, 2026-11-24. A269 discards an agent’s request when its pairing window closes. The agent asks
+  again and carries a previous denial into its next request.
 - **Dev mode is unchanged:** a knock is still accepted at once with the first `till` profile,
   without the window (`apps/server/src/device-api.ts`). `apps/server/scripts/dev-setup.ts` seeds its
   devices through `enrolDeviceForTest` (`apps/server/src/testing/enrol.ts`), which calls
@@ -223,6 +225,7 @@ The plan writes each of these as a failing test first:
 ## 9. Not in this work
 
 - **A269:** apply "discarded when the window shuts" to print agents without stranding them.
+  Update, 2026-11-24. See the revised print-agent behavior in §4.
 - **A270:** whether "made here" belongs on the device or on its profile. It stays on the device
   (owner, 2026-10-04). _2026-11-14: settled, on the device, as one station; see A1534 in `docs/backlog.md`._
 - **A271:** each browser tab as its own device, in Demo as well as dev mode, with its own device

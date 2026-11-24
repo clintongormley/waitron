@@ -41,14 +41,16 @@ describe("FileState", () => {
     });
   });
 
-  it("preserves the pending verification number on a config round-trip", async () => {
+  it("preserves the pending number and a remembered denial on a config round-trip", async () => {
     const state = new FileState(dir);
-    await state.writeConfig({ serverUrl: "https://a", name: "n", pendingVerificationNumber: "07" });
-    expect(await state.readConfig()).toEqual({
+    const config = {
       serverUrl: "https://a",
       name: "n",
       pendingVerificationNumber: "07",
-    });
+      previouslyDenied: true,
+    };
+    await state.writeConfig(config);
+    expect(await state.readConfig()).toEqual(config);
   });
 
   it("preserves the remembered server list on a config round-trip", async () => {

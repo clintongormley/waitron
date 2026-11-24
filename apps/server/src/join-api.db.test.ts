@@ -110,10 +110,10 @@ async function pendingCount(): Promise<number> {
 
 /** An app whose window was opened BEFORE the test makes its requests, so the gates' discard of
  *  requests a shut window stranded keeps them. */
-function openApp(cfg: TradingContext): { app: Hono; mode: PairingMode; holdId: string } {
+function openApp(cfg: TradingContext): { app: Hono; holdId: string } {
   const mode = createPairingMode();
   const { holdId } = mode.open();
-  return { app: mountApp(cfg, mode), mode, holdId };
+  return { app: mountApp(cfg, mode), holdId };
 }
 
 const shownAsks = new Map<string, string>();
@@ -906,7 +906,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("enrols the agent when the number matches, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app } = openApp(venue.cfg);
     const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const res = await send(
       app,
@@ -927,7 +927,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("a wrong number is 400 device.join_mismatch, no print_agents row, and the request is gone on a FRESH retry", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app } = openApp(venue.cfg);
     const made = await knock(venue, {
       kind: "print_agent",
       label: "Kitchen agent",
@@ -985,7 +985,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("needs hardware.manage — a staff session is 403 and the request survives", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app } = openApp(venue.cfg);
     const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const res = await send(
       app,
@@ -1001,7 +1001,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("is 404 for an unknown or malformed id, and screens a missing choice", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app } = openApp(venue.cfg);
     for (const id of [randomUUID(), "not-a-uuid"]) {
       const res = await send(
         app,
@@ -1393,7 +1393,7 @@ describe("device pairing: check, claim, approve", () => {
     expect((await errorOf(challenged)).code).toBe("join_request.not_found");
   });
 
-  it("keeps a print agent's request when the window shuts", async () => {
+  it("discards a print agent's request when the window shuts", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = await pairingApp(venue);
     await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
@@ -1401,7 +1401,7 @@ describe("device pairing: check, claim, approve", () => {
       cookie: venue.managerCookie,
     });
     expect(released.status).toBe(204);
-    expect(await pendingCount()).toBe(1);
+    expect(await pendingCount()).toBe(0);
   });
 
   it("refuses a print agent's request on the check route 404, and leaves it", async () => {

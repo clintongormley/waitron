@@ -20,8 +20,9 @@ export interface AgentConfig {
   environment?: string;
   /** The two-digit verification number of the OPEN join request, persisted while pending so a restart
    * (which reloads the token and keeps polling the same request) can still show the code the admin
-   * matches. Cleared on approval and on halt. */
+   * matches. Cleared when the request ends. */
   pendingVerificationNumber?: string;
+  previouslyDenied?: boolean;
   /** Other venue nodes learned from the last successful pull. */
   servers?: ServerEntry[];
 }

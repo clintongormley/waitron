@@ -30,8 +30,8 @@ const ownedBy = (cfg: Pick<TradingContext, "nodeId">) => eq(joinRequests.nodeId,
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
 
-/** A request lapses after this long, even while the window stays open. A device request also ends
- * when the window shuts ({@link discardLapsedDeviceRequests}). */
+/** A request lapses after this long, even while the window stays open. A request also ends
+ * when the window shuts. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
 /** Pending rows per kind, across this node's requests. It also bounds the numbers the decoy rule
@@ -58,29 +58,29 @@ async function sweepLapsed(tx: Transaction, cfg: TradingContext): Promise<void> 
     .where(and(ownedBy(cfg), or(lt(joinRequests.createdAt, from), gt(joinRequests.createdAt, to))));
 }
 
-export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
+export type RequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
 
 /**
- * A device asks only while the window is open, so a device request made before the window last
- * shut, or one whose claim's hold has ended, is discarded. Print-agent requests are left alone: an
- * agent told `not_approved` stops for good (`packages/print-agent/src/agent.ts`), A269.
+ * Discard requests made before the window last shut and device requests whose claim has ended.
  *
  * Returns the ids of the claims whose hold has ended. The caller drops those claims only after its
  * transaction commits: dropped here, a rolled-back transaction would bring the row back unclaimed.
  */
-export async function discardLapsedDeviceRequests(
+export async function discardLapsedRequests(
   tx: Transaction,
   cfg: TradingContext,
-  window: DeviceRequestWindow,
+  window: RequestWindow,
 ): Promise<string[]> {
   const since = window.openSince();
-  const device = and(ownedBy(cfg), eq(joinRequests.kind, "device"));
+  const owned = ownedBy(cfg);
   await tx
     .delete(joinRequests)
-    .where(since === null ? device : and(device, lt(joinRequests.createdAt, since)));
+    .where(since === null ? owned : and(owned, lt(joinRequests.createdAt, since)));
   const orphaned = window.orphanedClaims();
   if (orphaned.length > 0)
-    await tx.delete(joinRequests).where(and(device, inArray(joinRequests.id, orphaned)));
+    await tx
+      .delete(joinRequests)
+      .where(and(owned, eq(joinRequests.kind, "device"), inArray(joinRequests.id, orphaned)));
   return orphaned;
 }
 
@@ -428,12 +428,12 @@ export async function readJoinStatus(
   cfg: TradingContext,
   joinId: string,
   token: string,
-  window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
+  window: RequestWindow & Pick<PairingMode, "dropClaim">,
 ): Promise<JoinStatus> {
   let dropped: string[] = [];
   const status = await withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
-    dropped = await discardLapsedDeviceRequests(tx, cfg, window);
+    dropped = await discardLapsedRequests(tx, cfg, window);
     const pending = await pendingStatus(tx, cfg, joinId, token);
     if (pending !== undefined) return pending;
     const [accepted] = await tx
@@ -612,41 +612,49 @@ export async function acceptPrintAgentJoinRequest(
 }
 
 /**
- * The mirror of {@link readJoinStatus} for a print agent, resolving the approved fallback against
- * `print_agents`. The pending read is filtered to this node's rows; the approved fallback reads
- * `print_agents` by id and `active`, with no node filter.
+ * Pending requests belong to this node. An approved agent can follow another box, so look it up
+ * by id across nodes. Tell it about revocation or denial only after its token matches.
  */
 export async function readAgentJoinStatus(
   db: Database,
   cfg: TradingContext,
   joinId: string,
   token: string,
-): Promise<JoinStatus> {
-  return withTransaction(db, async (tx): Promise<JoinStatus> => {
-    await sweepLapsed(tx, cfg);
-    const pending = await pendingStatus(tx, cfg, joinId, token);
-    if (pending !== undefined) return pending;
-    const [accepted] = await tx
-      .select({ tokenHash: printAgents.tokenHash })
-      .from(printAgents)
-      .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
-    return accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash)
-      ? "approved"
-      : "not_approved";
-  });
+  window?: RequestWindow & Pick<PairingMode, "dropClaim" | "deniedAgentHash">,
+): Promise<JoinStatus | "denied" | "revoked"> {
+  let dropped: string[] = [];
+  const status = await withTransaction(
+    db,
+    async (tx): Promise<JoinStatus | "denied" | "revoked"> => {
+      if (window !== undefined) dropped = await discardLapsedRequests(tx, cfg, window);
+      await sweepLapsed(tx, cfg);
+      const pending = await pendingStatus(tx, cfg, joinId, token);
+      if (pending !== undefined) return pending;
+      const [accepted] = await tx
+        .select({ tokenHash: printAgents.tokenHash, active: printAgents.active })
+        .from(printAgents)
+        .where(eq(printAgents.id, joinId));
+      if (accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash))
+        return accepted.active ? "approved" : "revoked";
+      const deniedHash = window?.deniedAgentHash(joinId);
+      return deniedHash !== undefined && deviceTokenMatches(token, deniedHash)
+        ? "denied"
+        : "not_approved";
+    },
+  );
+  for (const id of dropped) window?.dropClaim(id);
+  return status;
 }
 
-/** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because
- * both real tables now hold only approved rows and a joiner's recovery is to knock again. Returns the
- * kind it deleted rather than taking one: a deny route shared by both surfaces cannot know the kind
- * until the row is read, so a `kind` parameter would either be vacuous or force a second read. */
 export async function denyJoinRequest(
   tx: Transaction,
   cfg: TradingContext,
   id: string,
+  rememberDenial?: (tokenHash: string) => void,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
   await tx.delete(joinRequests).where(and(ownedBy(cfg), eq(joinRequests.id, id)));
+  if (row.kind === "print_agent") rememberDenial?.(row.tokenHash);
   return row.kind;
 }
 

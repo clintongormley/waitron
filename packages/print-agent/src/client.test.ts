@@ -173,6 +173,17 @@ describe("createClient — probeNode", () => {
 });
 
 describe("createClient — join", () => {
+  it("carries a remembered denial on the next join", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(reply(201, { token: "a2.secret", verificationNumber: "42" }));
+    await createClient({ fetch }).join(URL_A, "kitchen-pi", true);
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({
+      name: "kitchen-pi",
+      previouslyDenied: true,
+    });
+  });
+
   it("POSTs { name } to /print-api/agent/join and returns { token, verificationNumber }", async () => {
     const fetchImpl = vi
       .fn()
@@ -364,6 +375,14 @@ describe("createClient — enrolSelf", () => {
 });
 
 describe("createClient — joinStatus", () => {
+  it.each(["denied", "revoked"] as const)("reads an authenticated %s refusal", async (kind) => {
+    const fetch = vi.fn().mockResolvedValue(reply(200, { status: "not_approved", [kind]: true }));
+    expect(await createClient({ fetch }).joinStatus(URL_A, "a1.secret")).toEqual({
+      ok: true,
+      value: kind,
+    });
+  });
+
   it("sends the Bearer and decodes the status string", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(reply(200, { status: "approved" }));
     const client = createClient({ fetch: fetchImpl });

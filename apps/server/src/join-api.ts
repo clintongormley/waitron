@@ -28,7 +28,7 @@ import {
   challengeFor,
   checkDeviceJoinNumber,
   denyJoinRequest,
-  discardLapsedDeviceRequests,
+  discardLapsedRequests,
   findJoinRequest,
   listPendingJoinRequests,
   returningDevicesOf,
@@ -109,7 +109,7 @@ function requireKind(value: string | undefined): JoinRequestKind {
  * approved and what it becomes; each refuses the OTHER kind's ask 404.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  // `gated` and `gatedByRowKind` discard the device requests a shut window or an ended claim
+  // `gated` and `gatedByRowKind` discard the requests a shut window or an ended claim
   // strands, and drop those claims only once the transaction has committed. `authorized` and the
   // window's read route do not: the window's read, take and renew routes act on no request, and the
   // dashboard calls the read and renew ones repeatedly.
@@ -125,7 +125,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   ): Promise<T> => {
     let dropped: string[] = [];
     const result = await withTransaction(deps.db, async (tx) => {
-      dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      dropped = await discardLapsedRequests(tx, deps.cfg, deps.pairingMode);
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
@@ -149,7 +149,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   ): Promise<T> => {
     let dropped: string[] = [];
     const result = await withTransaction(deps.db, async (tx) => {
-      dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      dropped = await discardLapsedRequests(tx, deps.cfg, deps.pairingMode);
       const row = isUuid(id) ? await findJoinRequest(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -213,7 +213,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       // release strands are discarded here, after it.
       const dropped = await gated(sessionId, "hardware.manage", async (tx) => {
         deps.pairingMode.release(holdId);
-        return discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+        return discardLapsedRequests(tx, deps.cfg, deps.pairingMode);
       });
       for (const id of dropped) deps.pairingMode.dropClaim(id);
       return c.body(null, 204);
@@ -227,7 +227,16 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const kind = requireKind(c.req.query("kind"));
       const { rows, returning } = await gated(sessionId, PERMISSION_FOR[kind], async (tx) => {
         const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
-        if (kind === "print_agent") return { rows, returning: null };
+        if (kind === "print_agent") {
+          const marked = rows.map((row) => ({
+            ...row,
+            ...(deps.pairingMode.wasPreviouslyDenied(row.id) ? { previouslyDenied: true } : {}),
+          }));
+          marked.sort(
+            (a, b) => Number(a.previouslyDenied === true) - Number(b.previouslyDenied === true),
+          );
+          return { rows: marked, returning: null };
+        }
         const ids = rows.map((row) => row.id);
         return { rows, returning: await returningDevicesOf(tx, ids) };
       });
@@ -268,15 +277,24 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const sessionKey = hashSessionToken(sessionId);
       // Parsed out here and screened inside the gate, for the accept route's reasons.
       const body = await readJsonBody<{ createdAt?: unknown }>(c);
-      await gatedByRowKind(sessionId, id, (tx, row) => {
-        // Before the claim, so an ask already replaced is answered as one already gone.
-        if (row.kind === "device" && requireString(body.createdAt, "createdAt") !== row.createdAt)
-          throw new AppError("join_request.not_found", {});
-        const claim = deps.pairingMode.claimOf(id);
-        if (claim !== undefined && claim.sessionKey !== sessionKey)
-          throw new AppError("join_request.claimed", {});
-        return denyJoinRequest(tx, deps.cfg, id);
-      });
+      let forgetDenial = (): void => {};
+      try {
+        await gatedByRowKind(sessionId, id, (tx, row) => {
+          // A replaced ask is already gone, regardless of who holds the replacement claim.
+          if (row.kind === "device" && requireString(body.createdAt, "createdAt") !== row.createdAt)
+            throw new AppError("join_request.not_found", {});
+          const claim = deps.pairingMode.claimOf(id);
+          if (claim !== undefined && claim.sessionKey !== sessionKey)
+            throw new AppError("join_request.claimed", {});
+          return denyJoinRequest(tx, deps.cfg, id, (hash) => {
+            // Record before the write queue admits the next poll.
+            forgetDenial = deps.pairingMode.rememberDeniedAgent(id, hash);
+          });
+        });
+      } catch (error) {
+        forgetDenial();
+        throw error;
+      }
       deps.pairingMode.dropClaim(id);
       return c.body(null, 204);
     }),
