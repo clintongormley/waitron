@@ -37,7 +37,9 @@ deciding. The owner chose none, asked about putting sections on a row of their o
   those numbers on paper; the lane measures it, at the larger text sizes too.
 - Tiles show **Colours** or **Photos** (was Thumbnails). **Shown first** is Shortcuts or Full menu (was
   "After search", "Device Home Page first" / "Menu first"). Both are `wt-segmented-control`, in a row
-  above the page, one under the other on a phone.
+  above the page. On a phone they stack, each with its label above and filling the width in two equal
+  halves, so they line up in any language (owner: "it would be good if they were the same width so they
+  line up on the phone, but difficult with different widths of text in different languages").
 
 ### The tab
 
@@ -91,8 +93,9 @@ Screenshots for the owner before landing each: the tab and a real till and handh
 
 The guest menu preview; Structure and Preview; what the till's search does.
 
-## Picture
+## Pictures
 
-Not committed. On the owner's machine, in the main checkout, `.impeccable/shots/menu-editor-mock-10.png`.
-Drawn, not a screenshot: where it differs from a shared `wt-*` component, the component wins. Its prices
-and "Popular drinks" are invented.
+Not committed. On the owner's machine, in the main checkout, `.impeccable/shots/menu-editor-mock-10.png`,
+and `-11.png` for the two controls on a phone, in English and Spanish (its Spanish tab name is too long,
+as it shows). Drawn, not screenshots: where they differ from a shared `wt-*` component, the component
+wins. The prices and "Popular drinks" are invented.
