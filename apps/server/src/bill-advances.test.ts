@@ -119,7 +119,7 @@ async function bill120(
   tableLabel = `7${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`,
 ): Promise<{ billId: string; tableLabel: string }> {
   const billId = await withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, { label: tableLabel, zoneId: venue.zoneId });
+    const table = await createTable(tx, { label: tableLabel, zoneId: venue.zoneId });
     const { tabId } = await openPartyTab(tx, venue.cfg, {
       tableId: table.id,
       lines: MEAL.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),

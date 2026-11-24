@@ -138,7 +138,7 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
       .insert(floorPlans)
       .values({
         zoneId,
-        setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        setId: (await defaultLayout(tx, zoneId)).setId,
         savedAt: NOW.toISOString(),
       })
       .returning({ id: floorPlans.id });
@@ -309,7 +309,7 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<Record<string, string>> {
-  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -323,7 +323,7 @@ async function resave(
     saveLayout(
       tx,
       REMOVALS,
-      await defaultLayout(tx, v.cfg, zoneId),
+      await defaultLayout(tx, zoneId),
       { revision: plan.revision, tables: change(tables) },
       NOW,
     ),
@@ -950,7 +950,7 @@ describe("building today's plan from a zone's layout", () => {
 
 describe("short names at a reset", () => {
   const liveWithShort = (label: string, shortName: string, zoneId: string) =>
-    inTx(v, async (tx) => (await createTable(tx, v.cfg, { label, zoneId, shortName })).id);
+    inTx(v, async (tx) => (await createTable(tx, { label, zoneId, shortName })).id);
 
   it("copies each master's short name onto its live table, with its folded key", async () => {
     const z = await zone();
@@ -1484,9 +1484,8 @@ describe("the parts of joined tables in the till's copy", () => {
   it("a group label held by an occupied ordinary table does not hide its real members", async () => {
     const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
     await seat(v, table.t9!);
-    const [t9] = (
-      await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)))
-    ).tables;
+    const [t9] = (await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId))))
+      .tables;
     await resave(zoneId, (tables) => [
       ...tables.filter((entry) => entry.id !== master.t9),
       ...["Counter 3", "Counter 4", "Counter 5"].map((label, i) => ({
@@ -2019,7 +2018,7 @@ describe("resets onto a set's layout", () => {
       const { ids } = await saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zone.id),
+        await defaultLayout(tx, zone.id),
         {
           revision: 0,
           tables: [
@@ -2103,7 +2102,7 @@ describe("resets onto a set's layout", () => {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const from = await defaultLayout(tx, v.cfg, zone.id);
+      const from = await defaultLayout(tx, zone.id);
       await saveLayout(
         tx,
         REMOVALS,
@@ -2312,7 +2311,7 @@ it("late saved-group formation restores a contained manual group's reset slots",
     NOW,
   );
   const other = await inTx(v, (tx) =>
-    createTable(tx, v.cfg, { label: `Held ${floorLabelSuffix()}`, zoneId: v.tables.zoneId }),
+    createTable(tx, { label: `Held ${floorLabelSuffix()}`, zoneId: v.tables.zoneId }),
   );
   const heldLabel = (await tableRow(v, other.id)).label;
   await editMaster(master.c!, { label: heldLabel });

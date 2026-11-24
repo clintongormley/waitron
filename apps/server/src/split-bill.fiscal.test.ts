@@ -151,8 +151,8 @@ async function setupVenue(opts: { takeaway?: boolean } = {}): Promise<Seeded> {
       await setTakeawayVatRate(tx, water.id, "21.00");
     }
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const t1 = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
     return { waterId: water.id, hamId: ham.id, tableId: t1.id, offers };
   });
   return { cfg, ...seeded };

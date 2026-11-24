@@ -61,8 +61,8 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     await withTransaction(db, async (tx) => {
       menu = await seedTakeawayProducts(tx);
-      counter = await offerProducts(tx, venue.cfg);
-      tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      counter = await offerProducts(tx);
+      tables = await offerProducts(tx, { zone: "tables" });
     });
   },
 });
@@ -101,7 +101,7 @@ async function unsentTab(
   lines: { productId: string; quantity?: string }[],
 ): Promise<{ partyId: string; tabId: string }> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `T-${randomUUID().slice(0, 8)}`,
       zoneId: tables.zoneId,
     });
@@ -521,7 +521,7 @@ describe("splitting a table with loose dishes", () => {
       { productId: menu.cheeseBoard },
     ]);
     const second = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `T-${randomUUID().slice(0, 8)}`,
         zoneId: tables.zoneId,
       });

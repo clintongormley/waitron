@@ -97,10 +97,10 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     offersByCfg.set(cfg, offers);
-    const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
-    const t2 = await createTable(tx, cfg, { label: "T2", zoneId: offers.zoneId });
+    const t1 = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
+    const t2 = await createTable(tx, { label: "T2", zoneId: offers.zoneId });
     return {
       waterId: water.id,
       hamId: ham.id,
@@ -129,8 +129,7 @@ async function openTabWith(
   return opened;
 }
 
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
@@ -140,7 +139,7 @@ describe("receipt order grouping", () => {
   it("uses a detached order's label and number, including an absent label", async () => {
     const { cfg } = await setupVenue();
     for (const label of ["Blue umbrella", null]) {
-      await asApp(cfg, async (tx) => {
+      await asApp(async (tx) => {
         const id = randomUUID();
         const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label, {
           zoneId: offersByCfg.get(cfg)!.zoneId,
@@ -152,7 +151,7 @@ describe("receipt order grouping", () => {
 
   it("uses a delivery table", async () => {
     const { cfg, tableId } = await setupVenue();
-    await asApp(cfg, async (tx) => {
+    await asApp(async (tx) => {
       const id = randomUUID();
       const { orderNumber } = await createOpenOrder(tx, cfg, id, [], "Operator label", {
         deliveryTableId: tableId,
@@ -162,9 +161,9 @@ describe("receipt order grouping", () => {
   });
 
   it("refuses a missing order", async () => {
-    const { cfg } = await setupVenue();
+    await setupVenue();
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => readReceiptOrder(tx, missing))).rejects.toMatchObject({
+    await expect(asApp((tx) => readReceiptOrder(tx, missing))).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: missing },
     });
@@ -174,7 +173,7 @@ describe("receipt order grouping", () => {
 describe("splitBill", () => {
   it("spins selected items onto a NEW open bill of the party", async () => {
     const { cfg, waterId, hamId, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openTabWith(tx, cfg, {
         tableId,
         lines: [
@@ -184,11 +183,11 @@ describe("splitBill", () => {
       }),
     );
 
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]),
     );
 
-    const state = await asApp(cfg, async (tx) => {
+    const state = await asApp(async (tx) => {
       const [check] = await tx
         .select({
           status: workingOrders.status,
@@ -234,22 +233,20 @@ describe("splitBill", () => {
     const { cfg } = await setupVenue();
     const MISSING = "00000000-0000-0000-0000-000000000000";
     await expect(
-      asApp(cfg, (tx) =>
-        splitBill(tx, cfg, MISSING, [{ lineNo: 1 }], { operatorId: randomUUID() }),
-      ),
+      asApp((tx) => splitBill(tx, cfg, MISSING, [{ lineNo: 1 }], { operatorId: randomUUID() })),
     ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 
   it("rejects a batch repeating a lineNo (tab.transfer_duplicate_line), minting nothing and conserving quantity", async () => {
     const { cfg, waterId, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "3" }] }),
     );
     await expect(
-      asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }, { lineNo: 1 }])),
+      asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }, { lineNo: 1 }])),
     ).rejects.toMatchObject({ code: "tab.transfer_duplicate_line" });
 
-    const state = await asApp(cfg, async (tx) => {
+    const state = await asApp(async (tx) => {
       const originLines = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -269,16 +266,16 @@ describe("splitBill", () => {
 
   it("refuses an EMPTY transfers array (sale.empty_basket), minting nothing", async () => {
     const { cfg, waterId, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openTabWith(tx, cfg, { tableId, lines: [{ productId: waterId, quantity: "3" }] }),
     );
     // Refused before anything is minted, or the call would leave an orphan check: a table-less
     // `open` working order with zero lines and a consumed order_number.
-    await expect(asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, []))).rejects.toMatchObject({
+    await expect(asApp((tx) => splitPartyBill(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
 
-    const state = await asApp(cfg, async (tx) => {
+    const state = await asApp(async (tx) => {
       const originLines = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -300,7 +297,7 @@ describe("splitBill", () => {
 /** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
 async function withKitchen(cfg: OriginConfig): Promise<string> {
   const stationId = await seedKitchenStation(db, {});
-  const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+  const offers = await asApp((tx) => offerProducts(tx, { zone: "tables" }));
   offersByCfg.set(cfg, offers);
   return stationId;
 }
@@ -340,7 +337,7 @@ async function ticketOf(lineId: string) {
 
 /** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
 async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> {
-  return asApp(cfg, async (tx) => {
+  return asApp(async (tx) => {
     const { id } = await createPrinter(tx, {
       name: `P-${randomUUID().slice(0, 8)}`,
       transport: "cloud_poll",
@@ -380,7 +377,7 @@ async function noticesOn(...orderIds: string[]) {
 
 /** Each order at the station, with the quantities its items ask for. */
 async function queueAt(cfg: OriginConfig, stationId: string) {
-  const groups = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
+  const groups = await asApp((tx) => listStationQueue(tx, stationId));
   return Object.fromEntries(
     groups.map((group) => [group.orderId, group.items.map((item) => item.quantity)]),
   );
@@ -394,16 +391,16 @@ async function twoTabs(
   add = addTabRound,
 ): Promise<{ from: string; to: string }> {
   const { cfg, waterId, tableId } = seeded;
-  const { tabId: from, partyId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+  const { tabId: from, partyId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
   const to = randomUUID();
-  await asApp(cfg, async (tx) => {
+  await asApp(async (tx) => {
     await createOpenOrder(tx, cfg, to, [], null, {
       partyId,
       existingService: true,
       copyServiceContextFrom: from,
     });
   });
-  await asApp(cfg, (tx) =>
+  await asApp((tx) =>
     add(
       tx,
       cfg,
@@ -424,8 +421,8 @@ async function splitToT2(
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<string> {
   const { cfg, tableId2 } = seeded;
-  const { billId } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, from, transfers));
-  await asApp(cfg, async (tx) => {
+  const { billId } = await asApp((tx) => splitPartyBill(tx, cfg, from, transfers));
+  await asApp(async (tx) => {
     const party = (await partyRevisionOfOrder(tx, from))!;
     await moveBill(
       tx,
@@ -447,16 +444,16 @@ describe("splitting a line the kitchen has", () => {
   it("moves a whole line the kitchen has started with its ticket", async () => {
     const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp((tx) =>
       addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
       ]),
     );
     const [line] = await linesWithTickets(tabId);
-    await asApp(cfg, (tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
+    await asApp((tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
 
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
 
@@ -480,10 +477,8 @@ describe("splitting a line the kitchen has", () => {
     const printed = await printedBy(printerId);
     expect(printed).toHaveLength(1);
 
-    await asApp(cfg, (tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
-    const { billId: checkId } = await asApp(cfg, (tx) =>
-      splitPartyBill(tx, cfg, from, [{ lineNo: 1 }]),
-    );
+    await asApp((tx) => advanceTicketItem(tx, line!.ticketId!, "preparing"));
+    const { billId: checkId } = await asApp((tx) => splitPartyBill(tx, cfg, from, [{ lineNo: 1 }]));
 
     const numbers = `${await orderNumberOf(from)} -> ${await orderNumberOf(checkId)}`;
     expect(await printedBy(printerId)).toEqual([
@@ -506,7 +501,7 @@ describe("splitting a line the kitchen has", () => {
     const { from } = await twoTabs(seeded, { quantity: "1" }, 2);
     const to = await splitToT2(seeded, from, [{ lineNo: 1 }]);
 
-    await asApp(cfg, (tx) => cancelLine(tx, cfg, to, 1));
+    await asApp((tx) => cancelLine(tx, cfg, to, 1));
 
     expect(await noticesOn(from, to)).toEqual([
       { orderId: to, kind: "moved", quantity: 1000 },
@@ -526,7 +521,7 @@ describe("splitting a line the kitchen has", () => {
     const { from } = await twoTabs(seeded, { quantity: "1" }, 2);
     const to = await splitToT2(seeded, from, [{ lineNo: 1 }]);
 
-    await asApp(cfg, (tx) => cancelLine(tx, cfg, from, 2));
+    await asApp((tx) => cancelLine(tx, cfg, from, 2));
 
     expect(await noticesOn(from, to)).toEqual([
       { orderId: to, kind: "moved", quantity: 1000 },
@@ -543,7 +538,7 @@ describe("splitting a line the kitchen has", () => {
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
     const { from, to } = await twoTabs(seeded, { quantity: "1", hold: true }, 2);
-    await asApp(cfg, async (tx) => {
+    await asApp(async (tx) => {
       const party = (await partyRevisionOfOrder(tx, from))!;
       await transferItems(tx, cfg, from, to, [{ lineNo: 1 }], {
         expectedPartyRevision: party.revision,
@@ -552,7 +547,7 @@ describe("splitting a line the kitchen has", () => {
     });
     expect(await printedBy(printerId)).toEqual([]);
 
-    await asApp(cfg, (tx) => sendLines(tx, cfg, to, []));
+    await asApp((tx) => sendLines(tx, cfg, to, []));
 
     const [moved] = await linesWithTickets(to);
     expect(moved!.sentAt).not.toBeNull();
@@ -563,7 +558,7 @@ describe("splitting a line the kitchen has", () => {
     expect(await printedBy(printerId)).toHaveLength(1);
     expect((await printedBy(printerId))[0]).toContain("1 x Agua");
 
-    await asApp(cfg, (tx) => sendLines(tx, cfg, from, []));
+    await asApp((tx) => sendLines(tx, cfg, from, []));
 
     expect((await linesWithTickets(from))[0]!.sentAt).not.toBeNull();
     expect(await ticketOf(kept!.id)).toMatchObject({ quantity: 1000 });
@@ -578,8 +573,8 @@ describe("splitting a line the kitchen has", () => {
     const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp((tx) =>
       addGroupedTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "2" },
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
@@ -587,11 +582,11 @@ describe("splitting a line the kitchen has", () => {
     );
     const [ticket] = await printedBy(printerId);
     expect(ticket).toContain("T1");
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
 
-    await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, checkId, 1, "1"));
+    await asApp((tx) => cancelItemForTest(tx, cfg, checkId, 1, "1"));
 
     const slip = (await printedBy(printerId)).at(-1)!;
     expect(slip).toContain("*** VOID ***");
@@ -606,20 +601,20 @@ describe("splitting a line the kitchen has", () => {
   it("names the origin's table for the check on the pass board", async () => {
     const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
       ]),
     );
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
     // The party's table wins over the order's own label.
     await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
 
-    const board = await asApp(cfg, (tx) => readScopedPassBoard(tx, EVERY));
+    const board = await asApp((tx) => readScopedPassBoard(tx, EVERY));
     const orders = boardCards(board).flatMap((card) => card.orders);
 
     expect(Object.fromEntries(orders.map((order) => [order.orderId, order.tableLabel]))).toEqual({
@@ -631,7 +626,7 @@ describe("splitting a line the kitchen has", () => {
   it("splits off a dish the kitchen does not have without making a ticket", async () => {
     const { cfg, waterId, tableId } = await setupVenue();
     await withKitchen(cfg);
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openTabWith(tx, cfg, {
         tableId,
         lines: [
@@ -641,7 +636,7 @@ describe("splitting a line the kitchen has", () => {
       }),
     );
 
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]),
     );
 
@@ -652,7 +647,7 @@ describe("splitting a line the kitchen has", () => {
 
 /** A station's notices, every field a cook reads, oldest first. */
 async function kitchenNoticesAt(cfg: OriginConfig, stationId: string) {
-  return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({
+  return (await asApp((tx) => listStationNotices(tx, stationId))).map((notice) => ({
     stationId: notice.stationId,
     workingOrderId: notice.workingOrderId,
     orderLabel: notice.orderLabel,
@@ -693,19 +688,19 @@ describe("moving sent work to another table tells the kitchen", () => {
     const { cfg, waterId, tableId } = await setupVenue();
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
         { menuItemId: offersByCfg.get(cfg)!.offerFor(waterId), quantity: "1" },
       ]),
     );
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
     const printed = await printedBy(printerId);
 
-    await asApp(cfg, async (tx) => {
+    await asApp(async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabId))!;
       await mergeBills(tx, cfg, tabId, checkId, {
         expectedPartyRevision: party.revision,
@@ -742,15 +737,13 @@ describe("moving sent work to another table tells the kitchen", () => {
     const stationId = await withKitchen(cfg);
     const printerId = await printerAt(cfg, stationId);
     const offer = offersByCfg.get(cfg)!.offerFor(waterId);
-    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]),
-    );
-    await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp((tx) => addGroupedTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
+    await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "5", hold: true }]),
     );
 
-    await asApp(cfg, async (tx) => {
+    await asApp(async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabId))!;
       await moveGuests(tx, cfg, party.id, tableId2, {
         expectedPartyRevision: party.revision,

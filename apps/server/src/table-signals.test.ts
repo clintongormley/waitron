@@ -642,7 +642,7 @@ describe("the floor's attention signals", () => {
         vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
-      return (await offerProducts(tx, v.cfg, { zone: "tables" })).offerFor(product.id);
+      return (await offerProducts(tx, { zone: "tables" })).offerFor(product.id);
     });
     const table2 = await v.table("Mesa 2");
     const { tabId } = await seat(v, table2);

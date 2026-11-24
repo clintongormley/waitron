@@ -232,7 +232,7 @@ describe("ordinary zone edit revision", () => {
 });
 
 async function prepareSale(observeClock?: () => void) {
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
   const clock: TrustedClock = {
     now: () => {
       observeClock?.();
@@ -1200,7 +1200,7 @@ describe("venue detail consumer reads", () => {
   });
 
   it("keeps operational reports and the drawer close after allowed corrections and a refused clock edit", async () => {
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const cfg = await deviceRequestCfg(suite.db, venue.cfg);
     const clock: TrustedClock = {
       now: () => ({
@@ -1563,7 +1563,7 @@ describe("workforce facts after venue corrections", () => {
 describe("open kitchen work during venue corrections", () => {
   it("refuses the clock while preserving sent line and station assignments on a display correction", async () => {
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, { orderStart: "counter" }),
+      offerProducts(tx, { orderStart: "counter" }),
     );
     const cfg = await deviceRequestCfg(suite.db, venue.cfg);
     const clock: TrustedClock = {

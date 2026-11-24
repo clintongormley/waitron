@@ -51,8 +51,8 @@ useVenueDb({
           takeawayVatRate: "21.00",
         })
       ).id;
-      counter = await offerProducts(tx, venue.cfg);
-      tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      counter = await offerProducts(tx);
+      tables = await offerProducts(tx, { zone: "tables" });
     });
   },
 });
@@ -87,7 +87,7 @@ async function parked(dining: Dining, productIds: string[]): Promise<string> {
 /** A table's bill set to `dining` while empty, then given a round of these products. */
 async function tab(dining: Dining, productIds: string[]): Promise<string> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `T-${randomUUID().slice(0, 8)}`,
       zoneId: tables.zoneId,
     });
@@ -224,7 +224,7 @@ describe("the menu republished between adding a line and switching the order", (
     const id = await parked("eat_in", [icedTea]);
     const republished = await inTx(venue, async (tx) => {
       await setTakeawayVatRate(tx, icedTea, "0.00");
-      const offers = await offerProducts(tx, venue.cfg);
+      const offers = await offerProducts(tx);
       await setDining(tx, id, "takeaway");
       return offers;
     });

@@ -4281,22 +4281,17 @@ async function shortNamedBundle(taxId: string) {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TradingContext = {
-    nodeId: nodeId(source.nodeId),
-    locale: "es-ES",
-    simplifiedInvoiceLimit: null,
-  };
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Short service" });
     const zone = await createServiceZone(tx, {
       name: "Short zone",
       departmentId: department.id,
     });
-    await createTable(tx, cfg, { label: "Rt table 1", zoneId: zone.id, shortName: "Rt1" });
+    await createTable(tx, { label: "Rt table 1", zoneId: zone.id, shortName: "Rt1" });
     await saveLayout(
       tx,
       enabledTableRemovals(ALL_MODULES),
-      await defaultLayout(tx, cfg, zone.id),
+      await defaultLayout(tx, zone.id),
       {
         revision: 0,
         tables: [
@@ -7883,7 +7878,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       departmentId: old.id,
     });
     await seedDepartmentReceipt(tx, old.id, { headerSubtitle: { "es-ES": "Retained subtitle" } });
-    await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
+    await createTable(tx, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
       moduleCoreServices(cfg, removals, () => new Date()).floorDeletion,
@@ -7899,11 +7894,11 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       departmentId: live.id,
     });
     await seedDepartmentReceipt(tx, live.id, { headerSubtitle: { "es-ES": "Live subtitle" } });
-    await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
+    await createTable(tx, { label: "Live table", zoneId: liveZone.id });
     await saveLayout(
       tx,
       removals,
-      await defaultLayout(tx, cfg, liveZone.id),
+      await defaultLayout(tx, liveZone.id),
       {
         revision: 0,
         tables: [
@@ -7991,11 +7986,6 @@ it("carries Long table's parts, naming the imported tables", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TradingContext = {
-    nodeId: nodeId(source.nodeId),
-    locale: "es-ES",
-    simplifiedInvoiceLimit: null,
-  };
   const removals = enabledTableRemovals(ALL_MODULES);
   const offPlan = (key: string, label: string, seats: number) => ({
     key,
@@ -8014,7 +8004,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     const { ids } = await saveLayout(
       tx,
       removals,
-      await defaultLayout(tx, cfg, zone.id),
+      await defaultLayout(tx, zone.id),
       {
         revision: 0,
         tables: [
@@ -8071,11 +8061,6 @@ it("carries a kept size, naming the imported table", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TradingContext = {
-    nodeId: nodeId(source.nodeId),
-    locale: "es-ES",
-    simplifiedInvoiceLimit: null,
-  };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Sized service" });
     const zone = await createServiceZone(tx, {
@@ -8085,7 +8070,7 @@ it("carries a kept size, naming the imported table", async () => {
     const { ids } = await saveLayout(
       tx,
       enabledTableRemovals(ALL_MODULES),
-      await defaultLayout(tx, cfg, zone.id),
+      await defaultLayout(tx, zone.id),
       {
         revision: 0,
         tables: [

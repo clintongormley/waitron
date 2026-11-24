@@ -34,7 +34,7 @@ useVenueDb({
       });
       dishId = dish.id;
       await assignMenuToVenue(tx, menu.id);
-      counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
+      counter = await offerProducts(tx, { productIds: [dishId] });
     });
     const first = await cashSale(venue.app, randomUUID());
     if (first.status !== 200) throw new Error(`setup sale answered ${first.status}`);

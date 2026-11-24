@@ -141,7 +141,7 @@ async function seedDeleted() {
 
 async function openOrder(venue: Venue): Promise<string> {
   const orderId = randomUUID();
-  const offers = await inTx((tx) => offerProducts(tx, venue.cfg));
+  const offers = await inTx((tx) => offerProducts(tx));
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,

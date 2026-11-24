@@ -348,13 +348,13 @@ describe("A803 portions: recording portions", () => {
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      offers = await offerProducts(tx, cfg, { zone: "tables" });
+      offers = await offerProducts(tx, { zone: "tables" });
       return { burger, cheese, toppings, wine };
     });
   });
 
   async function bill(tx: Transaction): Promise<string> {
-    const table = await createTable(tx, cfg, {
+    const table = await createTable(tx, {
       label: `Portions ${randomUUID()}`,
       zoneId: offers.zoneId,
     });
@@ -498,7 +498,7 @@ describe("A803 portions: recording portions", () => {
         { kind: "extras", id: ids.toppings },
         { kind: "extras", id: sides },
       ]);
-      const published = await offerProducts(tx, cfg, { zone: "tables" });
+      const published = await offerProducts(tx, { zone: "tables" });
       const priced = await priceOrderLines(
         tx,
         cfg,

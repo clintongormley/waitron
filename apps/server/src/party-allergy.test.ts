@@ -178,7 +178,7 @@ async function nutritionProducts() {
     );
     await writeProductModifiers(tx, parent.id, [{ kind: "extras", id: list.id }]);
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, v.cfg, {
+    const offers = await offerProducts(tx, {
       zone: { zoneId: v.tables.zoneId },
       orderStart: "table",
     });

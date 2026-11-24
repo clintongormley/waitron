@@ -272,7 +272,7 @@ describe("A1517-3 a dish's own allergens on English station paper", () => {
         ],
         s.cfg.locale,
       );
-      const offers = await offerProducts(tx, s.cfg);
+      const offers = await offerProducts(tx);
       await setMenuVariants(tx, offers.offerFor(s.products.burger), [
         { variantId: double!.id, price: "2.00" },
       ]);

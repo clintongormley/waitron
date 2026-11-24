@@ -154,7 +154,7 @@ describe("splitting a dish with split-off extras", () => {
       addTabRound(tx, venue.cfg, venue.party.tabId, [picked(venue, "burger", "1")]),
     );
     const otherTable = await withTransaction(db, (tx) =>
-      createTable(tx, venue.cfg, { label: "Other split table", zoneId: venue.party.zoneId }),
+      createTable(tx, { label: "Other split table", zoneId: venue.party.zoneId }),
     );
     const destination = randomUUID();
     await withTransaction(db, (tx) =>

@@ -84,7 +84,7 @@ useVenueDb({
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      counter = await offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
+      counter = await offerProducts(tx, { zone: "counter", orderStart: "counter" });
       return { croquette, burger, cheese, toppings };
     });
   },
@@ -394,7 +394,7 @@ describe("A1208 counter orders are written as portions", () => {
 
   it("A1208 openTab with lines writes portions", async () => {
     const tabId = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });

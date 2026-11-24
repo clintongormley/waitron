@@ -27,7 +27,7 @@ useVenueDb({
     await withTransaction(db, async (tx) => {
       menu = await seedTakeawayProducts(tx);
       cola = menu.cola;
-      counter = await offerProducts(tx, venue.cfg);
+      counter = await offerProducts(tx);
     });
   },
 });

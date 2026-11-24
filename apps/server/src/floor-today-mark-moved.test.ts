@@ -338,7 +338,7 @@ describe("Mark moved", () => {
     const partyId = await seatAt(c3);
     const label = fresh("Long");
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const layout = await defaultLayout(tx, z.zoneId);
       const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
@@ -398,7 +398,7 @@ describe("Mark moved", () => {
     const [c3, c4, c9] = [z.table.c3!, z.table.c4!, z.table.c9!];
     const partyId = await seatAt(c3);
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const layout = await defaultLayout(tx, z.zoneId);
       const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
@@ -471,7 +471,7 @@ describe("Mark moved", () => {
       rotation: 0,
     });
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const layout = await defaultLayout(tx, z.zoneId);
       const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
@@ -621,7 +621,7 @@ describe("Mark moved", () => {
     const partyId = await seatAt(table.a!);
     const renamed = fresh("Renamed");
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(
@@ -682,7 +682,7 @@ describe("Leave it here", () => {
     const z = await plannedZone(v, entries, NOW);
     const partyId = await seatAt(z.table.c3!);
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const layout = await defaultLayout(tx, z.zoneId);
       const plan = await readLayout(tx, layout);
       await saveLayout(
         tx,
@@ -860,7 +860,7 @@ describe("Leave it here", () => {
     const partyId = await seatAt(table.a!);
     const renamed = fresh("Renamed");
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(
@@ -907,7 +907,7 @@ describe("Leave it here", () => {
     );
     const save = async (shortName: string, x: number, at: number) =>
       inTx(v, async (tx) => {
-        const layout = await defaultLayout(tx, v.cfg, zoneId);
+        const layout = await defaultLayout(tx, zoneId);
         const plan = await readLayout(tx, layout);
         const saved = plan.tables.find((t) => t.id === master.a)!;
         const next = await saveLayout(
@@ -978,7 +978,7 @@ describe("Leave it here", () => {
     const oldName = (await tableRow(v, table.a!)).label;
     const partyId = await seatAt(table.a!);
     await inTx(v, async (tx) => {
-      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const plan = await readLayout(tx, layout);
       const saved = plan.tables.find((t) => t.id === master.a)!;
       await saveLayout(

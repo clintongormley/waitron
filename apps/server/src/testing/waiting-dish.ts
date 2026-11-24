@@ -22,7 +22,7 @@ export async function waitingDish(
   at: Date,
 ): Promise<string> {
   const orderId = randomUUID();
-  const offers = await withTransaction(db, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await withTransaction(db, (tx) => offerProducts(tx));
   await parkOrder({ db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,

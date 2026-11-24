@@ -37,9 +37,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     counterZone = (
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", paidWhen: "prepay" }),
-      )
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", paidWhen: "prepay" }))
     ).zoneId;
   },
 });
@@ -139,7 +137,7 @@ describe("a bill moved within its own department keeps its way", () => {
     const seated = await seatedWith(venue);
     setDining(seated.tabId, "takeaway");
     const table = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, {
+      createTable(tx, {
         label: `Table ${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       }),
@@ -265,7 +263,7 @@ describe("the paper a move sends", () => {
     const seated = await seatedWith(venue, "Croquettes");
     expect(diningOf(seated.tabId)).toBe("takeaway");
     const table = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, {
+      createTable(tx, {
         label: `Table ${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       }),

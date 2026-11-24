@@ -410,12 +410,12 @@ beforeAll(async () => {
       name: "Deli tables",
       departmentId: deli.id,
     });
-    const barOffers = await offerProducts(tx, v.cfg, { zone: { zoneId: bar.id } });
-    const deliCounterOffers = await offerProducts(tx, v.cfg, {
+    const barOffers = await offerProducts(tx, { zone: { zoneId: bar.id } });
+    const deliCounterOffers = await offerProducts(tx, {
       zone: { zoneId: deliCounter.id },
       orderStart: "counter",
     });
-    const deliTablesOffers = await offerProducts(tx, v.cfg, {
+    const deliTablesOffers = await offerProducts(tx, {
       zone: { zoneId: deliTables.id },
       orderStart: "table",
     });
@@ -432,7 +432,7 @@ beforeAll(async () => {
     await publishWorkingMenu(tx, specials.id);
     await offerMenuThroughZone(tx, deliCounter.id, specials.id);
     await offerMenuThroughZone(tx, bar.id, specials.id);
-    const deliTable = await createTable(tx, v.cfg, { label: "D1", zoneId: deliTables.id });
+    const deliTable = await createTable(tx, { label: "D1", zoneId: deliTables.id });
     return {
       bar: bar.id,
       deliCounter: deliCounter.id,
@@ -1447,7 +1447,7 @@ describe("a kitchen display", () => {
       return seated;
     };
     const deliTable = await inTx(v, (tx) =>
-      createTable(tx, v.cfg, {
+      createTable(tx, {
         label: `D${floorLabelSuffix().padStart(4, "0")}`,
         zoneId: f.deliTables,
       }),
@@ -1463,7 +1463,7 @@ describe("a kitchen display", () => {
       await fire(
         (
           await inTx(v, (tx) =>
-            createTable(tx, v.cfg, {
+            createTable(tx, {
               label: `D${floorLabelSuffix().padStart(4, "0")}`,
               zoneId: f.deliTables,
             }),
@@ -1574,7 +1574,7 @@ describe("A773 pass board", () => {
       await routeProductTo(tx, v.productId("Burger"), grill.id);
       await setStationsWaitForPass(tx, true, [grill.id]);
       return (
-        await offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" })
+        await offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" })
       ).offerFor(v.productId("Burger"));
     });
     const fire = async (tableId: string, menuItemId: string) => {
@@ -1588,7 +1588,7 @@ describe("A773 pass board", () => {
       return placed.groups[0]!.id;
     };
     const deliTable = await inTx(v, (tx) =>
-      createTable(tx, v.cfg, {
+      createTable(tx, {
         label: `D${floorLabelSuffix().padStart(4, "0")}`,
         zoneId: f.deliTables,
       }),
@@ -1942,10 +1942,10 @@ describe("a Restaurant profile in its own zones", () => {
         name: "Terrace",
         departmentId: await departmentOf(tx, v.tables.zoneId),
       });
-      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
+      await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" });
       return {
         terrace: zone.id,
-        table: (await createTable(tx, v.cfg, { label: "T9", zoneId: zone.id })).id,
+        table: (await createTable(tx, { label: "T9", zoneId: zone.id })).id,
       };
     });
     const { partyId } = await seat(v, table);
@@ -1974,7 +1974,7 @@ describe("a Restaurant profile in its own zones", () => {
         name: "Patio",
         departmentId: await departmentOf(tx, v.tables.zoneId),
       });
-      await offerProducts(tx, v.cfg, { zone: { zoneId: zone.id } });
+      await offerProducts(tx, { zone: { zoneId: zone.id } });
       return zone.id;
     });
     expect((await send(restaurant, "GET", `/api/service-zones/${patio}/offers`)).status).toBe(200);
@@ -2117,11 +2117,11 @@ describe("the bill and invoice lookups", () => {
   });
 
   const deliTable = (label: string) =>
-    inTx(v, async (tx) => (await createTable(tx, v.cfg, { label, zoneId: f.deliTables })).id);
+    inTx(v, async (tx) => (await createTable(tx, { label, zoneId: f.deliTables })).id);
   const deliTableItem = async () =>
     (
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
+        offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
     ).offerFor(v.productId("Water"));
 
@@ -2129,11 +2129,11 @@ describe("the bill and invoice lookups", () => {
     const deliBill = await unpaidBill(
       await inTx(
         v,
-        async (tx) => (await createTable(tx, v.cfg, { label: "D7", zoneId: f.deliTables })).id,
+        async (tx) => (await createTable(tx, { label: "D7", zoneId: f.deliTables })).id,
       ),
       (
         await inTx(v, (tx) =>
-          offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
+          offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
         )
       ).offerFor(v.productId("Water")),
       "Lookup Deli",
@@ -2184,14 +2184,13 @@ describe("the bill and invoice lookups", () => {
     const restBill = await unpaidBill(await v.table("R8"), v.item("Water"), "Crowded Sala");
     const deliItem = (
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
+        offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
     ).offerFor(v.productId("Water"));
     for (let index = 0; index < 21; index++) {
       const table = await inTx(
         v,
-        async (tx) =>
-          (await createTable(tx, v.cfg, { label: `DC${index}`, zoneId: f.deliTables })).id,
+        async (tx) => (await createTable(tx, { label: `DC${index}`, zoneId: f.deliTables })).id,
       );
       await unpaidBill(table, deliItem, `Crowded Deli ${index}`);
     }

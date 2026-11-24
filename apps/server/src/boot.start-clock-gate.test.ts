@@ -131,7 +131,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    counter = await offerProducts(db, venue.cfg, { zone: "counter", orderStart: "counter" });
+    counter = await offerProducts(db, { zone: "counter", orderStart: "counter" });
   },
 });
 

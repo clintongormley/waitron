@@ -94,14 +94,12 @@ describe("the till's table-state answer carries today's plan", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         { revision: 0, tables: entries },
         NOW,
       ),
     );
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
     const [a, b, spare, off] = [la, lb, ls, lo].map(liveId) as [string, string, string, string];
     const joinId = await inTx(v, async (tx) => {
@@ -177,9 +175,9 @@ describe("the till's table-state answer carries today's plan", () => {
     const [named, unnamed] = [fresh("Front 1"), fresh("Back 2")];
     const { withShort, without } = await inTx(v, async (tx) => ({
       withShort: (
-        await createTable(tx, v.cfg, { label: named, zoneId: v.tables.zoneId, shortName: "Fr1" })
+        await createTable(tx, { label: named, zoneId: v.tables.zoneId, shortName: "Fr1" })
       ).id,
-      without: (await createTable(tx, v.cfg, { label: unnamed, zoneId: v.tables.zoneId })).id,
+      without: (await createTable(tx, { label: unnamed, zoneId: v.tables.zoneId })).id,
     }));
 
     const states = await read();
@@ -214,14 +212,12 @@ describe("the till's table-state answer carries today's plan", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         { revision: 0, tables: entries },
         NOW,
       ),
     );
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
 
     const states = await read();

@@ -50,7 +50,7 @@ function roundOf(lines: RoundLine[]): TabRoundLine[] {
 /** A bill holding `rounds` in turn, each written as today's grouped lines or as portions. */
 function billOf(rounds: { shape: "grouped" | "portions"; lines: RoundLine[] }[]) {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `L-${randomUUID().slice(0, 8)}`,
       zoneId: venue.tables.zoneId,
     });

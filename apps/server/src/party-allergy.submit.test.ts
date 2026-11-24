@@ -577,7 +577,7 @@ describe("A669 atomic submit", () => {
       );
       await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
       await assignMenuToVenue(tx, cat.id);
-      const offers = await offerProducts(tx, v.cfg, {
+      const offers = await offerProducts(tx, {
         zone: { zoneId: v.tables.zoneId },
         orderStart: "table",
       });

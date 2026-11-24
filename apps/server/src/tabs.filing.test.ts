@@ -146,8 +146,8 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
-      counter: await offerProducts(tx, cfg),
-      tables: await offerProducts(tx, cfg, { zone: "tables" }),
+      counter: await offerProducts(tx),
+      tables: await offerProducts(tx, { zone: "tables" }),
     };
   });
   const coffee = available.find((p) => p.name === "Café")!;
@@ -162,9 +162,9 @@ async function seedTable(
   zoneId?: string,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { id } = await createTable(tx, cfg, {
+    const { id } = await createTable(tx, {
       label,
-      zoneId: zoneId ?? (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+      zoneId: zoneId ?? (await offerProducts(tx, { zone: "tables" })).zoneId,
     });
     return id;
   });
@@ -556,7 +556,7 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         unitPrice: "3.00",
         vatClass: "general",
       });
-      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: beer.id }, zoneId: null },

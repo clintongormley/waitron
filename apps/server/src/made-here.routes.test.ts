@@ -133,7 +133,7 @@ useVenueDb({
       );
       garnishListId = garnish.id;
       await writeProductModifiers(tx, lager!.id, [{ kind: "extras", id: garnishListId }]);
-      const offers = await offerProducts(tx, venue.cfg, {
+      const offers = await offerProducts(tx, {
         zone: "counter",
         productIds: [lager!.id, paella!.id],
       });
@@ -952,7 +952,7 @@ describe("made-here route wiring", () => {
     );
     expect(sent.status).toBe(200);
     const target = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Target ${randomUUID()}`, zoneId: venue.zoneId }),
+      createTable(tx, { label: `Target ${randomUUID()}`, zoneId: venue.zoneId }),
     );
     const barBefore = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
@@ -1049,7 +1049,7 @@ describe("made-here route wiring", () => {
     );
     expect(item).toMatchObject({ madeHere: true, firedAt: expect.any(String), state: "ready" });
     const table = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Arrival ${randomUUID()}`, zoneId: venue.zoneId }),
+      createTable(tx, { label: `Arrival ${randomUUID()}`, zoneId: venue.zoneId }),
     );
     const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${orderId}/move`, {
       to: { tableId: table.id },
@@ -1362,7 +1362,7 @@ describe("made-here route wiring", () => {
           .select({ id: products.id })
           .from(products)
           .where(eq(products.name, "Caña"));
-        const offers = await offerProducts(tx, venue.cfg, {
+        const offers = await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
           productIds: [lager!.id],

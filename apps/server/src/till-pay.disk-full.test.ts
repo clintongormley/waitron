@@ -44,7 +44,7 @@ useVenueDb({
       });
       dishId = dish.id;
       await assignMenuToVenue(tx, cat.id);
-      counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
+      counter = await offerProducts(tx, { productIds: [dishId] });
     });
   },
 });

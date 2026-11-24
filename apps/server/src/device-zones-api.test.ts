@@ -293,7 +293,7 @@ describe("the device's zone preferences", () => {
             .set({ active: false })
             .where(eq(floorZones.id, f.current.startingZoneId!));
         if (change === "payment") {
-          const offers = await run((tx) => offerProducts(tx, f.venue.cfg));
+          const offers = await run((tx) => offerProducts(tx));
           const orderId = randomUUID();
           await parkOrder({ db: suite.db }, f.venue.cfg, {
             id: orderId,
@@ -348,7 +348,7 @@ describe("the device's zone preferences", () => {
 
   it("refuses a settings write while the device's payment is in progress", async () => {
     const f = await fixture();
-    const offers = await run((tx) => offerProducts(tx, f.venue.cfg));
+    const offers = await run((tx) => offerProducts(tx));
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, f.venue.cfg, {
       id: orderId,

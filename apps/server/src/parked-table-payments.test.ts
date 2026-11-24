@@ -17,7 +17,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    counterZone = (await inTx(venue, (tx) => offerProducts(tx, venue.cfg))).zoneId;
+    counterZone = (await inTx(venue, (tx) => offerProducts(tx))).zoneId;
   },
 });
 

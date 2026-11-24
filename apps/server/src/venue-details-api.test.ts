@@ -259,7 +259,7 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
   expect(response.status).toBe(200);
   const model = await initial();
   expect(await response.json()).toEqual(model);
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
   const clock: TrustedClock = {
     now: () => ({
       instant: new Date("2026-10-06T12:00:00Z"),

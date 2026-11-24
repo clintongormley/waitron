@@ -105,7 +105,7 @@ async function partyRevision(partyId: string): Promise<number> {
 /** A second table for the party, which Split a table can then take away. */
 async function joinSecondTable(partyId: string): Promise<string> {
   const { id: tableId } = await withTransaction(suite.db, (tx) =>
-    createTable(tx, venue.cfg, {
+    createTable(tx, {
       label: `Second ${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     }),
@@ -384,7 +384,7 @@ describe("late issuance rolls back its initiating command", () => {
     const [product] = await suite.db.select().from(products);
     const party = await seatedWith(venue, product!.name);
     const zone = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter", paidWhen: "prepay" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter", paidWhen: "prepay" }),
     );
     await placedCounterBillMovedTo(venue, zone.zoneId, party);
     const [row] = await suite.db.select().from(parties).where(eq(parties.id, party.partyId));
@@ -421,7 +421,7 @@ describe("late issuance rolls back its initiating command", () => {
   it("a placed-order credit refusal leaves its original invoice unchanged", async () => {
     const [product] = await suite.db.select().from(products);
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, {
+      offerProducts(tx, {
         zone: "counter",
         orderStart: "counter",
         paidWhen: "ticket_then_pay",

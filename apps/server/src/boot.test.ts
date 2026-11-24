@@ -2390,17 +2390,7 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
-      const { setId } = await liveFixture(httpPort(), (db) =>
-        defaultLayout(
-          db,
-          {
-            locale: "es-ES",
-            ...loadNodeIdentity(TILL_ENV),
-            simplifiedInvoiceLimit: null,
-          },
-          zoneId,
-        ),
-      );
+      const { setId } = await liveFixture(httpPort(), (db) => defaultLayout(db, zoneId));
       const planPath = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
       const table = {
         key: "a",

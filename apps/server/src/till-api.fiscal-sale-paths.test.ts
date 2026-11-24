@@ -3243,7 +3243,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const venue = await setupVenue();
     const cfg: TradingContext = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, {
+      offerProducts(tx, {
         orderStart: "counter",
         paidWhen: orderFlow,
       }),

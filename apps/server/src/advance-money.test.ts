@@ -77,7 +77,7 @@ useVenueDb({
         });
         ids.set(dish.name, product.id);
       }
-      return offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
+      return offerProducts(tx, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
     });
     offerFor = (name) => offers.offerFor(ids.get(name)!);
   },
@@ -88,7 +88,7 @@ type Bill = { billId: string; partyId: string };
 /** A party at a fresh table whose bill carries one line per named dish, its dishes sent. */
 async function seated(...names: string[]): Promise<Bill> {
   return withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

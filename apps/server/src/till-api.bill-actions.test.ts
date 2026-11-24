@@ -55,7 +55,7 @@ const NOT_A_UUID = "not-a-uuid";
 /** A party at a fresh table whose main bill holds one of each dish named, in order. */
 async function seated(...names: string[]): Promise<{ partyId: string; tabId: string }> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Mesa ${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

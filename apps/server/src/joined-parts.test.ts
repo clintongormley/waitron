@@ -160,9 +160,7 @@ describe("a saved joined table's real members", () => {
     );
     await seat(v, table.c3!);
     await seat(v, table.c4!);
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     const tables: ZonePlanSave["tables"] = plan.tables.map((entry) => ({
       id: entry.id,
       key: entry.id,
@@ -181,12 +179,10 @@ describe("a saved joined table's real members", () => {
       partKeys: [master.c3!, master.c4!, master.c5!],
     });
     const { ids } = await inTx(v, async (tx) =>
-      saveLayout(tx, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), { revision, tables }, NOW),
+      saveLayout(tx, REMOVALS, await defaultLayout(tx, zoneId), { revision, tables }, NOW),
     );
     await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, NOW, "due"));
-    const after = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const after = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     expect(after.tables.find((entry) => entry.id === ids.long)!.liveTableId).toBeNull();
     const { partyId } = await seat(v, table.c5!);
     expect(await partyAt(v, table.c5!)).toBe(partyId);

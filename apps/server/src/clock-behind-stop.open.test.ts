@@ -31,7 +31,7 @@ interface OpenVenue {
  * device on it, may print and clock in. */
 async function openVenue(db: Database): Promise<OpenVenue> {
   const venue = await provisionBillVenue(db);
-  const counter = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));
+  const counter = await inTx(venue, (tx) => offerProducts(tx));
   const [dish] = db.all<{ id: string }>(sql`select id from products where name = 'Paella'`);
   db.run(sql`
     update device_profiles

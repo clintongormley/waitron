@@ -148,7 +148,7 @@ useVenueDb({
         )
       ).id;
       await writeProductModifiers(tx, topped, [{ kind: "extras", id: toppings }]);
-      const offers = await offerProducts(tx, v.cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       return {
         toppedBurger: offers.offerFor(topped),
         toppings,
@@ -159,8 +159,7 @@ useVenueDb({
     });
     terraceZone = await inTx(v, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Terrace" })];
-      return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
-        .zoneId;
+      return (await offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "table" })).zoneId;
     });
   },
 });

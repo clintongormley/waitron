@@ -136,7 +136,7 @@ async function setupVenue(): Promise<Venue> {
     }
     await routeProductTo(tx, productId.beer, barStationId);
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const printer = async (name: string) =>
       (await createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` }))
         .id;
@@ -172,7 +172,7 @@ interface Seated {
 
 async function seated(v: Venue, label: string): Promise<Seated> {
   return inTx(async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, { label, zoneId: v.zoneId });
+    const { id: tableId } = await createTable(tx, { label, zoneId: v.zoneId });
     const { partyId, tabId } = await seatTable(tx, v.cfg, {
       tableId,
       guestCount: 2,

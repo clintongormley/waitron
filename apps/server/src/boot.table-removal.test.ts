@@ -63,7 +63,7 @@ for (const [mode, status] of [
             name: "Terrace",
             departmentId: department.id,
           });
-          const layout = await defaultLayout(tx, venue.cfg, zone.id);
+          const layout = await defaultLayout(tx, zone.id);
           await saveLayout(
             tx,
             [],

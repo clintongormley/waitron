@@ -125,7 +125,7 @@ async function generalVenue() {
       menu,
       wine: wine.id,
       wine175: wine175!.id,
-      counter: await offerProducts(tx, venue.cfg),
+      counter: await offerProducts(tx),
     };
   });
   return { venue, ...made };

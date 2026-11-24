@@ -168,8 +168,8 @@ async function setupTwoTabs(): Promise<{
 }> {
   const { cfg, coffee } = await setupVenue();
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const a = await createTable(tx, { label: "A", zoneId: offers.zoneId });
     const ta = await openPartyTab(tx, cfg, {
       tableId: a.id,
       lines: [{ menuItemId: offers.offerFor(coffee.id), quantity: "4" }],

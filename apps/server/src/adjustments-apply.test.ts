@@ -528,7 +528,7 @@ describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
         venue.venueLocale,
       );
       await writeProductModifiers(tx, product.id, [{ kind: "extras", id: list.id }]);
-      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       return { menuItemId: offers.offerFor(product.id), pizzaExtras: list.id };
     });
     const { billId } = await billWith({ ...venue, item: () => menuItemId, pizzaExtras }, [
@@ -3932,7 +3932,7 @@ describe("a counter order (B11c)", () => {
     return inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name })];
       return (
-        await offerProducts(tx, venue.cfg, {
+        await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
         })

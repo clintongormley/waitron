@@ -42,8 +42,8 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     await withTransaction(db, async (tx) => {
       menu = await seedTakeawayProducts(tx);
-      counter = await offerProducts(tx, venue.cfg);
-      tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      counter = await offerProducts(tx);
+      tables = await offerProducts(tx, { zone: "tables" });
     });
     counterZoneId = counter.zoneId;
   },
@@ -219,8 +219,8 @@ describe("a new order's way of selling", () => {
         departmentId: terrace.id,
         orderStart: "table",
       });
-      await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
-      return (await createTable(tx, venue.cfg, { label: `T-${randomUUID()}`, zoneId: zone.id })).id;
+      await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" });
+      return (await createTable(tx, { label: `T-${randomUUID()}`, zoneId: zone.id })).id;
     });
     const workingOrderId = randomUUID();
     await inTx(venue, (tx) =>

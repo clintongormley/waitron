@@ -49,7 +49,7 @@ async function fixture() {
       name: "Terrace",
       departmentId: policy!.departmentId,
     });
-    const offers = await offerProducts(tx, v.cfg, {
+    const offers = await offerProducts(tx, {
       zone: { zoneId: terrace.id },
       orderStart: "table",
     });

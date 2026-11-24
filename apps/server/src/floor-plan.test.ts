@@ -121,7 +121,7 @@ async function masterOf(
       .insert(floorPlans)
       .values({
         zoneId,
-        setId: setId ?? (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        setId: setId ?? (await defaultLayout(tx, zoneId)).setId,
         revision,
         savedAt: NOW.toISOString(),
       })
@@ -164,12 +164,12 @@ async function refusal(promise: Promise<unknown>): Promise<AppError> {
 
 function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemoval[] = NONE) {
   return inTx(v, async (tx) =>
-    checkLayoutSave(tx, removals, await defaultLayout(tx, v.cfg, zoneId), input, NOW),
+    checkLayoutSave(tx, removals, await defaultLayout(tx, zoneId), input, NOW),
   );
 }
 
 async function layoutOf(zoneId: string): Promise<LayoutRef> {
-  return inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
+  return inTx(v, (tx) => defaultLayout(tx, zoneId));
 }
 
 async function readDefault(zoneId: string) {

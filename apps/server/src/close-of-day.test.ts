@@ -75,9 +75,7 @@ useVenueDb({
       tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
     );
     counterZone = (
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
-      )
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", orderStart: "counter" }))
     ).zoneId;
     const dayClock = await inTx(venue, (tx) => readVenueClock(tx));
     const nextDayStart = businessDayBounds(dayClock, businessDayAt(dayClock, new Date())).endAt;

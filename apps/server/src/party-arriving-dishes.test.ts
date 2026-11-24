@@ -85,7 +85,7 @@ useVenueDb({
     ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Invoice counter" })];
       return (
-        await offerProducts(tx, v.cfg, {
+        await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
         })

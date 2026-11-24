@@ -637,7 +637,7 @@ describe("rows written within one millisecond, read in the order they were writt
       const joined: string[] = [];
       for (const n of [1, 2]) {
         const label = `Junta ${n} ${randomUUID().slice(0, 8)}`;
-        const table = await createTable(tx, venue.cfg, { label, zoneId: venue.zoneId });
+        const table = await createTable(tx, { label, zoneId: venue.zoneId });
         await tx.insert(partyTables).values({
           id: id(),
           partyId: party.partyId,

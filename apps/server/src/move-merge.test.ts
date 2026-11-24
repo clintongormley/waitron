@@ -200,10 +200,7 @@ async function setupVenue(): Promise<Seeded> {
     await assignMenuToVenue(tx, cat.id);
     return { coffeeId: coffee.id, waterId: water.id, baconId: bacon.id };
   });
-  offersByCfg.set(
-    cfg,
-    await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" })),
-  );
+  offersByCfg.set(cfg, await withTransaction(db, (tx) => offerProducts(tx, { zone: "tables" })));
   return { cfg, coffeeId, waterId, baconId };
 }
 
@@ -222,7 +219,7 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 /** Create one active dining table in the venue's tables zone; returns its id. */
 async function seedTable(cfg: OriginConfig, label: string): Promise<string> {
   const zoneId = offersOf(cfg).zoneId;
-  return asApp((tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
+  return asApp((tx) => createTable(tx, { label, zoneId }).then((r) => r.id));
 }
 
 /** Open a tab on a table with the given lines; returns the tab (working_order) id. */

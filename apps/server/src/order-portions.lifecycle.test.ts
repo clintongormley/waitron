@@ -92,7 +92,7 @@ useVenueDb({
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      offers = await offerProducts(tx, venue.cfg, {
+      offers = await offerProducts(tx, {
         zone: { zoneId: venue.zoneId },
         orderStart: "table",
       });
@@ -114,7 +114,7 @@ const burgersWithCheese = (quantity: string): TabRoundLine[] =>
  * second bill. */
 async function fixture(fire = true, quantity = "2") {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Life-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
@@ -506,7 +506,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
    * by submitting the operator's draft, and an empty second bill; the portions in line order. */
   async function submitted(quantity: string) {
     const p = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `Sub-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });
@@ -819,7 +819,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
   it("A1208 portion lifecycle: a counter order moved to a table holds portions, and one burger leaves with its cheese", async () => {
     const p = await submitted("1");
     const counter = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     const movedId = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {

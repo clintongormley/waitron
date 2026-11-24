@@ -277,7 +277,7 @@ describe("a finished party's dishes are checked against its family's bills' zone
     const p = await servedParty();
     const patio = await patioZone();
     const joining = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `P-${randomUUID().slice(0, 8)}`,
         zoneId: patio,
       });

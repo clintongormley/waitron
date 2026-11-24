@@ -236,7 +236,7 @@ describe("releaseHeldWorkOf", () => {
     const p = await paidHeld();
     // Combining with a party that never answered the allergy question leaves it unanswered.
     await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.tables.zoneId,
       });

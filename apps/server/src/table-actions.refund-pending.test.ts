@@ -74,7 +74,7 @@ function lineIdsOf(billId: string): string[] {
 
 async function freeTable(): Promise<string> {
   const { id } = await withTransaction(venue.db, (tx) =>
-    createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   return id;
 }

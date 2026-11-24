@@ -7,7 +7,6 @@ import type { LayoutRef } from "../floor-plan.js";
 /** The default set of the zone's department, made under `name` when the department has none. */
 export async function defaultLayout(
   tx: Transaction,
-  _cfg: unknown,
   zoneId: string,
   name = "Standard",
 ): Promise<LayoutRef> {

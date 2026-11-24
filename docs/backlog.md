@@ -1522,8 +1522,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Cloud's D579 owns dependency updates, the seven-day lag check and portal/image
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
-- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
-
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).** Index and key names that
   still read `tenant`, and the prefix for `server.credential_unusable`.
   [Detail](backlog/architecture.md#loose-ends-left-by-the-tenant-column-removal-378-2026-09-16)

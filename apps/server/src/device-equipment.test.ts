@@ -190,7 +190,7 @@ async function cashSale(venue: Venue, deviceId: string): Promise<string> {
   const cfg = { ...venue.cfg, origin: deviceOrigin(deviceId) };
   const offers = await inTx(async (tx) => {
     await ensureOperator(tx, OPERATOR);
-    return offerProducts(tx, cfg);
+    return offerProducts(tx);
   });
   await payFreshCounterInCash(
     { admission: testTradingAdmission(), db: suite.db, backend, clock },

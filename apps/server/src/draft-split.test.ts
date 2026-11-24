@@ -68,7 +68,7 @@ useVenueDb({
 
 async function setup() {
   const table = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `Split-${randomUUID()}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `Split-${randomUUID()}`, zoneId: venue.zoneId }),
   );
   const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${table.id}/seat`, {});
   expect(seated.status).toBe(200);

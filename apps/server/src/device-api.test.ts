@@ -122,7 +122,7 @@ beforeAll(() => {
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
   await seedPerson(suite.db, { id: OPERATOR, displayName: "Order operator" });
   const orderId = randomUUID();
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,
@@ -3570,7 +3570,7 @@ describe("a device's approved profiles and switching its active one", () => {
   /** An `attempting` card payment started on `deviceId`. */
   async function paymentInProgress(venue: Venue, deviceId: string, state = "attempting" as const) {
     const orderId = randomUUID();
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     await parkOrder({ db: suite.db }, venue.cfg, {
       id: orderId,
       zoneId: offers.zoneId,

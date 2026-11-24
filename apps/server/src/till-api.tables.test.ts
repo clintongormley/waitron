@@ -106,7 +106,7 @@ const suite = useVenueDb({
     cfg = makeCfg(nodeId);
     const zone = await withTransaction(db, (tx) => createZone(tx, { name: "Terraza" }));
     seededZoneId = zone.id;
-    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+    const offers = await withTransaction(db, (tx) => offerProducts(tx, { zone: "tables" }));
     menuItemId = offers.offerFor(productId);
     tablesZoneId = offers.zoneId;
     noPreparationMenuItemId = offers.offerFor(product.breadId);
@@ -270,7 +270,7 @@ describe("table + tab routes", () => {
   it("a signed-in staff session's POST, PATCH and DELETE on /api/tables answer 404 and leave the table unchanged", async () => {
     const label = `K-${floorLabelSuffix().padStart(6, "0")}`;
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label, zoneId: seededZoneId }),
+      createTable(tx, { label, zoneId: seededZoneId }),
     );
     const row = () =>
       suite.db.all<{ label: string }>(sql`select label from dining_tables where id = ${id}`);
@@ -304,8 +304,8 @@ describe("table + tab routes", () => {
   it("GET /api/tables/state names each table by its short name, or by its full name when it has none", async () => {
     const label = `Short ${floorLabelSuffix().padStart(6, "0")}`;
     const [withShort, without] = await withTransaction(suite.db, async (tx) => [
-      await createTable(tx, cfg, { label: `${label} a`, zoneId: seededZoneId, shortName: "Rt1" }),
-      await createTable(tx, cfg, { label: `${label} b`, zoneId: seededZoneId }),
+      await createTable(tx, { label: `${label} a`, zoneId: seededZoneId, shortName: "Rt1" }),
+      await createTable(tx, { label: `${label} b`, zoneId: seededZoneId }),
     ]);
     const state = (await (await request("/api/tables/state")).json()) as {
       id: string;
@@ -317,7 +317,7 @@ describe("table + tab routes", () => {
 
   it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "3", zoneId: tablesZoneId }),
+      createTable(tx, { label: "3", zoneId: tablesZoneId }),
     );
     const open = await request(`/api/tables/${id}/seat`, {
       method: "POST",
@@ -348,7 +348,7 @@ describe("table + tab routes", () => {
 
   it("POST /api/parties/:id/groups appends; Cancel item voids; GET /api/tables/state reflects it", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "5", zoneId: tablesZoneId }),
+      createTable(tx, { label: "5", zoneId: tablesZoneId }),
     );
     const { tabId, partyId } = await seat(id);
     expect((await sendRound(partyId, [{ menuItemId, quantity: "1" }])).status).toBe(200);
@@ -390,7 +390,7 @@ describe("table + tab routes", () => {
 
   it("a cancel of a quantity voids that part of the line, and refuses a quantity it cannot void", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: `V-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: tablesZoneId,
       }),
@@ -428,7 +428,7 @@ describe("table + tab routes", () => {
 
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "9", zoneId: tablesZoneId }),
+      createTable(tx, { label: "9", zoneId: tablesZoneId }),
     );
     const { tabId, partyId } = await seat(id);
     // One round of two lines, then serve line 1 (the two floor states the screen renders).
@@ -482,7 +482,7 @@ describe("table + tab routes", () => {
 
   it("the tab-lines read carries no venue switch", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: `C-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: tablesZoneId,
       }),
@@ -507,7 +507,7 @@ describe("table + tab routes", () => {
       await setChangesAfterSending(tx, "never", [bar]);
     });
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: `K-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: tablesZoneId,
       }),
@@ -581,7 +581,7 @@ describe("table + tab routes", () => {
   /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
   async function firedTab(): Promise<{ tabId: string; partyId: string; revision: number }> {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: `E-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: tablesZoneId,
       }),
@@ -771,7 +771,7 @@ it.each(["PUT", "DELETE"])(
     try {
       const managerCookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
       const { id } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, cfg, { label: `Retired ${randomUUID()}`, zoneId: seededZoneId }),
+        createTable(tx, { label: `Retired ${randomUUID()}`, zoneId: seededZoneId }),
       );
       const rows = () =>
         suite.db.all(sql`
@@ -798,7 +798,7 @@ it.each(["PUT", "DELETE"])(
 
 it("answers a table's state without the old columns", async () => {
   const { id } = await withTransaction(suite.db, (tx) =>
-    createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId }),
+    createTable(tx, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId }),
   );
   const response = await request("/api/tables/state");
   expect(response.status).toBe(200);

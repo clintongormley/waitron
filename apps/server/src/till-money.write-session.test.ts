@@ -28,7 +28,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    counter = await withTransaction(db, (tx) => offerProducts(tx, venue.cfg));
+    counter = await withTransaction(db, (tx) => offerProducts(tx));
     const [product] = await db
       .select({ id: products.id })
       .from(products)

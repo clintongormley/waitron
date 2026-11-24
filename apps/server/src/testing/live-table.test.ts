@@ -11,12 +11,12 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 describe("test live tables", () => {
   it("makes a table for a zone whose service policy the fixture has not installed yet", async () => {
-    const v = await setupPartyVenue(suite.db);
+    await setupPartyVenue(suite.db);
     const result = await withTransaction(suite.db, async (tx) => {
       const zone = await seedZone(tx, {
         name: "Fixture zone",
       });
-      const { id } = await createTable(tx, v.cfg, {
+      const { id } = await createTable(tx, {
         label: "Fixture table",
         zoneId: zone!.id,
       });

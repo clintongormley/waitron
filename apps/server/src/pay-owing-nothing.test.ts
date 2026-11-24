@@ -68,7 +68,7 @@ useVenueDb({
         vatClass: "general",
       });
       freeWaterId = water.id;
-      return offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
+      return offerProducts(tx, { zone: "counter", orderStart: "counter" });
     });
   },
 });
@@ -278,7 +278,7 @@ describe("the card reader on a bill whose every line was given away", () => {
   it("leaves a party's unsent dish unsent in a zone that sends before payment, where the same dish with no party is sent once", async () => {
     const ticketZone = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
-      const offered = await offerProducts(tx, venue.cfg, {
+      const offered = await offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
         productIds: [productIdOf("Caña")],
@@ -305,7 +305,7 @@ describe("the card reader on a bill whose every line was given away", () => {
       await seedGivenAwayLine(venue, id, 1);
     }
     await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: "Mesa ticket",
         zoneId: venue.zoneId,
       });

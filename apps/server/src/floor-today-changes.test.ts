@@ -128,7 +128,7 @@ async function labelOf(tableId: string): Promise<string | undefined> {
 
 function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) {
   return inTx(v, async (tx) =>
-    saveLayout(tx, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), { revision, tables }, NOW),
+    saveLayout(tx, REMOVALS, await defaultLayout(tx, zoneId), { revision, tables }, NOW),
   );
 }
 

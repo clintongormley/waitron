@@ -612,7 +612,7 @@ describe("extras added later to a stored dish", () => {
   const sendAtTable = (v: MealVenue, lines: Line[], lateSend?: LateSendConfirmation) =>
     withTransaction(suite.db, async (tx) => {
       await updateDepartment(tx, v.restaurant, { orderStart: "table" });
-      const table = await createTable(tx, v.cfg, { label: randomUUID(), zoneId: v.diningZone });
+      const table = await createTable(tx, { label: randomUUID(), zoneId: v.diningZone });
       const cfg = { ...v.cfg, origin: { source: "readiness_test", deviceId: null } } as const;
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId: table.id });
       await placeGroups(tx, cfg, partyId, {

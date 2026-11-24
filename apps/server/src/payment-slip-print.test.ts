@@ -876,7 +876,7 @@ describe("a payment after the ticket was issued", () => {
   /** A walk-up counter sale of one Red wine bottle (30.00). */
   async function counterSale(body: Record<string, unknown>, workingOrderId = randomUUID()) {
     const { zoneId } = await withTransaction(venue.db, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${workingOrderId}/payments`, {
       dining: "eat_in",

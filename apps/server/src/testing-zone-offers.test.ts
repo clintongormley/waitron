@@ -152,7 +152,7 @@ describe("offerProducts", () => {
       await tx.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
       );
-      const offers = await offerProducts(tx, venue.cfg);
+      const offers = await offerProducts(tx);
       await addProductToMenu(tx, {
         menuId: venue.menuId,
         productId: venue.coffee,
@@ -164,7 +164,7 @@ describe("offerProducts", () => {
       });
       return offers;
     });
-    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    await withTransaction(suite.db, (tx) => offerProducts(tx));
     const [savedPeriod] = await suite.db
       .select({ id: menuPeriods.id })
       .from(menuPeriods)
@@ -213,7 +213,7 @@ describe("offerProducts", () => {
     async ({ zone, orderStart, paidWhen, expected }) => {
       const venue = await seedVenueWithMenu(suite.db);
       const offers = await withTransaction(suite.db, (tx) =>
-        offerProducts(tx, venue.cfg, { zone, orderStart, paidWhen }),
+        offerProducts(tx, { zone, orderStart, paidWhen }),
       );
       const id = randomUUID();
       await parkOrder({ db: suite.db }, venue.cfg, {
@@ -231,8 +231,8 @@ describe("offerProducts", () => {
   );
 
   it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
-    const venue = await seedVenueWithMenu(suite.db);
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    await seedVenueWithMenu(suite.db);
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const context = await withTransaction(suite.db, (tx) => resolveZoneContext(tx, offers.zoneId));
     expect(context.serviceMode).toBe("prepay");
   });
@@ -241,9 +241,7 @@ describe("offerProducts", () => {
     "snapshots explicit %s zone payment timing onto a quick sale",
     async (paidWhen) => {
       const venue = await seedVenueWithMenu(suite.db);
-      const offers = await withTransaction(suite.db, (tx) =>
-        offerProducts(tx, venue.cfg, { paidWhen }),
-      );
+      const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, { paidWhen }));
       const id = randomUUID();
       await parkOrder({ db: suite.db }, venue.cfg, {
         id,
@@ -261,7 +259,7 @@ describe("offerProducts", () => {
 
   it("offers each product at the product's own price, even beside a menu that reprices it", async () => {
     const venue = await seedVenueWithMenu(suite.db);
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     await withTransaction(suite.db, async (tx) => {
       await addProductToMenu(tx, {
         menuId: venue.menuId,
@@ -289,7 +287,7 @@ describe("offerProducts", () => {
 
   it("publishes a product's extras lists on its offer, so a pick sells", async () => {
     const venue = await seedVenueWithMenu(suite.db);
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const id = randomUUID();
     await parkOrder({ db: suite.db }, venue.cfg, {
       id,
@@ -311,10 +309,10 @@ describe("offerProducts", () => {
   });
 
   it("keeps an explicit counter style separate from a table-tab zone", async () => {
-    const venue = await seedVenueWithMenu(suite.db);
+    await seedVenueWithMenu(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
-      const counter = await offerProducts(tx, venue.cfg, { orderStart: "counter" });
-      const tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      const counter = await offerProducts(tx, { orderStart: "counter" });
+      const tables = await offerProducts(tx, { zone: "tables" });
       return {
         counter: await resolveZoneContext(tx, counter.zoneId),
         tables: await resolveZoneContext(tx, tables.zoneId),
@@ -326,9 +324,9 @@ describe("offerProducts", () => {
   });
 
   it("an explicit counter paid-at-collection policy answers ticket_then_pay", async () => {
-    const venue = await seedVenueWithMenu(suite.db);
+    await seedVenueWithMenu(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
-      const counter = await offerProducts(tx, venue.cfg, {
+      const counter = await offerProducts(tx, {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
       });
@@ -340,8 +338,8 @@ describe("offerProducts", () => {
   it("fires each line to the station the product, its category or the venue default would pick", async () => {
     const venue = await seedVenueWithMenu(suite.db);
     const tabId = await withTransaction(suite.db, async (tx) => {
-      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
-      const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
+      const offers = await offerProducts(tx, { zone: "tables" });
+      const table = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
       await addTabRound(
         tx,
@@ -376,8 +374,8 @@ describe("offerProducts", () => {
         await tx.execute(
           sql`update kitchen_stations set active = 0 where id = ${venue.stations.kitchen}`,
         );
-        const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
-        const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
+        const offers = await offerProducts(tx, { zone: "tables" });
+        const table = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
         const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
         await addTabRound(
           tx,
@@ -391,9 +389,9 @@ describe("offerProducts", () => {
 
   it("is harmless to call twice, and offers a product added between the calls", async () => {
     const venue = await seedVenueWithMenu(suite.db);
-    const first = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const first = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const before = await counts(suite.db);
-    const again = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const again = await withTransaction(suite.db, (tx) => offerProducts(tx));
     expect(await counts(suite.db)).toEqual(before);
     expect(again.zoneId).toBe(first.zoneId);
     expect(again.menuId).toBe(first.menuId);
@@ -408,7 +406,7 @@ describe("offerProducts", () => {
         vatClass: "reduced",
       }),
     );
-    const third = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    const third = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const id = randomUUID();
     await parkOrder({ db: suite.db }, venue.cfg, {
       id,
@@ -420,17 +418,17 @@ describe("offerProducts", () => {
 
   it("takes an extras list off the offer once the product stops carrying it", async () => {
     const venue = await seedVenueWithMenu(suite.db);
-    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    await withTransaction(suite.db, (tx) => offerProducts(tx));
     expect((await counts(suite.db)).extras).toBe(1);
     await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.coffee, []));
-    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    await withTransaction(suite.db, (tx) => offerProducts(tx));
     expect((await counts(suite.db)).extras).toBe(0);
   });
 
   it("names the product when asked for one it does not offer", async () => {
     const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, venue.cfg, { productIds: [venue.coffee] }),
+      offerProducts(tx, { productIds: [venue.coffee] }),
     );
     expect(() => offers.offerFor(venue.water)).toThrow(venue.water);
     expect(() => offers.toOfferLines([{ productId: venue.water, quantity: "1" }])).toThrow(

@@ -112,7 +112,7 @@ async function cookie(): Promise<string> {
 
 async function table(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createTable(tx, cfg, {
+    const { id } = await createTable(tx, {
       label: `Mesa ${randomUUID()}`,
       zoneId: (await createZone(tx, { name: `Tables ${randomUUID()}` })).id,
     });
@@ -242,8 +242,8 @@ describe("POST /api/tables/:id/seat", () => {
         vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
-      const offers = await offerProducts(tx, cfg, { zone: "tables" });
-      const { id } = await createTable(tx, cfg, {
+      const offers = await offerProducts(tx, { zone: "tables" });
+      const { id } = await createTable(tx, {
         label: `Mesa ${randomUUID()}`,
         zoneId: offers.zoneId,
       });

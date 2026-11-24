@@ -147,7 +147,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     return {
       cfg,
       seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-      offers: await offerProducts(tx, cfg, { zone: "tables" }),
+      offers: await offerProducts(tx, { zone: "tables" }),
       beer: beer.id,
     };
   });
@@ -198,7 +198,7 @@ async function freshTill(): Promise<Till> {
 /** A fresh €3.00 bill at a fresh table. */
 async function bill(): Promise<string> {
   return inTx(async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.offers.zoneId,
     });

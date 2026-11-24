@@ -276,7 +276,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       productIds.set(item.name, product.id);
     }
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const [person] = await seedPersons(tx, {
       displayName: "Ann",
       pinHash: fixturePinHash("5555"),
@@ -424,7 +424,7 @@ function offer(name: string): string {
 /** A fresh tab at a fresh table carrying one of each named dish, in order (line 1, 2, …). */
 async function tabWith(...names: string[]): Promise<string> {
   return inTx(async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.offers.zoneId,
     });
@@ -439,7 +439,7 @@ async function tabWith(...names: string[]): Promise<string> {
 /** {@link tabWith}'s bill with its lines stored grouped: the line route cuts part of a line in place. */
 async function groupedTabWith(...names: string[]): Promise<string> {
   return inTx(async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.offers.zoneId,
     });
@@ -1295,7 +1295,7 @@ describe("a contribution (design §8 test 2)", () => {
 
   it("refuses a payment of a bill with nothing on it", async () => {
     const billId = await inTx(async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.offers.zoneId,
       });
@@ -1550,7 +1550,7 @@ describe("an item already paid for (design §8 test 5)", () => {
 
   it("takes an item payment for a held line that has not gone to the kitchen", async () => {
     const table = await inTx((tx) =>
-      createTable(tx, venue.cfg, {
+      createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.offers.zoneId,
       }),
@@ -1610,7 +1610,7 @@ describe("an item already paid for (design §8 test 5)", () => {
 
   it("sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else", async () => {
     const table = await inTx((tx) =>
-      createTable(tx, venue.cfg, {
+      createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.offers.zoneId,
       }),
@@ -1885,7 +1885,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `D-${randomUUID().slice(0, 8)}`,
         zoneId: zone.id,
       });
@@ -1936,11 +1936,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
-      const offers = await offerProducts(tx, venue.cfg, {
+      const offers = await offerProducts(tx, {
         zone: { zoneId: zone.id },
         orderStart: "table",
       });
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `D-${randomUUID().slice(0, 8)}`,
         zoneId: zone.id,
       });

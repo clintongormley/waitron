@@ -100,7 +100,7 @@ export async function plannedZone(
       partKeys: entry.partKeys ?? [],
     });
   }
-  const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
+  const layout = await inTx(v, (tx) => defaultLayout(tx, zoneId));
   const { revision, ids } = await inTx(v, (tx) =>
     saveLayout(tx, REMOVALS, layout, { revision: 0, tables }, now),
   );
@@ -126,7 +126,7 @@ export async function giveKeptSize(
       .select({ zoneId: floorPlanTables.zoneId })
       .from(floorPlanTables)
       .where(eq(floorPlanTables.id, masterId));
-    const inSet = setId ?? (await defaultLayout(tx, v.cfg, master!.zoneId!)).setId;
+    const inSet = setId ?? (await defaultLayout(tx, master!.zoneId!)).setId;
     const [plan] = await tx
       .select({ id: floorPlans.id })
       .from(floorPlans)
@@ -299,7 +299,7 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
   const [tableId, spare] = [z.table.moving!, z.table.spare!];
   const { partyId, revision } = await seat(v, tableId);
   await inTx(v, async (tx) => {
-    const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+    const layout = await defaultLayout(tx, z.zoneId);
     const plan = await readLayout(tx, layout);
     await saveLayout(
       tx,

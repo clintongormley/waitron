@@ -570,9 +570,7 @@ describe("/management-api/zones", () => {
   it("DELETE reports the occupied table's name when a zone has an open party", async () => {
     const zoneId = await createZone(unique("Occupied"));
     const label = unique("T7");
-    const table = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label, zoneId }),
-    );
+    const table = await withTransaction(suite.db, (tx) => createTable(tx, { label, zoneId }));
     await withTransaction(suite.db, async (tx) => {
       const [party] = await tx
         .insert(parties)
@@ -767,9 +765,8 @@ describe("POST /management-api/session (email login)", () => {
 
 describe("/management-api/tables", () => {
   it("answers the management table list without the old columns, with planTableId", async () => {
-    const cfg = tillConfigFromVenue(venue);
     const { id } = await withTransaction(suite.db, async (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: unique("shape"),
         zoneId: (await createTableZone(tx, { name: unique("Shape zone") })).id,
       }),
@@ -785,7 +782,7 @@ describe("/management-api/tables", () => {
   describe("disabled tables: the includeDisabled list", () => {
     async function newTable(): Promise<string> {
       const { id } = await withTransaction(suite.db, async (tx) =>
-        createTable(tx, tillConfigFromVenue(venue), {
+        createTable(tx, {
           label: unique("en"),
           zoneId: (await createTableZone(tx, { name: unique("Tables") })).id,
         }),
@@ -819,7 +816,6 @@ describe("/management-api/tables", () => {
       zoneId: string;
       tableId: string;
     }> {
-      const cfg = tillConfigFromVenue(venue);
       const zoneId = await createZone(unique("Served"));
       const departmentId = await withTransaction(suite.db, async (tx) => {
         const department = await createDepartment(tx, {
@@ -830,7 +826,7 @@ describe("/management-api/tables", () => {
         return department.id;
       });
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, cfg, { label: unique("zt"), zoneId }),
+        createTable(tx, { label: unique("zt"), zoneId }),
       );
       return { departmentId, zoneId, tableId };
     }
@@ -3175,8 +3171,7 @@ describe("floor plans", () => {
     placement: PLACE,
     partKeys: [] as string[],
   });
-  const layoutAt = (zoneId: string) =>
-    withTransaction(suite.db, (tx) => defaultLayout(tx, tillConfigFromVenue(venue), zoneId));
+  const layoutAt = (zoneId: string) => withTransaction(suite.db, (tx) => defaultLayout(tx, zoneId));
   const planPath = async (zoneId: string) =>
     `/floor-plan-sets/${(await layoutAt(zoneId)).setId}/zones/${zoneId}/floor-plan`;
   const put = async (zoneId: string, body: unknown, cookie: string | undefined = managerCookie) =>
@@ -3190,7 +3185,7 @@ describe("floor plans", () => {
     const first = await put(zoneId, { revision: 0, tables: [entry("a", label)] });
     const { ids } = (await first.json()) as { ids: Record<string, string> };
     const { id: otherId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label: unique("Unrelated"), zoneId }),
+      createTable(tx, { label: unique("Unrelated"), zoneId }),
     );
     const read = (await (await get(zoneId)).json()) as { tables: { liveTableId: string }[] };
     const response = await put(zoneId, {
@@ -3511,9 +3506,7 @@ describe("retired table writes", () => {
   ])("answers %s %s 404 for a manager and leaves tables unchanged", async (method, path) => {
     const zoneId = await createZone(unique("Retired"));
     const label = unique("Retired table");
-    const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label, zoneId }),
-    );
+    const { id } = await withTransaction(suite.db, (tx) => createTable(tx, { label, zoneId }));
     const rows = () =>
       suite.db.all(sql`
       select * from dining_tables order by id`);

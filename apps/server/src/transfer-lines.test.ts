@@ -107,8 +107,8 @@ async function setupVenue(): Promise<Seeded> {
       vatClass: "reduced",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const a = await createTable(tx, { label: "A", zoneId: offers.zoneId });
     return {
       coffeeId: coffee.id,
       waterId: water.id,
@@ -368,7 +368,7 @@ describe("transfer — extras children", () => {
     );
     await writeProductModifiers(tx, dishId, [{ kind: "extras", id: list.id }]);
     // An offer carries only the extras lists published on it, so re-offer to publish this one.
-    await offerProducts(tx, cfg, { zone: "tables" });
+    await offerProducts(tx, { zone: "tables" });
     return list.id;
   }
 

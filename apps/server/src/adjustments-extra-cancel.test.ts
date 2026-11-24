@@ -102,7 +102,7 @@ useVenueDb({
       for (const dish of [hamburger, toastie]) {
         await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
       }
-      const offers = await offerProducts(tx, venue.cfg, {
+      const offers = await offerProducts(tx, {
         zone: "tables",
         productIds: [hamburger.id, toastie.id],
       });
@@ -152,7 +152,7 @@ async function billOf(
   portions: Portions = ONE,
 ): Promise<string> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.tables.zoneId,
     });
@@ -610,7 +610,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         );
         ids.push(product.id);
       }
-      const offered = await offerProducts(tx, venue.cfg, { zone: "tables", productIds: ids });
+      const offered = await offerProducts(tx, { zone: "tables", productIds: ids });
       await setStationPrinting(tx, { printHeldWork: true }, [venue.stationId, screenId]);
       await setStationPrinting(tx, { printHeldWork: false }, [barId]);
       return {
@@ -622,7 +622,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
     });
     try {
       const billId = await inTx(venue, async (tx) => {
-        const table = await createTable(tx, venue.cfg, {
+        const table = await createTable(tx, {
           label: `M-${randomUUID().slice(0, 8)}`,
           zoneId: venue.tables.zoneId,
         });
@@ -709,7 +709,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
 describe("cancelling an extra of a dish the kitchen does not have (B11g)", () => {
   it("tells the kitchen nothing for a dish never sent", async () => {
     const seated = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.tables.zoneId,
       });

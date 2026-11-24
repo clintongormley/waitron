@@ -48,7 +48,7 @@ beforeAll(async () => {
   await seedDepartmentReceipt(suite.db, departmentId, {
     operationDescription: "Venta en establecimiento",
   });
-  offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
 });
 function app() {
   const app = new Hono();

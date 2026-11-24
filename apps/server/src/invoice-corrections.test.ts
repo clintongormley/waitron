@@ -111,7 +111,7 @@ useVenueDb({
         vatClass: "reduced",
       });
       ids.set("Cold soup", soup.id);
-      const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId } });
+      const offers = await offerProducts(tx, { zone: { zoneId: venue.zoneId } });
       offerOf = (name) => offers.offerFor(ids.get(name)!);
       const [manager] = await seedPersons(tx, {
         displayName: "Martha",

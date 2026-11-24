@@ -1806,7 +1806,7 @@ describe("a start on a real full disk", () => {
         let deliveryId: string | undefined;
         if (kind === "floor") {
           await withTransaction(db, async (tx) => {
-            const ref = await defaultLayout(tx, venue.cfg, venue.zoneId);
+            const ref = await defaultLayout(tx, venue.zoneId);
             await tx.insert(floorPlans).values({
               zoneId: venue.zoneId,
               setId: ref.setId,

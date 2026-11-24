@@ -147,7 +147,7 @@ it("integrated capture files the department description and replay keeps its fil
 
 it("a counter sale sent without a zone records the selected zone and files that department's description", async () => {
   const counter = await withTransaction(venue.db, async (tx) => {
-    const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
+    const offers = await offerProducts(tx, { zone: "counter" });
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, offers.zoneId));
     await tx
       .update(departments)

@@ -55,14 +55,10 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ticketThenPayZone = (
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
-      )
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", orderStart: "counter" }))
     ).zoneId;
     issueAtPaymentZone = (
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "tables", orderStart: "counter" }),
-      )
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "tables", orderStart: "counter" }))
     ).zoneId;
   },
 });

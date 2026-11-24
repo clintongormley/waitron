@@ -600,7 +600,7 @@ describe("GET /api/invoice-corrections", () => {
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Croquettes"));
-      const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId } });
+      const offers = await offerProducts(tx, { zone: { zoneId } });
       return { zoneId, croquettes: offers.offerFor(croquettes!.id) };
     });
     const here = await opened(await sold(["10.00"]));

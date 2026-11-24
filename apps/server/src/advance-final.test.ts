@@ -104,7 +104,7 @@ useVenueDb({
         });
         ids.set(dish.name, product.id);
       }
-      return offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
+      return offerProducts(tx, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
     });
     offerFor = (name) => offers.offerFor(ids.get(name)!);
     kit = deferredCloseKit(venue, venue.zoneId);
@@ -126,7 +126,7 @@ async function seatedFor(
   names: string[],
 ): Promise<{ billId: string; partyId: string }> {
   return withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `A-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

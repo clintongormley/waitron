@@ -64,9 +64,9 @@ useVenueDb({
         pricingUnit: "each",
         unitPrice: decimal("12.10"),
       });
-      const offers = await offerProducts(tx, venue.cfg, { productIds: [product.id] });
+      const offers = await offerProducts(tx, { productIds: [product.id] });
       tableOffer = (
-        await offerProducts(tx, venue.cfg, {
+        await offerProducts(tx, {
           zone: { zoneId: venue.zoneId },
           orderStart: "table",
           productIds: [product.id],
@@ -110,7 +110,7 @@ async function held(dishes: "one" | "two" = "one") {
 
 async function tableBill() {
   return withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Boundary ${randomUUID()}`,
       zoneId: venue.zoneId,
     });

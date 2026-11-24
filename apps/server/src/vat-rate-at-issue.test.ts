@@ -226,11 +226,11 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg, {
+    counter: await offerProducts(tx, {
       orderStart: "counter",
       paidWhen: orderFlow,
     }),
-    tables: await offerProducts(tx, cfg, { zone: "tables" }),
+    tables: await offerProducts(tx, { zone: "tables" }),
   }));
   const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
   return { cfg, products, counter, tables, operator };
@@ -606,7 +606,7 @@ describe("publishing a menu before a rate's legal date", () => {
   it("does not bring the new rate forward: a sale that day files the old rate, and one on the day files the new", async () => {
     const v = await setupVenue();
     at(EVE);
-    await withTransaction(suite.db, (tx) => offerProducts(tx, v.cfg));
+    await withTransaction(suite.db, (tx) => offerProducts(tx));
     const eve = await park(v, one(v, v.products.beer));
     await payCash(v, eve, "2.50");
 

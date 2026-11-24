@@ -680,10 +680,8 @@ describe("passScreensDark", () => {
 
   async function passFixture() {
     const f = await setup();
-    const counter = await withTransaction(suite.db, (tx) => offerProducts(tx, f.venue.cfg));
-    const tables = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, f.venue.cfg, { zone: "tables" }),
-    );
+    const counter = await withTransaction(suite.db, (tx) => offerProducts(tx));
+    const tables = await withTransaction(suite.db, (tx) => offerProducts(tx, { zone: "tables" }));
     return { ...f, counterZone: counter.zoneId, tablesZone: tables.zoneId };
   }
 

@@ -91,7 +91,7 @@ async function setupVenue() {
     await assignMenuToVenue(tx, menu.id);
     return product.id;
   });
-  const counter = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  const counter = await withTransaction(suite.db, (tx) => offerProducts(tx));
   return { cfg, beer, counter, menuId: counter.menuId };
 }
 

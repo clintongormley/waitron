@@ -106,7 +106,7 @@ async function burgerAndWater(tx: Transaction, venue: Venue) {
 }
 
 async function seatAnotherParty(tx: Transaction, venue: Venue, label: string): Promise<string> {
-  const { id: tableId } = await createTable(tx, venue.cfg, { label, zoneId: venue.party.zoneId });
+  const { id: tableId } = await createTable(tx, { label, zoneId: venue.party.zoneId });
   const { partyId } = await seatTable(tx, venue.cfg, {
     tableId,
     guestCount: null,

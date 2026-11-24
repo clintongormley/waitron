@@ -197,7 +197,7 @@ describe("a bill left open past its business day is dated by its close, never by
   it("files the end of Monday's business day when a later serving mark is taken back and the rest cancelled before payment", async () => {
     const venue = await provisionBillVenue(suite.db);
     const billId = await withTransaction(venue.db, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });

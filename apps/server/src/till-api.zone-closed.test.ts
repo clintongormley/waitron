@@ -81,7 +81,7 @@ const refused = (v: BillVenue) => ({
 });
 async function table(v: BillVenue) {
   return withTransaction(suite.db, (tx) =>
-    createTable(tx, v.cfg, { label: randomUUID(), zoneId: v.zoneId }),
+    createTable(tx, { label: randomUUID(), zoneId: v.zoneId }),
   );
 }
 async function seat(v: BillVenue) {
@@ -681,9 +681,7 @@ describe("moving into closed zones", () => {
     return { v, dining: dining.id };
   }
   async function freeTable(v: BillVenue, zoneId: string) {
-    return withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: randomUUID(), zoneId }),
-    );
+    return withTransaction(suite.db, (tx) => createTable(tx, { label: randomUUID(), zoneId }));
   }
   async function seated(v: BillVenue, zoneId: string) {
     const t = await freeTable(v, zoneId);

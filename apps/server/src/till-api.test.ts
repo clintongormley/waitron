@@ -3862,7 +3862,7 @@ describe("/api/working-orders/:id/cancel", () => {
 describe("/api/zones + served route + /api/tables/state occupancy fields", () => {
   async function tabZone(): Promise<{ zoneId: string; waterOffer: string }> {
     const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables", productIds: [waterProduct.id] }),
+      offerProducts(tx, { zone: "tables", productIds: [waterProduct.id] }),
     );
     return { zoneId: offers.zoneId, waterOffer: offers.offerFor(waterProduct.id) };
   }
@@ -3921,7 +3921,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields", () =>
     });
 
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "4", zoneId }),
+      createTable(tx, { label: "4", zoneId }),
     );
 
     // Seat the table, then ring TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by
@@ -4045,7 +4045,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields", () =>
     // A REAL party with a line, so only the body's shape can refuse.
     const tab = await tabZone();
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "served-bad-items", zoneId: tab.zoneId }),
+      createTable(tx, { label: "served-bad-items", zoneId: tab.zoneId }),
     );
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
@@ -4086,7 +4086,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields", () =>
     // UUID at all: the command's own guard, not a route screen.
     const tab = await tabZone();
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "served-99", zoneId: tab.zoneId }),
+      createTable(tx, { label: "served-99", zoneId: tab.zoneId }),
     );
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
@@ -4454,7 +4454,7 @@ describe("canonical modifier HTTP serialization", () => {
       await offerMenuThroughZone(tx, zoneId, waterProduct.menuId, { makeDefault: true });
     });
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "Modifiers", zoneId }),
+      createTable(tx, { label: "Modifiers", zoneId }),
     );
     const line = { menuItemId: f.offer.id, quantity: "1", ...f.answers };
     const opened = await f.app.request(`/api/tables/${tableId}/seat`, {
@@ -4725,7 +4725,7 @@ describe("sale-policy order flow routes", () => {
         return zone;
       });
       const table = await withTransaction(suite.db, (tx) =>
-        createTable(tx, cfg, { label: `Counter ${randomUUID()}`, zoneId: zone.id }),
+        createTable(tx, { label: `Counter ${randomUUID()}`, zoneId: zone.id }),
       );
       const seated = await app.request(`/api/tables/${table.id}/seat`, {
         method: "POST",
@@ -4830,7 +4830,7 @@ describe("settling edit answers", () => {
                 vatClass: "general",
               });
               await assignMenuToVenue(tx, menu.id);
-              const offers = await offerProducts(tx, venue.cfg, {
+              const offers = await offerProducts(tx, {
                 zone: "tables",
                 productIds: [product.id],
               });

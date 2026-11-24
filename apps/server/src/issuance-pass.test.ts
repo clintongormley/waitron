@@ -221,8 +221,8 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     };
   });
   const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-    counter: await offerProducts(tx, cfg, { paidWhen }),
-    tables: await offerProducts(tx, cfg, { zone: "tables" }),
+    counter: await offerProducts(tx, { paidWhen }),
+    tables: await offerProducts(tx, { zone: "tables" }),
   }));
   const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
   return { cfg, ...seeded, counter, tables, operator };

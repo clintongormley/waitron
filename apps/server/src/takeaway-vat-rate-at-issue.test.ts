@@ -104,7 +104,7 @@ async function counterVenue() {
       ],
       "es-ES",
     );
-    const counter = await offerProducts(tx, venue.cfg);
+    const counter = await offerProducts(tx);
     return { tea: tea.id, coffee: coffee.id, double: double!.id, counter };
   });
   return { venue, ...made };
@@ -215,7 +215,7 @@ describe("a takeaway line files its product's rate as it stands at issue", () =>
         .update(products)
         .set({ takeawayVatClass: "reduced" })
         .where(eq(products.id, menu.lemonSoda));
-      return { menu, counter: await offerProducts(tx, venue.cfg) };
+      return { menu, counter: await offerProducts(tx) };
     });
     const id = randomUUID();
 
@@ -420,7 +420,7 @@ describe("the products' takeaway rates are read once per basket", () => {
     const { menu, counter } = await inTx(venue, async (tx) => {
       await tillChoiceEverywhere(tx);
       const menu = await seedTakeawayProducts(tx);
-      return { menu, counter: await offerProducts(tx, venue.cfg) };
+      return { menu, counter: await offerProducts(tx) };
     });
     const lines = Array.from({ length: 20 }, (_, i) => ({
       menuItemId: counter.offerFor(i % 2 === 0 ? menu.cola : menu.cheese),

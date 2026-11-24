@@ -37,11 +37,11 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     beerId = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`)[0]!.id;
     zoneOf.invoiced = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     zoneOf.uninvoiced = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
-      return offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
+      return offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "counter" });
     });
   },
 });

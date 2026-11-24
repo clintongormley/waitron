@@ -834,7 +834,7 @@ describe("a party change that changes a room answers its revision", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         {
           revision: planRevision,
           tables: [

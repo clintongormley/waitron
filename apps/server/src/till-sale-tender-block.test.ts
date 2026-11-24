@@ -149,7 +149,7 @@ beforeAll(async () => {
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg);
+    const offers = await offerProducts(tx);
     return { menuItemId: offers.offerFor(product.id), zoneId: offers.zoneId };
   }));
 });

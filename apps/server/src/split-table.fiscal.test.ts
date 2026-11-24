@@ -156,7 +156,7 @@ function joinedTo(partyId: string): string[] {
 async function atTwoTables(...names: string[]) {
   const party = await seatedWith(venue, ...names);
   const { id: leaving } = await withTransaction(venue.db, (tx) =>
-    createTable(tx, venue.cfg, {
+    createTable(tx, {
       label: `Mesa ${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     }),

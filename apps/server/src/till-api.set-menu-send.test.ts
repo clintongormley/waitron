@@ -41,7 +41,7 @@ async function request(method: string, path: string, body: unknown) {
 
 async function draft(seeded: boolean, dishes = 1) {
   const table = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { zoneId: venue.zoneId, label: crypto.randomUUID() }),
+    createTable(tx, { zoneId: venue.zoneId, label: crypto.randomUUID() }),
   );
   const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
   expect(seated.status).toBe(200);

@@ -59,14 +59,10 @@ useVenueDb({
     );
     prepayZone = await inTx(venue, async (tx) => {
       const zone = await seedZone(tx, { name: "Prepay counter" });
-      return (
-        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "counter" })
-      ).zoneId;
+      return (await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "counter" })).zoneId;
     });
     ticketThenPayZone = (
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
-      )
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", orderStart: "counter" }))
     ).zoneId;
   },
 });

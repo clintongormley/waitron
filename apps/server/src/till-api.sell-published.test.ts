@@ -936,10 +936,10 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       await configureZone(tx, { zoneId: zone!.id, departmentId: department.id });
     });
     const tables = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] }),
+      offerProducts(tx, { zone: "tables", productIds: [bacon.productId] }),
     );
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: "Mesa 7", zoneId: tables.zoneId }),
+      createTable(tx, { label: "Mesa 7", zoneId: tables.zoneId }),
     );
     const seat = await send(v, "POST", `/api/tables/${tableId}/seat`, {});
     expect(seat.status).toBe(200);
@@ -959,7 +959,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const submitted = (await held.json()) as { revision: number; groups: { id: string }[] };
     await withTransaction(suite.db, async (tx) => {
       await updateProduct(tx, bacon.productId, { ordering: "not_sold_separately" });
-      await offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] });
+      await offerProducts(tx, { zone: "tables", productIds: [bacon.productId] });
     });
     const served = (await (
       await send(v, "GET", `/api/service-zones/${tables.zoneId}/offers`)

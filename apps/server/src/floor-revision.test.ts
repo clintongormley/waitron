@@ -94,7 +94,7 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<void> {
-  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -108,7 +108,7 @@ async function resave(
     saveLayout(
       tx,
       REMOVALS,
-      await defaultLayout(tx, v.cfg, zoneId),
+      await defaultLayout(tx, zoneId),
       { revision: plan.revision, tables: change(tables) },
       NOW,
     ),

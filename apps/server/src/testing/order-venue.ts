@@ -57,7 +57,7 @@ export async function provisionOrderVenue(
     .where(eq(devices.id, venue.deviceId));
   const counterZone = (
     await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, {
+      offerProducts(tx, {
         zone: "counter",
         orderStart: "counter",
         paidWhen: "ticket_then_pay",

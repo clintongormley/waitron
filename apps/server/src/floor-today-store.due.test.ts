@@ -22,7 +22,7 @@ it("detects a due saved layout without changing rows, revisions or notifications
   await inTx(v, (tx) => tx.insert(floorPlanTables).values({ zoneId, label: "Due table" }));
   expect(await due()).toBe(false);
   await inTx(v, async (tx) => {
-    const ref = await defaultLayout(tx, v.cfg, zoneId);
+    const ref = await defaultLayout(tx, zoneId);
     await tx.insert(floorPlans).values({ zoneId, setId: ref.setId, savedAt: now.toISOString() });
   });
   await installChangeFeed(v.db, CORE_CHANGE_SOURCES);

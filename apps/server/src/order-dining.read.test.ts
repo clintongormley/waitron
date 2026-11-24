@@ -32,8 +32,8 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     await withTransaction(db, async (tx) => {
       await seedTakeawayProducts(tx);
-      counterZoneId = (await offerProducts(tx, venue.cfg)).zoneId;
-      await offerProducts(tx, venue.cfg, { zone: "tables" });
+      counterZoneId = (await offerProducts(tx)).zoneId;
+      await offerProducts(tx, { zone: "tables" });
     });
   },
 });
