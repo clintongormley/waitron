@@ -941,7 +941,7 @@ describe("the restricted page's download section", () => {
       totpRequired: "Enter your password again and the code from your authenticator app.",
       passkeyAction: "Sign in with a passkey",
       passkeyRefused:
-        "That passkey could not sign you in. This box knows the passkeys as they were when it stopped running the venue. Try again, or use your email and password. Nothing was changed.",
+        "That passkey could not sign you in. This box knows the passkeys as they were when it last ran the venue. Try again, or use your email and password. Nothing was changed.",
       passkeyExpired: "The passkey request expired. Try again. Nothing was changed.",
       passkeyCancelled:
         "The passkey sign-in did not finish. Try again, or use your email and password.",
@@ -977,7 +977,7 @@ describe("the restricted page's download section", () => {
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
       passkeyAction: "Entrar con passkey",
       passkeyRefused:
-        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban cuando dejó de llevar el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
+        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban la última vez que llevó el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
       passkeyExpired:
         "La solicitud de passkey ha caducado. Vuelve a intentarlo. No se ha cambiado nada.",
       passkeyCancelled:

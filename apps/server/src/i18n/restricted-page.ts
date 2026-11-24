@@ -169,7 +169,7 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
         "That email and password do not match an account on this box. This box knows the accounts as they were when it last ran the venue. Nothing was changed.",
       passkeyAction: "Sign in with a passkey",
       passkeyRefused:
-        "That passkey could not sign you in. This box knows the passkeys as they were when it stopped running the venue. Try again, or use your email and password. Nothing was changed.",
+        "That passkey could not sign you in. This box knows the passkeys as they were when it last ran the venue. Try again, or use your email and password. Nothing was changed.",
       passkeyExpired: "The passkey request expired. Try again. Nothing was changed.",
       passkeyCancelled:
         "The passkey sign-in did not finish. Try again, or use your email and password.",
@@ -205,7 +205,7 @@ export const RESTRICTED_DOWNLOAD_WORDS: Readonly<Record<SupportedLocale, Restric
         "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de este servidor. Este servidor conoce las cuentas tal como estaban la última vez que llevó el local. No se ha cambiado nada.",
       passkeyAction: "Entrar con passkey",
       passkeyRefused:
-        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban cuando dejó de llevar el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
+        "Esa passkey no ha podido iniciar tu sesión. Este servidor conoce las passkeys tal como estaban la última vez que llevó el local. Vuelve a intentarlo o usa tu correo electrónico y tu contraseña. No se ha cambiado nada.",
       passkeyExpired:
         "La solicitud de passkey ha caducado. Vuelve a intentarlo. No se ha cambiado nada.",
       passkeyCancelled:
