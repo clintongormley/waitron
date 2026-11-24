@@ -270,6 +270,8 @@ export const en = {
   "give_back.uw_approvers_failed":
     "The people who can approve this could not be read. Nothing has changed. Press the same button again to try again.",
   "give_back.uw_close": "Close",
+  "give_back.uw_card_elsewhere":
+    "A card refund started with Refund a payment on this receipt has no answer yet, so nothing was sent. Open Refund a payment on this receipt to finish it, then give the rest back here.",
   "give_back.uw_card_waiting":
     "An earlier card refund on this receipt is still waiting for an answer, so nothing was sent. Press Check again before giving more back to a card.",
   "give_back.uw_finish": "Finish",
@@ -2740,6 +2742,8 @@ export const es: Record<StringKey, string> = {
   "give_back.uw_approvers_failed":
     "No se ha podido leer quién puede aprobarlo. No ha cambiado nada. Vuelve a pulsar el mismo botón para intentarlo de nuevo.",
   "give_back.uw_close": "Cerrar",
+  "give_back.uw_card_elsewhere":
+    "Una devolución a tarjeta iniciada con Devolver un pago en este ticket aún no tiene respuesta, así que no se ha enviado nada. Abre Devolver un pago en este ticket para terminarla y después devuelve el resto aquí.",
   "give_back.uw_card_waiting":
     "Una devolución anterior a tarjeta en este ticket sigue esperando respuesta, así que no se ha enviado nada. Pulsa Comprobar de nuevo antes de devolver más a una tarjeta.",
   "give_back.uw_finish": "Terminar",

@@ -119,10 +119,21 @@ export class TillGiveBackUnderWay extends LitElement {
   }
   /** A card's part refused for a right whose sign-in is dropped moved nothing: forget it. */
   #abandonCard(): void {
+    if (this.#savedCard() === null) return;
     try {
       this.refunds.abandon(this.saleId);
     } catch {
       // Unreadable storage: Check again or the next press says so.
+    }
+  }
+  /** A card refund Refund a payment saved on this receipt whose answer was lost, which Check
+   * again here does not ask about. */
+  #elsewhereLost(): boolean {
+    try {
+      const saved = this.refunds.read(this.saleId);
+      return saved !== null && saved.refundId === null && this.#savedCard() === null;
+    } catch {
+      return false;
     }
   }
   #lostCard(): SavedTenderRefund | null {
@@ -175,7 +186,10 @@ export class TillGiveBackUnderWay extends LitElement {
       if (error.kind === "storage" || error.kind === "invalid")
         this.message = t("give_back.storage");
       else if (error.kind === "mismatch") this.message = t("give_back.uw_unknown");
-      else if (this.lostCard === null) this.message = t("give_back.uw_card_waiting");
+      else if (this.lostCard === null)
+        this.message = t(
+          this.#elsewhereLost() ? "give_back.uw_card_elsewhere" : "give_back.uw_card_waiting",
+        );
       return;
     }
     const refusal = refusalOf(error);

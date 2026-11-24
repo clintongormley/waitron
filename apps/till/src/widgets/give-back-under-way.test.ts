@@ -116,6 +116,7 @@ async function mount(
   correction: InvoiceCorrectionView = OPEN,
   api: Api = fakeApi(),
   capabilities = EVERY_METHOD,
+  refunds = new TenderRefundSession(SCOPE, api),
 ) {
   const close = vi.fn();
   const { el } = await mountWidget<TillGiveBackUnderWay>("till-give-back-under-way", {
@@ -123,7 +124,7 @@ async function mount(
     saleId: "sale-1",
     correction,
     corrections: new InvoiceCorrectionSession(SCOPE, api),
-    refunds: new TenderRefundSession(SCOPE, api),
+    refunds,
     capabilities,
     close,
   });
@@ -923,6 +924,47 @@ describe("only a card's part with no answer counts as lost", () => {
     await vi.waitFor(() => expect(text(root(el).querySelector("[data-left]"))).toContain("€5.05"));
     expect(api.refundTransaction).toHaveBeenCalledOnce();
     expect(root(el).querySelector("[data-send-again]")).toBeNull();
+  });
+
+  it("says to finish a card refund with no answer from Refund a payment, which Check again here does not ask about", async () => {
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(lost());
+    await new TenderRefundSession(SCOPE, api)
+      .submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      })
+      .catch(() => {});
+    const { el } = await mount(OPEN, api);
+
+    press(el, "card");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_elsewhere")));
+    expect(api.refundTransaction).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-send-again]")).toBeNull();
+  });
+
+  it("keeps a refused card refund Refund a payment saved when this window closes", async () => {
+    const api = fakeApi();
+    const refunds = new TenderRefundSession(SCOPE, api);
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    await refunds
+      .submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      })
+      .catch(() => {});
+    expect(refunds.read("sale-1")).not.toBeNull();
+    const { el } = await mount(OPEN, api, EVERY_METHOD, refunds);
+
+    el.remove();
+
+    expect(refunds.read("sale-1")?.request.appliedAmount).toBe("1.00");
   });
 
   it("words a card answer that does not match what was sent as an unknown answer", async () => {
