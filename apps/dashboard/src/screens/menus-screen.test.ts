@@ -13702,15 +13702,13 @@ it("opens the archive window for the chosen menu", async () => {
 it("shows status checking while the Published filter is waiting for statuses", async () => {
   const el = await mount(api({ getMenuStatuses: vi.fn(() => new Promise(() => {})) }));
   const list = table(el);
-  list
-    .querySelector('wt-combobox[name="menu-status"]')!
-    .dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "published" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+  list.querySelector('wt-combobox[name="menu-status"]')!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "published" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await vi.waitFor(() =>
     expect(text(list.shadowRoot.querySelector(".empty"))).toContain(t("menus.status_loading")),
   );
