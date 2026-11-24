@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import {
   AppError,
@@ -12,7 +12,13 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { guardPathParty, moveDishes, refuseClosedBill, type BillCommand } from "./bill-actions.js";
+import {
+  guardPathParty,
+  moveDishes,
+  refuseClosedBill,
+  resolveMoveLines,
+  type BillCommand,
+} from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
 import { money } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -104,7 +110,12 @@ async function readPicks(
           part: { quantity: pick.quantity, ofQuantity: row.quantity },
         };
   });
-  return picked;
+  // A set menu's dish chosen with its set menu is already in the set menu's price.
+  const ids = new Set(picked.map((line) => line.id));
+  return picked.map((line) => {
+    const menu = byId.get(line.id)!.setMenuLineId;
+    return menu !== null && ids.has(menu) ? { ...line, familyCents: 0 } : line;
+  });
 }
 
 function pickedThousandths(quantity: string): number | null {
@@ -139,18 +150,27 @@ export async function priceItemPicks(
 }
 
 /**
- * Refuse a choice that left the bill with no dish (D7) or owing less than its advances credit (D4).
- * Checked on the bill as the move left it, so a set menu's dishes, which move with it, count.
+ * Refuse (D7) a move of `lineIds` that would take every dish, a set menu's dishes counted as
+ * {@link resolveMoveLines} brings them along. Before the move: `moveDishes` asks its merge-invoice
+ * question of a move that empties the bill.
  */
-async function refuseBillLeft(tx: Transaction, billId: string): Promise<void> {
-  const [dish] = await tx
-    .select({ id: workingOrderLines.id })
+async function refuseEveryDish(
+  tx: Transaction,
+  billId: string,
+  lineIds: readonly string[],
+): Promise<void> {
+  const { transfers } = await resolveMoveLines(tx, billId, lineIds);
+  const [row] = await tx
+    .select({ dishes: count() })
     .from(workingOrderLines)
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
-    )
-    .limit(1);
-  if (dish === undefined) throw new AppError("bill.all_items_chosen", {});
+    );
+  if (transfers.length === row!.dishes) throw new AppError("bill.all_items_chosen", {});
+}
+
+/** Refuse (D4) a bill the move left owing less than its advances credit, read as it was left. */
+async function refuseBelowAdvances(tx: Transaction, billId: string): Promise<void> {
   const advances = await readBillAdvances(tx, [billId]);
   const credited = sumDecimals((advances.credits.get(billId) ?? []).map((credit) => credit.gross));
   if (compareDecimal(await storedOrderTotal(tx, billId), credited) < 0)
@@ -188,6 +208,7 @@ export async function moveItemsToNewBill(
   const lineIds = picked.map((line) =>
     line.part === undefined ? line.id : split.get(line.id)!.id,
   );
+  await refuseEveryDish(tx, fromBillId, lineIds);
   const { billId } = await moveDishes(tx, cfg, fromBillId, null, lineIds, command, {
     sourceMayBeOverpaid: true,
     tellKitchen: false,
@@ -196,7 +217,7 @@ export async function moveItemsToNewBill(
     .update(workingOrders)
     .set({ itemsPaidFrom: fromBillId })
     .where(eq(workingOrders.id, billId));
-  await refuseBillLeft(tx, fromBillId);
+  await refuseBelowAdvances(tx, fromBillId);
   const invoice = await issueIfFullyPaid(tx, sale.deps, sale.cfg, fromBillId, command.operatorId);
   return { billId, ...(invoice === null ? {} : { invoice }) };
 }

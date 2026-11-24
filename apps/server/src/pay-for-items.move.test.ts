@@ -18,6 +18,7 @@ import { moveDishes } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { placeGrouped, REASONS } from "./testing/adjustment-venue.js";
 import { setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import { ACME, fullInvoice } from "./testing/bill-invoice-fixture.js";
 import { setMenuBill } from "./testing/set-menu-readers-fixture.js";
 import {
   OPERATOR,
@@ -351,6 +352,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
     const picks = [{ lineId: menuLineId }, { lineId: await lineOf(billId, "beer"), quantity: "1" }];
 
     expect(await inTx(v, (tx) => priceItemPicks(tx, billId, picks))).toBe("18.50");
+    // The Flan chosen as well is in the set menu's price already.
+    expect(await inTx(v, (tx) => priceItemPicks(tx, billId, [...picks, { lineId: dishId }]))).toBe(
+      "18.50",
+    );
     const moved = await payFor(partyId, billId, picks);
 
     const ids = (await rowsOf(moved.billId)).map((row) => row.id);
@@ -418,6 +423,24 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
       ]),
     ).rejects.toMatchObject({ code: "bill.all_items_chosen" });
     expect(await billsNaming(billId)).toEqual([]);
+  });
+
+  it("refuses every dish of a bill naming a customer for a full invoice, moving nothing", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "soup" },
+      { product: "beer", quantity: "3" },
+    );
+    await fullInvoice(v, billId, ACME);
+    const before = await rowsOf(billId);
+
+    await expect(
+      payFor(partyId, billId, [
+        { lineId: await lineOf(billId, "soup") },
+        { lineId: await lineOf(billId, "beer") },
+      ]),
+    ).rejects.toMatchObject({ code: "bill.all_items_chosen" });
+    expect(await billsNaming(billId)).toEqual([]);
+    expect(await rowsOf(billId)).toEqual(before);
   });
 
   it("tells the kitchen nothing", async () => {
