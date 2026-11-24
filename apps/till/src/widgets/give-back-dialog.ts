@@ -32,6 +32,7 @@ import type {
 import { reasonPicker } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
 import { unservedDishText } from "./dish-format.js";
+import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
 
 type Refusal = ReturnType<typeof refusalOf>;
@@ -74,6 +75,8 @@ const AMOUNT_REFUSALS = new Set([
   "tender.refund_exceeds_payment",
   "tender.refund_exceeds_cancelled",
 ]);
+/** A payment this device's profile does not take is held, as the preview refuses it. */
+const usable = (way: GiveBackWay) => way.reason === null && way.allowedHere;
 const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
 /** What ticking `line` starts the amount at: a cancel's money still owed, otherwise what is left. */
 const startOf = (line: GiveBackLine) =>
@@ -269,7 +272,7 @@ export class TillGiveBackDialog extends LitElement {
     );
   }
   #way(): GiveBackWay | undefined {
-    return this.view!.ways.find((way) => way.way === this.draft.way && way.reason === null);
+    return this.view!.ways.find((way) => way.way === this.draft.way && usable(way));
   }
   #extraPaid(): string {
     return sumDecimals(this.view!.ways.map((way) => decimal(way.extraLeft)));
@@ -285,7 +288,7 @@ export class TillGiveBackDialog extends LitElement {
       : "0.00";
   }
   #choose(purpose: GiveBackPurpose): void {
-    const way = this.#offered(purpose).find((row) => row.reason === null);
+    const way = this.#offered(purpose).find(usable);
     this.purpose = purpose;
     this.amountTyped = false;
     this.attempted = false;
@@ -298,7 +301,19 @@ export class TillGiveBackDialog extends LitElement {
     this.#scope?.commit(this.draft);
     void this.#preview();
   }
+  /** Back leaves the form, so staged input asks first, as closing does. */
   #back(): void {
+    if (!this.#scope!.isDirty()) {
+      this.#toChoice();
+      return;
+    }
+    void this.#leave!.request({
+      scopes: [this],
+      reason: "navigation",
+      proceed: () => this.#toChoice(),
+    });
+  }
+  #toChoice(): void {
     this.purpose = null;
     this.draft = blank();
     this.preview = null;
@@ -390,8 +405,8 @@ export class TillGiveBackDialog extends LitElement {
     const shown = this.preview;
     return shown !== null && "refusal" in shown && shown.key === this.#key() ? shown.refusal : null;
   }
-  #refusalText(refusal: Refusal): string {
-    if (refusal.code === "network") return t("give_back.read_failed");
+  #refusalText(refusal: Refusal, lost: StringKey): string {
+    if (refusal.code === "network") return t(lost);
     return codeMessage(refusal.code, currentLocale(), refusal);
   }
   async #confirm(): Promise<void> {
@@ -487,6 +502,14 @@ export class TillGiveBackDialog extends LitElement {
     const dishName = lineName(line.descriptions, this.namesLocale);
     return `${unservedDishText({ dishName, quantity: line.quantity })} · ${this.#money(line.gross)}`;
   }
+  #extrasOf(view: GiveBackView, dish: GiveBackLine) {
+    return view.lines
+      .filter((extra) => extra.partOf === dish.id)
+      .map(
+        (extra) =>
+          html`<p class="muted extra-of" data-extra-of=${dish.id}>${this.#dishText(extra)}</p>`,
+      );
+  }
   #lines(view: GiveBackView) {
     const label = (line: GiveBackLine) =>
       line.cancelled === null
@@ -502,9 +525,10 @@ export class TillGiveBackDialog extends LitElement {
           .map((line) =>
             line.givenFree
               ? html`<div class="free" data-free=${line.id}>
-                  <span>${this.#dishText(line)}</span>
-                  <span class="muted">${t("give_back.given_free")}</span>
-                </div>`
+                    <span>${this.#dishText(line)}</span>
+                    <span class="muted">${t("give_back.given_free")}</span>
+                  </div>
+                  ${this.#extrasOf(view, line)}`
               : html`<wt-switch
                     name="dish"
                     data-line=${line.id}
@@ -524,14 +548,7 @@ export class TillGiveBackDialog extends LitElement {
                         </p>`
                       : nothing
                   }
-                  ${view.lines
-                    .filter((extra) => extra.partOf === line.id)
-                    .map(
-                      (extra) =>
-                        html`<p class="muted extra-of" data-extra-of=${line.id}>
-                          ${this.#dishText(extra)}
-                        </p>`,
-                    )}`,
+                  ${this.#extrasOf(view, line)}`,
           )}
       </div>
     </fieldset>`;
@@ -554,17 +571,17 @@ export class TillGiveBackDialog extends LitElement {
               name="way"
               .value=${way.way}
               .checked=${way.way === this.draft.way}
-              .disabled=${way.reason !== null}
+              .disabled=${!usable(way)}
               @change=${(event: Event) => {
                 event.stopPropagation();
                 this.#chooseWay(way);
               }}
             /><span>${words}</span></label
           >${
-            way.reason === null
+            usable(way)
               ? nothing
               : html`<p class="reason" data-way-reason=${way.way}>
-                  ${this.#reasonText(way.reason)}
+                  ${way.reason === null ? t("give_back.way_not_here") : this.#reasonText(way.reason)}
                 </p>`
           }`;
       })}
@@ -604,7 +621,8 @@ export class TillGiveBackDialog extends LitElement {
     const errors = new Map(own);
     const refusal = this.#refusal();
     const onAmount = refusal !== null && AMOUNT_REFUSALS.has(refusal.code);
-    if (refusal !== null && onAmount) errors.set("amount", this.#refusalText(refusal));
+    if (refusal !== null && onAmount)
+      errors.set("amount", this.#refusalText(refusal, "give_back.preview_failed"));
     const answer = this.#answer();
     const way = this.#way();
     const amount = typedMoney(this.draft.amount);
@@ -669,7 +687,7 @@ export class TillGiveBackDialog extends LitElement {
           own.size > 0
             ? t("form.fix_fields")
             : refusal !== null && !onAmount
-              ? this.#refusalText(refusal)
+              ? this.#refusalText(refusal, "give_back.preview_failed")
               : this.changedWhileChecking
                 ? t("give_back.changed_while_checking")
                 : ""
@@ -696,7 +714,8 @@ export class TillGiveBackDialog extends LitElement {
       return this.purpose === null ? this.#choices(this.view) : this.#form(this.view, this.purpose);
     if (this.loadRefusal === null)
       return html`<p class="muted" data-loading role="status">${t("give_back.loading")}</p>`;
-    return html`<wt-form-actions .error=${this.#refusalText(this.loadRefusal)}
+    return html`<wt-form-actions
+      .error=${this.#refusalText(this.loadRefusal, "give_back.read_failed")}
       >${this.#cancelButton()}${
         this.loadRefusal.code === "network"
           ? html`<wt-button variant="primary" data-reload @click=${() => void this.#load()}

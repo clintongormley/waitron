@@ -211,6 +211,9 @@ export const en = {
     "If you cannot give money back yourself, a supervisor or manager approves it with their PIN next.",
   "give_back.submit": "Give back {amount}",
   "give_back.submit_any": "Give back",
+  "give_back.preview_failed":
+    "The box could not be reached to check this money back. Nothing has been given back.",
+  "give_back.way_not_here": "This device's profile does not give money back this way.",
   "give_back.changed_while_checking":
     "The money back changed while it was being checked. Check what is shown and press Give back again.",
   "invoice_correction.title": "Correct invoice",
@@ -2610,6 +2613,9 @@ export const es: Record<StringKey, string> = {
     "Si tú no puedes devolver dinero, a continuación lo aprueba un responsable o encargado con su PIN.",
   "give_back.submit": "Devolver {amount}",
   "give_back.submit_any": "Devolver",
+  "give_back.preview_failed":
+    "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada.",
+  "give_back.way_not_here": "El perfil de este dispositivo no permite devolver dinero así.",
   "give_back.changed_while_checking":
     "La devolución cambió mientras se comprobaba. Revisa lo que se muestra y vuelve a pulsar Devolver.",
   "invoice_correction.title": "Rectificar factura",

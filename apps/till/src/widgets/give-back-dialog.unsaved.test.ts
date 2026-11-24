@@ -120,3 +120,27 @@ it("the choice's Cancel closes at once", async () => {
   await closed;
   expect(app.closes).toBe(1);
 });
+
+it("Back with a ticked dish and a reason asks first, keeps them on Keep and goes back on Discard", async () => {
+  const { app, form } = await mount();
+  await choose(form, "dishes");
+  form
+    .shadowRoot!.querySelector('wt-switch[data-line="croquetas"]')!
+    .shadowRoot!.querySelector("input")!
+    .click();
+  await form.updateComplete;
+  form.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(amount(form).value).toBe("8.00");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
+  expect((await question(app)).open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect
+    .poll(() => form.shadowRoot!.querySelector("wt-choice-row[data-choice=dishes]"))
+    .not.toBeNull();
+  expect(app.closes).toBe(0);
+  expect(unload()).toBe(false);
+});

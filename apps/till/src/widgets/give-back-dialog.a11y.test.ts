@@ -88,7 +88,7 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
   it("has no violations with the summary and the PIN line shown", async () => {
     const api = fakeGiveBackApi();
     api.previewGiveBack.mockResolvedValue({
-      parts: [{ kind: "correction", amount: "7.00", way: "card-1" }],
+      parts: [{ kind: "correction", amount: "7.00", way: "card-1", lineIds: [] }],
       leftUnderWay: "3.00",
       needs: ["sale.rectify"],
       manual: false,

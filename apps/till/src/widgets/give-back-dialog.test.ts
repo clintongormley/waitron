@@ -159,7 +159,9 @@ describe("A dish", () => {
     expect(dish(el, "aioli")).toBeNull();
     expect(dish(el, "cake")).toBeNull();
     expect(text(root(el).querySelector("[data-free=cake]"))).toContain("Given free");
-    expect(root(el).textContent).not.toContain("Served");
+    expect([...root(el).querySelectorAll("wt-switch")].map((row) => row.description)).not.toContain(
+      "Served",
+    );
   });
 
   it("fills the amount from what is left, a cancelled dish from what it is owed, and keeps an edit", async () => {
@@ -313,7 +315,7 @@ describe("the summary", () => {
     const api = fakeGiveBackApi();
     api.previewGiveBack.mockImplementation(async (_saleId: string, request: GiveBackRequest) => ({
       ...previewFor(request),
-      parts: [{ kind: "correction", amount: "7.00", way: request.way }],
+      parts: [{ kind: "correction", amount: "7.00", way: request.way, lineIds: [] }],
       leftUnderWay: "3.00",
       needs: ["sale.rectify"],
     }));
@@ -478,7 +480,7 @@ describe("choosing and changing", () => {
     expect(api.previewGiveBack).not.toHaveBeenCalled();
   });
 
-  it("drops the extra when the payment changes to one with none, and refills the extra's amount per payment", async () => {
+  it("drops the extra when the payment changes to one with none", async () => {
     const other = { ...CARD, way: "card-2", last4: null, moneyLeft: "5.00", extraLeft: "1.50" };
     const { el, api } = await mount(withView({ ways: [CASH, CARD, other] }));
     await choose(el, "dishes");
@@ -497,8 +499,11 @@ describe("choosing and changing", () => {
       ),
     );
     expect(text(way(el, "card-2")!.closest("label"))).toBe("Card · up to €5.00");
-    root(el).querySelector<HTMLElement>("[data-back]")!.click();
-    await el.updateComplete;
+  });
+
+  it("refills the extra's amount per payment until one is typed", async () => {
+    const other = { ...CARD, way: "card-2", last4: null, moneyLeft: "5.00", extraLeft: "1.50" };
+    const { el } = await mount(withView({ ways: [CASH, CARD, other] }));
     await choose(el, "extra");
     expect(amountField(el).value).toBe("3.00");
     way(el, "card-2")!.click();
@@ -682,5 +687,88 @@ describe("closing", () => {
     const { el } = await mount(api);
     expect(bottom(el)).toBe(codeMessage("sale.not_found", "en"));
     expect(root(el).querySelector("[data-reload]")).toBeNull();
+  });
+});
+
+describe("fix round 1", () => {
+  it("treats a payment this device does not take as held, and picks the next", async () => {
+    const { el } = await mount(withView({ ways: [{ ...CASH, allowedHere: false }, CARD] }));
+    const asks: GiveBackAsk[] = [];
+    el.addEventListener("give-back-submit", (event) =>
+      asks.push((event as CustomEvent<GiveBackAsk>).detail),
+    );
+    await choose(el, "goodwill");
+    expect(way(el, "cash")!.disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
+      t("give_back.way_not_here"),
+    );
+    expect(way(el, "card-1")!.checked).toBe(true);
+    await reason(el, "complaint");
+    await type(el, "5");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(asks).toHaveLength(1));
+    expect(asks[0]!.request.way).toBe("card-1");
+  });
+
+  it("hands on the preview's parts with their cancels and dishes", async () => {
+    const api = fakeGiveBackApi();
+    const parts = [
+      { kind: "refund" as const, amount: "20.00", way: "cash", cancellationIds: ["cancel-1"] },
+      { kind: "correction" as const, amount: "5.00", way: "cash", lineIds: ["croquetas"] },
+    ];
+    api.previewGiveBack.mockImplementation(async (_saleId: string, request: GiveBackRequest) => ({
+      ...previewFor(request),
+      parts,
+    }));
+    const { el } = await mount(api);
+    const asks: GiveBackAsk[] = [];
+    el.addEventListener("give-back-submit", (event) =>
+      asks.push((event as CustomEvent<GiveBackAsk>).detail),
+    );
+    await choose(el, "dishes");
+    await tick(el, "paella");
+    await tick(el, "croquetas");
+    await type(el, "25");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(asks).toHaveLength(1));
+    expect(asks[0]!.expected).toEqual(parts);
+  });
+
+  it("says a preview that could not reach the box could not be checked", async () => {
+    const api = fakeGiveBackApi();
+    api.previewGiveBack.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await type(el, "5");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.preview_failed")));
+  });
+
+  it("lists a dish given free's priced extras under it", async () => {
+    const { el } = await mount(
+      withView({
+        lines: [
+          ...VIEW.lines,
+          {
+            ...VIEW.lines[2]!,
+            id: "cake-cream",
+            descriptions: { en: "Cream", es: "Nata" },
+            partOf: "cake",
+          },
+        ],
+      }),
+    );
+    await choose(el, "dishes");
+    expect(text(root(el).querySelector("[data-extra-of=cake]"))).toBe("Cream · €1.50");
+  });
+
+  it("goes back with nothing staged at once", async () => {
+    const { el } = await mount();
+    await choose(el, "dishes");
+    root(el).querySelector<HTMLElement>("[data-back]")!.click();
+    await el.updateComplete;
+    expect(choice(el, "dishes")).not.toBeNull();
   });
 });

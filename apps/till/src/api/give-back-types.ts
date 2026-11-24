@@ -62,9 +62,15 @@ export interface GiveBackRequest {
 
 export type GiveBackRight = "sale.refund" | "sale.rectify";
 
+/** The write compares every field of each part, the ids included, with what it plans again. */
+export type GiveBackPart =
+  | { kind: "refund"; amount: string; way: string; cancellationIds?: string[] }
+  | { kind: "extra"; amount: string; way: string }
+  | { kind: "correction"; amount: string; way: string; lineIds: string[] };
+
 /** `POST /api/transactions/:saleId/give-back/preview`. */
 export interface GiveBackPreview {
-  parts: { kind: "refund" | "extra" | "correction"; amount: string; way: string }[];
+  parts: GiveBackPart[];
   /** What the chosen way cannot hold, left under way for the other payments. */
   leftUnderWay: string;
   /** The rights the parts need that the person signed in lacks. */
