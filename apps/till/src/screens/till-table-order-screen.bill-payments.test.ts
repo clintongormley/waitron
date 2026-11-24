@@ -723,6 +723,18 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
     expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
   });
 
+  it("someone who may not take payments is offered Give back but not Keep as tip", async () => {
+    const el = await mountScreen({
+      bills: [overpaidBill],
+      billBalance: overpaidBalance,
+      tipsEnabled: true,
+      takesPayment: false,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-give-back]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
+  });
+
   it("Give back asks for the excess to be refunded", async () => {
     const el = await mountScreen({ bills: [overpaidBill], billBalance: overpaidBalance });
     const seen: CustomEvent[] = [];

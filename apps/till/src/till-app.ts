@@ -22795,7 +22795,7 @@ export class TillApp extends LitElement {
    * again; the bill is read again whatever the answer. */
   async #onKeepAsTip(): Promise<void> {
     const billId = this.activeTabId;
-    if (billId === undefined || this.overpaidBusy) return;
+    if (billId === undefined) return;
     const visit = this.#orderVisit;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.overpaidBusy = true;
@@ -22805,7 +22805,6 @@ export class TillApp extends LitElement {
       kept = await this.api.keepOverpaidAsTip(billId, crypto.randomUUID(), {
         signal: limit.signal,
       });
-      if (this.activeTabId === billId) this.billBalance = kept;
     } catch (error) {
       if (!this.#hasLeftOrder(billId, visit)) await this.#onTableRefusal(error);
     } finally {

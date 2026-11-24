@@ -175,6 +175,21 @@ describe("stillToPay", () => {
   it.each([
     ["an open bill holding money", { status: "open", outstanding: "10.00" }, true],
     ["an open bill with nothing on it", { status: "open", outstanding: "0.00" }, false],
+    [
+      "an open bill paid more than it comes to",
+      { status: "open", outstanding: "0.00", overpaid: "5.00" },
+      true,
+    ],
+    [
+      "an open bill over by nothing",
+      { status: "open", outstanding: "0.00", overpaid: "0.00" },
+      false,
+    ],
+    [
+      "an overpaid bill left unpaid",
+      { status: "open", outstanding: "0.00", overpaid: "5.00", leftUnpaid: true },
+      false,
+    ],
     ["a placed bill", { status: "placed", outstanding: "10.00" }, true],
     ["a placed bill answering zero", { status: "placed", outstanding: "0.00" }, true],
     ["a settled bill", { status: "settled", outstanding: "0.00" }, false],

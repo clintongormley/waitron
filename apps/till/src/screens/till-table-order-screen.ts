@@ -5213,7 +5213,8 @@ export class TillTableOrderScreen extends LitElement {
     return html`${beingPaidNotice(balance)}
     ${overpaidNotice({
       balance,
-      tipsEnabled: this.tipsEnabled,
+      // The server's keep-as-tip route needs `payment.take` (bill-payments-api.ts).
+      tipsEnabled: this.tipsEnabled && this.takesPayment,
       busy: this.overpaidBusy,
       onGiveBack: (excess) => this.#dispatch("refund-excess", { excess }),
       onKeepAsTip: () => this.#dispatch("keep-as-tip", {}),

@@ -6,7 +6,7 @@ import type {
   TillApi,
 } from "../api/client.js";
 import { formatMoney } from "@waitron/shared";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import type { PayLine, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { refusalText } from "../widgets/pay-refusal.js";
 import { confirmationOf, paymentAsk, refusalOf, type Confirmation } from "./bill-payment.js";
@@ -167,7 +167,7 @@ describe("itemsRefusal", () => {
     setLocale("es");
     expect(
       refusalText(itemsRefusal({ code: "set_menu.no_place_on_target", dishName: "Flan" })),
-    ).toBe("Flan forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.");
+    ).toBe(fill(t("bill_pay.items_set_menu_dish"), { dishName: "Flan" }));
   });
 
   it("the advances refusal names its amount in the Pay window", () => {

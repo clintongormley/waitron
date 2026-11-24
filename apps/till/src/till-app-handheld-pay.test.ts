@@ -4558,6 +4558,17 @@ describe("the document choice on a handheld", () => {
       expect(tableOrder(el).checkVisibility()).toBe(true);
     });
 
+    it("Back shows a bill paid more than it comes to before a higher-numbered bill still owing", async () => {
+      const overpaidTwo = { ...billTwo, outstanding: "0.00", overpaid: "5.00" };
+      const { el } = await payBillOne([billThree, billOne, overpaidTwo]);
+      await firstDrawn(el);
+
+      backButton(el).click();
+      await flush(el);
+
+      expect(tableOrder(el).orderId).toBe("wo-5");
+    });
+
     it("Back reads the next bill's lines once", async () => {
       const { el } = await payBillOne(threeBills);
       await firstDrawn(el);

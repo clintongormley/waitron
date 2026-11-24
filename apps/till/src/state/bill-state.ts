@@ -1,6 +1,7 @@
 import { MONEY_SCALE, compareDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
 import type { PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
+import { overpaidOf } from "./pay-for-items.js";
 
 /** Open or placed; unlike `stillToPay`, counts an open bill with nothing outstanding. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
@@ -42,17 +43,20 @@ export function printBillOffered(
 }
 
 /**
- * A bill the table cannot finish without paying, as near the server's `billOwes` as the wire allows:
- * the bills read sends no line count, so an open bill whose lines total zero reads as not owing, and
- * the server's refusal of Finish table handles it.
+ * A bill the table cannot finish without paying, or giving back or keeping what it was paid over
+ * its total, as near the server's `billOwes` as the wire allows: the bills read sends no line count,
+ * so an open bill whose lines total zero reads as not owing, and the server's refusal of Finish
+ * table handles it.
  */
 export function stillToPay(
-  bill: Pick<PartyBill, "status" | "outstanding" | "leftUnpaid">,
+  bill: Pick<PartyBill, "status" | "outstanding" | "leftUnpaid" | "overpaid">,
 ): boolean {
   return (
     !bill.leftUnpaid &&
     (bill.status === "placed" ||
-      (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0))
+      (bill.status === "open" &&
+        (compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0 ||
+          overpaidOf(bill) !== null)))
   );
 }
 

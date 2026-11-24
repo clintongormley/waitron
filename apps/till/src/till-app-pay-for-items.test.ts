@@ -572,7 +572,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
       getDeviceIdentity: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d1", name: "Móvil", formFactor: "phone-portrait" }),
+        .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
       getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(SECOND_READER)),
       getBillBalance,
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
@@ -848,7 +848,7 @@ describe("till-app: a bill paid more than it comes to", () => {
       getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
       keepOverpaidAsTip,
     });
-    const order = await openTable(el);
+    const order = await openTable(el, ["payment.take"]);
     await flush(el);
     expect(order.shadowRoot!.querySelector("[data-overpaid]")).not.toBeNull();
     const reads = getPartyBills.mock.calls.length;
@@ -874,7 +874,7 @@ describe("till-app: a bill paid more than it comes to", () => {
       getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
       keepOverpaidAsTip,
     });
-    const order = await openTable(el);
+    const order = await openTable(el, ["payment.take"]);
     await flush(el);
 
     order.shadowRoot!.querySelector<HTMLElement>("[data-keep-as-tip]")!.click();
@@ -894,7 +894,7 @@ describe("till-app: a bill paid more than it comes to", () => {
       getBillBalance: vi.fn().mockResolvedValue(overpaidBalance),
       keepOverpaidAsTip: vi.fn().mockRejectedValue({ code: "bill.not_overpaid", status: 409 }),
     });
-    const order = await openTable(el);
+    const order = await openTable(el, ["payment.take"]);
     await flush(el);
     const reads = getPartyBills.mock.calls.length;
 
