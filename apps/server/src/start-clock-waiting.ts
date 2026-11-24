@@ -331,8 +331,10 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     $("clock-key-error").hidden = refusal === null;
     field.toggleAttribute("aria-invalid", refusal !== null);
   };
+  let attempt = 0;
   // This device's time against a fresh challenge; a refused key shows the key's refusal.
   const timed = async (path) => {
+    attempt += 1;
     const challenge = await post("challenge", {});
     const refused = typeof challenge.id !== "string";
     keyLine(refused ? challenge : null);
@@ -355,9 +357,8 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
     $("clock-pack-error").hidden = text === null;
     pack.toggleAttribute("aria-invalid", text !== null);
   };
-  // Each PDF chosen and each key typed or sent is a new attempt; a PDF's answer is used only while
-  // its choice is still the latest attempt.
-  let attempt = 0;
+  // Each PDF chosen, each key typed and each request that sends the key is a new attempt; a PDF's
+  // answer is used only while its choice is still the latest attempt.
   field.addEventListener("input", () => (attempt += 1));
   // The chosen PDF is read on the box; the master key it answers is used as if typed.
   pack.addEventListener("change", quietly(async () => {
@@ -402,7 +403,6 @@ ${escapeHtml(words.serverTime)} <strong id="clock-server"></strong></p>
   }));
   $("clock-key").addEventListener("submit", (event) => {
     event.preventDefault();
-    attempt += 1;
     packLine(null);
     void quietly(compare)();
   });
