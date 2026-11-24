@@ -23,7 +23,7 @@ _2026-11-10, A1308 slice 4b: `WAITRON_TILL_LOCALE` is gone; kitchen-ticket units
 
 _2026-11-09, A977: the guard now reads every tracked text file under `apps/` and `packages/` outside its homes and refuses accented letters; items 1 and 3, and item 4's last two exemptions, of "What the English-only guard misses, and a proposal" describe the earlier guard. Its current limits are in [conventions-data.md](../developers/conventions-data.md#spanish-domain-terms-are-deliberate-and-a-module-declares-its-own)._
 
-_2026-11-24: the questions left to the owner below are closed, settled by later rules (CLAUDE.md §3, English only); the note for two internal sample names was answered on 2026-10-28 (A965 below)._
+_2026-11-24: the questions left to the owner below are closed by the watcher, not asked, as settled by later rules (CLAUDE.md §3, English only); the note for two internal sample names was answered on 2026-10-28 (A965 below)._
 
 _2026-11-05, A404: the sample receipt's character-probe footer is gone; its accented letters now come from per-language sample dishes in `country-es`._
 

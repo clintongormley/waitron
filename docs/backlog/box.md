@@ -307,7 +307,7 @@ username, the route also still connects to whatever server and port the request 
 answer says whether that name exists and whether the port answers.
 
 The owner put this on hold on 2026-11-16 and took it off hold on 2026-11-21. Requiring a login
-during setup is the watcher's choice (2026-11-21), kept (closed 2026-11-24);
+during setup is the watcher's choice (2026-11-21), kept by the watcher 2026-11-24, not asked;
 the watcher dropped the setup-claim build because a claim needs no sign-in either. Cost: a venue
 whose only mail server takes mail with no login uses one with a login during setup, then saves its
 own on the dashboard's Email page.
@@ -1156,10 +1156,15 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 ## Bundle: What pack part 1's reviews left
 
-2 entries, size S.
+3 entries, size S.
 
 - **A1187: the Backups card's receipts.** [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
 - **A1187: the Backups card after a Live setup has not been seen in dark theme or at phone width.**
+- **After a save whose reload fails, Turn on backups stays greyed out until a field changes**, so
+  the only retries are changing a setting or the box's next start. Letting it send the same settings
+  again is an exception to the Forms rule that a save stays quiet until the draft changes (A331);
+  kept by the watcher 2026-11-24, not asked. Found by fix/backups-screen-small's review, by reading `#apply`'s `scope.commit` and
+  `#applyAction`; not run.
 
 ## Bundle: Remaining bucket-copy limits
 
@@ -1181,7 +1186,7 @@ Remaining work from the 6 November backlog bundle. The four-cut plan is
 
 **The server does not refuse `WAITRON_VENUE_DIR` outside development (owner, 2026-11-09).** A box never sets it because the deploy files never name it (guarded by `scripts/deploy-image-env.test.ts`); the variable is listed as a development setting: "the server does not refuse the variable outside development; it is listed as a development setting."
 
-- **A950, step 1b (watcher, 2026-11-18 22:47; kept, closed 2026-11-24).** A numbered install that
+- **A950, step 1b (watcher, 2026-11-18 22:47; kept by the watcher 2026-11-24, not asked).** A numbered install that
   keeps venue data refuses an older release. A confirmed reset may choose an older signed
   release because the wipe discards that data. Fresh and reset installs keep their retained
   verifier and keys. A checked numbered upgrade refreshes both before Apply. A release
@@ -1370,14 +1375,14 @@ throttling and its five-minute grants. [Plan and changed checks](https://github.
   until it passes, so such a bucket would get no backups at all, and the recheck would mark a
   working copy's bucket unusable.
   A bucket saved before this check, on such a provider, keeps copying, and each daily clean-up
-  that has old files to remove still fails (`stream.prune_failed`). Kept, closed 2026-11-24.
+  that has old files to remove still fails (`stream.prune_failed`). Kept by the watcher 2026-11-24, not asked.
 - **The Tax agency row on Box status shows the oldest unsent record's time ("Unsent since"), not
   when sends began failing** (campaign watcher, 2026-11-15 02:28, lane C questions.md; #3266).
   Nothing stores when sends began failing, and an incident's open time would cover only part of what
   raises the unsent notice (a failure marked on one record raises it with no incident open). The
   record's time is true in every case the notice shows. It is the same record time the bell's
   delayed-sending alert and Fiscal filing's "Oldest waiting" read, though over more records: stopped
-  and held ones count too. Kept, closed 2026-11-24.
+  and held ones count too. Kept by the watcher 2026-11-24, not asked.
 
 The watcher retained invoice-delivery status’s existing claim-expiry transaction and its 507 refusal
 on 15 November 2026 at 06:10 in Lane K’s `questions.md`.
@@ -1400,7 +1405,7 @@ notes on that page.
 
 ### The bucket client's limits (A44, #676)
 
-Recorded as limits by the campaign watcher on 2026-11-11 (A1508); kept, closed 2026-11-24.
+Recorded as limits by the campaign watcher on 2026-11-11 (A1508); kept by the watcher 2026-11-24, not asked.
 `createS3ObjectStore` gives a request up when it has had no reply 30 seconds after it started
 (`BUCKET_IDLE_MS`, `packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
 body then stalls is not bounded by that limit, only by its caller cancelling the call
@@ -1444,8 +1449,8 @@ The owner's four answers: no reserved
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
 - **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
-- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05; kept, closed 2026-11-24).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
-- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06; kept, closed 2026-11-24).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
+- **B3 keeps slice 9b's clock requests on their wire and shell handler (B3 PR 7's D1; the lane's decision of 2026-11-05; kept by the watcher 2026-11-24, not asked).** They have landed, the start's time check and the clock set use them, and a box installed by `waitron.sh` has no Node on its host. B3's requests will share the socket, the one-line framing and `apps/server/src/box-host-client.ts`; the shell handler is to forward them to the Node host in slice 3's Linux pull request. The host knows its caller by the socket alone (D2): only root and the app's group can connect, one request per connection, so there is no token to replay; the server is to mint an ids-only actor from a session it authorised, and the host checks its form and logs it, and a compromised server can send any actor, as with slice 9b's requester. ([PR 7's plan](../superpowers/plans/2026-11-05-b3-7-host-protocol.md), D1, D2.)
+- **The box's network and screen routes send at most two requests to the host service at once, and refuse a third with `box_host.busy` rather than queue it (B3 PR 9's D7; the lane's decision of 2026-11-06; kept by the watcher 2026-11-24, not asked).** The host's socket serves four connections (`deploy/box/waitron-box.socket`, `MaxConnections=4`) and how many the clock side holds at once is not measured (PR 9's plan, finding 11). Two rather than one, so a page's read is not refused while a scan runs; refused rather than queued, so no request waits behind a change, which can hold its place for up to 20 seconds. Two places do not hold the total to four; what is still to measure on Linux is in [PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md), D7.
 - **The server-wide page check looks only at whether a change carries the dashboard's sign-in cookie, not at whether its session is live (A1371, 2026-11-06).** Checking the session would cost a database read on every change, and nothing but a browser sends that cookie: outside tests, its name appears only in `packages/server-kit/src/management-cookie.ts` and that package's index (a search of `apps`, `packages` and `scripts`, 2026-11-06), and `git grep` for it in Waitron Cloud's repository at `6eeb0d953` printed nothing. A change without the cookie passes, so a till on another server, Stripe's webhook and the print agent keep working. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
   **2026-11-15:** the [till origin check](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-till-origin-check.md) extends this presence check to till and device cookies. Trusted venue origins retain access; only requests with none of these cookies bypass it.
 - **The page check leaves `GET`, `HEAD` and `OPTIONS` alone (A1371, 2026-11-06).** Another page cannot read their answers, and a CORS preflight must reach the CORS middleware. Two kinds of `GET` still change something when another page sends them: every signed-in `GET` that is not a passive read moves the session's last-seen time (`packages/identity/src/management-session.ts:86-91`), so a page on another port left open in the same browser can keep a session from going idle, though it changes no venue data; and the Google sign-in's return, `GET /management-api/google/callback`, sets a session cookie, as a sign-in arriving from Google must, guarded by its own state cookie. No route takes a WebSocket. [Detail](../developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it)
@@ -1497,7 +1502,7 @@ The owner's four answers: no reserved
   and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
 
 - **Backup status reads keep their own storage client per destination (the watcher's decision of
-  2026-11-07, A1391; kept, closed 2026-11-24).** The status read holds one client per destination
+  2026-11-07, A1391; kept by the watcher 2026-11-24, not asked).** The status read holds one client per destination
   (`StatusClients`, `apps/server/src/backup-status-clients.ts`, owned by `BackupSupervisor`), built
   on the first read and lent to every later one; it shares nothing with the running backup's
   clients. A destination whose settings differ by value from the client's (any field, the secret
@@ -1515,7 +1520,7 @@ The owner's four answers: no reserved
   reads was not measured.
 
 - **A stored bucket-copy record is not re-checked for a user name, password, query or fragment in
-  its address (A1391 plan D1; the lane's decision of 2026-11-07; kept, closed 2026-11-24).** Save through
+  its address (A1391 plan D1; the lane's decision of 2026-11-07; kept by the watcher 2026-11-24, not asked).** Save through
   Backups, whose PUT checks the address with `readBucketConfig`
   (`packages/stream/src/bucket-config.ts`). **2026-11-15, env6:** the credentials tool now refuses
   `backup.stream` changes, retiring the former CLI exception. The address is in the `backup`

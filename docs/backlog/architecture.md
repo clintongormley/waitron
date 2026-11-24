@@ -917,7 +917,7 @@ An export with an optional module Off loads on a new box with that module On and
 See the [design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
 
 
-**A malformed path id keeps the status it answers today (A394 question 7, the watcher's decision of 2026-11-20 22:35 on the owner's delegation of 14:31; kept, closed 2026-11-24).**
+**A malformed path id keeps the status it answers today (A394 question 7, the watcher's decision of 2026-11-20 22:35 on the owner's delegation of 14:31; kept by the watcher 2026-11-24, not asked).**
 An address whose id is not even well formed answers 400 `shared.invalid_id` on most routes; the A394
 audit (read, not run) found the resource's not-found 404 on management-api and orders-api and 409 on
 three till routes. The rule's 404 is not applied to it. The watcher's reason: such an id comes only

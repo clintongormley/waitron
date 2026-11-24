@@ -46,7 +46,7 @@ Left open:
   original dish survives. An added-portion/removal/cancellation control found no such links for
   the remaining correction-only dish. HOLD CHANGED/CANCELLED jobs carry no dish links.
   The unchanged-printer control retained Grill/pass output; the [A1369 evidence](../superpowers/plans/2026-11-16-held-dish-reprint.md#evidence-and-scope)
-  records both reproductions. Recipient routing is kept as built (deferred by the watcher on 2026-11-16, closed 2026-11-24).
+  records both reproductions. Recipient routing is kept as built (deferred by the watcher on 2026-11-16, kept by the watcher 2026-11-24, not asked).
 
 ## KDS corrections deferred from #191
 
@@ -129,7 +129,7 @@ Built by A756 PRs 1–8 (plan [2026-10-18-a756-kitchen-tab-split.md](https://git
 
 ### Add station sets a station's name, colour, printers and late flags only (A756 PRs 6–8)
 
-This records the built default (plans A756 PRs 6–8), not an owner ruling; kept, closed 2026-11-24.
+This records the built default (plans A756 PRs 6–8), not an owner ruling; kept by the watcher 2026-11-24, not asked.
 Every other choice starts at its default and is changed in the station editor: one line for
 identical dishes, no held printing, MOVED slips printed, one item at a time on the screen, and
 changes allowed while held or waiting.

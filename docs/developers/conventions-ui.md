@@ -984,7 +984,7 @@ the venue default there. Before till login, `GET /api/locales` uses the same bro
 logout the till returns to it. A till operator with no saved language, and an enrolled kitchen
 display with no language picked on it, get that browser match too (owner, 2026-11-18: "when i open
 a new device, it switches to spanish rather than using the language of my browser"; that the remark
-covers these two cases is the watcher's and lane B's reading, kept, 2026-11-24).
+covers these two cases is the watcher's and lane B's reading, kept by the watcher 2026-11-24, not asked).
 A language picked on the till's sign-in screen carries through that sign-in for a person with no
 saved language, without being saved to them; a saved language wins over it.
 Returning to login after logout or session expiry uses the last browser match, or the venue default
@@ -2659,7 +2659,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   tail is the file's last lines, whichever start or running server wrote them, written through
   `redactSecrets` and the personal-data mask (except the frozen-process watchdog's own line, which
   goes through neither), and HTML-escaped** (owner decision 2026-09-26; the
-  personal-data mask is partial, owner, 2026-10-26; the tail's span is A980 S10's default, kept, 2026-11-24).
+  tail's span and the personal-data mask are A980 S10's defaults, open to the owner).
   `redactSecrets` masks only a password in a URL, which is why no code's
   params and no logged message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
   the administrator password over HTTPS only (cost if not: a password sent in plain text on the
@@ -2667,6 +2667,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   (A1098). Guard: the never-delete cases in
   `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
   not the page.
+
+2026-11-24: the personal-data mask is the owner's, who asked on 26 October for it to be partial; the
+tail's span was kept by the watcher, not asked.
 
 ### Which drawer opens, and who may open it
 

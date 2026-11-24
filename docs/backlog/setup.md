@@ -373,7 +373,7 @@ Ask the owner then which fire immediately and which wait. Left open by A1458.
   started in Preparation.
 
 - **A restore through setup always needs Review backup's recovery details** (watcher, 2026-11-17
-  19:30, lane B questions, option (b); kept, closed 2026-11-24). The file, bucket and Cloud restore pages
+  19:30, lane B questions, option (b); kept by the watcher 2026-11-24, not asked). The file, bucket and Cloud restore pages
   refuse to send without them, and the setup server refuses a restore without them unless the box
   names a `WAITRON_RECOVERY_OPERATION_FILE`. Seen on the test box on 2026-11-17: a bucket restore
   sent without them was placed and the start failed with `sif.allocation_invalid`. A country pack
@@ -439,7 +439,7 @@ current minute, just as long as that minute series doesn't exist in the database
 restore and promotion name the box's current UTC minute after the second clock and (setup and
 restore) the 90–150 second wait, and refuse it only when a name in a history the box reads already
 holds that minute; a later name, a later record, the newest invoice's time and the backup's creation
-time no longer refuse or move it. Built with these defaults, kept (A1207 plan, Q2–Q7; the owner answered Q1 and Q4 and accepted the limits):
+time no longer refuse or move it. Built with these defaults (A1207 plan, Q2–Q7; the owner answered Q1 and Q4 and accepted the limits stated below; the others were kept by the watcher 2026-11-24, not asked):
 "in use" counts every history the choice read before (the database in hand, the module's own record
 of its picks, earlier abandoned attempts of the same setup, the database a restore replaces, the
 backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was

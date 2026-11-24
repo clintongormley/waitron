@@ -95,7 +95,7 @@ by the answers):
     table is not one column: a party's bill reaches its tables through its party, a counter order
     names the table it is delivered to in `delivery_table_id`, and the bill's `label` is operator
     text that filing overwrites with the frozen table grouping (S2d decision 9).
-- **A swap in the download carries no shift** (S2b decision 8), kept (closed 2026-11-24): approving a
+- **A swap in the download carries no shift** (S2b decision 8), kept by the watcher 2026-11-24, not asked: approving a
   swap moves no shift, so the shift stays its giver's and the taker's copy shows the swap with no time.
 - **Measure the working-time, actions and adjustments parts, and the invoice customer's download,
   on a box.** The PDF renders on the thread that serves sales, which is why the box's figure
@@ -138,8 +138,8 @@ by the answers):
   else the venue holds, such as an invoice they sent the venue, is not in the copy and to ask the
   venue for it. Ask the owner whether a supplier's request gets a download of its own when that work
   starts.
-- **S3's defaults are kept as built** (closed 2026-11-24: the best guess now, and a specialist
-  confirms). The README is in the venue's language, not the newest invoice's (decision 10); nothing
+- **S3's defaults are kept as built** (by the watcher 2026-11-24, not asked: the best guess now, and a
+  specialist confirms). The README is in the venue's language, not the newest invoice's (decision 10); nothing
   records who downloaded a customer's copy (decision 12); details kept outside issued sales are not in
   it (decision 19, the point above); and every invoice carrying the customer's number is in it, with
   someone else's name on it too, the dialog showing each row's name first (decision 20). The last is on
@@ -151,7 +151,7 @@ by the answers):
 - **Receipts and invoices** — a privacy line waits for the specialist's answer to Q59 (design
   §4.1.1). Receipt Email omits the existing full-invoice notice; the processing-guide entries also
   need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
-- **The partial mask's remaining choices are kept** (closed 2026-11-24; the S10 plan's decision 14): the
+- **The partial mask's remaining choices are kept** (by the watcher 2026-11-24, not asked; the S10 plan's decision 14): the
   ending after an email's last dot is kept whole, so a mistyped `jordi@puig.ferrer` logs as
   `j***i@p***g.ferrer`.
 
@@ -250,8 +250,8 @@ by the answers):
 - **A980 S1a2, 2026-10-26:** the configuration export carries the privacy notice page and the
   privacy email, built with the four defaults of the
   [S1a2 plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md)'s "Open
-  decisions for the owner". The owner kept A on 2026-11-24; B, C and D are kept as built (closed the same
-  day):
+  decisions for the owner". The owner kept A on 2026-11-24; B, C and D are
+  kept by the watcher 2026-11-24, not asked:
   - **A. Carried with New tax ID too.** A new owner setting up from Bar Ejemplo's export with
     **New tax ID** sees Bar Ejemplo's address and email on the Privacy card until someone changes
     them; the guide says to check them. The owner, 2026-11-24: "the main use for setting up a venue from exported settings
@@ -269,7 +269,7 @@ by the answers):
 - **A980 S1b, 2026-10-27:** the staff emails, the sign-in page, Account settings and both
   downloads read the privacy page saved on the Privacy card, built with the two Part 1 defaults of
   the [S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open
-  decisions for the owner", kept as built (closed 2026-11-24):
+  decisions for the owner", kept by the watcher 2026-11-24, not asked:
   - **A. Only the Privacy card shows the privacy email until S1b2.** Bar Ejemplo saves
     `privacidad@barejemplo.es`; Ana's invitation, the sign-in page, Account settings and Jordi's
     download show `https://barejemplo.es/privacidad` and not the email. S1b2 shows it to
@@ -282,7 +282,7 @@ by the answers):
   privacy notice, with the venue's legal name and the privacy email and page saved on the Privacy
   card, built with the four Part 2 defaults of the
   [S1b plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a980-s1b-privacy-link-readers.md)'s "Open decisions
-  for the owner", kept as built (the owner landed #2124 on 2026-10-27; closed 2026-11-24):
+  for the owner", kept as built (the owner landed #2124 on 2026-10-27; none asked by itself):
   - **C. The Tax Agency clause appears only for an invoice with a tax record.** Bar Ejemplo runs
     Veri\*Factu, so its invoice emails say "incluida la remisión a la Agencia Tributaria de un
     registro de la factura con su nombre y su NIF"; a box without Veri\*Factu, whose sales file
@@ -309,7 +309,7 @@ by the answers):
   `apps/server/src/boot.invoice-delivery.test.ts` pins only that the server gives the worker the
   reader, with the values stored before it starts.
 - **A980 S10, 2026-10-26:** what the log masks and what it leaves. The owner's answer on it
-  (2026-10-26) was to mask partly; the rest is built with the default and kept, closed 2026-11-24 (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
+  (2026-10-26) was to mask partly; the rest is built with the default and kept by the watcher 2026-11-24, not asked (the [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md)'s decisions 4 to 7, 10 and 12 and its
   owner note 5). Masked in every line the server's logger writes, on `docker logs` as
   well as in `waitron.log` and on the recovery page: a person's name, email or tax number under a
   listed detail name. Masked partly, by the owner's decision of 2026-10-26 (the plan's decision 14, which

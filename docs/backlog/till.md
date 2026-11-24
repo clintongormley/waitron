@@ -742,12 +742,13 @@ Printer identity is separate from the till route inventory.
 the owner's redesign.
 
 - **Screen faults seen during menus Task 9's look on 2026-09-27.** Recheck the floor-map overlap;
-  the header scrolls inside itself by design (closed 2026-11-24).
+  the header scrolls inside itself by design (kept by the watcher 2026-11-24, not asked).
   [Detail](till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
 ## SETTLED-SMALL. Small answers the owner gave that are not built yet
 
-Queued as SETTLED-SMALL (lane I), in two or three pull requests by screen.
+Queued as SETTLED-SMALL (lane I), in two or three pull requests by screen. Some are the owner's own
+answers; where an entry says a rule is read across, the owner was not asked that point.
 
 - **A1079. A supervisor may read a station's "Changes after sending", and not change it** (owner's
   picker answer B, 2026-10-25). Since #2044 the setting lives only in the station editor, which needs
@@ -764,15 +765,17 @@ Queued as SETTLED-SMALL (lane I), in two or three pull requests by screen.
 - **A1081. The till's refusals about a sent item name its station.** Owner, 2026-10-25: "don't mention
   the kitchen. It's confusing. Why has the caña gone to the kitchen instead of the bar". Today's words
   say "the station" and, in Spanish, «Este plato» (`apps/till/src/i18n/codes.ts`).
-- **The table's part-payment button reads "Take the rest"**, as the counter's does (Task 15, #956).
+- **The table's part-payment button reads "Take the rest"**, as the counter's does (Task 15, #956): the
+  owner's concise-text rule, read across by the watcher, not an answer.
 - **A692. Editing a sent dish keeps its extras' "made here" choice**, as it keeps the dish's: the
   owner's "Keep what was sent" (2026-11-17, A1416), read across by the watcher. Today
   `insertSplitExtras` (`apps/server/src/working-order-kitchen-fire.ts`) routes the extras afresh from
   the sending device's made-here stations, so an extra a station already received can come back as
   made on the spot. The fifth case in `apps/server/src/sent-order-number.test.ts` relies on that and
   will change.
-- **The extras form's picker lists variants** (owner decision 2026-09-24: a variant can be an extra);
-  today it lists top-level products only (`listProducts`).
+- **The extras form's picker lists variants**: the owner's decision that a variant can be an extra
+  (2026-09-24), read across to the picker by the watcher, not an answer. Today it lists top-level products
+  only (`listProducts`).
 - **A957 and A1011 point 9. One word per meaning** (D22): «cancelado» for «anulado» in «Valor de carta
   anulado» and «Valor de carta de lo anulado» (`packages/adjustments/src/dashboard/strings.ts`), and
   "comp" for "discount" in the English of `adjustment.exceeds_amount` and `adjustment.no_reduction`
@@ -870,7 +873,10 @@ here is asked or built before that. They were separate entries, many of them que
 - **A1565. The till's order panel squeezed on a landscape tablet.** At about 640 CSS pixels tall
   (the Pixel tablet in landscape, no keyboard), the order panel's buttons leave the list of lines
   a sliver one line high, on the Counter and on a table's order. Seen by the owner on 21 November,
-  and in desktop emulation at 1280 by 640. Not investigated.
+  and in desktop emulation at 1280 by 640. Not investigated. On the counter till at 1024 × 768 with
+  text at 130%, the bill's scrolling area is 48–64 px tall, less than one bill line, against 110 px
+  for Waitron's look at 100% (2026-10-27, A841 slice 11b's look check,
+  `~/waitron-campaign/a841-11b-shots/look-report-11b.md`).
 
 ## Bundle: One answer to "where is this order"
 
@@ -913,6 +919,11 @@ someone typed stays. This drops A765's choice to keep a bill's first table in it
 If the server requires an options list on a recalled dish absent from the live menu, the till cannot offer that list and staff cannot save the order with the dish on it.
 
 ## Decisions and deliberate limits
+
+- **On the voids and comps report, choosing a reason narrows the list, not the totals below it (A958,
+  left open by A758-3; kept by the watcher 2026-11-24, not asked).** With
+  Staff meal chosen, By action, By stage and By reason still count every reason for the person (or
+  everyone) shown.
 
 - **Closing a drawer (A1325, owner, 2026-11-06).** Moved here from the deleted design. "a close is really
   just a withdrawal": count the cash, remove the extra, put it in the bank, and separate the tips if
@@ -962,7 +973,7 @@ If the server requires an options list on a recalled dish absent from the live m
   count is one number, used as a guide and for bookings; the till seats a larger party without a
   refusal.
 - **The till's `TableState.today` stays nullable, wider than what the server sends (watcher,
-  2026-11-18, lane A; kept, closed 2026-11-24).** `/api/tables/state` lists only
+  2026-11-18, lane A; kept by the watcher 2026-11-24, not asked).** `/api/tables/state` lists only
   on-floor tables in switched-on zones (`packages/db/src/table-in-service.ts`), and
   `readTodayTables` (`apps/server/src/working-order-table-state.ts`) reads a row for every one, so the server
   never sends a table without today's row. Making the till's type required would rewrite 69
@@ -977,16 +988,16 @@ If the server requires an options list on a recalled dish absent from the live m
   the dish is started or served, or when its station refuses changes after sending.
 
 - **A parked dish not yet sent keeps a recorded options answer the menu no longer matches (lane B,
-  2026-11-18; kept, closed 2026-11-24).** The till asks staff to choose for each new
+  2026-11-18; kept by the watcher 2026-11-24, not asked).** The till asks staff to choose for each new
   list that has no recorded answer of its own.
   [The rule](../developers/modifiers.md#ordering-and-stored-facts).
 
 - **The server still works out each pass dish's age colour, which the till does not read (A773-2
-  B4 plan, D68, 2026-11-02; kept, closed 2026-11-24).** "The server's `band` stays correct for any other
+  B4 plan, D68, 2026-11-02; kept by the watcher 2026-11-24, not asked).** "The server's `band` stays correct for any other
   reader and is not read by the till."
 
 - **Saving a device on Devices (Edit or Pair) reads the device list twice while the live connection
-  is up (watcher, 2026-11-17, lane B; kept, closed 2026-11-24).** "Follow
+  is up (watcher, 2026-11-17, lane B; kept by the watcher 2026-11-24, not asked).** "Follow
   docs/developers/dashboard-live-updates.md:123-128 — call this.api.liveData?.invalidate([{ type:
   "devices" }]) after the Edit save and the Pair accept, so a person always sees their own save
   through the screen's watch." After the write the screen marks the list out of date, so its own watch reads it again, and the
@@ -997,13 +1008,13 @@ If the server requires an options list on a recalled dish absent from the live m
   `apps/dashboard/src/screens/devices-screen.test.ts`).
 
 - **Editing a device still has to send its name, its profile and, unless the profile is a kitchen
-  display, its receipt and payment-slip printer choices (lane B, 2026-11-18; kept, closed 2026-11-24).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
+  display, its receipt and payment-slip printer choices (lane B, 2026-11-18; kept by the watcher 2026-11-24, not asked).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
   field as optional, as #1235's review suggested: its one caller, the Devices screen's Edit
   (`updateDevice` in `apps/dashboard/src/api/client.ts`), always sends them, so that would add a
   path nothing uses.
 
 - **A copy of a deleted device's cookie can still ask to come back first, and so make the real
-  device's cookie stop working (watcher, 2026-11-18, lane B; kept, closed 2026-11-24;
+  device's cookie stop working (watcher, 2026-11-18, lane B; kept by the watcher 2026-11-24, not asked;
   confirmed the same day after review showed that on a box serving plain HTTP the cookie crosses
   the network unencrypted).** Each ask to come back gives the asking browser a new cookie and makes the old one
   worthless (`createJoinRequest` in `apps/server/src/join-requests.ts`), so the real tablet's next
@@ -1058,22 +1069,22 @@ If the server requires an options list on a recalled dish absent from the live m
 - **A sold-out extra stays on a reopened held order, flagged, and only a raise of its line is refused
   (owner, 2026-09-23, lane B Q1, option A: "keep sold-out lines in held work, flag them on the till,
   refuse only a quantity increase").** An extra whose list was deleted or no longer offers it is
-  treated the same (lane A's choice, 2026-11-16; kept, closed 2026-11-24). An
+  treated the same (lane A's choice, 2026-11-16; kept by the watcher 2026-11-24, not asked). An
   unsent line stored on a held order keeps its variant after that variant sells out (the watcher's
-  choice, 2026-11-17; kept, closed 2026-11-24): the server keeps the line when only its note or answers
+  choice, 2026-11-17; kept by the watcher 2026-11-24, not asked): the server keeps the line when only its note or answers
   change, or when a portion is dropped or an extra removed, and
   refuses a raise, an extra added or changed, or a switch to another sold-out variant with
   `product.variant_unavailable`, which the till words. The counter does not flag such a line.
 
 - **A step done before a bill moves onto a seated table, or before two parties combine, is asked
-  again at the receiving table (watcher, 2026-11-16, #3507; kept until the owner's redesign of the
-  table screens, closed as a question 2026-11-24).** "Asking twice is a small annoyance; a missed step is a lost sale." A Done is copied
+  again at the receiving table (watcher, 2026-11-16, #3507; kept by the watcher 2026-11-24, not
+  asked, until the owner's redesign of the table screens).** "Asking twice is a small annoyance; a missed step is a lost sale." A Done is copied
   only to the party a move to a free table or a split opens, and only when a dish comes with it
   (`carryDoneWithBill`,
   `apps/server/src/service-step-done.ts`).
 
 - **A dragged table keeps its square when the map refits mid-drag (A766 decision 4, kept by the
-  watcher 2026-11-16; kept, closed 2026-11-24).** After a refit the drawn table is no longer under the
+  watcher 2026-11-16; kept by the watcher 2026-11-24, not asked).** After a refit the drawn table is no longer under the
   finger, and later moves do not close the gap. A766's first draft "kept the grabbed point under
   the finger; a model of it ran the table out to x 999 once the finger neared the edge".
   [Plan](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a766-till-floor-grows-on-drag.md)
@@ -1735,7 +1746,7 @@ payment belongs to the table, so no payment is lost.
   16 #981, 17 #991. "Visit" is "party" everywhere since the table actions plan.
 
 - **Task 10 (#908, the service dashboard's attention signals).** Defaults the branch chose (the
-  long-wait, to-serve and bill-request choices were sent to the owner as an FYI, not overruled, and closed on 2026-11-24):
+  long-wait, to-serve and bill-request choices were sent to the owner as an FYI, not overruled; kept by the watcher 2026-11-24, not asked again):
   - A bill request is cleared only when a PAYMENT leaves the party's family with nothing to pay;
     other ways of leaving nothing owed keep the request until staff press Cancel or Finish table
     closes the party.
@@ -2071,9 +2082,10 @@ ticking requests the reader's own slip. Effective native control needs proved ad
 behaviour. The SumUp/Stripe boundary probes did not forward print intent; physical paper is
 unverified. The target checkbox stays disabled with an explanation. The new capability fallback
 question recommends that boundary, no Waitron duplicate for own-paper/unknown readers, and an
-initially off Waitron checkbox for known no-paper readers. The fallback, the cash slips and the
-pending document choice below are replaced by the owner's answers of 19 and 20 November: a payment
-slip prints only when asked for, through **Print payment slip**.
+initially off Waitron checkbox for known no-paper readers. The fallback and the cash slips
+below are replaced by the owner's answers of 19 and 20 November: a payment slip prints only when asked
+for, through **Print payment slip**. The pending document choice below is settled by the owner's words of
+19 November: "the receipt/invoice is required, the payment slip is not".
 
 No cash slips; all four journeys, amount modes, recovery and separate table closure stay. After a
 part, show the remaining amount and next tender; after settlement/issuance or a settling edit,

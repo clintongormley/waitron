@@ -1119,7 +1119,7 @@ correction's line points, reading a void's date in its sale's offset, and puttin
 exchange invoice on that invoice's own date are the watcher's choices (the plan's D5, D7 and D8;
 [plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). The plan's
 movement table, which decides how each kind of record moves VAT, and the handover limit below are not
-asked: the accountant decides from the workbook, under the owner's rule of 2026-11-21 ("leave it up to
+asked (the watcher, 2026-11-24): the accountant decides from the workbook, reading across the owner's rule of 2026-11-21 ("leave it up to
 the restaurant and their accountant. Our job then is to provide the information they need to do their
 job"). Deliberate limits:
 a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned

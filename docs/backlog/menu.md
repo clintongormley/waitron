@@ -306,6 +306,16 @@ The remaining storage, input-validation and shared-form limits.
   [Detail](menu.md#modifiers-spanish-opciones-tab-is-cut-at-a-310-px-screen-on-cis-linux-fonts)
 
 
+## Bundle: Each unit literal
+
+1 entry, size S.
+
+- **`EACH_UNIT` keeps Spanish, Catalan, Galician and Basque words in general code (left open by
+  A918 slice 4, #2141)**, a standing breach of the English-only rule. `packages/menu/src/units.ts:26-34` is never written into a venue, but the
+  receipt reads its abbreviations to decide whether a line prints a unit
+  (`quantityText` in `packages/orders-sales/src/receipt-figures.ts`), so moving its words can change printed text: its
+  own pull request waits for the owner.
+
 ## A1517. Allergen points to revisit before go-live
 
 The customer menu's allergen work is in its
@@ -407,7 +417,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   palette colour's stripe either reaches 3:1 against the tile or is edged by a line that does; the
   dark theme's sold-out tile sits at the page's own level (`--wt-color-surface-sunken`); and the
   labels are centred (products.md, _Colour_). The owner kept the 4 px stripe on 2026-11-23, and
-  approved the redrawn tiles (#4259) on 2026-11-24, which closes the dark theme's question.
+  on 2026-11-24 approved the colour-only tiles (#4259) in both themes; no sold-out tile was shown, and
+  the dark theme's contrast was kept by the watcher, not asked.
 
 - **Translate all's joint fault proof is recorded on pinned candidates (D85, 2026-10-20).**
   Cloud [PR #247](https://github.com/waitron-io/waitron-cloud/pull/247), commit

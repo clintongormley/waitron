@@ -32,7 +32,25 @@ The same item takes:
 - **The section's introduction**, which says a manager records only the outcome the provider confirms,
   with a note, and does not fit the held list.
 
-A846's other points for the owner were closed as built on 2026-11-24.
+Until it is built, kept money on a cancelled order has no invoice: the payment stays captured on an
+abandoned order with no sale, and Waitron files nothing for it.
+
+Known limits, kept by the watcher 2026-11-24, not asked:
+
+- **The morning return needs the payments check to get past its Stripe account.** While the
+  Stripe credential cannot be used, the check starts and throws in `resolveAccount()`
+  (`packages/payments-stripe/src/reconciler.ts`) before reading anything, so a handled
+  held-payments alert does not come back; what shows instead is the check's own failure
+  (`reconcile.run_failed` and `reconcile.run_parked` log lines, and `/health`'s `parked` count
+  and a `duty.degraded` log line for the pass that parks it). The alternative is refreshing the
+  held alert before the check resolves its Stripe account.
+- **A payment refunded by staff between the check's two transactions could still be held**: the
+  check decides on its first read, as the existing refund-claim path does. Believed rare; not fixed.
+- **A held payment whose order stops being abandoned** would be named by both the difference and
+  held alerts (`markOrderPlaced`, `apps/server/src/working-order-counter.ts`, updates by id with no status
+  check): reported twice, never hidden. Callers not traced.
+
+A846's other points for the owner were on looks and words; kept by the watcher 2026-11-24, not asked.
 
 ## The SumUp Solo experiments
 
@@ -326,9 +344,9 @@ Remaining Stripe qualification and maintenance.
   change a dish's note, rename the bill and change the whole-order kitchen note. Adding, removing
   or repricing dishes, a quantity, extras or options-answer change (a card taken for the whole
   order files the options answered when the card payment began; refusing it while a refund or a
-  part payment waits is the lane's reading, kept, 2026-11-24), comps, discounts and moving
+  part payment waits is the lane's reading, kept by the watcher 2026-11-24, not asked), comps, discounts and moving
   dishes between bills stay refused. So do a partial move or split of a held dish, which rewrite
-  the rows carrying its price: that is the lane's reading, kept, 2026-11-24. Moving a whole bill
+  the rows carrying its price: that is the lane's reading, kept by the watcher 2026-11-24, not asked. Moving a whole bill
   was already allowed ([till.md](till.md#a-pending-card-payment-does-not-stop-a-bill-moving-table-actions-plan-p19)).
   The writes allowed above count their write with `bumpRevisionKeepingPayment`
   (`apps/server/src/working-order-edit-state.ts`). Tests: the "card payment" and "refund" cases in

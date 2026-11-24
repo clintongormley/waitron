@@ -416,7 +416,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1161: with the database present, a public record or documents file still dead-ends Start
   again**, damaged or intact, and since A1206 so does the summary. Left
-  open by A1099; the owner asked for a safe self-service way out of damaged evidence (2026-10-25), not designed.
+  open by A1099; the owner asked for a safe self-service way out of damaged evidence (2026-10-25); intact files are not answered.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
@@ -514,6 +514,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (lane E). Owner, 2026-11-24: "yes type the amount, or use the +- … but that should be a single value, not
   a line per ml". [Detail](backlog/menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
 
+- **Each unit literal** (bundle of 1, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
+
 - **The combined end-to-end journey has not been walked**
   [Detail](backlog/menu.md#the-combined-end-to-end-journey-has-not-been-walked)
 
@@ -591,7 +593,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till and floor wording fixes** (bundle of 1, size S). [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
-- **SETTLED-SMALL. Small answers the owner gave that are not built yet** — queued (lane I): a supervisor's
+- **SETTLED-SMALL. Small answers the owner gave, and rules read across from them, not built yet** — queued (lane I): a supervisor's
   read-only station views (A1079, A506-12), "started" wins (A1080), the station's name in refusals (A1081),
   "Take the rest", extras keep "made here" (A692), variants in the extras form, one word per meaning
   (A957, A1011). [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
@@ -599,8 +601,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
   [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
 
-- **The till's top bar: loose ends (A395, #1435; A425).** Its scrolling strip is kept as agreed (closed
-  2026-11-24). [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
+- **The till's top bar: loose ends (A395, #1435; A425).** Its scrolling strip is kept by the watcher 2026-11-24, not asked. [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
@@ -817,7 +818,9 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   window and kept the separate €1.40 entry unmatched. The owner closed these hands-on checks on
   20 November. Signature was not tested because no card was available.
   Idle SumUp battery refresh timing is unqualified. Check missing battery percentages on the
-  reader itself. No further paid request unattended.
+  reader itself. An idle Solo may read `OFFLINE`: the owner's unused Solo did (slice 10 plan P11), and
+  SumUp's client maps anything but `ONLINE` to offline, so the bell could carry a standing
+  `reader.offline` warning; a lane checks it at the next reader session. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
 
 - **The deli's outage card machine.** Buy the standalone machine and
@@ -962,7 +965,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
-- **The Backups card's receipts and looks** (bundle of 2, size S). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
+- **The Backups card's receipts, looks and Turn on backups** (bundle of 3, size S). [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -1117,7 +1120,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   relay. The two new notice classes need the compatible Cloud release, and box alerts have a
   joint inbox check pending.
   Left: qualify invitations, resets and email-change codes against the live test Cloud
-  (BOX-EMAIL-RELAY), the paid Cloud plan and the remaining free notice work.
+  (BOX-EMAIL-RELAY), the paid Cloud plan and the remaining free notice work. To take with a later email
+  pass, the account-security emails still undecided: notify the old address on an own-account email
+  change; notices and wording for other administrator-made security changes (administrator email edits
+  already notify the old address) and break-glass changes; grouping a burst.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
 - **A venue on Microsoft 365 uses its own mail server (owner, 2026-11-23).**

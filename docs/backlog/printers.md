@@ -412,7 +412,7 @@ owner sees it before it lands.
   file, browser journal, prepare/accept and duplicate-print protection on 9 November 2026 at
   20:34. Landed foundations grant no cleanup authority. Keep the Printers tab’s A4-printers
   wording; F2 replacement stays separate work; the print queue's Reprint keeps its own printer choice (A661,
-  closed 2026-11-24). See the
+  kept by the watcher 2026-11-24, not asked). See the
   [closeout and implementation receipts](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-13-a790-payment-invoice-printer.md).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is

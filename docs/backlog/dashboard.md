@@ -538,14 +538,14 @@ Rulings put to the owner, with the answers:
     window afterwards shows the refusal. Owner, 2026-10-08: "Keep Save active" — A410 opens that
     window with Save active, and pressing it untouched gives the option back to the list, which
     clears that option's refusal; the window opened any other way still opens quiet. **Landed as
-  #1434.** Left as built, kept (closed 2026-11-24): Save turns active only for a refusal the window holds
+  #1434.** Left as built, kept by the watcher 2026-11-24, not asked: Save turns active only for a refusal the window holds
     when it OPENS — one handed to it while it is already open leaves Save as it was (believed
     unreachable, from reading only: the list's own Save sits behind the open window) — and it stays active
     for the whole time that window is open, even once the refused field is edited back;
 
 Opening already savable: the printers'
   name dialog, the calibration wizard when an add opened it (the campaign runner's ruling of
-  2026-10-08, kept: a freshly added printer's wizard opens with a blue Save),
+  2026-10-08, kept by the watcher 2026-11-24, not asked: a freshly added printer's wizard opens with a blue Save),
   the device pairing dialog, each row of "Add a card reader", the canvas Duplicate dialog, and a new
   canvas's editor.
 

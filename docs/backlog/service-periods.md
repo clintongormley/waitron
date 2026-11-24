@@ -411,8 +411,8 @@ the season painter continues saving through the season-week route._
 
 Left open by A723 (#1849).
 
-A723's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled, and closed
-on 2026-11-24:
+A723's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled,
+and kept by the watcher 2026-11-24, not asked again:
 
 Decisions 1 and 3 are superseded by the stored-whole, read-intersection rule above (2026-11-15).
 
@@ -428,8 +428,8 @@ heading): the editor is now titled "<name>: special day, <dates>".
 
 Left open by A762, #1850.
 
-A762's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled, and closed
-on 2026-11-24:
+A762's plan made these choices by default and sent them to the owner on 2026-10-17; not overruled,
+and kept by the watcher 2026-11-24, not asked again:
 
 - Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
   rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits

@@ -96,9 +96,10 @@ the labour advisor to confirm: a collective agreement can change each of them.
 Queued as MONTH-CLOSE (lane I). The owner, 2026-11-24: "my guess is automatically a few days after month
 end", then, on closing by itself and adjustable, "3 working days of grace, adjustable". Working days are
 Monday to Friday, skipping the public holidays in the venue's calendar (the watcher's default, told to
-the owner). Totals are frozen, not the record; nothing blocks; corrections are shown beside the closed
-total and carried as an adjustment; nobody reopens a month; an email goes the day before only when
-something is open.
+the owner). The rest is the research design
+(`~/waitron-campaign-shared/desk/month-close-research.md`), not the owner's words: totals are frozen,
+not the record; nothing blocks; corrections are shown beside the closed total and carried as an
+adjustment; nobody reopens a month; an email goes the day before only when something is open.
 
 Found by A793's design, read: the workforce
 module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
@@ -150,7 +151,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
   whether it can still be applied. Open shifts, disputed corrections, unanswered questions
   and unconfirmed automatic clock-outs can appear in any selected period (watcher, 2026-11-18).
 
-- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept (A644, closed 2026-11-24).
+- Season staffing uses the start in force when the season runs (owner, 2026-11-16, “1” in the watcher window). The Calendar month selects the occurrence; stepping to an absent season selects its next occurrence (driver choice, watcher cleared 2026-11-16). One grid uses the first matching date's start and notes later changes; changed weekdays must fit every applicable start. Crossing blocks are marked before saving (watcher, 2026-11-16). On a business day longer than a day, slots stop at minute 1440 (`slotsForDay`, `packages/staffing/src/slots.ts`), so the changeover's extra hour cannot be staffed by a block; kept by the watcher 2026-11-24, not asked (A644).
 
 ### A1268 corrections after a backward clock step
 
