@@ -322,7 +322,7 @@ rate, on '80mm' in 'eu-ES'".
 
 `named` is null
 when no one adjustment names the row, for instance a dish with two or more comps of its own
-(`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
+(`GroupDiscount`, `packages/orders-sales/src/receipt-figures.ts`), and the row then falls back to the
 zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
 dish to zero as one «Descuento 100%» row, where the ticket prints them as two steps, «Descuento
 50%» and «Descuento 100%» (A803 slice 1's decision, [till.md](till.md#decisions-and-deliberate-limits)).
