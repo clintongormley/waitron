@@ -96,7 +96,7 @@ describe("selected-hour admission before archive placement", () => {
       "original destination identity",
     );
     expect(output.join("\n")).toContain(
-      "restore failed: promotion.break_glass_invalid — use the selected backup's server key",
+      "restore failed: promotion.break_glass_invalid — use the selected backup's master key",
     );
   });
 

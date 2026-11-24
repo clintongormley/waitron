@@ -429,7 +429,7 @@ function sharedRefusal(err: unknown): string {
   if (err.code === "sif.allocation_invalid" && CLOCK_REFUSALS.has(reason))
     return `restore failed: sif.allocation_invalid (${String(reason)}) — the box's time is not confirmed, so no invoice series was made; check that timedatectl shows "System clock synchronized: yes", then run this command again`;
   if (err.code === "promotion.break_glass_invalid")
-    return "restore failed: promotion.break_glass_invalid — use the selected backup's server key";
+    return "restore failed: promotion.break_glass_invalid — use the selected backup's master key";
   if (err.code === "provisioning.database_in_use") {
     return "restore failed: provisioning.database_in_use — another process, usually the Waitron server, is using this venue folder; stop it first (docker compose stop app)";
   }
