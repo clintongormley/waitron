@@ -936,8 +936,12 @@ export class ServersScreen extends LitElement {
     return this.#declaring(action, row) && !(this.declared.switchedOff && this.declared.noRecovery);
   }
 
+  get #working(): boolean {
+    return this.busy || this.downloading;
+  }
+
   #close(): void {
-    if (this.busy || this.downloading) return;
+    if (this.#working) return;
     this.target = null;
     this.actionErrorKey = null;
     this.#forgetDeclarations();
@@ -951,8 +955,7 @@ export class ServersScreen extends LitElement {
     const target = this.target;
     if (
       target === null ||
-      this.busy ||
-      this.downloading ||
+      this.#working ||
       this.#undeclared(target.action, target.row) ||
       this.#unticked(target.action, target.row)
     )
@@ -990,7 +993,7 @@ export class ServersScreen extends LitElement {
   }
 
   async #downloadOldBoxData(row: ServerRow): Promise<void> {
-    if (this.busy || this.downloading) return;
+    if (this.#working) return;
     this.downloading = true;
     this.actionErrorKey = null;
     try {
@@ -1212,7 +1215,7 @@ export class ServersScreen extends LitElement {
       data-test=${`${action}-dialog`}
       heading=${t(title)}
       .open=${target !== null}
-      .dismissible=${!this.busy && !this.downloading}
+      .dismissible=${!this.#working}
       @wt-close=${() => {
         // The browser reports a close a task later, by when the other dialog may have opened.
         if (this.target === null || this.target.action === action) this.#close();
@@ -1264,7 +1267,7 @@ export class ServersScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test=${`cancel-${action}`}
-          ?disabled=${this.busy || this.downloading}
+          ?disabled=${this.#working}
           @click=${() => this.#close()}
           >${t("action.cancel")}</wt-button
         >
