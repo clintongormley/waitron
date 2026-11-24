@@ -1,8 +1,36 @@
 # Extract Make now from TillApp
 
-The trial gives developers one place to read how the till keeps **Make now** instructions. Staff still see the same instructions after sending an order, switching screens or reloading the same device. This is the single trial assigned to Lane I on 24 November. Further till splits wait for the owner’s decision after the trial.
+This trial gives developers one place to read how the till keeps **Make now** instructions.
+Staff see the same instructions after sending an order, switching screens or reloading the same
+device. The list is the only field moving. The host supplies its current device ID and connects
+the existing API callback. Further till splits wait for the owner’s decision after the trial.
 
-- Move the list, device-specific storage, saved snapshot validation, deduplication and Done handling from `apps/till/src/till-app.ts` into `apps/till/src/state/make-now-controller.ts`. Use a Lit reactive controller with the host’s `requestUpdate()`, as the existing countdown controller does. Its only inputs are the device ID and the existing `TillApi.onMadeHere` callback source. Pass changes to the API from the existing `willUpdate` branch and register its listener in the controller’s update hook before render. Read the current device ID when accessing storage, including while boot has temporarily cleared it. Keep the existing reset and restore call sites and their order. Reset clears memory, and Done clears memory and the current device’s saved list. The same `till-make-now` widget renders in the same place, with the same bindings and event. Use a type-only import for the client types. No till screen, client, payment or server changes.
-- Run the four existing browser files on the base and candidate, with all assertions intact: `till-app-boot-and-counter.test.ts` (deduplication, navigation, device switch and restore, malformed or unavailable storage, Done), `till-app-table-service.test.ts` (table Send), `widgets/make-now.test.ts` and `widgets/make-now.a11y.test.ts` (the displayed instructions and accessibility). Run Till typecheck, the product file-size guard and the normal push and CI checks. Record exact counts. Run a deletion control for the restore call against the existing same-device case in a disposable worktree. Leave markup in place.
-- Base `72ff8f92f6` has 26,065 lines in `till-app.ts`. Expect about +120/−105 production lines including the controller and wiring, and +0/−0 tests. Measure the file after rebasing and lower its row in `scripts/product-file-size-limits.json` if past the existing 250-line threshold. This task came from the campaign queue, which has no matching product backlog entry to retire. Check the backlog again before landing.
-- Overlap at planning: Lane C’s `feat/a1515-1-pay-items-till` also edits the app, in payment and bill code outside the Make now hunks. Lane F’s `feat/f-home-tiles` and Lane L’s `feat/give-money-back-server` and `feat/vat-rates-b` have no changes to the Make now hunks. Compare again before the PR. If both trial and Lane C land at their current sizes, a 26,000-line cap may become tight. Record the combined count and raise the conflict with the watcher if it exceeds the cap.
+Move the list, storage, snapshot validation, deduplication and Done handling from
+`apps/till/src/till-app.ts` into `apps/till/src/state/make-now-controller.ts`. Follow
+`FormFeedback`’s pattern of a class that requests a Lit host update when its state changes.
+Keep API registration in its existing place in `willUpdate`, with the optional call and a
+stable arrow callback. Give Done an arrow callback for the widget binding. Use a type-only
+client import. Keep the existing widget and markup in place.
+
+Keep each reset and restore at its current call site. On boot, clear the old list before assigning
+the new ID and restore after holding the identity. Reset clears memory. Done clears memory before
+saving. Read the current device ID on each storage access, including while boot has cleared it.
+Keep storage access inside the `try` blocks and request an update on each list replacement.
+
+Run `till-app-boot-and-counter.test.ts`, `till-app-table-service.test.ts`, `widgets/make-now.test.ts`
+and `widgets/make-now.a11y.test.ts` in Till’s browser project on the base and candidate with every
+assertion intact. They cover instruction delivery, deduplication, device switching, restoration,
+invalid and blocked storage, Done and presentation. In a disposable checkout, prove the existing
+checks catch a missing listener, missing restore, missing Switch device reset, missing Done save,
+and a reset that deletes the old device’s saved list. Compare the other boot and reset call sites
+directly. Run Till typecheck, the root product file-size guard, the normal push hook and required CI.
+
+At base `72ff8f92f6`, the app has 26,065 lines. Expect about +120/−105 production and +0/−0 tests.
+About 25,975 lines would require lowering the 26,250 cap to 26,000 on this base. Lane C’s
+`feat/a1515-1-pay-items-till` adds 107 net lines outside the trial’s hunks. The combined estimate
+is 26,082. Lane F’s `feat/f-home-tiles` and Lane L’s `feat/give-money-back-server` and
+`feat/vat-rates-b` leave the trial hunks alone. Recheck branch diffs and the measured file count
+against current main before the PR and landing. Give the watcher the numbers before changing the
+landing order or raising a cap. No matching product backlog entry exists at the base, so check
+again before landing. Report lines removed from the app, shared inputs, rebase conflicts, review
+rounds and elapsed time after the trial.
