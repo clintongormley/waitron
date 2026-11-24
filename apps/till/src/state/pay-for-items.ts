@@ -60,12 +60,11 @@ function itemsOf(asked: PayRequest): ItemsChoice {
 }
 
 function picksOf(choice: ItemsChoice): ItemPick[] {
-  return choice.picks.map((pick) => {
-    if (pick.lineId === undefined) throw new Error("Pay for items needs each pick's line id");
-    return pick.units === undefined
+  return choice.picks.map((pick) =>
+    pick.units === undefined
       ? { lineId: pick.lineId }
-      : { lineId: pick.lineId, quantity: String(pick.units) };
-  });
+      : { lineId: pick.lineId, quantity: String(pick.units) },
+  );
 }
 
 export function itemsAsk(asked: PayRequest): ItemPaymentAsk {

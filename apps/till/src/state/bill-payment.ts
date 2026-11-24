@@ -37,7 +37,7 @@ import { tabLinePortionKey } from "./portion-groups.js";
  * only how many people are still to pay: the server works out the share and the preview shows it. */
 export type PayChoice =
   | { kind: "whole" }
-  | { kind: "items"; picks: { lineNo: number; lineId?: string; units?: number }[] }
+  | { kind: "items"; picks: { lineNo: number; lineId: string; units?: number }[] }
   | { kind: "contribution"; amount: string }
   | { kind: "share"; shareOf: number };
 

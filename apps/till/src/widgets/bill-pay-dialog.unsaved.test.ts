@@ -295,7 +295,7 @@ it("item units are protected and reverting the selection clears the warning", as
   await expect.poll(() => app.requests.length).toBe(1);
   expect(app.requests).toEqual([
     {
-      choice: { kind: "items", picks: [{ lineNo: 2, units: 2 }] },
+      choice: { kind: "items", picks: [{ lineNo: 2, lineId: "line-2", units: 2 }] },
       pay: { method: "cash", tendered: "10.00" },
     },
   ]);

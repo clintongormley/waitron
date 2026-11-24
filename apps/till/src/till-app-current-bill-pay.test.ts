@@ -195,18 +195,16 @@ it.each(["live", "fallback"])(
     const getBillBalance = vi
       .fn()
       .mockResolvedValue(balanceOf({ total: "36.00", outstanding: "36.00" }));
-    const previewBillPayment = vi.fn().mockResolvedValue({
-      kind: "allocated",
-      choice: null,
+    const previewItemPayment = vi.fn().mockResolvedValue({
+      total: "3.00",
       applied: "3.00",
       tip: "0.00",
-      charged: null,
       change: "7.00",
     });
     const api = stubApi({
       getTabLines,
       getBillBalance,
-      previewBillPayment,
+      previewItemPayment,
       readLiveEvents: stream.read,
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
@@ -237,9 +235,8 @@ it.each(["live", "fallback"])(
     expect(dialog(el)!.balance!.outstanding).toBe("33.00");
     expect(text(inDialog(el, '[data-units="2"]'))).toBe("1");
     await press(el, "[data-pay-continue]");
-    expect(previewBillPayment.mock.calls.at(-1)?.[1]).toMatchObject({
-      kind: "items",
-      lines: [{ lineNo: 2 }],
+    expect(previewItemPayment.mock.calls.at(-1)?.[1]).toMatchObject({
+      picks: [{ lineId: "line-2" }],
       tendered: "10",
     });
   },
@@ -276,7 +273,13 @@ it("keeps a submitted preview intact, then shows refreshed items when staff go B
   const stream = liveReadFixture();
   const dishes = [line({ lineNo: 1, name: "Dessert" }), line({ lineNo: 2, name: "Coffee" })];
   const getTabLines = vi.fn().mockResolvedValue({ lines: dishes, revision: 0 });
-  const api = stubApi({ readLiveEvents: stream.read, getTabLines });
+  const api = stubApi({
+    readLiveEvents: stream.read,
+    getTabLines,
+    previewItemPayment: vi
+      .fn()
+      .mockResolvedValue({ total: "1.00", applied: "1.00", tip: "0.00", change: "49.00" }),
+  });
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await openTable(el);
   stream.event("ready");

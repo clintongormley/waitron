@@ -2016,6 +2016,8 @@ export const en = {
   "bill_pay.chargeable": "This venue does not take tips, so charge at most {amount} to this card",
   "bill_pay.items_set_menu_dish":
     "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill.",
+  "bill_pay.items_own_bill":
+    "These items move to a bill of their own, paid now. The rest stays on this bill.",
   "bill_pay.reader": "Card reader",
   "bill_pay.card_declined":
     "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.",
@@ -4334,6 +4336,8 @@ export const es: Record<StringKey, string> = {
     "Este local no acepta propinas, así que cobra como mucho {amount} en esta tarjeta",
   "bill_pay.items_set_menu_dish":
     "{dishName} forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.",
+  "bill_pay.items_own_bill":
+    "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
   "bill_pay.reader": "Lector de tarjetas",
   "bill_pay.card_declined":
     "La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo con la tarjeta, o vuelve atrás y elige otra forma de pago.",

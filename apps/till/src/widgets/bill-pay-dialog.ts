@@ -80,6 +80,7 @@ import {
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import { portionGroups } from "../state/portion-groups.js";
+import { itemsChoiceOf } from "../state/pay-for-items.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -961,16 +962,7 @@ export class TillBillPayDialog extends LitElement {
       case "whole":
         return { kind: "whole" };
       case "items":
-        return {
-          kind: "items",
-          picks: this.#offered().flatMap((line) => {
-            const units = this.picks.get(line.lineNo);
-            if (units === undefined) return [];
-            // Once any of a line is paid, fewer units than its quantity are left to pick.
-            const whole = line.unitTotal === null || units === Number(line.quantity);
-            return [whole ? { lineNo: line.lineNo } : { lineNo: line.lineNo, units }];
-          }),
-        };
+        return itemsChoiceOf(this.lines, this.picks, this.#offered());
       case "contribution":
         return { kind: "contribution", amount: typedAmount(this.typedAmountValue)! };
       case "share":
@@ -1554,6 +1546,11 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
+  /** Pay for items' preview carries the chosen items' price: they are paid on a bill of their own. */
+  #ownBill(): this is { preview: Allocated & { total: string } } {
+    return this.preview?.kind === "allocated" && this.preview.total !== undefined;
+  }
+
   /** What the way covers, as far as the dialog knows before the server allocates it. */
   #scope(): string {
     switch (this.chosenWay) {
@@ -1584,9 +1581,10 @@ export class TillBillPayDialog extends LitElement {
             return shown === "1" ? line.name : `${line.name} ×${shown}`;
           })
           .join(", ");
+        const total = this.#ownBill() ? this.preview.total : undefined;
         return fill(t("bill_pay.scope_items"), {
           items: names,
-          amount: this.#money(this.#pickedAmount()),
+          amount: this.#money(total ?? this.#pickedAmount()),
         });
       }
       case "contribution": {
@@ -2133,6 +2131,7 @@ export class TillBillPayDialog extends LitElement {
   #guestsShown(preview: Allocated): boolean {
     return (
       this.asksGuests &&
+      preview.total === undefined &&
       this.balance !== null &&
       (this.asked?.choice.kind === "whole" ||
         compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
@@ -2143,6 +2142,7 @@ export class TillBillPayDialog extends LitElement {
   #ownReceiptAsked(preview: Allocated): boolean {
     return (
       this.ownReceiptOffered &&
+      preview.total === undefined &&
       !this.confirmationLocked &&
       this.balance !== null &&
       this.asked !== null &&
@@ -2223,6 +2223,7 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
+      ${this.#ownBill() ? html`<p data-pay-own-bill>${t("bill_pay.items_own_bill")}</p>` : nothing}
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

@@ -47,7 +47,10 @@ describe("paymentAsk", () => {
       paymentAsk(
         {
           kind: "items",
-          picks: [{ lineNo: 1 }, { lineNo: 3, units: 2 }],
+          picks: [
+            { lineNo: 1, lineId: "l-1" },
+            { lineNo: 3, lineId: "l-3", units: 2 },
+          ],
         },
         { method: "card" },
       ),
@@ -95,7 +98,10 @@ describe("paymentAsk", () => {
       addedTip: "10.00",
     });
     expect(
-      paymentAsk({ kind: "items", picks: [{ lineNo: 2 }] }, { method: "card", addedTip: "10.00" }),
+      paymentAsk(
+        { kind: "items", picks: [{ lineNo: 2, lineId: "l-2" }] },
+        { method: "card", addedTip: "10.00" },
+      ),
     ).toEqual({
       expectedEdit: null,
       kind: "items",
@@ -107,7 +113,10 @@ describe("paymentAsk", () => {
 });
 
 describe("confirmationOf", () => {
-  const ask = paymentAsk({ kind: "items", picks: [{ lineNo: 1 }] }, { method: "card" });
+  const ask = paymentAsk(
+    { kind: "items", picks: [{ lineNo: 1, lineId: "l-1" }] },
+    { method: "card" },
+  );
 
   it("sends the applied amount and tip the operator was shown", () => {
     expect(
