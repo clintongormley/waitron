@@ -858,7 +858,7 @@ command against it treat that entrypoint differently:
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
-  backup's box key, a fresh allocation and current outside evidence. The source examples below
+  backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
@@ -901,12 +901,11 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older box keys.** Restoring an older backup also restores the box key
-  from that time. A replaced key can work again on the restored box, while its replacement
-  can be refused. Keep the older key until every backup made before the replacement has
-  been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the key you need. The box key authenticates recovery; the separate recovery key opens
-  the backup file.
+  **Keep older master keys.** A backup's restore is authorised only by the master key that was
+  current when the backup was made. Keep the older master key until every backup made before its
+  replacement has been deleted. When the restored copy contains a key name,
+  `restore.recovery_key_selected` names the master key you need. The master key authorises
+  recovery; the separate recovery key opens the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that
