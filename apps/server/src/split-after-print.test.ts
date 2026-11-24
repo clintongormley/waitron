@@ -82,7 +82,7 @@ useVenueDb({
       );
       extraListId = extras.id;
       await writeProductModifiers(tx, ids.get("Steak")!, [{ kind: "extras", id: extras.id }]);
-      await offerProducts(tx, venue.cfg, { zone: "tables" });
+      await offerProducts(tx, { zone: "tables" });
     });
     // Print the bill prints on the till's receipt printer, which the venue's till profile allows.
     db.run(sql`update device_profiles set capabilities = json_insert(capabilities, '$[#]', 'print-receipt')
@@ -113,7 +113,7 @@ function revisionOf(partyId: string): number {
 /** A party seated at a fresh table with one guest, its dishes sent to the kitchen as one group. */
 async function seat(...lines: (string | Line)[]): Promise<Party> {
   const { id: tableId } = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `S-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `S-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seated.status).toBe(200);

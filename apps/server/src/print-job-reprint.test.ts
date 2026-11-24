@@ -219,7 +219,7 @@ async function kitchenTicket(
     tx.update(printers).set(setting).where(eq(printers.id, kitchenPrinterId)),
   );
   const { id: tableId } = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   const seat = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seat.status).toBe(200);

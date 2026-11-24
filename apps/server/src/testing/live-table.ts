@@ -11,7 +11,6 @@ import {
 
 export async function createTable(
   tx: Transaction,
-  _cfg: unknown,
   input: { label: string; zoneId: string; shortName?: string },
   options: { today?: boolean } = {},
 ): Promise<{ id: string }> {

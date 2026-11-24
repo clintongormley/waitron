@@ -29,7 +29,7 @@ const suite = useVenueDb({
     await db.update(taxpayer).set({ taxpayerDomicile: "8 Fiscal Street" });
     walkupZone = (
       await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, {
+        offerProducts(tx, {
           zone: "counter",
           orderStart: "counter",
           paidWhen: "prepay",

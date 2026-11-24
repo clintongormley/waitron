@@ -228,7 +228,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
-      offers: await offerProducts(tx, cfg, {
+      offers: await offerProducts(tx, {
         orderStart: "counter",
         paidWhen: orderFlow,
       }),
@@ -1108,14 +1108,14 @@ describe("a party's bill request goes when a card or collect settles its last ow
     const venue = await setupVenue();
     const { cfg, coffee } = venue;
     const seated = await withTransaction(suite.db, async (tx) => {
-      const offers = await offerProducts(tx, cfg, { zone: "tables" });
-      const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+      const offers = await offerProducts(tx, { zone: "tables" });
+      const table = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId: table.id });
       const coffeeLine = { menuItemId: offers.offerFor(coffee.id), quantity: "1" };
       await addTabRound(tx, cfg, tabId, owingSibling ? [coffeeLine, coffeeLine] : [coffeeLine]);
       if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]);
       if (serviceMode !== "table_tab") {
-        const elsewhere = await offerProducts(tx, cfg, {
+        const elsewhere = await offerProducts(tx, {
           orderStart: "counter",
         });
         await VENUE_SERVICE.retargetOrderContext(tx, tabId, elsewhere.zoneId);

@@ -198,7 +198,7 @@ describe("Cancel item service command", () => {
     "uses the existing started-dish %s decision on a Counter bill",
     async (outcome) => {
       const table = await fixture("fire", "Pizza", "1");
-      const offers = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));
+      const offers = await inTx(venue, (tx) => offerProducts(tx));
       const id = randomUUID();
       await parkOrder({ db: venue.db }, venue.cfg, {
         id,

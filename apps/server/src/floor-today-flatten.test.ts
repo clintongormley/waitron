@@ -348,14 +348,12 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
 
 it("reset applies an edited saved membership, leaving its former member separate", async () => {
   const { table, master, zoneId } = await LONG_TABLE();
-  const layout = await inTx(v, async (tx) =>
-    readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-  );
+  const layout = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
   await inTx(v, async (tx) =>
     saveLayout(
       tx,
       REMOVALS,
-      await defaultLayout(tx, v.cfg, zoneId),
+      await defaultLayout(tx, zoneId),
       {
         revision: layout.revision,
         tables: layout.tables.map((t) => ({
@@ -402,7 +400,7 @@ it.each([false, true])(
     );
     await inTx(v, (tx) => takeOffToday(tx, table.c5!));
     await inTx(v, async (tx) => {
-      const key = await defaultLayout(tx, v.cfg, zoneId);
+      const key = await defaultLayout(tx, zoneId);
       const layout = await readLayout(tx, key);
       await updateLayout(tx, REMOVALS, zoneId, await todayBusinessDay(tx, NOW), NOW, {
         setId: key.setId,

@@ -307,7 +307,7 @@ describe("A773 waiter request: send", () => {
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       const salad = await kitchenDish(tx, venue);
-      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       const input = {
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(tx, venue.party.partyId),

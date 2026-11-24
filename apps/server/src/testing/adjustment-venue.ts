@@ -431,7 +431,7 @@ export async function provisionAdjustmentVenue(
     );
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
     await assignMenuToVenue(tx, cat.id);
-    const tables = await offerProducts(tx, cfg, { zone: "tables" });
+    const tables = await offerProducts(tx, { zone: "tables" });
     await setRoutingCell(
       tx,
       { row: { kind: "product", productId: productIds.get("Coffee")! }, zoneId: null },
@@ -580,7 +580,7 @@ export async function billWith(
   const operatorId = opts.operatorId ?? venue.staffId;
   const release = opts.release ?? "fire";
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.tables.zoneId,
     });

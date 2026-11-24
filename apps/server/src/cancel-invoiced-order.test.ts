@@ -185,7 +185,7 @@ useVenueDb({
       );
     });
     const offers = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     ticketThenPayZone = offers.zoneId;
     productIdOf = (name) => productIds.get(name)!;
@@ -661,9 +661,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
         lineGross: 3,
       });
 
-      await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
-      );
+      await inTx(venue, (tx) => offerProducts(tx, { zone: "counter", orderStart: "counter" }));
       const newId = await placed([
         {
           name: "Mosto",
@@ -694,7 +692,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           sql`update extra_list_items set portion = 50 where list_id = ${portionListId}`,
         );
         await tx.execute(sql`update units set precision = 3 where seed_key = 'credit-test-kg'`);
-        await offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
+        await offerProducts(tx, { zone: "counter", orderStart: "counter" });
       });
     }
   });
@@ -1498,7 +1496,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   function noInvoiceZone(name: string) {
     return inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name })];
-      return offerProducts(tx, venue.cfg, {
+      return offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
       });
@@ -1595,7 +1593,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
   it("derives no key for an override sent with an order that has no invoice", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra sin factura, sin clave" })];
-      return offerProducts(tx, venue.cfg, {
+      return offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
       });
@@ -1871,7 +1869,7 @@ describe("cancelling a placed order with no invoice", () => {
   it("abandons it with its reasoned amendment and files nothing", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra ticket" })];
-      return offerProducts(tx, venue.cfg, {
+      return offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
       });
@@ -1892,7 +1890,7 @@ describe("cancelling a placed order with no invoice", () => {
   it("refuses while a card is at the reader for it, and the card then files its sale", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra tarjeta" })];
-      return offerProducts(tx, venue.cfg, {
+      return offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
       });

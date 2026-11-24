@@ -628,7 +628,7 @@ const savedTableDraft = async (v: Venue, middayVersionId = v.versions["Midday me
     .set({ orderStart: "table" })
     .where(eq(departments.id, v.restaurant));
   const { id: tableId } = await withTransaction(suite.db, (tx) =>
-    createTable(tx, v.cfg, { label: "Late table", zoneId: v.diningZone }),
+    createTable(tx, { label: "Late table", zoneId: v.diningZone }),
   );
   const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
   expect(seated.status).toBe(200);
@@ -1167,7 +1167,7 @@ describe("service periods gate only added dishes and added stored quantities", (
           .set({ orderStart: "table" })
           .where(eq(departments.id, v.restaurant));
         const { id: tableId } = await withTransaction(suite.db, (tx) =>
-          createTable(tx, v.cfg, { label: "Fired meal table", zoneId: v.diningZone }),
+          createTable(tx, { label: "Fired meal table", zoneId: v.diningZone }),
         );
         const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, {
           guestCount: 2,
@@ -1252,7 +1252,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         .set({ orderStart: "table" })
         .where(eq(departments.id, v.restaurant));
       const { id: tableId } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, v.cfg, { label: "Meal table", zoneId: v.diningZone }),
+        createTable(tx, { label: "Meal table", zoneId: v.diningZone }),
       );
       const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
       expect(seated.status).toBe(200);
@@ -2233,7 +2233,7 @@ describe("a dish whose period ended earlier today", () => {
           .set({ orderStart: "table" })
           .where(eq(departments.id, v.restaurant));
         const { id: tableId } = await withTransaction(suite.db, (tx) =>
-          createTable(tx, v.cfg, { label: "Late arrival", zoneId: v.diningZone }),
+          createTable(tx, { label: "Late arrival", zoneId: v.diningZone }),
         );
         at(mondayAt("14:05"));
         const moved = await sendAsTill(v, "POST", `/api/bills/${id}/move`, {
@@ -2700,7 +2700,7 @@ describe("kitchen routing for current and confirmed late dishes", () => {
       await tx
         .insert(routingCellPeriods)
         .values({ cellId: cell!.id, periodId: lunch.id, stationId: downstairs.stationId });
-      const table = await createTable(tx, v.cfg, { label: "Cocktail table", zoneId: v.diningZone });
+      const table = await createTable(tx, { label: "Cocktail table", zoneId: v.diningZone });
       return { offer, mojito: mojito.id, upstairs, downstairs, lunch: lunch.id, tableId: table.id };
     });
     const seated = await sendAsTill(v, "POST", `/api/tables/${setup.tableId}/seat`, {

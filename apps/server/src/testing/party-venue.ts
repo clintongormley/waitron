@@ -165,8 +165,8 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     await assignMenuToVenue(tx, cat.id);
     const available = (await listAvailableProducts(tx)).products;
     const offers = {
-      tables: await offerProducts(tx, cfg, { zone: "tables" }),
-      counter: await offerProducts(tx, cfg, { zone: "counter" }),
+      tables: await offerProducts(tx, { zone: "tables" }),
+      counter: await offerProducts(tx, { zone: "counter" }),
       productIds: new Map(available.map((p) => [p.name, p.id])),
     };
     const stepDepartments = new Set(
@@ -190,7 +190,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     productId: (name) => productIds.get(name)!,
     table: (label, zoneId = tables.zoneId, options) =>
       withTransaction(db, async (tx) => {
-        const { id } = await createTable(tx, cfg, { label, zoneId }, options);
+        const { id } = await createTable(tx, { label, zoneId }, options);
         return id;
       }),
   };

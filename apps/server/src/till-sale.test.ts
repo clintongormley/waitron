@@ -281,7 +281,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       variantIds,
     };
   });
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
   return { cfg, seriesId: brandSeriesId(venue.seriesIds[0]!), ...menu, offers };
 }
 
@@ -914,7 +914,7 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
       await assignMenuToVenue(tx, cat.id);
       return product.id;
     });
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     return { cfg, zoneId: offers.zoneId, menuItemId: offers.offerFor(productId) };
   }
 
@@ -1316,8 +1316,8 @@ describe("ordering extras and options — parent + child lines", () => {
       };
     });
     const { counter, tables } = await withTransaction(suite.db, async (tx) => ({
-      counter: await offerProducts(tx, cfg),
-      tables: await offerProducts(tx, cfg, { zone: "tables" }),
+      counter: await offerProducts(tx),
+      tables: await offerProducts(tx, { zone: "tables" }),
     }));
     return {
       cfg,
@@ -1650,7 +1650,7 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg.locale,
       );
       await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
-      const offers = await offerProducts(tx, v.cfg);
+      const offers = await offerProducts(tx);
       return {
         dishOfferId: offers.offerFor(dish.id),
         listId: list.id,

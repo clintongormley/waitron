@@ -68,7 +68,7 @@ export async function provisionAdvanceVenue(db: Database): Promise<AdvanceVenue>
       });
       ids.set(dish.name, product.id);
     }
-    return offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
+    return offerProducts(tx, { zone: { zoneId: venue.zoneId }, orderStart: "table" });
   });
   return { venue, offerFor: (name) => offers.offerFor(ids.get(name)!) };
 }
@@ -89,7 +89,7 @@ export function advanceBills(current: () => AdvanceVenue) {
 
   function seatedFor(dining: Dining, names: string[]): Promise<string> {
     return withTransaction(venue().db, async (tx) => {
-      const table = await createTable(tx, venue().cfg, {
+      const table = await createTable(tx, {
         label: `R-${randomUUID().slice(0, 8)}`,
         zoneId: venue().zoneId,
       });

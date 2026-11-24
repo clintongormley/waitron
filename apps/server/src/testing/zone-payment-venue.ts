@@ -35,7 +35,7 @@ export async function zonePaymentVenue(db: Database) {
       pricingUnit: "each",
       unitPrice: decimal("12.10"),
     });
-    const offers = await offerProducts(tx, venue.cfg, {
+    const offers = await offerProducts(tx, {
       zone: { zoneId: venue.zoneId },
       orderStart: "table",
       productIds: [product.id],
@@ -61,7 +61,7 @@ export async function zonePaymentVenue(db: Database) {
   };
   async function bill() {
     return withTransaction(db, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `Worker ${randomUUID()}`,
         zoneId: venue.zoneId,
       });

@@ -98,7 +98,7 @@ it("a table bill firing 11,880 burgers at once records an allergy snapshot for e
   const venue = await setupSplitExtrasVenue();
   const id = await withTransaction(suite.db, async (tx) => {
     const tabId = await createTableKitchenOrder(tx, venue.cfg);
-    const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const round = offers.toOfferLines(
       Array.from({ length: 990 }, () => ({ productId: venue.products.burger, quantity: "1" })),
     );
@@ -120,7 +120,7 @@ it("a 1,188-water round keeps every line and context and an extra across the ins
   const venue = await setupSplitExtrasVenue();
   await withTransaction(suite.db, async (tx) => {
     const tabId = await createTableKitchenOrder(tx, venue.cfg);
-    const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const water = Array.from({ length: 1188 }, () => ({
       productId: venue.products.water,
       quantity: "1",

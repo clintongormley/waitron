@@ -419,7 +419,7 @@ describe("the table routes' revision", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         {
           revision,
           tables: [entry("bar", renamed, 40), entry("a", other, 0)],
@@ -570,7 +570,7 @@ describe("today's routes", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         {
           revision,
           tables: [
@@ -839,7 +839,7 @@ describe("the zone reset's revision", () => {
       saveLayout(
         tx,
         REMOVALS,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         {
           revision,
           tables: [

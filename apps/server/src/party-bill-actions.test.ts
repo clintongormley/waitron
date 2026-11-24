@@ -82,7 +82,7 @@ useVenueDb({
   setup: async (db) => {
     v = await setupPartyVenue(db);
     const made = await inTx(v, async (tx) => ({
-      counter: await offerProducts(tx, v.cfg, { zone: "counter" }),
+      counter: await offerProducts(tx, { zone: "counter" }),
       products: (await listAvailableProducts(tx)).products,
     }));
     counter = made.counter;

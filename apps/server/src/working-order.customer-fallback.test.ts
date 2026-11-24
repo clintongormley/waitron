@@ -104,7 +104,7 @@ async function arrange() {
       "en",
     );
     await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: extra.id }]);
-    const offers = await offerProducts(tx, venue.cfg, { productIds: [dish.id] });
+    const offers = await offerProducts(tx, { productIds: [dish.id] });
     return { dish, parent, variant: variant!, extra, unit: unit!, offers };
   });
 }

@@ -101,7 +101,7 @@ useVenueDb({
       ).id;
       const burger = v.productId("Burger");
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      offers = await offerProducts(tx, v.cfg, { zone: "tables" });
+      offers = await offerProducts(tx, { zone: "tables" });
       return { burger, cheese, toppings, ham };
     });
   },

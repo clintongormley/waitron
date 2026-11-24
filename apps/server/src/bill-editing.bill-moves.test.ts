@@ -43,7 +43,7 @@ const blank = (billId: string): BillEditExpected => ({
 });
 async function party() {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Editor-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
@@ -278,7 +278,7 @@ describe("split a table carries only its moved bill editor", () => {
   async function setup() {
     const from = await party();
     const free = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Split-${randomUUID()}`, zoneId: venue.zoneId }),
+      createTable(tx, { label: `Split-${randomUUID()}`, zoneId: venue.zoneId }),
     );
     const own = await venue.db.select().from(parties).where(eq(parties.id, from.partyId));
     await inTx(venue, (tx) =>

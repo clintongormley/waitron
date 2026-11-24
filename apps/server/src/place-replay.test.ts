@@ -42,7 +42,7 @@ beforeEach(async () => {
       stationId: station.id,
       printerId: printer!.id,
     });
-    const offered = await offerProducts(tx, venue.cfg, {
+    const offered = await offerProducts(tx, {
       zone: "counter",
       paidWhen: "ticket_then_pay",
     });

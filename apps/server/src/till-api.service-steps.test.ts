@@ -48,7 +48,7 @@ beforeEach(async () => {
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) });
   requestCookie = await sessionCookieForTest(suite.db, token);
   const zone = await createZone(suite.db, { name: "Tables" });
-  const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
+  const table = await createTable(suite.db, { label: "Table 1", zoneId: zone.id });
   [stepId] = (await setSteps({ db: suite.db }, await departmentOf({ db: suite.db }, zone.id), [
     { name: "Set up", start: "seated", courseId: null, minutes: 0 },
   ])) as [string];

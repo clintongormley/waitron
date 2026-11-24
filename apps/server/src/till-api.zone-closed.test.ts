@@ -81,7 +81,7 @@ const refused = (v: BillVenue) => ({
 });
 async function table(v: BillVenue) {
   return withTransaction(suite.db, (tx) =>
-    createTable(tx, v.cfg, { label: randomUUID(), zoneId: v.zoneId }),
+    createTable(tx, { label: randomUUID(), zoneId: v.zoneId }),
   );
 }
 async function seat(v: BillVenue) {
@@ -680,13 +680,11 @@ describe("moving into closed zones", () => {
     });
     return { v, dining: dining.id };
   }
-  async function freeTable(v: BillVenue, zoneId: string) {
-    return withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: randomUUID(), zoneId }),
-    );
+  async function freeTable(zoneId: string) {
+    return withTransaction(suite.db, (tx) => createTable(tx, { label: randomUUID(), zoneId }));
   }
   async function seated(v: BillVenue, zoneId: string) {
-    const t = await freeTable(v, zoneId);
+    const t = await freeTable(zoneId);
     const answer = await request(v, "POST", `/api/tables/${t.id}/seat`, {});
     expect(answer).toMatchObject({ status: 200 });
     return { tableId: t.id, ...answer.json } as {
@@ -709,7 +707,7 @@ describe("moving into closed zones", () => {
       const { v, dining } = await moveVenue();
       const source = await seated(v, dining);
       const holder = target === "held table" ? await seated(v, v.zoneId) : null;
-      const destination = holder ?? (await freeTable(v, v.zoneId));
+      const destination = holder ?? (await freeTable(v.zoneId));
       const before = await moveRows();
       at("23:45");
       expect(
@@ -733,7 +731,7 @@ describe("moving into closed zones", () => {
       const { v, dining } = await moveVenue();
       const source = await seated(v, dining);
       const holder = target.startsWith("held table") ? await seated(v, v.zoneId) : null;
-      const destination = holder ?? (await freeTable(v, v.zoneId));
+      const destination = holder ?? (await freeTable(v.zoneId));
       if (target === "no bill" || target === "held table without a bill")
         await withTransaction(suite.db, async (tx) => {
           await tx
@@ -764,7 +762,7 @@ describe("moving into closed zones", () => {
     const { v, dining } = await moveVenue();
     const source = await seated(v, v.zoneId);
     const zoneId = sameZone ? v.zoneId : dining;
-    const destination = await freeTable(v, zoneId);
+    const destination = await freeTable(zoneId);
     at("23:45");
     const answer =
       kind === "bill"
@@ -796,7 +794,7 @@ describe("moving into closed zones", () => {
   it("lets a presented bill move to a closed zone, taking that zone", async () => {
     const { v, dining } = await moveVenue();
     const source = await seated(v, dining);
-    const destination = await freeTable(v, v.zoneId);
+    const destination = await freeTable(v.zoneId);
     await withTransaction(suite.db, (tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, source.tabId)),
     );

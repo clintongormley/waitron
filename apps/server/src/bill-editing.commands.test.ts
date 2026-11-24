@@ -43,7 +43,7 @@ const blank = (billId: string): BillEditExpected => ({
 
 async function fixture() {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Ownership-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

@@ -157,11 +157,11 @@ async function dish(name: string, categoryId: string | null = null): Promise<Dis
       unitPrice: "4.00",
       vatClass: "general",
     });
-    const counter = await offerProducts(tx, v.cfg, {
+    const counter = await offerProducts(tx, {
       zone: "counter",
       productIds: [product.id],
     });
-    const tables = await offerProducts(tx, v.cfg, {
+    const tables = await offerProducts(tx, {
       zone: "tables",
       productIds: [product.id],
     });
@@ -477,7 +477,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const zoneId = await inTx(v, async (tx) => {
       const [zone] = [await seedZone(tx, { name: `Barra ticket ${randomUUID()}` })];
       return (
-        await offerProducts(tx, v.cfg, {
+        await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
           productIds: [made.productId],
@@ -1069,7 +1069,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     async ({ mode, sends }) => {
       const made = await strandedDish(`Question ${mode}`);
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, {
+        offerProducts(tx, {
           zone: "counter",
           orderStart: mode === "table_tab" ? "table" : "counter",
           productIds: [made.productId],
@@ -1119,7 +1119,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
   it("asks an existing sale in its stored zone when the request omits or conflicts on zone", async () => {
     const made = await dish("Table zone lager");
     await inTx(v, (tx) =>
-      offerProducts(tx, v.cfg, {
+      offerProducts(tx, {
         zone: "tables",
         orderStart: "counter",
         productIds: [made.productId],
@@ -1448,7 +1448,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     async (mode) => {
       const made = await strandedDish(`Order ${mode}`);
       await inTx(v, (tx) =>
-        offerProducts(tx, v.cfg, {
+        offerProducts(tx, {
           zone: "counter",
           orderStart: "counter",
           productIds: [made.productId],

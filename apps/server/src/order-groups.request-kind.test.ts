@@ -433,7 +433,7 @@ describe("A773 request kind of arriving dishes", () => {
   it("gives arrival at a newly seated party new_order", async () => {
     const { source, billId } = await splitOff();
     const { id: free } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId }),
+      createTable(tx, { label: "Destination", zoneId: v.zoneId }),
     );
     const moved = await send(v.app, v.cookie, "POST", `/api/bills/${billId}/move`, {
       operatorId: v.adminId,

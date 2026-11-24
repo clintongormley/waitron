@@ -71,7 +71,7 @@ useVenueDb({
     for (const mode of ["prepay", "ticket_then_pay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = [await seedZone(tx, { name: `Bar ${mode}` })];
-        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
+        await offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "counter" });
         if (mode === "ticket_then_pay") {
           await tx.execute(sql`
             update floor_zones set paid_when = 'ticket_then_pay'
@@ -673,7 +673,7 @@ const plain = (name: string, quantity = "1"): Line => ({
 
 async function seatParty(): Promise<{ partyId: string; billId: string }> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `T-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

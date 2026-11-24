@@ -104,8 +104,8 @@ const suite = useVenueDb({
       await setProductCourse(tx, soupId, starterCourse.id);
       await setProductCourse(tx, steakId, mainCourse.id);
       await assignMenuToVenue(tx, menu.id);
-      counterOffers = await offerProducts(tx, cfg);
-      tablesZoneId = (await offerProducts(tx, cfg, { zone: "tables" })).zoneId;
+      counterOffers = await offerProducts(tx);
+      tablesZoneId = (await offerProducts(tx, { zone: "tables" })).zoneId;
     });
   },
 });
@@ -255,7 +255,7 @@ async function placeOrder(names: string[]): Promise<string> {
 async function tabWithSoupAndSteak(): Promise<string> {
   const ids = await offerIdsByName();
   const { id: tableId } = await withTransaction(suite.db, (tx) =>
-    createTable(tx, cfg, { label: `Mesa-${randomUUID().slice(0, 8)}`, zoneId: tablesZoneId }),
+    createTable(tx, { label: `Mesa-${randomUUID().slice(0, 8)}`, zoneId: tablesZoneId }),
   );
   const opened = await app.request(`/api/tables/${tableId}/seat`, {
     method: "POST",

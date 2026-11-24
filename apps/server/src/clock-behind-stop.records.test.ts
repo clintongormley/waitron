@@ -47,7 +47,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     const offers = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     counterZone = offers.zoneId;
     const productIds = new Map(

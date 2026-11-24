@@ -74,7 +74,7 @@ function api(attendance?: AttendanceRecorder) {
 async function prepare(action: Action) {
   const source = await seatedWith(v, "House salad", "Tarta");
   const { id: free } = await run((tx) =>
-    createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId }),
+    createTable(tx, { label: "Destination", zoneId: v.zoneId }),
   );
   if (action === "split-table") {
     await run((tx) =>

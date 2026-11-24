@@ -193,7 +193,7 @@ async function setupVenue(): Promise<Venue> {
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(
       tx,
@@ -217,7 +217,7 @@ interface Seated {
 
 async function seated(v: Venue): Promise<Seated> {
   return inTx(async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, {
+    const { id: tableId } = await createTable(tx, {
       label: `S-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });

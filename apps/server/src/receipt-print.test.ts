@@ -261,7 +261,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
-      offers: await offerProducts(tx, cfg, {
+      offers: await offerProducts(tx, {
         orderStart: "counter",
         paidWhen: orderFlow,
       }),
@@ -690,8 +690,8 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
   const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   const tabId = await withTransaction(suite.db, async (tx) => {
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const table = await createTable(tx, cfg, { label: "Table 4", zoneId: offers.zoneId });
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const table = await createTable(tx, { label: "Table 4", zoneId: offers.zoneId });
     const { tabId } = await openPartyTab(tx, cfg, {
       tableId: table.id,
       lines: [{ menuItemId: offers.offerFor(each.id), quantity: "1" }],
@@ -751,9 +751,9 @@ describe("receipt grouping after table changes", () => {
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
       // order in a zone of this flow, delivered to the table.
       const { tableId, orderId } = await withTransaction(suite.db, async (tx) => {
-        const table = await createTable(tx, cfg, {
+        const table = await createTable(tx, {
           label: "Terrace 6",
-          zoneId: (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+          zoneId: (await offerProducts(tx, { zone: "tables" })).zoneId,
         });
         const orderId = randomUUID();
         await createOpenOrder(
@@ -3769,7 +3769,7 @@ describe("department receipt presentation on thermal jobs", () => {
   });
 
   it("uses two recorded departments on one printer without inheriting venue contact", async () => {
-    const { cfg, departmentId, zoneId, sell, documents } = await setupReceipt();
+    const { departmentId, zoneId, sell, documents } = await setupReceipt();
     await storeDepartmentReceipt(departmentId, {
       headerSubtitle: { "es-ES": "First subtitle" },
       phone: "911111111",
@@ -3786,7 +3786,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .update(floorZones)
       .set({ departmentId: other.id })
       .where(eq(floorZones.id, zoneId));
-    await withTransaction(suite.db, (tx) => offerProducts(tx, cfg, { zone: { zoneId } }));
+    await withTransaction(suite.db, (tx) => offerProducts(tx, { zone: { zoneId } }));
     await sell();
     const text = (await documents()).map((job) => decodeTicket(job.payload));
     expect(text).toHaveLength(2);

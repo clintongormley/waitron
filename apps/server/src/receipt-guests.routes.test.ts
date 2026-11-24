@@ -149,8 +149,8 @@ async function venue(db: Database): Promise<Venue> {
       unitPrice: "0.00",
       vatClass: "general",
     });
-    const offers = await offerProducts(tx, cfg, { productIds: [product.id, free.id] });
-    const tables = await offerProducts(tx, cfg, {
+    const offers = await offerProducts(tx, { productIds: [product.id, free.id] });
+    const tables = await offerProducts(tx, {
       zone: "tables",
       productIds: [product.id, free.id],
     });
@@ -388,7 +388,7 @@ async function partyBill(
   { menuItemId = v.tableItemId, quantity = "8" } = {},
 ): Promise<string> {
   return withTransaction(v.db, async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, {
+    const { id: tableId } = await createTable(tx, {
       label: `Mesa ${randomUUID().slice(0, 8)}`,
       zoneId: v.tablesZone,
     });

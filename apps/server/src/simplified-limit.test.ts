@@ -68,10 +68,10 @@ useVenueDb({
       }
       await assignMenuToVenue(tx, cat.id);
       const productIds = [...product.values()];
-      counter = await offerProducts(tx, venue.cfg, { productIds });
-      tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });
+      counter = await offerProducts(tx, { productIds });
+      tables = await offerProducts(tx, { zone: "tables", productIds });
       const [zone] = [await seedZone(tx, { name: "Barra pago posterior" })];
-      ticketThenPay = await offerProducts(tx, venue.cfg, {
+      ticketThenPay = await offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
@@ -146,7 +146,7 @@ function written() {
  * each line one stored row. */
 async function seated(app: Hono, basket: Basket) {
   const table = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `M-${randomUUID().slice(0, 8)}`, zoneId: tables.zoneId }),
+    createTable(tx, { label: `M-${randomUUID().slice(0, 8)}`, zoneId: tables.zoneId }),
   );
   const seat = await send(app, venue.cookie, "POST", `/api/tables/${table.id}/seat`, {});
   expect(seat.status).toBe(200);

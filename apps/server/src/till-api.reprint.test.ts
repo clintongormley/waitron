@@ -75,7 +75,7 @@ const suite = useVenueDb({
         vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
-      coffeeOffer = (await offerProducts(tx, cfg)).offerFor(coffee.id);
+      coffeeOffer = (await offerProducts(tx)).offerFor(coffee.id);
     });
   },
 });

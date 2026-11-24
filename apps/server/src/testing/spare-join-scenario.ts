@@ -392,7 +392,7 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
         vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
-      const offers = await offerProducts(tx, cfg, { zone: "counter" });
+      const offers = await offerProducts(tx, { zone: "counter" });
       const [person] = await seedPersons(tx, {
         displayName: "Sam",
         pinHash: fixturePinHash(STAFF_PIN),

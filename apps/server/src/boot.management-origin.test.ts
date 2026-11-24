@@ -533,7 +533,7 @@ it("protects a real Ready write while accepting own and membership-listed pages"
       });
       cookie = `waitron_device=${device.deviceId}.${device.token}`;
       await withTransaction(suite.db, async (tx) => {
-        const offers = await offerProducts(tx, venue.cfg);
+        const offers = await offerProducts(tx);
         await createOpenOrder(
           tx,
           venue.cfg,

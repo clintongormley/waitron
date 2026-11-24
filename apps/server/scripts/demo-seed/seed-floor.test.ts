@@ -322,7 +322,7 @@ describe("seedFloor", () => {
       );
       const plans = [];
       for (const { zone_id } of zones)
-        plans.push(await readLayout(tx, await defaultLayout(tx, undefined, zone_id)));
+        plans.push(await readLayout(tx, await defaultLayout(tx, zone_id)));
       const { rows: today } = await tx.execute<{
         label: string;
         zone_id: string;
@@ -476,14 +476,10 @@ describe("seedFloor", () => {
         sql`select id as zone_id from floor_zones
             where is_counter_default limit 1`,
       );
-      await createTable(
-        tx,
-        {},
-        {
-          label: "Stray",
-          zoneId: rows[0]!.zone_id,
-        },
-      );
+      await createTable(tx, {
+        label: "Stray",
+        zoneId: rows[0]!.zone_id,
+      });
       await seedFloor(tx, {
         locale: LOCALE,
         departmentTradingNames: TRADING_NAMES,
@@ -501,7 +497,6 @@ describe("seedFloor", () => {
         where is_counter_default limit 1`);
       await createTable(
         tx,
-        {},
         { label: "Disabled stray", zoneId: rows[0]!.zone_id },
         { today: false },
       );

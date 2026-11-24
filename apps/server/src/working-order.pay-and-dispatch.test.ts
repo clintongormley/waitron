@@ -272,7 +272,7 @@ async function offerAtCounter(
   mode: OrderFlow = "prepay",
 ): Promise<SeededVenue> {
   const offers = await withTransaction(suite.db, (tx) =>
-    offerProducts(tx, cfg, {
+    offerProducts(tx, {
       orderStart: "counter",
       paidWhen: mode,
     }),
@@ -1707,7 +1707,7 @@ describe("prepare & collect — zone payment timing", () => {
   it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
     const { cfg, coffee, zoneId: prepayZoneId } = await setupVenue();
     const collectZone = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables", orderStart: "counter" }),
+      offerProducts(tx, { zone: "tables", orderStart: "counter" }),
     );
     await suite.db.execute(sql`
       update floor_zones set paid_when = 'ticket_then_pay'
@@ -3018,7 +3018,7 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
         const original = await createCourse(tx, { name: "Desserts", displayOrder: 9 });
         const other = await createCourse(tx, { name: "Other", displayOrder: 10 });
         await setProductCourse(tx, coffee.id, original.id);
-        const tables = await offerProducts(tx, cfg, { zone: "tables" });
+        const tables = await offerProducts(tx, { zone: "tables" });
         const tableId = await addTable(tx, tables.zoneId);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         await addTabRound(

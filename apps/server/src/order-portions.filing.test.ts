@@ -136,7 +136,7 @@ useVenueDb({
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      offers = await offerProducts(tx, venue.cfg, {
+      offers = await offerProducts(tx, {
         zone: { zoneId: venue.zoneId },
         orderStart: "table",
       });
@@ -485,7 +485,7 @@ describe("A803 portions: filing a bill of portions", () => {
 
   it("A803 portions: an unbound line files one row per line, as before", async () => {
     const billId = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `U-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });
@@ -613,7 +613,7 @@ describe("A803 portions: filing a bill of portions", () => {
 
   it("A803 portions: an order with no bound line keeps its stored row order, an extra after another dish included", async () => {
     const billId = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `O-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });
@@ -751,7 +751,7 @@ describe("A803 portions: a cancel's refund value on a paid bill", () => {
 
   it("A803 portions: a measured portion of 3 is worth its whole row, so a part cancel refunds its part", async () => {
     const billId = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });
@@ -1291,7 +1291,7 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
 
   it("A803 portion grouping: identical unbound lines stay apart, as today", async () => {
     const billId = await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `D-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });
@@ -1315,7 +1315,7 @@ describe("A803 portions: raising a dish", () => {
    * lines; `fire` sends them all. */
   async function billOf(lines: TabRoundLine[], opts: { bound: boolean; fire?: boolean }) {
     return inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, {
+      const table = await createTable(tx, {
         label: `R-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       });

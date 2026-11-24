@@ -1172,7 +1172,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           vatClass: "general",
         });
         await assignMenuToVenue(tx, menu.id);
-        const offers = await offerProducts(tx, {});
+        const offers = await offerProducts(tx);
         return offers.offerFor(water.id);
       });
 

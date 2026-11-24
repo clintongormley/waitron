@@ -164,7 +164,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     return {
       cfg,
       operator,
-      offers: await offerProducts(tx, cfg, { zone: "tables" }),
+      offers: await offerProducts(tx, { zone: "tables" }),
       productIds,
     };
   });
@@ -180,7 +180,7 @@ function offer(name: string): string {
 
 async function freshTable(): Promise<string> {
   return inTx(async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.offers.zoneId,
     });

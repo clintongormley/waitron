@@ -272,7 +272,6 @@ describe("A964 language boundaries", () => {
 
 it("A964 language boundaries preserve saved receipt-language card bytes and fiscal rows", async () => {
   const v = await provisionBillVenue(suite.db);
-  const cfg = { ...v.cfg, locale: "de-DE" };
   const offers = await inTx(v, async (tx) => {
     const cat = await createMenu(tx, { name: "Boundary menu" });
     const product = await createProduct(tx, {
@@ -285,7 +284,7 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offered = await offerProducts(tx, cfg);
+    const offered = await offerProducts(tx);
     return { zoneId: offered.zoneId, menuItemId: offered.offerFor(product.id) };
   });
   // A slip prints only on a device whose profile may print receipts.

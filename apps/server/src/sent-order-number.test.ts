@@ -67,7 +67,7 @@ useVenueDb({
       await setMadeHere(tx, v.cfg.origin.deviceId, [cheeseStation]);
     });
     madeHereCfg = { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId };
-    offers = await inTx(v, (tx) => offerProducts(tx, v.cfg, { zone: "tables" }));
+    offers = await inTx(v, (tx) => offerProducts(tx, { zone: "tables" }));
   },
 });
 

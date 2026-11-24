@@ -366,7 +366,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           vatClass: "general",
         });
         await assignMenuToVenue(tx, menu.id);
-        const offers = await offerProducts(tx, {});
+        const offers = await offerProducts(tx);
         return offers.offerFor(water.id);
       });
       box = {

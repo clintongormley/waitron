@@ -57,7 +57,7 @@ const blank = (billId: string): BillEditExpected => ({
 });
 async function party() {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `Editor-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
@@ -260,7 +260,7 @@ describe("table composition compares every affected bill before moving anything"
       await save(from.partyId, from.tabId, venue.adminId);
       await save(into.partyId, into.tabId, venue.adminId);
       await inTx(venue, async (tx) => {
-        const counter = await offerProducts(tx, venue.cfg, { zone: "counter" });
+        const counter = await offerProducts(tx, { zone: "counter" });
         await VENUE_SERVICE.retargetOrderContext(tx, from.tabId, counter.zoneId);
       });
       const expected = await edits(from.partyId, into.partyId);
@@ -282,7 +282,7 @@ describe("table composition compares every affected bill before moving anything"
       await save(from.partyId, from.tabId);
       await save(into.partyId, into.tabId);
       await inTx(venue, async (tx) => {
-        const counter = await offerProducts(tx, venue.cfg, { zone: "counter" });
+        const counter = await offerProducts(tx, { zone: "counter" });
         await VENUE_SERVICE.retargetOrderContext(tx, from.tabId, counter.zoneId);
       });
       expect(await request(action, from, into, await edits(from.partyId, into.partyId))).toEqual(
@@ -432,7 +432,7 @@ describe("table composition compares every affected bill before moving anything"
   it("a whole party moving to a free table advances every bill without changing editor or dishes", async () => {
     const from = await party(),
       free = await inTx(venue, (tx) =>
-        createTable(tx, venue.cfg, { label: `Free-${randomUUID()}`, zoneId: venue.zoneId }),
+        createTable(tx, { label: `Free-${randomUUID()}`, zoneId: venue.zoneId }),
       );
     const saved = await save(from.partyId, from.tabId, venue.adminId);
     const empty = await otherBill(from.partyId);
@@ -462,7 +462,7 @@ describe("table composition compares every affected bill before moving anything"
     async (action) => {
       const from = await party(),
         free = await inTx(venue, (tx) =>
-          createTable(tx, venue.cfg, { label: `Free-${randomUUID()}`, zoneId: venue.zoneId }),
+          createTable(tx, { label: `Free-${randomUUID()}`, zoneId: venue.zoneId }),
         );
       const empty = await otherBill(from.partyId);
       await refused(
@@ -678,7 +678,7 @@ describe("A803 race replay: Split a table against another command, from one read
 
   async function freeTable() {
     const { id } = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, {
+      createTable(tx, {
         label: `Race-${randomUUID().slice(0, 8)}`,
         zoneId: venue.zoneId,
       }),

@@ -47,7 +47,6 @@ const TABLES_ZONE = "Test tables";
  */
 export async function offerProducts(
   tx: Transaction,
-  _cfg: unknown,
   options: OfferProductsOptions = {},
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";

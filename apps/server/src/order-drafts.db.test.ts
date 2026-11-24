@@ -217,7 +217,7 @@ async function setupVenue(): Promise<Venue> {
       LOCALE,
     );
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     await setMenuVariants(tx, offers.offerFor(productId.wine), [
       { variantId: glass!.id, price: "4.00" },
       { variantId: bottle!.id, price: "18.00" },
@@ -248,7 +248,7 @@ interface Seated {
 
 async function seated(v: Venue, label = "Mesa 4"): Promise<Seated> {
   return inTx(async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, { label, zoneId: v.zoneId });
+    const { id: tableId } = await createTable(tx, { label, zoneId: v.zoneId });
     const { partyId, tabId } = await seatTable(tx, v.cfg, {
       tableId,
       guestCount: 4,
@@ -4423,8 +4423,7 @@ describe("fresh drafts alongside existing bill families", () => {
         const tableId =
           target?.tableId ??
           (await inTx(
-            async (tx) =>
-              (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+            async (tx) => (await createTable(tx, { label: "Destination", zoneId: v.zoneId })).id,
           ));
         const own = target === null ? null : await billDraft(v, target.partyId, target.tabId);
         if (destination === "split table")
@@ -4577,8 +4576,7 @@ describe("fresh drafts alongside existing bill families", () => {
       const tableId =
         target?.tableId ??
         (await inTx(
-          async (tx) =>
-            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+          async (tx) => (await createTable(tx, { label: "Destination", zoneId: v.zoneId })).id,
         ));
       if (destination === "split table")
         await inTx(async (tx) =>
@@ -4668,8 +4666,7 @@ describe("fresh drafts alongside existing bill families", () => {
       const tableId =
         target?.tableId ??
         (await inTx(
-          async (tx) =>
-            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+          async (tx) => (await createTable(tx, { label: "Destination", zoneId: v.zoneId })).id,
         ));
       if (destination === "split table")
         await inTx(async (tx) =>

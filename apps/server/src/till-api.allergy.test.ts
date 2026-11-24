@@ -66,7 +66,7 @@ beforeEach(async () => {
   partyId = party!.id;
   const zone = await createZone(suite.db, { name: "Tables" });
   tableZoneId = zone.id;
-  const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
+  const table = await createTable(suite.db, { label: "Table 1", zoneId: zone.id });
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
   orderId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 1 })).id;
   billId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 2, partyId })).id;

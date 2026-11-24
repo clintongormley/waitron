@@ -175,7 +175,7 @@ async function fileOneSale(db: Database) {
     await assignMenuToVenue(tx, menu.id);
     return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
   });
-  const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg));
+  const offers = await withTransaction(db, (tx) => offerProducts(tx));
   const backend = new VerifactuBackend({
     clock: fixedClock,
     db,

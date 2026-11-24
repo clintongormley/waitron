@@ -170,7 +170,7 @@ function place(x: number, y: number) {
 
 function save(zoneId: string, revision: number, tables: Entry[]) {
   return inTx(v, async (tx) =>
-    saveLayout(tx, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), { revision, tables }, NOW),
+    saveLayout(tx, REMOVALS, await defaultLayout(tx, zoneId), { revision, tables }, NOW),
   );
 }
 
@@ -203,7 +203,7 @@ async function tableExists(tableId: string): Promise<boolean> {
 async function plannedTable(label: string) {
   const zoneId = await zone();
   const { revision, ids } = await save(zoneId, 0, [entry("t", label)]);
-  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
   const tableId = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
   return { zoneId, tableId, masterId: ids.t!, revision };
 }
@@ -301,9 +301,7 @@ describe("the till's floor routes catch today's plan up", () => {
       entry("c4", c4, { seats: 6, placement: place(20, 0) }),
       entry("c5", c5, { seats: 4, placement: place(40, 0) }),
     ]);
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
     const [t3, t4, t5] = [liveOf("c3"), liveOf("c4"), liveOf("c5")];
     const partyId = await seatAt(t3);
@@ -442,7 +440,7 @@ describe("on a new business day, the till's floor routes reset today's plan befo
 
 /** The live table each of the first save's entries made, by entry key. */
 async function liveIdsOf(zoneId: string, ids: Record<string, string>) {
-  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)));
+  const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
   return (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
 }
 
@@ -845,7 +843,7 @@ describe("a table that frees up after a reset needs moving", () => {
       await giveKeptSize(v, z.master[key]!, { width: 2, height: 2 });
     const [t3, long, bar] = [z.table.t3!, z.table.c3!, z.table.bar!];
     const partyId = await seatAt(t3);
-    const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, z.zoneId));
+    const layout = await inTx(v, (tx) => defaultLayout(tx, z.zoneId));
     const saved = await inTx(v, (tx) => readLayout(tx, layout));
     await save(
       z.zoneId,

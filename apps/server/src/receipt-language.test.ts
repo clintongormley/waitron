@@ -176,7 +176,7 @@ async function venueWith(
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const offers = await offerProducts(tx, cfg, { productIds: [product.id] });
+    const offers = await offerProducts(tx, { productIds: [product.id] });
     const [staff] = await seedPersons(tx, {
       displayName: "Cashier",
       pinHash: fixturePinHash("5555"),
@@ -479,7 +479,7 @@ describe("a bill paid in parts and an unpaid invoice file the venue's language w
   it("files and explicitly prints an unpaid invoice in Catalan", async () => {
     const venue = await catalanBillVenue();
     const { zoneId } = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -514,7 +514,7 @@ describe("a card-reader sale files and prints in the venue's language when the o
   async function catalanCounter() {
     const venue = await catalanBillVenue();
     const { zoneId, offerFor } = await inTx(venue, async (tx) => {
-      const offers = await offerProducts(tx, venue.cfg, { zone: "counter" });
+      const offers = await offerProducts(tx, { zone: "counter" });
       return { zoneId: offers.zoneId, offerFor: offers.offerFor };
     });
     const [tarta] = suite.db.all<{ id: string }>(sql`select id from products where name = 'Tarta'`);
@@ -818,7 +818,7 @@ describe("a sale prints its goods in the default content language its lines stor
         defaultLanguage,
       );
       await writeProductModifiers(tx, product.id, [{ kind: "options", id: bread.id }]);
-      const offers = await offerProducts(tx, v.cfg, { productIds: [product.id] });
+      const offers = await offerProducts(tx, { productIds: [product.id] });
       return {
         menuItemId: offers.offerFor(product.id),
         zoneId: offers.zoneId,
@@ -1221,7 +1221,7 @@ describe("the receipt language staff choose is saved on the order", () => {
   /** A counter order parked, and placed when asked, through the working-order functions. */
   async function counterOrder(venue: BillVenue, placed: boolean): Promise<string> {
     const { zoneId } = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -1457,7 +1457,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       await tx.execute(
         sql`update products set customer_name = json_object('es', 'ES ' || name, 'ca', 'CA ' || name)`,
       );
-      await offerProducts(tx, venue.cfg, { zone: "tables" });
+      await offerProducts(tx, { zone: "tables" });
     });
     return venue;
   }
@@ -1521,7 +1521,7 @@ describe("a sale files in the receipt language saved on its order", () => {
   /** A counter order parked with one Tarta, through the working-order functions. */
   async function parkedTarta(venue: BillVenue): Promise<{ id: string; zoneId: string }> {
     const { zoneId } = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     const id = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {
@@ -1889,7 +1889,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     /** A counter basket of one Tarta, in a counter zone. */
     async function counterBasket(venue: BillVenue) {
       const { zoneId } = await inTx(venue, (tx) =>
-        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+        offerProducts(tx, { zone: "counter", orderStart: "counter" }),
       );
       return { zoneId, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }] };
     }

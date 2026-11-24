@@ -69,9 +69,9 @@ const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
 
 describe("listTablesWithState — floor-annotator merge", () => {
   it("surfaces a table's imminent booked reservation through the bookings floor annotator", async () => {
-    const cfg = await setupVenue();
+    await setupVenue();
     const { id: tableId } = await asApp(async (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: "7",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),
@@ -89,9 +89,9 @@ describe("listTablesWithState — floor-annotator merge", () => {
   it("returns nextReservation null with NO annotators, even for a table with a booked row (deletion proof)", async () => {
     // A descriptor whose `floorAnnotations` seat is OMITTED: the badge flows ONLY through the seat, so
     // the booked row never reaches the floor.
-    const cfg = await setupVenue();
+    await setupVenue();
     const { id: tableId } = await asApp(async (tx) =>
-      createTable(tx, cfg, {
+      createTable(tx, {
         label: "8",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       }),

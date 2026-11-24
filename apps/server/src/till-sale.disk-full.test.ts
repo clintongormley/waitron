@@ -31,7 +31,7 @@ useVenueDb({
       });
       productId = created.id;
       await assignMenuToVenue(tx, cat.id);
-      counter = await offerProducts(tx, venue.cfg, { productIds: [productId] });
+      counter = await offerProducts(tx, { productIds: [productId] });
     });
   },
 });

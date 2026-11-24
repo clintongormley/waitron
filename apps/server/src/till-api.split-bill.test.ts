@@ -102,7 +102,7 @@ const suite = useVenueDb({
       return p;
     });
     coffeeId = product.id;
-    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+    const offers = await withTransaction(db, (tx) => offerProducts(tx, { zone: "tables" }));
     coffeeMenuItemId = offers.offerFor(coffeeId);
     tablesZoneId = offers.zoneId;
   },
@@ -196,7 +196,7 @@ async function setupTabApp(
   mountTillApi(app, d, collect([]));
   const cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
+    const a = await createTable(tx, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openPartyTab(tx, cfg, {
       tableId: a.id,
       lines: [{ menuItemId: coffeeMenuItemId, quantity: aQty }],
@@ -228,9 +228,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
   }> {
     const { app, tabA, cookie } = await setupTabApp("1");
     const stationId = await kitchenStation();
-    const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables" }),
-    );
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, { zone: "tables" }));
     const printerId = await withTransaction(suite.db, async (tx) => {
       const { id } = await createPrinter(tx, {
         name: `P-${randomUUID().slice(0, 8)}`,
@@ -374,7 +372,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
         body: JSON.stringify(await observedGroupSubmitBody(suite.db, path, body)),
       });
     const table = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),
+      createTable(tx, { label: `T-${randomUUID()}`, zoneId: tablesZoneId }),
     );
     const seated = await post(`/api/tables/${table.id}/seat`, { guestCount: 2 });
     expect(seated.status).toBe(200);
@@ -387,9 +385,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, staffMember.id),
     );
     await kitchenStation();
-    const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, cfg, { zone: "tables" }),
-    );
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, { zone: "tables" }));
     const round = await post(`/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: revision,
@@ -484,8 +480,8 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const db = venueSuite.db;
     const { cfg: venueCfg, coffeeId: provisionedCoffeeId } = await setupVenue(db);
     const { tabId, personId, profileId } = await withTransaction(db, async (tx) => {
-      const offers = await offerProducts(tx, venueCfg, { zone: "tables" });
-      const table = await createTable(tx, venueCfg, { label: "Table 5", zoneId: offers.zoneId });
+      const offers = await offerProducts(tx, { zone: "tables" });
+      const table = await createTable(tx, { label: "Table 5", zoneId: offers.zoneId });
       const tab = await openPartyTab(tx, venueCfg, {
         tableId: table.id,
         lines: offers.toOfferLines([{ productId: provisionedCoffeeId, quantity: "2" }]),

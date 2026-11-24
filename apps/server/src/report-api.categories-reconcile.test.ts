@@ -167,7 +167,7 @@ describe("the category report reconciles with the till's sales", () => {
       });
       return { products: ids, managerSid: session.token };
     });
-    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
+    const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
     const line = (productId: string, quantity: string) => ({
       menuItemId: offers.offerFor(productId),
       quantity,

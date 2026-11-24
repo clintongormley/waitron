@@ -166,7 +166,7 @@ async function notedVoidReason() {
 }
 
 async function counterFixture() {
-  const offers = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await inTx(venue, (tx) => offerProducts(tx));
   const id = randomUUID();
   const table = await fixture("fire");
   const [dish] = await venue.db

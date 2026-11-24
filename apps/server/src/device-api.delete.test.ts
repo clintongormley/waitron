@@ -117,7 +117,7 @@ async function openTillSession(deviceId: string): Promise<string> {
 
 async function paymentInProgress(venue: Venue, deviceId: string): Promise<void> {
   const orderId = randomUUID();
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx));
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,

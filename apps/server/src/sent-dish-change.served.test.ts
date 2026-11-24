@@ -98,7 +98,7 @@ describe("changing a sent dish that has been served", () => {
 /** A fresh party's bill carrying `quantity` of the named dish on one stored line, fired. */
 async function firedTabOf(name: string, quantity: string): Promise<string> {
   return inTx(venue, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `S-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });

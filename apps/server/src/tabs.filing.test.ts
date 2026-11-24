@@ -146,8 +146,8 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
     await assignMenuToVenue(tx, cat.id);
     return {
       available: (await listAvailableProducts(tx)).products,
-      counter: await offerProducts(tx, cfg),
-      tables: await offerProducts(tx, cfg, { zone: "tables" }),
+      counter: await offerProducts(tx),
+      tables: await offerProducts(tx, { zone: "tables" }),
     };
   });
   const coffee = available.find((p) => p.name === "Café")!;
@@ -155,16 +155,11 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   return { cfg, coffee, water, counter, tables };
 }
 
-async function seedTable(
-  cfg: DeviceRequestConfig,
-  label: string,
-  db: Database = suite.db,
-  zoneId?: string,
-): Promise<string> {
+async function seedTable(label: string, db: Database = suite.db, zoneId?: string): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { id } = await createTable(tx, cfg, {
+    const { id } = await createTable(tx, {
       label,
-      zoneId: zoneId ?? (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+      zoneId: zoneId ?? (await offerProducts(tx, { zone: "tables" })).zoneId,
     });
     return id;
   });
@@ -234,7 +229,7 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
 describe("bill payment closes the tab", () => {
   it("settles a tab with a round, files one sale and one fiscal record, and frees the table", async () => {
     const { cfg, coffee, water, tables } = await setupVenue();
-    const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
+    const tableId = await seedTable("Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
@@ -272,7 +267,7 @@ describe("bill payment closes the tab", () => {
 
   it("refuses payment on an empty saved tab and leaves the tab open", async () => {
     const { cfg } = await setupVenue();
-    const tableId = await seedTable(cfg, "Empty-pay");
+    const tableId = await seedTable("Empty-pay");
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
@@ -371,7 +366,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     );
 
     const { cfg: cfgB, coffee: coffeeB, tables: tablesB } = await secondVenueSharingNif(nifA);
-    const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
+    const tableId = await seedTable("H2-tab", suiteB.db, tablesB.zoneId);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
       return openPartyTab(tx, cfgB, {
         tableId,
@@ -458,7 +453,7 @@ async function deliveryTableOf(
 describe("counter delivery order creation and payment", () => {
   it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
     const { cfg, coffee, counter } = await setupVenue();
-    const tableId = await seedTable(cfg, "Del-1");
+    const tableId = await seedTable("Del-1");
     const deps = { db: suite.db, backend, clock };
 
     const id = randomUUID();
@@ -508,7 +503,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
 
     const { cfg: cfgA, coffee: coffeeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
-    const tableA = await seedTable(cfgA, "H2col-A");
+    const tableA = await seedTable("H2col-A");
     const deliveredId = randomUUID();
     await deliveryOrder(
       depsA.db,
@@ -556,7 +551,7 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         unitPrice: "3.00",
         vatClass: "general",
       });
-      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: beer.id }, zoneId: null },
@@ -566,7 +561,7 @@ describe("a sent line is payable after archival; an archived unsent one is not",
       return { burgerId: burger.id, beerId: beer.id, offers, courseId: mains.id };
     });
     expect(offers.zoneId).toBe(tables.zoneId);
-    const tableId = await seedTable(cfg, "Focus-6", suite.db, tables.zoneId);
+    const tableId = await seedTable("Focus-6", suite.db, tables.zoneId);
     const { tabId } = await withTransaction(suite.db, (tx) => openPartyTab(tx, cfg, { tableId }));
     await withTransaction(suite.db, async (tx) => {
       // Lines 1 and 2: a Burger each, fired. Line 3: a bottle with no preparation, sent with the

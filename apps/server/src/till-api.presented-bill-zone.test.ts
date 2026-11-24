@@ -67,7 +67,7 @@ beforeAll(async () => {
       name: "Interior",
       departmentId: department.id,
     });
-    await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "table" });
+    await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" });
     return { indoor: zone.id, indoorDepartment: department.id };
   }));
   terraceTill = await zoneTill(terrace);
@@ -137,9 +137,7 @@ function partyOf(billId: string): string {
 
 async function freeTable(zoneId: string): Promise<string> {
   return (
-    await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `M-${randomUUID().slice(0, 8)}`, zoneId }),
-    )
+    await inTx(venue, (tx) => createTable(tx, { label: `M-${randomUUID().slice(0, 8)}`, zoneId }))
   ).id;
 }
 

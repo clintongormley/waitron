@@ -185,7 +185,7 @@ async function venue(): Promise<Venue> {
     });
     await assignMenuToVenue(tx, menu.id);
     const available = (await listAvailableProducts(tx)).products;
-    const offers = await offerProducts(tx, scriptCfg, { orderStart: "counter" });
+    const offers = await offerProducts(tx, { orderStart: "counter" });
     const [staff] = await seedPersons(tx, {
       displayName: "Cashier",
       pinHash: fixturePinHash("5555"),

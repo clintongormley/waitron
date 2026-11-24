@@ -320,8 +320,8 @@ interface ProductLine {
  * Every product the venue's menu holds now, offered in its counter zone (`setupVenue`'s) from
  * the test helper's own menu at the product's own price. Call it after the menu is final.
  */
-function counterOffers(cfg: DeviceRequestConfig): Promise<ZoneOffers> {
-  return withTransaction(db, (tx) => offerProducts(tx, cfg));
+function counterOffers(): Promise<ZoneOffers> {
+  return withTransaction(db, (tx) => offerProducts(tx));
 }
 
 /** `parkOrder` for a basket named by product, sold through each product's counter-zone offer. */
@@ -329,7 +329,7 @@ async function parkProducts(
   cfg: DeviceRequestConfig,
   req: { id: string; label?: string; lines: ProductLine[] },
 ): Promise<{ id: string; orderNumber: number }> {
-  const offers = await counterOffers(cfg);
+  const offers = await counterOffers();
   return parkOrder({ db }, cfg, {
     ...req,
     zoneId: offers.zoneId,
@@ -347,7 +347,7 @@ async function updateProducts(
     lines: (ProductLine & { workingOrderLineId?: string })[];
   },
 ): Promise<number> {
-  const offers = await counterOffers(cfg);
+  const offers = await counterOffers();
   return updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
     ...req,
     revision: req.revision ?? (await revisionOf(id)),
@@ -954,7 +954,7 @@ describe("parkOrder", () => {
 
   it("refuses an empty basket (sale.empty_basket) and an offer the zone does not hold (service_zone.offer_not_allowed)", async () => {
     const { cfg, coffeeId } = await setupVenue();
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
     await expect(parkProducts(cfg, { id: randomUUID(), lines: [] })).rejects.toMatchObject({
@@ -1025,7 +1025,7 @@ describe("parkOrder", () => {
 
   it("returns the mode saved at park even after the zone's payment flow changes", async () => {
     const { cfg, coffeeId } = await setupVenue();
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     const id = randomUUID();
     const req = {
       id,
@@ -1512,7 +1512,7 @@ describe("listHeldOrders", () => {
       const held = await makeProduct(tx, {});
       const cooking = await makeProduct(tx, {});
       const done = await makeProduct(tx, {});
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [
         { productId: held, quantity: "2", hold: true },
@@ -2224,7 +2224,7 @@ describe("getHeldOrder", () => {
       ],
     });
 
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     const order = await getHeldOrder({ db }, id);
     // Saved selections and quantities return in lineNo order; a quantity reads back at the three
     // places `thousandthsToDecimal` renders.
@@ -2656,10 +2656,10 @@ describe("updateHeldOrder", () => {
       );
       await attachModifierList(tx, coffeeId, { kind: "options", id: list.id });
       const options = [{ listId: list.id, labelId: list.labels[0]!.id }];
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [{ productId: coffeeId, quantity: "1", options }]);
-      return { tabId, options, offers: await tableOffers(tx, cfg) };
+      return { tabId, options, offers: await tableOffers(tx) };
     });
     const linesOf = () =>
       db
@@ -2740,10 +2740,10 @@ describe("updateHeldOrder", () => {
         );
         await attachModifierList(tx, coffeeId, { kind: "options", id: list.id });
         const options = [{ listId: list.id, labelId: list.labels[0]!.id }];
-        const tableId = await makeTable(tx, cfg);
+        const tableId = await makeTable(tx);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         await addRound(tx, cfg, tabId, [{ productId: coffeeId, quantity: "1", options }]);
-        return { tabId, options, offers: await tableOffers(tx, cfg) };
+        return { tabId, options, offers: await tableOffers(tx) };
       });
       const linesOf = () =>
         db
@@ -2829,7 +2829,7 @@ describe("updateHeldOrder", () => {
         const side = await makeProduct(tx, {});
         const added = await makeProduct(tx, {});
         const options = [{ listId: cooking.listId, labelId: cooking.labelIds[0]! }];
-        const tableId = await makeTable(tx, cfg);
+        const tableId = await makeTable(tx);
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         await addRound(tx, cfg, tabId, [
           { productId: coffeeId, quantity: "1", options },
@@ -2867,7 +2867,7 @@ describe("updateHeldOrder", () => {
         );
         await republishMenus(tx);
       });
-      const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+      const offers = await withTransaction(db, (tx) => tableOffers(tx));
 
       await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, seeded.tabId, {
         revision: await revisionOf(seeded.tabId),
@@ -2911,7 +2911,7 @@ describe("updateHeldOrder", () => {
     const seeded = await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const cooking = await addOptionList(tx, coffeeId, "Cooking", ["Rare", "Well done"]);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [
         {
@@ -2939,7 +2939,7 @@ describe("updateHeldOrder", () => {
     const { cfg, coffeeId, tabId, cooking, dish, items } = await seedAnsweredDish(false);
     const [fired] = await items();
     expect(fired!.firedAt).not.toBeNull();
-    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+    const offers = await withTransaction(db, (tx) => tableOffers(tx));
 
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       revision: await revisionOf(tabId),
@@ -2982,7 +2982,7 @@ describe("updateHeldOrder", () => {
           );
           await republishMenus(tx);
         });
-      const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+      const offers = await withTransaction(db, (tx) => tableOffers(tx));
 
       await expect(
         updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
@@ -3017,7 +3017,7 @@ describe("updateHeldOrder", () => {
       );
       await republishMenus(tx);
     });
-    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+    const offers = await withTransaction(db, (tx) => tableOffers(tx));
     const revision = await revisionOf(tabId);
 
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
@@ -3044,7 +3044,7 @@ describe("updateHeldOrder", () => {
       await menu.deleteOptionList(tx, cooking.listId);
       await republishMenus(tx);
     });
-    const offers = await withTransaction(db, (tx) => tableOffers(tx, cfg));
+    const offers = await withTransaction(db, (tx) => tableOffers(tx));
 
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       revision: await revisionOf(tabId),
@@ -3913,14 +3913,14 @@ async function attachedPrinter(
 }
 
 /** The helper's table-service zone, every current product offered in it. */
-function tableOffers(tx: Transaction, cfg: DeviceRequestConfig): Promise<ZoneOffers> {
-  return offerProducts(tx, cfg, { zone: "tables" });
+function tableOffers(tx: Transaction): Promise<ZoneOffers> {
+  return offerProducts(tx, { zone: "tables" });
 }
 
 /** Insert an active dining table in the table-service zone and return its id (for the openTab →
  *  addRound path). */
-async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
-  const { zoneId } = await tableOffers(tx, cfg);
+async function makeTable(tx: Transaction): Promise<string> {
+  const { zoneId } = await tableOffers(tx);
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into dining_tables (id, label, zone_id, created_at)
     values (${randomUUID()}, ${`T-${randomUUID().slice(0, 8)}`}, ${zoneId},
@@ -3938,7 +3938,7 @@ async function addRound(
   lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
   add = addTabRound,
 ): Promise<void> {
-  const offers = await tableOffers(tx, cfg);
+  const offers = await tableOffers(tx);
   await add(tx, cfg, tabId, offers.toOfferLines(lines));
 }
 
@@ -3954,7 +3954,7 @@ async function createOfferedOrder(
   lines: ProductLine[],
   shape: "portions" | "grouped" = "portions",
 ): Promise<{ orderNumber: number }> {
-  const offers = await offerProducts(tx, cfg);
+  const offers = await offerProducts(tx);
   if (shape === "grouped") {
     return openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
       zoneId: offers.zoneId,
@@ -4107,7 +4107,7 @@ describe("createOpenOrder's menu reads (perf)", () => {
 
   it("reads the invoice languages once, and never `listAvailableProducts`, for a non-empty basket", async () => {
     const { cfg, coffeeId } = await setupVenue();
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     const venueRead = vi.spyOn(menu, "readInvoiceLocales");
     const productList = vi.spyOn(menu, "listAvailableProducts");
     await withTransaction(db, async (tx) => {
@@ -4123,7 +4123,7 @@ describe("createOpenOrder's menu reads (perf)", () => {
   // not by the till's `[cfg.locale]`, which this case leaves at one locale.
   it("keys each stored line's customer text by the venue's invoice locales", async () => {
     const { cfg, coffeeId } = await setupVenue();
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     await seedVenueSettings(db, { invoiceLocales: [LOCALE, "en-GB"] });
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
@@ -4158,7 +4158,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       const waterOptions = await addOptionList(tx, waterId, "Tamano");
       return { coffeeOptions, waterOptions };
     });
-    const offers = await counterOffers(cfg);
+    const offers = await counterOffers();
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await parkProducts(cfg, {
@@ -4573,7 +4573,7 @@ describe("fireLines (routing resolver + snapshot)", () => {
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, {});
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(coffeeProduct)]);
@@ -4823,7 +4823,7 @@ describe("opening hours", () => {
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, { categoryId: drinks.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:30:00Z"));
@@ -4925,7 +4925,7 @@ describe("opening hours", () => {
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, { categoryId: drinks.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:30:00Z"));
@@ -6565,7 +6565,7 @@ describe("waiter line release / hold-and-fire", () => {
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
       await setProductCourse(tx, dessert, post.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Round 1: starter (Starters, earliest) auto-fires; main (Mains) is held.
@@ -6651,7 +6651,7 @@ describe("setLineCourse (move a held line to another course)", () => {
       const main = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring both: starter (Starters, earliest) auto-fires; main (Mains) is HELD — it is line 2.
@@ -6684,7 +6684,7 @@ describe("setLineCourse (move a held line to another course)", () => {
       const main = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
 
@@ -6708,7 +6708,7 @@ describe("setLineCourse (move a held line to another course)", () => {
       const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       // A lone Starters line is the order's earliest (only) course, so it auto-fires at round-send.
       await addRound(tx, cfg, tabId, [line(starter)]);
@@ -6734,7 +6734,7 @@ describe("setLineCourse (move a held line to another course)", () => {
         .where(eq(kitchenCourses.id, retired.id));
       const starter = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
@@ -6759,7 +6759,7 @@ describe("setLineCourse (move a held line to another course)", () => {
       const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
@@ -6782,7 +6782,7 @@ describe("setLineCourse (move a held line to another course)", () => {
       const main = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const billPaymentId = await seedPendingCardPayment(tx, tabId);
@@ -6836,7 +6836,7 @@ describe("sendLines (fire specific held lines / send-all)", () => {
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main1, mainCourse.id);
       await setProductCourse(tx, main2, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring three: starter (Starters, earliest) auto-fires as line 1; both Mains mains are HELD
@@ -6890,7 +6890,7 @@ describe("sendLines (fire specific held lines / send-all)", () => {
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
       await setProductCourse(tx, dessert, post.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Mains) and dessert (line 3, Desserts) are held.
@@ -6919,7 +6919,7 @@ describe("sendLines (fire specific held lines / send-all)", () => {
       const main = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -6978,7 +6978,7 @@ describe("sendLines (fire specific held lines / send-all)", () => {
       const main = await makeProduct(tx, { stationId: barStation.id });
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring both: starter auto-fires (prints at Kitchen); main (Mains, Counter) is HELD — no Counter
@@ -7013,7 +7013,7 @@ describe("sendLines (fire specific held lines / send-all)", () => {
       const main = await makeProduct(tx, {});
       await setProductCourse(tx, starter, starterCourse.id);
       await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const billPaymentId = await seedPendingCardPayment(tx, tabId);
@@ -7065,7 +7065,7 @@ describe("correction slips on line changes and cancellations", () => {
       );
       const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
       const starter = await namedProduct(tx, "Croquettes", starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(starter)]);
@@ -7093,7 +7093,7 @@ describe("correction slips on line changes and cancellations", () => {
         "P-Kitchen",
       );
       const starter = await namedProduct(tx, "Croquettes");
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
       const [{ revision }] = await tx
@@ -7120,7 +7120,7 @@ describe("correction slips on line changes and cancellations", () => {
     const { tabId, cooking } = await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const cooking = await addOptionList(tx, coffeeId, "Cooking", ["Rare", "Well done"]);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [
         {
@@ -7176,7 +7176,7 @@ describe("correction slips on line changes and cancellations", () => {
       const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
       const starter = await namedProduct(tx, "Croquettes", starterCourse.id);
       const main = await namedProduct(tx, "Chuleton", mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2) is HELD — never printed.
@@ -7214,7 +7214,7 @@ describe("addTabRound hold-on-send", () => {
       const bread = await makeProduct(tx, {});
       await setProductCourse(tx, olives, starterCourse.id);
       await setProductCourse(tx, bread, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Both starters sit in the EARLIEST course, so both WOULD auto-fire — but line 2 carries hold:true.
@@ -7254,7 +7254,7 @@ describe("addTabRound hold-on-send", () => {
       const modified = await makeProduct(tx, {});
       const plain = await makeProduct(tx, {});
       const extra = await addExtra(tx, modified, "Extra");
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [
@@ -7398,7 +7398,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
       const coffeeProduct = await makeProduct(tx, {}); // null course → fires immediately
 
       // A party's tab at a known-labelled table.
-      const { zoneId } = await tableOffers(tx, cfg);
+      const { zoneId } = await tableOffers(tx);
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, label, zone_id, created_at)
         values (${randomUUID()}, 'Table 5', ${zoneId}, ${nowIso()})
@@ -7430,7 +7430,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
       const coffeeProduct = await makeProduct(tx, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, label, zone_id, created_at)
-        values (${randomUUID()}, 'Terrace 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
+        values (${randomUUID()}, 'Terrace 8', ${(await offerProducts(tx)).zoneId}, ${nowIso()})
         returning id`);
       await tx.update(diningTables).set({ onFloor: true }).where(eq(diningTables.id, rows[0]!.id));
       const { id } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);
@@ -7523,7 +7523,7 @@ describe("the pass board (cross-station expo/pass read)", () => {
       await createStation(tx, { name: "Kitchen", isDefault: true }); // 5/10/15 defaults
       const coffeeProduct = await makeProduct(tx, {});
       const waterProduct = await makeProduct(tx, {});
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       // Serving is a command on a party, so this needs a party's tab rather than `placeOrderWith`'s
       // order.
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
@@ -7764,9 +7764,9 @@ describe("a dish's extras children", () => {
       );
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
       await setStationPrinting(tx, { printHeldWork: true });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
-      const offers = await tableOffers(tx, cfg);
+      const offers = await tableOffers(tx);
       await placeGroupedRound(
         tx,
         cfg,
@@ -7875,7 +7875,7 @@ describe("a dish's extras children", () => {
         LOCALE,
       );
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addGroupedRound(tx, cfg, tabId, [
         {
@@ -7904,7 +7904,7 @@ describe("a dish's extras children", () => {
         order by quantity`);
       expect(notices.rows.map((row) => row.quantity)).toEqual([50, 1000]);
 
-      const reducedTableId = await makeTable(tx, cfg);
+      const reducedTableId = await makeTable(tx);
       const { tabId: reducedTabId } = await openPartyTab(tx, cfg, { tableId: reducedTableId });
       await addGroupedRound(tx, cfg, reducedTabId, [
         {
@@ -7931,7 +7931,7 @@ describe("a dish's extras children", () => {
         setPrice: "18.00",
         setVatClass: "reduced",
       });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const tabId = await openExtrasTab(tx, cfg, tableId, [{ productId: coffeeId, quantity: "2" }]);
       const placement = {
         setMenuRole: "dish",
@@ -7990,7 +7990,7 @@ describe("a dish's extras children", () => {
         LOCALE,
       );
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
           productId: coffeeId,
@@ -8056,7 +8056,7 @@ describe("a dish's extras children", () => {
         LOCALE,
       );
       await attachModifierList(tx, coffeeId, { kind: "extras", id: list.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
           productId: coffeeId,
@@ -8134,7 +8134,7 @@ describe("a dish's extras children", () => {
     lines: ProductLine[],
   ): Promise<string> {
     const id = randomUUID();
-    const offers = await tableOffers(tx, cfg);
+    const offers = await tableOffers(tx);
     const { partyId } = await openPartyTab(tx, cfg, { tableId });
     // Grouped, as a counter order written before portions: two cases here split or cancel part of a line.
     await openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
@@ -8148,7 +8148,7 @@ describe("a dish's extras children", () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, coffeeId, "Bacon");
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       // line 1 = coffee (parent), line 2 = bacon (child), line 3 = water (plain).
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
@@ -8178,7 +8178,7 @@ describe("a dish's extras children", () => {
     const { cfg, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, coffeeId, "Bacon");
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       // line 1 = espresso (parent), line 2 = bacon (child).
       const tabId = await openExtrasTab(tx, cfg, tableId, [
         {
@@ -8598,7 +8598,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 describe("priceOrderLines course-override validation", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
-    const tableId = await makeTable(tx, cfg);
+    const tableId = await makeTable(tx);
     const { tabId } = await openPartyTab(tx, cfg, { tableId });
     return tabId;
   }
@@ -8832,7 +8832,7 @@ describe("frozen answers through a fractional quantity edit", () => {
       const options = [{ listId: cupOptions.listId, labelId: cupOptions.labelIds[0]! }];
       // The product-priced offer carries no price of its own, so it sells at the product's.
       const menuItemId =
-        source === "menu" ? coffeeOfferId : (await counterOffers(cfg)).offerFor(coffeeId);
+        source === "menu" ? coffeeOfferId : (await counterOffers()).offerFor(coffeeId);
       const result = await parkOrder({ db }, cfg, {
         id: randomUUID(),
         zoneId,
@@ -9180,7 +9180,7 @@ describe("order path — extras and options", () => {
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const station = await createStation(tx, { name: "Chosen station" });
-      const tableId = await makeTable(tx, seeded.cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, seeded.cfg, { tableId });
       await addRound(tx, seeded.cfg, tabId, [
         {
@@ -9269,7 +9269,7 @@ describe("order path — extras and options", () => {
         LOCALE,
       );
       await attachModifierList(tx, coffeeId, { kind: "options", id: list.id });
-      const tableId = await makeTable(tx, cfg);
+      const tableId = await makeTable(tx);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [
         {

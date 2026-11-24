@@ -32,7 +32,7 @@ async function calendar(directory: string) {
       sql`select id from products where name = 'Worker dish'`,
     )[0]!;
     const offers = await withTransaction(store.venue, (tx) =>
-      offerProducts(tx, v.cfg, { productIds: [product.id] }),
+      offerProducts(tx, { productIds: [product.id] }),
     );
     const results = [];
     for (const [key, timeZone, at] of [...scenarios].sort(

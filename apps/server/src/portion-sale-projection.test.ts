@@ -991,7 +991,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
           noteRequired: false,
         })
       ).id;
-      offers = await offerProducts(tx, cfg, { zone: "tables" });
+      offers = await offerProducts(tx, { zone: "tables" });
       return { drink, plate, burger, cheese, toppings, water, steak, bread, salad, reasonId };
     });
   });

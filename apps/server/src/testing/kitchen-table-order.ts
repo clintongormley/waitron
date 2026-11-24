@@ -13,8 +13,8 @@ export async function createTableKitchenOrder(
   cfg: OriginConfig,
   lines: ProductLine[] = [],
 ): Promise<string> {
-  const offers = await offerProducts(tx, cfg, { zone: "tables" });
-  const table = await createTable(tx, cfg, {
+  const offers = await offerProducts(tx, { zone: "tables" });
+  const table = await createTable(tx, {
     label: `Kitchen ${randomUUID()}`,
     zoneId: offers.zoneId,
   });

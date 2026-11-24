@@ -142,7 +142,7 @@ async function seated(
   tx: Transaction,
   dining?: "takeaway",
 ): Promise<{ billId: string; partyId: string }> {
-  const table = await createTable(tx, venue.cfg, {
+  const table = await createTable(tx, {
     label: `R-${randomUUID().slice(0, 8)}`,
     zoneId: venue.tables.zoneId,
   });
@@ -630,7 +630,7 @@ async function threeWithAnOliveAt(price: string): Promise<Bill & { dish: string 
       vatClass: "general",
     });
     await writeProductModifiers(tx, product.id, [{ kind: "extras", id: venue.pizzaExtras }]);
-    const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const bill = await seated(tx);
     await addPortionRound(
       tx,
@@ -3426,7 +3426,7 @@ describe("A803 portions: the extras of a row of identical portions", () => {
         { kind: "extras", id: toppings.id },
         { kind: "extras", id: sides.id },
       ]);
-      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      const offers = await offerProducts(tx, { zone: "tables" });
       return { menuItemId: offers.offerFor(focaccia.id), lists: [toppings.id, sides.id] };
     });
   }

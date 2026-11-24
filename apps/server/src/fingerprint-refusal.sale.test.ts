@@ -83,7 +83,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
     let body: Record<string, unknown>;
     if (counter) {
       const offers = await withTransaction(suite.db, (tx) =>
-        offerProducts(tx, venue.cfg, {
+        offerProducts(tx, {
           zone: "counter",
           orderStart: "counter",
           paidWhen: "prepay",
@@ -106,7 +106,7 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
       };
     } else if (kind === "collection") {
       const offers = await withTransaction(suite.db, (tx) =>
-        offerProducts(tx, venue.cfg, {
+        offerProducts(tx, {
           zone: "counter",
           orderStart: "counter",
           paidWhen: "ticket_then_pay",

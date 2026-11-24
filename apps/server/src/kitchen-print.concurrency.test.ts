@@ -84,7 +84,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
           vatClass: "general",
         });
         const orderId = randomUUID();
-        const offers = await offerProducts(tx, cfg);
+        const offers = await offerProducts(tx);
         await createOpenOrder(
           tx,
           cfg,

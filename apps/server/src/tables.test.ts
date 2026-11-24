@@ -72,8 +72,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
   };
 }
 
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
@@ -81,10 +80,10 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): P
 
 describe("table CRUD", () => {
   it("creates a table WITH a zone and lists it (active, by label)", async () => {
-    const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
-    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
-    const tables = await asApp(cfg, (tx) => listTables(tx, new Date()));
+    await setupVenue();
+    const { id: zoneId } = await asApp((tx) => createZone(tx, { name: "Terrace" }));
+    const { id } = await asApp((tx) => createTable(tx, { label: "12", zoneId }));
+    const tables = await asApp((tx) => listTables(tx, new Date()));
     expect(tables).toEqual([
       expect.objectContaining({
         id,
@@ -98,8 +97,8 @@ describe("table CRUD", () => {
 
 describe("a joined table's parts", () => {
   it("lists the real tables of a saved group with their own labels", async () => {
-    const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Counter" }));
+    await setupVenue();
+    const { id: zoneId } = await asApp((tx) => createZone(tx, { name: "Counter" }));
     const entry = (
       key: string,
       label: string,
@@ -116,8 +115,8 @@ describe("a joined table's parts", () => {
           : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
       partKeys,
     });
-    await asApp(cfg, async (tx) =>
-      saveLayout(tx, enabledTableRemovals(ALL_MODULES), await defaultLayout(tx, cfg, zoneId), {
+    await asApp(async (tx) =>
+      saveLayout(tx, enabledTableRemovals(ALL_MODULES), await defaultLayout(tx, zoneId), {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -128,7 +127,7 @@ describe("a joined table's parts", () => {
       }),
     );
     const labels = async (options?: { includeDisabled: boolean }) =>
-      (await asApp(cfg, (tx) => listTables(tx, new Date(), options))).map((table) => table.label);
+      (await asApp((tx) => listTables(tx, new Date(), options))).map((table) => table.label);
     expect(await labels()).toEqual(["Counter 3", "Counter 4", "Counter 5"]);
     expect(await labels({ includeDisabled: true })).toEqual([
       "Counter 3",
@@ -140,93 +139,87 @@ describe("a joined table's parts", () => {
 
 describe("zone CRUD", () => {
   it("creates, lists (ordered by display_order, active-only), renames, deactivates a zone", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, { name: "Dining room", displayOrder: 1 }),
-    );
-    await asApp(cfg, (tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
+    await setupVenue();
+    const { id } = await asApp((tx) => createZone(tx, { name: "Dining room", displayOrder: 1 }));
+    await asApp((tx) => createZone(tx, { name: "Terrace", displayOrder: 0 }));
     // Ordered by display_order: Terrace (0) before Dining room (1).
-    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual([
+    expect((await asApp((tx) => listZones(tx))).map((z) => z.name)).toEqual([
       "Terrace",
       "Dining room",
     ]);
-    await asApp(cfg, (tx) => updateZone(tx, id, { name: "Lounge", displayOrder: 2 }));
+    await asApp((tx) => updateZone(tx, id, { name: "Lounge", displayOrder: 2 }));
     // Renamed and reordered (Terrace 0, Lounge 2), both still active.
-    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual([
-      "Terrace",
-      "Lounge",
-    ]);
-    await asApp(cfg, async (tx) =>
+    expect((await asApp((tx) => listZones(tx))).map((z) => z.name)).toEqual(["Terrace", "Lounge"]);
+    await asApp(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
     // Inactive hidden.
-    expect((await asApp(cfg, (tx) => listZones(tx))).map((z) => z.name)).toEqual(["Terrace"]);
+    expect((await asApp((tx) => listZones(tx))).map((z) => z.name)).toEqual(["Terrace"]);
   });
 
   it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, { name: "Dining room", displayOrder: 3 }),
-    );
-    const [z] = await asApp(cfg, (tx) => listZones(tx));
+    await setupVenue();
+    const { id } = await asApp((tx) => createZone(tx, { name: "Dining room", displayOrder: 3 }));
+    const [z] = await asApp((tx) => listZones(tx));
     expect(z).toEqual({ id, name: "Dining room", displayOrder: 3, active: true });
   });
 
   it("hides deleted zones even when management requests inactive entries", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Closed room" }));
-    await asApp(cfg, async (tx) =>
+    await setupVenue();
+    const { id } = await asApp((tx) => createZone(tx, { name: "Closed room" }));
+    await asApp(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
-    expect(await asApp(cfg, (tx) => listZones(tx, { includeInactive: true }))).toEqual([]);
+    expect(await asApp((tx) => listZones(tx))).toEqual([]);
+    expect(await asApp((tx) => listZones(tx, { includeInactive: true }))).toEqual([]);
     expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toContainEqual(
       expect.objectContaining({ id, name: "Closed room", displayOrder: 0, active: false }),
     );
   });
 
   it("createZone defaults displayOrder to 0 when omitted", async () => {
-    const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, { name: "Solo" }));
-    const [z] = await asApp(cfg, (tx) => listZones(tx));
+    await setupVenue();
+    await asApp((tx) => createZone(tx, { name: "Solo" }));
+    const [z] = await asApp((tx) => listZones(tx));
     expect(z).toMatchObject({ name: "Solo", displayOrder: 0 });
   });
 
   it("rejects a duplicate name (zone.name_taken) and an unknown id (zone.not_found)", async () => {
-    const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, { name: "Dining room" }));
-    await expect(asApp(cfg, (tx) => createZone(tx, { name: "Dining room" }))).rejects.toMatchObject(
-      { code: "zone.name_taken", params: { name: "Dining room" } },
-    );
+    await setupVenue();
+    await asApp((tx) => createZone(tx, { name: "Dining room" }));
+    await expect(asApp((tx) => createZone(tx, { name: "Dining room" }))).rejects.toMatchObject({
+      code: "zone.name_taken",
+      params: { name: "Dining room" },
+    });
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => updateZone(tx, missing, { name: "X" }))).rejects.toMatchObject({
+    await expect(asApp((tx) => updateZone(tx, missing, { name: "X" }))).rejects.toMatchObject({
       code: "zone.not_found",
       params: { zoneId: missing },
     });
   });
 
   it("createZone keeps a primary-key clash as an internal database error", async () => {
-    const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
+    await setupVenue();
+    const existing = await asApp((tx) => createZone(tx, { name: "Terrace" }));
     const generateId = vi
       .spyOn(floorZones.id as unknown as { defaultFn: () => string }, "defaultFn")
       .mockReturnValue(existing.id);
     try {
-      await expect(asApp(cfg, (tx) => createZone(tx, { name: "Garden" }))).rejects.toMatchObject({
+      await expect(asApp((tx) => createZone(tx, { name: "Garden" }))).rejects.toMatchObject({
         errcode: 1555,
         message: "UNIQUE constraint failed: floor_zones.id",
       });
     } finally {
       generateId.mockRestore();
     }
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
+    expect(await asApp((tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
 
   it("updateZone does not translate a primary-key clash from another write in its trigger", async () => {
-    const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
+    await setupVenue();
+    const existing = await asApp((tx) => createZone(tx, { name: "Terrace" }));
     await db.execute(sql`create trigger test_zone_key_clash before update on floor_zones
       when new.name = 'Trigger collision'
       begin
@@ -235,7 +228,7 @@ describe("zone CRUD", () => {
       end`);
     try {
       await expect(
-        asApp(cfg, (tx) => updateZone(tx, existing.id, { name: "Trigger collision" })),
+        asApp((tx) => updateZone(tx, existing.id, { name: "Trigger collision" })),
       ).rejects.toMatchObject({
         errcode: 1555,
         message: "UNIQUE constraint failed: floor_zones.id",
@@ -243,14 +236,14 @@ describe("zone CRUD", () => {
     } finally {
       await db.execute(sql`drop trigger test_zone_key_clash`);
     }
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
+    expect(await asApp((tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
 
   it("updateZone keeps a name-key refusal internal when the patch supplies no name", async () => {
-    const cfg = await setupVenue();
-    const existing = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
+    await setupVenue();
+    const existing = await asApp((tx) => createZone(tx, { name: "Terrace" }));
     await db.execute(sql`create trigger test_zone_name_clash before update on floor_zones
       when new.name = old.name
       begin
@@ -259,7 +252,7 @@ describe("zone CRUD", () => {
       end`);
     try {
       await expect(
-        asApp(cfg, (tx) => updateZone(tx, existing.id, { displayOrder: 4 })),
+        asApp((tx) => updateZone(tx, existing.id, { displayOrder: 4 })),
       ).rejects.toMatchObject({
         errcode: 2067,
         message: "UNIQUE constraint failed: floor_zones.name",
@@ -267,46 +260,46 @@ describe("zone CRUD", () => {
     } finally {
       await db.execute(sql`drop trigger test_zone_name_clash`);
     }
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([
+    expect(await asApp((tx) => listZones(tx))).toEqual([
       { id: existing.id, name: "Terrace", displayOrder: 0, active: true },
     ]);
   });
 
   it("updateZone surfaces a name collision as zone.name_taken", async () => {
-    const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, { name: "A" }));
-    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "B" }));
-    await expect(asApp(cfg, (tx) => updateZone(tx, id, { name: "A" }))).rejects.toMatchObject({
+    await setupVenue();
+    await asApp((tx) => createZone(tx, { name: "A" }));
+    const { id } = await asApp((tx) => createZone(tx, { name: "B" }));
+    await expect(asApp((tx) => updateZone(tx, id, { name: "A" }))).rejects.toMatchObject({
       code: "zone.name_taken",
       params: { name: "A" },
     });
   });
 
   it("updateZone refuses to restore or reorder a deleted zone", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Patio", displayOrder: 5 }));
-    await asApp(cfg, async (tx) =>
+    await setupVenue();
+    const { id } = await asApp((tx) => createZone(tx, { name: "Patio", displayOrder: 5 }));
+    await asApp(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
+    expect(await asApp((tx) => listZones(tx))).toEqual([]);
     const before = await db.select().from(floorZones).where(eq(floorZones.id, id));
     await expect(
-      asApp(cfg, (tx) =>
+      asApp((tx) =>
         updateZone(tx, id, { active: true, displayOrder: 9 } as unknown as Parameters<
           typeof updateZone
         >[2]),
       ),
     ).rejects.toMatchObject({ code: "zone.not_found" });
     expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toEqual(before);
-    expect(await asApp(cfg, (tx) => listZones(tx))).toEqual([]);
+    expect(await asApp((tx) => listZones(tx))).toEqual([]);
   });
 
   it("deactivating a zone takes its tables out of service", async () => {
-    const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T8", zoneId }));
+    await setupVenue();
+    const { id: zoneId } = await asApp((tx) => createZone(tx, { name: "Terrace" }));
+    const { id: tableId } = await asApp((tx) => createTable(tx, { label: "T8", zoneId }));
 
-    await asApp(cfg, async (tx) =>
+    await asApp(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
     );
 
@@ -329,13 +322,11 @@ describe("zone CRUD", () => {
   });
 
   it("service zone creation rethrows a non-unique insert refusal raw", async () => {
-    const cfg = await setupVenue();
+    await setupVenue();
     await db.execute(sql`create trigger refuse_zone_insert before insert on floor_zones
       begin select raise(abort, 'zone insert refused'); end`);
     try {
-      const err = await asApp(cfg, (tx) => createZone(tx, { name: "Big" })).catch(
-        (e: unknown) => e,
-      );
+      const err = await asApp((tx) => createZone(tx, { name: "Big" })).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(Error);
       expect(err).not.toBeInstanceOf(AppError);
       expect(String(err)).toMatch(/zone insert refused/);
@@ -345,13 +336,13 @@ describe("zone CRUD", () => {
   });
 
   it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
+    await setupVenue();
+    const { id } = await asApp((tx) => createZone(tx, { name: "Terrace" }));
     await db.execute(sql`
       create trigger floor_zones_refuse_update before update on floor_zones
       begin select raise(abort, 'zone update refused'); end`);
     try {
-      const err = await asApp(cfg, (tx) => updateZone(tx, id, { name: "Patio" })).catch(
+      const err = await asApp((tx) => updateZone(tx, id, { name: "Patio" })).catch(
         (e: unknown) => e,
       );
       expect(err).toBeInstanceOf(Error);
@@ -403,8 +394,8 @@ async function setupTabVenue(): Promise<{
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const table = await createTable(tx, { label: "T1", zoneId: offers.zoneId });
     return { coffeeId: coffee.id, waterId: water.id, tableId: table.id, offers };
   });
   return { cfg, coffeeId, waterId, tableId, offers };
@@ -414,7 +405,7 @@ describe("listTablesWithState — readyToServe (N listos)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
@@ -423,7 +414,7 @@ describe("listTablesWithState — readyToServe (N listos)", () => {
         ]),
       }),
     );
-    const lines = await asApp(cfg, (tx) =>
+    const lines = await asApp((tx) =>
       tx
         .select({
           id: workingOrderLines.id,
@@ -437,25 +428,25 @@ describe("listTablesWithState — readyToServe (N listos)", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo),
     );
-    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+    await asApp((tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    let row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
 
-    const [item] = await asApp(cfg, (tx) =>
+    const [item] = await asApp((tx) =>
       tx
         .select({ id: ticketItems.id })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderLineId, lines[0]!.id)),
     );
-    await asApp(cfg, (tx) => advanceTicketItem(tx, item!.id, "preparing"));
-    await asApp(cfg, (tx) => advanceTicketItem(tx, item!.id, "ready"));
+    await asApp((tx) => advanceTicketItem(tx, item!.id, "preparing"));
+    await asApp((tx) => advanceTicketItem(tx, item!.id, "ready"));
 
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
 
-    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    await asApp((tx) => serveLine(tx, cfg, tabId, 1));
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });
@@ -464,7 +455,7 @@ describe("listTablesWithState — no dispatch state", () => {
   it("reports ready food without a dispatch field and keeps service and Undo counts", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
@@ -473,7 +464,7 @@ describe("listTablesWithState — no dispatch state", () => {
         ]),
       }),
     );
-    const lines = await asApp(cfg, (tx) =>
+    const lines = await asApp((tx) =>
       tx
         .select({
           id: workingOrderLines.id,
@@ -487,13 +478,13 @@ describe("listTablesWithState — no dispatch state", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo),
     );
-    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+    await asApp((tx) => fireLines(tx, cfg, tabId, lines));
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    let row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
-    const items = await asApp(cfg, (tx) =>
+    const items = await asApp((tx) =>
       tx
         .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
         .from(ticketItems)
@@ -501,26 +492,26 @@ describe("listTablesWithState — no dispatch state", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     for (const item of items) {
-      await asApp(cfg, (tx) => advanceTicketItem(tx, item.id, "preparing"));
-      await asApp(cfg, (tx) => advanceTicketItem(tx, item.id, "ready"));
+      await asApp((tx) => advanceTicketItem(tx, item.id, "preparing"));
+      await asApp((tx) => advanceTicketItem(tx, item.id, "ready"));
     }
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
     const ready = row;
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toEqual(ready);
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
 
-    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    await asApp((tx) => serveLine(tx, cfg, tabId, 1));
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 1 });
     expect(row).not.toHaveProperty("enRoute");
 
-    await asApp(cfg, (tx) => unserveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    await asApp((tx) => unserveLine(tx, cfg, tabId, 1));
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 2, pendingToServe: 2 });
     expect(row).not.toHaveProperty("enRoute");
   });
@@ -531,7 +522,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   it("bands a line by its station thresholds and clears it once served", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
@@ -540,7 +531,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
         ]),
       }),
     );
-    const lines = await asApp(cfg, (tx) =>
+    const lines = await asApp((tx) =>
       tx
         .select({
           id: workingOrderLines.id,
@@ -554,26 +545,26 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo),
     );
-    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+    await asApp((tx) => fireLines(tx, cfg, tabId, lines));
 
     // Between the seeded station's overdue (10) and forgotten (15) thresholds.
-    await asApp(cfg, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(12)}
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    let row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    let row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("overdue");
 
-    await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
-    row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    await asApp((tx) => serveLine(tx, cfg, tabId, 1));
+    row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 
   it("worst-line-wins: a forgotten line outranks a fresh one on the same table", async () => {
     const { cfg, coffeeId, waterId, tableId, offers } = await setupTabVenue();
 
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
@@ -582,7 +573,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
         ]),
       }),
     );
-    const lines = await asApp(cfg, (tx) =>
+    const lines = await asApp((tx) =>
       tx
         .select({
           id: workingOrderLines.id,
@@ -596,50 +587,50 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo),
     );
-    await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
+    await asApp((tx) => fireLines(tx, cfg, tabId, lines));
 
     // Past the seeded station's forgotten threshold (15).
-    await asApp(cfg, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(16)}
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    const row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("forgotten");
   });
 
   it("a free table (no open tab) reports fresh", async () => {
-    const { cfg, tableId } = await setupTabVenue();
-    const row = (await asApp(cfg, (tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
+    const { tableId } = await setupTabVenue();
+    const row = (await asApp((tx) => listTablesWithState(tx))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
   });
 });
 
 it("renames a zone onto a deleted name while retaining the deleted row", async () => {
-  const cfg = await setupVenue();
-  const target = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
-  const source = await asApp(cfg, (tx) => createZone(tx, { name: "Dining" }));
-  await asApp(cfg, async (tx) =>
+  await setupVenue();
+  const target = await asApp((tx) => createZone(tx, { name: "Terrace" }));
+  const source = await asApp((tx) => createZone(tx, { name: "Dining" }));
+  await asApp(async (tx) =>
     tx.execute(sql`update floor_zones set active = false where id = ${target.id}`),
   );
-  await asApp(cfg, (tx) => updateZone(tx, source.id, { name: "Terrace" }));
+  await asApp((tx) => updateZone(tx, source.id, { name: "Terrace" }));
   expect(source.id).not.toBe(target.id);
   expect(await db.select().from(floorZones).where(eq(floorZones.id, target.id))).toContainEqual(
     expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
   );
-  expect(await asApp(cfg, (tx) => listZones(tx, { includeInactive: true }))).toEqual(
+  expect(await asApp((tx) => listZones(tx, { includeInactive: true }))).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: source.id, name: "Terrace", active: true }),
     ]),
   );
-  await asApp(cfg, (tx) => updateZone(tx, source.id, { name: "Dining" }));
+  await asApp((tx) => updateZone(tx, source.id, { name: "Dining" }));
 });
 
 it("refuses zone removal while an open party occupies a table there", async () => {
-  const cfg = await setupVenue();
-  const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, { name: "Terrace" }));
-  const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
-  await asApp(cfg, async (tx) => {
+  await setupVenue();
+  const { id: zoneId } = await asApp((tx) => createZone(tx, { name: "Terrace" }));
+  const { id: tableId } = await asApp((tx) => createTable(tx, { label: "T9", zoneId }));
+  await asApp(async (tx) => {
     const [party] = await tx
       .insert(parties)
       .values({ openedBy: await seedPerson(tx, { displayName: randomUUID() }) })
@@ -648,9 +639,7 @@ it("refuses zone removal while an open party occupies a table there", async () =
   });
 
   await expect(
-    asApp(cfg, (tx) =>
-      deleteZone(tx, floorDeletionFor([]), zoneId, new Date("2026-10-11T12:00:00Z")),
-    ),
+    asApp((tx) => deleteZone(tx, floorDeletionFor([]), zoneId, new Date("2026-10-11T12:00:00Z"))),
   ).rejects.toMatchObject({
     code: "zone.table_in_use",
     params: { zoneId, tableId, tableName: "T9" },
@@ -666,16 +655,16 @@ it("refuses zone removal while an open party occupies a table there", async () =
 });
 
 it("allows removing a zone with a closed party while another zone has an open party", async () => {
-  const cfg = await setupVenue();
-  const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, { name: "Dining" }));
-  const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, { name: "Bar" }));
-  const { id: removedTable } = await asApp(cfg, (tx) =>
-    createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
+  await setupVenue();
+  const { id: removedZone } = await asApp((tx) => createZone(tx, { name: "Dining" }));
+  const { id: otherZone } = await asApp((tx) => createZone(tx, { name: "Bar" }));
+  const { id: removedTable } = await asApp((tx) =>
+    createTable(tx, { label: "D1", zoneId: removedZone }),
   );
-  const { id: otherTable } = await asApp(cfg, (tx) =>
-    createTable(tx, cfg, { label: "B1", zoneId: otherZone }),
+  const { id: otherTable } = await asApp((tx) =>
+    createTable(tx, { label: "B1", zoneId: otherZone }),
   );
-  await asApp(cfg, async (tx) => {
+  await asApp(async (tx) => {
     const [closed] = await tx
       .insert(parties)
       .values({
@@ -696,7 +685,7 @@ it("allows removing a zone with a closed party while another zone has an open pa
   });
 
   await expect(
-    asApp(cfg, (tx) =>
+    asApp((tx) =>
       deleteZone(tx, floorDeletionFor([]), removedZone, new Date("2026-10-11T12:00:00Z")),
     ),
   ).resolves.toMatchObject({ target: { id: removedZone, name: "Dining" }, refusals: [], ends: [] });

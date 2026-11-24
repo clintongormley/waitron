@@ -72,7 +72,7 @@ interface Seated {
 
 async function seated(): Promise<Seated> {
   const { id: tableId } = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `G-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `G-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   const seat = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seat.status).toBe(200);

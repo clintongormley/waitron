@@ -31,7 +31,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     zoneId = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Counter, pays after sending" })];
-      await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "counter" });
+      await offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "counter" });
       await tx.execute(
         sql`update floor_zones set paid_when = 'ticket_then_pay' where id = ${zone!.id}`,
       );

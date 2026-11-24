@@ -311,7 +311,7 @@ async function seedSaleVenue(admin: Database): Promise<string> {
       vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, {});
+    const offers = await offerProducts(tx);
     return offers.offerFor(water.id);
   });
 

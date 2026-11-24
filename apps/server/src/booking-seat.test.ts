@@ -117,7 +117,7 @@ describe("bookings seat route → real seatTable", () => {
 
     // A table to reserve, and a `booked` reservation on it (the seat reuses the booking's own table).
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id } = await createTable(tx, v.tillCfg, {
+      const { id } = await createTable(tx, {
         label: "7",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
@@ -161,7 +161,7 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id } = await createTable(tx, v.tillCfg, {
+      const { id } = await createTable(tx, {
         label: "9",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
@@ -201,7 +201,7 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id } = await createTable(tx, v.tillCfg, {
+      const { id } = await createTable(tx, {
         label: "8",
         zoneId: (await createZone(tx, { name: "Tables" })).id,
       });
@@ -260,7 +260,7 @@ describe("bookings seat route → real seatTable", () => {
     const { tableId, zoneId } = await withTransaction(db, async (tx: Transaction) => {
       const counter = await createDepartment(tx, { name: "Counter", orderStart: "counter" });
       const zone = await createServiceZone(tx, { name: "Bar", departmentId: counter.id });
-      const { id } = await createTable(tx, v.tillCfg, { label: "B1", zoneId: zone.id });
+      const { id } = await createTable(tx, { label: "B1", zoneId: zone.id });
       return { tableId: id, zoneId: zone.id };
     });
     const created = await post(app, "/management-api/bookings", v.managerCookie, {
@@ -292,7 +292,7 @@ describe("bookings seat route → real seatTable", () => {
     const now = NOW;
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id: zoneId } = await createZone(tx, { name: "Terrace" });
-      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const at = (x: number) => ({
         x,
         y: 0,
@@ -370,7 +370,7 @@ describe("bookings seat route → real seatTable", () => {
     const removals = enabledTableRemovals(ALL_MODULES);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       const { id: zoneId } = await createZone(tx, { name: "Patio" });
-      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const { ids } = await saveLayout(tx, removals, layout, {
         revision: 0,
         tables: [
@@ -443,7 +443,7 @@ describe("bookings seat route → real seatTable", () => {
             : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
         partKeys,
       });
-      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const layout = await defaultLayout(tx, zoneId);
       const { ids } = await saveLayout(tx, enabledTableRemovals(ALL_MODULES), layout, {
         revision: 0,
         tables: [

@@ -224,7 +224,7 @@ async function setup(
     });
     await assignMenuToVenue(tx, cat.id);
     const available = (await listAvailableProducts(tx)).products;
-    const offers = await offerProducts(tx, cfg);
+    const offers = await offerProducts(tx);
     const coffee = available.find((p) => p.name === "Café")!;
     const [mgr] = await seedPersons(tx, {
       displayName: "The Manager",

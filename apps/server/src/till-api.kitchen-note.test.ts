@@ -72,7 +72,7 @@ beforeEach(async () => {
   partyId = party!.id;
   const zone = await createZone(suite.db, { name: "Tables" });
   tableZoneId = zone.id;
-  const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
+  const table = await createTable(suite.db, { label: "Table 1", zoneId: zone.id });
   await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
   orderId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 1 })).id;
   billId = (await seedWorkingOrder(suite.db, { deviceId: null, orderNumber: 2, partyId })).id;
@@ -595,7 +595,7 @@ describe("seating an unassigned kitchen instruction", () => {
       body: JSON.stringify({ guestCount: 2, kitchenNote }),
     });
   it("seats and saves the note in one write before any food is submitted", async () => {
-    const table = await createTable(suite.db, cfg, { label: "New table", zoneId: tableZoneId });
+    const table = await createTable(suite.db, { label: "New table", zoneId: tableZoneId });
     const response = await seatRequest(table.id, "  Train\nat 14:30  ");
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
     const seated = (await response.json()) as {
@@ -618,7 +618,7 @@ describe("seating an unassigned kitchen instruction", () => {
     { note: [], code: "kitchen_note.invalid" },
     { note: "x".repeat(2001), code: "kitchen_note.too_long" },
   ])("rejects $code and leaves the table free", async ({ note, code }) => {
-    const table = await createTable(suite.db, cfg, { label: "New table", zoneId: tableZoneId });
+    const table = await createTable(suite.db, { label: "New table", zoneId: tableZoneId });
     const before = await suite.db.select().from(parties);
     const response = await seatRequest(table.id, note);
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(400);

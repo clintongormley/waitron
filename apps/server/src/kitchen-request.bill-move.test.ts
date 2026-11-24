@@ -250,9 +250,8 @@ describe("A773 requested lifecycle: bill move", () => {
         [{ lineNo: copy.lineNo }],
         await command(tx, venue),
       );
-      const tableId = (
-        await createTable(tx, venue.cfg, { label: "Elsewhere", zoneId: venue.party.zoneId })
-      ).id;
+      const tableId = (await createTable(tx, { label: "Elsewhere", zoneId: venue.party.zoneId }))
+        .id;
       const other = await seatTable(tx, venue.cfg, {
         tableId,
         guestCount: null,

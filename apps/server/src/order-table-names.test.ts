@@ -57,7 +57,7 @@ describe("A765 table names in order lists", () => {
     await withTransaction(venue.db, async (tx) => {
       const tables = [];
       for (const label of ["North 1", "North 2"])
-        tables.push(await createTable(tx, venue.cfg, { label, zoneId: venue.zoneId }));
+        tables.push(await createTable(tx, { label, zoneId: venue.zoneId }));
       const [join] = await tx
         .insert(tableMerges)
         .values({ zoneId: venue.zoneId, seats: 6, name: "Garden party" })
@@ -100,7 +100,7 @@ describe("A765 table names in order lists", () => {
     async (status) => {
       const id = randomUUID();
       await withTransaction(venue.db, async (tx) => {
-        const table = await createTable(tx, venue.cfg, {
+        const table = await createTable(tx, {
           label: `Saved ${status}`,
           zoneId: venue.zoneId,
         });

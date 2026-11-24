@@ -239,7 +239,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       });
       ids.set(dish.name, product.id);
     }
-    const offers = await offerProducts(tx, venue.cfg, {
+    const offers = await offerProducts(tx, {
       zone: "tables",
       productIds: [...ids.values()],
     });

@@ -125,8 +125,8 @@ async function setup() {
     // Keep a reference so deletion retains the other row as well.
     await setProductCourse(tx, sauce.id, other.id);
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const counter = await offerProducts(tx, cfg);
+    const offers = await offerProducts(tx, { zone: "tables" });
+    const counter = await offerProducts(tx);
     return { early, late, other, dish, sauce, list, offers, counter };
   });
   const app = new Hono();
@@ -177,7 +177,7 @@ async function setup() {
   }
   async function seat() {
     const table = await withTransaction(db, (tx) =>
-      createTable(tx, cfg, { label: randomUUID(), zoneId: stocked.offers.zoneId }),
+      createTable(tx, { label: randomUUID(), zoneId: stocked.offers.zoneId }),
     );
     const res = await request(`/api/tables/${table.id}/seat`, "POST", {});
     expect(res.status).toBe(200);

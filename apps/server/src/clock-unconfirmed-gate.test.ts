@@ -90,7 +90,7 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     counter = await inTx(venue, (tx) =>
-      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
     );
     // The first till's profile may close bills as deferred payments, so that route's row reaches
     // its clock check.

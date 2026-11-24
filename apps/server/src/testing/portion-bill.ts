@@ -86,7 +86,7 @@ export async function portionBill(
   lines: TabRoundLine[],
   opts?: { measureDishes?: true },
 ): Promise<{ billId: string; portions: PortionRef[] }> {
-  const table = await createTable(tx, cfg, { label: `P-${randomUUID().slice(0, 8)}`, zoneId });
+  const table = await createTable(tx, { label: `P-${randomUUID().slice(0, 8)}`, zoneId });
   const { tabId } = await openPartyTab(tx, cfg, { tableId: table.id });
   return { billId: tabId, portions: await addPortionRound(tx, cfg, tabId, lines, opts) };
 }

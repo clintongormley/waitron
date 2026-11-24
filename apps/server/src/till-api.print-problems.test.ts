@@ -49,7 +49,7 @@ useVenueDb({
 /** A seated table with one fired group of Octopus, its kitchen ticket just queued. */
 async function tableWithTicket() {
   const { id: tableId } = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   const seat = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   expect(seat.status).toBe(200);

@@ -468,10 +468,9 @@ describe("POST /api/working-orders/:id/close-deferred, the party", () => {
     );
     const terrace = await inTx(t.venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: `Terrace ${randomUUID().slice(0, 8)}` })];
-      const zoneId = (
-        await offerProducts(tx, t.venue.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" })
-      ).zoneId;
-      const table = await createTable(tx, t.venue.cfg, {
+      const zoneId = (await offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "table" }))
+        .zoneId;
+      const table = await createTable(tx, {
         label: `T ${randomUUID().slice(0, 8)}`,
         zoneId,
       });

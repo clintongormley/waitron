@@ -107,7 +107,7 @@ async function call(who: Member, method: string, path: string, body?: unknown) {
 /** A party seated by `who` at a fresh table; answers the party and its bill. */
 async function seat(who: Member): Promise<{ partyId: string; billId: string }> {
   const table = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, {
+    createTable(tx, {
       label: `R-${randomUUID().slice(0, 8)}`,
       zoneId: venue.tables.zoneId,
     }),

@@ -65,7 +65,7 @@ useVenueDb({
       });
       dishId = dish.id;
       await assignMenuToVenue(tx, menu.id);
-      counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
+      counter = await offerProducts(tx, { productIds: [dishId] });
     });
     marta = await seedPerson("manager", "Martha");
     mario = await seedPerson("admin", "Mario");

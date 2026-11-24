@@ -43,7 +43,7 @@ useVenueDb({
       freeId = water.id;
       await assignMenuToVenue(tx, cat.id);
       const [zone] = [await seedZone(tx, { name: "Free counter" })];
-      free = await offerProducts(tx, venue.cfg, {
+      free = await offerProducts(tx, {
         zone: { zoneId: zone!.id },
         orderStart: "counter",
         productIds: [freeId],

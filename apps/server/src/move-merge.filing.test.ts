@@ -157,7 +157,7 @@ async function setupVenue(): Promise<SeededVenue> {
   const water = available.find((p) => p.name === "Agua")!;
   offersByCfg.set(
     cfg,
-    await withTransaction(suite.db, (tx) => offerProducts(tx, cfg, { zone: "tables" })),
+    await withTransaction(suite.db, (tx) => offerProducts(tx, { zone: "tables" })),
   );
   return { cfg, available, coffee, water };
 }
@@ -171,7 +171,7 @@ function offersOf(cfg: DeviceRequestConfig): ZoneOffers {
 /** Seed one active dining table in the venue's tables zone; returns its id. */
 async function seedTable(cfg: DeviceRequestConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    return createTable(tx, cfg, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
+    return createTable(tx, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
   });
 }
 

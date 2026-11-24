@@ -93,7 +93,7 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
   await inTx(v, async (tx) => {
     await tx.insert(floorPlans).values({
       zoneId,
-      setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+      setId: (await defaultLayout(tx, zoneId)).setId,
       savedAt: NOW.toISOString(),
     });
     for (const [i, label] of labels.entries()) {
@@ -576,9 +576,7 @@ describe("removing a table of a joined table split today", () => {
 
   /** Saves the zone's plan again without master table `masterId`, and without it as a part. */
   async function saveWithout(zoneId: string, masterId: string): Promise<void> {
-    const plan = await inTx(v, async (tx) =>
-      readLayout(tx, await defaultLayout(tx, v.cfg, zoneId)),
-    );
+    const plan = await inTx(v, async (tx) => readLayout(tx, await defaultLayout(tx, zoneId)));
     const tables = plan.tables
       .filter((table) => table.id !== masterId)
       .map((table) => ({
@@ -594,7 +592,7 @@ describe("removing a table of a joined table split today", () => {
       saveLayout(
         tx,
         NONE,
-        await defaultLayout(tx, v.cfg, zoneId),
+        await defaultLayout(tx, zoneId),
         { revision: plan.revision, tables },
         NOW,
       ),

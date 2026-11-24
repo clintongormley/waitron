@@ -43,7 +43,7 @@ it("deletes through the real core seat when the optional bookings table was neve
     await createDepartment(tx, { name: "Keep", orderStart: "table" });
     const department = await createDepartment(tx, { name: "Delete", orderStart: "table" });
     const zone = await createServiceZone(tx, { name: "Terrace", departmentId: department.id });
-    const table = await createTable(tx, cfg, { label: "1", zoneId: zone.id });
+    const table = await createTable(tx, { label: "1", zoneId: zone.id });
     return { departmentId: department.id, zoneId: zone.id, tableId: table.id };
   });
   const absent = await suite.db.execute<{ name: string }>(

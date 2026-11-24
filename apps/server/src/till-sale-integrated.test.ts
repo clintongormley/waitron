@@ -55,7 +55,7 @@ describe("saved-zone payment transactions", () => {
           }),
         );
       }
-      const offers = await offerProducts(tx, zoneVenue.cfg, {
+      const offers = await offerProducts(tx, {
         productIds: products.map((p) => p.id),
       });
       zoneOffer = offers.offerFor(products[0]!.id);

@@ -192,7 +192,7 @@ export async function provisionBillVenue(
       productIds.set(item.name, product.id);
     }
     await assignMenuToVenue(tx, cat.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     const [person] = await seedPersons(tx, {
       displayName: "Anna",
       pinHash: fixturePinHash("5555"),
@@ -353,7 +353,7 @@ export async function provisionBillVenue(
 /** A fresh party's bill at a fresh table carrying one of each named dish, in order (line 1, 2, …). */
 export function tabWith(venue: BillVenue, ...names: string[]): Promise<string> {
   return withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
@@ -371,7 +371,7 @@ export function tabWith(venue: BillVenue, ...names: string[]): Promise<string> {
  */
 export function groupedTabWith(venue: BillVenue, ...names: string[]): Promise<string> {
   return withTransaction(venue.db, async (tx) => {
-    const table = await createTable(tx, venue.cfg, {
+    const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
@@ -517,7 +517,7 @@ async function seatedWithRelease(
   release: "fire" | "hold",
 ): Promise<{ partyId: string; tabId: string; tableId: string; revision: number }> {
   const { id: tableId } = await withTransaction(venue.db, (tx) =>
-    createTable(tx, venue.cfg, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
+    createTable(tx, { label: `Mesa ${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
   );
   const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
   if (seated.status !== 200) throw new Error(`seatedWith: seating answered ${seated.status}`);

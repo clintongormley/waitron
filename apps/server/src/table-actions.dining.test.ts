@@ -45,9 +45,8 @@ useVenueDb({
         name: "Dining room",
         departmentId: department.id,
       });
-      eatInZone = (
-        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone.id }, orderStart: "table" })
-      ).zoneId;
+      eatInZone = (await offerProducts(tx, { zone: { zoneId: zone.id }, orderStart: "table" }))
+        .zoneId;
     });
   },
 });
@@ -94,7 +93,7 @@ describe("a whole table moved into another department", () => {
     venue.db.run(sql`update working_orders set dining = 'takeaway' where id = ${unsent}`);
     expect(await inTx(venue, (tx) => orderDiningLocked(tx, unsent))).toBeNull();
     const table = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Table ${randomUUID().slice(0, 8)}`, zoneId: eatInZone }),
+      createTable(tx, { label: `Table ${randomUUID().slice(0, 8)}`, zoneId: eatInZone }),
     );
 
     await inTx(venue, async (tx) =>

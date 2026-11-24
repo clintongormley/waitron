@@ -68,7 +68,7 @@ useVenueDb({
     for (const mode of ["ticket_then_pay", "prepay"] as const) {
       zones[mode] = await inTx(venue, async (tx) => {
         const [zone] = [await seedZone(tx, { name: `Barra ${mode}` })];
-        await offerProducts(tx, venue.cfg, {
+        await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
         });

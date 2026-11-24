@@ -83,7 +83,7 @@ async function zoneNamed(
 ): Promise<string> {
   const [zone] = [await seedZone(tx, { name })];
   return (
-    await offerProducts(tx, v.cfg, {
+    await offerProducts(tx, {
       zone: { zoneId: zone!.id },
       orderStart: serviceMode === "table_tab" ? "table" : "counter",
     })
@@ -104,7 +104,7 @@ useVenueDb({
         orderStart: "table",
       });
       await configureZone(tx, { zoneId: v.tables.zoneId, departmentId: department.id });
-      await offerProducts(tx, v.cfg, { zone: "tables" });
+      await offerProducts(tx, { zone: "tables" });
       diningRoomDepartment = department.id;
     });
     ticketThenPayZone = await inTx(v, (tx) => zoneNamed(tx, "Invoice counter", "ticket_then_pay"));

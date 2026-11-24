@@ -223,7 +223,7 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     );
     await writeProductModifiers(tx, productId.steak, [{ kind: "extras", id: extras.id }]);
     await assignMenuToVenue(tx, menu.id);
-    const offers = await offerProducts(tx, cfg, { zone: "tables" });
+    const offers = await offerProducts(tx, { zone: "tables" });
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(
       tx,
@@ -256,7 +256,7 @@ interface Seated {
 
 async function seated(v: Venue): Promise<Seated> {
   return inTx(async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, {
+    const { id: tableId } = await createTable(tx, {
       label: `T-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });
@@ -1061,7 +1061,7 @@ describe("country starter courses in service", () => {
 
   it("fires the starter and later courses together at the counter", async () => {
     const v = await setupVenue(true);
-    const counter = await inTx((tx) => offerProducts(tx, v.cfg, { zone: "counter" }));
+    const counter = await inTx((tx) => offerProducts(tx, { zone: "counter" }));
     const id = randomUUID();
     await inTx((tx) =>
       createOpenOrder(
@@ -2479,7 +2479,7 @@ async function billOfNoParty(
   fill: (tx: Transaction, billId: string) => Promise<void>,
 ): Promise<string> {
   const { tabId, partyId } = await inTx(async (tx) => {
-    const { id: tableId } = await createTable(tx, v.cfg, {
+    const { id: tableId } = await createTable(tx, {
       label: `N-${floorLabelSuffix().padStart(6, "0")}`,
       zoneId: v.zoneId,
     });
@@ -3673,7 +3673,7 @@ describe("credit (D5)", () => {
   it("credits the lines a tab is opened with to the operator who opened it", async () => {
     const v = await setupVenue();
     const { tabId } = await inTx(async (tx) => {
-      const { id: tableId } = await createTable(tx, v.cfg, {
+      const { id: tableId } = await createTable(tx, {
         label: `O-${floorLabelSuffix().padStart(6, "0")}`,
         zoneId: v.zoneId,
       });
@@ -4486,7 +4486,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
         });
       const hake = await dish("Hake", "K-HAKE", { unitId: gram!.id });
       const ham = await dish("Ham", "K-HAM", { pricingUnit: "weight" });
-      const offers = await offerProducts(tx, v.cfg, {
+      const offers = await offerProducts(tx, {
         zone: "tables",
         productIds: [hake.id, ham.id],
       });
@@ -4648,7 +4648,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         LOCALE,
       );
       await writeProductModifiers(tx, tuna.id, [{ kind: "options", id: list.id }]);
-      const offers = await offerProducts(tx, v.cfg, { zone: "tables", productIds: [tuna.id] });
+      const offers = await offerProducts(tx, { zone: "tables", productIds: [tuna.id] });
       const [rare, well] = list.labels.map((label) => ({ listId: list.id, labelId: label.id }));
       return { offer: offers.offerFor(tuna.id), rare: rare!, well: well! };
     });

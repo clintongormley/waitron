@@ -394,9 +394,9 @@ async function seed(
         .values({ name: `Bench zone ${z + 1}`, departmentId })
         .returning({ id: floorZones.id });
       await configureZone(tx, { zoneId: zone!.id, departmentId, orderStart: "table" });
-      await offerProducts(tx, cfg, { zone: { zoneId: zone!.id }, orderStart: "table" });
+      await offerProducts(tx, { zone: { zoneId: zone!.id }, orderStart: "table" });
       for (let t = 1; t <= BENCH_PROFILE.tablesPerZone; t++)
-        await createTable(tx, cfg, { label: `Table ${z + 1}.${t}`, zoneId: zone!.id });
+        await createTable(tx, { label: `Table ${z + 1}.${t}`, zoneId: zone!.id });
       zonesOf.set(departmentId, [...(zonesOf.get(departmentId) ?? []), zone!.id]);
     }
 

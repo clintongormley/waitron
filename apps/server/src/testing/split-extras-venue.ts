@@ -199,10 +199,9 @@ export async function setupSplitExtrasVenue() {
     await writeProductModifiers(tx, products.burger, [{ kind: "extras", id: burgerList.id }]);
     await writeProductModifiers(tx, products.water, [{ kind: "extras", id: waterList.id }]);
     const lists = { burger: burgerList.id, water: waterList.id };
-    const tables = await offerProducts(tx, cfg, { zone: "tables" });
-    const counter = await offerProducts(tx, cfg, { zone: "counter" });
-    const tableId = (await createTable(tx, cfg, { label: "Split extras", zoneId: tables.zoneId }))
-      .id;
+    const tables = await offerProducts(tx, { zone: "tables" });
+    const counter = await offerProducts(tx, { zone: "counter" });
+    const tableId = (await createTable(tx, { label: "Split extras", zoneId: tables.zoneId })).id;
     const seated = await seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, OPERATOR);
     const party = { tableId, zoneId: tables.zoneId, partyId: seated.partyId, tabId: seated.tabId };
@@ -227,7 +226,7 @@ export async function createOfferedOrder(
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
-  const offers = await offerProducts(tx, cfg);
+  const offers = await offerProducts(tx);
   return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
     zoneId: offers.zoneId,
   });
@@ -253,7 +252,7 @@ export async function fireGroupedOrder(
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();
-  const offers = await offerProducts(tx, cfg);
+  const offers = await offerProducts(tx);
   await openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
     zoneId: offers.zoneId,
   });

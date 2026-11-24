@@ -198,7 +198,7 @@ async function reader(name: string): Promise<string> {
 /** An open order labelled `label` (null for none); its id. */
 async function openOrder(venue: Venue, label: string | null = "Table 1"): Promise<string> {
   const orderId = randomUUID();
-  const offers = await inTx((tx) => offerProducts(tx, venue.cfg));
+  const offers = await inTx((tx) => offerProducts(tx));
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,
