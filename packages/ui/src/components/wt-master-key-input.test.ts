@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
+import { state } from "lit/decorators.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { LeaveController } from "../leave-controller.js";
@@ -11,6 +12,7 @@ import type {
   WtMasterKeyInput,
 } from "./wt-master-key-input.js";
 import "./wt-master-key-input.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const KEY_NAME = "2026-11-23 · QZJV";
@@ -24,11 +26,7 @@ const EN: MasterKeyInputCopy = {
   elsewhere: (heldBy) =>
     heldBy === null ? "Choose the pack that holds it." : `It is on pack ${heldBy}.`,
 };
-const ES: MasterKeyInputCopy = {
-  ...EN,
-  label: "Clave maestra",
-  button: "Elegir el PDF del paquete de recuperación",
-};
+const ES: MasterKeyInputCopy = MASTER_KEY_FIELD_WORDS.es;
 
 /** A refusal as `@waitron/recovery-pack`'s reader throws it: `RecoveryPackFileError` by name, with a reason. */
 function packRefusal(reason: string): Error {
@@ -576,4 +574,89 @@ test("the PDF chooser's own input event stays inside the field", async () => {
     document.removeEventListener("input", inputs);
   }
   expect(inputs).not.toHaveBeenCalled();
+});
+
+test("the PDF chooser's own click stays inside the field", async () => {
+  const el = (await mountInShadowRoot(
+    "<wt-master-key-input></wt-master-key-input>",
+  )) as WtMasterKeyInput;
+  el.copy = EN;
+  await el.updateComplete;
+  const clicks = vi.fn();
+  document.addEventListener("click", clicks);
+  try {
+    fileControl(el).dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  } finally {
+    document.removeEventListener("click", clicks);
+  }
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("clear() also forgets a refusal", async () => {
+  const { el } = await field();
+  el.wrongKey = true;
+  await settled(el, EN.wrongKey(KEY_NAME));
+  el.clear();
+  expect(el.wrongKey).toBe(false);
+  await settled(el, undefined);
+});
+
+class RefusingHost extends LitElement {
+  @state() refused = false;
+  clearsOnChange = true;
+  override render() {
+    return html`<wt-master-key-input
+      .copy=${EN}
+      .keyName=${KEY_NAME}
+      .wrongKey=${this.refused}
+      @wt-master-key-change=${() => {
+        if (this.clearsOnChange) this.refused = false;
+      }}
+    ></wt-master-key-input>`;
+  }
+}
+customElements.define("master-key-input-test-refusing-host", RefusingHost);
+
+async function refusingHost(clearsOnChange: boolean) {
+  const shell = (await mount(
+    "<master-key-input-test-refusing-host></master-key-input-test-refusing-host>",
+  )) as RefusingHost;
+  shell.clearsOnChange = clearsOnChange;
+  const el = shell.shadowRoot!.querySelector("wt-master-key-input")!;
+  await el.updateComplete;
+  const refuse = async () => {
+    shell.refused = true;
+    await shell.updateComplete;
+  };
+  const typeKey = async (text: string) => {
+    await type(el, text);
+    await shell.updateComplete;
+  };
+  return { el, refuse, typeKey };
+}
+
+test("a host that clears its bound flag on every change shows each refusal", async () => {
+  const { el, refuse, typeKey } = await refusingHost(true);
+  await typeKey(KEY);
+  await refuse();
+  await settled(el, EN.wrongKey(KEY_NAME));
+  await typeKey(KEY.slice(0, 8));
+  expect(message(el)).toBeUndefined();
+  await typeKey(KEY);
+  await refuse();
+  await settled(el, EN.wrongKey(KEY_NAME));
+});
+
+test("a host that keeps its bound flag set loses the second refusal", async () => {
+  const { el, refuse, typeKey } = await refusingHost(false);
+  await typeKey(KEY);
+  await refuse();
+  await settled(el, EN.wrongKey(KEY_NAME));
+  await typeKey(KEY.slice(0, 8));
+  await typeKey(KEY);
+  await refuse();
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(el.wrongKey).toBe(false);
+  expect(message(el)).toBeUndefined();
 });

@@ -98,7 +98,12 @@ export class WtMasterKeyInput extends LitElement {
   @property({ attribute: false }) copy?: MasterKeyInputCopy;
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
-  /** Set by the host when the key it sent was refused as not the expected one. */
+  /**
+   * Set by the host when the key it sent was refused as not the expected one. The field clears it
+   * when the person types or chooses a PDF, and on `clear()`. A host binding it (`.wrongKey=${flag}`)
+   * clears its own flag on every `wt-master-key-change` and sets it on each refusal: Lit writes a
+   * binding only when its value changes, so a flag left set would hide the next refusal.
+   */
   @property({ type: Boolean }) wrongKey = false;
   /** Set by the host once the person tried to carry on: a partly typed key is then not whole. */
   @property({ type: Boolean }) attempted = false;
@@ -143,6 +148,7 @@ export class WtMasterKeyInput extends LitElement {
     this.value = "";
     this.#file = undefined;
     this.problem = undefined;
+    this.wrongKey = false;
     this.#scope?.commit({ value: "" });
     this.#notify();
   }
@@ -255,6 +261,7 @@ export class WtMasterKeyInput extends LitElement {
         accept="application/pdf,.pdf"
         hidden
         ?disabled=${this.disabled}
+        @click=${(event: Event) => event.stopPropagation()}
         @input=${(event: Event) => event.stopPropagation()}
         @change=${(event: Event) => {
           const input = event.target as HTMLInputElement;

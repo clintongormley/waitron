@@ -53,6 +53,7 @@ import "../src/components/wt-venue-logo.js";
 import "../src/components/wt-powered-by.js";
 import "../src/components/wt-waitron-lockup.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../src/waitron-lockup.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -108,33 +109,8 @@ const panel = (theme: "light" | "dark") => `
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
     <wt-banner tone="error" message="Disk full: the tills cannot save anything." action-label="Open Box status"></wt-banner>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
-    <wt-master-key-box
-      .masterKey=${"88DP 74BA YPVB RRM5 XFV2 WPQY B5M5"}
-      .keyName=${"2026-11-23 · QZJV"}
-      .pdfUrl=${"about:blank"}
-      .copy=${{
-        name: (name: string) => `Master key · ${name}`,
-        download: "Download",
-        print: "Print",
-        copy: "Copy",
-        copied: "Copied.",
-        copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
-        printFailed: "Your browser blocked printing. Use Download instead.",
-      }}
-    ></wt-master-key-box>
-    <wt-master-key-input
-      required
-      .keyName=${"2026-11-23 · QZJV"}
-      .copy=${{
-        label: "Master key",
-        button: "Choose the recovery pack PDF",
-        notPack: "This PDF is not a recovery pack.",
-        damaged: "This recovery pack PDF is damaged. Type the key.",
-        notWhole: "Not a whole master key. Check it against the recovery pack.",
-        wrongKey: (name: string) => `Wrong master key. Use the one dated ${name}.`,
-        elsewhere: () => "This recovery pack does not hold the master key.",
-      }}
-    ></wt-master-key-input>
+    <wt-master-key-box></wt-master-key-box>
+    <wt-master-key-input required></wt-master-key-input>
     <p>
       Updated
       <wt-relative-time
@@ -630,7 +606,31 @@ for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {
   });
 }
 
+const DEMO_MASTER_KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+const DEMO_KEY_NAME = "2026-11-23 · QZJV";
+
 for (const panel of app.querySelectorAll(".panel")) {
+  const keyBox = panel.querySelector("wt-master-key-box")!;
+  keyBox.masterKey = DEMO_MASTER_KEY;
+  keyBox.keyName = DEMO_KEY_NAME;
+  keyBox.pdfUrl = "about:blank";
+  keyBox.copy = {
+    name: (name) => `Master key · ${name}`,
+    download: "Download",
+    print: "Print",
+    copy: "Copy",
+    copied: "Copied.",
+    copyFailed: "Copy did not work. Use Download or Print, or write the key down.",
+    printFailed: "Your browser blocked printing. Use Download instead.",
+  };
+  const keyInput = panel.querySelector("wt-master-key-input")!;
+  keyInput.keyName = DEMO_KEY_NAME;
+  keyInput.readPack = async () => async () => ({
+    masterKey: DEMO_MASTER_KEY,
+    masterKeyName: DEMO_KEY_NAME,
+    masterKeyHeldBy: null,
+  });
+  keyInput.copy = MASTER_KEY_FIELD_WORDS.en;
   const report = panel.querySelector("wt-report-dialog")!;
   report.copy = {
     heading: "Report a problem",
