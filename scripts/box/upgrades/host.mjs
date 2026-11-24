@@ -687,7 +687,7 @@ const PRODUCER = "WAITRON_PRODUCER_TAX_ID=";
 
 const isText = (value) => typeof value === "string" && value !== "";
 
-/** The note an earlier upgrade left in the live state, exactly as the server would take it. */
+/** The note an earlier upgrade left in the live state, if it has the shape the server reads. */
 async function liveIdentityNote(stateDirectory) {
   let note;
   try {
@@ -714,26 +714,37 @@ async function liveIdentityNote(stateDirectory) {
 }
 
 export async function identityChangeNote(oldImage, nextImage, stateDirectory, run) {
-  const configOf = async (image) =>
-    JSON.parse(
-      (await run("docker", ["image", "inspect", image, "--format", "{{json .Config}}"])).stdout,
-    );
-  // The server compares its setting trimmed (readSoftwareProducer), and otherwise exactly.
-  const producerOf = (config) =>
-    config.Env?.find((entry) => entry.startsWith(PRODUCER))
-      ?.slice(PRODUCER.length)
-      .trim();
-  const before = await configOf(oldImage);
-  const after = await configOf(nextImage);
-  const release = RELEASE_REF.exec(after.Labels?.["org.opencontainers.image.ref.name"])?.[1];
-  const runningProducerTaxId = producerOf(before);
-  const producerTaxId = producerOf(after);
-  if (!release || !runningProducerTaxId || !producerTaxId) return null;
-  // While the running release waits to open its installation, the latest record is still under the
-  // producer its note replaced.
+  const identityOf = async (image, name) => {
+    const { stdout } = await run("docker", [
+      "image",
+      "inspect",
+      image,
+      "--format",
+      "{{json .Config}}",
+    ]);
+    try {
+      const config = JSON.parse(stdout);
+      return {
+        release: RELEASE_REF.exec(config.Labels?.["org.opencontainers.image.ref.name"])?.[1],
+        // The server compares its setting trimmed (readSoftwareProducer), and otherwise exactly.
+        producerTaxId: config.Env?.find((entry) => entry.startsWith(PRODUCER))
+          ?.slice(PRODUCER.length)
+          .trim(),
+      };
+    } catch {
+      throw new Error(`${name} image has an unreadable configuration`);
+    }
+  };
+  const before = await identityOf(oldImage, "installed");
+  const { release, producerTaxId } = await identityOf(nextImage, "candidate");
+  if (!release || !before.producerTaxId || !producerTaxId) return null;
+  // While the installed release waits to open its installation, the latest record is still under
+  // the producer its note replaced. The server acts only on a note naming its own release.
   const live = await liveIdentityNote(stateDirectory);
   const fromProducerTaxId =
-    live?.producerTaxId === runningProducerTaxId ? live.fromProducerTaxId : runningProducerTaxId;
+    live?.producerTaxId === before.producerTaxId && live.release === before.release
+      ? live.fromProducerTaxId
+      : before.producerTaxId;
   if (producerTaxId === fromProducerTaxId) return null;
   return { version: 1, release, producerTaxId, fromProducerTaxId };
 }

@@ -1779,14 +1779,18 @@ describe("the note of a change of producer", () => {
     expect(await readdir(t.directory)).toEqual(["candidate-compose.json"]);
   });
 
+  const OLD_UNREADABLE = /^installed image has an unreadable configuration$/;
+  const NEXT_UNREADABLE = /^candidate image has an unreadable configuration$/;
   const refusedInspect = () => {
     throw new Error("No such image");
   };
   it.each([
-    ["an old image's answer that is not JSON", { old: "not json" }, SyntaxError],
-    ["a candidate's answer that is not JSON", { next: "not json" }, SyntaxError],
-    ["an old image's answer that is null", { old: "null" }, TypeError],
-    ["a candidate's answer that is null", { next: "null" }, TypeError],
+    ["an old image's answer that is not JSON", { old: "not json" }, OLD_UNREADABLE],
+    ["a candidate's answer that is not JSON", { next: "not json" }, NEXT_UNREADABLE],
+    ["an old image's answer that is null", { old: "null" }, OLD_UNREADABLE],
+    ["a candidate's answer that is null", { next: "null" }, NEXT_UNREADABLE],
+    ["an old image's environment that is no list", { old: '{"Env":"x"}' }, OLD_UNREADABLE],
+    ["a candidate's environment that is no list", { next: '{"Env":"x"}' }, NEXT_UNREADABLE],
     ["a refused inspect of the old image", { old: refusedInspect }, "No such image"],
     ["a refused inspect of the candidate", { next: refusedInspect }, "No such image"],
   ])("abandons the upgrade before any stop for %s", async (_case, configs, failure) => {
@@ -1905,6 +1909,32 @@ describe("the note of a change of producer", () => {
     it("names the running producer to a third one, for a live note naming another", async () => {
       const live = JSON.stringify({ ...NOTE, producerTaxId: FROM, fromProducerTaxId: "B00000009" });
       expect(await given({ ...FURTHER, live })).toMatchObject({ fromProducerTaxId: TO });
+    });
+
+    it.each([
+      ["of another release", "v1.4.1"],
+      ["built from main", "main"],
+      ["with no label", undefined],
+      ["whose label has no v", "1.4.0"],
+    ])("carries nothing for a running image %s", async (_case, ref) => {
+      const old = imageConfig(ref, producer(TO));
+      expect(await given({ ...SAME, old, live: LIVE })).toBeUndefined();
+      expect(await given({ ...FURTHER, old, live: LIVE })).toEqual({
+        version: 1,
+        release: "1.5.0",
+        producerTaxId: THIRD,
+        fromProducerTaxId: TO,
+      });
+    });
+
+    it("carries nothing for a running image with no labels", async () => {
+      const old = JSON.stringify({ Env: [producer(TO)], Labels: null });
+      expect(await given({ ...SAME, old, live: LIVE })).toBeUndefined();
+    });
+
+    it("writes no note for an unlabelled running image with no live note", async () => {
+      const old = imageConfig(undefined, producer(TO));
+      expect(await given({ ...SAME, old })).toBeUndefined();
     });
 
     it.each([

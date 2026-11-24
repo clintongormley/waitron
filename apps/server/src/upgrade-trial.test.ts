@@ -271,7 +271,7 @@ describe("the note an upgrade's host works out over a live one, judged by the ne
   const FIRST = TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID;
   const THIRD_PRODUCER_TAX_ID = "22222222J";
 
-  /** The host names its release 1.4.1; a server run from source calls itself something else. */
+  /** The host names the new release 1.4.1; a server run from source calls itself something else. */
   async function hostNote(running: string, next: string, live: Record<string, unknown> | null) {
     const { identityChangeNote } = (await import(
       new URL("../../../scripts/box/upgrades/host.mjs", import.meta.url).href
@@ -287,15 +287,18 @@ describe("the note an upgrade's host works out over a live one, judged by the ne
     await mkdir(stateDir);
     if (live !== null)
       await writeFile(join(stateDir, "identity-change.json"), JSON.stringify(live));
-    const producers: Record<string, string> = { "sha256:old": running, "sha256:next": next };
+    const images: Record<string, { producer: string; ref: string }> = {
+      "sha256:old": { producer: running, ref: "v1.4.0" },
+      "sha256:next": { producer: next, ref: "v1.4.1" },
+    };
     const note = await identityChangeNote(
       "sha256:old",
       "sha256:next",
       stateDir,
       async (_file, args) => ({
         stdout: JSON.stringify({
-          Env: [`WAITRON_PRODUCER_TAX_ID=${producers[args[2]!]}`],
-          Labels: { "org.opencontainers.image.ref.name": "v1.4.1" },
+          Env: [`WAITRON_PRODUCER_TAX_ID=${images[args[2]!]!.producer}`],
+          Labels: { "org.opencontainers.image.ref.name": images[args[2]!]!.ref },
         }),
       }),
     );
@@ -321,6 +324,10 @@ describe("the note an upgrade's host works out over a live one, judged by the ne
     [
       "with a live note naming another producer than the running one",
       () => leftBy("1.4.0", THIRD_PRODUCER_TAX_ID, FIRST),
+    ],
+    [
+      "with a live note naming another release than the running one",
+      () => leftBy("1.3.0", OTHER_PRODUCER_TAX_ID, FIRST),
     ],
     ["with a misshapen live note", () => ({ ...waiting(), more: "x" })],
   ])("refuses that release %s, which gives it no note", async (_label, live) => {

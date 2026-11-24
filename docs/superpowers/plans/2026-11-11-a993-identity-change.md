@@ -515,17 +515,30 @@ The findings:
      record), or the box is not production. So a preproduction box that files records deletes it too.
    - **As built 2026-11-24, the note carried forward** (cleared by the watcher, 08:23, not the owner;
      it goes past "When it is written" above): before the stop the host reads the live state folder's
-     note. When it is exactly the reader's shape and its `producerTaxId` is the old image's, the new
-     note's `fromProducerTaxId` is the live note's, and not the old image's. So a fixed release by the
-     same producer is accepted while the first one's opening keeps failing, and a third producer's note
-     names the producer the latest record is under. There is still no note when that producer is the
-     candidate's own. A live note left over from an opening already made (a crash before its deletion)
-     opens nothing for a release by the same producer; a third producer is refused until the running
-     release's start deletes the note.
+     note. When it is exactly the reader's shape, its `producerTaxId` is the old image's and its
+     `release` is the version in the old image's release label, the new note's `fromProducerTaxId`
+     is the live note's, and not the old image's. An old image without a numbered release's label
+     carries nothing, and then a note is written only if the two images' producers differ. So a
+     fixed release by the same producer is accepted while the first one's opening keeps failing, and
+     a third producer's note names the producer the latest record is under. There is still no note
+     when that producer is the candidate's own. A live note left over from an opening already made
+     (a crash before its deletion) opens nothing for a release by the same producer; a third
+     producer is refused until the running release's start deletes the note.
    - **As built 2026-11-24, a failed read:** a refused or unreadable `docker image inspect` of either
      image abandons the upgrade before anything stops. An image naming no producer, and a candidate
      without a numbered release's label, still mean no note.
    - **Disclosed limit:** root on the box can write the note by hand, as root can edit the database.
+   - **Disclosed limit, a race:** if the running release (producer B) opens its installation,
+     deletes the note and files a record after the trial's copy is taken, the attempt still carries
+     "from A" and an upgrade to a third producer C is refused after the stop; an automatic one
+     restores, a manual one stays shut until Restore, and a retry then names B.
+   - **Disclosed limit:** going back to A over a waiting B note leaves that note in the state
+     folder; it is acted on only if that B release is installed again, and an upgrade to it writes
+     the same note itself, so it matters only to someone pinning that release by hand.
+   - **Disclosed limit:** the running release's start leaves a left-over note naming another release
+     alone (`boot.identity-change.test.ts`, "leaves a note naming another release alone"); it stays
+     until an upgrade replaces it with a note of its own, the release it names starts and uses or
+     deletes it, or a plain reset.
 7. ★ **New words are unavoidable on three screens; the upgrade's report gets none.**
    - **The upgrade's report: no new words.** A refused opening on a copy leaves the copy's start
      waiting, so its test sale answers 409 `clock.unconfirmed` and A950 reports
