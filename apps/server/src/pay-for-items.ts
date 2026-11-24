@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   billPayments,
@@ -21,13 +21,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import {
-  guardPathParty,
-  moveDishes,
-  refuseClosedBill,
-  resolveMoveLines,
-  type BillCommand,
-} from "./bill-actions.js";
+import { guardPathParty, moveDishes, refuseClosedBill, type BillCommand } from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
 import {
   invalid,
@@ -87,7 +81,7 @@ async function readPicks(
   tx: Transaction,
   billId: string,
   picks: readonly ItemPick[],
-): Promise<PickedLine[]> {
+): Promise<{ picked: PickedLine[]; everyDish: boolean }> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
@@ -158,13 +152,23 @@ async function readPicks(
   // A set menu's dish chosen with its set menu is already in the set menu's price; chosen without
   // it, the new bill has no set menu to place it in, as the move would find.
   const ids = new Set(picked.map((line) => line.id));
-  return picked.map((line) => {
+  const priced = picked.map((line) => {
     const row = byId.get(line.id)!;
     if (row.setMenuLineId === null) return line;
     if (!ids.has(row.setMenuLineId))
       throw new AppError("set_menu.no_place_on_target", { dishName: row.name });
     return { ...line, familyCents: 0 };
   });
+  // A dish leaves whole when chosen whole or brought along by a set menu chosen whole; a part
+  // always leaves the rest behind.
+  const whole = new Set(picked.filter((line) => line.part === undefined).map((line) => line.id));
+  const everyDish = rows.every(
+    (row) =>
+      row.parentLineId !== null ||
+      whole.has(row.id) ||
+      (row.setMenuLineId !== null && whole.has(row.setMenuLineId)),
+  );
+  return { picked: priced, everyDish };
 }
 
 function pickedThousandths(quantity: string): number | null {
@@ -195,28 +199,7 @@ export async function priceItemPicks(
   fromBillId: string,
   picks: readonly ItemPick[],
 ): Promise<Decimal> {
-  return priceOf(await readPicks(tx, fromBillId, picks));
-}
-
-/**
- * Refuse (D7) a move of `lineIds` that would take every dish, a set menu's dishes counted as
- * {@link resolveMoveLines} brings them along. Before the move: `moveDishes` asks its merge-invoice
- * question of a move that empties the bill.
- */
-async function refuseEveryDish(
-  tx: Transaction,
-  billId: string,
-  lineIds: readonly string[],
-): Promise<void> {
-  const { transfers } = await resolveMoveLines(tx, billId, lineIds);
-  const [row] = await tx
-    .select({ dishes: count() })
-    .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
-    );
-  if (transfers.length === row!.dishes)
-    throw new AppError("bill.all_items_chosen", { workingOrderId: billId });
+  return priceOf((await readPicks(tx, fromBillId, picks)).picked);
 }
 
 /** Refuse (D4) a bill the move left owing less than its advances credit, read as it was left. */
@@ -253,7 +236,10 @@ export async function moveItemsToNewBill(
   await requireEconomicWrite(tx, cfg, command.admission);
   const path = await guardPathParty(tx, fromBillId, command, { bump: false });
   refuseClosedBill(fromBillId, path.status);
-  const picked = await readPicks(tx, fromBillId, picks);
+  const { picked, everyDish } = await readPicks(tx, fromBillId, picks);
+  // D7, before the move: `moveDishes` would ask its merge-invoice question of a move that empties
+  // the bill.
+  if (everyDish) throw new AppError("bill.all_items_chosen", { workingOrderId: fromBillId });
   const parts = picked.flatMap((line) =>
     line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part.quantity }],
   );
@@ -264,7 +250,6 @@ export async function moveItemsToNewBill(
   const lineIds = picked.map((line) =>
     line.part === undefined ? line.id : split.get(line.id)!.id,
   );
-  await refuseEveryDish(tx, fromBillId, lineIds);
   const { billId } = await moveDishes(tx, cfg, fromBillId, null, lineIds, command, {
     sourceMayBeOverpaid: true,
     tellKitchen: false,
