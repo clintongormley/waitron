@@ -109,7 +109,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   The nine local party suites use English table, party, course and printer samples; shared
   party-venue defaults, dish selectors and till-API samples remain.
   The filing order-portion suite still has Spanish dish samples. Shared helpers' dish names and selectors
-  remain, including those read by the working-order, receipt-print and counter-portion suites.
+  remain, including those read by the working-order and receipt-print suites.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)

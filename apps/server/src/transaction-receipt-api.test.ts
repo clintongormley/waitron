@@ -1479,7 +1479,7 @@ it("a resend of a receipt original given up as out of date carries its waiting d
 
 // A445 D3a: Find a bill's reprint of a ticket whose free item holds its share of the price paid
 // shows the dishes as sold, with the comp beneath the free one.
-async function counterBillWithFreeCana(takeaway: boolean): Promise<string> {
+async function counterBillWithFreeBeer(takeaway: boolean): Promise<string> {
   const ids = new Map(
     venue.db
       .all<{ id: string; name: string }>(sql`select id, name from products`)
@@ -1518,7 +1518,7 @@ const sold = (answer: { json: unknown }) =>
   }));
 
 it("reprints a takeaway ticket's free item and the dish beside it as sold, with the comp", async () => {
-  const answer = await get(await counterBillWithFreeCana(true));
+  const answer = await get(await counterBillWithFreeBeer(true));
   expect(answer.status).toBe(200);
   // Filed: salad 9.60 at 4% and small beer 2.40 at 21%, shared 12 : 3 of the €12.00 paid.
   expect(sold(answer)).toEqual([
@@ -1528,7 +1528,7 @@ it("reprints a takeaway ticket's free item and the dish beside it as sold, with 
 });
 
 it("reprints a comped ticket eaten here with its comp", async () => {
-  const answer = await get(await counterBillWithFreeCana(false));
+  const answer = await get(await counterBillWithFreeBeer(false));
   expect(answer.status).toBe(200);
   expect(sold(answer)).toEqual([
     { gross: "12.00", listGross: undefined, adjustments: undefined },

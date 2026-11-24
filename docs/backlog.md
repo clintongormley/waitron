@@ -1612,9 +1612,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local published-menu, menu-patch, current-order, integrated-sale, delivery, pay-and-dispatch
   and stuck-payment fixtures use Administrator, Main room and Drinks where present.
   Other display samples in those files remain.
-  BillVenue uses Steak,
-  Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
-  and kitchen names stay. PartyVenue uses Red wine bottle and Water as staff keys,
+  BillVenue uses Steak, Red wine bottle, House salad, Croquettes and Octopus as staff keys.
+  Seafood rice and Small beer have English names for staff, customers and the kitchen.
+  PartyVenue uses Red wine bottle and Water as staff keys,
   with customer Rioja crianza / Agua mineral and kitchen TINTO / AGUA unchanged.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
   their Spanish product samples (Agua mineral in both, Cerveza in the till API) remain.
@@ -1630,8 +1630,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
   suites still use Spanish display samples; fiscal-sale test descriptions,
   other shared-helper names and their consumers' dish selectors and screen expectations remain.
-  Triage made-here route and receipt-document fixture
-  text there while preserving Spanish receipt output and locale checks. Low priority.
+  Triage receipt-document fixture text there while preserving Spanish receipt output and locale checks.
+  Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
   BillVenue's receipt printer, card readers and cash till use English display names.
   Local device-equipment and office-printer route fixtures use English printer and reader names;

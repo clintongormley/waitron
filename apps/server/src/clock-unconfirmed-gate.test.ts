@@ -350,7 +350,7 @@ function billRefund(billId: string, paymentId: string) {
     as(app, "POST", `/api/working-orders/${billId}/payments/${paymentId}/refunds`, body);
 }
 
-/** A Seafood rice bill paid whole, which files its sale; answers the sale, its tender and the bill. */
+/** A Seafood rice bill paid whole, which files its sale; answers the sale, its one tender and the bill. */
 async function soldWhole(method: "cash" | "card") {
   const { billId } = await billPaid(method === "cash" ? cashPart("35.00") : readerPart("35.00"));
   const [tender] = await inTx(venue, (tx) =>
