@@ -4,7 +4,7 @@ import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import { payments } from "@waitron/payments";
+import { payments, type PaymentProvider } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
 import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
@@ -60,6 +60,15 @@ async function captureFor(tx: Transaction, refund: RefundRow) {
   );
 }
 
+/** Whether `provider`, looked up for a capture taken through `captureProvider`, can send its
+ * refund at all; whether it takes a part refund is a separate check. */
+export function sendsRefunds(
+  provider: PaymentProvider | undefined,
+  captureProvider: string,
+): boolean {
+  return provider?.provider === captureProvider && provider.sendRefund !== undefined;
+}
+
 // Connected refunds commit their reservation here; provider I/O belongs to the resolver afterwards.
 export async function beginSettledTenderRefund(
   deps: TenderRefundDeps,
@@ -103,9 +112,8 @@ export async function beginSettledTenderRefund(
           const capture = (await captureFor(tx, reserved))!;
           const provider = await deps.refundProviderFor?.(capture.provider);
           if (
-            provider?.provider !== capture.provider ||
-            provider.sendRefund === undefined ||
-            (!provider.capabilities.partialRefund &&
+            !sendsRefunds(provider, capture.provider) ||
+            (!provider!.capabilities.partialRefund &&
               reserved.appliedAmount + reserved.tipAmount !== capture.amount)
           )
             throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });

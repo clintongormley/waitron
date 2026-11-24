@@ -6,16 +6,34 @@ import {
   deviceProfiles,
   devices,
   parties,
+  readLiveSeriesIdTx,
+  saleLines,
   sales,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { createCategory, createProduct } from "@waitron/menu";
+import {
+  createCategory,
+  createExtraList,
+  createProduct,
+  writeProductModifiers,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { centsToDecimal, decimal, decimalToCents, saleId as brandSaleId } from "@waitron/shared";
+import { loginWithPin } from "@waitron/identity";
+import { recordReplacement } from "@waitron/core";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  decimalToCents,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  type SaleId,
+} from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { refundProvidersOf, type RefundProviderFor } from "./bill-refunds.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   deviceBindingColumns,
@@ -32,7 +50,9 @@ import { REASONS } from "./testing/adjustment-venue.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { TradingAdmission } from "./trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
 // Each product's staff, customer-facing and kitchen names differ (docs/developers/products.md).
@@ -55,6 +75,9 @@ let compReasonId: string;
 let correctionReasonId: string;
 /** The first till's device, whose profile takes cash, hand-keyed and reader cards. */
 let till: DeviceBinding;
+/** The extras list offered with the Paella, holding the Aioli at €3.00. */
+let sauces: string;
+let aioliId: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -78,6 +101,33 @@ useVenueDb({
         });
         productIds.set(dish.name, product.id);
       }
+      aioliId = (
+        await createProduct(tx, {
+          categoryId: category.id,
+          name: "Aioli",
+          customerName: { es: "Garlic mayonnaise" },
+          kitchenName: "AIOLI",
+          pricingUnit: "each",
+          unitPrice: "3.00",
+          vatClass: "general",
+        })
+      ).id;
+      sauces = (
+        await createExtraList(
+          tx,
+          {
+            name: "Sauces",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: 1,
+            active: true,
+            items: [{ productId: aioliId, maxQuantity: 1, preselected: false, price: "3.00" }],
+          },
+          "es-ES",
+        )
+      ).id;
+      await writeProductModifiers(tx, productIds.get("Paella")!, [{ kind: "extras", id: sauces }]);
       offers = await offerProducts(tx, { zone: "tables" });
       voidReasonId = (await createAdjustmentReason(tx, REASONS.houseVoid)).id;
       compReasonId = (await createAdjustmentReason(tx, REASONS.house)).id;
@@ -98,19 +148,37 @@ interface Tab {
   line: (name: Dish) => string;
 }
 
-async function tab(lines: readonly (Dish | [Dish, string])[]): Promise<Tab> {
+async function tab(
+  lines: readonly (Dish | [Dish, string])[],
+  { withAioli = false }: { withAioli?: boolean } = {},
+): Promise<Tab> {
   const { partyId, tabId } = await inTx(venue, async (tx) => {
     const table = await createTable(tx, {
       label: `G-${randomUUID().slice(0, 8)}`,
       zoneId: venue.zoneId,
     });
-    return openPartyTab(tx, venue.cfg, {
-      tableId: table.id,
-      lines: lines.map((line) => {
-        const [name, quantity] = typeof line === "string" ? [line, "1"] : line;
-        return { menuItemId: offers.offerFor(productIds.get(name)!), quantity };
-      }),
+    const orderLines = lines.map((line) => {
+      const [name, quantity] = typeof line === "string" ? [line, "1"] : line;
+      return { menuItemId: offers.offerFor(productIds.get(name)!), quantity };
     });
+    if (!withAioli) return openPartyTab(tx, venue.cfg, { tableId: table.id, lines: orderLines });
+    const opened = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+    await placeGroups(tx, venue.cfg, opened.partyId, {
+      groups: [
+        {
+          lines: orderLines.map((line) => ({
+            ...line,
+            ...(line.menuItemId === offers.offerFor(productIds.get("Paella")!)
+              ? { extras: [{ listId: sauces, picks: [{ productId: aioliId, quantity: 1 }] }] }
+              : {}),
+          })),
+          release: "hold",
+        },
+      ],
+      operatorId: venue.operatorId,
+      billId: opened.tabId,
+    });
+    return opened;
   });
   const rows = await venue.db
     .select({
@@ -247,12 +315,24 @@ async function plainRefund(
 
 function read(
   saleId: string,
-  options: { device?: DeviceBinding | null; backend?: BillVenue["backend"] } = {},
+  options: {
+    device?: DeviceBinding | null;
+    backend?: BillVenue["backend"];
+    admission?: TradingAdmission;
+    refundProviderFor?: RefundProviderFor;
+  } = {},
 ): Promise<GiveBackView> {
   return inTx(venue, (tx) =>
     readGiveBack(
       tx,
-      { backend: options.backend ?? venue.backend, admission: testTradingAdmission() },
+      {
+        backend: options.backend ?? venue.backend,
+        admission: options.admission ?? testTradingAdmission(),
+        refundProviderFor:
+          "refundProviderFor" in options
+            ? options.refundProviderFor
+            : refundProvidersOf({ pool: venue.pool }),
+      },
       venue.cfg,
       venue.clock.now(),
       brandSaleId(saleId),
@@ -525,5 +605,162 @@ describe("readGiveBack: what can be used now (O1)", () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
     expect((await read(saleId)).choices.extra).toEqual({ available: false, reason: null });
+  });
+});
+
+const aioliOf = (view: GiveBackView) =>
+  view.lines.find((line) => Object.values(line.descriptions).includes("Garlic mayonnaise"))!;
+
+describe("readGiveBack: a cancelled dish with a priced extra", () => {
+  it("shares the cancel's money between the dish's line and its extra's, the dish's first", async () => {
+    const b = await tab(["Paella", "Cheesecake"], { withAioli: true });
+    const saleId = await pay(b, [{ cash: "28.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const cash = await tenderOf(saleId, "cash");
+    const before = await read(saleId);
+    expect(lineOf(before, "Paella")).toMatchObject({
+      gross: "18.50",
+      left: "18.50",
+      cancelled: { quantity: "1.000", owed: "18.50", back: "0.00" },
+    });
+    expect(aioliOf(before)).toMatchObject({
+      gross: "3.00",
+      left: "3.00",
+      cancelled: { quantity: "1.000", owed: "3.00", back: "0.00" },
+    });
+
+    expect((await plainRefund(saleId, cash, { applied: "20.00" }, [cancelId])).status).toBe(200);
+    const partly = await read(saleId);
+    expect(lineOf(partly, "Paella")).toMatchObject({
+      left: "0.00",
+      available: false,
+      cancelled: { owed: "0.00", back: "18.50" },
+    });
+    expect(aioliOf(partly)).toMatchObject({
+      left: "1.50",
+      available: true,
+      cancelled: { owed: "1.50", back: "1.50" },
+    });
+
+    expect((await plainRefund(saleId, cash, { applied: "1.50" }, [cancelId])).status).toBe(200);
+    const all = await read(saleId);
+    for (const line of [lineOf(all, "Paella"), aioliOf(all)])
+      expect(line).toMatchObject({
+        left: "0.00",
+        available: false,
+        reason: null,
+        cancelled: { owed: "0.00" },
+      });
+    expect(lineOf(all, "Cheesecake")).toMatchObject({ left: "6.50", available: true });
+  });
+});
+
+describe("readGiveBack: more waits", () => {
+  it("shows a reader card whose company cannot send refunds as waiting (case 8)", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ reader: "15.00" }, { card: "10.00" }]);
+    const reader = await tenderOf(saleId, "card", 0);
+    const manual = await tenderOf(saleId, "card", 1);
+    const way = (view: GiveBackView, id: string) => view.ways.find((row) => row.way === id)!;
+    const served = await read(saleId);
+    expect(way(served, reader).reason).toBeNull();
+    const unserved = await read(saleId, { refundProviderFor: async () => undefined });
+    expect(way(unserved, reader).reason).toEqual({
+      code: "tender.refund_unavailable",
+      params: { tenderId: reader },
+    });
+    expect(way(unserved, manual).reason).toBeNull();
+    const noSend = await read(saleId, {
+      refundProviderFor: async () =>
+        Object.assign(Object.create(venue.card) as typeof venue.card, { sendRefund: undefined }),
+    });
+    expect(way(noSend, reader).reason).toMatchObject({ code: "tender.refund_unavailable" });
+  });
+
+  it("offers no dishes and no goodwill once every payment's money is back", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "25.00" }]);
+    admittingNot("wrong_node");
+    const cash = await tenderOf(saleId, "cash");
+    expect((await plainRefund(saleId, cash, { applied: "25.00" })).status).toBe(200);
+    const view = await read(saleId);
+    expect(lineOf(view, "Paella")).toMatchObject({ left: "18.50", available: false, reason: null });
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason: null },
+      goodwill: { available: false, reason: null },
+      extra: { available: false, reason: null },
+    });
+  });
+
+  it("while the box cannot trade, every choice waits (case 7)", async () => {
+    const b = await tab(["Paella"]);
+    const saleId = await pay(b, [{ cash: "18.50" }], "1.00");
+    const view = await read(saleId, { admission: new TradingAdmission() });
+    const reason = { code: "venue.time_zone_not_ready", params: { reason: "unchecked" } };
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason },
+      goodwill: { available: false, reason },
+      extra: { available: false, reason },
+    });
+  });
+
+  it("while the box is in a fiscal conflict, every choice waits (case 6)", async () => {
+    const b = await tab(["Paella"]);
+    const saleId = await pay(b, [{ cash: "18.50" }], "1.00");
+    const conflict = new AppError("sif.allocation_invalid", {} as never);
+    const spy = vi.spyOn(venue.backend, "refuseNewRefund").mockRejectedValue(conflict);
+    onTestFinished(() => spy.mockRestore());
+    const view = await read(saleId);
+    const reason = { code: "sif.allocation_invalid", params: { ...conflict.params } };
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason },
+      goodwill: { available: false, reason },
+      extra: { available: false, reason },
+    });
+  });
+});
+
+/** Replaces the receipt as the administrator would once AEAT has refused it. */
+function replace(saleId: SaleId): Promise<SaleId> {
+  return inTx(venue, async (tx) => {
+    await refusedByAeat(tx, saleId);
+    const session = await loginWithPin(tx, {
+      deviceId: venue.deviceId,
+      personId: venue.adminId,
+      pin: "1234",
+    });
+    const replaced = await recordReplacement(tx, venue.backend, {
+      operationDescription: "Restaurante",
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
+      correctsSaleId: saleId,
+      authz: { sessionId: session.id },
+      clock: venue.clock,
+    });
+    return replaced.saleId;
+  });
+}
+
+describe("readGiveBack: a receipt replaced after AEAT refused it", () => {
+  it("opened on the receipt the payments are on, lists the replacement's lines, which Correct invoice corrects", async () => {
+    const b = await tab(["Paella", "Cheesecake"]);
+    const saleId = await pay(b, [{ cash: "25.00" }]);
+    await cancel(b, "Paella", "1", true);
+    const replacement = await replace(saleId);
+    const replacementLines = await venue.db
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, replacement));
+    const view = await read(saleId);
+    expect(view.lines.map((line) => line.id).sort()).toEqual(
+      replacementLines.map((line) => line.id).sort(),
+    );
+    expect(lineOf(view, "Paella")).toMatchObject({
+      left: "18.50",
+      available: true,
+      cancelled: { quantity: "1.000", owed: "18.50", back: "0.00" },
+    });
+    expect(view.choices.goodwill).toEqual({ available: true, reason: null });
   });
 });

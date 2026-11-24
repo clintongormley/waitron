@@ -50,6 +50,7 @@ import { fingerprint } from "./parties.js";
 import { deviceMayPrintReceipts, enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
+import type { RefundableTender } from "./tender-refund-types.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
@@ -197,6 +198,29 @@ export async function correctableNow(
   saleId: SaleId,
   stillRefused: (amounts: { refundable: number; correctable: number }) => boolean,
 ): Promise<{ refundable: number; correctable: number }> {
+  const read = await readCorrectableNow(tx, backend, cfg, reading, saleId, stillRefused);
+  if (read.waiting !== null) throw read.waiting;
+  return read.amounts;
+}
+
+/**
+ * {@link correctableNow}'s reads, answered rather than thrown where Correct invoice waits
+ * (`waiting`), with the payments and the lines it read: `lines` is null where it refused them,
+ * for good or for now.
+ */
+export async function readCorrectableNow(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+  stillRefused: (amounts: { refundable: number; correctable: number }) => boolean,
+): Promise<{
+  tenders: RefundableTender[];
+  lines: CorrectableLine[] | null;
+  amounts: { refundable: number; correctable: number };
+  waiting: AppError | null;
+}> {
   const tenders = await readRefundableTenders(tx, saleId);
   const refundable = decimalToCents(appliedRemainingOf(tenders));
   let lines: CorrectableLine[];
@@ -209,22 +233,29 @@ export async function correctableNow(
     await refuseTakenOffAdvance(tx, saleId);
     lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId);
   } catch (error) {
-    if (refusesForGood(error)) return { refundable, correctable: 0 };
+    const none = { refundable, correctable: 0 };
+    if (refusesForGood(error)) return { tenders, lines: null, amounts: none, waiting: null };
+    if (error instanceof AppError) return { tenders, lines: null, amounts: none, waiting: error };
     throw error;
   }
-  const pending = tenders.find((row) => row.pendingRefundId !== null);
-  if (pending !== undefined)
-    throw new AppError("invoice_correction.refund_pending", {
-      saleId,
-      refundId: pending.pendingRefundId!,
-    });
   const left = lines.reduce((total, line) => total + decimalToCents(line.left), 0);
   const amounts = { refundable, correctable: Math.min(refundable, left) };
-  if (!stillRefused(amounts)) return amounts;
+  const pending = tenders.find((row) => row.pendingRefundId !== null);
+  if (pending !== undefined)
+    return {
+      tenders,
+      lines,
+      amounts,
+      waiting: new AppError("invoice_correction.refund_pending", {
+        saleId,
+        refundId: pending.pendingRefundId!,
+      }),
+    };
+  if (!stillRefused(amounts)) return { tenders, lines, amounts, waiting: null };
   if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
-    return { refundable, correctable: 0 };
+    return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null };
   await backend.refuseUntilRecordable(tx, reading);
-  return amounts;
+  return { tenders, lines, amounts, waiting: null };
 }
 
 /** The invoice's lines with what is left to correct of each, and the money still refundable on
