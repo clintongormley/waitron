@@ -592,3 +592,42 @@ describe("the Finish table and Cancel item lines on a dish given free", () => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);
   });
 });
+
+describe("Give money back's words", () => {
+  // O2 (owner, 2026-11-24): the stored tip is called the extra paid on top, never a tip, apart
+  // from naming what the receipt prints. D11: only what Waitron knows about a dish.
+  it("keeps the approved words for the extra and the dishes, in both languages", () => {
+    const keys = [
+      "give_back.extra",
+      "give_back.extra_hint",
+      "give_back.extra_too",
+      "give_back.extra_amount",
+      "give_back.cancelled_owed",
+      "give_back.cancelled_back",
+    ] as const;
+    expect(keys.map((key) => [en[key], es[key]])).toEqual([
+      ["Extra paid on top of the bill", "Lo pagado de más"],
+      [
+        "Give back some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
+        "Devuelve una parte o todos los {amount} pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
+      ],
+      [
+        "Give back the extra paid on top too ({amount})",
+        "Devolver también lo pagado de más ({amount})",
+      ],
+      ["Extra to give back", "Pagado de más a devolver"],
+      ["Cancelled, not served", "Cancelado, no servido"],
+      ["Cancelled, money given back", "Cancelado, dinero devuelto"],
+    ]);
+  });
+
+  it("calls the extra a tip nowhere else", () => {
+    const tipWords = Object.entries(en)
+      .filter(([key]) => key.startsWith("give_back."))
+      .filter(([key, text]) => key !== "give_back.extra_hint" && /\btip\b/i.test(text));
+    const propina = Object.entries(es)
+      .filter(([key]) => key.startsWith("give_back."))
+      .filter(([key, text]) => key !== "give_back.extra_hint" && /propina/i.test(text));
+    expect([...tipWords, ...propina]).toEqual([]);
+  });
+});

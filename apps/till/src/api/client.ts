@@ -43,6 +43,7 @@ import type {
   InvoiceCorrectionView,
   OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
+import type { GiveBackPreview, GiveBackRequest, GiveBackView } from "./give-back-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
   ItemPaymentAsk,
@@ -4571,6 +4572,23 @@ export class TillApi {
   ): Promise<InvoiceCorrectionPreview> {
     return this.#request(
       `/api/transactions/${encodeURIComponent(saleId)}/corrections/preview`,
+      "POST",
+      request,
+    );
+  }
+
+  readGiveBack(saleId: string, options: ReadOptions = {}): Promise<GiveBackView> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/give-back`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  previewGiveBack(saleId: string, request: GiveBackRequest): Promise<GiveBackPreview> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/give-back/preview`,
       "POST",
       request,
     );
