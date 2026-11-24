@@ -141,7 +141,7 @@ invoice is issued; a set-menu line files at the takeaway class its set menu froz
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
   the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else, through
   `resolveSnapshotText`, its bare language and then the non-blank entry whose language code sorts first
-  (`receiptFacts` in `apps/server/src/receipt-facts.ts`, which gathers what the paper receipt, the
+  (`receiptFacts` in `packages/orders-sales/src/receipt-facts.ts`, which gathers what the paper receipt, the
   till's receipt preview and the A4 invoice print), so it shows the same name
   whatever receipt language staff choose. An order placed before the venue's receipt languages
   change and collected after keeps the keys its lines were stored under (the case "accepts a change

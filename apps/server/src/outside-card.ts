@@ -1,10 +1,8 @@
+import type { OutsideCardDetails } from "@waitron/orders-sales/receipt-sale-types.js";
 import "./errors.js";
 import { invalid } from "./bill-allocation.js";
 
-export interface OutsideCardDetails {
-  externalProvider?: "connected_account" | "other";
-  externalMachine?: string;
-}
+export type { OutsideCardDetails } from "@waitron/orders-sales/receipt-sale-types.js";
 
 export function readOutsideCardDetails(
   input: { externalProvider?: unknown; externalMachine?: unknown },

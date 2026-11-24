@@ -6,10 +6,10 @@ import {
   rateLetters,
   receiptFacts,
   receiptFigures,
+  type ReceiptDocumentInput,
   type ReceiptFigures,
 } from "./receipt-facts.js";
-import type { ReceiptDocumentInput } from "./receipt-document.js";
-import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../test/full-invoice-fixture.js";
 import {
   advanceTakenOff,
   billDiscountOverTwoRates,
@@ -26,7 +26,7 @@ import {
   simplifiedDishDiscountOverExtraAtAnotherRate,
   threeCentRows,
   unfiledDish,
-} from "./testing/receipt-cases.js";
+} from "../test/receipt-cases.js";
 
 const charged = (figures: ReceiptFigures): Decimal[] =>
   figures.sections.flatMap((section) => {
@@ -383,4 +383,192 @@ describe("receiptFacts", () => {
     input.simulatedCardPayment = false;
     expect(receiptFacts(input).practice).toEqual({ noRealCharge: false });
   });
+});
+
+describe("receipt figure details", () => {
+  it("takes the remaining bill share off the unfiled dish and its priced extra", () => {
+    const input = billDiscountOverTwoRatesWithAnUnfiledLine();
+    const bread = input.result.lines[1]!;
+    bread.gross = "2.07";
+    bread.adjustments = [{ kind: "discount", amount: "0.20" }];
+    input.result.lines.push({
+      descriptions: { en: "Butter" },
+      quantity: "1",
+      gross: "0.90",
+      listGross: "1.00",
+      parentLineNo: 2,
+    });
+    input.result.billAdjustments = [{ kind: "discount", percentBp: 1000, amount: "3.33" }];
+    input.result.vatBreakdown[1] = { rate: "10.00", base: "2.70", tax: "0.27" };
+    input.result.total = "29.97";
+
+    const figures = receiptFigures(input);
+    expect(charged(figures)).toEqual(["30.00", "-3.00", "2.50", "1.00", "-0.20", "-0.33"]);
+    expect(sum(charged(figures))).toBe(figures.total);
+  });
+
+  it("shows the priced extra and answer of a covered dish and keeps the next dish's figures", () => {
+    const line = (name: string, gross: string, base: string, tax: string) => ({
+      descriptions: { en: name },
+      quantity: "1",
+      gross,
+      net: { unitPrice: base, priceQuantity: "1", base, tax, rate: "10" },
+    });
+    const input: ReceiptDocumentInput = {
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      invoiceLocale: "en-GB",
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        total: "5.50",
+        vatBreakdown: [{ rate: "10", base: "5.00", tax: "0.50" }],
+        lines: [
+          { ...line("Salad", "0.00", "0.00", "0.00"), setMenuRole: "dish" },
+          {
+            ...line("Soup", "0.00", "0.00", "0.00"),
+            setMenuRole: "dish",
+            optionSnapshots: [
+              {
+                listName: { en: "Temperature staff" },
+                listCustomerName: { en: "Temperature" },
+                listKitchenName: "Temperature kitchen",
+                labelName: { en: "Hot staff" },
+                labelCustomerName: { en: "Hot" },
+                labelKitchenName: "Hot kitchen",
+              },
+            ],
+          },
+          { ...line("Croutons", "1.10", "1.00", "0.10"), parentLineNo: 2 },
+          line("Pie", "4.40", "4.00", "0.40"),
+        ],
+      },
+    };
+    expect(receiptFigures(input).sections).toEqual([
+      {
+        kind: "filed",
+        rows: [
+          { kind: "line", units: "1", item: "Soup", indent: 0, rate: "10" },
+          { kind: "answer", units: "", item: "Temperature: Hot", indent: 2 },
+          {
+            kind: "option",
+            units: "1",
+            item: "Croutons",
+            indent: 2,
+            rate: "10",
+            unitPrice: "1.00",
+            amountExVat: "1.00",
+            chargedWithVat: "1.10",
+          },
+          {
+            kind: "line",
+            units: "1",
+            item: "Pie",
+            indent: 0,
+            rate: "10",
+            unitPrice: "4.00",
+            amountExVat: "4.00",
+            chargedWithVat: "4.40",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it.each([
+    ["counted", "2", "10.00", undefined, { price: "5.00" }],
+    ["weighed", "0.4", "2.00", { en: "kg" }, { price: "5.00", unitName: "kg" }],
+    ["weighed and rounded", "0.333", "1.67", { en: "kg" }, undefined],
+  ])(
+    "shows a %s surcharge's unit price only when it gives back the amount",
+    (_kind, quantity, gross, unitName, perUnit) => {
+      const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+      input.invoiceLocale = "en-GB";
+      input.result.invoiceType = "F2";
+      input.result.lines = [
+        {
+          descriptions: { en: "Sirloin" },
+          quantity,
+          gross,
+          unitName,
+          unitPriceGross: "5.00",
+          setMenuRole: "dish",
+        },
+      ];
+      const [section] = receiptFigures(input).sections;
+      expect(section).toMatchObject({
+        kind: "withVat",
+        group: { item: "Sirloin", surcharge: true, amount: gross },
+      });
+      expect(section?.kind === "withVat" && section.group.perUnit).toEqual(perUnit);
+    },
+  );
+
+  it.each([
+    ["one charged portion", "1", "5.00", "5.00", false],
+    ["two free portions", "2", "0.00", "0.00", false],
+    ["a credited portion", "-1", "-5.00", "5.00", true],
+  ])("omits the unit price for %s", (_kind, quantity, gross, unitPriceGross, credit) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = "en-GB";
+    input.result.invoiceType = credit ? "R5" : "F2";
+    input.result.total = gross;
+    if (credit)
+      input.result.corrects = { invoiceNumber: "T/37", issuedAt: "2026-08-16T20:00:00.000Z" };
+    input.result.lines = [{ descriptions: { en: "Pie" }, quantity, gross, unitPriceGross }];
+
+    const [section] = receiptFigures(input).sections;
+    expect(section).toMatchObject({
+      kind: "withVat",
+      group: { item: "Pie", quantity, amount: gross },
+    });
+    expect(section?.kind === "withVat" && section.group).not.toHaveProperty("perUnit");
+  });
+
+  it("shows how many counted extras each dish has and the measured extra's total quantity", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = "en-GB";
+    input.result.invoiceType = "F2";
+    input.result.lines = [
+      { descriptions: { en: "Sundae" }, quantity: "2", gross: "8.00" },
+      { descriptions: { en: "Wafer" }, quantity: "4", gross: "2.00", parentLineNo: 1 },
+      { descriptions: { en: "Cherry" }, quantity: "2", gross: "1.00", parentLineNo: 1 },
+      {
+        descriptions: { en: "Berries" },
+        quantity: "0.250",
+        gross: "3.00",
+        parentLineNo: 1,
+        unitName: { en: "kg" },
+      },
+    ];
+    const [section] = receiptFigures(input).sections;
+    expect(section?.kind === "withVat" && section.group).not.toHaveProperty("surcharge");
+    expect(section?.kind === "withVat" && section.group.options).toEqual([
+      { item: "Wafer", quantity: "x2", amount: "2.00", rateLetter: "" },
+      { item: "Cherry", quantity: "", amount: "1.00", rateLetter: "" },
+      { item: "Berries", quantity: "0.250 kg", amount: "3.00", rateLetter: "" },
+    ]);
+  });
+});
+
+it("carries the original issue and deferred account alongside the current issuer's available details", () => {
+  const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+  delete input.result.issuer;
+  delete input.result.issuedOffsetMinutes;
+  delete input.result.qrText;
+  delete input.venueAddress;
+  delete input.issuer.domicile;
+  input.result.tender = { method: "deferred" };
+  const account = { iban: "ES9121000418450200051332", bankName: "Example Bank" };
+  input.deferredPayment = { account };
+
+  const facts = receiptFacts(input);
+  expect(facts.letterhead).toMatchObject({
+    legalName: input.issuer.venueName,
+    nif: input.issuer.nif,
+    venueAddress: [],
+  });
+  expect(facts.letterhead).not.toHaveProperty("domicile");
+  expect(facts.band.issuedAt).toBe(input.result.issuedAt);
+  expect(facts.band).not.toHaveProperty("issuedOffsetMinutes");
+  expect(facts.qr).toEqual({ text: input.result.qr });
+  expect(facts.payment).toEqual({ tender: { method: "deferred" }, deferred: { account } });
 });

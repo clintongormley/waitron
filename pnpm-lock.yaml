@@ -1674,6 +1674,9 @@ importers:
       '@waitron/core':
         specifier: workspace:*
         version: link:../core
+      '@waitron/country':
+        specifier: workspace:*
+        version: link:../country
       '@waitron/country-packs':
         specifier: workspace:*
         version: link:../country-packs
@@ -1692,6 +1695,9 @@ importers:
       '@waitron/menu':
         specifier: workspace:*
         version: link:../menu
+      '@waitron/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@waitron/printing':
         specifier: workspace:*
         version: link:../printing
