@@ -1768,6 +1768,83 @@ describe("mountMenuApi — labels", () => {
   });
 });
 
+describe("dashboard product availability", () => {
+  const path = "/management-api/products/availability";
+  const productId = crypto.randomUUID();
+
+  it("requires menu management permission to change availability", async () => {
+    for (const [cookie, status, code] of [
+      [null, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(mountApp(), "PUT", path, {
+        cookie,
+        body: { productIds: [productId], available: false },
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+  });
+
+  it.each([
+    [null, "productIds"],
+    [{ productIds: [], available: false }, "productIds"],
+    [{ productIds: [productId, productId], available: false }, "productIds"],
+    [{ productIds: [1], available: false }, "productIds"],
+    [{ productIds: [productId] }, "available"],
+    [{ productIds: [productId], available: null }, "available"],
+  ])("refuses an invalid availability body %j", async (body, field) => {
+    const response = await send(mountApp(), "PUT", path, { body });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
+  it("distinguishes a malformed product ID from an unknown ID", async () => {
+    const app = mountApp();
+    const malformed = await send(app, "PUT", path, {
+      body: { productIds: ["not-a-uuid"], available: false },
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "ProductId", value: "not-a-uuid" } },
+    });
+    const unknown = await send(app, "PUT", path, {
+      body: { productIds: [productId], available: false },
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: { code: "product.not_found", params: { productId } },
+    });
+  });
+
+  it("leaves the first product available when the batch's next product is archived", async () => {
+    const app = mountApp();
+    const first = await createNamedProductVia(app, "Available tea");
+    const archived = await createNamedProductVia(app, "Archived tea");
+    const archive = await send(app, "POST", "/management-api/folders/delete", {
+      body: { productIds: [archived], categoryIds: [], contents: "delete" },
+    });
+    expect(archive.status).toBe(204);
+    const response = await send(app, "PUT", path, {
+      body: { productIds: [first, archived], available: false },
+    });
+    expect(response.status).toBe(409);
+    expect(response.headers.has("x-waitron-menu-revision")).toBe(false);
+    expect(await response.json()).toEqual({
+      error: { code: "product.archived", params: { productId: archived } },
+    });
+    const stored = await send(app, "GET", "/management-api/products");
+    expect(stored.headers.get("x-waitron-menu-revision")).toBe(
+      archive.headers.get("x-waitron-menu-revision"),
+    );
+    expect(await stored.json()).toContainEqual(
+      expect.objectContaining({ id: first, available: true }),
+    );
+  });
+});
+
 describe("mountMenuApi — products", () => {
   it("GET /management-api/products lists active top-level products", async () => {
     const app = mountApp();

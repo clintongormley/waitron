@@ -20,6 +20,7 @@ import { readVenueClock, withTransaction, type Database, type Transaction } from
 import {
   moveProductItems,
   deleteProductItems,
+  setProductAvailability,
   summariseFolders,
   menusHolding,
   type ProductSelection,
@@ -432,6 +433,7 @@ const runBodyIds = (...codes: string[]) =>
 const runCreateProduct = runBodyIds("menu.not_found", "category.not_found");
 const runBodyMenu = runBodyIds("menu.not_found");
 const runBodyCategory = runBodyIds("category.not_found");
+const runBodyProduct = runBodyIds("product.not_found");
 // A folder move or delete names its products and folders in the body.
 const runFolder = runBodyIds("category.not_found", "product.not_found");
 const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_role");
@@ -1623,6 +1625,24 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       return c.json(await gated(c, session, (tx) => listProducts(tx)));
+    }),
+  );
+  app.put("/management-api/products/availability", (c) =>
+    runBodyProduct(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const ids = idList(
+        isPlainObject(body) ? body.productIds : undefined,
+        "productIds",
+        "ProductId",
+      );
+      if (ids.length === 0 || new Set(ids).size !== ids.length)
+        throw new AppError("management.request_invalid", { field: "productIds" });
+      const available = isPlainObject(body) ? body.available : undefined;
+      if (typeof available !== "boolean")
+        throw new AppError("management.request_invalid", { field: "available" });
+      await gated(c, session, (tx) => setProductAvailability(tx, ids, available));
+      return c.body(null, 204);
     }),
   );
   app.post("/management-api/products/menus", (c) =>

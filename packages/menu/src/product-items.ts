@@ -5,7 +5,8 @@ import { batches } from "./batches.js";
 import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { archiveProducts } from "./archive.js";
-import { isTopLevelProduct } from "./variant-fallback.js";
+import { updateProduct } from "./operations.js";
+import { isTopLevelProduct, type ProductScope } from "./variant-fallback.js";
 import "./errors.js";
 
 export interface ProductSelection {
@@ -88,23 +89,37 @@ class FolderTree {
   }
 }
 
-async function requireTopLevelProducts(tx: Transaction, ids: readonly string[]): Promise<void> {
+async function requireProductRows(
+  tx: Transaction,
+  ids: readonly string[],
+  scope: ProductScope,
+): Promise<void> {
+  const scopeFilter = scope === "top-level" ? isTopLevelProduct : undefined;
   const found = new Set<string>();
   for (const batch of batches([...ids]))
     for (const row of await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(inArray(products.id, batch), isTopLevelProduct)))
+      .where(and(inArray(products.id, batch), scopeFilter)))
       found.add(row.id);
   const missing = ids.find((id) => !found.has(id));
   if (missing !== undefined) throw new AppError("product.not_found", { productId: missing });
 }
 
 async function readTree(tx: Transaction, selection: ProductSelection): Promise<FolderTree> {
-  await requireTopLevelProducts(tx, selection.productIds);
+  await requireProductRows(tx, selection.productIds, "top-level");
   const tree = new FolderTree(await listCategories(tx));
   for (const id of selection.categoryIds) tree.require(id);
   return tree;
+}
+
+export async function setProductAvailability(
+  tx: Transaction,
+  productIds: readonly string[],
+  available: boolean,
+): Promise<void> {
+  await requireProductRows(tx, productIds, "any");
+  for (const id of productIds) await updateProduct(tx, id, { available });
 }
 
 export async function moveProductItems(

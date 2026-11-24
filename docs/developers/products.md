@@ -968,6 +968,9 @@ exports leave those rows out. The product and variant writers refuse reactivatio
 **Available / Unavailable** is "sold out for now": a save sends `available` only when the editor's
 Available switch changed. Omission preserves an existing row; a new row defaults to available. This
 also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans.
+To change only availability, send one or more dish or variant IDs to
+`PUT /management-api/products/availability`. Tills see the new flags on their next offers read
+without republishing. Changing a dish's flag keeps its variants' own flags.
 Unavailable products remain visible in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`applyLiveFields` in `packages/menu/src/menu-document.ts` marks it on each
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order-pricing.ts` refuses
