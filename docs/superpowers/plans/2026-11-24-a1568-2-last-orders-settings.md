@@ -4,46 +4,53 @@
 
 A manager can set Kitchen to 15 minutes before Lunch ends and Bar to one hour after. Calendar and
 staffing show Bar's longer hours and keep Kitchen's painted end. Configuration export carries the
-settings to a fresh venue.
+settings to a fresh venue. The watcher cleared the two-pull-request split on 24 November at 20:44.
 
-**Save and transfer.** Add optional `lastOrders` to `menu-timetable-types.ts`, `menu-timetable.ts`
-and `routes.ts`. Store nonzero offsets as an array in `menu_periods.last_orders` (`packages/db/src/schema/venue-service/menus.ts`).
-Use the existing `RouteTarget` variants with `minutes`. Accept −60, −45, −30, −15, 0, 15, 30, 45,
-60, 90 or 120 once per target. Missing entries mean At the end. Share the minutes and parser in
-`menu-timetable-rules.ts`. Omitted PATCH keeps stored values, including when a menu is replaced.
-Validate supplied entries, refuse unknown ids and drop a known deleted station from a stale save.
-In `station-delete-settings.ts`, drop the whole entry in the same write and count it in delete
-impact and the `menu_periods` live dependency, with copy in `dashboard/station-delete-copy.ts`. Declare `[*].stationId` in
-`configuration-transfer.ts` and validate its targets. An invalid station entry cannot become No
-preparation. Bump the format in `packages/provisioning/src/configuration-transfer.ts` and rebuild
-core's starting migration. The venue needs a reset. Start with `menu-timetable-routes.test.ts`
-for save, reopen and refusal, `station-delete-settings.test.ts` for cleanup with No preparation
-present, and `apps/server/src/configuration-transfer.test.ts` for real remapping and reimport.
+## 1. Save and transfer
 
-**Choose stations.** In `last-order-routing.ts`, take the period's customer and staff menu drafts
-through the existing section graph. Extend `periodProductIds` with an opt-in for the picker and
-Calendar. Walk each included active set menu's root with `reachableProducts`. The routing grid and
-its validation keep their existing product list. Reuse `selectRoutingCell` across the department's zones. For each painted run in
-a season or resolved special day, share the routing intervals from the run through two hours after
-its end. Use the running period's route, or Any other time in gaps. A new unpainted period uses its
-normal routing and Any other time. Test a set-menu-only dish and a tail that reaches a later period
-after a gap. Use a passive GET in `routes.ts`, `dashboard/opening-hours-client.ts` and
-`dashboard/live-queries.ts`. In `dashboard/period-{editing,dialog}.ts`, refresh choices for draft
-menu and routing changes, ignoring stale replies. Reuse the draft scope and shared select fields.
-Save offsets for the currently listed targets. Localize the labels and Prep stations link in
-`dashboard/strings.ts`, including the routing dialog's new label. Extend `period-dialog.test.ts`
-for a takeover-only target, No preparation, an obsolete reply and saving a changed draft.
+Add optional `lastOrders` to `menu-timetable-types.ts`, `menu-timetable.ts` and `routes.ts`. Store
+nonzero offsets as an array in `menu_periods.last_orders` in `packages/db/src/schema/venue-service/menus.ts`.
+Use `RouteTarget` with `minutes`, once per target. Share the parser and the allowed minutes in
+`menu-timetable-rules.ts` (−60, −45, −30, −15, 0, 15, 30, 45, 60, 90, 120). Missing entries mean At
+the end. Omitted PATCH keeps stored values. Reject unknown ids and drop a known deleted station
+from a stale save. Drop the whole entry in `station-delete-settings.ts` and count it in the delete
+warning. Add localized copy in `dashboard/station-delete-copy.ts` and the `menu_periods` live
+dependency. Declare `[*].stationId` in venue-service's `configuration-transfer.ts` and validate its
+targets. Bump the format in provisioning and rebuild core's starting migration. Lead the PR with the
+venue reset. This PR adds no period form control and can land once green.
 
-**Show hours.** In `planned-service-guides.ts`, include set-menu dishes in base hours and after-end
-extensions. Clamp extensions at the business-day end and subtract zone closures. In each station
-and department row, a painted block owns its overlaps. Where extensions overlap, show the latest
-period to end. Keep the earlier cutoff out of the painted hours and leave department and staffing
-blocks as saved. Extend `station-service-times.test.ts` for Kitchen kept to 15:00, a set-menu-only
-station shown during and after Lunch, and a special-day tail clipped by a block and by day end.
+Start with `menu-timetable-routes.test.ts` for save, reopen and refusal, `menu-timetable.test.ts`
+for preserving offsets when replacing a deleted menu, and `station-delete-settings.test.ts` for
+cleanup and the count while No preparation keeps its own offset. Check the localized count and live
+dependency in `dashboard/station-delete-copy.test.ts` and `dashboard/live-queries.test.ts`. Run the
+real transfer round trip in `apps/server/src/configuration-transfer.test.ts`, schema guards and
+unedited fiscal immutability test. Allow 190–260 product lines and 150–210 test lines plus generated migration.
 
-Allow 600–750 product lines and 450–550 test lines, plus generated migration and docs. Update both
-languages of the Opening hours and Kitchen service guides, design-system wording and the backlog.
-Run the changed tests, schema guards and unedited fiscal immutability test. Send form, routing label
-and Calendar captures for owner OK, including a station serving adjoining periods. Hold the
-reviewed PR until the watcher confirms A1568-3 can follow it. Dish availability, send decisions,
-till display and demo stay in their queued pieces.
+## 2. Show and edit
+
+Use `selectRoutingCell` across the draft menus' products and the department's zones. In
+`last-order-routing.ts`, share the routing intervals during each run and up to two hours after it
+with `planned-service-guides.ts`. Use season weeks and `readSpecialDayPlan` and
+`resolveDepartmentsDays` in `day-resolver.ts` for effective special-day paint. Use whichever period
+runs then, or Any other time during gaps. Extend `periodProductIds` for the picker and Calendar to
+walk included active set-menu roots through `reachableProducts`. Test a set-menu-only dish and a later
+period that starts after a gap. Check the set-menu-only case through Prep stations' routing editor.
+If it omits the period, correct the reach there here if small, or split that fix into its own PR.
+
+Add the passive GET to `routes.ts`, `dashboard/opening-hours-client.ts` and `dashboard/live-queries.ts`.
+In `dashboard/period-{editing,dialog}.ts`, reuse the draft scope and shared select fields. Omit
+`lastOrders` during the first read, after a refusal or while draft choices are pending. Ignore stale
+replies. Localize the labels, Prep stations link and routing dialog in `dashboard/strings.ts`.
+Test omission in all three read states and saving a changed target in `period-dialog.test.ts`.
+
+In `planned-service-guides.ts`, include set-menu dishes in base hours and after-end extensions. Clamp
+at the business-day end and subtract zone closures. In the same station and department, its own
+painted block owns overlap. Where extensions overlap, show the latest period to end. Keep other
+paint as saved. In `station-service-times.test.ts`, test Kitchen kept to 15:00, Bar's Lunch shown
+until 16:00 when it serves nothing in Afternoon, Afternoon winning when Bar serves both, and the
+special-day extension clipped at day end.
+
+Allow 410–490 product lines and 300–340 test lines plus guides. Update both languages of Opening
+hours and Kitchen service, the design-system label and backlog. Send form, routing and Calendar
+captures for owner OK. Hold this PR until A1568-3 can follow. Dish availability, sending, till display
+and demo stay in their queued pieces.
