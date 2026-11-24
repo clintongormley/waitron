@@ -107,6 +107,7 @@ async function mountNarrow(
     field.copy = {
       label: "Master key",
       button: "Choose the recovery pack PDF",
+      loaded: "",
       notPack: "",
       damaged: "",
       notWhole: "",

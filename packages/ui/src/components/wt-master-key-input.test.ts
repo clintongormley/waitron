@@ -5,6 +5,8 @@ import { state } from "lit/decorators.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { LeaveController } from "../leave-controller.js";
+import { setHelpMode } from "../help-mode.js";
+import "./wt-help-tooltip.js";
 import type {
   MasterKeyChangeDetail,
   MasterKeyInputCopy,
@@ -20,6 +22,7 @@ const LIMIT = 16;
 const EN: MasterKeyInputCopy = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
+  loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
   damaged: "This recovery pack PDF is damaged. Type the key.",
   notWhole: "Not a whole master key. Check it against the recovery pack.",
@@ -600,6 +603,46 @@ test("the hidden status says a PDF's line, never a typed key's or the host's", a
   await choose(el);
   await settled(el, EN.wrongKey(KEY_NAME));
   expect(status()).toBe(EN.wrongKey(KEY_NAME));
+});
+
+test("the hidden status says the key was loaded from a PDF, never the key, until it changes", async () => {
+  const { el } = await field();
+  const status = () => el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim();
+  await choose(el);
+  await el.pdfRead;
+  expect(native(el).value).toBe(KEY);
+  expect(status()).toBe(EN.loaded);
+  expect(el.shadowRoot!.textContent).not.toContain(KEY);
+  await type(el, "A");
+  expect(status()).toBe("");
+  await choose(el);
+  await el.pdfRead;
+  expect(status()).toBe(EN.loaded);
+  el.clear();
+  await el.updateComplete;
+  expect(status()).toBe("");
+});
+
+test("a help-mode badge in the help slot hangs over the key field's top trailing corner", async () => {
+  const el = (await mount(
+    '<wt-master-key-input><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Master key">On the recovery pack.</wt-help-tooltip></wt-master-key-input>',
+  )) as WtMasterKeyInput;
+  el.copy = EN;
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  const badge = el.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "wt-help-tooltip",
+  )!;
+  setHelpMode(true);
+  try {
+    await badge.updateComplete;
+    const button = badge.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    const corner = inner(el).shadowRoot!.querySelector("[part=field]")!.getBoundingClientRect();
+    expect(Math.abs(button.left + button.width / 2 - corner.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(button.top + button.height / 2 - corner.top)).toBeLessThanOrEqual(1);
+  } finally {
+    setHelpMode(false);
+  }
 });
 
 test("the PDF chooser's own input event stays inside the field", async () => {

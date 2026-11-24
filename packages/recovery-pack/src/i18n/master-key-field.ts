@@ -4,6 +4,8 @@ import type { PackLocale } from "./pack-words.js";
 type MasterKeyFieldWords = {
   label: string;
   button: string;
+  /** Said to screen readers once a chosen PDF filled the field; never the key itself. */
+  loaded: string;
   notPack: string;
   damaged: string;
   notWhole: string;
@@ -15,6 +17,7 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
   en: {
     label: "Master key",
     button: "Choose the recovery pack PDF",
+    loaded: "Key loaded",
     notPack: "This PDF is not a recovery pack.",
     damaged: "This recovery pack PDF is damaged. Type the key.",
     notWhole: "Not a whole master key. Check it against the recovery pack.",
@@ -27,6 +30,7 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
   es: {
     label: "Clave maestra",
     button: "Elegir el PDF del paquete de recuperación",
+    loaded: "Clave cargada",
     notPack: "Este PDF no es un paquete de recuperación.",
     damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     notWhole: "No es una clave maestra completa. Compárala con el paquete de recuperación.",

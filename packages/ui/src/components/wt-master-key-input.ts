@@ -12,6 +12,8 @@ import "./wt-button.js";
 export type MasterKeyInputCopy = {
   label: string;
   button: string;
+  /** Said to screen readers once a chosen PDF filled the field; never the key itself. */
+  loaded: string;
   notPack: string;
   damaged: string;
   notWhole: string;
@@ -112,6 +114,8 @@ export class WtMasterKeyInput extends LitElement {
 
   @state() private value = "";
   @state() private problem?: Problem;
+  /** The key in the field came from a chosen PDF and has not been changed since. */
+  @state() private loaded = false;
   @query('input[type="file"]') private chooser!: HTMLInputElement;
 
   #file?: File;
@@ -167,6 +171,7 @@ export class WtMasterKeyInput extends LitElement {
     this.value = "";
     this.#file = undefined;
     this.problem = undefined;
+    this.loaded = false;
     this.#scope?.commit({ value: "" });
   }
 
@@ -182,6 +187,7 @@ export class WtMasterKeyInput extends LitElement {
 
   #start(): object {
     this.problem = undefined;
+    this.loaded = false;
     return (this.#reading = {});
   }
 
@@ -228,6 +234,7 @@ export class WtMasterKeyInput extends LitElement {
     if (reading !== this.#reading) return;
     if (problem === undefined) {
       this.value = key!;
+      this.loaded = true;
       this.#notify(key);
     } else this.problem = problem;
     await this.updateComplete;
@@ -263,6 +270,7 @@ export class WtMasterKeyInput extends LitElement {
           const input = (event.currentTarget as LitElement).shadowRoot!.querySelector("input")!;
           void this.#edit(event.detail.value, input);
         }}
+        ><slot name="help" slot="help"></slot
       ></wt-input>
       <wt-button
         class="choose"
@@ -288,7 +296,9 @@ export class WtMasterKeyInput extends LitElement {
           if (file !== undefined) this.#pdfRead = this.#choose(file);
         }}
       />
-      <p class="visually-hidden" role="status">${fromPack ? line : nothing}</p>`;
+      <p class="visually-hidden" role="status">
+        ${fromPack ? line : this.loaded ? copy.loaded : nothing}
+      </p>`;
   }
 }
 

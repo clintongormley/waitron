@@ -3,20 +3,29 @@ import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { RecoveryPackReading, WtMasterKeyInput } from "./wt-master-key-input.js";
 import "./wt-master-key-input.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setHelpMode(false);
+});
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const KEY_NAME = "2026-11-23 · QZJV";
 const COPY = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
+  loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
   damaged: "This recovery pack PDF is damaged. Type the key.",
   notWhole: "Not a whole master key. Check it against the recovery pack.",
   wrongKey: (name: string) => `Wrong master key. Use the one dated ${name}.`,
   elsewhere: () => "This recovery pack does not hold the master key.",
 };
+
+const BADGE =
+  '<wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Master key">On the recovery pack.</wt-help-tooltip>';
 
 async function field(
   theme: "light" | "dark",
@@ -25,9 +34,10 @@ async function field(
     masterKeyName: KEY_NAME,
     masterKeyHeldBy: null,
   }),
+  badge = "",
 ): Promise<WtMasterKeyInput> {
   const el = (await mountThemed(
-    "<wt-master-key-input required></wt-master-key-input>",
+    `<wt-master-key-input required>${badge}</wt-master-key-input>`,
     theme,
   )) as WtMasterKeyInput;
   el.copy = COPY;
@@ -82,6 +92,13 @@ describe.each(["light", "dark"] as const)("wt-master-key-input a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 
+  test("loaded from a PDF", async () => {
+    const el = await field(theme);
+    await choose(el, "");
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe(COPY.loaded);
+    await expectNoA11yViolations(host);
+  });
+
   test("not a pack", async () => {
     const el = await field(theme, () => Promise.reject(refusal("not_a_pack")));
     await choose(el, COPY.notPack);
@@ -112,6 +129,22 @@ describe.each(["light", "dark"] as const)("wt-master-key-input a11y (%s theme)",
     }));
     await choose(el, COPY.elsewhere());
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await field(theme, undefined, BADGE);
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    const el = await field(theme, undefined, BADGE);
+    const badge = el.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 
   test("disabled", async () => {
