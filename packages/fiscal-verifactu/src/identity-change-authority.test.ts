@@ -177,10 +177,25 @@ it("refuses the identity-change action under an ordinary operation authority", a
 });
 
 it.each(["setup", "restore", "promote", "conflict-switch"])(
-  "refuses the private authority bound to the %s action",
+  "will not issue the private authority for the %s action",
+  async (action) => {
+    const run = vi.fn();
+    await expect(
+      withIdentityChangeAuthority(
+        fixture(action, "0CNPG", "identity-hour", IDENTITY_OPERATOR).binding,
+        RELEASE,
+        run,
+      ),
+    ).rejects.toMatchObject(refused("reauthentication_required"));
+    expect(run).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["setup", "restore", "promote", "conflict-switch"])(
+  "refuses the private authority presented for the %s action",
   async (action) => {
     const f = fixture(action, "0CNPG", "identity-hour", IDENTITY_OPERATOR);
-    await withIdentityChangeAuthority(f.binding, RELEASE, async (authority) => {
+    await withIdentityChangeAuthority(identityChange().binding, RELEASE, async (authority) => {
       expect(isIdentityChangeAuthority(authority)).toBe(true);
       await expectAdmissionRefused(f, authority);
       const source = vi.fn();
@@ -256,7 +271,7 @@ it("withdraws the private authority when its run throws", async () => {
   expect(isIdentityChangeAuthority(kept)).toBe(false);
 });
 
-it("names the release in the operator it issues", async () => {
+it("refuses an approval naming another release's operator", async () => {
   const f = identityChange();
   const wrong = fixture("identity-change", "0CNPG", "identity-hour", "identity-change:9.9.9");
   await withIdentityChangeAuthority(f.binding, RELEASE, async (authority) => {

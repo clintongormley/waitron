@@ -1,11 +1,12 @@
+import "./errors.js";
 import {
   withOperationAuthority,
   type OperationAuthority,
   type OperationBinding,
 } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 
-// An ordinary withOperationAuthority authority never carries identity-change. index.ts does not
-// export this file, though the package's `./src/*` export still reaches it.
+// Outside this package's src, eslint.config.js's identity-change zone refuses an import of this file.
 const issued = new WeakSet<object>();
 
 export async function withIdentityChangeAuthority<T>(
@@ -13,6 +14,8 @@ export async function withIdentityChangeAuthority<T>(
   release: string,
   run: (authority: OperationAuthority) => Promise<T>,
 ): Promise<T> {
+  if (binding.action !== "identity-change")
+    throw new AppError("sif.allocation_invalid", { reason: "reauthentication_required" });
   return withOperationAuthority(binding, `identity-change:${release}`, async (authority) => {
     issued.add(authority);
     try {

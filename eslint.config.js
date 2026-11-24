@@ -26,6 +26,32 @@ export default tseslint.config(
   wcPlugin.configs["flat/recommended"],
 
   {
+    // Before the package blocks below: a later block's zones replace these, and each of those
+    // already refuses every fiscal-verifactu import.
+    files: ["**/*.ts"],
+    ignores: ["packages/fiscal-verifactu/src/**"],
+    plugins: { "import-x": importX },
+    settings: { "import-x/resolver": { typescript: true } },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./**/*",
+              from: "./packages/fiscal-verifactu/src/identity-change-authority.ts",
+              message:
+                "Only packages/fiscal-verifactu/src may issue the identity-change authority, which " +
+                "opens a new installation when the producer changes.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     // A dependency-free manifest does not prevent relative imports of another package's source.
     files: ["packages/shared/**/*.ts"],
     plugins: { "import-x": importX },
