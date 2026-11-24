@@ -114,7 +114,10 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
   let heardCopy: HeardCopy | null = null;
   // Stamped with the time the question left: records are only added, so the main box held no
   // less then than the summary it read afterwards.
-  const hear = (asked: Extract<ReplacedResetCheck, { lacking: unknown }>, askedAt: Date) => {
+  const hear = (
+    asked: { holdings?: Record<string, CanonicalValue>; copy?: HeardCopy },
+    askedAt: Date,
+  ) => {
     heard = asked.holdings === undefined ? null : { holdings: asked.holdings, heardAt: askedAt };
     if (asked.copy !== undefined) heardCopy = asked.copy;
   };
@@ -228,9 +231,11 @@ export function startResetOrderDuty(deps: ResetOrderDutyDeps): {
       } else if (asked?.outcome === "refused") {
         answer = null;
         note("reset-order.refused", { reason: asked.reason });
-      } else if (asked?.outcome === "failed")
+      } else if (asked?.outcome === "failed") {
+        // The return sender picks earlier boxes' records by this summary.
+        if (asked.check === "unconfirmed") hear(asked, askedAt);
         note("reset-order.check_failed", { check: asked.check });
-      else if (asked?.outcome === "unreachable") note("reset-order.unreachable", asked.fields);
+      } else if (asked?.outcome === "unreachable") note("reset-order.unreachable", asked.fields);
       await sleep(
         asked?.outcome === "refused" ? ASK_AFTER_REFUSAL_MS : ASK_EVERY_MS,
         stopping.signal,

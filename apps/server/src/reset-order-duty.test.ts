@@ -420,6 +420,38 @@ it.each([
   await duty.stop();
 });
 
+it("keeps the summary and copy time of an order it may not act on yet because its own return is unconfirmed, and saves nothing", async () => {
+  const MAIN_HELD = { sample: [{ chain: "main-box", count: 9 }] };
+  const copyAt = Date.parse("2026-11-12T09:41:07.123Z");
+  const unconfirmed: WaitronModule[] = [
+    {
+      ...modules[0]!,
+      handover: {
+        ...modules[0]!.handover!,
+        returnRecords: { ...modules[0]!.handover!.returnRecords!, read: async () => ["unsent"] },
+      },
+    },
+  ];
+  const main = await standIn((seen) =>
+    signedOrder(seen, { orderId: "order-1", acceptLoss: false }, { sample: [] }, MAIN_HELD, {
+      lastChangeAtMs: copyAt,
+    }),
+  );
+  const { time, sleep, resume } = parkedClock();
+  const { duty, restart } = start(main.fetch, time, { modules: unconfirmed });
+  await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(2));
+  expect(duty.mainHoldings()).toEqual({
+    holdings: MAIN_HELD,
+    heardAt: new Date("2026-11-22T10:00:00Z"),
+  });
+  expect(duty.mainCopy()).toEqual({ lastChangeAtMs: copyAt });
+  expect(await markerOnDisk()).toBeNull();
+  expect(main.seen.every((seen) => seen.body.ack === undefined)).toBe(true);
+  expect(restart).not.toHaveBeenCalled();
+  resume();
+  await duty.stop();
+});
+
 it("asks every 5 minutes while the main box refuses, and keeps no answer", async () => {
   const main = await standIn(() => refused());
   const { time, sleep, resume } = parkedClock();
