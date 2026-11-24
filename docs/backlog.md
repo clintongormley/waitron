@@ -542,6 +542,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
+- **A1568. Last orders per prep station** (owner, 24 November; approved, not started). Lunch keeps its
+  hours; each station stops taking its orders before or after the end, so desserts can go on without
+  extra periods. Also a menu dropdown on the till, which can be built first.
+  [Design](superpowers/specs/2026-11-24-last-orders-per-station-design.md)
+
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 

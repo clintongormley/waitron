@@ -156,6 +156,9 @@ What changes:
   recorded copy, `packages/venue-service/src/set-menu-copies.ts`).
 - **A linked set menu stays usable** after its period ends, so a table that sat down at 15:30 can
   still have the lunch menu with desserts ordered at 16:15 (**owner**, "yes").
+  _Changed later on 24 November by the [last orders design](2026-11-24-last-orders-per-station-design.md),
+  section 6: the price and grouping stay, but whether a dish can still be ordered follows its station's
+  last orders._
 - **A dish moved to another bill brings its links**, so a guest's split-off bill can use the same
   set menus at the same prices (**my call**).
 
