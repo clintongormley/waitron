@@ -128,7 +128,7 @@ export async function setProductAvailability(
 ): Promise<void> {
   const rows = await readRequiredProductRows(tx, productIds, "any");
   const deleted = rows.find((row) => !row.active || row.parentActive === false);
-  if (deleted !== undefined) throw new AppError("product.archived", { productId: deleted.id });
+  if (deleted !== undefined) throw new AppError("product.deleted", { productId: deleted.id });
   const updatedAt = now();
   for (const batch of batches(productIds))
     await tx.update(products).set({ available, updatedAt }).where(inArray(products.id, batch));

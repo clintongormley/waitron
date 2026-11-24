@@ -544,7 +544,7 @@ describe("deleting products", () => {
     expect(before[1]).toMatchObject({ active: true, available: true });
     await expect(
       app((tx) => setProductAvailability(tx, [f.burger, f.large], false)),
-    ).rejects.toMatchObject(archived(f.large));
+    ).rejects.toMatchObject(deletedProductRefusal(f.large));
     expect([await row(f.burger), await row(f.large)]).toEqual(before);
   });
   it("refuses editor saves of an archived product", async () => {

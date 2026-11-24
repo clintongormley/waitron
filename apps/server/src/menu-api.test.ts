@@ -1819,24 +1819,24 @@ describe("dashboard product availability", () => {
     });
   });
 
-  it("leaves the first product available when the batch's next product is archived", async () => {
+  it("leaves the first product available when the batch's next product is deleted", async () => {
     const app = mountApp();
     const first = await createNamedProductVia(app, "Available tea");
-    const archived = await createNamedProductVia(app, "Archived tea");
-    const archive = await send(app, "POST", "/management-api/folders/delete", {
-      body: { productIds: [archived], categoryIds: [], contents: "delete" },
+    const deleted = await createNamedProductVia(app, "Deleted tea");
+    const deletion = await send(app, "POST", "/management-api/folders/delete", {
+      body: { productIds: [deleted], categoryIds: [], contents: "delete" },
     });
-    expect(archive.status).toBe(204);
+    expect(deletion.status).toBe(204);
     const response = await send(app, "PUT", path, {
-      body: { productIds: [first, archived], available: false },
+      body: { productIds: [first, deleted], available: false },
     });
     expect(response.status).toBe(409);
     expect(response.headers.has("x-waitron-menu-revision")).toBe(false);
     expect(await response.json()).toEqual({
-      error: { code: "product.archived", params: { productId: archived } },
+      error: { code: "product.deleted", params: { productId: deleted } },
     });
     const unknown = await send(app, "PUT", path, {
-      body: { productIds: [archived, productId], available: false },
+      body: { productIds: [deleted, productId], available: false },
     });
     expect(unknown.status).toBe(400);
     expect(await unknown.json()).toEqual({
@@ -1844,7 +1844,7 @@ describe("dashboard product availability", () => {
     });
     const stored = await send(app, "GET", "/management-api/products");
     expect(stored.headers.get("x-waitron-menu-revision")).toBe(
-      archive.headers.get("x-waitron-menu-revision"),
+      deletion.headers.get("x-waitron-menu-revision"),
     );
     expect(await stored.json()).toContainEqual(
       expect.objectContaining({ id: first, available: true }),
