@@ -6035,84 +6035,58 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 > scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
 
-
 ### Server shard packing
 
-> checks packing, not a Vitest run or freshness.
-
-
-### CI job duration
-
-> the reporter only warns;
-
-> pins shard counts and 10-minute limits.
-
+> Guard: `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
 
 ### Browser shard coverage
 
-> reads text, not the Vitest config.
-
+> Guard: the browser-merge case in `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, not the Vitest config.
 
 ### Sharp in Node bundles
 
-> : read text; bundle-smoke reads only `dist/server.js`
-
+> Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
 
 ### Workflow job timeouts
 
-> reads text.
-
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text.
 
 ### Bounded package installation
 
-> read text, not retries;
-
+> Guards: `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`, weaker than their names: read text, not retries; `scripts/waitron-sh.test.mjs` runs waitron.sh's retries under stubs.
 
 ### Bounded pnpm setup
 
-> : reads text
-
-
-### Process tree deadlines on ubuntu-26.04
-
-> also checks ci-diff-paths' GNU preference and deadline arguments.
-
+> Guards: `scripts/ci-workflow.test.mjs` (weaker than its name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
 
 ### Bounded Node setup
 
-> reads workflow text.
-
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 
 ### Bounded checkout
 
-> reads text, never runs a workflow.
-
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, never runs a workflow.
 
 ### Bounded artifact downloads
 
-> read workflow text, never run it.
-
+> Guard: the artifact-download cases in `scripts/ci-workflow.test.mjs`, weaker than their name: read workflow text, never run it.
 
 ### Bounded artifact uploads
 
-> reads workflow text, never runs an upload.
-
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, never runs an upload.
 
 ### TypeScript compiler versions
 
 > A package's `tsc` is version 7; the root resolves `typescript` to the version 6 API (binary `tsc6`).
 
-
 ### Name-filtered test runs
 
 > A focused pass proves only those cases; CI supplies package-wide coverage.
-
 
 ### Browser-mode test concurrency
 
 > Chromium launch depends on seat permissions.
 
-
 ### CI scratch directories
 
-> reads workflow text, not the tests.
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, not the tests.

@@ -7394,189 +7394,96 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 ### Reading live SQLite state
 
-> those paths only.
-
-
-### Saved time zone spelling
-
-> (the latter covers named duties only)
-
+> Guards: the held-reader and two-store checkpoint cases in `packages/store/src/connections.test.ts` and `packages/store/src/index.test.ts`, weaker than the rule: those paths only.
 
 ### Optional request fields
 
 > an extras list's `maxPicks`, an extras item's `maxQuantity`, the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
 
-
 ### Personal data in logs
 
-> judges field names by a word list and named registry types by their names.
-
+> Guard: `scripts/personal-log-params.test.ts`, weaker than its name: judges field names by a word list and named registry types by their names.
 
 ### Incident alert wording
 
-> it reads literals in hand-listed files.
-
-
-### English code and starter content
-
-> which the guard skips by exact path
-
+> Guard: `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 
 ### Module boundaries
 
-> (it reads text)
-
-
-### Configuration exports
-
-> one export shape.
-
-
-### Workspace dependency cycles
-
-> it reads each `package.json`, not pnpm's own graph.
-
-
-### Resolve shared menu data once
-
-> (one zone snapshot, no per-line resolver)
-
+> Guard: `scripts/module-seams.test.ts`, weaker than its name (it reads text) — shrink its allowlist, never grow it.
 
 ### Allowed table write paths
 
-> it reads TEXT and judges a FILE, not a call chain.
-
+> Guard: `scripts/write-path-tables.test.ts` is the whole of the enforcement, weaker than its name: it reads TEXT and judges a FILE, not a call chain.
 
 ### Module settings documents
 
-> they read text.
-
-
-### Two-file transaction order
-
-> since `withTransaction` refuses the node handle at compile time.
-
+> Guards: `scripts/settings-not-migrated.test.ts` and the pinned-CHECK case in `packages/db/src/settings.test.ts`, both weaker than the rule: they read text.
 
 ### Housekeeping on a full disk
 
-> covers only named routes.
-
-
-### Statement refusals and transaction boundaries
-
-> (the last reads text)
-
-> an intervening outside transaction defeats that protection.
-
+> Guard: `apps/server/src/start-full-disk.e2e.test.ts`, weaker than the rule: covers only named routes.
 
 ### Full-disk refusal codes
 
-> stubbed errors, no real `ENOSPC` case.
-
-
-### The spare space file
-
-> reads text.
-
-
-### The backup room note
-
-> reads text, two hand-kept lists.
-
-
-### Start again records
-
-> reads text, never what a listed file does.
-
+> Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
 
 ### Venue folder ownership
 
-> prove the locks, not that every caller takes them.
-
-
-### Scratch state during backup and restore
-
-> reads text.
-
-> Cloud snapshots keep their own staging until the one backup service lands (fl2's explicit exception). A spare's first copy, an admitted mirror's selected handover backup and a spare's followed copy taken for an emergency switch wait in `<state>/pair-copy/` across the restart that places them (A947 3b-6a, A1188 part 0 and A947 4b's exceptions).
-
-
-### Streamed file handles
-
-> this route only.
-
-> A test that reads only an `app.request()` status leaks the same way.
-
+> Guards: `packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker than their names: prove the locks, not that every caller takes them.
 
 ### Failed-start cleanup
 
-> covers only named duties.
-
+> Guard: `apps/server/src/boot.failed-start.test.ts`, weaker than its name: covers only named duties.
 
 ### Database column declarations
 
-> reads imports and forbids only listed builders.
-
+> Guard: `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
 
 ### Counting sale correctives
 
-> reads lines of text, not queries.
-
+> Guard: `scripts/corrective-sums.test.ts`, weaker than its name: reads lines of text, not queries.
 
 ### Quantity and rate scales
 
-> only migration sets opting in are covered.
-
+> Guard: `packages/db/src/testing/schema-conformance.ts`, weaker than a universal check: only migration sets opting in are covered.
 
 ### Append-only table classification
 
-> call shape, not sets.
+> Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`, `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
 
 > Classification alone is not the trigger set; triggers cannot prevent `DROP TABLE`.
 
-
 ### The till person header
 
-> only the till, device and schedule mounts' routes.
-
+> Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the till, device and schedule mounts' routes.
 
 ### HTTPS between boxes
 
-> they cannot see a new request path that skips `openBoxRequest`.
+> Guards: the plain-http cases in `apps/server/src/mirror-bundle-fetch.test.ts` and `apps/server/src/box-join-api.test.ts`, weaker than the rule: they cannot see a new request path that skips `openBoxRequest`.
 
-> behind `boxExchange`, `boxDownload` and `postToBox`
-
+> **A box sends another box an HTTP request only through `openBoxRequest` (`apps/server/src/mirror-bundle-fetch.ts`, behind `boxExchange`, `boxDownload` and `postToBox`), except the spare's bucket-stream pipe, which always connects over TLS (`apps/server/src/spare-pipe.ts`); `openBoxRequest` refuses plain http unless the address's host and every address it dials are on this machine, in every environment; `parseHello` refuses a joining spare's plain-http contact address off this machine** (the watcher, 2026-11-24, not the owner's).
 
 ### Module migration requirements
 
-> text scan recognising fixed SQL shapes.
-
+> Guard: `scripts/module-graph-honesty.test.ts`, weaker than its name: text scan recognising fixed SQL shapes.
 
 ### Migration-set ownership
 
-> they pin today's sets and hosted modules.
-
+> Guard: the eight-sets cases in `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and hosted modules.
 
 ### Schema constraints
 
-> reads built schema.
-
+> Guard: `scripts/schema-constraints.test.ts`, weaker than its name: reads built schema.
 
 ### Starting migration rebuilds
 
-> trusts drizzle-kit.
-
+> Guard: `scripts/starting-migrations.test.ts`, weaker than its name: trusts drizzle-kit.
 
 ### Migration journal ordering
 
-> only sets with multiple entries.
-
-
-### Checking migration history
-
-> `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths do not carry that check.
-
+> Guard: `scripts/journal-monotonic.test.ts`, weaker than a universal check: only sets with multiple entries.
 
 ### Environment variable inventory
 
-> It scans tracked text.
+> Guard: `scripts/environment-variables.test.ts`, weaker than its name. It scans tracked text.

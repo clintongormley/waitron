@@ -2728,56 +2728,32 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 
 ### Native form fields
 
-> it reads string literals.
-
+> Guard: `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals.
 
 ### Address lookup placement
 
-> reads text, not placement or provider.
-
+> Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not placement or provider.
 
 ### Help tooltips
 
-> it reads literals as text;
-
+> Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text; what it misses is in [conventions-ui.md](../developers/conventions-ui.md).
 
 ### Dashboard draft scopes
 
-> (which resolves `leaveCoordinatorFor`)
-
+> **A new dashboard dialog or page holding staged input takes a draft scope from `draftScopeFor` (which resolves `leaveCoordinatorFor`) and has a `*.unsaved.test.ts`.** Nothing checks it across screens.
 
 ### Field refusals
 
 > `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE.
 
-
-### Passive API reads
-
-> automatic pairing renewal uses its own authenticated route.
-
-
 ### Pinned row menu columns
 
-> identifies menus only by that literal key;
-
-
-### Style tokens
-
-> (UI package only)
-
+> Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that literal key; a data column must use another key.
 
 ### Brand-coloured text
 
-> it reads `color:` declarations as text, in tracked files only;
-
-
-### Reader return and unpair limits
-
-> A deleted reader whose provider registration was unpaired is not brought back; an unpaired reader that was not deleted returns under its id only through a provider-verified Add once the provider lists it again; a new provider reference gets a new id. (owner, 2026-11-10, A1484, "1").
-
+> Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads `color:` declarations as text, in tracked files only; what it misses is in [design-system.md](../developers/design-system.md).
 
 ### Print-agent confinement
 
-> (no Bluetooth on the runner)
-
-> (reads the profile as TEXT)
+> Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
