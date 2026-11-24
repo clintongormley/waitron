@@ -14,8 +14,10 @@ import {
   previewBillPayment,
   takeBillPayment,
   takeReaderBillPayment,
+  type ReaderBillPaymentDeps,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
 import {
   payForItems,
@@ -293,6 +295,50 @@ export function mountBillPaymentsApi(
     attendance: deps.attendance,
   };
 
+  /**
+   * What a reader payment is collected with: the device's reader, or the one the body names, and
+   * the stop the cancel route finds under `stopKey` while the reader waits, removed by `done`.
+   */
+  async function readerDeps(
+    session: Awaited<ReturnType<typeof requireSession>>,
+    saleCfg: DeviceRequestConfig,
+    stopKey: string,
+    readerId: string | undefined,
+  ): Promise<{ deps: ReaderBillPaymentDeps; done: () => void }> {
+    const { sessionId, device } = session;
+    const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
+    let activeStop: RequestReaderStop | undefined;
+    return {
+      deps: {
+        ...fiscal,
+        provider,
+        onReaderCheckout(stop) {
+          activeStop = stop;
+          readerStops.set(stopKey, { sessionId, deviceId: device.deviceId, stop });
+        },
+        settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
+          const settled = await settleFromProviderRow(
+            tx,
+            { ...fiscal, cfg: saleCfg },
+            paymentId,
+            now,
+            print,
+            guestCount,
+          );
+          return settled.settled === "received" ? settled.invoice : null;
+        },
+        ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
+        deviceProfileId: device.deviceProfileId,
+        ...(deps.disk === undefined ? {} : { disk: deps.disk }),
+        sayCardChargedNotRecorded: true,
+      },
+      done: () => {
+        if (activeStop !== undefined && readerStops.get(stopKey)?.stop === activeStop)
+          readerStops.delete(stopKey);
+      },
+    };
+  }
+
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -394,44 +440,17 @@ export function mountBillPaymentsApi(
           ),
         );
       }
-      const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
-      const stopKey = `${id}/${request.submissionId}`;
-      let activeStop: RequestReaderStop | undefined;
+      const reading = await readerDeps(session, saleCfg, `${id}/${request.submissionId}`, readerId);
       const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         takeReaderBillPayment(
-          {
-            ...fiscal,
-            provider,
-            onReaderCheckout(stop) {
-              activeStop = stop;
-              readerStops.set(stopKey, { sessionId, deviceId: device.deviceId, stop });
-            },
-            settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
-              const settled = await settleFromProviderRow(
-                tx,
-                { ...fiscal, cfg: saleCfg },
-                paymentId,
-                now,
-                print,
-                guestCount,
-              );
-              return settled.settled === "received" ? settled.invoice : null;
-            },
-            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-            deviceProfileId: device.deviceProfileId,
-            ...(deps.disk === undefined ? {} : { disk: deps.disk }),
-            sayCardChargedNotRecorded: true,
-          },
+          reading.deps,
           saleCfg,
           id,
           request,
           operator,
           basket === undefined ? undefined : { ...basket, lateSend: late },
         ),
-      ).finally(() => {
-        if (activeStop !== undefined && readerStops.get(stopKey)?.stop === activeStop)
-          readerStops.delete(stopKey);
-      });
+      ).finally(reading.done);
       if (
         outcome.outcome === "declined" ||
         outcome.outcome === "failed" ||
@@ -475,11 +494,19 @@ export function mountBillPaymentsApi(
             : "hand-keyed-card",
       );
       const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      const operator = { personId, sessionId };
+      if (request.entry !== "reader")
+        return c.json(
+          await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, operator),
+        );
+      const reading = await readerDeps(
+        session,
+        saleCfg,
+        `${id}/${request.submissionId}`,
+        undefined,
+      );
       return c.json(
-        await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, {
-          personId,
-          sessionId,
-        }),
+        await payForItems(reading.deps, saleCfg, id, request, operator).finally(reading.done),
       );
     }),
   );

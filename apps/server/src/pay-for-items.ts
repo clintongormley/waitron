@@ -39,13 +39,19 @@ import {
 } from "./bill-allocation.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
+  afterCardCharged,
+  beginReaderBillPayment,
+  collectBegunReaderPayment,
   diskFullBeforePayment,
   issueIfFullyPaid,
   takeBillPaymentIn,
   type BillPaymentDeps,
   type BillPaymentRequest,
   type BillPaymentResult,
+  type ReaderBillPaymentDeps,
+  type ReaderPaymentHold,
 } from "./bill-payments.js";
+import { withSettledSlip } from "./payment-slip-print.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { fingerprint } from "./parties.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -307,18 +313,20 @@ async function earlierItemsBill(
 }
 
 /**
- * Pay for the chosen items, cash or a hand-keyed card, on a bill of their own: in one transaction
- * they move to a new bill ({@link moveItemsToNewBill}) and the payment covers it whole, issuing its
- * ticket. A resend of the same submission answers as the first did.
+ * Pay for the chosen items on a bill of their own: in one transaction they move to a new bill
+ * ({@link moveItemsToNewBill}) and the payment covers it whole. Cash and a hand-keyed card issue its
+ * ticket in that transaction; a reader card is collected after it commits, and one that charges
+ * nothing puts the items back (`failBillPayment`). A resend of the same submission answers as the
+ * first did.
  */
 export async function payForItems(
-  deps: BillPaymentDeps,
+  deps: BillPaymentDeps | ReaderBillPaymentDeps,
   cfg: DeviceRequestConfig,
   fromBillId: string,
   req: PayForItemsRequest,
   operator: { personId: string; sessionId: string },
 ): Promise<{ billId: string; payment: BillPaymentResult }> {
-  if (req.entry === "reader") throw invalid("entry");
+  if (req.entry === "reader" && !("provider" in deps)) throw invalid("entry");
   if (req.method === "cash" ? req.tendered === undefined : req.tendered !== undefined)
     throw invalid("tendered");
   const print = retryPrintOf(req);
@@ -330,44 +338,73 @@ export async function payForItems(
     applied: req.applied,
     tip: req.tip,
     expectedEdit,
-    ...(req.method === "cash" ? { tendered: req.tendered! } : { entry: "manual" as const }),
+    ...(req.method === "cash"
+      ? { tendered: req.tendered! }
+      : { entry: req.entry === "reader" ? ("reader" as const) : ("manual" as const) }),
     ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
   });
+  /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
+  const billFor = async (tx: Transaction) => {
+    const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
+    if (earlier !== undefined) return { billId: earlier, request: payment(null) };
+    const { billId } = await moveItemsToNewBill(
+      tx,
+      cfg,
+      fromBillId,
+      req.picks,
+      {
+        operatorId: operator.personId,
+        ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
+        ...(req.expectedPartyRevision === undefined
+          ? {}
+          : { expectedPartyRevision: req.expectedPartyRevision }),
+        expectedEdits: req.expectedEdits,
+        admission: deps.admission,
+      },
+      { deps, cfg },
+    );
+    return { billId, request: payment(await readBillEditState(tx, billId)) };
+  };
   const pending = diskFullBeforePayment(deps);
+  if ("provider" in deps && req.entry === "reader") {
+    const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
+    let billId = fromBillId;
+    try {
+      const preRead = pending !== false && (await pending);
+      const begun = await withSettledSlip((slip) =>
+        withIssuanceTransaction(
+          deps.db,
+          async (tx) => {
+            const bill = await billFor(tx);
+            billId = bill.billId;
+            return beginReaderBillPayment(tx, deps, cfg, billId, bill.request, operator, {
+              preRead,
+              print: slip,
+              hold,
+              fingerprint: print,
+            });
+          },
+          deps.log,
+        ),
+      );
+      // Begun with no basket, so a replay answers the payment, never a settled counter order.
+      if (begun.kind === "replay") return { billId, payment: begun.result as BillPaymentResult };
+      return { billId, payment: await collectBegunReaderPayment(deps, cfg, begun) };
+    } catch (error) {
+      if (!hold.capturedReplay) throw error;
+      return afterCardCharged(deps, billId, () => Promise.reject(error));
+    } finally {
+      hold.release();
+    }
+  }
   const preRead = pending !== false && (await pending);
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
-      if (earlier !== undefined) {
-        return {
-          billId: earlier,
-          payment: await takeBillPaymentIn(tx, deps, cfg, earlier, payment(null), operator, {
-            preRead,
-            print,
-          }),
-        };
-      }
-      const { billId } = await moveItemsToNewBill(
-        tx,
-        cfg,
-        fromBillId,
-        req.picks,
-        {
-          operatorId: operator.personId,
-          ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
-          ...(req.expectedPartyRevision === undefined
-            ? {}
-            : { expectedPartyRevision: req.expectedPartyRevision }),
-          expectedEdits: req.expectedEdits,
-          admission: deps.admission,
-        },
-        { deps, cfg },
-      );
-      const expectedEdit = await readBillEditState(tx, billId);
+      const { billId, request } = await billFor(tx);
       return {
         billId,
-        payment: await takeBillPaymentIn(tx, deps, cfg, billId, payment(expectedEdit), operator, {
+        payment: await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {
           preRead,
           print,
         }),

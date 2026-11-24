@@ -830,7 +830,7 @@ describe("settling a card payment of part of the bill", () => {
       ),
     );
     const failing = await captureError(() =>
-      inTx((tx) => failBillPayment(tx, received, new Date())),
+      inTx((tx) => failBillPayment(tx, venue.cfg, received, new Date())),
     );
 
     expect(triggerRaised(completing, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);

@@ -67,7 +67,7 @@ export async function settleFromProviderRow(
     return { settled: "left", providerState: "pending" };
   }
   const failed = async (): Promise<SettledFromRow> => {
-    await failBillPayment(tx, billPaymentId, now, undefined);
+    await failBillPayment(tx, deps.cfg, billPaymentId, now, undefined);
     await print(tx, billPaymentId);
     return { settled: "failed" };
   };
