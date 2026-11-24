@@ -1,15 +1,8 @@
-import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
 import { readCancelsForRefund } from "@waitron/adjustments";
 import { correctionTargetFor } from "@waitron/core";
-import {
-  adjustments,
-  saleLines,
-  sales,
-  tenders as tenderRows,
-  type Transaction,
-} from "@waitron/db";
+import { adjustments, saleLines, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
-import { payments } from "@waitron/payments";
 import {
   addDecimal,
   AppError,
@@ -33,11 +26,10 @@ import {
   recordsNeedChecking,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
-import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { refuseUntilRefundable } from "./tender-refund-completion.js";
 import { isPartPayment } from "./tender-refund-reservation.js";
 import type { RefundableTender } from "./tender-refund-types.js";
-import { sendsRefunds } from "./tender-refunds.js";
+import { capturesFor, sendsRefunds } from "./tender-refunds.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 
@@ -349,30 +341,13 @@ async function readersThatCannotRefund(
 ): Promise<Set<string>> {
   const refused = new Set<string>();
   const readers = refundable.filter((row) => row.method === "card" && !row.manual);
-  if (readers.length === 0) return refused;
-  const originals = await tx.select().from(tenderRows).where(eq(tenderRows.saleId, saleId));
-  const billIds = originals.flatMap((row) =>
-    row.billPaymentId === null ? [] : [row.billPaymentId],
+  const captures = await capturesFor(
+    tx,
+    saleId,
+    readers.map((row) => row.tenderId),
   );
-  const captures = await tx
-    .select()
-    .from(payments)
-    .where(
-      or(
-        eq(payments.saleId, saleId),
-        billIds.length === 0 ? undefined : inArray(payments.billPaymentId, billIds),
-      ),
-    );
-  const directCards = originals.filter(
-    (row) => row.method === "card" && row.billPaymentId === null,
-  ).length;
   for (const reader of readers) {
-    const tender = originals.find((row) => row.id === reader.tenderId)!;
-    const capture = matchTenderRefundCapture(
-      { ...tender, amount: centsToDecimal(tender.amount) },
-      captures,
-      directCards,
-    );
+    const capture = captures.get(reader.tenderId);
     const provider =
       capture === undefined ? undefined : await deps.refundProviderFor?.(capture.provider);
     if (capture === undefined || !sendsRefunds(provider, capture.provider))
