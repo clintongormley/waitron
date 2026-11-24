@@ -223,8 +223,15 @@ export const ALERT_MESSAGES: Readonly<
     es: "Al escribir un registro de facturación, la comprobación de Waitron del registro anterior ha encontrado un problema. El registro nuevo se ha escrito igualmente, y las ventas y los envíos a la AEAT continúan. Mantén el servidor encendido y anota cuándo ha aparecido esto.",
   },
   "chain.set_aside_on_reset": {
-    en: "The old main box holds invoice records or working hours that this box does not have, so it was told to set its databases aside when it wipes itself, instead of deleting them. They stay on that box but are no longer used; its local backups are removed. Keep that box rather than throwing it away. After the wipe, its data can no longer be downloaded from its page.",
-    es: "El servidor principal anterior tiene registros de facturación u horas trabajadas que este servidor no tiene, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Se quedan en ese servidor, pero ya no se usan; sus copias de seguridad locales se eliminan. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
+    en: "The old main box holds invoice records or working hours that differ from this box's, so it was told to set its databases aside when it wipes, instead of deleting them. Keep that box rather than throwing it away. After the wipe, its data can no longer be downloaded from its page.",
+    es: "El servidor principal anterior tiene registros de facturación u horas trabajadas que difieren de los de este servidor, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
+    variants: {
+      acceptedLoss: {
+        mode: "replace",
+        en: "The old main box holds invoice records or working hours that this box does not have, so it was told to set its databases aside when it wipes itself, instead of deleting them. They stay on that box but are no longer used; its local backups are removed. Keep that box rather than throwing it away. After the wipe, its data can no longer be downloaded from its page.",
+        es: "El servidor principal anterior tiene registros de facturación u horas trabajadas que este servidor no tiene, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Se quedan en ese servidor, pero ya no se usan; sus copias de seguridad locales se eliminan. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
+      },
+    },
   },
   "clock.degraded": {
     en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds.",

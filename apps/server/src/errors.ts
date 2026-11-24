@@ -66,7 +66,7 @@ declare module "@waitron/shared" {
      * A replaced old main box set aside, on its reset, invoice-record or working-time chains this
      * box lacks.
      */
-    "chain.set_aside_on_reset": { nodeId: string; orderId: string };
+    "chain.set_aside_on_reset": { nodeId: string; orderId: string; acceptedLoss: boolean };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };

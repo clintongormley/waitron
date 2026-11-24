@@ -73,15 +73,18 @@ const resetOrderedActivityId = (orderId: string) =>
   returnDigest({ kind: "handover.reset_ordered", orderId });
 
 /**
- * The takeover of the order `orderId` this box wrote for `targetNodeId` and who ordered it, or
- * undefined if there is no such order or it names nobody.
+ * The takeover of the order `orderId` this box wrote for `targetNodeId`, who ordered it and whether
+ * it accepted a loss, or undefined if there is no such order or it names nobody or no loss choice.
  */
 export async function readResetOrderOperation(
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
   targetNodeId: string,
   orderId: string,
-): Promise<{ readonly operationId: string | null; readonly personId: string } | undefined> {
+): Promise<
+  | { readonly operationId: string | null; readonly personId: string; readonly acceptLoss: boolean }
+  | undefined
+> {
   const [row] = await node
     .select({ operationId: nodeHandoverEvents.operationId, detail: nodeHandoverEvents.detail })
     .from(nodeHandoverEvents)
@@ -95,9 +98,10 @@ export async function readResetOrderOperation(
     )
     .limit(1);
   const personId = row?.detail.personId;
-  return row === undefined || typeof personId !== "string"
+  const acceptLoss = row?.detail.acceptLoss;
+  return row === undefined || typeof personId !== "string" || typeof acceptLoss !== "boolean"
     ? undefined
-    : { operationId: row.operationId, personId };
+    : { operationId: row.operationId, personId, acceptLoss };
 }
 
 /** The order this box answers for each box it has ordered to reset (`pickResetOrder`). */

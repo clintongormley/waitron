@@ -25,7 +25,11 @@ import {
   type NodeStanding,
 } from "@waitron/membership";
 import { verifyEnvelope } from "@waitron/handover";
-import { beginHandoverOperationTx, nodeHandoverEvents } from "@waitron/node-db";
+import {
+  appendHandoverEventTx,
+  beginHandoverOperationTx,
+  nodeHandoverEvents,
+} from "@waitron/node-db";
 import type { WaitronModule } from "@waitron/module";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
 import type { BackupStatus } from "./backup-status.js";
@@ -409,6 +413,26 @@ describe("POST /api/node/reset-order refuses", () => {
     expect(events("reset_acknowledged")).toEqual([]);
     expect(await oldStanding()).toBe("sell-only");
   });
+  it("an acknowledgement naming an order that does not say whether it accepted a loss", async () => {
+    await ordered();
+    await withNodeTransaction(suite.node, (tx) =>
+      appendHandoverEventTx(tx, {
+        nodeId: main,
+        operationId: null,
+        kind: "reset_ordered",
+        detail: { targetNodeId: oldBox, orderId: "no-loss-word", personId },
+        envelope: null,
+      }),
+    );
+    const res = await ask(
+      await queryBody({ ack: { orderId: "no-loss-word", setAside: false, lacking: {} } }),
+    );
+    expect(await refusalOf(res)).toEqual({
+      code: "handover.reset_query_refused",
+      params: { reason: "order" },
+    });
+    expect(events("reset_acknowledged")).toEqual([]);
+  });
 });
 
 describe("POST /api/node/reset-order answers", () => {
@@ -695,7 +719,41 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId },
+        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
+      },
+    ]);
+  });
+
+  it("a non-loss order's alert carries acceptedLoss false", async () => {
+    const order = await ordered();
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
+      },
+    ]);
+  });
+
+  it("a loss order's alert carries acceptedLoss true", async () => {
+    await completedReturn();
+    const order = await orderReset(
+      { db: suite.db, node: suite.node, nodeId: main },
+      { targetNodeId: oldBox, personId, acceptLoss: true },
+    );
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: true },
       },
     ]);
   });
@@ -754,7 +812,7 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId },
+        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
       },
     ]);
     expect(await offTheList()).toBe(true);

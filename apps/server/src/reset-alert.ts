@@ -29,12 +29,21 @@ async function alertRaisedFor(tx: Transaction, orderId: string): Promise<boolean
  */
 export async function raiseSetAsideOnReset(
   tx: Transaction,
-  args: { readonly nodeId: string; readonly orderId: string; readonly at: Date },
+  args: {
+    readonly nodeId: string;
+    readonly orderId: string;
+    readonly acceptedLoss: boolean;
+    readonly at: Date;
+  },
 ): Promise<void> {
   if (await alertRaisedFor(tx, args.orderId)) return;
   await recordIncidentOnce(tx, {
     origin: jobOrigin("dashboard"),
-    error: new AppError(SET_ASIDE_ALERT, { nodeId: args.nodeId, orderId: args.orderId }),
+    error: new AppError(SET_ASIDE_ALERT, {
+      nodeId: args.nodeId,
+      orderId: args.orderId,
+      acceptedLoss: args.acceptedLoss,
+    }),
     severity: "warning",
     detectedAt: args.at,
   });

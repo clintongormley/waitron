@@ -1156,3 +1156,19 @@ it.each([
     alertMessage("device.battery_low", { device: "Terrace handheld", percent: 10 }, locale),
   ).toBe(expected);
 });
+
+it("shows the differing-records words, and the loss words when acceptedLoss is true", () => {
+  const params = { nodeId: "old-box", orderId: "order-1" };
+  expect(alertMessage("chain.set_aside_on_reset", { ...params, acceptedLoss: false }, "en")).toBe(
+    "The old main box holds invoice records or working hours that differ from this box's, so it was told to set its databases aside when it wipes, instead of deleting them. Keep that box rather than throwing it away. After the wipe, its data can no longer be downloaded from its page.",
+  );
+  expect(alertMessage("chain.set_aside_on_reset", { ...params, acceptedLoss: false }, "es")).toBe(
+    "El servidor principal anterior tiene registros de facturación u horas trabajadas que difieren de los de este servidor, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
+  );
+  expect(alertMessage("chain.set_aside_on_reset", { ...params, acceptedLoss: true }, "en")).toBe(
+    "The old main box holds invoice records or working hours that this box does not have, so it was told to set its databases aside when it wipes itself, instead of deleting them. They stay on that box but are no longer used; its local backups are removed. Keep that box rather than throwing it away. After the wipe, its data can no longer be downloaded from its page.",
+  );
+  expect(alertMessage("chain.set_aside_on_reset", { ...params, acceptedLoss: true }, "es")).toBe(
+    "El servidor principal anterior tiene registros de facturación u horas trabajadas que este servidor no tiene, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Se quedan en ese servidor, pero ya no se usan; sus copias de seguridad locales se eliminan. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
+  );
+});

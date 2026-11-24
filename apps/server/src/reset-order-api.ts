@@ -176,6 +176,7 @@ async function acknowledge(
         await raiseSetAsideOnReset(tx, {
           nodeId: source,
           orderId: ack.orderId,
+          acceptedLoss: order.acceptLoss,
           at: deps.now?.() ?? new Date(),
         });
     });
