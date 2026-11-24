@@ -12,7 +12,6 @@ import { altaFor, anulacionFor, seedNode, seedSale, type SeededNode } from "./te
 import {
   readReturnedOriginals,
   makeReturnedBatches,
-  readOtherBoxesOriginals,
   receiveReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
@@ -181,7 +180,7 @@ it("lists an earlier box's returned record under the box that wrote it", async (
   const sender = await fixture();
   const id = await append(earlier, 1);
   const batch = await withTransaction(source.db, (tx) =>
-    readOtherBoxesOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
+    readReturnedOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
   );
   expect(
     await withTransaction(receiver.db, (tx) =>

@@ -7,7 +7,6 @@ import type { ModuleHandoverContribution } from "@waitron/module";
 import {
   makeReturnedBatches,
   inspectReturnedPayments,
-  readOtherBoxesOriginals,
   readReturnedOriginals,
   receiveReturnedOriginals,
   readReturnedBatch,
@@ -117,7 +116,7 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
       );
       if (ranges.length === 0) return [];
       return makeReturnedBatches(
-        await readOtherBoxesOriginals(tx, ranges),
+        await readReturnedOriginals(tx, ranges),
       ) as unknown as CanonicalValue[];
     },
     acceptPermission: FISCAL_REMEDY,

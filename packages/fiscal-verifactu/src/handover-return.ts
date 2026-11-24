@@ -189,13 +189,6 @@ export async function readReturnedOriginals(
   };
 }
 
-export function readOtherBoxesOriginals(
-  tx: Transaction,
-  ranges: readonly ChainRange[],
-): Promise<ReturnedOriginals> {
-  return readReturnedOriginals(tx, ranges);
-}
-
 async function insertRow(tx: Transaction, table: string, row: ReturnRow) {
   const entries = Object.entries(row);
   await tx.execute(sql`insert into ${sql.identifier(table)}

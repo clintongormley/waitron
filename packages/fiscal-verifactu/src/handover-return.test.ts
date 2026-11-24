@@ -31,10 +31,10 @@ import { appendToChain, readChainHead } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
   makeReturnedBatches,
-  readOtherBoxesOriginals,
   readReturnedOriginals,
   readReturnedBatch,
   receiveReturnedOriginals,
+  type ReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
 import {
@@ -410,7 +410,7 @@ it("reads only the named tail of an earlier box's chain, with its delivery state
     proximo_intento_en) values (${first.recordId}, 'aceptado', '2026-07-20T17:21:00.000Z')`);
 
   const returned = await withTransaction(suite.db, (tx) =>
-    readOtherBoxesOriginals(tx, [{ nodeId: first.nodeId, sifId: first.sifId, after: 1 }]),
+    readReturnedOriginals(tx, [{ nodeId: first.nodeId, sifId: first.sifId, after: 1 }]),
   );
 
   expect(returned.records.map((row) => row.id)).toEqual([second.recordId, third.recordId]);
@@ -431,7 +431,7 @@ it("reads two earlier boxes' records box by box", async () => {
   ];
 
   const returned = await withTransaction(suite.db, (tx) =>
-    readOtherBoxesOriginals(tx, [
+    readReturnedOriginals(tx, [
       { nodeId: two.nodeId, sifId: two.sifId, after: 0 },
       { nodeId: one.nodeId, sifId: one.sifId, after: 0 },
     ]),
@@ -501,7 +501,7 @@ it("reads a whole earlier chain with its corrective's parent sale and payments",
   await checkFixture();
 
   const returned = await withTransaction(suite.db, (tx) =>
-    readOtherBoxesOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
+    readReturnedOriginals(tx, [{ nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 }]),
   );
 
   expect(returned.records.map((row) => row.node_id)).toEqual([earlier.nodeId]);
@@ -1753,11 +1753,7 @@ async function boxesWithAnEarlierOne() {
   return { main, sender, earlier, other };
 }
 
-function receiveOthers(
-  source: string,
-  returned: Awaited<ReturnType<typeof readOtherBoxesOriginals>>,
-  destinationNodeId: string,
-) {
+function receiveOthers(source: string, returned: ReturnedOriginals, destinationNodeId: string) {
   return withTransaction(receiver.db, (tx) =>
     receiveReturnedOriginals(tx, source, returned, returnedAt, { others: { destinationNodeId } }),
   );
@@ -1765,7 +1761,7 @@ function receiveOthers(
 
 function readTail(node: SeededNode, after: number) {
   return withTransaction(suite.db, (tx) =>
-    readOtherBoxesOriginals(tx, [{ nodeId: node.nodeId, sifId: node.sifId, after }]),
+    readReturnedOriginals(tx, [{ nodeId: node.nodeId, sifId: node.sifId, after }]),
   );
 }
 
@@ -1895,7 +1891,7 @@ it("a clash on one earlier chain leaves another chain's records accepted", async
     receiveReturnedOriginals(tx, other.nodeId, clashing, returnedAt),
   );
   const both = await withTransaction(suite.db, (tx) =>
-    readOtherBoxesOriginals(tx, [
+    readReturnedOriginals(tx, [
       { nodeId: earlier.nodeId, sifId: earlier.sifId, after: 0 },
       { nodeId: other.nodeId, sifId: other.sifId, after: 0 },
     ]),
@@ -2029,7 +2025,7 @@ async function correctionOfAnEarlierBox(records = 1) {
   );
   const both = () =>
     withTransaction(suite.db, (tx) =>
-      readOtherBoxesOriginals(tx, [
+      readReturnedOriginals(tx, [
         { nodeId: corrector!.nodeId, sifId: corrector!.sifId, after: 0 },
         { nodeId: corrected!.nodeId, sifId: corrected!.sifId, after: 0 },
       ]),
@@ -2037,7 +2033,7 @@ async function correctionOfAnEarlierBox(records = 1) {
   return { main, sender, corrected: corrected!, targets, correctionId: correction!.id, both };
 }
 
-function inBoxOrder(returned: Awaited<ReturnType<typeof readOtherBoxesOriginals>>) {
+function inBoxOrder(returned: ReturnedOriginals) {
   returned.records.sort(
     (a, b) =>
       (String(a.node_id) < String(b.node_id)
