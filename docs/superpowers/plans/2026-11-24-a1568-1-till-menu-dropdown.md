@@ -4,7 +4,7 @@ On Table and Counter, staff can switch running menus from **Menu** beside **Sear
 staff menu. **Menu** appears only when more than one menu is available. The filter becomes an icon
 with an accessible name and its active count. Ended menus, station times, warnings and product marks
 belong to later pieces. Lane C’s active #4238 diff has no `menu-browser.ts` changes and its A1515-4
-slice is waiting. Keep the work at the top of the browser for that slice and Lane D’s settings.
+slice is waiting. Keep changes at the top of the browser for that slice and Lane D’s settings.
 [Approved design, section 5 and piece 1](../specs/2026-11-24-last-orders-per-station-design.md)
 
 - [ ] **Replace the selector.** In `widgets/menu-switcher.test.ts`, add failing cases for the
@@ -16,28 +16,32 @@ slice is waiting. Keep the work at the top of the browser for that slice and Lan
   forwarding the pick. Check the open and closed states in `widgets/menu-switcher.a11y.test.ts`.
 - [ ] **Put the controls in one row.** Add failing Chromium cases in
   `screens/till-{table-order,counter}-screen.test.ts` for a handheld row and first choice with focus
-  retained, including a Table with set-menu copies. In `widgets/menu-browser.ts` give the Search row
-  a leading picker slot. Mount the same browser in both screens when a menu is shown or there is a
-  choice, including when there is no selected menu and no tile to draw. In the waiting state, draw
-  the picker alone until a choice supplies Search, Filter and tiles. Keep widths shrinkable and
-  remove the old chooser wrappers and spacing. Keep the Table browser’s existing inert state while
-  sending, while edits are locked or when ordering is barred. The dropdown will be unavailable in
-  those states along with the rest of the row. Ask the watcher to clear that change and test it.
+  retained. Keep a copies-only case that checks its set-menu folder is still available. In
+  `widgets/menu-browser.ts` add a leading picker slot. Mount the same browser in both screens for
+  a shown menu, existing set-menu copies or a choice. Counter’s choice requires open service and
+  an open zone. Render the picker only with a choice, Search and Filter only with a shown menu,
+  and set-menu content as today. Check that a single-menu venue has no empty picker gap.
+  Keep widths shrinkable and remove the old chooser wrappers and spacing. On Table, keep the
+  picker usable while sending, while edits are locked and when the device cannot order for that
+  zone. Apply the existing browser lock inside its contents, around Search, Filter and dish
+  actions, outside the picker. Exercise the locked controls and the available picker together.
 - [ ] **Use a counted icon.** In `widgets/diet-filter.test.ts`, require a rendered funnel, the
   accessible names **Filter** and **Filter 2**, the visible count and the unchanged dialog action.
-  Make that pass in `widgets/diet-filter.ts`. Reuse the existing table-filter path and register it
-  where the widget loads. Keep the button’s dialog semantics, use shared size tokens and run its
-  existing accessibility tests in both themes.
+  Make that pass in `widgets/diet-filter.ts`. Reuse the registered `table-filter` icon,
+  `iconButtonStyles` and `trackIconTooltip`. The tooltip says Filter without the count. Keep the
+  button’s dialog semantics and run its accessibility tests in both themes.
 - [ ] **Verify and describe the change.** Run the changed Till files with
   `pnpm --filter @waitron/till exec vitest run <file>`. Adapt selectors in `till-app.test.ts` and
   `till-app-menu-refresh.test.ts`. In `till-app-{table-service,menu-timetable}.test.ts`, check no
-  menu or tiles are shown before a choice, even when the picker-only browser is mounted. Keep the
-  draft, history, menu-memory and zone assertions, and record changed checks in the PR. Run
+  menu or tiles are shown before a choice. In `till-app-drafts.test.ts`, check the same blocked dish
+  actions at the narrower lock. Keep the history, menu-memory and zone assertions, and record
+  changed checks in the PR. Run
   `till-counter-{cleanup.look,screen.layout}.test.ts`, the guide checks and the file-size guard.
-  Update `apps/server/src/guide/*/{table-service,products}.md` in both languages. Call it the Menu
-  field beside Search and the Filter icon, and leave only the remaining A1568 work in the backlog.
+  Update both `apps/server/src/guide/*/{table-service,products}.md` twins. Call it the Menu field
+  beside Search and the Filter icon. Name the button in the shared icon-button paragraph in
+  `docs/developers/design-system.md` and leave the remaining A1568 work in `docs/backlog.md`.
   Inspect Table and Counter on phone and desktop in both languages and themes. Send local captures
   based on `dropdown.png` and the queue’s filter-icon correction to the watcher for the owner’s OK.
 
-Estimate about 120 production lines added and 70 removed, 180 test lines added and 90 removed,
+Estimate about 145 production lines added and 75 removed, 200 test lines added and 90 removed,
 and a few guide lines. No new test support is planned.
