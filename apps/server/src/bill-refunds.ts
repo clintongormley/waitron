@@ -187,12 +187,6 @@ export async function refundBillPayment(
             personId: operator.personId,
             sessionId: operator.sessionId,
           });
-          const permission = await refundPermission(tx, workingOrderId, centsToDecimal(applied));
-          const authorization = await authorize(
-            tx,
-            { sessionId: operator.sessionId, permission, override },
-            operator.attempts,
-          );
           const [found] = await tx
             .select({ payment: billPayments, advanceSaleId: billAdvances.advanceSaleId })
             .from(billPayments)
@@ -200,12 +194,10 @@ export async function refundBillPayment(
             .where(
               and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
             );
-          if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
-          const { payment, advanceSaleId } = found;
-          if (advanceSaleId !== null)
-            await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
           const provided =
-            payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+            found?.payment.method === "card"
+              ? await findPaymentByBillPayment(tx, paymentId)
+              : undefined;
           const print = refundFingerprint(
             paymentId,
             req.appliedAmount,
@@ -213,8 +205,23 @@ export async function refundBillPayment(
             req.reason,
             provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
           );
-
           const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+          // A resent refund writes nothing its first answer did not authorise, so it needs only
+          // what every give-back needs: what the bill is overpaid by has changed since.
+          const permission =
+            earlier.refund?.fingerprint === print
+              ? "payment.take"
+              : await refundPermission(tx, workingOrderId, centsToDecimal(applied));
+          const authorization = await authorize(
+            tx,
+            { sessionId: operator.sessionId, permission, override },
+            operator.attempts,
+          );
+          if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+          const { payment, advanceSaleId } = found;
+          if (advanceSaleId !== null)
+            await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
+
           if (earlier.refund !== undefined) {
             assertRefundReplay(earlier.refund, print, req.submissionId);
             if (earlier.refund.state === "pending") {

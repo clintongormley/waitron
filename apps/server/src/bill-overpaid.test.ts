@@ -327,6 +327,19 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(given.json).toMatchObject({ refund: { state: "completed" } });
   });
 
+  it("answers a waiter's resent give-back of the excess as the first, with no refund permission", async () => {
+    const { billId, paymentId } = await overpaidBill();
+    const submissionId = randomUUID();
+    const given = await giveBack(billId, paymentId, "5.00", submissionId);
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+
+    const again = await giveBack(billId, paymentId, "5.00", submissionId);
+
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json).toEqual(given.json);
+    expect(await invoicesOf(billId)).toEqual(["10.00"]);
+  });
+
   it("giving back more than the excess still needs the refund permission", async () => {
     const { billId, paymentId } = await overpaidBill();
 
