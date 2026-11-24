@@ -285,6 +285,20 @@ export interface FutureDateRefusal {
   issuedOn: string;
 }
 
+/** The release and producer an upgrade named for opening a new installation, and the producer
+ * the open chain's head was filed under. */
+export interface IdentityChangeNote {
+  release: string;
+  producerTaxId: string;
+  fromProducerTaxId: string;
+}
+
+/** What vouches for the box's clock when a new installation opens: the box's internet time
+ * service, or a start whose time was confirmed and still stands. */
+export type SecondClock =
+  | { kind: "time-service"; read: () => Promise<boolean> }
+  | { kind: "confirmed-start"; standing: () => boolean };
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
