@@ -1,5 +1,8 @@
 # Several payments against one bill — the payment and billing design
 
+> **24 November 2026:** "refund first" (§4.3, §4.4, §6a and answers 2, 4 and 6) is replaced by
+> [a bill paid more than it comes to](2026-11-24-overpaid-open-bills-design.md), approved by the owner.
+
 > **2026-11-06, A1395:** The charged-payment readers now include an offline payment forwarded to
 > `settled`, while it has no sale. The placed-order cancellation guard covers stored payments
 > with or without an invoice.

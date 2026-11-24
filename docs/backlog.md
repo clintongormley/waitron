@@ -571,6 +571,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
+  cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;
+  cash back for a card payment with its own permission. Four pull requests, fiscal (the day close
+  issues the receipt), after lane C's A1515-1 PR 2. [Spec](superpowers/specs/2026-11-24-overpaid-open-bills-design.md).
+
+- **Small files in the till, after the device screens redesign (SPLIT-TILL-APP-REST, lane I).** Owner, 24
+  November 2026: "i can wait until the review, but i don't want this task to be forgotten. after the
+  redesign we should reach a happy state with small files, so anything left that is big should be
+  refactored". The trial was #4261 (95 of `till-app.ts`'s about 26,000 lines in about 81 minutes).
+
 - **A Make now instruction can disappear or come back while the till checks its device again.**
   [Detail](backlog/till.md#a-make-now-instruction-can-disappear-or-come-back-while-the-till-checks-its-device-again)
 
