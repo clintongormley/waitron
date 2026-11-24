@@ -281,8 +281,7 @@ two prices, an edit keeps the child at the price its own list sold it at, whatev
 charges now, and whether or not that list still offers it (menus spec §11.7 example 7); a pick MOVED to the
 other list, or two picks that EXCHANGED counts between the two lists, pair with nothing and are new
 picks, priced from today's offers. A child stored before the column existed records no list and
-pairs with nothing either. Pinned in `apps/server/src/working-order.test.ts` and
-`working-order-held-write.test.ts` by "keeps an extra's
+pairs with nothing either. Pinned in `apps/server/src/working-order-held-write.test.ts` by "keeps an extra's
 list and stored price on a quantity-only edit when two lists offer it", "keeps an extra from the
 list it was taken from, whatever that list later charges or offers", and by "prices a pick now when
 it moves to another list offering the same product: it is a new pick" and "prices both picks now

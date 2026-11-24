@@ -26,16 +26,16 @@ Land the shared tool first and the full split in the second PR the same day. Run
 Use two disposable checkouts to measure what your branch changes after the move. Set `split` to the split PR's squash commit and `branch_tip` to the branch commit you want to carry forward. Start from a checkout that has both commits. Each move took several minutes in the rehearsal.
 
 ```zsh
-before=$(git rev-parse "$split^1")
-scratch=$(cd "$(mktemp -d)" && pwd -P)
+before=$(git rev-parse "${split}^1")
+scratch=$(cd "$(mktemp -d /tmp/wt-work-order.XXXXXX)" && pwd -P)
 git worktree add --detach "$scratch/base" "$before"
 git worktree add --detach "$scratch/branch" "$branch_tip"
 git -C "$scratch/branch" merge --no-edit --signoff "$before"
-git show "$split:scripts/working-order-split.json" | jq '.moves |= .[:1]' > "$scratch/base.json"
+git show "${split}:scripts/working-order-split.json" | jq '.moves |= .[:1]' > "$scratch/base.json"
 cp "$scratch/base.json" "$scratch/branch.json"
 ```
 
-If your branch adds or removes declarations, update `branch.json` to match and leave `base.json` as it is. The pay-by-item rehearsal assigned `pricesAddUp`, `PartLine`, `ExtraPart` and `checkLinePart` to `working-order-transfer.ts`. Run these steps once the merge into the disposable branch checkout is clean.
+If your branch adds or removes declarations beyond those named in the map, update `branch.json` to match. Leave `base.json` as it is. Run these steps once the merge into the disposable branch checkout is clean and both moves succeed.
 
 ```zsh
 for side in base branch; do
@@ -43,13 +43,34 @@ for side in base branch; do
     node scripts/move-ts-declarations.mjs "$scratch/$side.json" &&
     git add -A && git write-tree > "$scratch/$side.tree") || break
 done
+```
 
-git diff --binary "$(cat "$scratch/base.tree")" "$(cat "$scratch/branch.tree")" > "$scratch/branch-edits.patch"
+Once both tree files exist, inspect the branch edits that still refer to the old module or its original test suite. The map names the destination of each moved test block. Transfer edits to those cases or additions by hand. Use the direct import from its defining module for any changes to the forwarding imports left in `working-order.ts`.
+
+```zsh
+base_moved=$(cat "$scratch/base.tree")
+branch_moved=$(cat "$scratch/branch.tree")
+git diff "$base_moved" "$branch_moved" -- \
+  apps/server/src/working-order.ts apps/server/src/working-order.test.ts
+git diff --binary "$base_moved" "$branch_moved" -- . \
+  ':(exclude)apps/server/src/working-order.ts' \
+  ':(exclude)apps/server/src/working-order.test.ts' > "$scratch/branch-edits.patch"
 git worktree add --detach "$scratch/result" "$split"
 git -C "$scratch/result" apply --3way "$scratch/branch-edits.patch"
 git -C "$scratch/result" diff --cached --stat
 ```
 
-The patch carries your branch's changes to the landed split. Committing the raw move before rebasing produces conflicts where both sides add the same files. The VAT branch's rehearsal carries changes in both `working-order-held-read.ts` and `stored-order-lines.ts`. Review the staged changes, resolve any three-way conflicts, install dependencies, and typecheck Server and run your branch's focused tests before transferring the result back to your feature branch. Keep the original branch while verifying the transfer. Remove the three disposable worktrees when you are done.
+The patch carries your branch's changes to the landed split. Committing the raw move before rebasing produces conflicts where both sides add the same files. The VAT branch's rehearsal carries changes in both `working-order-held-read.ts` and `stored-order-lines.ts`. Resolve any conflicts, add the edits you transferred by hand, install dependencies, and typecheck Server and run your branch's focused tests in `result`.
+
+Commit the verified replay, then return to your original feature checkout with a clean working tree. This puts your replayed changes into one signed commit. Set `backup_branch` to an unused name to keep the original commit history before moving the feature branch.
+
+```zsh
+git -C "$scratch/result" commit -s -m "Carry branch changes across the working-order split"
+replayed=$(git -C "$scratch/result" rev-parse HEAD)
+test -z "$(git status --porcelain)" && test "$(git rev-parse HEAD)" = "$branch_tip" &&
+  git branch "$backup_branch" "$branch_tip" && git reset --keep "$replayed"
+```
+
+If you had already pushed the feature branch, update it through `finish-branch` with `--force-with-lease`. Remove the three disposable worktrees when you are done.
 
 The landed split also adds the `./errors.js` side-effect imports, retargets the two forwarded imports and removes the forwarding file left by the tool. Using the landed split as the destination picks up those edits. If you repeat the test move itself, first remove the explicit Vitest import from `working-order.test.ts`. Server's test project supplies those globals.

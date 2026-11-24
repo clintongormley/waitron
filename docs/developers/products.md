@@ -793,8 +793,8 @@ variant in its own words" in `apps/till/src/till-app-menu-refresh.test.ts`). Pay
 dine-in rate, and taken away, at the product's takeaway rate, as _What a sold
 line freezes_ says; a line not yet sent, dish
 or extra, whose product or parent is now archived is refused `product.unavailable`, while a
-sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`, same file;
-a card payment already captured is filed as it stands). On the till, retrieving the order keeps
+sold-out recorded line remains payable and a sent one is billed after archival (`priceStoredOrderForIssuance`,
+`apps/server/src/stored-order-lines.ts`). The box files a captured card payment as it stands. On the till, retrieving the order keeps
 such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
 sold-out one, because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
 `apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved
