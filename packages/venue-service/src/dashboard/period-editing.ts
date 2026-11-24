@@ -260,6 +260,10 @@ export class PeriodEditing implements ReactiveController {
     return this.colours;
   }
 
+  private readonly watchLastOrderChoices = (
+    ...args: Parameters<OpeningHoursApi["watchLastOrderChoices"]>
+  ) => this.options.api().watchLastOrderChoices(...args);
+
   render(): unknown {
     const editor = this.editor;
     if (!editor) return nothing;
@@ -283,6 +287,7 @@ export class PeriodEditing implements ReactiveController {
         .departments=${colours.departments}
         .menus=${model.menus}
         .floorPlans=${this.#floorPlans?.departments}
+        .watchLastOrderChoices=${this.watchLastOrderChoices}
         .busy=${this.busy}
         .draftParent=${this.options.draftParent?.()}
         .submitLabel=${fromPainter ? t("painter.add_and_paint") : ""}

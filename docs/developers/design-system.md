@@ -5592,7 +5592,7 @@ query starts again from its own opening, and clearing the field brings back the 
 (the "search" cases in `routing-grid.test.ts`).
 
 A cell's button opens the routing cell editor (`routing-cell-editor.ts`): the cell's own station is
-labelled "Station" while there are no period routes, and "Any other time" while there is at least
+labelled "Station" while there are no period routes, and "Any other time, and after last orders" while there is at least
 one. Each route splits Periods and Station evenly beside Remove, and the fallback field ends
 where the route's Station field ends. "+ Add route" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose

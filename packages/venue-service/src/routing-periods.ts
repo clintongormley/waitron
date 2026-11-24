@@ -1,6 +1,6 @@
 import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { departments, menuPeriods, products, type Transaction } from "@waitron/db";
-import { loadSectionGraph, reachableProducts } from "@waitron/menu";
+import { loadSectionGraph, reachableFrom, reachableProducts } from "@waitron/menu";
 import type { RoutingPeriod } from "./routing-types.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
 import { rangeSpan } from "./service-day.js";
@@ -60,7 +60,24 @@ export async function periodProductIds(
       const root = rootOf.get(menuId);
       if (root === undefined) continue;
       let products = reached.get(root);
-      if (products === undefined) reached.set(root, (products = reachableProducts(graph, root)));
+      if (products === undefined) {
+        const direct = reachableFrom(graph, root);
+        products = direct.products;
+        const setMenus = new Set(
+          [...direct.sections, root].flatMap((sectionId) =>
+            graph
+              .children(sectionId)
+              .flatMap(({ ref }) =>
+                ref.kind === "set_menu" && graph.menu(ref.menuId)?.active ? [ref.menuId] : [],
+              ),
+          ),
+        );
+        for (const setMenuId of setMenus) {
+          const setRoot = rootOf.get(setMenuId);
+          if (setRoot !== undefined) products.push(...reachableProducts(graph, setRoot));
+        }
+        reached.set(root, products);
+      }
       for (const productId of products) ids.add(parentOf.get(productId) ?? productId);
     }
     found.set(periodId, [...ids]);

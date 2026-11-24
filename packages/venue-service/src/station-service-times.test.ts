@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { addProductToMenu, createMenu, createCategory, createProduct } from "@waitron/menu";
+import {
+  addMember,
+  addProductToMenu,
+  addSetMenuDishes,
+  createMenu,
+  createCategory,
+  createProduct,
+  requireMenuRoot,
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   floorZones,
@@ -15,11 +23,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
-import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
+import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
+import { clearRoutingCell, routingModel, setRoutingCell } from "./routing-store.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes, stationsServiceTimes } from "./station-service-times.js";
+import { readLastOrderChoices } from "./last-order-routing.js";
 import { readSeasons } from "./seasons.js";
 import * as service from "./index.js";
 import { saveSpecialDay, type SpecialDayInput } from "./special-days.js";
@@ -32,7 +41,7 @@ const at = new Date("2026-10-10T10:00:00Z");
 const tx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const week = <T>(field: "slots" | "ranges", monday: readonly T[]) =>
   Array.from({ length: 7 }, (_, weekday) => ({ weekday, [field]: weekday === 1 ? monday : [] }));
-async function fixture(db: Transaction) {
+async function fixture(db: Transaction, setMenuOnly = false) {
   await seedVenue(db, {
     name: randomUUID(),
     timeZone: "Europe/Madrid",
@@ -66,7 +75,18 @@ async function fixture(db: Transaction) {
       vatClass: "general",
     })
   ).id;
-  await addProductToMenu(db, { menuId: menu, productId: product });
+  if (setMenuOnly) {
+    const set = await createMenu(db, {
+      name: "Lunch special",
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "general",
+    });
+    await addSetMenuDishes(db, set.id, [{ productId: product, excludedVariantIds: [] }]);
+    await addMember(db, await requireMenuRoot(db, menu), { kind: "set_menu", menuId: set.id });
+  } else {
+    await addProductToMenu(db, { menuId: menu, productId: product });
+  }
   const lunch = (
     await saveMenuPeriod(db, department, {
       name: "Lunch",
@@ -96,7 +116,7 @@ async function fixture(db: Transaction) {
     db,
     { row: { kind: "category", categoryId: category }, zoneId: terrace!.id },
     { kind: "no_preparation" },
-    [{ periodId: lunch, target: { kind: "station", stationId: station } }],
+    setMenuOnly ? [] : [{ periodId: lunch, target: { kind: "station", stationId: station } }],
   );
   return {
     cfg,
@@ -149,6 +169,152 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   );
   return takeaway;
 }
+it("allows a period line for a dish sold only inside a set menu and shows its painted hours", async () =>
+  tx(async (db) => {
+    const f = await fixture(db, true);
+    const routing = await routingModel(db, at);
+    expect(routing.periods.find(({ id }) => id === f.lunch)?.productIds).toEqual([f.product]);
+    await setRoutingCell(
+      db,
+      { row: { kind: "product", productId: f.product }, zoneId: f.terrace },
+      { kind: "no_preparation" },
+      [{ periodId: f.lunch, target: { kind: "station", stationId: f.station } }],
+    );
+    expect(await stationServiceTimes(db, f.station, day, day)).toEqual(planned(f));
+  }));
+
+it.each([false, true])(
+  "gives Afternoon priority over a Lunch extension only when Bar serves it (%s)",
+  async (barServesAfternoon) =>
+    tx(async (db) => {
+      const f = await fixture(db);
+      const bar = { kind: "station", stationId: f.defaultStation } as const;
+      await updateMenuPeriod(db, f.lunch, {
+        lastOrders: [
+          { ...bar, minutes: 60 },
+          { kind: "station", stationId: f.station, minutes: -15 },
+        ],
+      });
+      await replaceMenuWeek(
+        db,
+        f.department,
+        week("slots", [
+          { periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" },
+          { periodId: f.afternoon, startsAt: "15:00", endsAt: "18:00" },
+        ]),
+        at,
+        1,
+      );
+      const address = {
+        row: { kind: "category", categoryId: f.category },
+        zoneId: f.terrace,
+      } as const;
+      await setRoutingCell(db, address, bar, [
+        { periodId: f.lunch, target: { kind: "station", stationId: f.station } },
+        { periodId: f.afternoon, target: bar },
+      ]);
+      if (!barServesAfternoon) {
+        const other = await createMenu(db, { name: "Afternoon menu" });
+        await updateMenuPeriod(db, f.afternoon, { menuId: other.id });
+      }
+      expect(await stationServiceTimes(db, f.station, day, day)).toEqual(
+        planned(f, [{ periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" }]),
+      );
+      expect(await stationServiceTimes(db, f.defaultStation, day, day)).toEqual(
+        planned(
+          f,
+          barServesAfternoon
+            ? [{ periodId: f.afternoon, startsAt: "15:00", endsAt: "18:00" }]
+            : [{ periodId: f.lunch, startsAt: "15:00", endsAt: "16:00" }],
+        ),
+      );
+    }),
+);
+
+it("offers the fallback in a gap and a station reached only in a special day's later period", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const bar = { kind: "station", stationId: f.defaultStation } as const;
+    await setRoutingCell(
+      db,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      { kind: "no_preparation" },
+      [
+        { periodId: f.lunch, target: { kind: "station", stationId: f.station } },
+        { periodId: f.afternoon, target: bar },
+      ],
+    );
+    await replaceMenuWeek(db, f.department, week("slots", []), at, 1);
+    await specialDay(db, {
+      name: "Afternoon break",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: false }],
+      paint: [
+        {
+          departmentId: f.department,
+          date: day,
+          ranges: [
+            { periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" },
+            { periodId: f.afternoon, startsAt: "15:30", endsAt: "17:00" },
+          ],
+        },
+      ],
+    });
+    expect(
+      await readLastOrderChoices(db, {
+        departmentId: f.department,
+        periodId: f.lunch,
+        menuId: f.menu,
+        staffMenuIds: [],
+      }),
+    ).toEqual([
+      { ...bar, name: "Bar" },
+      { kind: "station", stationId: f.station, name: "Cocktails" },
+      { kind: "no_preparation", name: null },
+    ]);
+  }));
+
+it("clips a special day's late service at a zone closure and at the business-day end", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const bar = { kind: "station", stationId: f.defaultStation } as const;
+    await updateMenuPeriod(db, f.lunch, { lastOrders: [{ ...bar, minutes: 120 }] });
+    await setRoutingCell(
+      db,
+      { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
+      bar,
+      [{ periodId: f.lunch, target: { kind: "station", stationId: f.station } }],
+    );
+    await specialDay(db, {
+      name: "Late service",
+      repeatsYearly: false,
+      dates: [{ date: day, closedAllDay: false }],
+      paint: [
+        {
+          departmentId: f.department,
+          date: day,
+          ranges: [
+            { periodId: null, startsAt: "06:00", endsAt: "04:00" },
+            { periodId: f.lunch, startsAt: "04:00", endsAt: "05:00" },
+          ],
+        },
+      ],
+      zonePaint: [
+        {
+          zoneId: f.terrace,
+          date: day,
+          ranges: [{ kind: "closed", startsAt: "05:15", endsAt: "05:30" }],
+        },
+      ],
+    });
+    expect(await stationServiceTimes(db, f.defaultStation, day, day)).toEqual(
+      planned(f, [
+        { periodId: f.lunch, startsAt: "05:00", endsAt: "05:15" },
+        { periodId: f.lunch, startsAt: "05:30", endsAt: "06:00" },
+      ]),
+    );
+  }));
+
 it("shows a special date's painted Dinner 19:00-01:00 for a station routed only during Dinner", async () =>
   tx(async (db) => {
     const f = await fixture(db);

@@ -3,7 +3,15 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, beforeAll, describe, expect, it } from "vitest";
-import { buildMenuDocument, createMenu, menuDocumentHash, publishMenu } from "@waitron/menu";
+import {
+  addProductToMenu,
+  buildMenuDocument,
+  createCategory,
+  createMenu,
+  createProduct,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/menu";
 import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
@@ -25,6 +33,7 @@ import { addFloorPlanSet } from "./floor-plan-set-store.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
+import { setRoutingCell } from "./routing-store.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
@@ -564,6 +573,31 @@ describe("the opening-hours period API", () => {
       ],
     );
     await answers(await r.send("GET", "/opening-hours", r.staff), 403);
+  });
+
+  it("reads Last orders choices for the draft menus with venue-view permission", async () => {
+    const r = await routed();
+    await scoped(async (tx) => {
+      const { id: categoryId } = await createCategory(tx, { name: "Breakfast" });
+      const { id: productId } = await createProduct(tx, {
+        name: "Toast",
+        categoryId,
+        unitPrice: "3",
+        pricingUnit: "each",
+        vatClass: "general",
+      });
+      await addProductToMenu(tx, { menuId: r.lunchMenu, productId });
+      await setRoutingCell(
+        tx,
+        { row: { kind: "product", productId }, zoneId: r.barZone },
+        { kind: "no_preparation" },
+      );
+    });
+    const route = `/menu-periods/last-order-choices?departmentId=${r.restaurant}&menuId=${r.lunchMenu}&periodId=${r.morningPeriod}`;
+    const response = await r.send("GET", route, r.supervisor);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ kind: "no_preparation", name: null }]);
+    await answers(await r.send("GET", route, r.staff), 403);
   });
 
   it("keeps Last orders through an omitted period patch and clears them with an empty list", async () => {

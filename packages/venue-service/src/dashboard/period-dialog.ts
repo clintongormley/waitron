@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -19,7 +20,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
-import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
+import { LAST_ORDER_MINUTES } from "../menu-timetable-rules.js";
+import type {
+  LastOrderAdjustment,
+  LastOrderChoice,
+  MenuPeriodInput,
+  OpeningHoursModel,
+} from "../menu-timetable-types.js";
+import { parseTargetKey, targetKey } from "../routing.js";
 import type { PaintedIn } from "../period-delete.js";
 import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import {
@@ -32,8 +40,10 @@ import { format } from "./hours-view.js";
 import { periodsPath, seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+import type { OpeningHoursApi } from "./opening-hours-client.js";
 
-type Draft = Omit<MenuPeriodInput, "floorPlanSetId"> & {
+type Draft = Omit<MenuPeriodInput, "floorPlanSetId" | "lastOrders"> & {
+  lastOrders: readonly LastOrderAdjustment[];
   colour: CalendarColour;
   /** Empty inherits the department's current default. */
   floorPlanSetId: string;
@@ -43,11 +53,34 @@ type Draft = Omit<MenuPeriodInput, "floorPlanSetId"> & {
 type Department = { id: string; name: string; colourUsers: readonly ColourUser[] };
 type Field = keyof Draft;
 const copy = (value: Draft): Draft => ({ ...value, staffMenuIds: [...value.staffMenuIds] });
+const sameLastOrders = (a: Draft["lastOrders"], b: Draft["lastOrders"]) =>
+  a.length === b.length &&
+  a.every((left) =>
+    b.some((right) => targetKey(left) === targetKey(right) && left.minutes === right.minutes),
+  );
+function adjustmentLabel(minutes: number): string {
+  if (minutes === 0) return t("period.last_orders_at_end");
+  const magnitude = Math.abs(minutes);
+  const duration =
+    magnitude < 60
+      ? format("period.last_orders_minutes", { minutes: String(magnitude) })
+      : t(
+          magnitude === 60
+            ? "period.last_orders_hour"
+            : magnitude === 90
+              ? "period.last_orders_hour_half"
+              : "period.last_orders_two_hours",
+        );
+  return format(minutes < 0 ? "period.last_orders_before" : "period.last_orders_after", {
+    duration,
+  });
+}
 const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
   name: "",
   colour: firstUnusedCalendarColour(users),
   menuId: "",
   staffMenuIds: [],
+  lastOrders: [],
   floorPlanSetId: "",
   departmentId: "",
 });
@@ -73,6 +106,31 @@ export class PeriodDialog extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
         padding-block: var(--wt-space-3);
+      }
+      .last-orders {
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .last-orders-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--wt-space-2) var(--wt-space-3);
+      }
+      .last-orders h3,
+      .last-orders p {
+        margin: 0;
+      }
+      .last-orders h3 {
+        font-size: var(--wt-font-size-md);
+      }
+      .last-orders a {
+        color: var(--wt-color-primary-text);
+      }
+      .last-orders p {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       .painted {
         display: grid;
@@ -127,6 +185,14 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) departments?: readonly Department[];
   /** The departments that offer a Floor plan field, with their sets; absent draws none. */
   @property({ attribute: false }) floorPlans?: PeriodFloorPlans["departments"];
+  @property({ attribute: false }) watchLastOrderChoices?: OpeningHoursApi["watchLastOrderChoices"];
+  @state() private lastOrderChoices?: readonly LastOrderChoice[];
+  @state() private lastOrderReadFailed = false;
+  private lastOrderRead?: {
+    key: string;
+    watch: NonNullable<PeriodDialog["watchLastOrderChoices"]>;
+    stop?: () => void;
+  };
   @state() private draft: Draft = empty();
   private colourPicked = false;
   private readonly feedback = new FormFeedback(this);
@@ -144,6 +210,7 @@ export class PeriodDialog extends LitElement {
     this.requestUpdate();
   }
   override disconnectedCallback() {
+    this.stopLastOrderRead();
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -152,6 +219,7 @@ export class PeriodDialog extends LitElement {
   }
   protected override willUpdate() {
     if (!this.open) {
+      this.stopLastOrderRead();
       this.scope?.dispose();
       this.scope = undefined;
       this.leave = undefined;
@@ -173,6 +241,7 @@ export class PeriodDialog extends LitElement {
             colour: this.period.colour,
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
+            lastOrders: this.period.lastOrders ?? [],
             floorPlanSetId: this.period.floorPlanSetId ?? "",
             departmentId: "",
           }
@@ -197,6 +266,7 @@ export class PeriodDialog extends LitElement {
           a.menuId === b.menuId &&
           a.floorPlanSetId === b.floorPlanSetId &&
           a.departmentId === b.departmentId &&
+          sameLastOrders(a.lastOrders, b.lastOrders) &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
         restore: (value) => {
@@ -207,6 +277,43 @@ export class PeriodDialog extends LitElement {
       this.leave = coordinator;
       scope.commit(this.baseline!);
     }
+    this.syncLastOrderRead();
+  }
+  private stopLastOrderRead() {
+    const read = this.lastOrderRead;
+    this.lastOrderRead = undefined;
+    read?.stop?.();
+    this.lastOrderChoices = undefined;
+    this.lastOrderReadFailed = false;
+  }
+  private syncLastOrderRead() {
+    const watch = this.watchLastOrderChoices;
+    const departmentId = this.choosesDepartment ? this.draft.departmentId : this.departmentId;
+    const { menuId, staffMenuIds } = this.draft;
+    if (!this.isConnected || !this.open || !watch || !departmentId || !menuId) {
+      this.stopLastOrderRead();
+      return;
+    }
+    const periodId = this.period?.id;
+    const sortedStaffMenus = [...staffMenuIds].sort();
+    const key = JSON.stringify([departmentId, periodId, menuId, sortedStaffMenus]);
+    if (this.lastOrderRead?.key === key && this.lastOrderRead.watch === watch) return;
+    this.stopLastOrderRead();
+    const read: NonNullable<PeriodDialog["lastOrderRead"]> = { key, watch };
+    this.lastOrderRead = read;
+    read.stop = watch(
+      { departmentId, periodId, menuId, staffMenuIds: sortedStaffMenus },
+      (choices) => {
+        if (this.lastOrderRead !== read) return;
+        this.lastOrderChoices = choices;
+        this.lastOrderReadFailed = false;
+      },
+      () => {
+        if (this.lastOrderRead !== read) return;
+        this.lastOrderChoices = undefined;
+        this.lastOrderReadFailed = true;
+      },
+    );
   }
   private get input(): Draft {
     return { ...this.draft, name: this.draft.name.trim() };
@@ -290,6 +397,8 @@ export class PeriodDialog extends LitElement {
     if (field === "departmentId") this.draft = { ...this.draft, floorPlanSetId: "" };
     if (field === "departmentId" && !this.colourPicked)
       this.draft = { ...this.draft, colour: firstUnusedCalendarColour(this.shownColourUsers) };
+    if (field === "departmentId" || field === "menuId" || field === "staffMenuIds")
+      this.syncLastOrderRead();
     if (this.refusalField() === field) this.refusal = undefined;
     this.scope?.changed();
   }
@@ -304,13 +413,20 @@ export class PeriodDialog extends LitElement {
     }
     this.submittedGeneration = this.generation;
     this.submitted = copy(this.input);
-    const { departmentId, floorPlanSetId, ...input } = copy(this.input);
+    const { departmentId, floorPlanSetId, lastOrders, ...input } = this.submitted;
+    const selected =
+      this.lastOrderChoices && !sameLastOrders(lastOrders, this.baseline!.lastOrders)
+        ? lastOrders.filter((entry) =>
+            this.lastOrderChoices!.some((choice) => targetKey(choice) === targetKey(entry)),
+          )
+        : undefined;
     this.dispatchEvent(
       new CustomEvent("period-save", {
         detail: {
           periodId: this.period?.id ?? null,
           input: {
             ...input,
+            ...(selected === undefined ? {} : { lastOrders: selected }),
             ...(this.floorPlanSets ? { floorPlanSetId: floorPlanSetId || null } : {}),
           },
           ...(this.choosesDepartment ? { departmentId } : {}),
@@ -323,8 +439,14 @@ export class PeriodDialog extends LitElement {
   commitSubmitted(input: MenuPeriodInput): boolean {
     if (!this.open || !this.isConnected || this.submittedGeneration !== this.generation)
       return false;
+    if (
+      input.lastOrders !== undefined &&
+      sameLastOrders(this.draft.lastOrders, this.submitted!.lastOrders)
+    )
+      this.draft = { ...this.draft, lastOrders: input.lastOrders };
     const submitted: Draft = {
       ...input,
+      lastOrders: input.lastOrders ?? this.baseline!.lastOrders,
       colour: input.colour ?? this.submitted!.colour,
       floorPlanSetId:
         input.floorPlanSetId === undefined
@@ -426,6 +548,50 @@ export class PeriodDialog extends LitElement {
       }}
     ></wt-combobox>`;
   }
+  private lastOrdersSection(current: () => boolean) {
+    if (!this.lastOrderChoices?.length) return nothing;
+    const options = LAST_ORDER_MINUTES.map((minutes) => ({
+      value: String(minutes),
+      label: adjustmentLabel(minutes),
+    }));
+    return html`<section class="last-orders" aria-labelledby="last-orders-heading">
+      <div class="last-orders-heading">
+        <h3 id="last-orders-heading">${t("period.last_orders")}</h3>
+        <a href="/prep-stations/view/routing">${t("nav.prep_stations")}</a>
+      </div>
+      <p>
+        ${
+          this.draft.name.trim()
+            ? format("period.last_orders_explained", { period: this.draft.name.trim() })
+            : t("period.last_orders_explained_unnamed")
+        }
+      </p>
+      ${repeat(this.lastOrderChoices, targetKey, (choice) => {
+        const key = targetKey(choice);
+        const field = choice.kind === "station" ? choice.stationId : "noPreparation";
+        const entry = this.draft.lastOrders.find((entry) => targetKey(entry) === key);
+        return html`<wt-combobox
+          name=${`lastOrders.${field}`}
+          label=${choice.name ?? t("prep.no_preparation")}
+          search="never"
+          preserve-order
+          .options=${options}
+          .value=${String(entry?.minutes ?? 0)}
+          ?disabled=${this.busy}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            if (!current() || !this.lastOrderChoices?.includes(choice)) return;
+            const minutes = Number(event.detail.value);
+            if (!LAST_ORDER_MINUTES.includes(minutes)) return;
+            const lastOrders = this.draft.lastOrders.filter((entry) => targetKey(entry) !== key);
+            if (minutes !== 0) lastOrders.push({ ...parseTargetKey(key)!, minutes });
+            this.draft = { ...this.draft, lastOrders };
+            this.scope?.changed();
+          }}
+        ></wt-combobox>`;
+      })}
+    </section>`;
+  }
   override render(): unknown {
     if (!this.open) return nothing;
     const s = saveActionState(this.scope);
@@ -520,11 +686,12 @@ export class PeriodDialog extends LitElement {
             if (current()) this.changed("staffMenuIds", [...event.detail.values]);
           }}
         ></wt-combobox>
-        ${this.floorPlanField(current)} ${this.paintedInSection()}
+        ${this.floorPlanField(current)} ${this.lastOrdersSection(current)}
+        ${this.paintedInSection()}
       </div>
       <wt-form-actions
         slot=${this.page ? nothing : "footer"}
-        .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "")}
+        .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "", this.lastOrderReadFailed ? t("period.last_orders_read_failed") : "")}
       >
         <wt-button
           slot="cancel"

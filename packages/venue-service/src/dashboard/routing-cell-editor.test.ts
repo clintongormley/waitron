@@ -110,7 +110,7 @@ it("offers a zone column its department's periods that meet the row, ungrouped",
 });
 
 it.each([
-  ["en", "Station", "Any other time"],
+  ["en", "Station", "Any other time, and after last orders"],
   [
     "es",
     VENUE_SERVICE_STRINGS.es["routing.line_station"],
@@ -148,6 +148,21 @@ it.each([390, 1280])(
   },
 );
 
+it("shows the full fallback label in Spanish at phone width", async () => {
+  await page.viewport(390, 800);
+  try {
+    setLocale("es");
+    const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
+    const fallback = one<Combobox>(el, "[name=target]")!;
+    await fallback.updateComplete;
+    await document.fonts.ready;
+    const text = fallback.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
+    expect(text.scrollWidth).toBeLessThanOrEqual(text.clientWidth);
+  } finally {
+    await page.viewport(1280, 800);
+  }
+});
+
 it("offers Every zone every active department's periods that meet the row, grouped by department", async () => {
   const el = await mount();
   await click(el, "add-line");
@@ -169,7 +184,7 @@ it("offers the station choices beside each line and for any other time", async (
   ];
   expect(lineTargets(el)[0]!.options).toEqual(expected);
   expect(one<Combobox>(el, "[name=target]")!.options).toEqual(expected);
-  expect(one<Combobox>(el, "[name=target]")!.label).toBe("Any other time");
+  expect(one<Combobox>(el, "[name=target]")!.label).toBe("Any other time, and after last orders");
   expect(one<Combobox>(el, "[name=target]")!.required).toBe(true);
 });
 

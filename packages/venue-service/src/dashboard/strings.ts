@@ -178,7 +178,8 @@ const en = {
     "Prep-station times could not be loaded. They will be tried again.",
   "opening.all_stations": "All prep stations",
   "opening.prep_station": "Prep station",
-  "opening.station_hours": "A prep station is open while a period sends it orders.",
+  "opening.station_hours":
+    "Prep-station hours follow periods, their menus, Last orders, routes and zone closures.",
   "opening.station_hours_edit":
     "Change its hours through the periods, their menus, routing or zone closing times.",
   "opening.zone_placeholder": "{name}: closed times",
@@ -807,6 +808,19 @@ const en = {
   "period.department_required": "Choose a department.",
   "period.painted_in": "Painted in",
   "period.floor_plan": "Floor plan",
+  "period.last_orders": "Last orders",
+  "period.last_orders_explained":
+    "After {period} ends, its dishes stay on sale only for tables that ordered during {period}.",
+  "period.last_orders_explained_unnamed":
+    "After the period ends, its dishes stay on sale only for tables that ordered during it.",
+  "period.last_orders_at_end": "At the end",
+  "period.last_orders_minutes": "{minutes} minutes",
+  "period.last_orders_hour": "1 hour",
+  "period.last_orders_hour_half": "1½ hours",
+  "period.last_orders_two_hours": "2 hours",
+  "period.last_orders_before": "{duration} before the end",
+  "period.last_orders_after": "{duration} after the end",
+  "period.last_orders_read_failed": "Could not load Last orders. Your saved times are kept.",
   "period.not_painted": "Not painted anywhere",
   "period.no_periods": "No periods",
   "period.delete_seasons_one": "Painted in 1 season.",
@@ -886,7 +900,7 @@ const en = {
     "Your choice was not saved: the No category row is no longer in the grid.",
   "routing.editor_from": "From {source}",
   "routing.cell_place": "{row}, {zone}",
-  "routing.any_other_time": "Any other time",
+  "routing.any_other_time": "Any other time, and after last orders",
   "routing.line_periods": "Periods",
   "routing.line_station": "Station",
   "routing.add_line": "+ Add route",
@@ -1116,7 +1130,7 @@ const es: Record<keyof typeof en, string> = {
   "opening.all_stations": "Todas las estaciones de preparación",
   "opening.prep_station": "Estación de preparación",
   "opening.station_hours":
-    "Una estación de preparación está abierta mientras un periodo le envía pedidos.",
+    "El horario de cada estación sigue los periodos, sus cartas, los últimos pedidos, las rutas y los cierres de zona.",
   "opening.station_hours_edit":
     "Cambia sus horarios mediante los periodos, sus cartas, las rutas o los cierres de las zonas.",
   "opening.zone_placeholder": "{name}: horarios de cierre",
@@ -1765,6 +1779,20 @@ const es: Record<keyof typeof en, string> = {
   "period.department_required": "Elige un departamento.",
   "period.painted_in": "Pintado en",
   "period.floor_plan": "Plano de sala",
+  "period.last_orders": "Últimos pedidos",
+  "period.last_orders_explained":
+    "Cuando termina {period}, sus platos solo se pueden pedir en las mesas que hicieron algún pedido durante {period}.",
+  "period.last_orders_explained_unnamed":
+    "Al terminar el periodo, sus platos solo se pueden pedir en las mesas que hicieron algún pedido durante ese periodo.",
+  "period.last_orders_at_end": "Al terminar",
+  "period.last_orders_minutes": "{minutes} minutos",
+  "period.last_orders_hour": "1 hora",
+  "period.last_orders_hour_half": "1 hora y media",
+  "period.last_orders_two_hours": "2 horas",
+  "period.last_orders_before": "{duration} antes del final",
+  "period.last_orders_after": "{duration} después del final",
+  "period.last_orders_read_failed":
+    "No se han podido cargar los últimos pedidos. Se conservan los tiempos guardados.",
   "period.not_painted": "Sin pintar en ningún sitio",
   "period.no_periods": "Sin periodos",
   "period.delete_seasons_one": "Pintado en 1 temporada.",
@@ -1846,7 +1874,7 @@ const es: Record<keyof typeof en, string> = {
     "Tu elección no se ha guardado: la fila Sin categoría ya no está en la cuadrícula.",
   "routing.editor_from": "De {source}",
   "routing.cell_place": "{row}, {zone}",
-  "routing.any_other_time": "El resto del tiempo",
+  "routing.any_other_time": "Resto del día y tras últimos pedidos",
   "routing.line_periods": "Periodos",
   "routing.line_station": "Estación",
   "routing.add_line": "+ Añadir ruta",

@@ -2,7 +2,13 @@ import { currentLocale } from "@waitron/dashboard-kit";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
-import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import type {
+  LastOrderChoice,
+  LastOrderDraftMenus,
+  MenuPeriodInput,
+  MenuWeekDay,
+  OpeningHoursModel,
+} from "../menu-timetable-types.js";
 import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
 import type { Season, SeasonChange } from "../season-rules.js";
@@ -70,6 +76,29 @@ export class OpeningHoursApi {
       apply,
       failed,
       recovered,
+    );
+  }
+  watchLastOrderChoices(
+    draft: LastOrderDraftMenus,
+    apply: (choices: LastOrderChoice[]) => void,
+    failed: (error: unknown) => void,
+  ): () => void {
+    const params = new URLSearchParams({ departmentId: draft.departmentId, menuId: draft.menuId });
+    if (draft.periodId) params.set("periodId", draft.periodId);
+    for (const id of draft.staffMenuIds) params.append("staffMenuId", id);
+    return this.#watches.watch(
+      `venue-service:last-order-choices:${params}`,
+      QUERY_DEPENDENCIES["last-order-choices"],
+      () =>
+        this.request<LastOrderChoice[]>(
+          `${BASE}/menu-periods/last-order-choices?${params}`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      () => {},
     );
   }
   watchPaintedIn(

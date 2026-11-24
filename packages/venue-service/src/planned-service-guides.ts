@@ -1,6 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
+import type { Transaction } from "@waitron/db";
 import type { BusinessDayClock } from "@waitron/shared";
 import type { CalendarColour, LocalDate } from "./hours-types.js";
 import {
@@ -9,12 +7,11 @@ import {
   resolveZoneClosedDays,
   type DayPlan,
 } from "./day-resolver.js";
-import { readActiveDepartments, readActivePeriods, serviceRuns } from "./menu-timetable.js";
+import { readActiveDepartments, readActivePeriods } from "./menu-timetable.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks } from "./season-weeks.js";
 import { readServiceZones } from "./zone-closed-times.js";
-import { periodProductIds } from "./routing-periods.js";
-import { loadRoutingRules } from "./routing-store.js";
-import { selectRoutingCell } from "./routing.js";
+import { afterPeriod, lastOrderRuns, readLastOrderRouting } from "./last-order-routing.js";
+import { targetKey } from "./routing.js";
 import { rangeSpan, rangeSpanInDay, type ServiceRange, type ClosedRange } from "./service-day.js";
 import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
 
@@ -43,14 +40,9 @@ function plannedSpan(
   const span = rangeSpanInDay(range, context);
   return { ...span, end: Math.min(span.end, context.endMinute) };
 }
-function subtract(
-  range: Span,
-  closed: readonly ClosedRange[],
-  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
-): Span[] {
+function subtract(range: Span, blocked: readonly Span[]): Span[] {
   let shares = [range];
-  for (const closure of closed) {
-    const { start, end } = plannedSpan(closure, context);
+  for (const { start, end } of blocked) {
     shares = shares.flatMap((share) => {
       if (end <= share.start || start >= share.end) return [share];
       return [
@@ -151,57 +143,54 @@ export async function readPlannedServiceGuides(
   for (const id of stationIds)
     stationRanges.set(id, new Map(columns.map((column) => [column, []])));
   if (stationIds.length) {
-    // Planning uses untimed routes: today's station closures and kept-open extensions do not author demand.
-    const offered = await periodProductIds(tx, periods);
-    const offeredIds = [...new Set([...offered.values()].flat())];
-    const routedId = sql<string>`coalesce(${products.parentId}, ${products.id})`;
-    const productRows = await tx
-      .select({ routedId, categoryId: effectiveProductColumns.categoryId })
-      .from(products)
-      .leftJoin(parentProducts, parentJoin)
-      .where(and(eq(products.active, true), inArray(routedId, offeredIds)));
-    const base = await loadRoutingRules(tx, null);
-    const rules = {
-      ...base,
-      zoneDepartment: new Map(zones.map(({ id, departmentId }) => [id, departmentId])),
-    };
-    const requested = new Set(stationIds.filter((id) => rules.activeStationIds.has(id)));
-    const reaches = new Map<string, Map<string, Set<string>>>();
-    for (const period of periods) {
-      const ids = new Set(offered.get(period.id)!);
-      const facts = productRows.filter((product) => ids.has(product.routedId));
-      const targets = new Map<string, Set<string>>();
-      for (const zone of zones.filter((zone) => zone.departmentId === period.departmentId)) {
-        for (const product of facts) {
-          const target = selectRoutingCell(
-            rules,
-            { kind: "product", productId: product.routedId },
-            zone.id,
-            product.categoryId,
-            { periods: new Map([[period.departmentId, period.id]]) },
-          ).target;
-          if (target?.kind !== "station" || !requested.has(target.stationId)) continue;
-          const zoneIds = targets.get(target.stationId) ?? new Set<string>();
-          zoneIds.add(zone.id);
-          targets.set(target.stationId, zoneIds);
-        }
-      }
-      reaches.set(period.id, targets);
-    }
-    for (const stationId of requested) {
+    const routing = await readLastOrderRouting(tx, periods, zones);
+    const adjustments = new Map(
+      periods.map(({ id, lastOrders }) => [
+        id,
+        new Map(lastOrders.map((entry) => [targetKey(entry), entry.minutes])),
+      ]),
+    );
+    for (const stationId of stationIds) {
+      const target = targetKey({ kind: "station", stationId });
       for (const column of columns) {
         const current = context(column);
         const results: { departmentId: string; ranges: ServiceRange[] }[] = [];
+        const closed = (zoneId: string) =>
+          (closures.get(zoneId)?.get(column) ?? []).map((range) => plannedSpan(range, current));
         for (const departmentId of departmentIds) {
           const byPeriod = new Map<string, Span[]>();
-          for (const slot of serviceRuns(departmentRanges.get(departmentId)?.get(column) ?? [])) {
-            const raw = rangeSpan(slot, current.dayCutover);
-            const sending = { start: raw.start, end: Math.min(raw.end, current.endMinute) };
-            if (sending.end <= sending.start) continue;
-            const shares = byPeriod.get(slot.periodId) ?? [];
-            for (const zoneId of reaches.get(slot.periodId)?.get(stationId) ?? [])
-              shares.push(...subtract(sending, closures.get(zoneId)?.get(column) ?? [], current));
-            byPeriod.set(slot.periodId, shares);
+          const runs = lastOrderRuns(
+            departmentRanges.get(departmentId)?.get(column) ?? [],
+            current.dayCutover,
+          ).filter(({ start }) => start < current.endMinute);
+          const add = (periodId: string, spans: Span[]) => {
+            const existing = byPeriod.get(periodId) ?? [];
+            existing.push(...spans);
+            byPeriod.set(periodId, existing);
+          };
+          for (const run of runs) {
+            const painted = { start: run.start, end: Math.min(run.end, current.endMinute) };
+            const zones = routing.get(run.periodId)?.(run.periodId).get(target) ?? [];
+            for (const zone of zones) add(run.periodId, subtract(painted, closed(zone)));
+          }
+          // Painted hours own their span. Of the extensions, the latest period to end owns overlap.
+          const occupied = [...byPeriod.values()].flat();
+          for (const { periodId, end } of [...runs].reverse()) {
+            const minutes = adjustments.get(periodId)?.get(target) ?? 0;
+            if (minutes <= 0) continue;
+            const route = routing.get(periodId)!;
+            const shares: Span[] = [];
+            for (const window of afterPeriod(
+              runs,
+              end,
+              Math.min(end + minutes, current.endMinute),
+            )) {
+              for (const zone of route(window.periodId).get(target) ?? [])
+                shares.push(...subtract(window, closed(zone)));
+            }
+            const unclaimed = union(shares).flatMap((span) => subtract(span, occupied));
+            add(periodId, unclaimed);
+            occupied.push(...unclaimed);
           }
           const ranges = [...byPeriod]
             .flatMap(([periodId, shares]) =>
