@@ -928,7 +928,7 @@ describe("the handover's preparation route", () => {
       }
     });
 
-    it("the box's real break-glass secret inside sign-in does not stand in for the password", async () => {
+    it("the venue's master key inside sign-in does not stand in for the password", async () => {
       const s = service();
       await controlledAtFilingAssumed();
       const key = await mintMasterKey(suite.db);
