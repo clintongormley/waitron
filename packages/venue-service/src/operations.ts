@@ -57,6 +57,7 @@ import type {
   ServiceMode,
   ZoneMenuState,
   ZoneOffers,
+  ZoneSelling,
   ZoneSetMenus,
 } from "@waitron/module";
 import {
@@ -963,23 +964,21 @@ function servedSetMenus(
 }
 
 /** {@link listZoneOffers}' set menus, without serving the zone's other offers; a zone whose menus
- *  hold no set menu answers no selling versions either, without reading its timetable. */
+ *  hold no set menu answers no selling versions either, without reading its timetable. A
+ *  `ZoneSelling` names the live menus and those orderable, so neither is read again. */
 export async function listZoneSetMenus(
   tx: Transaction,
   zoneId: string,
-  at: Date = new Date(),
+  when: Date | ZoneSelling = new Date(),
 ): Promise<ZoneSetMenus> {
-  const published = await zoneLiveDocuments(tx, zoneId, [], await zoneMenuIds(tx, zoneId));
+  const timed = when instanceof Date;
+  const published = await zoneLiveDocuments(tx, zoneId, [], timed ? undefined : when.menuIds);
   if (!published.some(({ document }) => Object.keys(document.setMenus ?? {}).length > 0))
     return { setMenus: [], sellingVersionIds: [] };
-  const { departmentId } = await resolveZoneContext(tx, zoneId);
-  const service = await resolveDepartmentService(
-    tx,
-    departmentId,
-    at,
-    await readServiceDayPlan(tx, at),
-  );
-  const isOrderable = (menuId: string) => service.orderableMenuIds.includes(menuId);
+  const orderableMenuIds = timed
+    ? await orderableMenuIdsAt(tx, zoneId, when)
+    : when.orderableMenuIds;
+  const isOrderable = (menuId: string) => orderableMenuIds.includes(menuId);
   const copies = zoneSetMenuCopies(published, isOrderable);
   const { setMenuOffers } = await applyLiveFields(
     tx,
@@ -993,6 +992,17 @@ export async function listZoneSetMenus(
       .filter(({ menuId }) => isOrderable(menuId))
       .map(({ versionId }) => versionId),
   };
+}
+
+async function orderableMenuIdsAt(tx: Transaction, zoneId: string, at: Date) {
+  const { departmentId } = await resolveZoneContext(tx, zoneId);
+  const service = await resolveDepartmentService(
+    tx,
+    departmentId,
+    at,
+    await readServiceDayPlan(tx, at),
+  );
+  return service.orderableMenuIds;
 }
 
 /** The key {@link productsOfferedIn} answers for a product, or one of its variants. */

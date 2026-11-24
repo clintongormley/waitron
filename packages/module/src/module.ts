@@ -405,6 +405,13 @@ export interface ZoneSetMenus {
   readonly sellingVersionIds: readonly string[];
 }
 
+/** A zone's live menus and those its timetable lets it sell at one instant, as a caller that
+ *  priced at that instant resolved them. */
+export interface ZoneSelling {
+  readonly menuIds: readonly string[];
+  readonly orderableMenuIds: readonly string[];
+}
+
 /** What a zone's live menus hold that cannot be sold now. */
 export interface ZoneUnavailable {
   /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
@@ -1065,8 +1072,13 @@ export interface VenueServiceContribution {
       withDefault?: false;
     },
   ): Promise<ZoneOffers>;
-  /** `listZoneOffers`' set menus at `at` (now when absent), without serving the zone's other offers. */
-  listZoneSetMenus(tx: Transaction, zoneId: string, at?: Date): Promise<ZoneSetMenus>;
+  /** `listZoneOffers`' set menus at `when` (now when absent), without serving the zone's other
+   *  offers; a {@link ZoneSelling} stands for the instant it was resolved at. */
+  listZoneSetMenus(
+    tx: Transaction,
+    zoneId: string,
+    when?: Date | ZoneSelling,
+  ): Promise<ZoneSetMenus>;
   resolveDefaultMenu(
     tx: Transaction,
     zoneId: string,

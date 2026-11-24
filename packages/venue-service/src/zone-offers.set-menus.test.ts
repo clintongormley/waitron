@@ -27,7 +27,7 @@ import {
 } from "./operations.js";
 import { setMenuFixture } from "./testing/set-menu-fixtures.js";
 import { readBusinessDayScheduleRevision } from "./business-day-schedule.js";
-import { replaceMenuWeek } from "./menu-timetable.js";
+import { replaceMenuWeek, resolveDepartmentService } from "./menu-timetable.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 type Fixture = Awaited<ReturnType<typeof setMenuFixture>>;
@@ -392,6 +392,26 @@ it.each(["midday", "evening"] as const)(
       expect(narrow.sellingVersionIds).toEqual(
         whole.menus.filter(({ orderable }) => orderable).map(({ versionId }) => versionId),
       );
+    }),
+);
+
+it.each(["midday", "evening"] as const)(
+  "answers the timed read from the live menus and the service a caller resolved at %s",
+  (when) =>
+    scenario(async (tx, f) => {
+      await differentCopies(tx, f);
+      const { departmentId } = await resolveZoneContext(tx, f.zoneId);
+      const service = await resolveDepartmentService(tx, departmentId, f[when]);
+      const priced = await listZoneOffers(tx, f.zoneId, { menuItemIds: [], withDefault: false });
+      const timed = await listZoneSetMenus(tx, f.zoneId, f[when]);
+      expect(timed.setMenus.length).toBeGreaterThan(1);
+      expect(timed.sellingVersionIds.length).toBeGreaterThan(0);
+      expect(
+        await listZoneSetMenus(tx, f.zoneId, {
+          menuIds: priced.menus.map(({ id }) => id),
+          orderableMenuIds: service.orderableMenuIds,
+        }),
+      ).toEqual(timed);
     }),
 );
 
