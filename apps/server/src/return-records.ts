@@ -73,12 +73,7 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   const held = await returnConfirmed(deps, operationId, inventory);
   const main = mainBoxToAsk(deps.nodeId, chart, restriction);
   // Sent first: the box's own records may correct one of these.
-  const others = await readOtherBoxesBatches(deps, main.target?.nodeId);
-  const sentOthers =
-    others === null || others.length === 0
-      ? null
-      : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
-  const othersState = othersPartState(others, sentOthers);
+  const othersState = await sendOthersPart(deps, chart, main);
   // Confirmed own records go again only once nothing else is left to send: a main box restored from
   // an earlier copy lacks them, and each batch is a write on the selling main box.
   const sent: Sent =
@@ -101,6 +96,26 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
       ? "confirmed"
       : sent.state;
   return own === "confirmed" ? othersState : own;
+}
+
+/** Earlier boxes' records; a failure to read them leaves this box's own still to send. */
+async function sendOthersPart(
+  deps: PassDeps,
+  chart: Awaited<ReturnType<typeof readNodeMembership>>,
+  main: ReturnType<typeof mainBoxToAsk>,
+): Promise<ReturnState> {
+  let others: Batch[] | null;
+  try {
+    others = await readOtherBoxesBatches(deps, main.target?.nodeId);
+  } catch (error) {
+    deps.log?.("warn", "return-records.others_failed", { errorCode: codeOf(error) });
+    return "needs-attention";
+  }
+  const sent =
+    others === null || others.length === 0
+      ? null
+      : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
+  return othersPartState(others, sent);
 }
 
 /**
@@ -289,18 +304,20 @@ export function startReturnRecordsDuty(
 ): { state(): ReturnState; passNow(): Promise<ReturnState>; stop(): Promise<void> } {
   const stopping = new AbortController();
   let state: ReturnState = "waiting";
-  // A main box that stays out of reach is logged once, and again only when the cause changes.
-  let lastUnreachable: string | null = null;
+  // A main box that stays out of reach, or earlier boxes' records that cannot be read, is logged
+  // once, and again only when the cause changes.
+  let lastRepeated = new Map<string, string>();
   // Every pass waits for the one before it, so two passes never send batches at once.
   let latest: Promise<unknown> = Promise.resolve();
   const pass = (): Promise<ReturnState> => {
     const next = latest.then(async () => {
       state = "sending";
-      let unreachable: string | null = null;
+      const repeated = new Map<string, string>();
       const log: Logger = (level, event, fields) => {
-        if (event === "return-records.unreachable") {
-          unreachable = JSON.stringify(fields);
-          if (unreachable === lastUnreachable) return;
+        if (event === "return-records.unreachable" || event === "return-records.others_failed") {
+          const cause = JSON.stringify(fields);
+          repeated.set(event, cause);
+          if (lastRepeated.get(event) === cause) return;
         }
         deps.log(level, event, fields);
       };
@@ -314,7 +331,7 @@ export function startReturnRecordsDuty(
         state = "needs-attention";
         deps.log("warn", "return-records.failed", { errorCode: codeOf(error) });
       }
-      lastUnreachable = unreachable;
+      lastRepeated = repeated;
       return state;
     });
     latest = next;

@@ -2216,6 +2216,65 @@ it("a record clash on one earlier box's batch still sends the next, and confirms
   }
 });
 
+it("a failure reading earlier boxes' records still sends its own, logs once, and needs attention", async () => {
+  const lines: { event: string; fields: unknown }[] = [];
+  const app = destination();
+  const state = await runReturnRecordsPass({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: twoParts(() => {
+      throw new AppError("fiscal.return_invalid", { reason: "batch" });
+    }),
+    mainHoldings: () => heard("summary"),
+    fetch: async (url, init) => app.request(String(url), init),
+    log: (_level, event, fields) => lines.push({ event, fields }),
+    stopped: () => false,
+  });
+  expect(state).toBe("needs-attention");
+  expect(received).toEqual(["first", "second"]);
+  expect(await confirmations()).toEqual([
+    expect.objectContaining({
+      detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+    }),
+  ]);
+  expect(lines).toEqual([
+    { event: "return-records.others_failed", fields: { errorCode: "fiscal.return_invalid" } },
+  ]);
+});
+
+it("logs a failure reading earlier boxes' records once across the duty's passes", async () => {
+  const sleep = vi.spyOn(loop, "realSleep").mockResolvedValue(undefined);
+  const app = destination();
+  let failing = 2;
+  const logs: { event: string; fields: unknown }[] = [];
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules: twoParts(() => {
+      if (failing-- > 0) throw new AppError("fiscal.return_invalid", { reason: "batch" });
+      return [];
+    }),
+    mainHoldings: () => heard("summary"),
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: (_level, event, fields) => logs.push({ event, fields }),
+    fetch: async (url, init) => app.request(String(url), init),
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+    expect(failing).toBe(-1);
+    expect(logs).toEqual([
+      { event: "return-records.others_failed", fields: { errorCode: "fiscal.return_invalid" } },
+    ]);
+  } finally {
+    await duty.stop();
+    sleep.mockRestore();
+  }
+});
+
 it("a second-part batch is not recorded as a return batch and moves no handover step", async () => {
   await completionBinding();
   const app = destination();
