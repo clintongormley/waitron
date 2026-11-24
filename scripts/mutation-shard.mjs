@@ -40,6 +40,7 @@ export const HEAVY_FILES = {
     "src/components/wt-data-table.ts": 12,
     "src/components/wt-dialog.ts": 6,
     "src/components/wt-floor-plan-canvas.ts": 2,
+    "src/components/wt-icon.ts": 2,
   },
   "ui-core": {},
   shared: {},
