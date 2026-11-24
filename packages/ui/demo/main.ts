@@ -54,6 +54,7 @@ import "../src/components/wt-powered-by.js";
 import "../src/components/wt-waitron-lockup.js";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "../src/waitron-lockup.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -631,6 +632,7 @@ for (const panel of app.querySelectorAll(".panel")) {
     masterKeyHeldBy: null,
   });
   keyInput.copy = MASTER_KEY_FIELD_WORDS.en;
+  keyInput.maxPdfBytes = MAX_PACK_PDF;
   const report = panel.querySelector("wt-report-dialog")!;
   report.copy = {
     heading: "Report a problem",

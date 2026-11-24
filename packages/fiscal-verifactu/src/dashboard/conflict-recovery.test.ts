@@ -11,6 +11,7 @@ import {
 } from "@waitron/dashboard-kit";
 import type { WtMasterKeyInput } from "@waitron/ui";
 import { encodeMasterKeyCode } from "@waitron/shared";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { ConflictRecovery } from "./conflict-recovery.js";
 import { parseConflictResult, type ConflictRequest } from "../conflict-recovery-contract.js";
@@ -70,6 +71,7 @@ it("opens key-only recovery without a session or disclosing conflicts before key
   expect(native.type).toBe("password");
   expect(native.value).toBe("");
   expect(native.autocomplete).toBe("off");
+  expect(keyField(screen as ConflictRecovery).maxPdfBytes).toBe(MAX_PACK_PDF);
   expect(screen.shadowRoot!.querySelector("[data-conflict]")).toBeNull();
   expect(request).not.toHaveBeenCalled();
 });

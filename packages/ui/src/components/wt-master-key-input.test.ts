@@ -16,6 +16,7 @@ import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-k
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const KEY_NAME = "2026-11-23 · QZJV";
+const LIMIT = 16;
 const EN: MasterKeyInputCopy = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
@@ -51,7 +52,13 @@ async function field(extra: Partial<WtMasterKeyInput> = {}) {
   const el = (await mount("<wt-master-key-input></wt-master-key-input>")) as WtMasterKeyInput;
   const read = vi.fn<(bytes: Uint8Array) => Promise<RecoveryPackReading>>(async () => reading());
   const loader = vi.fn(async () => read);
-  Object.assign(el, { copy: EN, keyName: KEY_NAME, readPack: loader, ...extra });
+  Object.assign(el, {
+    copy: EN,
+    keyName: KEY_NAME,
+    readPack: loader,
+    maxPdfBytes: LIMIT,
+    ...extra,
+  });
   await el.updateComplete;
   const seen: MasterKeyChangeDetail[] = [];
   el.addEventListener("wt-master-key-change", (event) =>
@@ -205,6 +212,40 @@ test("a choice that holds no file reads nothing", async () => {
   const { el, loader } = await field();
   fileControl(el).dispatchEvent(new Event("change", { bubbles: true }));
   await el.updateComplete;
+  expect(loader).not.toHaveBeenCalled();
+});
+
+test("a PDF larger than maxPdfBytes is refused as not a pack without being read", async () => {
+  const { el, seen, loader, read } = await field();
+  await type(el, KEY);
+  const file = new File([new Uint8Array(LIMIT + 1)], "big.pdf");
+  const bytes = vi.spyOn(file, "arrayBuffer");
+  await choose(el, file);
+  await el.pdfRead;
+  expect(message(el)).toBe(EN.notPack);
+  expect(bytes).not.toHaveBeenCalled();
+  expect(loader).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled();
+  expect(seen.at(-1)).toStrictEqual({});
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(EN.notPack);
+});
+
+test("a PDF of exactly maxPdfBytes is read", async () => {
+  const { el, seen, read } = await field();
+  await choose(el, new File([new Uint8Array(LIMIT)], "pack.pdf"));
+  await el.pdfRead;
+  expect(read).toHaveBeenCalledWith(new Uint8Array(LIMIT));
+  expect(seen.at(-1)).toEqual({ masterKey: KEY });
+});
+
+test("until maxPdfBytes is set every PDF is refused as not a pack, unread", async () => {
+  const { el, loader } = await field({ maxPdfBytes: undefined });
+  const file = new File(["%PDF-1.7"], "pack.pdf");
+  const bytes = vi.spyOn(file, "arrayBuffer");
+  await choose(el, file);
+  await el.pdfRead;
+  expect(message(el)).toBe(EN.notPack);
+  expect(bytes).not.toHaveBeenCalled();
   expect(loader).not.toHaveBeenCalled();
 });
 

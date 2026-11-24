@@ -14,6 +14,7 @@ import { SetupRestoreScreen } from "./restore-screen.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import { setLocale } from "../i18n/t.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 
 const preview = REVIEWED_PREVIEW;
 const operation: RecoveryRestoreCredentials["recoveryOperation"] =
@@ -272,11 +273,12 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
 
 it("allocation draws the master-key field labelled Master key with no hint, and sends its printed key", async () => {
   const { entry } = await selected();
-  const key = entry.shadowRoot!.querySelector<LitElement & { keyName?: string }>(
-    "wt-master-key-input",
-  );
+  const key = entry.shadowRoot!.querySelector<
+    LitElement & { keyName?: string; maxPdfBytes?: number }
+  >("wt-master-key-input");
   expect(key, "allocation draws the master-key field").not.toBeNull();
   expect(key!.keyName).toBe(preview.nodeRecoveryKeyName);
+  expect(key!.maxPdfBytes).toBe(MAX_PACK_PDF);
   const field = await keyField(entry);
   expect(field.label).toBe("Master key");
   expect(field.shadowRoot!.querySelector("input")!.placeholder).toBe("");

@@ -17,6 +17,7 @@ import type {
 } from "@waitron/module/src/setup-contract.js";
 import { isMinuteIdentity } from "../hour-identity.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -763,6 +764,7 @@ export class RecoveryHourEntry extends LitElement {
                   .keyName=${context.selection.keyName}
                   .copy=${keyWords}
                   .readPack=${readPack}
+                  .maxPdfBytes=${MAX_PACK_PDF}
                   .wrongKey=${this.wrongKey || this.#refused("wrongMasterKey")}
                   .attempted=${this.attempted}
                   .error=${(this.keyError && !this.wrongKey) || (this.attempted && !this.#secret) ? words.key : this.#refused("nodeRecoverySecret") || this.#refused("wrongMasterKey") ? (this.errorMessage ?? "") : ""}

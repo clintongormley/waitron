@@ -94,6 +94,11 @@ export class WtMasterKeyInput extends LitElement {
   /** The name of the key the field expects: a pack for another key is refused with it. */
   @property({ attribute: false }) keyName?: string;
   @property({ attribute: false }) readPack?: RecoveryPackReaderLoader;
+  /**
+   * The largest PDF the field reads (`@waitron/recovery-pack`'s `MAX_PACK_PDF`); a larger one is
+   * refused as not a pack before it is read. Until it is set every PDF is refused that way.
+   */
+  @property({ attribute: false }) maxPdfBytes?: number;
   /** Until it is set nothing is drawn. */
   @property({ attribute: false }) copy?: MasterKeyInputCopy;
   @property({ type: Boolean, reflect: true }) required = false;
@@ -220,12 +225,15 @@ export class WtMasterKeyInput extends LitElement {
     let problem: Problem | undefined;
     let key: string | undefined;
     try {
-      const read = await this.readPack!();
-      const pack = await read(new Uint8Array(await file.arrayBuffer()));
-      if (pack.masterKey === null) problem = { heldBy: pack.masterKeyHeldBy };
-      else if (this.keyName !== undefined && pack.masterKeyName !== this.keyName)
-        problem = "wrongKey";
-      else if ((key = printed(pack.masterKey)) === undefined) problem = "damaged";
+      if (this.maxPdfBytes === undefined || file.size > this.maxPdfBytes) problem = "notPack";
+      else {
+        const read = await this.readPack!();
+        const pack = await read(new Uint8Array(await file.arrayBuffer()));
+        if (pack.masterKey === null) problem = { heldBy: pack.masterKeyHeldBy };
+        else if (this.keyName !== undefined && pack.masterKeyName !== this.keyName)
+          problem = "wrongKey";
+        else if ((key = printed(pack.masterKey)) === undefined) problem = "damaged";
+      }
     } catch (error) {
       problem = notAPack(error) ? "notPack" : "damaged";
     }

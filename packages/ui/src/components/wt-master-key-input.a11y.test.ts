@@ -33,6 +33,7 @@ async function field(
   el.copy = COPY;
   el.keyName = KEY_NAME;
   el.readPack = async () => read;
+  el.maxPdfBytes = 1024;
   await el.updateComplete;
   return el;
 }

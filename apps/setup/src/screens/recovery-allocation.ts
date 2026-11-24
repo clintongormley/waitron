@@ -14,6 +14,7 @@ import {
   type MasterKeyInputCopy,
 } from "@waitron/ui";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -335,6 +336,7 @@ export class SetupRecoveryAllocation extends LitElement {
         .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
         .copy=${copy}
         .readPack=${readPack}
+        .maxPdfBytes=${MAX_PACK_PDF}
         .wrongKey=${this.#refused("wrongMasterKey")}
         .attempted=${this.attempted}
         .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret") || this.#refusal("wrongMasterKey")}
