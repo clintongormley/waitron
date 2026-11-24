@@ -2617,6 +2617,23 @@ test("a filter on its initial choice counts in the panel badge and can be cleare
   expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
+test("opens a standalone slotted filter when no rows are shown", async () => {
+  const el = await tableS({ rows: [] });
+  const control = document.createElement("button");
+  control.slot = "filters-start";
+  control.textContent = "Show archived";
+  el.append(control);
+  el.requestUpdate();
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger");
+  expect(trigger).not.toBeNull();
+  trigger!.click();
+  await el.updateComplete;
+  expect(control.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(document.activeElement).toBe(control);
+});
+
 test("a control slotted into filters-start shows in the open panel, above the first filter", async () => {
   const el = await tableS({ columns: withStatus });
   const control = document.createElement("button");

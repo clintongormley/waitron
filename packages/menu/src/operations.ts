@@ -71,7 +71,7 @@ import { batches } from "./batches.js";
 import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
-import { archiveProducts } from "./archive.js";
+import { archiveProducts, assertMenuWritable } from "./archive.js";
 import {
   refuseSetMenu,
   requireSetMenu,
@@ -462,6 +462,7 @@ export async function updateMenuItem(
 ): Promise<void> {
   if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
     throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  await assertMenuWritable(tx, menuId);
   await writeMenuItemSettings(tx, menuId, menuItemId, patch);
 }
 
@@ -904,6 +905,7 @@ export async function updateMenuDetails(
   },
   fallbackLanguage?: string,
 ): Promise<void> {
+  await assertMenuWritable(tx, menuId);
   const changesTerms =
     patch.setPrice !== undefined ||
     patch.setVatClass !== undefined ||
@@ -959,7 +961,7 @@ export async function deactivateMenu(
 ): Promise<void> {
   const [row] = await tx
     .update(menus)
-    .set({ active: false, updatedAt: now() })
+    .set({ active: false, isDefault: false, updatedAt: now() })
     .where(and(eq(menus.id, id), eq(menus.active, true)))
     .returning({ name: menus.name });
   if (row !== undefined)
@@ -1273,13 +1275,9 @@ export async function assignMenuToVenue(tx: Transaction, menuId: string): Promis
 }
 
 export async function setVenueDefaultMenu(tx: Transaction, menuId: string): Promise<void> {
-  await assertMenuExists(tx, menuId);
+  await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
   await assignMenuToVenue(tx, menuId);
-}
-
-async function assertMenuExists(tx: Transaction, menuId: string): Promise<void> {
-  if (!(await menuExists(tx, menuId))) throw new AppError("menu.not_found", { menuId });
 }
 
 export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {

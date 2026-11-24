@@ -2208,10 +2208,10 @@ rank. Returned invoices uses it with 50-row SQL pages, matching totals, word-sea
 First received sorting; its saved view is `waitron.returned-invoices.table`.
 
 Put a date range or another screen-owned filter in `filters-start`, and its visible chips in
-`toolbar-bottom`. In server mode, add its active count through `externalFilterCount`; this also
-offers Filters when no column has a filter. Clear all emits `wt-filters-clear` with an empty detail
-object, so you can clear those controls along with the column choices. The toolbar and filter
-panel remain available during loading, errors and empty results. At phone width, opening Filters
+`toolbar-bottom`. Add its active count through `externalFilterCount`. A slotted control offers Filters even when
+no column has a filter or no rows are visible. Clear all emits `wt-filters-clear` with an empty detail
+object, so you can clear those controls along with the column choices. In server mode, the toolbar and filter
+panel also remain available during loading and errors. At phone width, opening Filters
 focuses its first slotted field when present, and Tab stays within the panel, including native date
 fields' own segments.
 
@@ -2249,9 +2249,8 @@ Controls without selection keep their horizontal centering when `rowControlsAlig
 Put a full-width lower toolbar in the
 `toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
 a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
-Filters panel: Products puts its Show archived switch there. The panel is drawn only when some
-column has a `filter`, and the table does not count a `filters-start` control in the Filters badge,
-reset it on Clear all, or remember it under `viewKey`.
+Filters panel. Products and Menus put their Show archived switches there. Supply the badge count
+and handle Clear all in the screen. The table remembers column choices under `viewKey`.
 
 In Select mode, put selection checkboxes and drag grips together in the leading column, before
 the tree arrow and indentation. Leave a blank grip on All products and a category being added;

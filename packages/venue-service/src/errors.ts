@@ -74,6 +74,7 @@ declare module "@waitron/shared" {
     "zone_extension.invalid": { field: "until"; reason: "step" | "not_later" | "clock_skips" };
     "zone_extension.not_allowed": { zoneId: string; reason: "not_closing" | "department_closed" };
     "menu_period.not_found": { periodId: string };
+    "menu_period.archive_replacement": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
     /**
      * New dishes, or stored ones being sent, whose period ended earlier today, sent with no

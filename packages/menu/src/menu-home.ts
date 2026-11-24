@@ -52,9 +52,10 @@ export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, Home
 }
 
 /** The menu's root, its Device Home Page section and both display settings. */
-async function requireMenuHome(tx: Transaction, menuId: string): Promise<HomeRow> {
+async function requireMenuHome(tx: Transaction, menuId: string, writing = false): Promise<HomeRow> {
   const [row] = await tx.select().from(menus).where(eq(menus.id, menuId));
   if (row === undefined) throw new AppError("menu.not_found", { menuId: menuId });
+  if (writing && !row.active) throw new AppError("menu.archived", { menuId });
   return {
     rootSectionId: await requireMenuRoot(tx, menuId),
     homeSectionId: (await menuHome(tx, menuId))!,
@@ -122,7 +123,7 @@ export async function setHomeDisplay(
   device: HomeDevice,
   patch: { columns?: unknown; tiles?: unknown; order?: unknown },
 ): Promise<void> {
-  await requireMenuHome(tx, menuId);
+  await requireMenuHome(tx, menuId, true);
   const field = homeDisplayProblem(device, patch);
   if (field !== null) throw new AppError("menu.home_display_invalid", { device, field });
   // homeDisplayProblem answering null proves each present value is one the device takes.
@@ -143,7 +144,7 @@ export async function addShortcut(
   ref: MemberRef,
   position?: number,
 ): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId);
+  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
   const graph = await loadSectionGraph(tx);
   requirePosition(position);
   const stored = await checkRef(tx, graph, homeSectionId, ref);
@@ -158,7 +159,7 @@ export async function replaceShortcut(
   memberId: string,
   ref: MemberRef,
 ): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId);
+  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
   const graph = await loadSectionGraph(tx);
   const current = heldMember(graph.tiles(homeSectionId), homeSectionId, memberId);
   const stored = await checkRef(tx, graph, homeSectionId, ref, current);
@@ -173,7 +174,7 @@ export async function removeShortcut(
   menuId: string,
   memberId: string,
 ): Promise<void> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId);
+  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
   await deleteMember(
     tx,
     homeSectionId,
@@ -189,7 +190,7 @@ export async function moveShortcut(
   memberId: string,
   to: number,
 ): Promise<SectionMember<TileRef>[]> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId);
+  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
   return moveMemberTo(
     tx,
     homeSectionId,

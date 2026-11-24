@@ -13684,3 +13684,25 @@ it.each(
     });
   },
 );
+
+it("finds an archived menu through Filters and opens its read-only view", async () => {
+  const retired = { id: "menu-lunch", name: "Winter menu", active: false };
+  const el = await mount(api({ listMenus: vi.fn().mockResolvedValue([retired]) }));
+  const row = () => table(el)?.shadowRoot.querySelector('[data-row-key="menu-lunch"]');
+  await vi.waitFor(() => expect(table(el)).toBeTruthy());
+  expect(row()).toBeNull();
+  table(el).shadowRoot.querySelector<HTMLButtonElement>(".filters-trigger")!.click();
+  await el.updateComplete;
+  const show = table(el).querySelector("wt-switch")!;
+  show.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await vi.waitFor(() => expect(text(row())).toContain(t("menus.archived")));
+  expect(row()?.querySelector('[data-test="rename-menu-lunch"]')).toBeNull();
+  expect(row()?.querySelector('[data-test="duplicate-menu-lunch"]')).not.toBeNull();
+  row()?.querySelector<HTMLElement>('[data-test="open-menu-lunch"]')!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot?.querySelector('[data-test="archived-menu"]')).not.toBeNull(),
+  );
+  expect(el.shadowRoot?.querySelector("wt-tabs")).toBeNull();
+});

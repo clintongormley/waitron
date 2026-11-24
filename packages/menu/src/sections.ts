@@ -1,3 +1,4 @@
+import { assertMenuWritable } from "./archive.js";
 import { columnsFromOverrides } from "./include-folder.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { menus, sectionMembers, sections, type Transaction } from "@waitron/db";
@@ -99,6 +100,8 @@ function requireWritableList(graph: SectionGraph, sectionId: string): void {
   const role = graph.role(sectionId);
   if (role === undefined) throw new AppError("menu_section.not_found", { sectionId });
   if (role === "home_layout") throw new AppError("menu_section.wrong_role", { sectionId, role });
+  const menuId = graph.ownerMenu(sectionId)!;
+  if (graph.menu(menuId)?.active === false) throw new AppError("menu.archived", { menuId });
 }
 
 export function writableMember(
@@ -209,12 +212,13 @@ export async function updateSection(
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<SectionDetails> {
   const [row] = await tx
-    .select({ role: sections.role, names: sections.names })
+    .select({ role: sections.role, names: sections.names, ownerMenuId: sections.ownerMenuId })
     .from(sections)
     .where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   if (row.role !== "section")
     throw new AppError("menu_section.wrong_role", { sectionId: id, role: row.role });
+  await assertMenuWritable(tx, row.ownerMenuId);
   const values = await sectionPatchValues(tx, patch, fallbackLanguage, row.names);
   if (Object.keys(values).length > 0)
     await tx.update(sections).set(values).where(eq(sections.id, id));
@@ -235,6 +239,7 @@ export async function deleteSections(tx: Transaction, ids: readonly string[]): P
     const role = graph.role(id);
     if (role === undefined) throw new AppError("menu_section.not_found", { sectionId: id });
     if (role !== "section") throw new AppError("menu_section.wrong_role", { sectionId: id, role });
+    requireWritableList(graph, id);
   }
   const deleted = new Set<string>();
   const collect = (current: string): void => {

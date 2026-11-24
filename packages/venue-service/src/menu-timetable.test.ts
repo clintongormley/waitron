@@ -6,6 +6,7 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   addProductToMenu,
+  addSetMenuDishes,
   addMember,
   requireMenuRoot,
   buildMenuDocument,
@@ -23,7 +24,9 @@ import {
   categories,
   floorZones,
   kitchenStations,
+  kitchenCourses,
   menuPeriods,
+  products,
   routingCellPeriods,
   routingCells,
   specialDayDates,
@@ -39,6 +42,7 @@ import { addDays } from "./hours-rules.js";
 import { CALENDAR_COLOURS } from "./hours-types.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import {
+  archivePeriodMenus,
   readRoutingUses,
   placeOpenPeriod,
   readOpeningHoursModel,
@@ -126,6 +130,94 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 });
 const weekOf = (fill: (weekday: number) => MenuSlot[]): MenuWeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: fill(weekday) }));
+
+describe("archiving a period menu", () => {
+  it("promotes a staff choice and removes the retired menu from other periods", async () => {
+    const v = await venue();
+    const { Breakfast, Lunch, Dinner } = v.menus;
+    const { mornings, supper } = v.periods!;
+    await scoped(async (tx) => {
+      await updateMenuPeriod(tx, mornings, { staffMenuIds: [Lunch, Dinner] });
+      await updateMenuPeriod(tx, supper, { staffMenuIds: [Breakfast] });
+      await archivePeriodMenus(tx, Breakfast, { [mornings]: Lunch });
+      expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, mornings))).toEqual([
+        expect.objectContaining({ name: "Mornings", menuId: Lunch, staffMenuIds: [Dinner] }),
+      ]);
+      expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, supper))).toEqual([
+        expect.objectContaining({ name: "Supper", menuId: Dinner, staffMenuIds: [] }),
+      ]);
+    });
+  });
+
+  it("refuses replacing a starting menu with itself", async () => {
+    const v = await venue();
+    const periodId = v.periods!.mornings;
+    await scoped(async (tx) => {
+      await expect(
+        archivePeriodMenus(tx, v.menus.Breakfast, {
+          [periodId]: v.menus.Breakfast,
+        }),
+      ).rejects.toMatchObject({ code: "menu_period.archive_replacement", params: { periodId } });
+    });
+  });
+
+  it("requires a sellable staff choice if the starting menu is still a draft", async () => {
+    const v = await venue({ unpublished: ["Breakfast"] });
+    const { Lunch } = v.menus;
+    const periodId = v.periods!.mornings;
+    await scoped(async (tx) => {
+      const drink = await createProduct(tx, {
+        name: "Tea",
+        categoryId: null,
+        unitId: null,
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      await addProductToMenu(tx, { menuId: Lunch, productId: drink.id });
+      await publish(tx, Lunch);
+      await updateMenuPeriod(tx, periodId, { staffMenuIds: [Lunch] });
+      await expect(archivePeriodMenus(tx, Lunch, {})).rejects.toMatchObject({
+        code: "menu_period.archive_replacement",
+        params: { periodId },
+      });
+    });
+  });
+
+  it("can preserve service with a replacement that sells only a set menu", async () => {
+    const v = await venue();
+    const { Breakfast, Lunch } = v.menus;
+    const periodId = v.periods!.mornings;
+    await scoped(async (tx) => {
+      const [course] = await tx
+        .insert(kitchenCourses)
+        .values({ name: "Soup course" })
+        .returning({ id: kitchenCourses.id });
+      const [dish] = await tx
+        .insert(products)
+        .values({
+          name: "Soup",
+          unitPrice: 400,
+          vatClass: "general",
+          courseId: course!.id,
+        })
+        .returning({ id: products.id });
+      const set = await createMenu(tx, {
+        name: "Lunch set",
+        kind: "set_menu",
+        setPrice: "8.00",
+        setVatClass: "general",
+      });
+      await addSetMenuDishes(tx, set.id, [{ productId: dish!.id, excludedVariantIds: [] }]);
+      await addMember(tx, await requireMenuRoot(tx, Lunch), { kind: "set_menu", menuId: set.id });
+      await publish(tx, Lunch);
+      await addProductToMenu(tx, { menuId: Breakfast, productId: dish!.id });
+      await publish(tx, Breakfast);
+      await archivePeriodMenus(tx, Breakfast, { [periodId]: Lunch });
+      const [stored] = await tx.select().from(menuPeriods).where(eq(menuPeriods.id, periodId));
+      expect(stored?.menuId).toBe(Lunch);
+    });
+  });
+});
 
 describe("Always fixture periods", () => {
   it("keeps the previous customer menu and staff menus when the fixture selects another default", async () => {

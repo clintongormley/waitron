@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { menus, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { foldName } from "./name-uniqueness.js";
@@ -8,7 +9,10 @@ export async function assertMenuNameFree(
   name: string,
   menuId?: string,
 ): Promise<void> {
-  const rows = await tx.select({ id: menus.id, name: menus.name }).from(menus);
+  const rows = await tx
+    .select({ id: menus.id, name: menus.name })
+    .from(menus)
+    .where(eq(menus.active, true));
   // Existing duplicate names must not prevent edits to the menu's presentation.
   if (menuId !== undefined && rows.some((row) => row.id === menuId && row.name === name)) return;
   if (rows.some((row) => row.id !== menuId && foldName(row.name) === foldName(name)))

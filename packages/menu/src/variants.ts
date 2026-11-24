@@ -1,3 +1,4 @@
+import { assertMenuWritable } from "./archive.js";
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import {
   extraListItems,
@@ -320,10 +321,12 @@ async function offerProduct(
   tx: Transaction,
   menuItemId: string,
   menuId: string | undefined,
+  writing = false,
 ): Promise<string> {
   const offer = await reachableMenuItem(tx, menuItemId, menuId);
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   await refuseSetMenu(tx, offer.menuId);
+  if (writing) await assertMenuWritable(tx, offer.menuId);
   return offer.productId;
 }
 
@@ -397,7 +400,7 @@ export async function setMenuVariants(
   inputs: readonly MenuVariant[],
   menuId?: string,
 ): Promise<MenuVariant[]> {
-  const productId = await offerProduct(tx, menuItemId, menuId);
+  const productId = await offerProduct(tx, menuItemId, menuId, true);
   const ids = new Set((await activeVariants(tx, productId)).map((variant) => variant.id));
   const seen = new Set<string>();
   const rows = [];
@@ -450,7 +453,7 @@ export async function setMenuVariantPrice(
   price: string | null,
   menuId?: string,
 ): Promise<void> {
-  const productId = await offerProduct(tx, menuItemId, menuId);
+  const productId = await offerProduct(tx, menuItemId, menuId, true);
   if (!(await activeVariants(tx, productId)).some(({ id }) => id === variantId))
     throw new AppError("product.variant_not_found", { variantId });
   const value = validatePrice(price, "price");

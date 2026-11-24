@@ -297,6 +297,8 @@ alérgenos y la aptitud dietética vigentes de los productos los gestionas en **
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
+Para retirar una carta, elige **Archivar…** en el menú de su fila y selecciona las sustitutas que te pida la ventana. Usa **Filtros → Mostrar archivados** para consultarla o elige **Copiar…** para crear una carta sin publicar.
+
 Usa **Buscar cartas** en la lista de Cartas para encontrar una carta por su nombre.
 
 Consulta **Carta principal** para ver qué periodos empiezan con esa carta y **Cartas del personal** para ver en cuáles puede seleccionarla el personal. Pulsa el nombre de un periodo para abrir sus ajustes si tienes permiso para editarlo.

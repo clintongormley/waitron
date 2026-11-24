@@ -54,7 +54,9 @@ export class SetMenuCopyDishes extends LitElement {
     this.failed = false;
     try {
       const menus = await (this.api.background ?? this.api).listMenus();
-      this.sources = menus.filter(({ id, kind }) => id !== this.menuId && kind === "set_menu");
+      this.sources = menus.filter(
+        ({ id, kind, active }) => active && id !== this.menuId && kind === "set_menu",
+      );
     } catch {
       this.failed = true;
     }

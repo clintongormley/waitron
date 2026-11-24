@@ -16,16 +16,23 @@ import {
 } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { saveBodyOf } from "../test/save-body.js";
-import { menusFixture, product } from "../test/menus-fixture.js";
+import { menusFixture, product, section } from "../test/menus-fixture.js";
 import {
   archiveProducts,
+  menusDependingOnArchive,
   assertProductWritable,
   assertOffPublishedMenus,
   publishedMenusHolding,
 } from "./archive.js";
-import { addMember, removeMember } from "./sections.js";
+import { addMember, createSectionIn, removeMember } from "./sections.js";
 import { readMenuStructure } from "./menu-structure.js";
-import { insertVersion, previewMenu, publishMenu } from "./menu-publication.js";
+import {
+  insertVersion,
+  patchLiveMenu,
+  previewMenu,
+  publishMenu,
+  readLiveMenu,
+} from "./menu-publication.js";
 import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
 import { eq } from "drizzle-orm";
 import { listProductVariants, setProductVariants } from "./variants.js";
@@ -33,9 +40,16 @@ import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { moveProductItems, deleteProductItems } from "./product-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { offerOf } from "../test/menus-fixture.js";
-import { deactivateMenu, deactivateProduct, updateProduct } from "./operations.js";
+import {
+  createMenu,
+  deactivateMenu,
+  deactivateProduct,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
 
 import { createCategory, setMainReportingCategory } from "./categories.js";
+import { setHomeDisplay } from "./menu-home.js";
 
 const fx = useMenuDb();
 beforeEach(async () => {
@@ -56,6 +70,62 @@ async function queue(menuId: string, activatesAt: Date) {
 }
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
 const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
+
+it("names a parent even after its include has been removed from the working menu", async () => {
+  const f = await menusFixture(fx.db);
+  const member = await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
+  await publish(f.dinner);
+  await app((tx) => removeMember(tx, f.dinnerRoot, member.id));
+  expect(await app((tx) => menusDependingOnArchive(tx, f.lunch, T0))).toEqual([
+    { id: f.dinner, name: "Dinner Menu" },
+  ]);
+});
+
+it("keeps a published include until the parent is republished after archive", async () => {
+  const f = await menusFixture(fx.db);
+  const parent = await app((tx) => createMenu(tx, { name: "Evening" }));
+  const root = (await app((tx) => readMenuStructure(tx, parent.id))).rootSectionId;
+  await app((tx) => addMember(tx, root, section(f.lunchRoot)));
+  const live = await publish(parent.id);
+  await app((tx) => deactivateMenu(tx, f.lunch));
+  const at = new Date(T0.getTime() + 1000);
+  const correction = await app(async (tx) =>
+    patchLiveMenu(
+      tx,
+      parent.id,
+      live.versionId,
+      [
+        {
+          target: { kind: "offer", menuItemId: await offerOf(tx, parent.id, f.soup) },
+          field: "price",
+          value: "8.00",
+        },
+      ],
+      "person-1",
+      { at },
+    ),
+  );
+  const saved = await app((tx) => readLiveMenu(tx, parent.id, at));
+  expect(saved?.versionId).toBe(correction.versionId);
+  expect(saved?.document.includedMenuHashes).toHaveProperty(f.lunch);
+  await publish(parent.id, new Date(at.getTime() + 1000));
+  const replaced = await app((tx) => readLiveMenu(tx, parent.id, later));
+  expect(replaced?.document.includedMenuHashes).not.toHaveProperty(f.lunch);
+});
+
+it("refuses changes to an archived menu's lists, prices and device home", async () => {
+  const f = await menusFixture(fx.db);
+  await app(async (tx) => {
+    const offer = await offerOf(tx, f.lunch, f.soup);
+    await deactivateMenu(tx, f.lunch);
+    for (const write of [
+      () => createSectionIn(tx, f.lunchRoot, { internalName: "Desserts" }),
+      () => updateMenuItem(tx, f.lunch, offer, { grossPrice: "9.00" }),
+      () => setHomeDisplay(tx, f.lunch, "till", { columns: 2 }),
+    ])
+      await expect(write()).rejects.toMatchObject({ code: "menu.archived" });
+  });
+});
 
 describe("publishedMenusHolding", () => {
   it("names the live menu for a dish, its variant and an extras item", async () => {

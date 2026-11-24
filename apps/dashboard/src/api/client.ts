@@ -349,6 +349,7 @@ import type {
   MenuDocument,
   MenuPreview,
   MenuPublicationsAnswer,
+  MenuArchiveImpact,
   MenuStatus,
   ProductChangeField,
   PublishedMenuVersion,
@@ -3693,6 +3694,24 @@ export class DashboardApi {
 
   placeSetMenu(sectionId: string, menuId: string): Promise<SectionMember> {
     return this.addSectionMember(sectionId, { kind: "set_menu", menuId });
+  }
+
+  getMenuArchiveImpact(id: string): Promise<MenuArchiveImpact> {
+    return this.#request<MenuArchiveImpact>(
+      `/management-api/menus/${encodeURIComponent(id)}/archive-impact`,
+      "GET",
+    );
+  }
+
+  archiveMenu(
+    id: string,
+    body: { replacements: Record<string, string>; defaultMenuId?: string },
+  ): Promise<void> {
+    return this.#request<void>(
+      `/management-api/menus/${encodeURIComponent(id)}/archive`,
+      "POST",
+      body,
+    );
   }
 
   duplicateMenu(id: string, name: string): Promise<MenuSummary> {

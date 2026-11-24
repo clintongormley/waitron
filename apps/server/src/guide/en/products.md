@@ -281,6 +281,8 @@ product allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
+To retire a menu, choose **Archive…** from its row menu and select any replacements the window asks for. Use **Filters → Show archived** to view it or choose **Copy…** to make a new unpublished menu.
+
 Use **Search menus** on the Menus list to find a menu by name.
 
 Check **Main menu** to see which periods open on a menu and **Staff menus** to see where staff can select it. Choose a period name to open its settings if you can edit periods.

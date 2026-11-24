@@ -428,6 +428,8 @@ export type {
   MenuVariant,
   MenuPriceVariant,
   MenuPriceRow,
+  MenuArchiveImpact,
+  MenuArchivePeriod,
   AvailableProduct,
   AccessibleMenu,
   OfferedExtraItem,

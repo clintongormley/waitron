@@ -2,8 +2,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import type { DashboardApi, SetMenuDetails } from "../api/client.js";
-import type { SetMenuProblem } from "@waitron/shared";
-import { fill, t } from "../i18n/t.js";
+import { formatMoney, type SetMenuProblem } from "@waitron/shared";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import "./set-menu-terms-form.js";
 import "./set-menu-lines-form.js";
 import type { SetMenuDishesSaved } from "./set-menu-dishes.js";
@@ -28,6 +28,7 @@ export class SetMenuEditor extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property() menuId = "";
+  @property({ type: Boolean }) readOnly = false;
   @state() private details: SetMenuDetails | null = null;
   @state() private failed = false;
   @state() private lineNotices: string[] = [];
@@ -167,6 +168,24 @@ export class SetMenuEditor extends LitElement {
       return this.failed
         ? this.#renderFailure()
         : html`<p role="status">${t("menus.set_menu_loading")}</p>`;
+    if (this.readOnly)
+      return html`<p>${formatMoney(details.price, currentLocale())}</p>
+        <ul>
+          ${details.dishes.map(({ name }) => html`<li>${name}</li>`)}
+        </ul>
+        <h2>${t("menus.set_menu_inclusions")}</h2>
+        <ul>
+          ${details.lines.map(
+            ({ count, courseIds }) =>
+              html`<li>
+                ${count} ·
+                ${details.courses
+                  .filter(({ id }) => courseIds.includes(id))
+                  .map(({ name }) => name)
+                  .join(` ${t("menus.set_menu_or")} `)}
+              </li>`,
+          )}
+        </ul>`;
     return html`
       <h2>${t("menus.set_menu_terms")}</h2>
       ${

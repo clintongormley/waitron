@@ -18,8 +18,19 @@ import {
   routingCells,
   type Transaction,
 } from "@waitron/db";
-import { directIncludedMenus, loadSectionGraph, refuseSetMenu } from "@waitron/menu";
-import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
+import {
+  directIncludedMenus,
+  documentSetMenuOffers,
+  loadSectionGraph,
+  readLiveDocuments,
+  refuseSetMenu,
+} from "@waitron/menu";
+import {
+  AppError,
+  createLabelComparator,
+  type BusinessDayClock,
+  type MenuArchivePeriod,
+} from "@waitron/shared";
 import { starterName, type StarterStaffLanguage } from "@waitron/country-packs";
 
 import { rowKey, visibleRoutingRows } from "./routing.js";
@@ -438,6 +449,77 @@ export async function updateMenuPeriod(
     floorPlanSetId:
       period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
   });
+}
+
+async function menuArchiveChanges(tx: Transaction, menuId: string) {
+  const periods = (await readActivePeriods(tx)).filter(
+    (period) => period.menuId === menuId || period.staffMenuIds.includes(menuId),
+  );
+  if (periods.length === 0) return [];
+  const departmentNames = new Map((await readActiveDepartments(tx)).map((d) => [d.id, d.name]));
+  const fullMenus = await tx
+    .select({ id: menus.id, name: menus.name })
+    .from(menus)
+    .where(and(eq(menus.active, true), eq(menus.kind, "menu")))
+    .orderBy(asc(menus.name), asc(menus.id));
+  const documents = await readLiveDocuments(
+    tx,
+    fullMenus.map((menu) => menu.id),
+  );
+  const sellable = (id: string) => {
+    const document = documents.get(id)?.document;
+    return (
+      document !== undefined &&
+      (Object.keys(document.offers).length > 0 || documentSetMenuOffers(document).length > 0)
+    );
+  };
+  return periods.map((period) => {
+    const starting = period.menuId === menuId;
+    const staffMenuIds = period.staffMenuIds.filter((id) => id !== menuId);
+    const losesLastChoice =
+      sellable(menuId) &&
+      !(starting ? staffMenuIds : [period.menuId, ...staffMenuIds]).some(sellable);
+    const impact: MenuArchivePeriod = {
+      id: period.id,
+      name: period.name,
+      departmentName: departmentNames.get(period.departmentId)!,
+      starting,
+      replacement: starting ? "starting" : losesLastChoice ? "staff" : null,
+      choices: fullMenus.filter(({ id }) => id !== menuId && (!losesLastChoice || sellable(id))),
+    };
+    return { period, staffMenuIds, impact };
+  });
+}
+
+export async function readMenuArchivePeriods(
+  tx: Transaction,
+  menuId: string,
+): Promise<MenuArchivePeriod[]> {
+  return (await menuArchiveChanges(tx, menuId)).map(({ impact }) => impact);
+}
+
+export async function archivePeriodMenus(
+  tx: Transaction,
+  menuId: string,
+  replacements: Readonly<Record<string, string>>,
+): Promise<void> {
+  const changes = await menuArchiveChanges(tx, menuId);
+  for (const periodId of Object.keys(replacements))
+    if (!changes.some(({ impact }) => impact.id === periodId && impact.replacement !== null))
+      throw new AppError("menu_period.archive_replacement", { periodId });
+  for (const { period, staffMenuIds, impact } of changes) {
+    const selected = replacements[period.id];
+    if (impact.replacement !== null && !impact.choices.some((choice) => choice.id === selected))
+      throw new AppError("menu_period.archive_replacement", { periodId: period.id });
+    await updateMenuPeriod(tx, period.id, {
+      menuId: impact.starting ? selected : period.menuId,
+      staffMenuIds: impact.starting
+        ? staffMenuIds.filter((id) => id !== selected)
+        : selected === undefined
+          ? staffMenuIds
+          : [...staffMenuIds, selected],
+    });
+  }
 }
 
 export async function replaceMenuWeek(

@@ -1,3 +1,4 @@
+import type { MenuArchivePeriod } from "@waitron/shared";
 import type {
   KitchenAllergyBlock,
   KitchenNoteChange,
@@ -782,6 +783,12 @@ export type LineContextColumns = Pick<
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  readMenuArchivePeriods(tx: Transaction, menuId: string): Promise<MenuArchivePeriod[]>;
+  archivePeriodMenus(
+    tx: Transaction,
+    menuId: string,
+    replacements: Readonly<Record<string, string>>,
+  ): Promise<void>;
   readServiceDay(tx: Transaction, at: Date): Promise<PreparedServiceDay>;
   /** One entry per zone named; each department's day is read once. */
   dueFloorLayouts(

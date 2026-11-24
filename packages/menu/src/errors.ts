@@ -80,6 +80,8 @@ declare module "@waitron/shared" {
      * bytes. */
     "media.unsupported_type": { detected?: string };
     "menu.not_found": { menuId: string };
+    "menu.archived": { menuId: string };
+    "menu.archive_default": { menuId: string };
     "set_menu.invalid": {
       field:
         | "setPrice"

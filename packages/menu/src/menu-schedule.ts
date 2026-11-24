@@ -1,3 +1,4 @@
+import { assertMenuWritable } from "./archive.js";
 import { and, asc, desc, eq, gt, lte, ne, or } from "drizzle-orm";
 import { menuReleases, menuVersions, now, recordActivity, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -94,6 +95,7 @@ export async function cancelMenuPublication(
   personId: string,
   at: Date = now(),
 ): Promise<void> {
+  await assertMenuWritable(tx, menuId);
   await settleDue(tx, at, [menuId]);
   const [row] = await tx
     .select({ state: menuReleases.state })
@@ -128,6 +130,7 @@ export async function rescheduleMenuPublication(
   options: { at?: Date } = {},
 ): Promise<QueuedEdition> {
   const at = options.at ?? now();
+  await assertMenuWritable(tx, menuId);
   await settleDue(tx, at, [menuId]);
   const [row] = await tx
     .select({

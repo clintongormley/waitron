@@ -49,7 +49,7 @@ export function placementMenus(
     });
   return menus.flatMap((menu, index) => {
     const structure = structures[index];
-    return structure
+    return structure && menu.active
       ? [
           {
             id: menu.id,
