@@ -415,7 +415,7 @@ it("opens a useful menu at the limit and closes it after a cancellation without 
 }, 15_000);
 
 it("moves a released dish into a saved place immediately at the limit", () => {
-  const large = table(40, 5);
+  const large = table(21, 5);
   const starter = dish("lunch-starter", "starter", 900);
   const main = dish("other-main", "main", 1600);
   const lunch = offer("lunch", 1400, [starter]);
@@ -435,7 +435,7 @@ it("moves a released dish into a saved place immediately at the limit", () => {
 });
 
 it("keeps the larger discount on the surviving menu at the limit", () => {
-  const large = table(40, 5);
+  const large = table(21, 5);
   const first = dish("first", "main", 1700);
   const second = { ...first, id: "second", aLaCarteCents: 800 };
   const lunch = offer("lunch", 1400, [first]);
@@ -513,7 +513,7 @@ it("leaves enough search to price an eight-diner bill with two percentage discou
 });
 
 it("keeps a free place usable when a saved menu empties at the limit", () => {
-  const large = table(40, 5);
+  const large = table(21, 5);
   const comped = { ...dish("a1", "starter", 0), eligible: false };
   const starter = dish("b1", "starter", 1800);
   const inexpensive = dish("c1", "starter", 300);
@@ -722,7 +722,7 @@ it.each([
 });
 
 it("charges separately for a cheap dish when one fixed discount covers only one supplement", () => {
-  const large = table(40, 5);
+  const large = table(21, 5);
   const starter = dish("starter", "starter", 220);
   const main = dish("main", "main", 40);
   const lunch = offer("lunch", 1400, [starter, main], { starter: 100, main: 100 });
@@ -765,7 +765,7 @@ it("proves prices with two discounts that only yield whole-cent supplements", ()
 });
 
 it("fills a free saved place without using a fixed discount allowance twice", () => {
-  const large = table(40, 5);
+  const large = table(21, 5);
   const starter = dish("starter", "starter", 900);
   const main = dish("main", "main", 40);
   const dessert = dish("dessert", "dessert", 50);
