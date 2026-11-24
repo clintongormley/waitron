@@ -2549,8 +2549,7 @@ async function itemsPaymentSource(
 
 /** A card bill payment that charged nothing becomes `failed`, releasing its reservation, and the
  * items it was paying for go back to their bill ({@link putItemsBack}). Its callers have read it
- * pending, as {@link completeBillPayment}'s have. `issueSource: false` leaves a source the items
- * stay off unissued, for a caller that may write no invoice now. */
+ * pending, as {@link completeBillPayment}'s have. */
 export async function failBillPayment(
   tx: Transaction,
   deps: TillSaleDeps,
@@ -2558,7 +2557,6 @@ export async function failBillPayment(
   billPaymentId: string,
   failedAt: Date,
   attestation?: Attestation,
-  options: { issueSource?: false } = {},
 ): Promise<PaymentRow> {
   const [payment] = await tx
     .update(billPayments)
@@ -2569,7 +2567,7 @@ export async function failBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
-  await putItemsBack(tx, deps, cfg, payment!, options.issueSource !== false);
+  await putItemsBack(tx, deps, cfg, payment!);
   return payment!;
 }
 
@@ -2586,12 +2584,11 @@ async function putItemsBack(
   deps: TillSaleDeps,
   cfg: TradingContext,
   failed: PaymentRow,
-  issueSource: boolean,
 ) {
   const items = await itemsPaymentSource(tx, failed);
   if (items === null) return;
   const moved = items.alone && (await movedItemsBack(tx, cfg, failed, items.sourceId));
-  if (!moved && issueSource) await issueHeldSource(tx, deps, cfg, failed, items.sourceId);
+  if (!moved) await issueHeldSource(tx, deps, cfg, failed, items.sourceId);
 }
 
 /**
@@ -2864,15 +2861,13 @@ export async function collectBegunReaderPayment(
   const { workingOrderId, req, operator, payment } = begun;
   const slip = { frozen: begun.slip, log: deps.log };
   if (deps.disk?.noted() === true) {
-    // No slip, and no invoice for a source the items stay off, while the full-disk stop refuses
-    // the till's writes (conventions-data.md, "A full disk stops the till's writes"); that source
-    // stays open for a later action on it that issues a paid bill.
+    // A source the items stay off is issued here if its own payments cover it: no later payment or
+    // End meal is taken on a bill with nothing outstanding. If the disk refuses this transaction,
+    // the payment stays pending, and the recovery loop fails it as one no reader was asked to
+    // charge (`settleFromProviderRow`).
     await withIssuanceTransaction(
       deps.db,
-      (tx) =>
-        failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant, undefined, {
-          issueSource: false,
-        }),
+      (tx) => failBillPayment(tx, deps, cfg, payment.id, deps.clock.now().instant),
       deps.log,
     );
     refuseForDiskStop(deps.log, workingOrderId);

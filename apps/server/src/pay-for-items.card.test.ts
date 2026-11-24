@@ -995,7 +995,7 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await statusOf(venue, sourceId)).toBe("settled");
   });
 
-  it("a full disk noted before the card is asked issues no invoice for a source its own payments cover", async () => {
+  it("a full disk noted before the card is asked issues a source its own payments cover, once", async () => {
     const sourceId = await coffeeAndTarta();
     await contribute(sourceId, "3.00");
     const body = (await tartaByReaderBody(sourceId)) as PayForItemsRequest;
@@ -1051,8 +1051,8 @@ describe("A1515 pay for items on the card reader", () => {
     const newBill = await billNaming(sourceId);
     expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "failed" }]);
     expect(await lineTotals(newBill)).toEqual(["18.00"]);
-    expect(await invoiceCount(sourceId)).toBe(0);
-    expect(await statusOf(venue, sourceId)).toBe("open");
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(await statusOf(venue, sourceId)).toBe("settled");
   });
 
   it("charges the reader the request names when it names one", async () => {
