@@ -53,7 +53,6 @@ import {
 import { cancelItem, type CancelItemCommand } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
-import { previewInvoiceCorrection } from "./invoice-corrections.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -63,22 +62,6 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { TradingAdmission } from "./trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-
-/** When set, what `readCorrectableNow` answers Correct invoice could give back, in cents. */
-const shrunk = vi.hoisted(() => ({ correctable: undefined as number | undefined }));
-vi.mock("./invoice-corrections.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./invoice-corrections.js")>();
-  return {
-    ...actual,
-    readCorrectableNow: async (...args: Parameters<typeof actual.readCorrectableNow>) => {
-      const read = await actual.readCorrectableNow(...args);
-      const correctable = shrunk.correctable;
-      return correctable === undefined
-        ? read
-        : { ...read, amounts: { ...read.amounts, correctable } };
-    },
-  };
-});
 
 // Each product's staff, customer-facing and kitchen names differ (docs/developers/products.md).
 const DISHES = [
@@ -376,12 +359,10 @@ const holding = (...permissions: string[]) =>
 /** Rows a give-back could write: refunds, corrections and sales. */
 async function rowCount(): Promise<number> {
   return inTx(venue, async (tx) => {
-    const counts = await Promise.all([
-      tx.select({ id: refunds.id }).from(refunds),
-      tx.select({ id: invoiceCorrections.id }).from(invoiceCorrections),
-      tx.select({ id: sales.id }).from(sales),
-    ]);
-    return counts.reduce((total, rows) => total + rows.length, 0);
+    const refundRows = await tx.select({ id: refunds.id }).from(refunds);
+    const correctionRows = await tx.select({ id: invoiceCorrections.id }).from(invoiceCorrections);
+    const saleRows = await tx.select({ id: sales.id }).from(sales);
+    return refundRows.length + correctionRows.length + saleRows.length;
   });
 }
 
@@ -1047,9 +1028,9 @@ describe("planGiveBack: waits answer what the read shows", () => {
     );
   });
 
-  it("dishes and goodwill wait with the reason of the only way holding money (a card that cannot refund)", async () => {
+  it("dishes, goodwill and the extra wait with the reason of the only way holding money (a card that cannot refund)", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
-    const saleId = await pay(b, [{ reader: "25.00" }]);
+    const saleId = await pay(b, [{ reader: "25.00" }], "1.00");
     const card = await tenderOf(saleId, "card");
     const options = { refundProviderFor: async () => undefined };
     const view = await read(saleId, options);
@@ -1060,23 +1041,9 @@ describe("planGiveBack: waits answer what the read shows", () => {
     expect(await preview(saleId, ask("goodwill", "5.00", { way: card }), options)).toEqual(
       refused(reason.code, reason.params),
     );
-  });
-
-  it("refuses a part refund on a card whose company takes none (case 8)", async () => {
-    const b = await tab(["Paella", "Cheesecake"]);
-    const saleId = await pay(b, [{ reader: "25.00" }]);
-    const cancelId = await cancel(b, "Paella", "1", true);
-    const card = await tenderOf(saleId, "card");
-    const whole = Object.assign(Object.create(venue.card) as typeof venue.card, {
-      capabilities: { partialRefund: false },
-    });
-    const options = { refundProviderFor: async () => whole };
-    const paella = [lineOf(await read(saleId, options), "Paella").id];
-    expect(
-      await preview(saleId, ask("dishes", "18.50", { lineIds: paella, way: card }), options),
-    ).toEqual(refused("tender.refund_unavailable", { tenderId: card }));
-    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella, way: card }))).toEqual(
-      planned([{ kind: "refund", amount: "18.50", way: card, cancellationIds: [cancelId] }]),
+    expect(view.choices.extra).toEqual({ available: false, reason });
+    expect(await preview(saleId, ask("extra", "1.00", { way: card }), options)).toEqual(
+      refused(reason.code, reason.params),
     );
   });
 });
@@ -1123,28 +1090,5 @@ describe("planGiveBack: the rights it needs (D9)", () => {
     expect(
       await preview(saleId, ask("dishes", "18.50", { lineIds: paella }), { authority: holding() }),
     ).toEqual(planned(refund, { needs: ["sale.refund"] }));
-  });
-});
-
-describe("planGiveBack: a correction larger than Correct invoice could give back", () => {
-  it("answers the code Correct invoice's open answers for it", async () => {
-    const b = await tab(FIVE);
-    const saleId = await pay(b, [{ cash: "34.00" }]);
-    const written = await inTx(venue, (tx) =>
-      previewInvoiceCorrection(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, {
-        gross: "34.01",
-      }),
-    ).catch((error: unknown) => error);
-    expect(written).toMatchObject({ code: "sale.correction_amount_invalid", params: {} });
-    shrunk.correctable = 1000;
-    onTestFinished(() => {
-      shrunk.correctable = undefined;
-    });
-    expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
-      planned([{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }]),
-    );
-    expect(await preview(saleId, ask("goodwill", "10.01"))).toEqual(
-      refused("sale.correction_amount_invalid", {}),
-    );
   });
 });

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { floorZones, invoiceCorrections, refunds, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
@@ -78,12 +78,10 @@ const preview = (saleId: string, body: Record<string, unknown>, cookie = venue()
 /** Rows a give-back could write: refunds, corrections and sales. */
 async function rowCount(): Promise<number> {
   return inTx(venue(), async (tx) => {
-    const counts = await Promise.all([
-      tx.select({ id: refunds.id }).from(refunds),
-      tx.select({ id: invoiceCorrections.id }).from(invoiceCorrections),
-      tx.select({ id: sales.id }).from(sales),
-    ]);
-    return counts.reduce((total, rows) => total + rows.length, 0);
+    const refundRows = await tx.select({ id: refunds.id }).from(refunds);
+    const correctionRows = await tx.select({ id: invoiceCorrections.id }).from(invoiceCorrections);
+    const saleRows = await tx.select({ id: sales.id }).from(sales);
+    return refundRows.length + correctionRows.length + saleRows.length;
   });
 }
 
@@ -160,13 +158,30 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
 });
 
 describe("POST …/give-back/preview on a part payment's ticket", () => {
-  it("corrects goodwill before the table's receipt exists, and refuses it once that receipt took the payment off with money left there", async () => {
+  it("corrects goodwill before the table's receipt exists, waits while the records need checking, and refuses it once that receipt took the payment off with money left there", async () => {
     const billId = await seated("Tasting menu");
     const advanceId = await advance(billId, "30.00");
     expect(await preview(advanceId, { purpose: "goodwill", amount: "10.00" })).toMatchObject({
       status: 200,
       json: { parts: [{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }] },
     });
+    const unsound = vi.spyOn(venue().backend, "checkIntegrity").mockResolvedValue({
+      ok: false,
+      checked: 1,
+      issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+    } as Awaited<ReturnType<ReturnType<typeof venue>["backend"]["checkIntegrity"]>>);
+    onTestFinished(() => unsound.mockRestore());
+    const unchecked = ((await read(advanceId)).json as unknown as GiveBackView).choices.goodwill
+      .reason!;
+    expect(unchecked).toMatchObject({
+      code: "tender.refund_of_advance",
+      params: { saleId: advanceId },
+    });
+    expect(await preview(advanceId, { purpose: "goodwill", amount: "10.00" })).toEqual({
+      status: 409,
+      json: unchecked,
+    });
+    unsound.mockRestore();
     await payRest(billId, "90.00");
     const finalSaleId = await restId(billId);
     const view = (await read(advanceId)).json as unknown as GiveBackView;

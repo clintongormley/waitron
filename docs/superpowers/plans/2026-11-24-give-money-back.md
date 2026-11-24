@@ -393,7 +393,7 @@ tests. The till stops calling `…/corrections` and the plain form of `…/refun
    route refuses with that code. Steps 1–3 never reach `correctableNow` (case 1's probe).
 7. **More than one payment holds (D10):** steps 1–3 come from the chosen way only (cash: every cash
    payment, oldest first, as `giveCorrectionCash` takes it, `invoice-correction-cash.ts:50-56`); if
-   they need more, the preview refuses with a field error naming what that way holds. The correction
+   they need more, the preview refuses on the amount field; the till shows what that way holds from the read's `ways`. The correction
    is opened for the whole rest; its leg gives what the chosen way holds; what is left stays on the
    open correction (`leftUnderWay`), and the window moves to the under-way view with a step for each
    other payment. So a €45 give-back over €30 cash and €17 card is still **one** corrective invoice,

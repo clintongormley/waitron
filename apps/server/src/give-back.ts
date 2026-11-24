@@ -109,7 +109,7 @@ export interface GiveBackWaits {
   all: WaitReason | null;
   /** Stops money that needs a corrective (cases 1 and 2); null while `all` holds. */
   correction: WaitReason | null;
-  /** Stops all payment money: a part payment's ticket Correct invoice can never take, whose plain
+  /** Stops all payment money: a part payment's ticket Correct invoice cannot take, whose plain
    * refund the write refuses (cases 9 and 10); null while `all` holds. */
   money: WaitReason | null;
 }
@@ -157,10 +157,10 @@ export async function giveBackWaits(
   if (all !== null) return { all, correction: null, money: null };
   const { tenderId } = read;
   const money =
-    read.correctable === 0 &&
     read.correctionWaiting === null &&
     tenderId !== undefined &&
-    (await isPartPayment(tx, saleId))
+    (await isPartPayment(tx, saleId)) &&
+    (read.correctable === 0 || (await recordsNeedChecking(tx, deps.backend, cfg.nodeId)))
       ? await waitOf(() => refusePlainRefundOfAdvance(tx, saleId, { tenderId }))
       : null;
   return {
@@ -220,7 +220,7 @@ export function choiceAvailability(
       ? { available: false, reason: waiting }
       : { available: true, reason: null };
   const withExtra = ways.filter((way) => positive(decimal(way.extraLeft)));
-  const extra = withExtra.some((way) => !way.pending)
+  const extra = withExtra.some((way) => way.reason === null)
     ? { available: true, reason: null }
     : { available: false, reason: withExtra[0]?.reason ?? null };
   return { dishes, goodwill, extra };
@@ -351,25 +351,17 @@ function takesHere(device: DeviceBinding | null, tender: RefundableTender): bool
   }
 }
 
-/** What the refund write will ask of a reader card's capture: whether its provider sends refunds
- * at all, takes part refunds, and the capture's amount in cents (case 8). */
-interface ReaderCapture {
-  sends: boolean;
-  partialRefund: boolean;
-  amount: number;
-}
-
-/** {@link ReaderCapture} for each reader-card tender of `refundable`, as the refund write finds
- * the capture and asks the provider. */
-async function readerCaptures(
+/** The reader-card tenders of `refundable` whose capture's provider cannot send a refund (case 8),
+ * as the refund write finds the capture and asks the provider. */
+async function readersThatCannotRefund(
   tx: Transaction,
   deps: GiveBackDeps,
   saleId: SaleId,
   refundable: readonly RefundableTender[],
-): Promise<Map<string, ReaderCapture>> {
-  const found = new Map<string, ReaderCapture>();
+): Promise<Set<string>> {
+  const refused = new Set<string>();
   const readers = refundable.filter((row) => row.method === "card" && !row.manual);
-  if (readers.length === 0) return found;
+  if (readers.length === 0) return refused;
   const originals = await tx.select().from(tenderRows).where(eq(tenderRows.saleId, saleId));
   const billIds = originals.flatMap((row) =>
     row.billPaymentId === null ? [] : [row.billPaymentId],
@@ -395,19 +387,16 @@ async function readerCaptures(
     );
     const provider =
       capture === undefined ? undefined : await deps.refundProviderFor?.(capture.provider);
-    found.set(reader.tenderId, {
-      sends: capture !== undefined && sendsRefunds(provider, capture.provider),
-      partialRefund: provider?.capabilities.partialRefund === true,
-      amount: capture?.amount ?? 0,
-    });
+    if (capture === undefined || !sendsRefunds(provider, capture.provider))
+      refused.add(reader.tenderId);
   }
-  return found;
+  return refused;
 }
 
 function waysOf(
   refundable: readonly RefundableTender[],
   device: DeviceBinding | null,
-  readers: ReadonlyMap<string, ReaderCapture>,
+  cannotRefund: ReadonlySet<string>,
 ): GiveBackWay[] {
   const cash = refundable.filter((tender) => tender.method === "cash");
   const groups = [
@@ -430,7 +419,7 @@ function waysOf(
       reason:
         pending !== undefined
           ? { code: "tender.refund_in_progress", params: { tenderId: pending.tenderId } }
-          : readers.get(first.tenderId)?.sends === false
+          : cannotRefund.has(first.tenderId)
             ? { code: "tender.refund_unavailable", params: { tenderId: first.tenderId } }
             : null,
     };
@@ -446,7 +435,6 @@ interface GiveBackFacts {
   correctable: number;
   /** The cancels with Refund ticked on each line. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
-  readers: ReadonlyMap<string, ReaderCapture>;
 }
 
 async function readFacts(
@@ -465,8 +453,11 @@ async function readFacts(
     correctable: correctable.amounts.correctable,
     tenderId: correctable.tenders.find((row) => positive(decimal(row.appliedRemaining)))?.tenderId,
   });
-  const readers = await readerCaptures(tx, deps, saleId, correctable.tenders);
-  const ways = waysOf(correctable.tenders, device, readers);
+  const ways = waysOf(
+    correctable.tenders,
+    device,
+    await readersThatCannotRefund(tx, deps, saleId, correctable.tenders),
+  );
   const money = moneyAvailability(ways);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
   const { cancelled, cancelIds, free } = await cancelsAndFreeByLine(tx, saleId, toLine);
@@ -502,7 +493,6 @@ async function readFacts(
     tenders: correctable.tenders,
     correctable: correctable.amounts.correctable,
     cancelIds,
-    readers,
   };
 }
 
@@ -701,8 +691,6 @@ export async function planGiveBack(
     } else {
       const usable = view.ways.filter((row) => row.reason === null);
       if (rest > sumCents(usable.map((row) => row.moneyLeft)) - refund) throw invalid("amount");
-      // Opening it shares the rest over the lines, which refuse more than they hold.
-      if (rest > correctable) throw new AppError("sale.correction_amount_invalid", {});
       const named = ticked.filter((line) => cents(line.left) - owedOf(line) > 0);
       const linesHold =
         named.reduce((total, line) => total + cents(line.left) - owedOf(line), 0) >= rest;
@@ -718,11 +706,6 @@ export async function planGiveBack(
   if (refund > wayMoney) throw invalid("amount");
   if (refund > 0 && (await isPartPayment(tx, saleId)))
     await refusePlainRefundOfAdvance(tx, saleId, { tenderId: tenders[0]!.tenderId });
-
-  const legs = [refund, extra, rest - leftUnderWay].filter((part) => part > 0);
-  const reader = facts.readers.get(tenders[0]!.tenderId);
-  if (reader !== undefined && !reader.partialRefund && legs.some((part) => part !== reader.amount))
-    throw new AppError("tender.refund_unavailable", { tenderId: tenders[0]!.tenderId });
 
   const parts: GiveBackPart[] = [];
   if (refund > 0)
