@@ -2460,6 +2460,24 @@ export const en = {
   "servers.abandon_explanation":
     "Choose this only if the old main box will not be switched on again with its data, for example because it has been wiped. The last handover stops waiting for its invoice records and working hours. Any it recorded after the copy this main box started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
   "servers.abandon_confirm": "Stop waiting for its invoice records and working hours",
+  "servers.self_reset": "Reset this box",
+  "servers.self_reset_loss":
+    "This erases the venue’s data, local backups and Waitron Cloud connection.",
+  "servers.self_reset_keeps":
+    "The box keeps its certificate and any captured Demo email. It restarts and opens Setup.",
+  "servers.self_reset_export": "Export your configuration first from",
+  "servers.self_reset_word": "reset",
+  "servers.self_reset_confirm": "Type “{word}” to confirm",
+  "servers.self_reset_sign_in": "Sign in again if asked to authorise the reset.",
+  "servers.self_reset_environment": "You can reset a Demo or Preparation box here.",
+  "servers.self_reset_local": "Open the Servers page from this box’s own address to reset it.",
+  "servers.self_reset_joined": "This box joined another box. You can reset it from its terminal.",
+  "servers.self_reset_other_boxes": "Remove the other boxes from this venue first.",
+  "servers.self_reset_pending": "A reset is already in progress. Wait for Setup to open.",
+  "servers.self_reset_wait": "The box is restarting. Setup will open when it is ready.",
+  "servers.self_reset_open": "Open Setup",
+  "servers.self_reset_timeout":
+    "The box is taking longer than expected. Open Setup to check if it is ready.",
   "servers.reset_spare": "Wipe and remove",
   "servers.reset_asked":
     "Wipe asked. The old main box wipes itself and leaves the venue the next time it is on and can reach this box; you can then re-add it as a spare. If it was already wiped by hand, choose Remove from venue.",
@@ -7332,6 +7350,30 @@ export const es: Record<StringKey, string> = {
   "servers.abandon_explanation":
     "Elige esto solo si el servidor principal anterior no se va a volver a encender con sus datos, por ejemplo porque se ha borrado. El último traspaso deja de esperar sus registros de facturación y horas trabajadas. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
   "servers.abandon_confirm": "Dejar de esperar sus registros de facturación y horas trabajadas",
+  "servers.self_reset": "Restablecer este servidor",
+  "servers.self_reset_loss":
+    "Se borrarán los datos del local, las copias de seguridad locales y la conexión con Waitron Cloud.",
+  "servers.self_reset_keeps":
+    "Se conservarán el certificado del servidor y los correos capturados en modo Demostración. El servidor se reiniciará y abrirá la configuración inicial.",
+  "servers.self_reset_export": "Exporta la configuración primero desde",
+  "servers.self_reset_word": "restablecer",
+  "servers.self_reset_confirm": "Escribe «{word}» para confirmar",
+  "servers.self_reset_sign_in":
+    "Si se te pide, vuelve a iniciar sesión para autorizar el restablecimiento.",
+  "servers.self_reset_environment":
+    "Aquí puedes restablecer un servidor en modo Demostración o Preparación.",
+  "servers.self_reset_local":
+    "Abre Servidores desde la dirección de este servidor para restablecerlo.",
+  "servers.self_reset_joined":
+    "Este servidor se unió a otro. Puedes restablecerlo desde su terminal.",
+  "servers.self_reset_other_boxes": "Retira primero los demás servidores de este local.",
+  "servers.self_reset_pending":
+    "Ya hay un restablecimiento en curso. Espera a que se abra la configuración inicial.",
+  "servers.self_reset_wait":
+    "El servidor se está reiniciando. La configuración inicial se abrirá cuando esté lista.",
+  "servers.self_reset_open": "Abrir la configuración inicial",
+  "servers.self_reset_timeout":
+    "El servidor tarda más de lo previsto. Abre la configuración inicial para comprobar si ya está lista.",
   "servers.reset_spare": "Borrar y retirar",
   "servers.reset_asked":
     "Borrado solicitado. El servidor principal anterior se borrará y saldrá del local la próxima vez que esté encendido y pueda conectar con este servidor; después puedes volver a añadirlo como servidor de reserva. Si ya se borró a mano, elige Retirar del local.",

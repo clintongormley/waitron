@@ -358,6 +358,8 @@ describe("a management change in the running server", () => {
         );
         without[port] = await ask(headers);
       }
+      const reset = await fetch(url("/management-api/servers/reset-this-box"), { method: "POST" });
+      expect(await answerOf(reset)).toMatchObject({ status: 404 });
       expect(withCookie).toEqual(without);
       for (const port of ports) {
         expect(withCookie[port]).not.toEqual({ status: 403, body: REFUSED });

@@ -13,6 +13,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "../widgets/switch-label.js";
+import { resetThisBoxRefusal } from "./reset-this-box-dialog.js";
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -182,6 +183,13 @@ export class ServersScreen extends LitElement {
       wt-data-table::part(server-no-address) {
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(self-reset-reason) {
+        max-width: 24ch;
+        padding-inline: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        white-space: normal;
+      }
       wt-data-table::part(server-self) {
         display: inline-block;
         padding: 0 var(--wt-space-2);
@@ -283,6 +291,10 @@ export class ServersScreen extends LitElement {
   ];
 
   @property({ type: Boolean }) canPromote = false;
+  @property({ type: Boolean }) canOpenBackups = false;
+  @property({ attribute: false }) onboardingIntent?: "demo" | "prepare" | "live";
+  @state() private resetThisBox?: ServerListing["resetThisBox"];
+  @state() private resetOpener: HTMLElement | null = null;
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -343,6 +355,10 @@ export class ServersScreen extends LitElement {
   @state() private handoverProfileFailed = false;
   @state() private handoverError = "";
   @state() private handoverBusy = false;
+  get resetAccepted(): boolean {
+    return this.renderRoot.querySelector("dashboard-reset-this-box-dialog")?.resetAccepted ?? false;
+  }
+
   #operationId = "";
   #handoverSent = false;
   /** While this screen is starting a handover: the box refuses other requests before it answers,
@@ -391,6 +407,7 @@ export class ServersScreen extends LitElement {
     if (read <= this.#newestApplied) return;
     this.#newestApplied = read;
     this.servers = inStandingOrder(listing.nodes);
+    this.resetThisBox = listing.resetThisBox;
     this.spare = listing.spare ?? null;
     this.joinRequests = listing.joinRequests ?? [];
     this.loadErrorKey = null;
@@ -1035,6 +1052,30 @@ export class ServersScreen extends LitElement {
     return this.servers.some((row) => row.isSelf && row.standing === "serving-primary");
   }
 
+  #selfResetAction(row: ServerRow) {
+    const status = this.resetThisBox;
+    if (
+      !row.isSelf ||
+      !this.canPromote ||
+      !status ||
+      (this.onboardingIntent !== "demo" && this.onboardingIntent !== "prepare")
+    )
+      return nothing;
+    const available = status === "available";
+    return html`<wt-button
+        icon="menu-delete"
+        variant="danger"
+        data-test="reset-this-box"
+        ?disabled=${!available}
+        @click=${(event: Event) => {
+          const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+          this.resetOpener = menu?.shadowRoot?.querySelector("button") ?? null;
+        }}
+        >${t("servers.self_reset")}</wt-button
+      >
+      ${available ? nothing : html`<small part="self-reset-reason">${resetThisBoxRefusal(status)}</small>`}`;
+  }
+
   #columns(): DataTableColumn<ServerRow>[] {
     return [
       {
@@ -1151,10 +1192,11 @@ export class ServersScreen extends LitElement {
               @click=${(event: Event) => this.#open(action, row, event)}
               >${t(ACTION_KEYS[action].verb)}</wt-button
             >`;
-          return actions.length === 0 && !handover && !switchLabel
+          const selfReset = this.#selfResetAction(row);
+          return actions.length === 0 && !handover && !switchLabel && selfReset === nothing
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#address(row)}`}
-                >${handover ? html`<wt-button icon="menu-move" data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button icon="menu-move" data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${ordinary.map(item)}${rowActionTail(handover || switchLabel || ordinary.length > 0, tail.map(item))}</wt-row-actions
+                >${handover ? html`<wt-button icon="menu-move" data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${switchLabel ? html`<wt-button icon="menu-move" data-test=${`switch-label-${row.nodeId}`} @click=${(event: Event) => this.#openSwitchLabel(row, event)}>${t("servers.switch_label")}</wt-button>` : nothing}${ordinary.map(item)}${rowActionTail(handover || switchLabel || ordinary.length > 0, [...tail.map(item), selfReset])}</wt-row-actions
               >`;
         },
       },
@@ -1356,6 +1398,18 @@ export class ServersScreen extends LitElement {
       ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
       ${this.#renderDialog("abandon")} ${this.#renderDialog("reset")} ${this.#renderHandover()}
       ${this.#renderJoinDialog()}
+      ${
+        this.resetOpener === null
+          ? nothing
+          : html`<dashboard-reset-this-box-dialog
+              .api=${this.api}
+              .opener=${this.resetOpener}
+              .canExportConfiguration=${this.onboardingIntent === "prepare" && this.canOpenBackups}
+              @wt-close=${() => {
+                this.resetOpener = null;
+              }}
+            ></dashboard-reset-this-box-dialog>`
+      }
       ${
         this.switchLabel === null
           ? nothing

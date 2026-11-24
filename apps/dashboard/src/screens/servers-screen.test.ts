@@ -166,6 +166,35 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
+describe("resetting this box", () => {
+  it.each([
+    ["demo", true, "available", false],
+    ["prepare", true, "available", false],
+    ["live", true, "available", null],
+    ["demo", false, "available", null],
+    ["demo", true, undefined, null],
+    ["demo", true, "remove_other_boxes", true],
+    ["prepare", true, "joined_another_box", true],
+    ["prepare", true, "local_address_required", true],
+  ] as const)(
+    "shows the correct row action in %s with Manage boxes %s and status %s",
+    async (onboardingIntent, canPromote, resetThisBox, disabled) => {
+      const api = stubApi({ listServers: async () => ({ ...listing, resetThisBox }) });
+      const { el } = await mountWidget<ServersScreen>("dashboard-servers-screen", {
+        api,
+        canPromote,
+        onboardingIntent,
+      });
+      await flush(el);
+      const action = rowMenu(el, SELF)?.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "wt-button[data-test=reset-this-box]",
+      );
+      expect(action?.disabled ?? null).toBe(disabled);
+      expect(rowMenu(el, STANDBY)?.querySelector("[data-test=reset-this-box]")).toBeNull();
+    },
+  );
+});
+
 describe("servers screen list", () => {
   it.each([
     ["en-GB", "Main box", "Spare box"],

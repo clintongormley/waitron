@@ -75,6 +75,14 @@ each start, and you can save your bucket or add another spare. To use that machi
 it from a terminal and add it as a new spare. The old main box this one took over from is wiped
 from its row ([read more](servers.md#old-box-returns)).
 
+## Reset a Demo or Preparation box {#reset-this-box}
+
+Open the **Servers** page at the box’s own address and choose **Reset this box** from the menu on the **This box** row. You need **Manage boxes**. If the menu asks you to remove another box first, follow [Remove a spare box](servers.md#remove-a-spare).
+
+On a Preparation box, download a [configuration export](backups.md#configuration-export) first if you want to reuse your setup. Reset erases the venue’s data, local backups and the Waitron Cloud connection. Keep the export somewhere you can reach after the reset.
+
+Type the word shown, choose **Reset this box** and sign in again if asked. The box keeps its certificate and captured Demo email. Wait for Setup to open, then choose how you want to set up the box.
+
 ## Start here when the main box has failed {#emergency}
 
 Use a spare that has finished joining this venue. Switch off the old main box and keep it off,

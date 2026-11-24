@@ -2047,8 +2047,16 @@ export interface ServerRow {
   recoveredRecordsBackup: "backed-up" | "awaiting-backup" | "no-backups" | null;
 }
 
+export type SelfResetRefusal =
+  | "environment"
+  | "local_address_required"
+  | "joined_another_box"
+  | "remove_other_boxes"
+  | "reset_pending";
+
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
 export interface ServerListing {
+  resetThisBox?: "available" | Exclude<SelfResetRefusal, "environment">;
   spare?: SpareFollowView | null;
   term: number | null;
   nodes: ServerRow[];
@@ -5462,6 +5470,15 @@ export class DashboardApi {
     return listing.spare === undefined
       ? listing
       : { ...listing, spare: spareFollowView(listing.spare) };
+  }
+
+  resetThisBox(signal: AbortSignal): Promise<{ setupUrl: string }> {
+    return this.#request(
+      "/management-api/servers/reset-this-box",
+      "POST",
+      { confirmation: "reset" },
+      { signal },
+    );
   }
 
   /** `removed` is false when the machine was already removed and nothing was written. */

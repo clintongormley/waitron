@@ -209,10 +209,15 @@ export function resolveConfigDir(raw: string | undefined, fallback: string): str
   return isUnset(raw) ? fallback : resolve(raw);
 }
 
-/** The mounted local backups folder a replaced box's reset empties, absolute; unset or `""` names none. */
+/** Empty and unset both mean there is no mounted local backups folder to empty. */
 export function localBackupsDir(env: Env): string | null {
   const raw = readVariable(env, "WAITRON_LOCAL_BACKUPS_DIR");
   return isUnset(raw) ? null : resolve(raw);
+}
+
+export function readTunnelControlDir(env: Env): string | undefined {
+  const raw = readVariable(env, "WAITRON_TUNNEL_CONTROL_DIR");
+  return isUnset(raw) ? undefined : resolve(raw);
 }
 
 /**
@@ -455,7 +460,7 @@ export function loadConfig(
   const staffSocket = readVariable(env, "WAITRON_STAFF_SOCKET");
   const staffHost = readVariable(env, "WAITRON_STAFF_HOST");
   const versitygwBin = readVariable(env, "WAITRON_VERSITYGW_BIN");
-  const tunnelControlDir = readVariable(env, "WAITRON_TUNNEL_CONTROL_DIR");
+  const tunnelControlDir = readTunnelControlDir(env);
   const tillAppDir = readVariable(env, "WAITRON_TILL_APP_DIR");
   const dashboardAppDir = readVariable(env, "WAITRON_DASHBOARD_APP_DIR");
   const setupAppDir = readVariable(env, "WAITRON_SETUP_APP_DIR");
@@ -486,7 +491,7 @@ export function loadConfig(
     litestreamBin: resolveLitestreamBin(env),
     versitygwBin: isUnset(versitygwBin) ? "versitygw" : versitygwBin,
     stateDir: resolvedStateDir,
-    ...(isUnset(tunnelControlDir) ? {} : { tunnelControlDir: resolve(tunnelControlDir) }),
+    ...(tunnelControlDir === undefined ? {} : { tunnelControlDir }),
     venueDir,
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(readVariable(env, "WAITRON_BOX_ADDRESSES")),

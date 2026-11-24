@@ -1886,6 +1886,8 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null, next: ScreenId | null = null): void {
+    // Setup refuses the old session while the accepted reset is still opening it.
+    if (this.renderRoot.querySelector("dashboard-servers-screen")?.resetAccepted) return;
     this.sessionEpoch.advance();
     this.#suspendIdentity();
     this.#permissionContinuation.reset();
@@ -3706,6 +3708,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-servers-screen
           .api=${this.api}
           .canPromote=${this.#sessionPermissions.includes("node.manage")}
+          .canOpenBackups=${this.#canOpenScreen("backup")}
+          .onboardingIntent=${this.onboardingIntent}
           @handover-open=${(event: CustomEvent<{ url: string }>) => {
             this.#leaving = true;
             window.location.href = event.detail.url;

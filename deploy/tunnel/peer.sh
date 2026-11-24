@@ -5,15 +5,21 @@ control=${1:-/control}
 keys=${2:-/keys}
 mkdir -p "$control" "$keys"
 chmod 700 "$keys"
-if [ ! -f "$keys/private-key" ]; then
+write_private_key() {
   wg genkey > "$keys/private-key.new"
   mv "$keys/private-key.new" "$keys/private-key"
+}
+publish_public_key() {
+  chmod 600 "$keys/private-key"
+  rm -f "$control/public-key.new"
+  wg pubkey < "$keys/private-key" > "$control/public-key.new"
+  chmod 644 "$control/public-key.new"
+  mv "$control/public-key.new" "$control/public-key"
+}
+if [ ! -f "$control/rotate-key" ]; then
+  if [ ! -f "$keys/private-key" ]; then write_private_key; fi
+  publish_public_key
 fi
-chmod 600 "$keys/private-key"
-rm -f "$control/public-key.new"
-wg pubkey < "$keys/private-key" > "$control/public-key.new"
-chmod 644 "$control/public-key.new"
-mv "$control/public-key.new" "$control/public-key"
 proxy=
 active=
 stop() {
@@ -43,6 +49,15 @@ configure() {
 trap 'stop; exit 0' TERM INT
 trap stop EXIT
 while :; do
+  if [ -f "$control/rotate-key" ]; then
+    stop
+    rm -f "$control/public-key"
+    write_private_key
+    publish_public_key
+    rm -f "$control/rotate-key"
+    printf '%s\n' tunnel.off
+    reported=yes
+  fi
   next=
   if [ -f "$control/peer.json" ] && [ "$(wc -c < "$control/peer.json")" -le 2048 ]; then
     next=$(jq -Ssce '

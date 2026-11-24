@@ -7,7 +7,7 @@ import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { settleOrRelease } from "../test/settle-or-release.js";
 import { createCloudConnection } from "./cloud-client.js";
-import { writeTunnelConfiguration } from "./cloud-tunnel.js";
+import { readTunnelPublicKey, writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -57,6 +57,21 @@ async function fixture(environment: "test" | "production" = "test") {
     client: createCloudConnection({ ...f.options, tunnelDir }),
   };
 }
+
+it("withholds the old public key while a box reset waits for rotation", async () => {
+  const f = await fixture();
+  try {
+    const request = join(f.tunnelDir, "rotate-key");
+    await writeFile(request, "");
+    await expect(readTunnelPublicKey(f.tunnelDir)).resolves.toBeUndefined();
+    const newKey = randomBytes(32).toString("base64");
+    await writeFile(join(f.tunnelDir, "public-key"), newKey);
+    await rm(request);
+    await expect(readTunnelPublicKey(f.tunnelDir)).resolves.toBe(newKey);
+  } finally {
+    await f.close();
+  }
+});
 
 it.each(["ready", "provisioning"])(
   "writes only the assigned peer fields for a %s service, with a public file mode",

@@ -412,7 +412,8 @@ describe("dashboard: a planned handover started from this page", () => {
       new CustomEvent("waitron-session-invalid", { detail: { code: "handover.stepping_down" } }),
     );
 
-  async function serversPage() {
+  async function serversPage(reset?: "demo" | "prepare") {
+    let down = false;
     let answer!: (value: { handoverPage: string }) => void;
     const startHandover = vi.fn(
       () =>
@@ -422,7 +423,14 @@ describe("dashboard: a planned handover started from this page", () => {
     );
     const api = {
       liveData: new LiveData(),
-      getMe: async () => ({ ...ME, permissions: ["venue.view", "node.manage"] }),
+      getMe: async () => {
+        if (down) throw new Error("box restarting");
+        return {
+          ...ME,
+          permissions: ["venue.view", "node.manage", "system.manage"],
+          onboardingIntent: reset,
+        };
+      },
       getGoogleConfig: async () => ({ configured: false }),
       getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
       getLegalAbout: async () => ({ release: null, build: "test" }),
@@ -435,7 +443,10 @@ describe("dashboard: a planned handover started from this page", () => {
       }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
       getDiskStop: async () => ({ stopped: false, deleted: null }),
-      listServers: async () => listing,
+      listServers: async () =>
+        reset ? { term: 0, nodes: [listing.nodes[0]], resetThisBox: "available" } : listing,
+      resetThisBox: async () => ({ setupUrl: `${location.href}#setup` }),
+      forgetLocales: () => {},
       getProfile: async () => ({
         displayName: "Owner",
         firstNames: null,
@@ -467,7 +478,9 @@ describe("dashboard: a planned handover started from this page", () => {
       expect(
         screen
           .shadowRoot!.querySelector("wt-data-table")!
-          .shadowRoot!.querySelector('[data-test="handover-new"]'),
+          .shadowRoot!.querySelector(
+            reset ? '[data-test="reset-this-box"]' : '[data-test="handover-new"]',
+          ),
       ).not.toBeNull();
     });
     return {
@@ -475,9 +488,49 @@ describe("dashboard: a planned handover started from this page", () => {
       screen,
       reload,
       startHandover,
+      boxDown: () => {
+        down = true;
+      },
       answer: (url: string) => answer({ handoverPage: url }),
     };
   }
+
+  it.each([
+    ["demo", "node.reset", false],
+    ["prepare", "visibilitychange", true],
+  ] as const)("opens Setup for %s despite %s", async (mode, interruption, exportShown) => {
+    let setupReady = false;
+    vi.stubGlobal("fetch", async () => json({ provisioned: !setupReady }));
+    const { el, screen, boxDown } = await serversPage(mode);
+    const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-this-box]")!.click();
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("dashboard-reset-this-box-dialog")).not.toBeNull(),
+    );
+    const root = screen.shadowRoot!.querySelector("dashboard-reset-this-box-dialog")!.shadowRoot!;
+    expect(Boolean(root.querySelector('a[href="/backup"]'))).toBe(exportShown);
+    root
+      .querySelector("wt-input")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "reset" } }));
+    await vi.waitFor(() =>
+      expect(root.querySelector("wt-button:not([slot])")?.hasAttribute("disabled")).toBe(false),
+    );
+    root.querySelector<HTMLElement>("wt-button:not([slot])")!.click();
+    await vi.waitFor(() => expect(root.querySelector("[role=status]")).not.toBeNull());
+    boxDown();
+    if (interruption === "node.reset") {
+      window.dispatchEvent(
+        new CustomEvent("waitron-session-invalid", { detail: { code: interruption } }),
+      );
+    } else {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      document.dispatchEvent(new Event(interruption));
+    }
+    await settle(el);
+    expect(screen.isConnected).toBe(true);
+    setupReady = true;
+    await vi.waitFor(() => expect(location.hash).toBe("#setup"), { timeout: 4000 });
+  });
 
   async function startHandover(screen: ServersScreen): Promise<void> {
     screen

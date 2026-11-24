@@ -187,19 +187,11 @@ carry none.
 
 ## Resetting a box without a terminal
 
-- (owner, 2026-10-02). An operator who set the box up in
-  Demo and now wants to Prepare has to wipe Demo away first, and the only wipe is
-  `waitron.sh reset` or `waitron.sh --reset install` (`wipe_box`, `deploy/waitron.sh`), run with `sudo` at the box's terminal —
-  which a box operator does not have. Going from Prepare to Live needs a fresh database too (one
-  database per environment, CLAUDE.md §5): the Backups screen can export the venue's configuration
-  and setup can import it (`apps/server/src/configuration-export-api.ts`,
-  `apps/server/src/configuration-import.ts`), but the wipe between them is again only the script.
-  Wanted: a reset offered on the dashboard, and probably on the recovery page as well, because a
-  box that will not start is the one an operator most wants to reset. It keeps the script's rules:
-  refused on a production box, confirmed by typing a word, and keeping the box's certificate so
-  devices need not trust it again. Open: who may press it (the owner only?), and whether a reset
-  started from inside the app container can remove the Docker volumes the script removes, or has
-  to empty them instead.
+- The owner asked on 2026-10-02 for a reset on the dashboard and probably on the recovery page.
+  People with Manage boxes can reset a standalone Demo or Preparation box from its own dashboard.
+- Open: offer a reset on the recovery page for a box that cannot start, and cover boxes that joined
+  another box. Those cases still need the terminal. Keep the same certificate and refuse a
+  production reset. The recovery page needs its own choice of who can authorise the reset.
 
 ## `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the staging folder
 

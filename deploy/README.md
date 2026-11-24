@@ -680,7 +680,11 @@ to leave it unchanged. An administrator without a password cannot use this recov
 
 ## Resetting a box
 
-`reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local
+On a standalone Demo or Preparation box, open the Servers page at the box's own address and
+choose **Reset this box** from the current box's menu. You need **Manage boxes**. The box
+keeps its certificate and opens Setup after the restart.
+
+From the terminal, `reset` wipes a box back to a clean state — the database, the wizard's settings, and the box's local
 backups — then brings it straight back up, so the next thing anyone opens is the setup wizard, as if
 the box had just been installed. Use it to get a demo or test box back to a known state. It is not a
 recovery tool for a box holding real trading data — see the refusal below.
@@ -731,13 +735,11 @@ without a terminal (an unattended script) it needs `--yes` instead.
 
 **`reset` refuses on a box stamped for production.** A box that has gone live holds real records
 filed with the Spanish tax agency that cannot be recreated, and `reset` would destroy them — see
-`CLAUDE.md` §5 on why that data is unrecoverable. A box that has never been set up, or is still in
-demo/test mode, is not stamped and resets freely with no extra flag; that is the normal demo
-workflow. A half-finished box counts as never set up: the server creates the venue database file
-before it runs its migrations, so a box that failed partway through setup has the file with no
-stamp table in it, and that reads as unstamped rather than as a read that failed. What is still
-refused is a box whose venue file cannot be read at all, because nothing about it can be
-established. The only way past the refusal on a genuinely production box is deliberate: pass
+`CLAUDE.md` §5 on why that data is unrecoverable. Demo and Preparation stamp your box for
+preproduction, so you can reset it without `--force-production`. A half-finished setup may have
+created the database file before creating its stamp table. You can reset that box just as you can
+reset one you have never set up. If `reset` cannot read the venue file, it refuses because it
+cannot establish the environment. The only way past the refusal on a genuinely production box is to pass
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
 The command was designed and built in #314.
 

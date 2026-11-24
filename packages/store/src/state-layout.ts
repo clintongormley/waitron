@@ -163,7 +163,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     backup: { exclude: "Local reset in progress." },
     kind: "file",
     reset: "deleted",
-    why: "A replaced main box's reset, finished by the next start.",
+    why: "A Servers reset or a replaced main box's reset waits here for the next start.",
   },
   {
     name: PENDING_ADOPTION_FILE,

@@ -83,6 +83,14 @@ volver a usar esa máquina, restablécela desde un terminal y añádela como un 
 reserva. El servidor principal anterior del que este tomó el relevo se borra desde su fila
 ([más información](servers.md#old-box-returns)).
 
+## Restablecer un servidor en modo Demostración o Preparación {#reset-this-box}
+
+Abre **Servidores** desde la dirección del propio servidor y elige **Restablecer este servidor** en el menú de la fila **Este servidor**. Necesitas el permiso **Gestionar servidores**. Si el menú te pide que retires otro servidor primero, sigue los pasos de [Retirar un servidor de reserva](servers.md#remove-a-spare).
+
+En modo Preparación, descarga primero una [exportación de la configuración](backups.md#configuration-export) si quieres reutilizarla. El restablecimiento borra los datos del local, las copias de seguridad locales y la conexión con Waitron Cloud. Guarda la exportación en un lugar al que puedas acceder después del restablecimiento.
+
+Escribe la palabra que aparece, elige **Restablecer este servidor** y vuelve a iniciar sesión si se te pide. El servidor conserva su certificado y los correos capturados en modo Demostración. Espera a que se abra la configuración inicial y elige cómo quieres configurar el servidor.
+
 ## Iniciar aquí si ha fallado el servidor principal {#emergency}
 
 Usa un servidor de reserva que haya terminado de unirse a este local. Apaga el servidor principal

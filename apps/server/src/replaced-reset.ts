@@ -13,6 +13,7 @@ import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
 import { REPLACED_RESET_FILE, SCRATCH_DIR, STATE_LAYOUT, TLS_DIR } from "@waitron/store";
 import { errnoOf } from "./errno.js";
+import { requestTunnelKeyRotation } from "./cloud-tunnel.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { removeJoinedTls } from "./reset-request.js";
@@ -29,6 +30,7 @@ export interface ReplacedResetDeps {
   venueDir: string;
   /** The mounted backups folder, whose contents the reset removes; null empties none. */
   backupsDir: string | null;
+  tunnelDir?: string;
   log: Logger;
 }
 
@@ -96,6 +98,8 @@ export async function removeResetPrefixEntries(stateDir: string): Promise<void> 
 
 /** Deletes the environment Move's list; `scratch/` is left for the start's `emptyScratch`. */
 async function deleteAll(deps: ReplacedResetDeps): Promise<void> {
+  // A tunnel volume fault must leave the venue's files intact for the next start.
+  await requestTunnelKeyRotation(deps.tunnelDir);
   await deleteBackupRoomNote(deps.stateDir);
   await clearSelectedCopy(deps.stateDir);
   for (const piece of await environmentMoveInventory(deps)) {
@@ -133,7 +137,7 @@ async function setAsideAll(deps: ReplacedResetDeps, resumed: boolean): Promise<b
 }
 
 /**
- * Finishes a replaced main box's reset once its marker reads `wiping`; the checks ran before the
+ * Finishes a box's reset once its marker reads `wiping`; the checks ran before the
  * marker was saved, so none run here. Every step tolerates a re-run, and the marker goes last, so
  * a start cut short finishes the job at the next. Returns whether it reset the box.
  *
@@ -149,8 +153,7 @@ export async function finishReplacedReset(
   try {
     const marker = await readReplacedResetMarker(deps.stateDir);
     if (marker?.phase !== "wiping") return false;
-    // Any Move record is this reset's own: a restricted start serves no page that begins one. The
-    // resume's own hold shares this process's.
+    // A set-aside reset comes from the restricted start, which serves no page that begins a Move.
     const resumed =
       marker.setAside &&
       (await resumeEnvironmentMove({ stateDir: deps.stateDir, venueDir: deps.venueDir })) !== null;

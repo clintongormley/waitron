@@ -39,7 +39,12 @@ export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
-import { DEFAULT_HTTP_HOST, localBackupsDir, resolveConfigDir } from "./config.js";
+import {
+  DEFAULT_HTTP_HOST,
+  localBackupsDir,
+  readTunnelControlDir,
+  resolveConfigDir,
+} from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -319,8 +324,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    judges a database nothing has migrated yet, which the one-directional comparison in
  *    `assertNotAhead` makes safe. On the start that places a handover's accepted copy, in
  *    `bootServer`, this check has already run on the old file; the handover's compare checked the copy.
- *    A replaced box's reset (`finishReplacedReset`), which removes or sets aside the venue files,
- *    runs earlier still: after the full-disk clean-up and the spare's release, and before
+ *    A reset from Servers or from a replaced box (`finishReplacedReset`)
+ *    runs after the full-disk clean-up and the spare's release, before
  *    first-setup resolution and the counter, so a wipe that fails restarts into another try rather
  *    than the page. While its marker says it is wiping, the environment Move is not resumed: any
  *    Move record is that reset's own.
@@ -359,7 +364,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
-  // While a replaced box's reset is wiping, any Move record is that reset's own, and its wipe
+  // While a reset is wiping, any Move record is that reset's own, and its wipe
   // finishes it without clearing `recovery.json`.
   const wiping = (await readReplacedResetMarker(deps.stateDir))?.phase === "wiping";
   let environmentMoveError: AppError | undefined;
@@ -426,6 +431,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           stateDir: deps.stateDir,
           venueDir: deps.venueDir,
           backupsDir: localBackupsDir(deps.baseEnv),
+          tunnelDir: readTunnelControlDir(deps.baseEnv),
           log: deps.log,
         },
         cleanUp.lockVenue,
@@ -1036,7 +1042,7 @@ function bootThisProcess(): Promise<void> {
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,
-    startServer,
+    startServer: (env, base) => startServer(env, base, { resetOnRestart: true }),
     serveRecovery: async (app, options) => {
       const listener = await serveRecovery(app, options);
       installShutdownHandlers({ close: () => closeListener(listener) });
