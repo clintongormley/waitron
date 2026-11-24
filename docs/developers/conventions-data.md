@@ -7304,7 +7304,7 @@ refund of a grouped row of identical portions whose filed cents do not divide ev
 now takes its own whole cents, `byPortion` and `rowRefundsIn` in
 `apps/server/src/cancellation-refund-value.ts`). The review's runs of whole-bill and line discounts on
 one-rate tickets (2026-11-23) produced no uneven grouped row: the portions split into separate rows
-instead.
+instead. On 2026-11-24 `soldAt` moved to `packages/orders-sales/src/receipt-lines.ts`.
 
 ## A box reaches another box only over https or on this machine
 

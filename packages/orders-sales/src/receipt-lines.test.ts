@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
   groupByParent,
+  isCoveredDish,
+  isSurcharge,
   mergeIdenticalGroups,
+  printsOnTicket,
   ticketLinesFrom,
   withReceiptListPrices,
 } from "./receipt-lines.js";
-import type { TillSaleLine } from "./till-sale.js";
+import type { TillSaleLine } from "./receipt-lines.js";
 
 describe("groupByParent", () => {
   it("keeps a later added extra under its recorded parent instead of the intervening dish", () => {
@@ -206,6 +209,39 @@ describe("ticketLinesFrom", () => {
     ]);
 
     expect(line).toMatchObject({ listGross: "2.95", listUnitPriceGross: "24.00" });
+  });
+});
+
+describe("set-menu dishes", () => {
+  const dish: TillSaleLine = {
+    descriptions: { en: "Soup" },
+    quantity: "1",
+    gross: "0.00",
+    setMenuRole: "dish",
+  };
+
+  it("omits a covered dish with a free extra and prints it with a charged extra", () => {
+    const extra = { descriptions: { en: "Bread" }, quantity: "1", gross: "0.00" };
+    expect(isCoveredDish(dish)).toBe(true);
+    expect(printsOnTicket({ dish, options: [extra] })).toBe(false);
+    expect(printsOnTicket({ dish, options: [{ ...extra, gross: "1.00" }] })).toBe(true);
+  });
+
+  it.each<Partial<TillSaleLine>>([
+    { listGross: "3.00" },
+    { correctsPricedDish: true },
+    { adjustments: [{ kind: "comp", amount: "3.00" }] },
+  ])("prints a zero-gross dish with %o", (pricing) => {
+    expect(printsOnTicket({ dish: { ...dish, ...pricing }, options: [] })).toBe(true);
+  });
+
+  it("marks only a positive set-menu dish amount as a surcharge", () => {
+    expect(isSurcharge({ ...dish, gross: "1.50" }, decimal("1.50"))).toBe(true);
+    expect(isSurcharge(dish, decimal("0.00"))).toBe(false);
+    expect(isSurcharge({ ...dish, gross: "-1.50" }, decimal("-1.50"))).toBe(false);
+    expect(isSurcharge({ ...dish, gross: "1.50", setMenuRole: undefined }, decimal("1.50"))).toBe(
+      false,
+    );
   });
 });
 

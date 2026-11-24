@@ -10,9 +10,11 @@
     "./find-bill-types.js": "./src/find-bill-types.ts",
     "./invoice-selection.js": "./src/invoice-selection.ts",
     "./receipt-dates.js": "./src/receipt-dates.ts",
+    "./receipt-lines.js": "./src/receipt-lines.ts",
     "./receipt-logo.js": "./src/receipt-logo.ts",
     "./receipt-money.js": "./src/receipt-money.ts",
-    "./receipt-table.js": "./src/receipt-table.ts"
+    "./receipt-table.js": "./src/receipt-table.ts",
+    "./receipt-tax-table.js": "./src/receipt-tax-table.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -28,6 +30,7 @@
     "@waitron/fiscal": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/media": "workspace:*",
+    "@waitron/menu": "workspace:*",
     "@waitron/printing": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",
