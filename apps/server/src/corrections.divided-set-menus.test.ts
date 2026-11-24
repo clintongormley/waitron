@@ -7,6 +7,7 @@ import {
   printers,
   printJobs,
   products,
+  readHistoryNodes,
   readLiveSeriesIdTx,
   saleLines,
   sales,
@@ -17,8 +18,15 @@ import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixture
 import { createPinThrottle } from "@waitron/identity";
 import { menuItems } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
-import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
+import { computeCategorySales, currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
+import {
+  decimal,
+  nodeId as brandNodeId,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  subtractDecimal,
+  type SaleId,
+} from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillFiling, refundValueIn } from "./cancellation-refund-value.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -262,6 +270,76 @@ describe("a goodwill amount", () => {
     );
     expect(emailed.result.lines).toMatchObject([{ gross: "-2.00", setMenuRole: "dish" }]);
     expect(emailed.result.lines[0]).not.toHaveProperty("setMenuPart");
+  });
+
+  /** Category sales' gross by group, around today. */
+  function categoryGross() {
+    return inTx(venue, async (tx) => {
+      const nodeId = brandNodeId(venue.cfg.nodeId);
+      const clock = await resolveVenueClock(tx, nodeId);
+      const day = currentBusinessDay(clock);
+      const { tree } = await computeCategorySales(tx, {
+        nodeIds: await readHistoryNodes(tx, nodeId),
+        fromBusinessDay: day,
+        toBusinessDay: day,
+        timeZone: clock.timeZone,
+        dayCutover: clock.dayCutover,
+        cutoverChanges: clock.cutoverChanges,
+        mode: "at_time_of_sale",
+      });
+      return new Map(
+        tree.map((node) => [node.kind === "category" ? node.name : node.kind, node.gross]),
+      );
+    });
+  }
+
+  async function withHakeSupplement(run: (versionId: string) => Promise<void>) {
+    const [before] = await venue.db
+      .select({ grossPrice: menuItems.grossPrice })
+      .from(menuItems)
+      .where(eq(menuItems.id, lunch.items.Hake));
+    try {
+      await run(await hakeSupplement(200));
+    } finally {
+      lunch.versionId = await hakeSupplement(before!.grossPrice);
+    }
+  }
+
+  it("on a hake row with a supplement takes its part once, then the supplement", async () => {
+    await withHakeSupplement(async (versionId) => {
+      const { saleId, lines } = await paidLunch(versionId, "16.00");
+      const hake = lines.find(({ name }) => name === "Hake")!;
+      expect(hake).toMatchObject({ lineGross: 1014, setMenuPart: 814 });
+      const first = await giveBack(saleId, "8.14", [hake.id]);
+      expect(await rowsOf(first)).toEqual([
+        { name: "Hake", lineGross: -814, setMenuPart: -814, vatRate: 1000 },
+      ]);
+      const start = await categoryGross();
+      const second = await giveBack(saleId, "1.00", [hake.id]);
+      expect(await rowsOf(second)).toEqual([
+        { name: "Hake", lineGross: -100, setMenuPart: null, vatRate: 1000 },
+      ]);
+      const after = await categoryGross();
+      expect(after.get("set_menus")).toBe(start.get("set_menus"));
+      expect(
+        String(
+          subtractDecimal(
+            decimal(after.get("Set menu dishes")!),
+            decimal(start.get("Set menu dishes")!),
+          ),
+        ),
+      ).toBe("-1.00");
+    });
+  });
+
+  it("on a hake row with a supplement takes what is left of its part second time", async () => {
+    await withHakeSupplement(async (versionId) => {
+      const { saleId, lines } = await paidLunch(versionId, "16.00");
+      const hake = lines.find(({ name }) => name === "Hake")!;
+      const partOf = async (correctiveId: string) => (await rowsOf(correctiveId))[0]!.setMenuPart;
+      expect(await partOf(await giveBack(saleId, "5.00", [hake.id]))).toBe(-500);
+      expect(await partOf(await giveBack(saleId, "5.00", [hake.id]))).toBe(-314);
+    });
   });
 
   it("naming an empty list of lines is refused", async () => {

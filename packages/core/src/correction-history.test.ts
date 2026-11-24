@@ -455,6 +455,20 @@ it("takes an amount off a dish's set-menu part before its supplement", async () 
   expect(off("9.00")).toBe("-8.14");
 });
 
+it("takes an amount off what earlier corrections left of a dish's part", async () => {
+  const { rows, ids } = await sell();
+  const hake = { ...rows[0]!, setMenuRole: "dish" as const, lineGross: 1014, setMenuPart: 814 };
+  const off = (gross: string, taken: number) =>
+    correctionLinesFor(
+      [hake],
+      [allocation(ids[0]!, "10.00", gross, "0.00")],
+      new Map([[ids[0]!, taken]]),
+    )[0]!.setMenuPart;
+  expect(off("5.00", 500)).toBe("-3.14");
+  expect(off("1.00", 814)).toBeNull();
+  expect(off("1.00", 0)).toBe("-1.00");
+});
+
 it("leaves the part out on a row whose part is not a share of the price", async () => {
   const { rows, ids } = await sell();
   const lines = correctionLinesFor(
