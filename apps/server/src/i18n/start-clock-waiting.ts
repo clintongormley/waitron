@@ -2,8 +2,8 @@ import type { SupportedLocale } from "@waitron/shared";
 
 /** The words of the page a restore's start shows while it waits to confirm its time. The key
  * field's label and wrong-key line are every master-key field's (`@waitron/recovery-pack`'s
- * `MASTER_KEY_FIELD_WORDS`), copied so this module imports only types; its missing-key line is
- * setup's `restore.allocation_key_missing`; the clock step's are the done screen's. */
+ * `MASTER_KEY_FIELD_WORDS`), copied so this module imports only types; its unnamed wrong-key line
+ * repeats setup's `restore.allocation_key_missing`; the clock step's are the done screen's. */
 export const START_CLOCK_WAITING_WORDS: Readonly<
   Record<
     SupportedLocale,
