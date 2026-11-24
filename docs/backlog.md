@@ -923,9 +923,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Wt dialog lifecycle** (covered-dialog reinsertion and the department and zone wrappers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
-- **Should an all-archived product selection show Archive greyed out rather than hidden?**
-  Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
-
 - **One session with real phones and password managers** (bundle of 13, 3 go-live, 7 important, size M, needs the real hardware; includes profile-name updates in password managers and field-focus verification). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 
 - **What C38 left as it was (a generated display name is the first given name and first surname,
