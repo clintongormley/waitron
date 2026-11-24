@@ -315,7 +315,9 @@ records the limits of clock and operator assurance; the
 replaces its hour names with minute names and its clock confirmation with the 30-second rule.
 
 
-## A working box keeps its fiscal identity
+<a id="a-working-box-keeps-its-fiscal-identity"></a>
+
+## Starting a new chain on a working box
 
 You cannot start a new chain on a working box while keeping its database, except to
 [switch it after an invoice identity conflict](#switch-a-running-box-after-an-invoice-identity-conflict)
