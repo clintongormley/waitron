@@ -720,12 +720,16 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           }
         : balanceOf(),
     );
+    expect(api.printReceipt).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(5_000);
     await flush(el);
     expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
     expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
     expect(getBillBalance).toHaveBeenCalledWith("wo-4");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flush(el);
+    expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-9", { ifOwed: true });
   });
 
   describe("at the Counter", () => {
@@ -867,6 +871,30 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         bill120.slice(1).map((dish) => dish.id),
       );
     });
+
+    it.each([
+      [["print-receipt", "take-cash"], [["wo-9", { ifOwed: true }]]],
+      [["take-cash"], []],
+    ] as const)(
+      "at the Counter the new bill's receipt prints once its invoice is issued (capabilities %j)",
+      async (capabilities, asked) => {
+        const el = await retrieved({
+          getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [...capabilities] }),
+          previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+          payForItems: vi.fn().mockResolvedValue(paidOnWo9()),
+        });
+        await chooseFirst(el);
+        await press(el, "[data-pay-continue]");
+        expect(api.printReceipt).not.toHaveBeenCalled();
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+
+        expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+          t("bill_pay.taken_change").replace("{amount}", money("20.00")),
+        );
+        expect(vi.mocked(api.printReceipt).mock.calls).toEqual(asked);
+      },
+    );
 
     it("at the Counter Print payment slip names the bill that received the payment", async () => {
       const printPaymentSlip = vi.fn().mockResolvedValue(undefined);

@@ -493,8 +493,10 @@ controls or the "No place" question.
   `paidMark`, `table-bill-controls.ts:21-25`). At the Counter: no receipt window (closing it starts
   a new sale, `till-app.ts:25684-25690`, which would drop the rest of the order); the Pay window
   says the payment was taken and the order is read again (`#rereadPayingOrder`'s counter branch).
-  The server prints the new bill's receipt either way (`enqueueSaleReceipt`,
-  `apps/server/src/bill-payments.ts:1265`).
+  The server queues no original receipt at payment (`enqueueSaleReceipt` only reserves delivery);
+  the till asks for it (`printReceipt` with `ifOwed`) when the receipt window closes, so where no
+  window opens (the Counter, and a handheld's pending card that settles on a later read) the till
+  asks as soon as it learns the new bill's invoice was issued, if the device may print receipts.
 - **PR2-D7. The answer's balance is the new bill's.** `payForItems` answers `{ billId, payment }`
   with `payment.balance` of the new bill (`pay-for-items.ts:336-438`). The till never stores it as
   the table's balance (`till-app.ts:23628`) and rereads the table's bill without it. A card the

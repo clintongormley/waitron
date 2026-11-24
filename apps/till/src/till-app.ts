@@ -22309,8 +22309,14 @@ export class TillApp extends LitElement {
   /** Settles, never rejects, once the request has its answer. */
   #askForOwedReceipt(): Promise<void> | undefined {
     const owed = this.ticketWorkingOrderId;
-    if (this.settlementDocument === null || owed === undefined || !this.#mayPrintReceipt) return;
-    return this.api.printReceipt(owed, { ifOwed: true }).catch((error: unknown) => {
+    if (this.settlementDocument === null || owed === undefined) return;
+    return this.#printOwedReceipt(owed);
+  }
+
+  /** The receipt of a bill whose invoice was issued with no receipt window to close. */
+  #printOwedReceipt(billId: string): Promise<void> | undefined {
+    if (!this.#mayPrintReceipt) return;
+    return this.api.printReceipt(billId, { ifOwed: true }).catch((error: unknown) => {
       const code = (error as { code?: unknown } | null | undefined)?.code;
       diag.record(
         "warn",
@@ -23138,6 +23144,12 @@ export class TillApp extends LitElement {
       if (payment === undefined || (await this.#onPendingEnded(reread, taken, payment, balance))) {
         reread.pending.delete(id);
         ended = true;
+        if (
+          reread.billId !== undefined &&
+          payment?.state === "received" &&
+          balance.status === "settled"
+        )
+          void this.#printOwedReceipt(reread.billId);
       }
     }
     const open = this.#billPayingNow(reread.dialogId);
@@ -23665,6 +23677,8 @@ export class TillApp extends LitElement {
       );
       return;
     }
+    if (result.invoice !== undefined && result.paidOn !== undefined)
+      void this.#printOwedReceipt(result.paidOn);
     const taken: PayTaken =
       result.payment.state === "pending"
         ? { change: null, pending: result.payment.applied, slipPaymentId, ...slipBillId }
