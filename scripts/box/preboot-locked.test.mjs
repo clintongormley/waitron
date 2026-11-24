@@ -130,15 +130,33 @@ const from = (name) => new X509Certificate(cert(name)).validFromDate.getTime();
 /** @param {string} name */
 const to = (name) => new X509Certificate(cert(name)).validToDate.getTime();
 
-/** @param {{ca?: string, recovery?: string} & Record<string, unknown>} [options] */
-function input({ ca = "ca", recovery = "recovery", ...overrides } = {}) {
-  return {
+/** @param {unknown} certificate */
+function certificateStart(certificate) {
+  // Malformed certificate fixtures still need a finite clock to reach the certificate checks.
+  if (typeof certificate !== "string") return 0;
+  try {
+    return new X509Certificate(certificate).validFromDate.getTime();
+  } catch {
+    return 0;
+  }
+}
+
+/** @param {Partial<Record<string, unknown>>} [overrides] */
+function input(overrides = {}) {
+  const values = {
     installationId: "a1b2",
-    caCertificate: cert(ca),
-    recoveryCertificate: cert(recovery),
+    caCertificate: cert("ca"),
+    recoveryCertificate: cert("recovery"),
     redirectCertificate: cert("redirect"),
-    now: Math.max(from(ca), from(recovery)) + 1000,
     ...overrides,
+  };
+  return {
+    now:
+      Math.max(
+        certificateStart(values.caCertificate),
+        certificateStart(values.recoveryCertificate),
+      ) + 1000,
+    ...values,
   };
 }
 
@@ -179,7 +197,9 @@ describe("freezeLockedTarget", () => {
   describe("installation id", () => {
     it("a 56-character id → ready, and its recovery label is 63 characters", () => {
       expect(`unlock-${LONG_ID}`).toHaveLength(63);
-      expect(freezeLockedTarget(input({ installationId: LONG_ID, recovery: "longId" }))).toEqual({
+      expect(
+        freezeLockedTarget(input({ installationId: LONG_ID, recoveryCertificate: cert("longId") })),
+      ).toEqual({
         kind: "ready",
         target: {
           ...READY.target,
@@ -296,7 +316,7 @@ describe("freezeLockedTarget", () => {
     );
 
     it("caServerAuth (extended key usage serverAuth) → ready", () => {
-      expect(freezeLockedTarget(input({ ca: "caServerAuth" }))).toEqual(READY);
+      expect(freezeLockedTarget(input({ caCertificate: cert("caServerAuth") }))).toEqual(READY);
     });
 
     it("futureCa, now one second before its validFrom, its leaf already valid → ca-not-yet-valid", () => {
@@ -387,7 +407,7 @@ describe("freezeLockedTarget", () => {
       "%s (extended key usage including serverAuth) → ready",
       (name) => {
         expect(new X509Certificate(cert(name)).keyUsage).toContain("1.3.6.1.5.5.7.3.1");
-        expect(freezeLockedTarget(input({ recovery: name }))).toEqual(READY);
+        expect(freezeLockedTarget(input({ recoveryCertificate: cert(name) }))).toEqual(READY);
       },
     );
 
@@ -405,7 +425,7 @@ describe("freezeLockedTarget", () => {
 
     it("longLived → recovery-outlives-ca", () => {
       expect(to("longLived")).toBeGreaterThan(to("ca"));
-      expect(freezeLockedTarget(input({ recovery: "longLived" }))).toEqual(
+      expect(freezeLockedTarget(input({ recoveryCertificate: cert("longLived") }))).toEqual(
         refused("recovery-outlives-ca"),
       );
     });
@@ -565,7 +585,7 @@ const REFUSED_INPUTS = [
   ["recovery-names-wrong", () => input({ recoveryCertificate: cert("normal") })],
   ["recovery-not-server-auth", () => input({ recoveryCertificate: cert("recoveryClientAuth") })],
   ["recovery-expired", () => input({ now: from("recovery") - 1000 })],
-  ["recovery-outlives-ca", () => input({ recovery: "longLived" })],
+  ["recovery-outlives-ca", () => input({ recoveryCertificate: cert("longLived") })],
   [
     "ca-not-yet-valid",
     () =>
@@ -694,7 +714,9 @@ describe("decideLockedRequest on a ready result", () => {
   });
 
   it("every redirect's location is target.recoveryUrl, over every host and both schemes", () => {
-    const result = freezeLockedTarget(input({ installationId: LONG_ID, recovery: "longId" }));
+    const result = freezeLockedTarget(
+      input({ installationId: LONG_ID, recoveryCertificate: cert("longId") }),
+    );
     const url = /** @type {any} */ (result).target.recoveryUrl;
     expect(url).toBe(`https://unlock-${LONG_ID}.waitron.local/`);
     const longHost = `unlock-${LONG_ID}.waitron.local`;
