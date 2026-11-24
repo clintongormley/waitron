@@ -8,6 +8,7 @@ import {
   withTransaction,
   withFoldedPersonChanges,
 } from "@waitron/db";
+import * as db from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, dashboardSessions, persons } from "@waitron/identity";
 import { readOperationAuthority, type OperationAuthority } from "@waitron/module";
@@ -359,6 +360,17 @@ describe("a recovery key's authority", () => {
     expect(current.name).toBe(own.name);
     for (const secret of [WRONG_MASTER_KEY, changeOneSymbol(own.secret), "not a key"])
       expect(await refusalParams(secret)).toStrictEqual({ keyName: current.name });
+  });
+
+  it("a refused key reads the current master key once", async () => {
+    const own = await mintMasterKey(suite.db);
+    const reads = vi.spyOn(db, "readCurrentMasterKey");
+    onTestFinished(() => reads.mockRestore());
+    for (const secret of [WRONG_MASTER_KEY, changeOneSymbol(own.secret), "not a key"]) {
+      reads.mockClear();
+      expect(await refusalParams(secret)).toStrictEqual({ keyName: own.name });
+      expect(reads, secret).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("with no master key the refusal names none", async () => {

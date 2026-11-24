@@ -56,14 +56,15 @@ export async function withRecoveryKeyAuthority<T>(
   };
   if (binding.targetNodeId !== targetNodeId || !allowedActions.includes(binding.action))
     return refuse();
-  const checked = await masterKeyAuthorising(deps.db, secret);
-  if (checked === null) {
-    const current = await readCurrentMasterKey(deps.db);
+  const check = await checkMasterKey(deps.db, secret);
+  if (!check?.authorised) {
+    const current = check === null ? await readCurrentMasterKey(deps.db) : check.current;
     throw new AppError(
       "promotion.break_glass_invalid",
       current === null ? {} : { keyName: current.name },
     );
   }
+  const checked = check.current;
   return withOperationAuthority(
     binding,
     { kind: "recovery-key", nodeId: targetNodeId, eventId: binding.eventId },
@@ -131,16 +132,32 @@ function authorityFrom(secret: unknown): Uint8Array | null {
   }
 }
 
+type MasterKeyCheck =
+  | { readonly authorised: true; readonly current: MasterKeyRecord }
+  | { readonly authorised: false; readonly current: MasterKeyRecord | null };
+
+/** The venue's current master key and whether `secret` (a typed master key or a staged authority
+ * key) is that key; `null`, having read nothing, when `secret` is neither. */
+async function checkMasterKey(
+  db: Database | Transaction,
+  secret: unknown,
+): Promise<MasterKeyCheck | null> {
+  const authority = authorityFrom(secret);
+  if (authority === null) return null;
+  const current = await readCurrentMasterKey(db);
+  return current !== null && authorityKeyMatches(authority, current.checkValue)
+    ? { authorised: true, current }
+    : { authorised: false, current };
+}
+
 /** The venue's current master key when `secret` (a typed master key or a staged authority key)
  * is that key; `null` otherwise, and before the venue has one. */
 export async function masterKeyAuthorising(
   db: Database | Transaction,
   secret: unknown,
 ): Promise<MasterKeyRecord | null> {
-  const authority = authorityFrom(secret);
-  if (authority === null) return null;
-  const current = await readCurrentMasterKey(db);
-  return current !== null && authorityKeyMatches(authority, current.checkValue) ? current : null;
+  const check = await checkMasterKey(db, secret);
+  return check?.authorised ? check.current : null;
 }
 
 const switchSignedIn = new WeakSet<object>();
