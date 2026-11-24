@@ -301,26 +301,6 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
   attempts, or still waiting on a disabled or unseen printer) to any other active receipt printer.
   Decide whether a manager's reprint should.
 
-## A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).
-
-The receipt table (`packages/orders-sales/src/receipt-table.ts`) wraps item text longer than the item
-column — 14 characters on that bill, narrowed by the VAT-rate column, less a 2-character indent
-for a row under a dish — just as a 100% percentage discount or a long dish name already wraps
-there. Decide whether a short label should be kept whole. The wrapped text is pinned in
-`apps/server/src/receipt-ticket.test.ts`, in the case "prints F1 reductions before VAT, at their
-rate, on '80mm' in 'eu-ES'".
-
-## A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento 100%» whenever every line at its rate was filed at zero (left open by A758-4).
-
-`named` is null
-when no one adjustment names the row, for instance a dish with two or more comps of its own
-(`GroupDiscount`, `packages/orders-sales/src/receipt-figures.ts`), and the row then falls back to the
-zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
-dish to zero as one «Descuento 100%» row, where the ticket prints them as two steps, «Descuento
-50%» and «Descuento 100%» (A803 slice 1's decision, [till.md](till.md#decisions-and-deliberate-limits)).
-And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
-only its own part (the A758-4 plan's owner point 3). Owner to confirm.
-
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 
 Hardware and inbox checks to complete in the owner session.
@@ -413,14 +393,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Receipt layout pass
 
-3 entries, size M.
+1 entry, size S.
 
-- **A960. On an 80 mm roll in Basque, a full invoice with more than one VAT rate prints a full
-  comp's «Deskontua 100%» with «100%» on its own line under the figures (left open by A758-4).**
-  [Detail](printers.md#a960-on-an-80-mm-roll-in-basque-a-full-invoice-with-more-than-one-vat-rate-prints-a-full-comps-deskontua-100-with-100-on-its-own-line-under-the-figures-left-open-by-a758-4)
-- **A961. On a full invoice, a dish's discount row that no single comp names prints «Descuento
-  100%» whenever every line at its rate was filed at zero (left open by A758-4).**
-  [Detail](printers.md#a961-on-a-full-invoice-a-dishs-discount-row-that-no-single-comp-names-prints-descuento-100-whenever-every-line-at-its-rate-was-filed-at-zero-left-open-by-a758-4)
 - **A1201. Owner question: a receipt's extra prints no count beside a grouped dish (seen in A803
   slice 1's LOOK).** Two Pollo asado with Padrón peppers print "2 Pollo asado con patatas 19.00"
   then "Pimientos de Padrón 4.00", at 58 and 80 mm. What a line of two printed before slice 1 was not

@@ -52,13 +52,9 @@ export interface GroupDiscount {
   rate: string;
   /** What the row takes off at this rate, before VAT; never zero. */
   amount: Decimal;
-  /** Every line of the family at this rate has a filed base of zero; always false on an end row. */
+  /** Zero filed base at this rate. An unnamed row also needs one full adjustment for its loss. */
   comp: boolean;
-  /**
-   * The adjustment whose words name the row, or null when no one adjustment does or its words would
-   * not describe the row's amount: the row then prints the full-comp words when `comp` is set, and
-   * the bare discount word otherwise.
-   */
+  /** The adjustment that names the row. If absent, `comp` chooses the full or plain discount label. */
   named: ReceiptAdjustment | null;
 }
 
@@ -105,6 +101,7 @@ export function invoiceDiscounts(
     // means a free item's share of the price paid moved part of it, and the words would not fit.
     const nameable =
       ownEntries.length === 1 && (hasBill ? lostVersusOwn >= 0 : lostVersusOwn === 0);
+    const wholeFamilyComp = singleFullAdjustment(ownEntries) && lostVersusOwn === 0;
     const byRate = discountsByRate(lines);
     const oneRate = byRate.length === 1;
     const home =
@@ -126,11 +123,14 @@ export function invoiceDiscounts(
               );
       addByRate(billShares, entry.rate, subtractDecimal(entry.amount, ownAmount));
       if (isZeroDecimal(ownAmount)) continue;
+      const named = nameable && (!hasBill || oneRate) ? ownEntries[0]! : null;
       const row: GroupDiscount = {
         rate: entry.rate,
         amount: ownAmount,
-        comp: entry.comp,
-        named: nameable && (!hasBill || oneRate) ? ownEntries[0]! : null,
+        comp:
+          entry.comp &&
+          (named !== null || wholeFamilyComp || fullAdjustmentAtRate(lines, entry.rate)),
+        named,
       };
       const rows = under.get(home.at);
       if (rows === undefined) under.set(home.at, [row]);
@@ -153,6 +153,16 @@ export function invoiceDiscounts(
 
 function sameRate(left: string, right: string): boolean {
   return compareDecimal(decimal(left), decimal(right)) === 0;
+}
+
+function singleFullAdjustment(entries: readonly ReceiptAdjustment[]): boolean {
+  return entries.length === 1 && (entries[0]!.kind === "comp" || entries[0]!.percentBp === 10000);
+}
+
+function fullAdjustmentAtRate(lines: readonly FiguredLine[], rate: string): boolean {
+  const atRate = lines.filter(({ line }) => sameRate(line.net.rate, rate));
+  const entries = atRate.flatMap(({ line }) => line.adjustments ?? []);
+  return singleFullAdjustment(entries) && compareDecimal(lost(atRate), amountOf(entries[0]!)) === 0;
 }
 
 function addByRate(

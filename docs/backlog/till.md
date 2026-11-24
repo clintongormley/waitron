@@ -1444,11 +1444,10 @@ If the server requires an options list on a recalled dish absent from the live m
   before it, half up to a basis point and never as 0% or 100% (`readBillAdjustments`,
   `packages/adjustments/src/record.ts`); the report still shows such an amount in euros. Three
   places print no share: a full invoice's row that joins several steps (a dish with two of its own,
-  or two whole-bill steps), which prints one row, «Descuento», or «Descuento 100%» when every line
-  at its rate was filed at zero (A961); a full invoice's row whose adjustment's words would not
-  describe its amount, as on a ticket where a free item took its share of the price paid (A445),
-  which prints «Descuento»; and the per-dish fallback used when the records no longer add up to
-  the bill. The filed sale is unchanged. A reason without Free refuses 100% too (the rule's first
+  or two whole-bill steps), which prints one row, «Descuento»; a full invoice's row whose
+  adjustment's words do not describe its amount, as when a free item took its share of the price
+  paid (A445), which prints «Descuento»; and the per-dish fallback used when the records no longer
+  add up to the bill. The filed sale is unchanged. A reason without Free refuses 100% too (the rule's first
   half, `adjustment.free_not_allowed`). Plan:
   [A803 slice 1](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
 

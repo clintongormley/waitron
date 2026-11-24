@@ -807,7 +807,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A4 receipt copies.** When adding A4 receipt printing, have the copy-audit writer require a
   receipt-page job. Test that it accepts a receipt page and refuses an A4 invoice page.
 
-- **Receipt layout pass** (bundle of 3, 1 important, size M). Holds A960, A961, A1201. [Detail](backlog/printers.md#bundle-receipt-layout-pass)
+- **Receipt layout pass** (size S). Holds A1201. [Detail](backlog/printers.md#bundle-receipt-layout-pass)
 
 - **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
   open:**
