@@ -3877,7 +3877,7 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
 - **Invalid** (`data-invalid`, from `invalid` or a non-empty `error`): the line becomes
   `--wt-field-line-width-active` of `--wt-color-danger` and the label `--wt-color-danger`, and both
   stay red when the field receives focus. When the control matches `:focus-visible`, the box
-  draws `--wt-focus-ring` at `--wt-focus-offset` so you can see where Tab landed while you correct
+  draws `--wt-focus-ring` at `--wt-focus-offset` so you can see where focus is while you correct
   the error. The message is a paragraph under the box, read after the hint in the control's
   `aria-describedby`.
 - **Disabled** (`data-disabled`): the fill is `--wt-color-field-fill-disabled`, the bottom line is
