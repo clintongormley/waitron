@@ -83,7 +83,7 @@ interface MixVectors {
   readonly vectors: Int32Array;
   readonly bases: Float64Array;
   readonly solve: (counts: number[], base: number) => MixSearchResult;
-  // This can only decrease as mixes are accepted.
+  // A discarded mix cannot rejoin, so the cutoff must never rise.
   readonly cutoff: () => number;
   readonly canSolve?: () => boolean;
   readonly accept: (candidate: MixSearchResult) => void;
@@ -102,22 +102,25 @@ export function searchMixVectors({
 }: MixVectors): boolean {
   const bounds = bases.slice();
   const slopes = new Float64Array(offerCount);
-  const remaining = new Int32Array(bases.length);
-  let remainingCount = 0;
-  let next = -1;
-  const initialLimit = cutoff();
-  let lowest = initialLimit;
-  for (let mix = 0; mix < bases.length; mix++) {
-    const bound = bounds[mix]!;
-    if (!(bound < initialLimit)) continue;
-    remaining[remainingCount++] = mix;
-    if (bound < lowest) {
-      lowest = bound;
-      next = mix;
+  const remaining = Int32Array.from(bases.keys());
+  let remainingCount = remaining.length;
+  for (;;) {
+    let next = -1;
+    let kept = 0;
+    const viable = cutoff();
+    let lowest = viable;
+    for (let row = 0; row < remainingCount; row++) {
+      const mix = remaining[row]!;
+      const bound = bounds[mix]!;
+      if (!(bound < viable)) continue;
+      remaining[kept++] = mix;
+      if (bound < lowest) {
+        lowest = bound;
+        next = mix;
+      }
     }
-  }
-
-  while (next !== -1) {
+    remainingCount = kept;
+    if (next === -1) return true;
     if (canSolve && !canSolve()) return false;
 
     const start = next * offerCount;
@@ -132,9 +135,6 @@ export function searchMixVectors({
     });
 
     const limit = cutoff();
-    let kept = 0;
-    lowest = limit;
-    next = -1;
     for (let row = 0; row < remainingCount; row++) {
       const mix = remaining[row]!;
       if (bounds[mix]! >= limit) continue;
@@ -143,16 +143,7 @@ export function searchMixVectors({
         const count = vectors[mix * offerCount + offer]!;
         bound -= slopes[offer]! * (count - candidate.counts[offer]!);
       }
-      bound = Math.max(bounds[mix]!, bound);
-      if (!(bound < limit)) continue;
-      bounds[mix] = bound;
-      remaining[kept++] = mix;
-      if (bound < lowest) {
-        lowest = bound;
-        next = mix;
-      }
+      bounds[mix] = Math.max(bounds[mix]!, bound);
     }
-    remainingCount = kept;
   }
-  return true;
 }
