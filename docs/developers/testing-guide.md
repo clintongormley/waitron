@@ -2289,8 +2289,11 @@ no agent variables set and with `CI=true`, and was hidden in two separate runs, 
 [ci-and-gates.md](ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)); a test thread's
 own `process.stderr.write` was not tried. To see a passing test's output from an agent session,
 unset `AI_AGENT` and `CLAUDECODE` for the run (std-env checks others too): the output was hidden
-with either set and shown with neither; passing
-`--reporter=default` instead has not been measured.
+with either set and shown with neither. Measured 2026-11-24 with Vitest 4.1.12 on Node v26.13.1, a
+one-test probe run with `vitest run --root <probe dir>`: `CODEX_SANDBOX` alone and
+`CODEX_THREAD_ID` alone each hid the output too, so a Codex session must unset those as well; and
+with `CLAUDECODE=1` still set, adding `--reporter=default` showed it. Adding `--reporter=default`
+is the simpler way to see the output.
 
 Vite has a separate browser-console forwarding path. A902's 14 November 2026 receipt used
 Vite 8.3.4 in `apps/till`:
@@ -2332,6 +2335,28 @@ listed `lit/directives/unsafe-html.js`. Metadata shows optimization, not executi
 entry. In particular, the startup case replaces the Popover startup function. This control
 therefore does not establish that the include list prevents a reload, or that removing it
 is sound for all setup files. Keep the includes. Dashboard, till and UI were not compared.
+
+## There is no `tsx` or `esbuild` at the workspace root
+
+The root `package.json` declares neither, and `node_modules/.bin` at the root holds neither
+(checked 2026-11-24); `apps/server` declares both. So `pnpm exec tsx` from the root says
+`Command "tsx" not found`, and `node scripts/bundle-node.mjs` run from the root fails with
+`spawnSync esbuild ENOENT`. Run them through the package that has them:
+`pnpm --filter @waitron/server exec node ../../scripts/bundle-node.mjs …`, or `pnpm exec tsx`
+from `apps/server`. Lanes lost time to this on many days in November 2026.
+
+## A test that passes in Vitest can still fail the push hook's typecheck
+
+Vitest does not typecheck. Three shapes passed their tests and then failed the hook in November
+2026:
+
+- **A relative import of another package's source** fails with `TS6059` (file is not under
+  `rootDir`). Import the package's public entry, or keep a local fake at the existing mock seam.
+- **`Promise.withResolvers`** fails with `TS2550` where a package's TypeScript library is ES2022,
+  although the browser and Node run it. Use the deferred-promise pattern the sibling tests use.
+- **A new root `.mjs` test using a Node global** such as `URL`, `setInterval` or `clearInterval`
+  fails lint with `no-undef`. Import it (`node:url`, `node:timers`) as the sibling root tests do,
+  and run ESLint on the file before pushing.
 
 ## A child that loads the Stripe SDK writes a line to its error output under Claude Code
 

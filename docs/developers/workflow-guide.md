@@ -460,7 +460,9 @@ on slot 0 got a dashboard that could not reach its server). Design:
 
 For side-by-side visual checks, Claude starts more worktrees beside the owner's; `wa-wt ls` shows
 which name owns each URL and who started it. Bare `wa-wt down` and `wa-wt logs` act on the
-caller's own side; name the instance when more than one of that side runs. When every slot a start
+caller's own side; name the instance when more than one of that side runs. `wa-wt logs` runs
+`tail -f` and never returns, so a script or agent reads `~/workspace/.waitron-dev/<name>.log`
+directly instead. When every slot a start
 may use is held, it refuses and lists what holds each.
 
 `wa-wt.test.sh` in `~/workspace/tools` runs `wa-wt` against stand-in `pnpm` and `docker` in a

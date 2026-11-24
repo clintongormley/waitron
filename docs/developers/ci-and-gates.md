@@ -628,6 +628,11 @@ that still exist as regular files, excluding symlinks. Each tool keeps a content
 file lists skip the tool. Global or unknown scopes retain uncached whole-repository
 `pnpm format:check` and `pnpm lint`. The existing scope classifier decides this fallback.
 
+**Run `prettier --check` after `prettier --write`.** With Prettier 3.9.10 and 3.10.1, one `--write`
+sometimes left a long call chain (most often a `vi.fn().mockResolvedValue(…)` chain) in a shape the
+hook's check then refused; a second `--write` settled it. Lanes hit this repeatedly from 11 to 21
+November 2026, each time paying for a whole hook run to find out.
+
 ### Root workers start from available headroom
 
 Several root suites can exhaust processor time while the machine still has plenty of memory.
