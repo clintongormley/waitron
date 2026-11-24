@@ -1,3 +1,4 @@
+import { optionSnapshotNames } from "@waitron/shared";
 import type { ExpoItem, LineNutrition, StationQueueItem, TabLine } from "../api/client.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
@@ -169,7 +170,9 @@ export function kitchenPortionKey(
   }
   return JSON.stringify([
     dish.name,
-    (dish.optionSnapshots ?? []).map((answer) => JSON.stringify(answer)).sort(),
+    (dish.optionSnapshots ?? [])
+      .map((answer) => JSON.stringify(optionSnapshotNames(answer)))
+      .sort(),
     (dish.modifiers ?? []).map((modifier) => JSON.stringify(modifier)).sort(),
     dish.crossRefs ?? [],
     dish.asServed ?? null,

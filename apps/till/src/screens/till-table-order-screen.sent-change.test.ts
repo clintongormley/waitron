@@ -574,6 +574,7 @@ const doneness = burger.offeredModifiers!.find((list) => list.kind === "options"
 const extrasList = burger.offeredModifiers!.find((list) => list.kind === "extras")!;
 const steakish = { ...burger, offeredModifiers: [doneness] };
 const rare = {
+  listId: doneness.id,
   listName: { en: "Doneness" },
   listCustomerName: { es: "Punto carta" },
   listKitchenName: "Punto KDS",
@@ -1142,6 +1143,7 @@ it("keeps a staged change through an update that leaves its dish as it was", asy
 
 it("keeps a staged change, saying nothing, when an update lists the dish's answers in another order", async () => {
   const pepper = {
+    listId: "list-sauce",
     listName: { en: "Sauce" },
     listCustomerName: { es: "Salsa carta" },
     listKitchenName: "Salsa KDS",

@@ -216,9 +216,7 @@ export const workingOrderLines = table(
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
     descriptions: json<Record<string, string>>("descriptions").notNull(),
-    // The diner's answers to this dish's OPTIONS lists, copied by value — no id points back at a
-    // list or a label, so editing or deleting a list cannot rewrite a saved order. EXTRAS are not
-    // here: a pick becomes its own child line.
+    // Keep the list's original id and frozen wording so a replacement list cannot claim its answer.
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
     // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
     // default content language of that time — presentation only.

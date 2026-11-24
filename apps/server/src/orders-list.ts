@@ -32,10 +32,11 @@ import {
   addDecimal,
   centsToDecimal,
   compareDecimal,
+  optionSnapshotNames,
   rawCentsToDecimal,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, OptionSnapshot } from "@waitron/shared";
 import { FILTER_TEXT_MAX } from "./find-bill-query.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import { readPaymentsByBill } from "./bill-payments.js";
@@ -876,7 +877,7 @@ interface StoredBillLine {
   parentLineId: string | null;
   name: string;
   variantName: string | null;
-  optionSnapshots: unknown[];
+  optionSnapshots: OptionSnapshot[];
   note: string | null;
   unitPriceGross: number;
   courseId: string | null;
@@ -907,7 +908,7 @@ function foldIdenticalPortions<L extends StoredBillLine>(lines: readonly L[]): L
     JSON.stringify([
       line.name,
       line.variantName,
-      optionAnswersKey(line.optionSnapshots),
+      optionAnswersKey(line.optionSnapshots.map(optionSnapshotNames)),
       line.note,
       line.unitPriceGross,
       line.listUnitPrice,

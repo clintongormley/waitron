@@ -1548,13 +1548,8 @@ export interface HeldOrder {
     extras?: HeldExtra[];
     product?: TillProduct;
     /**
-     * The dish's frozen answers to its options lists; absent on a line that answered none and on
-     * every child line. The six names per answer are the server's, copied by value.
-     *
-     * `options` is deliberately NOT here: a frozen answer carries no list or label id, so the till
-     * re-derives them by matching these names against the dish's live offered lists
-     * (`deriveOptionSelections`, `../state/held-options.ts`). The match is on the STAFF name alone, so
-     * a list or label whose staff wording changed matches nothing.
+     * The dish's recorded answers with the original list id and six frozen names.
+     * The till rebuilds a selection only when that list still offers the recorded staff wording.
      */
     optionSnapshots?: OptionSnapshot[];
   })[];

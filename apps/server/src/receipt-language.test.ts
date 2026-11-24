@@ -864,7 +864,7 @@ describe("a sale prints its goods in the default content language its lines stor
     }
   }
 
-  /** The line a Spanish-default venue stores, on the order and on the sale. */
+  /** The Spanish-default line as stored on the sale. */
   const SPANISH_LINE = {
     descriptions: { "ca-ES": "CLIENT-ES Tostada" },
     unitName: { es: "ES-rac" },
@@ -879,6 +879,13 @@ describe("a sale prints its goods in the default content language its lines stor
       },
     ],
   };
+
+  function spanishOrderLine(listId: string) {
+    return {
+      ...SPANISH_LINE,
+      optionSnapshots: [{ ...SPANISH_LINE.optionSnapshots[0]!, listId }],
+    };
+  }
 
   /** The goods stored on an order's lines and on the sale filed from it. */
   function storedGoods(id: string) {
@@ -942,7 +949,7 @@ describe("a sale prints its goods in the default content language its lines stor
       }
       expectGoods(receipt!, "es");
       expect(storedGoods(sale.id)).toEqual({
-        order: [SPANISH_LINE, SPANISH_LINE],
+        order: Array(2).fill(spanishOrderLine(goods.options[0]!.listId)),
         sale: [SPANISH_LINE],
       });
     }
@@ -1085,7 +1092,7 @@ describe("a sale prints its goods in the default content language its lines stor
       })),
     ).toEqual([SPANISH_LINE]);
     expect(storedGoods(id)).toEqual({
-      order: [SPANISH_LINE, SPANISH_LINE],
+      order: Array(2).fill(spanishOrderLine(goods.options[0]!.listId)),
       sale: [SPANISH_LINE],
     });
     const [filed] = suite.db.all<{ id: string }>(

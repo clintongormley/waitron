@@ -13,7 +13,6 @@ import {
   editLineExtras,
   editLineOptions,
   editUnsentLineOptions,
-  onlyStoredAnswersUnmatched,
   type ExtraProductFacts,
 } from "./modifier-selection.js";
 
@@ -166,6 +165,7 @@ describe("buildLineExtras", () => {
     ).optionSnapshots;
     expect(answer).toEqual([
       {
+        listId: cooked.id,
         listName: { en: "Cooked staff" },
         listCustomerName: null,
         listKitchenName: "Cook kitchen",
@@ -192,6 +192,7 @@ describe("buildLineExtras", () => {
     ).optionSnapshots;
     expect(answer).toEqual([
       {
+        listId: cooked.id,
         listName: { en: "Cooked staff" },
         listCustomerName: { en: "Cooked staff" },
         listKitchenName: "Cook kitchen",
@@ -294,6 +295,7 @@ describe("buildLineExtras", () => {
     );
     expect(optionSnapshots).toEqual([
       {
+        listId: cooked.id,
         listName: { en: "Cooked staff" },
         listCustomerName: { en: "How cooked? diner" },
         listKitchenName: "Cook kitchen",
@@ -304,7 +306,6 @@ describe("buildLineExtras", () => {
     ]);
     // Neither the list's id nor the label's reaches the line, so editing or deleting either cannot
     // rewrite a saved order.
-    expect(JSON.stringify(optionSnapshots)).not.toContain("list-cooked");
     expect(JSON.stringify(optionSnapshots)).not.toContain("label-medium-rare");
   });
 
@@ -338,6 +339,7 @@ describe("buildLineExtras", () => {
     );
     expect(optionSnapshots).toEqual([
       {
+        listId: cooked.id,
         listName: { es: "Cooked staff" },
         listCustomerName: { es: "Punto cliente" },
         listKitchenName: "Cook kitchen",
@@ -526,6 +528,7 @@ describe("editLineOptions", () => {
       };
       const stored = [
         {
+          listId: cooked.id,
           listName: { es: "Cooked staff" },
           listCustomerName: recordedList,
           listKitchenName: "Cook kitchen",
@@ -572,6 +575,7 @@ describe("editLineOptions", () => {
     // The row a line priced earlier from the same menu holds.
     const stored = [
       {
+        listId: cooked.id,
         listName: { es: "Cooked staff" },
         listCustomerName: { es: "Punto cliente" },
         listKitchenName: "Cook kitchen",
@@ -638,6 +642,7 @@ describe("editLineOptions", () => {
     ).toEqual([
       stored[0],
       {
+        listId: sauce.id,
         listName: { en: "Sauce staff" },
         listCustomerName: { en: "Sauce diner" },
         listKitchenName: "Sauce kitchen",
@@ -835,123 +840,6 @@ describe("asksNoNewAnswer", () => {
   });
 });
 
-describe("onlyStoredAnswersUnmatched", () => {
-  const rare = { listId: cooked.id, labelId: mediumRare.id };
-  const pepper = { listId: sauce.id, labelId: "label-pepper" };
-  const stored = freeze({ options: [cooked] }, { options: [rare] }).optionSnapshots;
-  const storedBoth = freeze(
-    { options: [cooked, sauce] },
-    { options: [rare, pepper] },
-  ).optionSnapshots;
-  const renamed: OptionList = { ...cooked, name: "Doneness staff" };
-  const relabelled: OptionList = {
-    ...cooked,
-    labels: cooked.labels.map((label) =>
-      label.id === mediumRare.id ? { ...label, name: "Pink staff" } : label,
-    ),
-  };
-  const withdrawn: OptionList = {
-    ...cooked,
-    labels: cooked.labels.map((label) =>
-      label.id === mediumRare.id ? { ...label, available: false } : label,
-    ),
-  };
-
-  it.each([
-    { case: "its list renamed", offered: [renamed], requested: [], held: stored },
-    { case: "its label renamed", offered: [relabelled], requested: [], held: stored },
-    { case: "its list gone", offered: [], requested: [], held: stored },
-    {
-      case: "its list switched off",
-      offered: [{ ...cooked, active: false }],
-      requested: [],
-      held: stored,
-    },
-    { case: "its label withdrawn, not named", offered: [withdrawn], requested: [], held: stored },
-    { case: "its withdrawn label named", offered: [withdrawn], requested: [rare], held: stored },
-    {
-      case: "one of two lists renamed, the other re-sent",
-      offered: [renamed, sauce],
-      requested: [pepper],
-      held: storedBoth,
-    },
-  ])("holds with $case", ({ offered, requested, held }) => {
-    expect(onlyStoredAnswersUnmatched(offered, requested, held)).toBe(true);
-  });
-
-  it.each([
-    { case: "every answer re-sent", offered: [cooked], requested: [rare], held: stored },
-    { case: "a still-matching answer left out", offered: [cooked], requested: [], held: stored },
-    {
-      case: "one of two answers unmatched and neither re-sent",
-      offered: [renamed, sauce],
-      requested: [],
-      held: storedBoth,
-    },
-    {
-      case: "a new list beside a re-sent answer",
-      offered: [cooked, sauce],
-      requested: [rare],
-      held: stored,
-    },
-    {
-      case: "more lists unanswered than answers unmatched",
-      offered: [renamed, sauce],
-      requested: [],
-      held: stored,
-    },
-    { case: "nothing stored", offered: [cooked], requested: [], held: [] },
-  ])("does not hold with $case", ({ offered, requested, held }) => {
-    expect(onlyStoredAnswersUnmatched(offered, requested, held)).toBe(false);
-  });
-
-  it("pairs one offered list with one stored answer only", () => {
-    expect(onlyStoredAnswersUnmatched([cooked], [rare], [...stored, ...stored])).toBe(true);
-  });
-
-  it("reads request ids in any case, as the validator does", () => {
-    const shouted = { listId: rare.listId.toUpperCase(), labelId: rare.labelId.toUpperCase() };
-    expect(onlyStoredAnswersUnmatched([cooked, sauce], [shouted], [...stored, ...stored])).toBe(
-      true,
-    );
-  });
-
-  it("does not hold when the answer the menu still matches is left out beside an unmatched one", () => {
-    expect(onlyStoredAnswersUnmatched([sauce], [], storedBoth)).toBe(false);
-  });
-
-  describe("with two lists sharing a staff name", () => {
-    const twin: OptionList = {
-      ...sauce,
-      id: "list-sauce-twin",
-      labels: [{ ...sauce.labels[0]!, id: "label-pepper-twin" }],
-    };
-    const pepperOnTwin = { listId: twin.id, labelId: "label-pepper-twin" };
-
-    it.each([
-      { list: "the first", requested: [pepper] },
-      { list: "the second", requested: [pepperOnTwin] },
-    ])("holds whichever of them, $list, the till gave the answer to", ({ requested }) => {
-      expect(onlyStoredAnswersUnmatched([sauce, twin], requested, storedBoth)).toBe(true);
-    });
-
-    it("does not hold when neither is answered", () => {
-      expect(onlyStoredAnswersUnmatched([sauce, twin], [], storedBoth)).toBe(false);
-    });
-  });
-
-  it.each([
-    { case: "not a list", requested: "nonsense" },
-    {
-      case: "holding malformed entries",
-      requested: [null, { listId: 1, labelId: 2 }, { listId: sauce.id, labelId: 2 }],
-    },
-  ])("reads a request $case as answering nothing", ({ requested }) => {
-    expect(onlyStoredAnswersUnmatched([renamed], requested, stored)).toBe(true);
-    expect(onlyStoredAnswersUnmatched([sauce], requested, storedBoth)).toBe(false);
-  });
-});
-
 describe("editUnsentLineOptions", () => {
   const rare = { listId: cooked.id, labelId: mediumRare.id };
   const wellDone = { listId: cooked.id, labelId: "label-well-done" };
@@ -995,6 +883,7 @@ describe("editUnsentLineOptions", () => {
         labels: [{ ...sauce.labels[0]!, customerName: null }],
       };
       const recorded: OptionSnapshot = {
+        listId: sauce.id,
         listName: { es: "Sauce staff" },
         listCustomerName: { es: "Recorded French list" },
         listKitchenName: "Sauce kitchen",
@@ -1070,9 +959,10 @@ describe("editUnsentLineOptions", () => {
       ]);
     });
 
-    it("keeps nothing beside a list that may be the old one renamed", () => {
+    it("keeps the removed list's answer when staff answer a renamed list", () => {
       expect(staffLabels(editUnsentLineOptions([renamed], [wellDone], stored, "en"))).toEqual([
         "Well done staff",
+        "Pepper staff",
       ]);
     });
 
@@ -1107,10 +997,10 @@ describe("editUnsentLineOptions", () => {
         ).toEqual(["Mayo staff", "Pepper staff", "Medium rare staff"]);
       });
 
-      it("keeps nothing when only one stored answer stands for the two", () => {
+      it("keeps the removed answer when an identically named list is new", () => {
         expect(
           staffLabels(editUnsentLineOptions([withMayo, twin], [mayo, pepperOnTwin], stored, "en")),
-        ).toEqual(["Mayo staff", "Pepper staff"]);
+        ).toEqual(["Mayo staff", "Pepper staff", "Medium rare staff"]);
       });
 
       describe("when one of them is deleted", () => {
@@ -1128,18 +1018,16 @@ describe("editUnsentLineOptions", () => {
           ],
         };
 
-        // Nothing recorded says which of the two same-named answers was the deleted list's.
-        it("keeps exactly one of their answers beside the changed one", () => {
+        it("keeps the answer from the deleted twin beside the changed one", () => {
           const held = freeze(
             { options: [sauce, mayoTwin] },
             { options: [pepper, mayoOnTwin] },
           ).optionSnapshots;
 
-          const labels = staffLabels(editUnsentLineOptions([withKetchup], [ketchup], held, "en"));
+          const edited = editUnsentLineOptions([withKetchup], [ketchup], held, "en");
 
-          expect(labels).toHaveLength(2);
-          expect(labels![0]).toBe("Ketchup staff");
-          expect(["Pepper staff", "Mayo staff"]).toContain(labels![1]);
+          expect(staffLabels(edited)).toEqual(["Ketchup staff", "Mayo staff"]);
+          expect(edited?.map((answer) => answer.listId)).toEqual([sauce.id, mayoTwin.id]);
         });
 
         it("does not carry a second copy of the answer the request re-sends", () => {
@@ -1155,7 +1043,7 @@ describe("editUnsentLineOptions", () => {
       });
     });
 
-    it("keeps no deleted list's answer when the dish has more lists than the line has answers", () => {
+    it("keeps a deleted list's answer alongside multiple new answers", () => {
       const milk: OptionList = {
         ...sauce,
         id: "list-milk",
@@ -1182,7 +1070,7 @@ describe("editUnsentLineOptions", () => {
             "en",
           ),
         ),
-      ).toEqual(["Well done staff", "Oat staff", "Large staff"]);
+      ).toEqual(["Well done staff", "Oat staff", "Large staff", "Pepper staff"]);
     });
   });
 });

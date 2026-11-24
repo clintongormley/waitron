@@ -210,7 +210,11 @@ export { blankComments, blankCommentsAndLiterals, mapComments } from "./source-c
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
 export { SETTINGS_CHANGE_TYPE, settingsChangeType } from "./live-updates.js";
 
-export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
+export {
+  optionSnapshotNames,
+  type OptionSelection,
+  type OptionSnapshot,
+} from "./option-selection.js";
 export type { ExtraSelection } from "./extra-selection.js";
 export type {
   DeleteImpact,

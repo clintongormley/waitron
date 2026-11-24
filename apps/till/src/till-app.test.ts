@@ -8139,8 +8139,9 @@ describe("till-app", () => {
     expect(banner()).toContain(t("held.extra_not_offered"));
   });
 
-  it("shows a retrieved line's frozen options answers, which carry no ids to re-send", async () => {
+  it("shows a retrieved line's frozen answer when the dish no longer offers its list", async () => {
     const snapshot = {
+      listId: "list-gone",
       listName: { "es-ES": "Punto personal" },
       listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
       listKitchenName: "PTO",
@@ -8185,10 +8186,7 @@ describe("till-app", () => {
     expect(line.options).toBeUndefined();
   });
 
-  // A frozen answer carries six names and no ids, so a retrieved line re-derives the
-  // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
-  // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
-  // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
+  // The list and label each use distinct names so only the staff wording matches.
   const donenessList = {
     kind: "options" as const,
     id: "list-punto",
@@ -8216,6 +8214,7 @@ describe("till-app", () => {
 
   /** The answer as the server froze it: the list's three names and the chosen label's three. */
   const frozenDoneness = {
+    listId: donenessList.id,
     listName: { es: "Punto" },
     listCustomerName: { es: "¿Cómo lo quiere?" },
     listKitchenName: "PTO",
@@ -8335,6 +8334,7 @@ describe("till-app", () => {
   };
   const frozenMilk = {
     ...frozenDoneness,
+    listId: oatMilkList.id,
     listName: { es: "Leche" },
     labelName: { es: "Avena" },
   };
@@ -8508,6 +8508,67 @@ describe("till-app", () => {
       );
       expect(counter.store.lines[0]!.optionSnapshots).toEqual([frozenRare, frozenMilk]);
       expect(counter.store.dirty).toBe(false);
+    });
+
+    it("asks for Milk and reads back Cooking after the Cooking list is deleted", async () => {
+      const sauceList = { ...donenessList, id: "list-sauce", name: "Sauce" };
+      const cooking = { ...frozenDoneness, listId: donenessList.id };
+      const sauce = { ...frozenDoneness, listId: sauceList.id, listName: { es: "Sauce" } };
+      const milk = { ...frozenMilk, listId: oatMilkList.id };
+      const before = [cooking, sauce];
+      const saved = [cooking, sauce, milk];
+      const offering = { ...coffee, offeredModifiers: [sauceList, oatMilkList] };
+      const { el } = await mountApp({
+        listDefaultZoneOffers: vi
+          .fn()
+          .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(orderWith(before))
+          .mockResolvedValue(orderWith(saved)),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce({ lines: [listedWith(before)], revision: 0 })
+          .mockResolvedValue({ lines: [listedWith(saved)], revision: 1 }),
+        placeOrder: vi.fn().mockRejectedValue({ code: "place.refused" }),
+      });
+      const counter = await toCounter(el);
+      emit(counter, "retrieve-order", { id: "wo-answered" });
+      await flush(el);
+
+      expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
+      const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
+      await userEvent.click(
+        basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="0"]')!,
+      );
+      await flush(el);
+      const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+      await picker.updateComplete;
+      await userEvent.click(
+        picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="options-list-leche"]')!,
+      );
+      await userEvent.click(picker.shadowRoot!.querySelector<HTMLButtonElement>(".confirm")!);
+      await flush(el);
+      expect(counter.store.lines[0]!.optionSnapshots).toHaveLength(2);
+
+      emit(counter, "place-order");
+      await flush(el);
+
+      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+        "wo-answered",
+        expect.objectContaining({
+          lines: [
+            expect.objectContaining({
+              workingOrderLineId: "line-answered",
+              options: [
+                { listId: "list-sauce", labelId: "label-medium" },
+                { listId: "list-leche", labelId: "label-avena" },
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(counter.store.lines[0]!.optionSnapshots).toEqual(saved);
     });
 
     it("does not read the order back when the row holds every stored answer", async () => {

@@ -23,6 +23,7 @@ import {
   MONEY_SCALE,
   QUANTITY_SCALE,
   multiplyDecimal,
+  optionSnapshotNames,
   perDishOptionQuantity,
   rawCentsToDecimal,
   type ChangesAfterSending,
@@ -1339,7 +1340,7 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
       priceQuantity: thousandthsToDecimal(line.priceQuantity),
       name: line.name,
       descriptions: line.descriptions,
-      optionSnapshots: line.optionSnapshots,
+      optionSnapshots: line.optionSnapshots.map(optionSnapshotNames),
       category: line.category,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
@@ -5418,7 +5419,7 @@ export interface HeldOrder {
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
   lines: {
-    /** The dish's frozen options answers: names, no ids. */
+    /** The dish's recorded answers with their list ids and frozen names. */
     optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;

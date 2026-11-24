@@ -3217,6 +3217,7 @@ describe("till-table-order-screen", () => {
         note: "sin sal",
         optionSnapshots: [
           {
+            listId: cookedList.id,
             listName: { es: "Punto" },
             listCustomerName: { es: "Punto carta" },
             listKitchenName: "Punto KDS",
@@ -3291,7 +3292,8 @@ describe("till-table-order-screen", () => {
     });
 
     describe("a line holding an answer to a list the dish no longer offers", () => {
-      const snapshot = (list: string, label: string) => ({
+      const snapshot = (listId: string, list: string, label: string) => ({
+        listId,
         listName: { es: list },
         listCustomerName: { es: `${list} carta` },
         listKitchenName: `${list} KDS`,
@@ -3301,7 +3303,10 @@ describe("till-table-order-screen", () => {
       });
       const line: TabLine = {
         ...burgerLine,
-        optionSnapshots: [snapshot("Punto", "Poco hecha"), snapshot("Pan", "Sin gluten")],
+        optionSnapshots: [
+          snapshot(cookedList.id, "Punto", "Poco hecha"),
+          snapshot("list-bread", "Pan", "Sin gluten"),
+        ],
       };
       const mountWithdrawn = () =>
         mount({ products: [{ ...burger, offeredModifiers: [cookedList] }], lines: [line] });

@@ -1527,7 +1527,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
   [Table restrictions after the grants audit](backlog/architecture.md#remaining-table-restrictions-after-the-grants-record-audit)
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 8, 5 important, size M, waits for the A1308 table hold to lift). [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 7, 4 important, size M, waits for the A1308 table hold to lift). [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes

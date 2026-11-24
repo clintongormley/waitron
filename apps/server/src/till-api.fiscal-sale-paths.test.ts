@@ -2963,7 +2963,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       name: "Agua mineral",
       quantity: 1000,
       parentLineId: null,
-      optionSnapshots: [frozenAnswer],
+      optionSnapshots: [{ ...frozenAnswer, listId: optionListId }],
     },
     {
       id: expect.any(String),
@@ -2977,7 +2977,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       name: "Agua mineral",
       quantity: 1000,
       parentLineId: null,
-      optionSnapshots: [frozenAnswer],
+      optionSnapshots: [{ ...frozenAnswer, listId: optionListId }],
     },
     {
       id: expect.any(String),
