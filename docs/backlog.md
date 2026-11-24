@@ -469,8 +469,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
   tab with Online and Print, named styles, and a customer page the box serves through Cloud.
-  Cloud removes its old hosted copies in piece 6.
-  [Design](superpowers/specs/2026-11-24-customer-menu-design.md)
+  Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
+  piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)
 - **Allergens and diets are published with the menu (owner, 2026-11-24), replacing A1150.** Piece 2 of
   the same design, section 8; it stands alone.
 

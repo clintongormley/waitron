@@ -45,13 +45,15 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
   let primary = false,
     ticks = 0;
   const errors: unknown[] = [];
+  const pauses: number[] = [];
   try {
     await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => primary,
       onError: (e) => errors.push(e),
-      sleep: async () => {
+      sleep: async (ms) => {
+        pauses.push(ms);
         ticks++;
         if (ticks === 1) {
           expect(f.requests).toHaveLength(0);
@@ -63,6 +65,7 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
         } else controller.abort();
       },
     });
+    expect(pauses).toEqual([60_000, 60_000, 60_000]);
     expect((await f.client.status()).installation?.state).toBe("active");
     expect(f.requests[0]![4]).toBe(f.requests[1]![4]);
   } finally {

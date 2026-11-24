@@ -378,7 +378,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
 
 - **Allergen choices (A1517, owner 2026-11-11, “As recommended”).** Hide unchecked dishes while
   excluding allergens, then extend filtering to extras/options; print live declarations on every
-  kitchen ticket; bring forward the basic guest-menu design; label extras before selection; keep
+  kitchen ticket; bring forward the basic guest-menu design, now superseded by the
+  [customer menu design](../superpowers/specs/2026-11-24-customer-menu-design.md); label extras before selection; keep
   sent-order/history declarations as sent while kitchen and guest-clash checks stay current.
   Option-list labels carry no allergen declarations and remain unfiltered; new-dish filtering covers
   sizes and extra products, while saved dishes keep their choices.
