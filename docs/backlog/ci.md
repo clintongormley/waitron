@@ -281,6 +281,17 @@ The unchanged first-hour file passed all 142 cases locally. The key-only PDF cas
 the [24 November job](https://github.com/clintongormley/waitron/actions/runs/45330023321/job/138229178179).
 Both 14 November PDF failures still need an assertion trace.
 
+The slow file again, with no failed assertion, on 24 November:
+[run 45330023321, job 138229178179](https://github.com/clintongormley/waitron/actions/runs/45330023321/job/138229178179)
+(#4206) stopped at the 420 s deadline with no unfinished test file reported.
+`backup-verification-history.test.ts` took 328.4 s, against 40.6 s and 68.8 s in the shard 2 jobs
+of runs 45323660109 and 45322811342 the same hour; `drain.cases.test.ts` took 31.1 s against 9.0 s
+and `handover-chain-check.test.ts` 29.2 s against 3.6 s in the first of those, while
+`setup/first-hour.browser.test.ts` took 27.4 s against 27.3 s. So the tests that run in Node slowed
+and that browser test did not; whether the runner's disk was the cause is not established. The log is
+`ci-logs/pr4206-run45330023321-test-fiscal-verifactu-2.log` in lane L. A slow runner also took
+`test-venue-service` past its limit before its databases moved to memory (A500); trying the same here is the first thing to measure.
+
 ## Bundle: Qualify CI's server routing and action setup
 
 The [checked routing records](../developers/ci-and-gates.md#disposable-server-test-runners)

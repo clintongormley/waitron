@@ -10,7 +10,7 @@ import type {
   ClockWitness,
   TrustedClock,
 } from "@waitron/fiscal";
-import type { NodeId, SeriesId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
@@ -60,10 +60,11 @@ function clockAt(ms: number): TrustedClock {
   };
 }
 
-async function sale(ms: number): Promise<void> {
-  await withTransaction(suite.db, (tx) =>
-    recordSale(tx, backend, saleInput({ nodeId, seriesId, clock: clockAt(ms) })),
+async function sale(ms: number, seller = { nodeId, seriesId }): Promise<SaleId> {
+  const { saleId } = await withTransaction(suite.db, (tx) =>
+    recordSale(tx, backend, saleInput({ ...seller, clock: clockAt(ms) })),
   );
+  return saleId;
 }
 
 function device(id: string, boxMs: number, differenceMs: number, address: string): ClockWitness {
@@ -403,6 +404,23 @@ describe("the seat's chain heads", () => {
     await sale(R);
     await sale(R + M);
     await expect(heads()).resolves.toEqual({ [nodeId]: 2 });
+  });
+
+  it("answers a node's record at its highest position, never another node's", async () => {
+    const other = await seedTaxpayerWithSif(suite.db);
+    const latest = (node: NodeId) =>
+      withTransaction(suite.db, (tx) => backend.latestRecord(tx, node));
+    await expect(latest(nodeId)).resolves.toBeNull();
+
+    await sale(R);
+    const second = await sale(R + M);
+    await expect(latest(nodeId)).resolves.toEqual({ position: 2, saleId: second });
+    await expect(latest(other.nodeId)).resolves.toBeNull();
+
+    for (const at of [2, 3]) await sale(R + at * M, other);
+    const elsewhere = await sale(R + 4 * M, other);
+    await expect(latest(nodeId)).resolves.toEqual({ position: 2, saleId: second });
+    await expect(latest(other.nodeId)).resolves.toEqual({ position: 3, saleId: elsewhere });
   });
 });
 

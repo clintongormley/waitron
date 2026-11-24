@@ -104,7 +104,9 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
           mode: "trading",
           menus: menuRows.length,
           orders: page.rows.length,
-          fiscalRecords: integrity.checked,
+          // `checked` counts what the integrity read looked at, which need not be the whole chain.
+          fiscalRecords:
+            (await backend.latestRecord?.(tx, node.nodeId))?.position ?? integrity.checked,
         };
       });
     } finally {

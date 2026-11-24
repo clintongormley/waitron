@@ -39,8 +39,12 @@ import {
   writeDepartmentReceipt,
 } from "@waitron/venue-service";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { enabledModules } from "@waitron/module";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
+import { readModuleConfig } from "./module-config.js";
+import { readFilingModule } from "./node-config.js";
+import { makeFiscalBackend } from "./till-backend.js";
 import type { ServerConfig } from "./config.js";
 import { boxHostClient } from "./box-host-client.js";
 import { answersSynchronised } from "./clock-service-reading.js";
@@ -264,11 +268,24 @@ export async function checkUpgradeSale(
   const store = await openVenueDatabase(config.venueDir);
   try {
     const [sale] = await store.venue.select().from(sales).where(eq(sales.workingOrderId, orderId));
+    const backend = makeFiscalBackend(
+      enabledModules(ALL_MODULES, await readModuleConfig(store.venue)),
+      await readFilingModule(store.venue, config.node!),
+      store.venue,
+      env,
+    );
+    const latest = await withTransaction(store.venue, async (tx) =>
+      backend.latestRecord?.(tx, config.node!.nodeId),
+    );
     if (
       !sale ||
       sale.total !== 100 ||
       sale.invoiceNumber < 1 ||
-      (sale.fiscalState === "recorded" && after.fiscalRecords !== before.fiscalRecords + 1)
+      // A regime keeping record positions must show this sale's record as the latest on this node's chain.
+      (backend.latestRecord !== undefined &&
+        (sale.fiscalState !== "recorded" ||
+          after.fiscalRecords <= before.fiscalRecords ||
+          latest?.saleId !== sale.id))
     )
       throw new Error("Upgrade sale was not persisted with its fiscal history");
     return {

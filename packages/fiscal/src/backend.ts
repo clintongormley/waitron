@@ -388,6 +388,13 @@ export interface FiscalBackend {
   /** Each node's highest record position. Absent when the regime keeps no record positions. */
   recordHeads?(tx: Transaction): Promise<Record<string, number>>;
 
+  /** The record at `nodeId`'s highest position; null when it has none. Absent when the regime keeps
+   * no record positions. */
+  latestRecord?(
+    tx: Transaction,
+    nodeId: NodeId,
+  ): Promise<{ position: number; saleId: SaleId } | null>;
+
   /** The highest position above `abovePosition` on `nodeId`'s chain AEAT refused as dated in the
    * future, with its issue date; null when none. Absent when the regime files nothing. */
   latestFutureDateRefusal?(
