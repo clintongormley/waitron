@@ -171,9 +171,9 @@ Read on `af930f2b30`; "ran" marks what was run.
 - **S2. Its own price** (the weight) is the dish's ordinary offer in the menu copy its line records
   (`menu_version_id`): that offer's price, or a variant's menu price, else its own. A line whose copy has
   no ordinary offer of it takes the product's own price (a variant's
-  own, else its dish's). This is A1515's rule for "its à la carte price" (its section 1); when A1515
-  piece 3 stores that price on the line, the reader takes it from there. A weight taken from the copy never
-  moves; one taken from the product's own price is read at issue, as the rates are.
+  own, else its dish's). This is A1515's rule for "its à la carte price" (its section 1). A1515 piece 3
+  (#4258) stores that price on the line when the dish is added, and the reader takes it from there (B1.2h,
+  24 Nov): a product price changed after the dish was added does not move its weight.
 - **S3. Only when the rates differ.** A set menu is divided only when its covered dishes with a weight above
   0 have two or more rates that day. Otherwise its own row files the whole price at that one rate and its
   dishes stay at 0.00 at that rate: today's shape, so the common all-10% set menu files, prints and reports
