@@ -3488,6 +3488,10 @@ it("ticks from padding beside the menu grip and leaves selection alone during a 
   expect(changes).toEqual([{ selected: ["m-burger"] }]);
   await userEvent.click(grip);
   expect(changes).toEqual([{ selected: ["m-burger"] }]);
+  pointer(grip, "pointerdown", grip, { pointerType: "mouse" });
+  pointer(grip, "pointerup", cell, { pointerType: "mouse" });
+  pointer(cell, "click", cell, { detail: 1, pointerType: "mouse" });
+  expect(changes).toEqual([{ selected: ["m-burger"] }]);
   pointer(grip, "pointerdown");
   try {
     await dragOver(el, grip, "m-drinks", "middle");

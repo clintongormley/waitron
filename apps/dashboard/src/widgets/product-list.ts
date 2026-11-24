@@ -464,8 +464,7 @@ export class ProductList extends LitElement {
     });
   }
 
-  /** A mouse drags a category or product from anywhere on its row; a finger only from the grip, so it
-   * can still scroll; a control on the row is never a drag handle. */
+  /** Touch starts a drag at the grip so a gesture on the rest of the row can scroll. */
   readonly #pointerDown = (event: PointerEvent): void => {
     if (!this.reordering) return;
     const path = event

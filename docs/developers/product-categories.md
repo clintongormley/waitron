@@ -404,9 +404,10 @@ category). The row stays in place, faded, while a copy follows the pointer; the 
 is tinted, inside a primary-colour ring with a bar on its left edge, and, while that row is open
 and shows rows under it, a dashed gap shows where the row will land in the current sort. Open parent
 categories before dragging to reach their subcategories.
-Esc, or a drop where the drag started, moves nothing. A mouse drags from anywhere on the row; a
-finger drags only from the row's grip, so the rest of the row still scrolls. A keyboard does not
-drag: keyboard users, and touch users who prefer it, use the same selection actions.
+Esc, or a drop where the drag started, moves nothing. With a mouse, drag from the grip or from row
+space outside the selection cell and the other controls. On a touch screen, drag from the grip so
+you can scroll on the rest of the row. You can also use the selection actions with a keyboard or on
+a touch screen.
 
 Searching or changing a filter keeps your ticks, so you can gather rows from several searches.
 The selected count includes hidden ticks; Move includes them too. A drag carries only visible ticks

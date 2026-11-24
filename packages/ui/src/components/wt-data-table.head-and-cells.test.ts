@@ -1,10 +1,17 @@
 import { html } from "lit";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { chooseOption, cleanup, mount } from "../test-helpers.js";
+import {
+  chooseOption,
+  cleanup,
+  elementPixels,
+  emulateForcedColours,
+  mount,
+} from "../test-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
+import "./wt-switch.js";
 import "./wt-data-table.js";
 
 afterEach(() => {
@@ -128,6 +135,33 @@ test.each(["tree", "pinned"] as const)("sorts from blank %s heading space once",
   expect(cell.getAttribute("aria-sort")).toBe("descending");
 });
 
+test("sorts from a visible heading without scrolling to its hidden button", async () => {
+  const el = await table({
+    columns: [
+      { ...nameColumn, sortValue: (row) => row.name, cell: (row) => `${row.name} `.repeat(50) },
+      statusColumn,
+    ],
+  });
+  el.style.width = "300px";
+  const root = el.shadowRoot!;
+  const scroll = root.querySelector<HTMLElement>(".scroll")!;
+  scroll.scrollLeft = 200;
+  const button = root.querySelector<HTMLButtonElement>("button.sort")!;
+  const cell = button.closest("th")!;
+  expect(box(button).right).toBeLessThan(box(scroll).left);
+  // Playwright can aim at the visible padding without revealing the whole heading.
+  const visiblePadding = document.createElement("span");
+  visiblePadding.style.cssText =
+    "position: absolute; inset: 3px auto auto 240px; width: 12px; height: 12px";
+  cell.append(visiblePadding);
+  const scrollAtPress: number[] = [];
+  visiblePadding.addEventListener("pointerdown", () => scrollAtPress.push(scroll.scrollLeft));
+  await clickPadding(visiblePadding);
+  expect(scrollAtPress).toEqual([200]);
+  expect(root.activeElement).toBe(button);
+  expect(scroll.scrollLeft).toBe(200);
+});
+
 test.each([
   { tree: false, activation: "click", grip: false },
   { tree: true, activation: "toggle", grip: true },
@@ -152,24 +186,28 @@ test.each([
     });
     const expand = vi.fn();
     el.addEventListener("wt-expand-change", expand);
+    const click = vi.fn();
+    el.addEventListener("click", click);
     const rowBox = root.querySelector<HTMLInputElement>('[data-test="select-food"]')!;
     const cell = rowBox.closest("td")!;
     await clickPadding(cell);
     expect(changes).toEqual([["food"]]);
+    expect(click).toHaveBeenCalledTimes(1);
     expect(root.activeElement).toBe(rowBox);
     expect(getComputedStyle(cell).cursor).toBe("pointer");
     expect(open).not.toHaveBeenCalled();
     expect(expand).not.toHaveBeenCalled();
     await userEvent.keyboard(" ");
     expect(changes).toEqual([["food"], []]);
-    el.selected = ["food"];
+    await userEvent.click(rowBox);
+    expect(changes).toEqual([["food"], [], ["food"]]);
     await el.updateComplete;
     const selectAll = root.querySelector<HTMLInputElement>('[data-test="select-all"]')!;
     const heading = selectAll.closest("th")!;
     expect(selectAll.indeterminate).toBe(true);
     await clickPadding(heading);
-    expect(changes).toHaveLength(3);
-    expect(changes[2]).toEqual(expect.arrayContaining(["food", "drinks"]));
+    expect(changes).toHaveLength(4);
+    expect(changes[3]).toEqual(expect.arrayContaining(["food", "drinks"]));
     expect(selectAll.checked).toBe(true);
     expect(selectAll.indeterminate).toBe(false);
     expect(getComputedStyle(heading).cursor).toBe("pointer");
@@ -189,6 +227,40 @@ test("padding beside a grip without a checkbox still opens its row", async () =>
   expect(open.mock.calls[0]?.[0]).toEqual(rows[0]);
 });
 
+test("a supplied row control in a shadow root keeps its click", async () => {
+  const el = await table({
+    selectable: true,
+    rowControls: (row) => html`<wt-switch label=${`Available: ${row.name}`}></wt-switch>`,
+  });
+  const toggle = el.shadowRoot!.querySelector("wt-switch")!;
+  await toggle.updateComplete;
+  const selection = vi.fn();
+  el.addEventListener("wt-selection-change", selection);
+  await userEvent.click(page.getByRole("switch", { name: "Available: Food" }));
+  expect(toggle.checked).toBe(true);
+  expect(selection).not.toHaveBeenCalled();
+});
+
+test("a joined row's contrast marker stays visible past its checkbox", async () => {
+  onTestFinished(() => emulateForcedColours(null));
+  await emulateForcedColours("active");
+  const el = await table({
+    rowParent: (row) => row.parent,
+    rowJoinsParent: (row) => row.id === "eggs",
+  });
+  const row = el.shadowRoot!.querySelector('tr[data-row-key="eggs"]')!;
+  const pixelsOnLeadingEdge = async () => {
+    const at = await elementPixels(el);
+    const { left, top, height } = box(row);
+    return [0, 1, 2, 3].map((offset) => at(left + offset, top + height / 2).join());
+  };
+  const edge = await pixelsOnLeadingEdge();
+  expect(edge).toContain("0,0,0");
+  el.selectable = true;
+  await el.updateComplete;
+  expect(await pixelsOnLeadingEdge()).toEqual(edge);
+});
+
 test.each([false, true])(
   "changes only opted-in body padding at the table's own width, tree %s",
   async (tree) => {
@@ -199,7 +271,8 @@ test.each([false, true])(
       columns: [
         { ...nameColumn, cell: () => html`<button style="min-height: 44px">Open</button>` },
         {
-          ...statusColumn,
+          key: "details",
+          label: "Details",
           cell: (row) =>
             row.id === "drinks"
               ? "A description with enough text to wrap onto several separate lines at the smaller width. ".repeat(
@@ -222,6 +295,9 @@ test.each([false, true])(
     expect(getComputedStyle(cell).paddingBlock).toBe("2px");
     expect(box(row).height).toBeGreaterThanOrEqual(48);
     expect(box(row).height).toBeLessThanOrEqual(52);
+    el.style.setProperty("--wt-space-1", "10px");
+    expect(getComputedStyle(cell).paddingBlock).toBe("5px");
+    el.style.removeProperty("--wt-space-1");
     el.style.width = "320px";
     await vi.waitFor(() => expect(el.hasAttribute("narrow")).toBe(true));
     expect(getComputedStyle(cell).paddingBlock).toBe("4px");
@@ -237,11 +313,13 @@ test.each([false, true])(
     expect(getComputedStyle(cell).paddingBlock).toBe(ordinary);
     expect(el.hasAttribute("narrow")).toBe(tree);
     const parent = el.parentElement!;
-    el.remove();
     el.style.width = "540px";
     el.denseRows = true;
-    parent.append(el);
     await vi.waitFor(() => expect(getComputedStyle(cell).paddingBlock).toBe("2px"));
+    el.remove();
+    el.style.width = "320px";
+    parent.append(el);
+    await vi.waitFor(() => expect(getComputedStyle(cell).paddingBlock).toBe("7px"));
   },
 );
 

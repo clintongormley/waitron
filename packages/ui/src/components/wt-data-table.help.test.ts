@@ -115,6 +115,10 @@ test("a sortable column's badge is beside the sort button, not inside it", async
   el.addEventListener("wt-sort-change", sort);
   await userEvent.click(page.elementLocator(popup));
   expect(sort).not.toHaveBeenCalled();
+  const press = { bubbles: true, composed: true, pointerId: 3, pointerType: "mouse" };
+  badgeButton(el).dispatchEvent(new PointerEvent("pointerdown", press));
+  th.dispatchEvent(new PointerEvent("click", { ...press, detail: 1 }));
+  expect(sort).not.toHaveBeenCalled();
   const { left, top } = th.getBoundingClientRect();
   const position = { x: 3, y: 3 };
   expect(el.shadowRoot!.elementFromPoint(left + position.x, top + position.y)).toBe(th);
@@ -193,8 +197,8 @@ test("in a right-to-left page it hangs over the label's top left corner", async 
   expect(Math.abs(centre.y - label.top)).toBeLessThanOrEqual(1);
 });
 
-test("an open column help box sets its own plain weight rather than the heading's bold", async () => {
-  const el = await table([nameColumn, availability()]);
+test("an open help box keeps its own text weight and cursor in a sortable heading", async () => {
+  const el = await table([nameColumn, availability({ sortValue: (row) => row.status })]);
   host.style.setProperty("--wt-font-weight-normal", "300");
   host.style.setProperty("--wt-font-weight-bold", "800");
   await turnHelp(true, el);
@@ -204,4 +208,5 @@ test("an open column help box sets its own plain weight rather than the heading'
   await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
   expect(getComputedStyle(headerOf(el, "Availability")).fontWeight).toBe("800");
   expect(getComputedStyle(popup).fontWeight).toBe("300");
+  expect(getComputedStyle(popup).cursor).toBe("auto");
 });

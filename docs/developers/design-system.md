@@ -1577,7 +1577,8 @@ list wraps at every width. Products keeps its separately fitted names and defaul
 
 Set `denseRows` (the `dense-rows` attribute) to reduce the block padding of body cells. Each side
 uses half of `--wt-space-1` above 440 px of scrolling-box width and half of `--wt-space-2` at or
-below it. Headings and inline padding keep their spacing. A row grows to fit its contents.
+below it. Headings and inline padding keep their spacing. A row takes its height from its
+contents. Give the row a control with a `--wt-tap-min` target where you need a 44 px minimum.
 
 A reorderable table (`ReorderController.tableStyles`, `packages/ui/src/reorder-table.ts`) lines its
 body cells up by the baseline (`vertical-align: baseline`), so on a tall row the drag handle sits on
