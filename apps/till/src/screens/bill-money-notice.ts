@@ -18,7 +18,7 @@ export function beingPaidNotice(balance: BillBalance | null): TemplateResult | t
 }
 
 export interface OverpaidNotice {
-  balance: BillBalance | null;
+  balance: Pick<BillBalance, "overpaid" | "total"> | null;
   tipsEnabled: boolean;
   /** A Keep as tip is unanswered: both choices wait for it. */
   busy: boolean;

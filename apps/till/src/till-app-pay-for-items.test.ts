@@ -739,32 +739,33 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         "till-counter-screen",
       )!;
 
+    const heldWo1 = {
+      zoneId: null,
+      items: [],
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Ana",
+      counts: { ordered: 5, unsent: 0, held: 0, waiting: 0, ready: 0 },
+      total: "120.00",
+      outstanding: "120.00",
+      hasPayments: false,
+      partyId: null,
+      billNumber: null,
+      billName: null,
+      openedAt: "2026-09-30T19:00:00.000Z",
+      signals: [],
+    };
+
     /** Signed in at the counter with the held order `wo-1` retrieved, its edit state as each
      * read in `edits` gives it (the last one repeating). */
     async function retrieved(
       overrides: Record<string, unknown>,
       edits: (typeof counterEdit | null)[] = [counterEdit],
+      permissions: string[] = [],
     ): Promise<TillApp> {
       let reads = 0;
       const { el } = await mountApp({
-        listWorkingOrders: vi.fn().mockResolvedValue([
-          {
-            zoneId: null,
-            items: [],
-            id: "wo-1",
-            orderNumber: 5,
-            label: "Ana",
-            counts: { ordered: 5, unsent: 0, held: 0, waiting: 0, ready: 0 },
-            total: "120.00",
-            outstanding: "120.00",
-            hasPayments: false,
-            partyId: null,
-            billNumber: null,
-            billName: null,
-            openedAt: "2026-09-30T19:00:00.000Z",
-            signals: [],
-          },
-        ]),
+        listWorkingOrders: vi.fn().mockResolvedValue([heldWo1]),
         retrieveWorkingOrder: vi.fn(async () => ({
           zoneId: null,
           kitchenNote: {
@@ -801,7 +802,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         ...overrides,
       });
       await flush(el);
-      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions });
       await flush(el);
       emit(counter(el), "retrieve-order", { id: "wo-1" });
       await flush(el);
@@ -895,6 +896,101 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         expect(vi.mocked(api.printReceipt).mock.calls).toEqual(asked);
       },
     );
+
+    /** `wo-1` holding €95.00 on dishes that now come to €90.00 once the chosen dish is paid on
+     * `wo-9`, as after An amount and then Pay for items. */
+    async function leftOverpaid(
+      overrides: Record<string, unknown> = {},
+      permissions: string[] = [],
+    ): Promise<TillApp> {
+      let paid = false;
+      const el = await retrieved(
+        {
+          listWorkingOrders: vi.fn(async () => [
+            paid
+              ? { ...heldWo1, total: "90.00", outstanding: "-5.00", hasPayments: true }
+              : { ...heldWo1, outstanding: "25.00", hasPayments: true },
+          ]),
+          getBillBalance: vi.fn(async () =>
+            balanceOf({
+              workingOrderId: "wo-1",
+              total: paid ? "90.00" : "120.00",
+              received: "95.00",
+              outstanding: paid ? "0.00" : "25.00",
+              overpaid: paid ? "5.00" : "0.00",
+              payments: [paymentOf({ applied: "95.00", tendered: "95.00" })],
+            }),
+          ),
+          previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+          payForItems: vi.fn(async () => {
+            paid = true;
+            return paidOnWo9();
+          }),
+          ...overrides,
+        },
+        [counterEdit],
+        permissions,
+      );
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      emit(dialog(el)!, "bill-pay-close");
+      await flush(el);
+      return el;
+    }
+
+    it("at the Counter an order left paid over its total offers Give back and no Pay", async () => {
+      const el = await leftOverpaid();
+
+      const notice = counter(el).shadowRoot!.querySelector("[data-overpaid]");
+      expect(text(notice?.querySelector("p"))).toBe(
+        fill(t("table.overpaid"), { amount: money("5.00") }),
+      );
+      expect(notice!.querySelector("[data-keep-as-tip]")).toBeNull();
+      const pay = counter(el).shadowRoot!.querySelector("till-tender-pay")!;
+      expect(pay.shadowRoot!.querySelector("[data-counter-pay]")).toBeNull();
+
+      notice!.querySelector<HTMLElement>("[data-give-back]")!.click();
+      await flush(el, 6);
+
+      expect(dialog(el)!.balance?.workingOrderId).toBe("wo-1");
+      const giving =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-bill-refund-dialog"]>(
+          "till-bill-refund-dialog",
+        );
+      expect(giving?.suggested).toBe("5.00");
+    });
+
+    it("at the Counter Keep as tip keeps the excess, prints the order's receipt and starts a new sale", async () => {
+      const keepOverpaidAsTip = vi.fn().mockResolvedValue(
+        balanceOf({
+          workingOrderId: "wo-1",
+          status: "settled",
+          total: "90.00",
+          received: "90.00",
+          outstanding: "0.00",
+          tips: "5.00",
+        }),
+      );
+      const el = await leftOverpaid({ keepOverpaidAsTip }, ["payment.take"]);
+      vi.mocked(api.printReceipt).mockClear();
+
+      counter(el)
+        .shadowRoot!.querySelector<HTMLElement>("[data-overpaid] [data-keep-as-tip]")!
+        .click();
+      await flush(el, 6);
+
+      expect(keepOverpaidAsTip).toHaveBeenCalledExactlyOnceWith(
+        "wo-1",
+        expect.stringMatching(/^[0-9a-f-]{36}$/),
+        "5.00",
+        expect.anything(),
+      );
+      expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-1", { ifOwed: true });
+      expect(counter(el).store.id).not.toBe("wo-1");
+      expect(counter(el).shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+    });
 
     it("at the Counter Print payment slip names the bill that received the payment", async () => {
       const printPaymentSlip = vi.fn().mockResolvedValue(undefined);

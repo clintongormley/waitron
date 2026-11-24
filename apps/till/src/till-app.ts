@@ -22826,14 +22826,40 @@ export class TillApp extends LitElement {
     if (!this.#hasLeftOrder(billId, visit)) await this.#rereadAmounts(billId, visit, kept);
   }
 
-  async #openRefund(excess: string): Promise<void> {
-    const open = await this.#openBillPaying(
-      "contribution",
-      this.#payLinesOnScreen(),
-      undefined,
-      undefined,
-      true,
-    );
+  async #onCounterKeepAsTip(overpaid: string): Promise<void> {
+    const id = this.#store.id;
+    const session = this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    this.overpaidBusy = true;
+    this.errorKey = undefined;
+    let kept: BillBalance | undefined;
+    try {
+      kept = await this.api.keepOverpaidAsTip(id, crypto.randomUUID(), overpaid, {
+        signal: limit.signal,
+      });
+    } catch (error) {
+      if (!this.#hasLeftCounterOrder(id, session))
+        this.errorKey = counterError(error, "sale.error");
+    } finally {
+      limit.done();
+      this.overpaidBusy = false;
+    }
+    if (this.#hasLeftCounterOrder(id, session)) return;
+    if (kept?.status !== "settled") {
+      await this.#reloadCounterOrder(id, session);
+      return;
+    }
+    void this.#printOwedReceipt(id);
+    this.#replaceBasket(() => this.#onNewSale());
+    await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+  }
+
+  async #openRefund(
+    excess: string,
+    order?: PayingOrder,
+    lines = this.#payLinesOnScreen(),
+  ): Promise<void> {
+    const open = await this.#openBillPaying("contribution", lines, undefined, order, true);
     const now = open === null ? null : this.#billPayingNow(open.id);
     // Only on payments just read: a failed read says so above the dialog's action instead.
     if (now?.balance == null || now.refusal !== null || this.billRefunding !== null) return;
@@ -24615,6 +24641,9 @@ export class TillApp extends LitElement {
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
+        .paidTotal=${this.#basketPaidInPart()?.total ?? null}
+        .overpaidBusy=${this.overpaidBusy}
+        .keepsTips=${this.tipsEnabled && this.permissions.includes("payment.take")}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
@@ -25426,6 +25455,14 @@ export class TillApp extends LitElement {
           void this.#onKeepAsTip(event.detail.overpaid)}
         @dining-change=${(event: CustomEvent<{ dining: Dining }>) => void this.#onDiningChange(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
+        @counter-give-back=${(event: CustomEvent<{ excess: string }>) =>
+          void this.#openRefund(
+            event.detail.excess,
+            { surface: "counter", billId: this.#store.id, visit: this.#operatorSession },
+            this.#counterPayLines(),
+          )}
+        @counter-keep-as-tip=${(event: CustomEvent<{ overpaid: string }>) =>
+          void this.#onCounterKeepAsTip(event.detail.overpaid)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
         @back-to-counter=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @open-equipment=${() => void this.#onOpenEquipment()}

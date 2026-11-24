@@ -342,6 +342,8 @@ export class TillTenderPay extends LitElement {
   /** Cash and Card are drawn quiet but stay enabled; a tap dispatches `pay-quiet-tap` and starts
    * nothing, so the screen can say why. */
   @property({ type: Boolean }) payQuiet = false;
+  /** False while the order is paid more than it comes to: its excess is settled first. */
+  @property({ type: Boolean }) payOffered = true;
   /** The language this order's receipt prints in. */
   @property() receiptLanguage = "";
   @property({ type: Boolean }) asksGuests = false;
@@ -1033,6 +1035,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderTenderButtons(disabled: boolean) {
+    if (!this.payOffered) return nothing;
     if (this.#opensPaymentWindow())
       return html`<wt-button
         data-counter-pay
