@@ -35,7 +35,7 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
@@ -397,7 +397,7 @@ describe("opaque authenticated standby carriers", () => {
       });
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+    const key = (await mintMasterKey(suite.db)).secret;
     const result = await promoteMirrorToPrimary(
       {
         ...deps,
@@ -422,13 +422,13 @@ describe("opaque authenticated standby carriers", () => {
       entered = true;
       await activateSeries(tx, node);
     });
-    const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+    const key = (await mintMasterKey(suite.db)).secret;
     await expect(
       promoteMirrorToPrimary(
         {
           ...deps,
           withModuleOperations: async ({ db, nodeDb, node }, run) => {
-            await mintBreakGlassSecret({ venue: db, node: nodeDb }, node.nodeId);
+            await mintMasterKey(db);
             return withRecoveryKeyOperation(
               { db, node: nodeDb, nodeId: node.nodeId },
               scope,

@@ -31,7 +31,7 @@ import {
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -123,7 +123,7 @@ beforeEach(async () => {
           await withTransaction(suite.db, (tx) =>
             seedVenueSettings(tx, { name: "Source collected" }),
           );
-          if (replaceKey) await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+          if (replaceKey) await mintMasterKey(suite.db);
           return run({ ...operation, input: { current: "independent" } });
         },
       },
@@ -256,7 +256,7 @@ it.each(["account", "key"])(
     const credentials =
       method === "account"
         ? { personId: ADMIN, password: PASSWORD }
-        : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET) };
+        : { breakGlass: (await mintMasterKey(suite.db)).secret };
     const response = await post(app, "/management-api/promote", promoteBody(credentials));
     expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
     expect(await response.json()).toEqual({ alreadyPrimary: false, restarting: true });
@@ -332,7 +332,7 @@ it("admits with the module operation over the streaming link of a spare the char
 });
 it("refuses a node key replaced during outside collection without activating or changing role", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+  const key = (await mintMasterKey(suite.db)).secret;
   replaceKey = true;
   const response = await post(app, "/management-api/promote", promoteBody({ breakGlass: key }));
   expect(response.status).toBe(401);
@@ -372,7 +372,7 @@ it("does not consult outside evidence when the account password is wrong", async
 });
 it("does not consult outside evidence when the node key is wrong, even with valid account credentials", async () => {
   const app = await promotionApp();
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+  await mintMasterKey(suite.db);
   const response = await post(
     app,
     "/management-api/promote",
@@ -440,7 +440,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
 });
 it("returns the committed promotion result after a lost response without consulting outside evidence again", async () => {
   const app = await promotionApp();
-  const key = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
+  const key = (await mintMasterKey(suite.db)).secret;
   const body = promoteBody({ breakGlass: key });
   const first = await post(app, "/management-api/promote", body);
   expect(first.status).toBe(200);

@@ -52,7 +52,7 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
@@ -377,7 +377,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own fiscal identity; does NOT file", async () => {
     const seed = await seedMirror(db.main, stores.main.node);
     const waterOffer = await seedSaleVenue(db.main);
-    await mintBreakGlassSecret({ venue: db.main, node: stores.main.node }, seed.nodeId); // an adopted mirror always has a verifier
+    await mintMasterKey(db.main);
 
     const mirrorPort = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
@@ -563,10 +563,7 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
 
   it("break-glass secret → 200 promoted (no login)", async () => {
     const seed = await seedMirror(db.breakGlass, stores.breakGlass.node);
-    const breakGlass = await mintBreakGlassSecret(
-      { venue: db.breakGlass, node: stores.breakGlass.node },
-      seed.nodeId,
-    );
+    const breakGlass = (await mintMasterKey(db.breakGlass)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
 
@@ -690,7 +687,7 @@ describe("a real offer beside a real promotion on a real start", () => {
     }) => Promise<void>,
   ): Promise<void> {
     const seed = await seedMirror(db[venue], stores[venue].node);
-    await mintBreakGlassSecret({ venue: db[venue], node: stores[venue].node }, seed.nodeId);
+    await mintMasterKey(db[venue]);
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-${venue}-state-`));
 

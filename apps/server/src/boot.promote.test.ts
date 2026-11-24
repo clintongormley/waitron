@@ -34,7 +34,7 @@ import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
 import { invoiceSeries } from "@waitron/db";
 import { parseEnvFile } from "./env-file.js";
@@ -427,7 +427,7 @@ async function seedMirrorIdentity(
 describe("promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and leaves the trading.env its join wrote untouched", async () => {
     const seed = await seedMirrorIdentity(mirrorDb, mirrorNode);
-    const secret = await mintBreakGlassSecret({ venue: mirrorDb, node: mirrorNode }, seed.nodeId);
+    const secret = (await mintMasterKey(mirrorDb)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
 
@@ -584,7 +584,7 @@ describe("a mirror's promotion whose role write is lost", () => {
   it("a promotion whose role write is lost finishes at the next start, activating once", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const secret = (await mintMasterKey(db)).secret;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-lost-role-"));
 
     await node.execute(
@@ -689,7 +689,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("is refused while the note cannot be deleted, and deletes it before promoting and before the restart", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -764,7 +764,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("what a caller must record before the restart runs after the backup note's last deletion, and the restart comes through the seam", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
@@ -828,7 +828,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("a failed record still restarts, so the start that follows can finish it", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-before-restart-state-"));
 
@@ -882,7 +882,7 @@ describe("a mirror's promote and the backup room note", () => {
   it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
     const [venueDir, db, node] = await migratedVenue();
     const seed = await seedMirrorIdentity(db, node);
-    const secret = await mintBreakGlassSecret({ venue: db, node }, seed.nodeId);
+    const secret = (await mintMasterKey(db)).secret;
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
     const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);

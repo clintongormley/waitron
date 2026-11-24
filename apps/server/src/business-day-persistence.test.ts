@@ -25,7 +25,7 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { restoreFromArtifact } from "./restore.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { readVenueDetails } from "./venue-details.js";
@@ -70,10 +70,7 @@ describe("business-day timeline through cold restore and reset", () => {
     try {
       const dump = join(root, "copy.db");
       await stampDeployment(suite.db, "preproduction");
-      const secret = await mintBreakGlassSecret(
-        { venue: suite.db, node: suite.node },
-        venue.cfg.nodeId,
-      );
+      const secret = (await mintMasterKey(suite.db)).secret;
       const series = await suite.db.select().from(invoiceSeries);
       const fixture = allocationFixture({
         node: { nodeId: nodeId(venue.cfg.nodeId) },
