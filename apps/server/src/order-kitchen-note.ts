@@ -10,7 +10,7 @@ import {
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
+import { enqueueOrderKitchenNoteChange } from "./kitchen-ticket-corrections.js";
 import { checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";

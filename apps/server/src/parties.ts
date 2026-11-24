@@ -34,7 +34,7 @@ import {
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
-import { enqueuePartyNameChange } from "./kitchen-print.js";
+import { enqueuePartyNameChange } from "./kitchen-ticket-corrections.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";

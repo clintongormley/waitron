@@ -1,6 +1,6 @@
 import { ticketItems } from "@waitron/db";
 import { sql, type SQL } from "drizzle-orm";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 export type KitchenPhase = "held" | "requested" | "waiting" | "preparing" | "ready";
 

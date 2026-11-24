@@ -29,7 +29,7 @@ owner's 19 November 13:46 decision to design the shared pieces before moving ord
 
 - Where should the kitchen waiting query and print trouble checks live? Both files import each other today, and
   alert, housekeeping, staff-notice and station-output code also calls the checks. The work for those callers is unsized.
-  [Print trouble](../../../apps/server/src/print-job-trouble.ts#L14) · [Kitchen printing](../../../apps/server/src/kitchen-print.ts#L63)
+  [Print trouble](../../../apps/server/src/print-job-trouble.ts#L14) · [Kitchen print problems](../../../apps/server/src/kitchen-ticket-problems.ts)
 - Which package owns the station-move parser and status mapping used by the device and till routes? The route inputs
   for session checks, trading context, receipt and invoice operations, and the placement of shared errors and real
   integration fixtures still need to be sized.

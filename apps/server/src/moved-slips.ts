@@ -1,11 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { mergeMembers } from "./floor-today-merges.js";
-import {
-  enqueueMovedSlipsFor,
-  readPartiesSentWork,
-  readSentWorkAt,
-  type SentWork,
-} from "./kitchen-print.js";
+import { enqueueMovedSlipsFor } from "./kitchen-ticket-moves.js";
+import { readPartiesSentWork, readSentWorkAt, type SentWork } from "./kitchen-ticket-paper.js";
 import type { TradingContext } from "./trading-context.js";
 
 // Function declarations and types only: this module sits in import loops, so top-level code

@@ -33,12 +33,12 @@ import {
 } from "@waitron/menu";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-group-submission.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import {
-  reprintOrderTickets,
   enqueueAllergyCorrectionSlips,
   enqueueHoldCorrections,
   enqueueExtraCancelled,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { KITCHEN_ALLERGY_WORDS, ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";

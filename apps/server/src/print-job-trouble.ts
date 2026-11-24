@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
-import { kitchenJobsNotWaiting } from "./kitchen-print.js";
+import { kitchenJobsNotWaiting } from "./kitchen-ticket-problems.js";
 
 /** A document job older than this that has not printed counts as in trouble. */
 export const JOBS_WAITING_MS = 2 * 60 * 1000;

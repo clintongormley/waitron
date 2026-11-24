@@ -1,6 +1,6 @@
 import { eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { ticketItems, workingOrderLines, type Transaction } from "@waitron/db";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 /** One kitchen record of a dish's work: the dish's own, or one of its split-off extras'. */
 export interface DishKitchenItem {

@@ -40,7 +40,7 @@ import { readInvoiceNumbers } from "./stored-order-lines.js";
 import { ordersWithUnfiredDish } from "./working-order-serving.js";
 import "./errors.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
-import { isStarted } from "./kitchen-print.js";
+import { isStarted } from "./kitchen-ticket-state.js";
 import {
   serviceCancellationFamilies,
   enqueueServiceCancellation,

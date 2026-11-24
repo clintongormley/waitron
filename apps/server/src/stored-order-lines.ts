@@ -46,7 +46,7 @@ import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import { stillMovable } from "./station-move.js";
 import type { TradingContext } from "./trading-context.js";
 import { dishesWithHeldExtra, dishWaitsInHeldGroup } from "./working-order-serving.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 export const productActive = sql<number>`(${products.active} and (${parentProducts.id} is null or ${parentProducts.active}))`;
 /** A line's product can be sold now: Active and Available, and so is its parent for a variant. */

@@ -26,7 +26,7 @@ import { or, eq, and, inArray, sql, isNull, isNotNull, exists } from "drizzle-or
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { refusePaidLines } from "./bill-payments.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
-import { copyKitchenJobLines, copyKitchenPrintLinks } from "./kitchen-print.js";
+import { copyKitchenJobLines, copyKitchenPrintLinks } from "./kitchen-ticket-links.js";
 import { splitLineServiceState, readLineCancellations } from "./line-service-state.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { grossLineTotal, perDishExtraPicks, extraQuantityFor } from "./order-line-quantities.js";

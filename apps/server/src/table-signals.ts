@@ -17,7 +17,7 @@ import { readHeldCounts, onShownBill } from "./order-group-reads.js";
 import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order-table-state.js";
 import { productSellable } from "./stored-order-lines.js";
-import { firedQuantity } from "./kitchen-print.js";
+import { firedQuantity } from "./kitchen-ticket-state.js";
 import { earliestTime } from "./time-order.js";
 
 /** A fired or requested line nobody has finished serving, with its station and waiting bands. */

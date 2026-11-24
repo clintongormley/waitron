@@ -4,11 +4,10 @@ import { workingOrderLines } from "./orders.js";
 import { printJobs } from "./print-jobs.js";
 
 /**
- * Which order lines each kitchen ticket's print job carried: one row per (job, line), written with
- * the job by `enqueueKitchenTickets` and `reprintOrderTickets` (`apps/server/src/kitchen-print.ts`),
- * copied by `copyKitchenJobLines` there onto the new line a split makes (`carveOffLines`,
- * `apps/server/src/working-order-transfer.ts`), and read by `copyKitchenPrintLinks` in
- * `apps/server/src/kitchen-print.ts`.
+ * One row per (job, order line) for each kitchen ticket or reprint. `enqueueKitchenJobs` writes
+ * these links with the job (`apps/server/src/kitchen-ticket-enqueue.ts`). `copyKitchenJobLines`
+ * copies them to a line split off the original, and `copyKitchenPrintLinks` uses them to find the
+ * jobs that carried moved work (`apps/server/src/kitchen-ticket-links.ts`).
  */
 export const kitchenPrintJobLines = table(
   "kitchen_print_job_lines",

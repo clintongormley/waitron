@@ -8,7 +8,7 @@ import {
 import { compareStationNames } from "@waitron/shared";
 import { eq, and, inArray, or } from "drizzle-orm";
 import { heldItem } from "./kitchen-phase.js";
-import { liveKitchenDish } from "./kitchen-print.js";
+import { liveKitchenDish } from "./kitchen-ticket-state.js";
 
 /**
  * The names of the stations holding a live dish of each of `groupIds`, across every bill, that the

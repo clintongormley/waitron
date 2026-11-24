@@ -14,7 +14,7 @@ import {
   parseBillEditExpected,
   requireBillEditor,
 } from "./bill-editing.js";
-import { inIds } from "./kitchen-print.js";
+import { inIds } from "./in-ids.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import {
   printedHeldGroups,

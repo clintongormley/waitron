@@ -40,7 +40,7 @@ import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { allergyTargets, applyPartyAllergyPatch, readPartyAllergyView } from "./party-allergy.js";
 import { printersInTrouble } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
 import { ALLERGEN_NAMES, KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 

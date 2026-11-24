@@ -624,7 +624,7 @@ describe("A669 capture", () => {
       VENUE_SERVICE.writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, OPERATOR),
     );
     await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: {} }));
-    const { enqueueKitchenTickets } = await import("./kitchen-print.js");
+    const { enqueueKitchenTickets } = await import("./kitchen-ticket-enqueue.js");
     await inTx(v, (tx) =>
       enqueueKitchenTickets(tx, v.cfg, p.tabId, [{ workingOrderLineId: old.lineId, stationId }]),
     );
@@ -963,7 +963,7 @@ describe("A669 capture", () => {
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     const row = copies(p.tabId)[0]!;
     await printer();
-    const { enqueueHoldCorrections } = await import("./kitchen-print.js");
+    const { enqueueHoldCorrections } = await import("./kitchen-ticket-corrections.js");
     for (const change of [
       { kind: "HOLD CANCELLED" as const },
       { kind: "HOLD CHANGED" as const, direction: "removed" as const },
@@ -1001,7 +1001,7 @@ describe("A669 capture", () => {
       true,
     );
     await printer();
-    const { enqueueHoldCorrections } = await import("./kitchen-print.js");
+    const { enqueueHoldCorrections } = await import("./kitchen-ticket-corrections.js");
     await inTx(v, (tx) =>
       enqueueHoldCorrections(
         tx,

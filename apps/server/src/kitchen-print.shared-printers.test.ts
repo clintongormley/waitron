@@ -24,7 +24,8 @@ import { createStation, updateStation } from "./kitchen.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { sessionHolding } from "./testing/session-holding.js";
-import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";

@@ -6469,7 +6469,7 @@ or a count of it; Fire now fires the first member only, because its request name
 station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: Items in Pay, until the A739 payment window releases its files; the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
-alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
+alone (`printMovedSlips`, `apps/server/src/kitchen-ticket-moves.ts`).
 
 ### The dish picker
 

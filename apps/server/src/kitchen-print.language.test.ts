@@ -32,15 +32,15 @@ import {
   createOfferedOrder,
 } from "./testing/split-extras-venue.js";
 import { updateStation } from "./kitchen.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
+import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
+import { readSentWork } from "./kitchen-ticket-paper.js";
 import {
-  enqueueKitchenTickets,
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
   enqueueStationMoved,
-  enqueueMovedSlips,
-  readSentWork,
-  reprintOrderTickets,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import "./errors.js";

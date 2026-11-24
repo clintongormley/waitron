@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 import {
   heldItem,
   initiatedAt,

@@ -16,13 +16,13 @@ import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js
 import { invalid } from "./bill-allocation.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
-import {
-  enqueueKitchenTickets,
-  enqueueStationMoved,
-  firedQuantity,
-  hasUngroupedHoldPaper,
-} from "./kitchen-print.js";
-import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
+import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
+import { enqueueStationMoved } from "./kitchen-ticket-corrections.js";
+import { firedQuantity } from "./kitchen-ticket-state.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
+import type { CorrectionItem } from "./kitchen-ticket-corrections.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
+import type { FiredItem } from "./kitchen-ticket-items.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { heldItem, requestedItem } from "./kitchen-phase.js";

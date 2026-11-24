@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
-import { orderTableLabel } from "./kitchen-print.js";
+import { orderTableLabel } from "./kitchen-ticket-items.js";
 import { listOrders } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {

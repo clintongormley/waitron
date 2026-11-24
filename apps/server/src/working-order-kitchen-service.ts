@@ -15,12 +15,9 @@ import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.
 import { onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { freezeKitchenAllergyItems, notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { heldItem, initiatedItem } from "./kitchen-phase.js";
-import {
-  type FiredItem,
-  enqueueKitchenTickets,
-  liveKitchenDish,
-  kitchenWork,
-} from "./kitchen-print.js";
+import { liveKitchenDish, kitchenWork } from "./kitchen-ticket-state.js";
+import { enqueueKitchenTickets } from "./kitchen-ticket-enqueue.js";
+import { type FiredItem } from "./kitchen-ticket-items.js";
 import { requestHeldItems } from "./kitchen-release.js";
 import { requireLiveCourse } from "./kitchen.js";
 import type { Firer } from "./order-group-records.js";
@@ -44,7 +41,7 @@ import {
   insertSplitExtras,
 } from "./working-order-kitchen-fire.js";
 import { assertPartyBillOpen } from "./working-order-open.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 export async function fireOrderLines(
   tx: Transaction,

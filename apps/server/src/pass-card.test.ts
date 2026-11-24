@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 import type { PassScope } from "./pass-board.js";
 import {
   buildPassBoard,

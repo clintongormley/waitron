@@ -9,7 +9,8 @@ import {
 import { decimal, divideDecimal, multiplyDecimal } from "@waitron/shared";
 import type { DishKitchenItem } from "./dish-kitchen.js";
 import type { TradingContext } from "./trading-context.js";
-import { enqueueCorrectionSlips, isStarted } from "./kitchen-print.js";
+import { enqueueCorrectionSlips } from "./kitchen-ticket-corrections.js";
+import { isStarted } from "./kitchen-ticket-state.js";
 
 type Line = typeof workingOrderLines.$inferSelect;
 type Cancellation = typeof lineServiceCancellations.$inferSelect;

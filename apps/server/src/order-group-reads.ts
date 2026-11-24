@@ -23,7 +23,7 @@ import {
 } from "@waitron/shared";
 import { inArray, and, eq, ne, asc, isNull, sql, or, type SQL, notInArray } from "drizzle-orm";
 import { initiatedItem, type KitchenPhase, initiatedAt, kitchenPhase } from "./kitchen-phase.js";
-import { leftToServe, type TicketState } from "./kitchen-print.js";
+import { leftToServe, type TicketState } from "./kitchen-ticket-state.js";
 import { readCourseFireNowZones } from "./kitchen.js";
 import { type LineNutrition, readDisplayLineNutrition } from "./line-nutrition.js";
 import {

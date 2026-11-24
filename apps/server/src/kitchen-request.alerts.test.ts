@@ -27,7 +27,7 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { fireGroup } from "./order-group-release.js";
 import { passScreensDark, stationScreensDark } from "./station-outputs-down.js";
 import { readStationDeleteImpact } from "./station-delete.js";
-import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
+import { enqueueOrderKitchenNoteChange } from "./kitchen-ticket-corrections.js";
 import "./errors.js";
 
 const suite = useVenueDb({

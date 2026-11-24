@@ -12,12 +12,10 @@ import { createPrinter } from "@waitron/printing";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-group-submission.js";
-import {
-  enqueueAllergyCorrectionSlips,
-  enqueueMovedSlips,
-  readSentWork,
-  reprintOrderTickets,
-} from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
+import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
+import { readSentWork } from "./kitchen-ticket-paper.js";
+import { enqueueAllergyCorrectionSlips } from "./kitchen-ticket-corrections.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {

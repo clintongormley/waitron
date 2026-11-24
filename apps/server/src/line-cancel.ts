@@ -56,7 +56,8 @@ import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js
 import type { BillEditExpected } from "./order-drafts.js";
 import { holdPaperFor } from "./order-group-hold-paper.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
-import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
+import { enqueueHoldCorrections } from "./kitchen-ticket-corrections.js";
+import { isStarted } from "./kitchen-ticket-state.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
 import { removeFromLine, removePortions, quantityOfLine } from "./working-order-removal.js";
 import { refusePaymentInFlight, bumpRevision } from "./working-order-edit-state.js";

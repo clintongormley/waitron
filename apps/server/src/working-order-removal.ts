@@ -26,15 +26,15 @@ import { and, eq, or, inArray } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { assertBillInvariant } from "./bill-payments.js";
 import { type DishKitchenItem, dishKitchenItems } from "./dish-kitchen.js";
+import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
 import {
-  hasUngroupedHoldPaper,
-  isStarted,
   readCancelledExtra,
   enqueueCorrectionSlips,
   type CancelledExtra,
   type CorrectionItem,
   enqueueExtraCancelled,
-} from "./kitchen-print.js";
+} from "./kitchen-ticket-corrections.js";
+import { isStarted } from "./kitchen-ticket-state.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import {
   type HoldPaper,
@@ -62,7 +62,7 @@ import {
   type EditableOrder,
 } from "./working-order-edit-state.js";
 import { clampServed } from "./working-order-serving.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 /** A line as a cancel takes from it, with its ticket item's kitchen state. */
 export interface VoidTarget {

@@ -26,7 +26,7 @@ import {
 } from "@waitron/db";
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
 import { bumpRevisionKeepingPayment } from "./working-order-edit-state.js";
-import { kitchenWork } from "./kitchen-print.js";
+import { kitchenWork } from "./kitchen-ticket-state.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
   const targets = [...new Map(rows.map((row) => [row.id, row])).values()];

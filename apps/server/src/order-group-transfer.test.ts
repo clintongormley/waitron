@@ -8,7 +8,8 @@ import {
 } from "@waitron/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { reprintOrderTickets, enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
+import { reprintOrderTickets } from "./kitchen-ticket-reprint.js";
+import { enqueueOrderKitchenNoteChange } from "./kitchen-ticket-corrections.js";
 import { readCurrentOrders } from "./order-group-reads.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";

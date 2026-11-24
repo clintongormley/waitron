@@ -18,7 +18,7 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
-import { orderTableLabel } from "./kitchen-print.js";
+import { orderTableLabel } from "./kitchen-ticket-items.js";
 import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";

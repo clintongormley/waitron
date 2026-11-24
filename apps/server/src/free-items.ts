@@ -39,7 +39,7 @@ import {
   type VatClass,
 } from "@waitron/shared";
 import { addDays } from "@waitron/venue-service";
-import { inIds } from "./kitchen-print.js";
+import { inIds } from "./in-ids.js";
 import { readLineVatRates } from "./line-vat-rates.js";
 
 /** One dish or bill given free: a comp, or a discount that left it at zero. */

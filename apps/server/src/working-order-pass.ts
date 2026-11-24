@@ -22,7 +22,7 @@ import {
 } from "@waitron/shared";
 import { type SQL, sql, eq, and } from "drizzle-orm";
 import { readFormerNumbers } from "./former-numbers.js";
-import { firedQuantity, liveKitchenDish } from "./kitchen-print.js";
+import { firedQuantity, liveKitchenDish } from "./kitchen-ticket-state.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readGroupNumberLabels } from "./order-group-records.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -38,7 +38,7 @@ import {
   optional,
   minutesSince,
 } from "./working-order-station-queue.js";
-import type { TicketState } from "./kitchen-print.js";
+import type { TicketState } from "./kitchen-ticket-state.js";
 
 /** One item on the cross-station expo board. */
 export interface ExpoItem {
