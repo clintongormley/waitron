@@ -243,6 +243,7 @@ export class WtDialog extends LitElement {
     this.opened = value;
     this.openingGeneration++;
     this.pendingClose = undefined;
+    this.backdropPress = false;
   }
   @property() heading = "";
   @property({ type: Boolean, attribute: "fixed-heading", reflect: true }) fixedHeading = false;
@@ -258,6 +259,9 @@ export class WtDialog extends LitElement {
    * uncancelable and closed the dialog. A close the caller did not ask for while this is off — a
    * browser without `closedby`, or a `close()` from outside — shows the dialog again. */
   @property({ type: Boolean }) dismissible = true;
+
+  @property({ type: Boolean, attribute: "dismiss-on-backdrop" }) dismissOnBackdrop = false;
+  private backdropPress = false;
 
   @property({ attribute: false }) beforeClose?: (reason: LeaveReason) => Promise<boolean>;
   private pendingClose?: object;
@@ -309,6 +313,7 @@ export class WtDialog extends LitElement {
     this.unwatchContent();
     this.openingGeneration++;
     this.pendingClose = undefined;
+    this.backdropPress = false;
     super.disconnectedCallback();
   }
 
@@ -614,6 +619,27 @@ export class WtDialog extends LitElement {
     return composedContains(element, deepActiveElement());
   }
 
+  private isBackdropPoint(event: MouseEvent): boolean {
+    if (event.target !== this.dialog) return false;
+    const box = this.dialog.getBoundingClientRect();
+    return (
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom
+    );
+  }
+
+  private onBackdropPress(event: PointerEvent): void {
+    this.backdropPress = event.isPrimary && event.button === 0 && this.isBackdropPoint(event);
+  }
+
+  private onBackdropClick(event: MouseEvent): void {
+    const startedOutside = this.backdropPress;
+    this.backdropPress = false;
+    if (startedOutside && this.isBackdropPoint(event)) void this.requestClose("backdrop");
+  }
+
   private onCancel(event: Event): void {
     if (!this.dismissible || this.beforeClose) event.preventDefault();
     if (this.dismissible && this.beforeClose) void this.requestClose("escape");
@@ -694,6 +720,9 @@ export class WtDialog extends LitElement {
         @close=${this.onClose}
         @cancel=${this.onCancel}
         @keydown=${this.onKeydown}
+        @pointerdown=${this.dismissOnBackdrop ? this.onBackdropPress : nothing}
+        @pointercancel=${this.dismissOnBackdrop ? () => (this.backdropPress = false) : nothing}
+        @click=${this.dismissOnBackdrop ? this.onBackdropClick : nothing}
         closedby=${this.dismissible && !this.beforeClose ? "closerequest" : "none"}
         role="dialog"
         aria-labelledby=${this.heading ? this.headingId : nothing}

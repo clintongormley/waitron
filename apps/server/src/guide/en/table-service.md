@@ -909,6 +909,9 @@ phone or tablet has no Counter, so its Floor shows every zone you chose. Until y
 phone or tablet opens where it always has; after that it opens on your **Opens first** zone. After
 you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
 
+On a till, if you open **Settings** while taking an order, tap outside the window to return
+to your order.
+
 The choice belongs to this device and the profile it is signed in on, so another device on the same
 profile keeps its own, and switching profile brings back that profile's choice. If a manager
 withdraws a profile's approval for this device, choose its zones again if that profile returns.

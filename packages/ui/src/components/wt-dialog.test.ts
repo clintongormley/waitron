@@ -103,6 +103,47 @@ test("opens when the open property is set", async () => {
   expect(dialog.open).toBe(true);
 });
 
+test("an opted-in backdrop click asks the close guard and can dismiss the dialog", async () => {
+  const el = (await mount(
+    '<wt-dialog dismiss-on-backdrop heading="Settings"><button>Inside</button></wt-dialog>',
+  )) as WtDialog;
+  const outside = await mount(
+    '<span style="position:fixed;top:4px;left:4px;width:8px;height:8px"></span>',
+  );
+  el.open = true;
+  el.beforeClose = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await el.updateComplete;
+  const inside = el.querySelector("button")!;
+  await userEvent.dragAndDrop(inside, outside, { force: true });
+  await userEvent.dragAndDrop(outside, inside, { force: true });
+  expect(el.beforeClose).not.toHaveBeenCalled();
+  await userEvent.click(outside, { force: true });
+  expect(el.beforeClose).toHaveBeenCalledExactlyOnceWith("backdrop");
+  expect(el.open).toBe(true);
+  const closed = new Promise((resolve) => el.addEventListener("wt-close", resolve, { once: true }));
+  await userEvent.click(outside, { force: true });
+  await closed;
+  expect(el.open).toBe(false);
+});
+
+test.each([false, true])(
+  "ignores the backdrop without opt-in or while dismissing is blocked (opt-in %s)",
+  async (optIn) => {
+    const el = (await mount(
+      `<wt-dialog ${optIn ? "dismiss-on-backdrop" : ""}>Settings</wt-dialog>`,
+    )) as WtDialog;
+    const outside = await mount(
+      '<span style="position:fixed;top:4px;left:4px;width:8px;height:8px"></span>',
+    );
+    el.dismissible = !optIn;
+    el.open = true;
+    await el.updateComplete;
+    await userEvent.click(outside, { force: true });
+    await closeReportsDelivered();
+    expect(el.open).toBe(true);
+  },
+);
+
 test("renders the heading", async () => {
   const el = await mount('<wt-dialog heading="Void sale">body</wt-dialog>');
   expect(el.shadowRoot!.querySelector("h2")?.textContent?.trim()).toBe("Void sale");

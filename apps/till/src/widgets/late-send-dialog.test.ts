@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { TillLateSendDialog } from "./late-send-dialog.js";
@@ -61,10 +61,11 @@ describe("till-late-send-dialog", () => {
     expect(button(el, "agreed").getAttribute("variant")).toBe("primary");
   });
 
-  it("puts Remove them before Kitchen agreed in the footer", async () => {
+  it("puts Cancel before Remove them and Kitchen agreed in the footer", async () => {
     const { el } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
     const footer = [...el.shadowRoot!.querySelectorAll('[slot="footer"]')];
-    expect(footer).toEqual([button(el, "remove"), button(el, "agreed")]);
+    expect(words(footer[0])).toBe("Cancel");
+    expect(footer.slice(1)).toEqual([button(el, "remove"), button(el, "agreed")]);
   });
 
   it("joins two ended periods in one heading", async () => {
@@ -142,19 +143,32 @@ describe("till-late-send-dialog", () => {
     ]);
   });
 
-  it("cancels on Escape and keeps the dialog's own close event inside", async () => {
-    const { el, host } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
-    const { seen, shapes } = captured(host);
-    const leaked = vi.fn();
-    host.addEventListener("wt-close", leaked);
-    const closed = new Promise((resolve) =>
-      dialog(el).addEventListener("wt-close", resolve, { once: true }),
-    );
-    await userEvent.keyboard("{Escape}");
-    await closed;
-    await vi.waitFor(() => expect(seen.cancelled).toBe(1));
-    expect(seen).toEqual({ removed: 0, agreed: 0, cancelled: 1 });
-    expect(shapes).toEqual([{ type: "wt-late-send-cancelled", bubbles: true, composed: true }]);
-    expect(leaked).not.toHaveBeenCalled();
-  });
+  it.each(["Escape", "Cancel", "backdrop"])(
+    "cancels via %s and keeps the dialog's own close event inside",
+    async (via) => {
+      const { el, host } = await mount({ dishes, periodNames: ["Lunch"], purpose: "send" });
+      const { seen, shapes } = captured(host);
+      const leaked = vi.fn();
+      host.addEventListener("wt-close", leaked);
+      const closed = new Promise((resolve) =>
+        dialog(el).addEventListener("wt-close", resolve, { once: true }),
+      );
+      if (via === "Escape") {
+        await userEvent.keyboard("{Escape}");
+      } else if (via === "Cancel") {
+        await page.getByRole("button", { name: "Cancel" }).click({ timeout: 500 });
+      } else {
+        const outside = document.createElement("span");
+        outside.style.cssText = "position:fixed;top:4px;left:4px;width:8px;height:8px";
+        host.append(outside);
+        await userEvent.click(outside, { force: true });
+        expect(dialog(el).open).toBe(false);
+      }
+      await closed;
+      await vi.waitFor(() => expect(seen.cancelled).toBe(1));
+      expect(seen).toEqual({ removed: 0, agreed: 0, cancelled: 1 });
+      expect(shapes).toEqual([{ type: "wt-late-send-cancelled", bubbles: true, composed: true }]);
+      expect(leaked).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -973,6 +973,9 @@ zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta 
 después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
 [Volver a tus mesas con platos sin enviar](table-service.md#unsent-tables).
 
+En la caja, si abres **Ajustes** mientras tomas un pedido, toca fuera de la ventana para volver
+al pedido.
+
 La elección es de este dispositivo y del perfil con el que ha entrado, así que otro dispositivo con
 el mismo perfil conserva la suya, y al cambiar de perfil vuelve la elección de ese perfil. Si un
 responsable retira la aprobación de un perfil para este dispositivo, vuelve a elegir las zonas

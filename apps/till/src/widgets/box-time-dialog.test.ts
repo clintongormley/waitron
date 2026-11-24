@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  PHONE_FONT,
+  textRects,
+} from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { clockDateTime, setLocale } from "../i18n/t.js";
@@ -79,6 +85,14 @@ async function press(el: TillBoxTimeDialog, name: string): Promise<void> {
   await settle(el);
 }
 
+async function clickBackdrop(el: TillBoxTimeDialog): Promise<void> {
+  const outside = document.createElement("span");
+  outside.style.cssText = "position:fixed;top:4px;left:4px;width:8px;height:8px";
+  el.parentElement!.append(outside);
+  await userEvent.click(outside, { force: true });
+  outside.remove();
+}
+
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(TILL_AT);
 });
@@ -102,8 +116,9 @@ describe("till-box-time-dialog", () => {
         "Which is correct:",
       ].join(" "),
     );
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
     expect(controls(el).map((name) => flat(control(el, name)))).toEqual([
+      "Close",
       "The box",
       "This device",
       "Both times are wrong",
@@ -122,13 +137,13 @@ describe("till-box-time-dialog", () => {
         "Is this time correct:",
       ].join(" "),
     );
-    expect(controls(el)).toEqual(["no", "yes"]);
-    expect(controls(el).map((name) => flat(control(el, name)))).toEqual(["No", "Yes"]);
+    expect(controls(el)).toEqual(["close", "no", "yes"]);
+    expect(controls(el).map((name) => flat(control(el, name)))).toEqual(["Close", "No", "Yes"]);
   });
 
   it.each([
-    ["differs", BOX_BEHIND, "box_time.which_correct", ["server", "device", "both_wrong"]],
-    ["agrees", BOX_AGREES, "box_time.is_correct", ["no", "yes"]],
+    ["differs", BOX_BEHIND, "box_time.which_correct", ["close", "server", "device", "both_wrong"]],
+    ["agrees", BOX_AGREES, "box_time.is_correct", ["close", "no", "yes"]],
   ] as const)(
     "words the question in Spanish when this till %s",
     async (_case, boxAt, question, labels) => {
@@ -235,6 +250,22 @@ describe("till-box-time-dialog", () => {
     expect(api.boxClockConfirm).toHaveBeenCalledOnce();
   });
 
+  it.each(["Close", "backdrop"])(
+    "dismisses the clock question via %s without confirming the time",
+    async (via) => {
+      const api = fakeApi(BOX_AGREES);
+      const el = await open(api);
+      const closed = new Promise((resolve) =>
+        el.addEventListener("box-time-close", resolve, { once: true }),
+      );
+      if (via === "Close") await page.getByRole("button", { name: "Close" }).click();
+      else await clickBackdrop(el);
+      expect(root(el).querySelector("wt-dialog")!.open).toBe(false);
+      await closed;
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps the dialog from closing while the confirm is out", async () => {
     let answer!: () => void;
     const api = fakeApi(BOX_AGREES, () => {
@@ -243,18 +274,21 @@ describe("till-box-time-dialog", () => {
       });
     });
     const el = await open(api);
-    const box = () => root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!;
+    const box = () => root(el).querySelector("wt-dialog")!;
     expect(box().dismissible).toBe(true);
     await press(el, "yes");
     expect(box().dismissible).toBe(false);
+    await expect.element(page.getByRole("button", { name: "Close" })).toBeDisabled();
+    await clickBackdrop(el);
+    expect(box().open).toBe(true);
     answer();
     await settle(el);
     expect(box().dismissible).toBe(true);
   });
 
   it.each([
-    [60_000, ["no", "yes"]],
-    [60_001, ["server", "device", "both-wrong"]],
+    [60_000, ["close", "no", "yes"]],
+    [60_001, ["close", "server", "device", "both-wrong"]],
   ] as const)("treats a till %i ms from the box as asking %j", async (gap, buttons) => {
     const el = await open(fakeApi(new Date(TILL_AT - gap).toISOString()));
     expect(controls(el)).toEqual(buttons);
@@ -292,12 +326,14 @@ describe("till-box-time-dialog", () => {
     },
   );
 
-  it("asks to correct this device in Spanish too", async () => {
+  it("keeps the Spanish clock correction open on a backdrop click", async () => {
     setLocale("es-ES");
     const el = await open(fakeApi(BOX_BEHIND));
     await press(el, "both-wrong");
     expect(words(el).endsWith(es["box_time.correct_device"])).toBe(true);
     expect(flat(control(el, "close"))).toBe(es["box_time.close"]);
+    await clickBackdrop(el);
+    expect(root(el).querySelector("wt-dialog")!.open).toBe(true);
   });
 
   const REFUSALS: [string, Record<string, unknown>, string, string[]][] = [
@@ -421,7 +457,7 @@ describe("till-box-time-dialog", () => {
     await press(el, "check-again");
     expect(api.boxClockChallenge).toHaveBeenCalledTimes(3);
     expect(shownError(el)).toBe("");
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
   });
 
   it("closes on Close after a refusal", async () => {
@@ -478,7 +514,7 @@ describe("till-box-time-dialog", () => {
       expect(api.boxClockConfirm).not.toHaveBeenCalled();
       expect(words(el)).toContain(clockDateTime(Date.parse(BOX_BEHIND)));
       expect(words(el)).toContain(clockDateTime(TILL_AT));
-      expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+      expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
       await press(el, "device");
       expect(api.boxClockConfirm.mock.calls).toEqual([
         [{ challengeId: "c2", deviceAt: TILL_AT, override }],
@@ -598,28 +634,40 @@ describe("till-box-time-dialog", () => {
     expect(es["box_time.refused.host_unavailable"]).not.toMatch(/confirm/i);
   });
 
-  for (const [language, differs] of [
-    ["es", true],
-    ["es", false],
-    ["en", true],
-    ["en", false],
-  ] as const)
-    it(`keeps each button's label on one line at phone width (${language}, ${differs ? "differs" : "agrees"})`, async () => {
+  it.each([
+    ["es", true, 360],
+    ["es", true, 390],
+    ["es", false, 390],
+    ["en", true, 390],
+    ["en", false, 390],
+  ] as const)(
+    "fits each clock button on one line at phone width (%s, differs %s, %ipx)",
+    async (language, differs, width) => {
       setLocale(language);
-      await page.viewport(390, 844);
+      const font = await loadPhoneFont();
+      await page.viewport(width, 844);
       try {
         const el = await open(fakeApi(differs ? BOX_BEHIND : BOX_AGREES));
-        for (const name of differs ? ["server", "device", "both-wrong"] : ["no", "yes"]) {
+        el.style.setProperty("--wt-font-family", PHONE_FONT);
+        const actions = root(el).querySelector("wt-form-actions")!.getBoundingClientRect();
+        const names = differs
+          ? ["close", "server", "device", "both-wrong"]
+          : ["close", "no", "yes"];
+        for (const name of names) {
           const button = control(el, name)!;
-          const range = document.createRange();
-          range.selectNodeContents(button);
-          const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-          expect(lines.size, `${name}: ${flat(button)}`).toBe(1);
+          const label = `${name}: ${flat(button)}`;
+          const lines = new Set(textRects(button).map((rect) => Math.round(rect.top)));
+          expect(lines.size, label).toBe(1);
+          const bounds = button.getBoundingClientRect();
+          expect(bounds.left, label).toBeGreaterThanOrEqual(actions.left);
+          expect(bounds.right, label).toBeLessThanOrEqual(actions.right);
         }
       } finally {
+        document.fonts.delete(font);
         await page.viewport(1280, 900);
       }
-    });
+    },
+  );
 });
 
 describe("till-box-time-dialog while the server waits for its time to be confirmed", () => {
@@ -628,7 +676,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
 
   it("asks the same question when they differ", async () => {
     const el = await open(waiting(BOX_BEHIND));
-    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el)).toEqual(["close", "server", "device", "both-wrong"]);
     expect(words(el)).toMatch(/Which is correct:$/);
   });
 
@@ -744,7 +792,7 @@ describe("till-box-time-dialog while the server waits for its time to be confirm
   it("confirms the time, without keep, on Yes when this till agrees", async () => {
     const api = waiting(BOX_AGREES);
     const el = await open(api);
-    expect(controls(el)).toEqual(["no", "yes"]);
+    expect(controls(el)).toEqual(["close", "no", "yes"]);
     await press(el, "yes");
     expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: TILL_AT }]]);
   });
