@@ -1646,7 +1646,8 @@ case the page the box shows instead of trading also accepts a phone's or a till'
 A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
 picture 6). **Being built** (owner, 2026-11-21, "build it"; on 2026-11-11 the owner had said "Later") in three
 pull requests from the plan, `docs/superpowers/plans/2026-11-11-a993-identity-change.md`; PR 1 gives
-the fiscal module a way to open the new installation, which nothing calls until PR 2. Asesor
+the fiscal module a way to open the new installation, which nothing calls until PR 2. Where the plan's decisions depart from the design described here,
+the plan is current. Asesor
 Q53(d)(2) is widened to ask whether the new system may cancel or correct the old one's invoices. A move between fiscal modules stays a refused start
 until the first non-Veri\*Factu mode. Since 2026-11-06 the producer is a setting each image
 carries (A940 Task 8), so a start that opened a new installation on any producer difference would

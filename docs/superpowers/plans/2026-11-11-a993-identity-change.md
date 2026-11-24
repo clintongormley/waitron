@@ -1133,8 +1133,8 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
 - `docs/backlog/fiscal.md:1566-1571` and `:1578`.
 - `docs/backlog/fiscal.md:1584-1624`: delete A993, and move the owner's constraint and decisions
   1–4, 7 and 12 to `## Decisions and deliberate limits` (`:1086`).
-- `docs/compliance/2026-11-19-adviser-meeting.md:463`: a dated pointer only, since it is a
-  historical record.
+- `docs/compliance/2026-11-19-adviser-meeting.md`: a dated pointer only, since it is a
+  historical record (PR 1 added one for the owner's "build it"; PR 3's says the change is usable).
 - `deploy/waitron.sh:44`: the help line "keep … start the candidate despite its failed checks"
   gains "(not for an upgrade that changes the software producer)".
 - The design's §5.6 (`docs/superpowers/specs/2026-10-21-a940-declaracion-responsable-design.md`):
@@ -1143,6 +1143,9 @@ The list comes from `git grep -n "A993\|new fiscal installation" -- ':!docs/supe
   start-clock confirmation, in place of the stuck page and the clock reading carried across the
   stop.
 - `apps/server/src/i18n/recovery-page.ts:308-320` and its test (the table above).
+- `apps/server/src/guide/en/fiscal-filing.md` and `es/fiscal-filing.md`: the list of identity
+  changes "other than by a handover" now also leaves out a producer change; prefer deleting the
+  exception to adding to it (the guide rule against explaining what the code handles itself).
 
 - [ ] **Step 1: Change the test first.** Change `recovery-surface.test.ts:440-462` to the new
   words. `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts` → FAIL.
