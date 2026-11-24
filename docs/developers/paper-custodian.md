@@ -10,6 +10,10 @@
 > **File layout update, 2026-11-11:** the staged node credential now lives at
 > `flows/restore/node-key`; `flows/restore/record.json` holds the request and its phase.
 
+> **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key,
+> checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
+> `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one
@@ -445,7 +449,7 @@ Use `--action re-register` for a node re-registration, with a matching current-e
 After a confirmed committed attempt, retain the original operation for the host's replay checks;
 the export command refuses to assemble a new operation from a committed or uncertain attempt.
 Exporting an approval does not authenticate its operator. The host still checks the selected
-database's master key and rereads separately configured current outside evidence before activation.
+database's node key and rereads separately configured current outside evidence before activation.
 
 ## Supply a recovery operation to the host
 
@@ -477,7 +481,7 @@ export WAITRON_RECOVERY_OPERATION_FILE="$PWD/recovery-operation.json"
 ```
 
 Use `re-register` for `register-till`, and `restore` for either `waitron-restore` source.
-Supply the master key through `WAITRON_MASTER_KEY`, never a command argument or either JSON
+Supply the node key through `WAITRON_NODE_RECOVERY_KEY`, never a command argument or either JSON
 file. The command reads at most 128 KiB of operation input. An unreadable, malformed or oversized
 file returns `server.config_invalid` with the variable name and `invalid_operation`; its contents
 are not included in that refusal.
@@ -485,7 +489,7 @@ are not included in that refusal.
 For a staged restore, the entry process reads the same environment settings after restart. A
 request may instead carry `recoveryOperation` in its marker. That marker takes precedence over the
 environment's operation file, but it supplies no authentication authority: the entry process must
-still receive the master key and reread the current outside evidence. The key is not copied into
+still receive the node key and reread the current outside evidence. The key is not copied into
 the marker. Inputs that would change when saved as JSON are refused before replacing a staged
 request.
 

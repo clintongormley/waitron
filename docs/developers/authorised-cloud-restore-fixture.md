@@ -35,23 +35,26 @@ comes from the existing fiscal test seed; it is not Cloud's `Cloud Test Venue` f
 
 **2026-11-22, A1308 fiscal 1.** The current seed exports this taxpayer as `TAXPAYER_A`.
 
+**2026-11-24, A1323 PR 2b:** the current helper seeds with `mintMasterKey` in place of
+`mintBreakGlassKey`, and `archiveCommand` supplies `WAITRON_MASTER_KEY`.
+
 ## Keep the authority attached to its own archive
 
 Build the fixture through its existing setup and helpers:
 
-1. The helper's setup seeds the disposable database and calls `mintMasterKey` for it. The
-   returned `key.secret` is the venue's master key; retain it privately for this run. The archive password is
+1. The helper's setup seeds the disposable database and calls `mintBreakGlassKey` for its
+   node. Retain the returned `key.secret` privately for this run. The archive password is
    a different secret. Initial setup goes through `createHourPreparation` and
    `activatePreparedModuleAllocation`; the test then sets the recovered counters to 123.
 2. `archiveHost()` archives that database, builds and encrypts its archive, then calls
    `previewRecoveryArchive`. The resulting source identifier binds recovery to those
    encrypted bytes. It constructs `createSelectedRecoveryPreparation` with that selection,
-   the master key, all composed modules and explicit old-machine-offline and sole-recovery
+   the node key, all composed modules and explicit old-machine-offline and sole-recovery
    facts. It compares clocks and selects the recovery hour through the preparation API.
 3. Keep `f.outcome.input`, `f.options.binding`, `f.roots` and the preparation journal together.
    `archiveCommand(f)` writes the encrypted artifact and the operation JSON, constructs the
    migrations directory and supplies `WAITRON_RECOVERY_OPERATION_FILE`,
-   `WAITRON_MASTER_KEY`, `WAITRON_BACKUP_RECOVERY_KEY`, the owned state and venue paths,
+   `WAITRON_NODE_RECOVERY_KEY`, `WAITRON_BACKUP_RECOVERY_KEY`, the owned state and venue paths,
    and both `--confirm-old-box-gone` and `--confirm-sole-recovery`.
 4. Follow the existing case **“the default archive command reconstructs selected-hour
    preparation with explicit isolation”** in

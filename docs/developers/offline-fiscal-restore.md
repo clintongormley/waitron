@@ -7,6 +7,10 @@
 > [recovering a box](../operations/hour-recovery.md). Cloud accounts, backup
 > transport and recovery authentication remain separate from naming authority.
 
+> **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key,
+> checked against the selected copy's `master_keys`, and `WAITRON_NODE_RECOVERY_KEY` is now
+> `WAITRON_MASTER_KEY`. A restore stages the master key's authority key, never the typed text.
+
 # Recover a filing box from an old backup
 
 An archive gives you the venue's saved history. It cannot tell you which installation names
@@ -83,11 +87,11 @@ entry, a different taxpayer, an altered signed value or consumption for another 
 
 For emergency recovery, prepare `current.json` using the
 [emergency confirmation format](emergency-recovery.md). Put the matching emergency request in
-the form. The box draws the actual identity later, after checking the selected backup's master key and
+the form. The box draws the actual identity later, after checking the selected node key and
 rereading that outside confirmation. The request download therefore contains no generated
 identity or activation result.
 
-Enter the selected backup's master key in its separate field. Check the source, event and target,
+Enter the selected backup's node key in its separate field. Check the source, event and target,
 isolate the former machine, then download and retain the public request with your outside
 records. A changed request clears its retention confirmation. The node secret stays out of that
 download. Missing fields and refusals appear beside their fields and above the restore action.
@@ -103,19 +107,19 @@ docker compose -f compose.yml -f recovery.override.yml up -d --no-deps --force-r
 ```
 
 Reopen the selected copy if recreating the app interrupted its preview. Submit the reviewed
-request and master key through the form. The archive encryption key remains in the archive-key
-field. The restart stages the master key's authority key separately from the public request, checks
-it against the selected database and rereads current outside evidence before activation.
+request and node key through the form. The archive encryption key remains in the archive-key
+field. The restart stages the node credential separately from the public request, checks that
+key against the selected database and rereads current outside evidence before activation.
 
 If you use the operator CLI instead, stop the app first and supply the same override to
-`docker compose run`. Set `WAITRON_MASTER_KEY` and, for a local archive,
+`docker compose run`. Set `WAITRON_NODE_RECOVERY_KEY` and, for a local archive,
 `WAITRON_BACKUP_RECOVERY_KEY` privately in your shell. Export no secret as a command argument.
 Keep `operation.json` in the public directory and mount the selected archive read-only:
 
 ```sh
 docker compose -f compose.yml -f recovery.override.yml stop app
 docker compose -f compose.yml -f recovery.override.yml run --rm --no-deps \
-  -e WAITRON_MASTER_KEY -e WAITRON_BACKUP_RECOVERY_KEY \
+  -e WAITRON_NODE_RECOVERY_KEY -e WAITRON_BACKUP_RECOVERY_KEY \
   -e WAITRON_RECOVERY_OPERATION_FILE=/outside/operation.json \
   -e WAITRON_ENV=preproduction \
   -v "$PWD/selected-backup.wt:/input/archive.wt:ro" \
