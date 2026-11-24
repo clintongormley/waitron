@@ -98,9 +98,15 @@ export async function isSetMenuBill(tx: Transaction, workingOrderId: string): Pr
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
+  return order !== undefined && isSetMenuBillRow(order);
+}
+
+/** {@link isSetMenuBill} for a bill row already read. */
+export function isSetMenuBillRow(
+  order: Pick<typeof workingOrders.$inferSelect, "partyId" | "dining" | "serviceMode">,
+): boolean {
   return (
-    order !== undefined &&
-    (order.dining === "takeaway" || (order.partyId !== null && order.serviceMode === "table_tab"))
+    order.dining === "takeaway" || (order.partyId !== null && order.serviceMode === "table_tab")
   );
 }
 

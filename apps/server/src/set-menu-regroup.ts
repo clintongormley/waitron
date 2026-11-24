@@ -19,7 +19,7 @@ import type { SetMenuGrouping, SetMenuGroupingInput } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import {
   hasBillSetMenuLines,
-  isSetMenuBill,
+  isSetMenuBillRow,
   readBillSetMenuVersions,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
@@ -85,6 +85,21 @@ export async function saveBillGrouping(
   copies: readonly GroupingCopy[],
   calculate?: Calculate,
 ): Promise<{ changed: boolean; exact: boolean }> {
+  const [bill] = await tx
+    .select({ setMenusExact: workingOrders.setMenusExact })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  return writeBillGrouping(tx, billId, bill!.setMenusExact, copies, calculate);
+}
+
+/** {@link saveBillGrouping} for a bill whose stored `set_menus_exact` is `wasExact`. */
+async function writeBillGrouping(
+  tx: Transaction,
+  billId: string,
+  wasExact: boolean,
+  copies: readonly GroupingCopy[],
+  calculate?: Calculate,
+): Promise<{ changed: boolean; exact: boolean }> {
   const lines = await readGroupingLines(tx, billId);
   const named = await namedFrozenLineIds(
     tx,
@@ -143,11 +158,7 @@ export async function saveBillGrouping(
       );
   }
 
-  const [bill] = await tx
-    .select({ exact: workingOrders.setMenusExact })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, billId));
-  const exactFlipped = bill!.exact !== plan.exact;
+  const exactFlipped = wasExact !== plan.exact;
   if (exactFlipped) {
     await tx
       .update(workingOrders)
@@ -178,16 +189,24 @@ export async function regroupBills(
   const changed = new Set<string>();
   for (const billId of new Set(billIds)) {
     const [bill] = await tx
-      .select({ status: workingOrders.status, dining: workingOrders.dining })
+      .select({
+        status: workingOrders.status,
+        dining: workingOrders.dining,
+        partyId: workingOrders.partyId,
+        serviceMode: workingOrders.serviceMode,
+        setMenusExact: workingOrders.setMenusExact,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, billId));
     if (bill?.status !== "open") continue;
     const copies =
-      bill.dining !== "takeaway" && (await isSetMenuBill(tx, billId))
+      bill.dining !== "takeaway" && isSetMenuBillRow(bill)
         ? await readGroupingCopies(tx, billId)
         : [];
     if (copies.length === 0 && !(await hasBillSetMenuLines(tx, billId))) continue;
-    if ((await saveBillGrouping(tx, billId, copies)).changed) changed.add(billId);
+    if ((await writeBillGrouping(tx, billId, bill.setMenusExact, copies)).changed) {
+      changed.add(billId);
+    }
   }
   return changed;
 }
