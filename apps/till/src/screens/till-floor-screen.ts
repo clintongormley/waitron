@@ -48,7 +48,7 @@ import {
   partyTablesName,
   type ServiceStepDue,
 } from "@waitron/shared";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -3197,7 +3197,9 @@ export class TillFloorScreen extends LitElement {
           }
           ${
             table.hasOpenTab
-              ? html`<span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>`
+              ? html`<span class="lines"
+                  >${countText(table.tabLineCount!, "floor.line_count", "floor.line_count_one")}</span
+                >`
               : nothing
           }
           ${this.#party(table.party)}

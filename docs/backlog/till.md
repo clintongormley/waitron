@@ -1075,8 +1075,8 @@ as designed, or revisit what stays on the bar? No collapse order is proposed.
 
 ## Bundle: Small till and floor wording fixes
 
-5 entries, size M. Four keep their text from the index they came from (backlog review, 2026-11-06);
-the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A1107 (the floor) and A1108
+4 entries, size M. Three keep their text from the index they came from (backlog review, 2026-11-06);
+the remaining till unit and tab edges joined on 2026-11-12. A470 and A1107 (the floor) and A1108
 (the order screen's Sent panel) wait for the owner's redesign of the table screens (watcher, 2026-11-15).
 
 - **Remaining till unit and tab edges (A379/A385 run-it review).** The Kitchen
@@ -1085,9 +1085,6 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
   [Detail](till.md#a470--the-tills-floor-map-follow-ups)
-- **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
-  `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
-  "€6.50, 1 items". Fix: a singular wording for a count of 1.
 - **A1107. Spanish calls a forgotten table «Olvidado» on its details sheet and «Olvidada» on its
   List card.** Seen, 2026-10-25 (the A797 slice 1 look, `g-details-window1-390-light-es.png` and
   `h-list-dining-390-light-es.png` in `~/waitron-campaign-c/a797-1-shots/`), for the same table.

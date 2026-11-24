@@ -126,6 +126,26 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-to-serve]")!.textContent).toContain("2");
   });
 
+  it.each([
+    ["en-GB", 1, "1 item"],
+    ["en-GB", 2, "2 items"],
+    ["es-ES", 1, "1 art."],
+    ["es-ES", 2, "2 art."],
+  ])("counts an open tab's items on its list card, in %s, for %i", async (locale, count, words) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount({
+        tables: [
+          table({ state: "open-tab", hasOpenTab: true, tabLineCount: count, tabTotal: "6.50" }),
+        ],
+      });
+      expect(el.shadowRoot!.querySelector(".lines")?.textContent?.trim()).toBe(words);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("shows the ready-to-serve badge with the readyToServe count ('N listos')", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],

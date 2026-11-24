@@ -605,7 +605,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
-- **Small till and floor wording fixes** (bundle of 5, size M, 4 wait for the owner's table-screen redesign). Holds A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 4, size M, 3 wait for the owner's table-screen redesign). Holds A470, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
   [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
