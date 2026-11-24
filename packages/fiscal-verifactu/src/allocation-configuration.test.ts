@@ -17,9 +17,9 @@ beforeEach(() => {
   for (const variable of variables) vi.stubEnv(variable, "unavailable-outside-file");
 });
 afterEach(() => vi.unstubAllEnvs());
-function attempt(input: unknown = { allocation: {}, approval: {} }) {
-  return withOperationAuthority(binding, "admin", (authority) =>
-    FISCAL_OPERATIONS.prepare({ binding, authority, input }, async () => {
+function attempt(input: unknown = { allocation: {}, approval: {} }, operationBinding = binding) {
+  return withOperationAuthority(operationBinding, "admin", (authority) =>
+    FISCAL_OPERATIONS.prepare({ binding: operationBinding, authority, input }, async () => {
       throw new Error("unverified input admitted");
     }),
   );
@@ -35,6 +35,13 @@ it.each(variables)("requires the host to configure %s independently", async (var
 });
 it("refuses an unavailable host custodian instead of accepting trust from input", async () => {
   await expect(attempt()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "reservation_untrusted" },
+  });
+});
+it("refuses a setup whose configured custodian file does not exist", async () => {
+  vi.stubEnv("WAITRON_FISCAL_CUSTODIAN_FILE", "/nonexistent/custodian.json");
+  await expect(attempt(undefined, { ...binding, action: "setup" })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "reservation_untrusted" },
   });
