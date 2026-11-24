@@ -87,13 +87,36 @@ async function queue(menuId: string, activatesAt: Date) {
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
 const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
 
-it("names a parent even after its include has been removed from the working menu", async () => {
+it.each(["published", "queued"])(
+  "names a %s parent after its draft drops the include",
+  async (edition) => {
+    const f = await menusFixture(fx.db);
+    const member = await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
+    if (edition === "published") await publish(f.dinner);
+    else await queue(f.dinner, later);
+    await app((tx) => removeMember(tx, f.dinnerRoot, member.id));
+    expect(await app((tx) => menusDependingOnArchive(tx, f.lunch, T0))).toEqual([
+      { id: f.dinner, name: "Dinner Menu" },
+    ]);
+  },
+);
+
+it("names a set menu's direct holder and the menu that includes it", async () => {
   const f = await menusFixture(fx.db);
-  const member = await app((tx) => addMember(tx, f.dinnerRoot, section(f.lunchRoot)));
-  await publish(f.dinner);
-  await app((tx) => removeMember(tx, f.dinnerRoot, member.id));
-  expect(await app((tx) => menusDependingOnArchive(tx, f.lunch, T0))).toEqual([
+  const holders = await app(async (tx) => {
+    const set = await createMenu(tx, {
+      name: "Daily",
+      kind: "set_menu",
+      setPrice: "14.00",
+      setVatClass: "general",
+    });
+    await addMember(tx, f.lunchRoot, { kind: "set_menu", menuId: set.id });
+    await addMember(tx, f.dinnerRoot, section(f.lunchRoot));
+    return menusDependingOnArchive(tx, set.id, T0);
+  });
+  expect(holders).toEqual([
     { id: f.dinner, name: "Dinner Menu" },
+    { id: f.lunch, name: "Lunch Menu" },
   ]);
 });
 

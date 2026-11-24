@@ -21,7 +21,7 @@ const impact: MenuArchiveImpact = {
     },
   ],
   dependants: [],
-  defaultChoices: null,
+  defaultChoices: [{ id: "spring", name: "Spring" }],
 };
 
 class ArchiveLeaveApp extends LitElement {
@@ -79,6 +79,13 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
     }),
   );
   await form.updateComplete;
+  expect(submit().disabled).toBe(true);
+  form
+    .shadowRoot!.querySelector('wt-combobox[name="default-menu"]')!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "spring" }, bubbles: true, composed: true }),
+    );
+  await form.updateComplete;
   expect(submit().disabled).toBe(false);
   if (signIn) {
     form.permissionContinuation = {
@@ -97,17 +104,20 @@ it.each([false, true])("requires a replacement through archive (sign-in: %s)", a
   }
   await userEvent.click(page.elementLocator(submit().shadowRoot!.querySelector("button")!));
   await vi.waitFor(() => expect(app.archived).toBe(true));
-  expect(app.api.archiveMenu).toHaveBeenCalledWith("winter", {
+  expect(app.api.archiveMenu).toHaveBeenLastCalledWith("winter", {
     replacements: { evening: "spring" },
+    defaultMenuId: "spring",
   });
 });
 
 it("explains when the period has no replacement menu", async () => {
+  const archiveMenu = vi.fn();
   const { el: form } = await mountWidget<HTMLElementTagNameMap["dashboard-menu-archive-dialog"]>(
     "dashboard-menu-archive-dialog",
     {
       menu: { id: "winter", name: "Winter" },
       api: {
+        archiveMenu,
         getMenuArchiveImpact: async () => ({
           ...impact,
           periods: [{ ...impact.periods[0]!, choices: [] }],
@@ -124,9 +134,10 @@ it("explains when the period has no replacement menu", async () => {
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="archive"]')
       ?.disabled,
   ).toBe(true);
+  expect(archiveMenu).not.toHaveBeenCalled();
 });
 
-it("discards a staged choice on Cancel without archiving", async () => {
+it("asks before discarding a staged choice on Escape", async () => {
   const { el: app } = await mountWidget<ArchiveLeaveApp>("menu-archive-leave-test-app", {});
   const form = app.shadowRoot!.querySelector("dashboard-menu-archive-dialog")!;
   await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-combobox")).not.toBeNull());
@@ -141,7 +152,10 @@ it("discards a staged choice on Cancel without archiving", async () => {
   const close = new Promise<void>((resolve) =>
     form.addEventListener("menu-archive-close", () => resolve(), { once: true }),
   );
-  await modal.requestClose("cancel");
+  const escaping = modal.requestClose("escape");
+  const discard = page.getByRole("button", { name: t("unsaved.discard") });
+  await userEvent.click(discard);
+  await escaping;
   await close;
   expect(app.api.archiveMenu).not.toHaveBeenCalled();
 });

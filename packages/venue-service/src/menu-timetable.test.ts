@@ -139,6 +139,12 @@ describe("archiving a period menu", () => {
     await scoped(async (tx) => {
       await updateMenuPeriod(tx, mornings, { staffMenuIds: [Lunch, Dinner] });
       await updateMenuPeriod(tx, supper, { staffMenuIds: [Breakfast] });
+      await expect(
+        archivePeriodMenus(tx, Breakfast, { [mornings]: Lunch, [supper]: Lunch }),
+      ).rejects.toMatchObject({
+        code: "menu_period.archive_replacement",
+        params: { periodId: supper },
+      });
       await archivePeriodMenus(tx, Breakfast, { [mornings]: Lunch });
       expect(await tx.select().from(menuPeriods).where(eq(menuPeriods.id, mornings))).toEqual([
         expect.objectContaining({ name: "Mornings", menuId: Lunch, staffMenuIds: [Dinner] }),
@@ -162,8 +168,8 @@ describe("archiving a period menu", () => {
   });
 
   it("requires a sellable staff choice if the starting menu is still a draft", async () => {
-    const v = await venue({ unpublished: ["Breakfast"] });
-    const { Lunch } = v.menus;
+    const v = await venue({ unpublished: ["Breakfast", "Dinner"] });
+    const { Lunch, Dinner } = v.menus;
     const periodId = v.periods!.mornings;
     await scoped(async (tx) => {
       const drink = await createProduct(tx, {
@@ -175,11 +181,14 @@ describe("archiving a period menu", () => {
       });
       await addProductToMenu(tx, { menuId: Lunch, productId: drink.id });
       await publish(tx, Lunch);
+      await updateMenuPeriod(tx, v.periods!.noon, { menuId: Dinner });
       await updateMenuPeriod(tx, periodId, { staffMenuIds: [Lunch] });
-      await expect(archivePeriodMenus(tx, Lunch, {})).rejects.toMatchObject({
-        code: "menu_period.archive_replacement",
-        params: { periodId },
-      });
+      for (const replacements of [{}, { [periodId]: Dinner }]) {
+        await expect(archivePeriodMenus(tx, Lunch, replacements)).rejects.toMatchObject({
+          code: "menu_period.archive_replacement",
+          params: { periodId },
+        });
+      }
     });
   });
 

@@ -344,14 +344,12 @@ that this menu shows.
 
 When your next menu is similar to one you already have, start with a copy. In **Products and
 menus → Menus**, open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
-You must use a name no menu already holds; upper and lower case count as the same name. **Cancel**
+Use a name no active menu holds. Upper and lower case count as the same name. **Cancel**
 discards the name without asking and creates nothing. Escape still asks whether to keep editing
 or discard a name you have typed.
 
-Use a different name when you create or rename a menu too. If another menu already has it, the
-message appears under Name. Names ignore surrounding spaces and case, including on inactive
-menus. Menus that already share a name keep it until you rename one; you can still edit their
-customer names, colour and image.
+The same rule applies when you create or rename a menu. Names ignore surrounding spaces. If an
+active menu already holds the name, the message appears under Name.
 
 The copy starts unpublished, with the source menu's working sections, prices and Home page
 settings. Published versions and scheduled publications stay with the source. Editing the copy's

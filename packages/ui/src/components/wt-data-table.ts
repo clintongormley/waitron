@@ -1957,7 +1957,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #focusFirstFilter(): void {
-    if (this.#hasSlottedFilters()) {
+    if (this.serverPaging !== undefined || !this.columns.some((column) => column.filter)) {
       const slot = this.filtersPanel.querySelector<HTMLSlotElement>('slot[name="filters-start"]')!;
       const first = this.#filterStops(slot)[0];
       if (first) {
