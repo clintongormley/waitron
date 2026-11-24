@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   billPayments,
@@ -256,13 +256,13 @@ export async function moveItemsToNewBill(
     sourceMayBeOverpaid: true,
     tellKitchen: false,
   });
-  const [source] = await tx
+  const sourceLocale = tx
     .select({ receiptLocale: workingOrders.receiptLocale })
     .from(workingOrders)
     .where(eq(workingOrders.id, fromBillId));
   await tx
     .update(workingOrders)
-    .set({ itemsPaidFrom: fromBillId, receiptLocale: source!.receiptLocale })
+    .set({ itemsPaidFrom: fromBillId, receiptLocale: sql`(${sourceLocale})` })
     .where(eq(workingOrders.id, billId));
   await refuseBelowAdvances(tx, fromBillId);
   if (options.holdSourceInvoice === true) {
