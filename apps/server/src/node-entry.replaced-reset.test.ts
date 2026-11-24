@@ -7,6 +7,16 @@ import { REPLACED_RESET_FILE, SPARE_SPACE_FILE } from "@waitron/store";
 import { runEntry } from "./node-entry.js";
 import { FRESH, type RecoveryState } from "./recovery-state.js";
 import { writeReplacedResetMarker } from "./replaced-reset.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { leafHostnamesFor } from "./box-name.js";
+import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+
+vi.mock("@hono/node-server", async () =>
+  (await import("./testing/ephemeral-listener.js")).ephemeralHttpMock(),
+);
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const { seen, watched } = vi.hoisted(() => {
   const seen = { steps: [] as string[] };
@@ -124,6 +134,62 @@ function entry(box: Box, env: NodeJS.ProcessEnv, kept: { state: RecoveryState })
 }
 
 describe("a start holding a replaced box's reset marker", () => {
+  it("returns to Setup with the same box certificate and a pending Cloud key rotation", async () => {
+    const box = await replacedBox();
+    const tunnelDir = join(box.stateDir, "..", "tunnel");
+    const migrationsRoot = join(box.stateDir, "..", "migrations");
+    await copyMigrationsRoot(migrationsRoot);
+    await mkdir(tunnelDir);
+    await writeFile(join(tunnelDir, "public-key"), "old public key");
+    const tls = await ensureBoxSecrets({
+      stateDir: box.stateDir,
+      hostnames: leafHostnamesFor("11111111-1111-4111-8111-111111111111"),
+      listIpv4: () => [],
+      now: () => new Date(),
+    });
+    const originalCa = await readFile(tls.caCertFile);
+    const originalLeaf = await readFile(tls.certFile);
+    await writeReplacedResetMarker(box.stateDir, { phase: "wiping", setAside: false });
+    const deps = entry(
+      box,
+      {
+        WAITRON_ENV: "preproduction",
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: "3000",
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_STATE_DIR: box.stateDir,
+        WAITRON_VENUE_DIR: box.venueDir,
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_TUNNEL_CONTROL_DIR: tunnelDir,
+      },
+      { state: FRESH },
+    );
+    let server: Awaited<ReturnType<typeof startServer>> | undefined;
+    const transport = httpsVia(originalCa);
+    try {
+      await runEntry({
+        ...deps,
+        startServer: async (env, base) => (server = await startServer(env, base)),
+      });
+      expect(deps.serveRecovery).not.toHaveBeenCalled();
+      const response = await fetch(
+        `https://127.0.0.1:${httpPort()}/setup-api/status`,
+        transport.via,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        provisioned: false,
+        environment: "preproduction",
+      });
+      expect(await readFile(tls.caCertFile)).toEqual(originalCa);
+      expect(await readFile(tls.certFile)).toEqual(originalLeaf);
+      expect(readdirSync(tunnelDir)).toEqual(["rotate-key"]);
+    } finally {
+      await transport.close();
+      await server?.close();
+    }
+  });
+
   it("wipes after the space steps and before admission, connection repair, the page and the counter", async () => {
     const box = await replacedBox();
     await writeReplacedResetMarker(box.stateDir, { phase: "wiping", setAside: false });

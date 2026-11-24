@@ -4212,6 +4212,13 @@ async function bootServer(
       readBackup: () =>
         backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
       listJoinRequests: () => boxJoinRequests.listed(),
+      selfReset: {
+        stateDir: config.stateDir,
+        environment: config.environment,
+        setupUrl: new URL("/", config.managementOrigin).href,
+        isReadOnly,
+        restart,
+      },
     },
     log,
   );

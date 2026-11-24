@@ -13,6 +13,7 @@ import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
 import { REPLACED_RESET_FILE, SCRATCH_DIR, STATE_LAYOUT, TLS_DIR } from "@waitron/store";
 import { errnoOf } from "./errno.js";
+import { requestTunnelKeyRotation } from "./cloud-tunnel.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { removeJoinedTls } from "./reset-request.js";
@@ -29,6 +30,7 @@ export interface ReplacedResetDeps {
   venueDir: string;
   /** The mounted backups folder, whose contents the reset removes; null empties none. */
   backupsDir: string | null;
+  tunnelDir?: string;
   log: Logger;
 }
 
@@ -105,6 +107,7 @@ async function deleteAll(deps: ReplacedResetDeps): Promise<void> {
   await removeResetPrefixEntries(deps.stateDir);
   await removeJoinedTls(deps.stateDir);
   await emptyFolder(deps.backupsDir);
+  await requestTunnelKeyRotation(deps.tunnelDir);
 }
 
 /**
@@ -133,7 +136,7 @@ async function setAsideAll(deps: ReplacedResetDeps, resumed: boolean): Promise<b
 }
 
 /**
- * Finishes a replaced main box's reset once its marker reads `wiping`; the checks ran before the
+ * Finishes a box's reset once its marker reads `wiping`; the checks ran before the
  * marker was saved, so none run here. Every step tolerates a re-run, and the marker goes last, so
  * a start cut short finishes the job at the next. Returns whether it reset the box.
  *

@@ -213,6 +213,17 @@ describe("finishReplacedReset without set-aside", () => {
     expect(files(await tree(root))).toEqual([...KEPT, ...TLS].sort());
   });
 
+  it("withdraws the previous Cloud peer and requests a new key during the wipe", async () => {
+    const { root, deps } = await box(false);
+    const tunnelDir = join(root, "tunnel");
+    await writeFile(join(tunnelDir, "public-key"), "old public key");
+    await writeFile(join(tunnelDir, "peer.json"), "old peer");
+
+    await expect(finishReplacedReset({ ...deps, tunnelDir })).resolves.toBe(true);
+
+    expect(await readdir(tunnelDir)).toEqual(["rotate-key", "staff.sock"]);
+  });
+
   it("removes the marker last", async () => {
     const { deps } = await box(true);
 

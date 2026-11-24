@@ -1,6 +1,16 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmod, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -28,8 +38,14 @@ beforeAll(async () => {
 const fs=require("node:fs"), path=require("node:path");
 const name=path.basename(process.argv[1]), args=process.argv.slice(2);
 fs.appendFileSync(process.env.TRACE, JSON.stringify([name,...args])+"\\n");
-if(name==="wg"&&args[0]==="genkey") process.stdout.write("${key}\\n");
-if(name==="wg"&&args[0]==="pubkey") {process.stdin.resume();process.stdin.on("end",()=>process.stdout.write("public-key\\n"));}
+if(name==="wg"&&args[0]==="genkey") {
+ const previous=fs.readFileSync(process.env.TRACE,"utf8").split('\\n').filter(line=>line==='["wg","genkey"]');
+ process.stdout.write((previous.length===1 ? "${key}" : "rotated-private-key")+"\\n");
+}
+if(name==="wg"&&args[0]==="pubkey") {
+ const privateKey=fs.readFileSync(0,"utf8").trim();
+ process.stdout.write((privateKey==="${key}" ? "public-key" : "rotated-public-key")+"\\n");
+}
 if(name==="wg"&&["setconf","set"].includes(args[0])&&process.env.WG_GATE&&!fs.existsSync(process.env.WG_GATE)) process.exit(1);
 if(name==="wg"&&args[0]==="setconf") fs.copyFileSync(args[2], process.env.SNAPSHOT);
 if(name==="wg"&&args[0]==="set") {
@@ -159,6 +175,26 @@ it("makes and retains a private box key while staying off without configuration"
   expect((await events(run)).filter((e) => e[1] === "genkey")).toHaveLength(1);
   expect(await readFile(join(run.keys, "private-key"), "utf8")).toBe(key + "\n");
   expect((await stat(join(run.keys, "private-key"))).mode & 0o777).toBe(0o600);
+});
+
+it("stops the previous peer and replaces its keys after a box reset requests rotation", async () => {
+  const run = await start(configuration);
+  expect(await readFile(join(run.control, "public-key"), "utf8")).toBe("public-key\n");
+  await rm(join(run.control, "peer.json"));
+  await writeFile(join(run.control, "rotate-key"), "");
+
+  await expect.poll(() => run.output, { timeout: 10_000 }).toContain("tunnel.off");
+  await expect
+    .poll(() => readFile(join(run.control, "public-key"), "utf8"), { timeout: 10_000 })
+    .toBe("rotated-public-key\n");
+  await expect(readFile(join(run.keys, "private-key"), "utf8")).resolves.toBe(
+    "rotated-private-key\n",
+  );
+  await expect.poll(() => readdir(run.control)).not.toContain("rotate-key");
+  const commands = await events(run);
+  const stopped = commands.findIndex((e) => e.join(" ") === "ip link del wg-cloud");
+  expect(stopped).toBeGreaterThan(-1);
+  expect(stopped).toBeLessThan(commands.findLastIndex((e) => e[1] === "genkey"));
 });
 
 it("routes only its gateway and fixes the proxy destination to the staff entrance", async () => {

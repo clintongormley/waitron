@@ -39,7 +39,12 @@ export { assertNotAhead } from "./upgrade-schema-check.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { keyRingVariables, loadBoxEnv } from "./box-env.js";
 import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
-import { DEFAULT_HTTP_HOST, localBackupsDir, resolveConfigDir } from "./config.js";
+import {
+  DEFAULT_HTTP_HOST,
+  localBackupsDir,
+  readTunnelControlDir,
+  resolveConfigDir,
+} from "./config.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -359,7 +364,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
-  // While a replaced box's reset is wiping, any Move record is that reset's own, and its wipe
+  // While a reset is wiping, any Move record is that reset's own, and its wipe
   // finishes it without clearing `recovery.json`.
   const wiping = (await readReplacedResetMarker(deps.stateDir))?.phase === "wiping";
   let environmentMoveError: AppError | undefined;
@@ -426,6 +431,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           stateDir: deps.stateDir,
           venueDir: deps.venueDir,
           backupsDir: localBackupsDir(deps.baseEnv),
+          tunnelDir: readTunnelControlDir(deps.baseEnv),
           log: deps.log,
         },
         cleanUp.lockVenue,

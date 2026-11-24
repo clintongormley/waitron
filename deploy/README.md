@@ -731,13 +731,11 @@ without a terminal (an unattended script) it needs `--yes` instead.
 
 **`reset` refuses on a box stamped for production.** A box that has gone live holds real records
 filed with the Spanish tax agency that cannot be recreated, and `reset` would destroy them — see
-`CLAUDE.md` §5 on why that data is unrecoverable. A box that has never been set up, or is still in
-demo/test mode, is not stamped and resets freely with no extra flag; that is the normal demo
-workflow. A half-finished box counts as never set up: the server creates the venue database file
-before it runs its migrations, so a box that failed partway through setup has the file with no
-stamp table in it, and that reads as unstamped rather than as a read that failed. What is still
-refused is a box whose venue file cannot be read at all, because nothing about it can be
-established. The only way past the refusal on a genuinely production box is deliberate: pass
+`CLAUDE.md` §5 on why that data is unrecoverable. Demo and Preparation stamp your box for
+preproduction, so you can reset it without `--force-production`. A half-finished setup may have
+created the database file before creating its stamp table. You can reset that box just as you can
+reset one you have never set up. If `reset` cannot read the venue file, it refuses because it
+cannot establish the environment. The only way past the refusal on a genuinely production box is to pass
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
 The command was designed and built in #314.
 

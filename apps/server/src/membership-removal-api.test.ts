@@ -1,12 +1,18 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   handoverActivations,
   readMembershipTrustSet,
   readNodeMembership,
+  stampDeployment,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -32,6 +38,7 @@ import {
   type MembershipNode,
 } from "@waitron/membership";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { REPLACED_RESET_FILE } from "@waitron/store";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import {
@@ -47,6 +54,8 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { readReplacedResetMarker } from "./replaced-reset.js";
+import { stagedPath } from "./fs-atomic.js";
 
 const pause = { beforeChartMint: undefined as (() => Promise<void>) | undefined };
 
@@ -72,6 +81,10 @@ const RING: KeyRing = loadKeyRing({
 
 const BOX_URL = "https://box.deli.test";
 const CLOUD_URL = "https://cloud.deli.test";
+const stateDirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(stateDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -87,11 +100,16 @@ interface Primary {
   managerCookie: string;
   lines: { level: string; event: string; fields: Record<string, unknown> | undefined }[];
   reloadStream: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  stateDir: string;
+  restart: ReturnType<typeof vi.fn<() => void>>;
   app: Hono;
 }
 
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
-async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promise<Primary> {
+async function primary(
+  readSpare?: MembershipRemovalApiDeps["readSpare"],
+  environment: "production" | "preproduction" = "preproduction",
+): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
@@ -110,9 +128,26 @@ async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promi
   const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
   const app = new Hono();
   const reloadStream = vi.fn(async () => {});
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-reset-api-"));
+  stateDirs.push(stateDir);
+  const restart = vi.fn<() => void>();
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare },
+    {
+      db,
+      node: suite.node,
+      ring: RING,
+      nodeId,
+      reloadStream,
+      readSpare,
+      selfReset: {
+        stateDir,
+        environment,
+        setupUrl: `${BOX_URL}/`,
+        restart,
+        isReadOnly: () => false,
+      },
+    },
     log,
   );
   return {
@@ -124,6 +159,8 @@ async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promi
     managerCookie: venue.managerCookie,
     lines,
     reloadStream,
+    stateDir,
+    restart,
     app,
   };
 }
@@ -141,6 +178,129 @@ async function holdChart(p: Primary, nodes: readonly MembershipNode[]): Promise<
 function self(p: Primary): MembershipNode {
   return { nodeId: p.nodeId, contactUrl: BOX_URL, standing: "serving-primary" };
 }
+
+function resetThisBox(
+  p: Primary,
+  cookie: string,
+  { confirmation = "reset", remoteStaff = false } = {},
+) {
+  const outgoing = new ServerResponse(new IncomingMessage(new Socket()));
+  const response = p.app.request(
+    "/management-api/servers/reset-this-box",
+    {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ confirmation }),
+    },
+    { outgoing, remoteStaff },
+  );
+  return { response, finish: () => outgoing.emit("finish") };
+}
+
+describe("reset this box", () => {
+  it.each([false, true])(
+    "stages a standalone reset and replies before restarting (chart held: %s)",
+    async (withChart) => {
+      const p = await primary();
+      await stampDeployment(p.db, "preproduction");
+      if (withChart) await holdChart(p, [self(p), evicted()]);
+      expect(await (await list(p, p.adminCookie)).json()).toMatchObject({
+        resetThisBox: "available",
+      });
+
+      const request = resetThisBox(p, p.adminCookie);
+      const response = await request.response;
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ setupUrl: `${BOX_URL}/` });
+      expect(await readReplacedResetMarker(p.stateDir)).toEqual({
+        phase: "wiping",
+        setAside: false,
+      });
+      expect(p.restart).not.toHaveBeenCalled();
+      request.finish();
+      expect(p.restart).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ["production stamp", "production", "preproduction", undefined],
+    ["production config", "preproduction", "production", undefined],
+    ["missing stamp", null, "preproduction", undefined],
+    ["Cloud access", "preproduction", "preproduction", "local_address_required"],
+    ["joined box", "preproduction", "preproduction", "joined_another_box"],
+    ["standby on chart", "preproduction", "preproduction", "remove_other_boxes"],
+    ["pair link", "preproduction", "preproduction", "remove_other_boxes"],
+    ["open handover", "preproduction", "preproduction", "remove_other_boxes"],
+  ] as const)("withholds reset for %s", async (reason, stamp, configured, listed) => {
+    const p = await primary(undefined, configured);
+    if (stamp !== null) await stampDeployment(p.db, stamp);
+    const remoteStaff = reason === "Cloud access";
+    if (reason === "joined box") {
+      await mkdir(join(p.stateDir, "tls"));
+      await writeFile(join(p.stateDir, "tls", "joined.json"), "{}");
+    }
+    if (reason === "standby on chart") await holdChart(p, [self(p), standby()]);
+    if (reason === "pair link") await linkTo(p, randomUUID());
+    if (reason === "open handover") await takeover(p, randomUUID(), "return_pending");
+    const request = resetThisBox(p, p.adminCookie, { remoteStaff });
+    const response = await request.response;
+    expect(response.status).toBe(409);
+    expect(await errorOf(response)).toEqual({
+      code: "membership.self_reset_unavailable",
+      params: { reason: listed ?? "environment" },
+    });
+    request.finish();
+    expect(await readReplacedResetMarker(p.stateDir)).toBeNull();
+    expect(p.restart).not.toHaveBeenCalled();
+    const listing = await p.app.request(
+      "/management-api/servers",
+      { headers: { cookie: p.adminCookie } },
+      { remoteStaff },
+    );
+    expect((await listing.json()).resetThisBox).toBe(listed);
+  });
+
+  it("requires Manage boxes, fresh sign-in and the exact confirmation word", async () => {
+    const p = await primary();
+    await stampDeployment(p.db, "preproduction");
+    const manager = await resetThisBox(p, p.managerCookie).response;
+    expect(manager.status).toBe(403);
+    expect((await errorOf(manager)).code).toBe("authorization.not_permitted");
+    const wrongWord = await resetThisBox(p, p.adminCookie, { confirmation: "Reset" }).response;
+    expect((await errorOf(wrongWord)).code).toBe("management.request_invalid");
+    await withTransaction(p.db, (tx) => setFreshManagementSignIn(tx, p.adminCookie, false));
+    const stale = await resetThisBox(p, p.adminCookie).response;
+    expect((await errorOf(stale)).code).toBe("management_session.proof_required");
+    expect(await readReplacedResetMarker(p.stateDir)).toBeNull();
+    expect(p.restart).not.toHaveBeenCalled();
+  });
+
+  it("withdraws the staged wipe when the restart throws", async () => {
+    const p = await primary();
+    await stampDeployment(p.db, "preproduction");
+    p.restart.mockImplementation(() => {
+      throw new Error("restart refused");
+    });
+    const request = resetThisBox(p, p.adminCookie);
+    expect((await request.response).status).toBe(202);
+    request.finish();
+
+    await vi.waitFor(() => expect(errorEvents(p)).toContain("server.restart_failed"));
+    expect(await readReplacedResetMarker(p.stateDir)).toBeNull();
+  });
+
+  it("does not restart when the wipe request cannot be saved", async () => {
+    const p = await primary();
+    await stampDeployment(p.db, "preproduction");
+    await mkdir(stagedPath(join(p.stateDir, REPLACED_RESET_FILE)));
+
+    const request = resetThisBox(p, p.adminCookie);
+    expect((await request.response).status).toBe(500);
+    request.finish();
+    expect(await readReplacedResetMarker(p.stateDir)).toBeNull();
+    expect(p.restart).not.toHaveBeenCalled();
+  });
+});
 
 function standby(nodeId: string = randomUUID(), contactUrl = CLOUD_URL): MembershipNode {
   return { nodeId, contactUrl, standing: "serving-secondary" };

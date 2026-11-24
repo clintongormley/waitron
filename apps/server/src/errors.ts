@@ -1576,6 +1576,14 @@ declare module "@waitron/shared" {
      * the chart can be freed.
      */
     "membership.node_not_removed": Record<string, never>;
+    "membership.self_reset_unavailable": {
+      reason:
+        | "environment"
+        | "local_address_required"
+        | "joined_another_box"
+        | "remove_other_boxes"
+        | "reset_pending";
+    };
     /**
      * A join named a standby node id this node's held chart lists as `evicted` or
      * has cleared. A fresh join mints a fresh id.

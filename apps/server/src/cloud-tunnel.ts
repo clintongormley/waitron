@@ -4,7 +4,10 @@ import { lstat, open, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
+
+const ROTATE_KEY = "rotate-key";
 
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -20,6 +23,11 @@ function refused(cause: unknown): never {
 
 export async function readTunnelPublicKey(directory: string): Promise<string | undefined> {
   try {
+    const rotation = await lstat(join(directory, ROTATE_KEY)).catch((error: unknown) => {
+      if (missing(error)) return null;
+      throw error;
+    });
+    if (rotation !== null) return undefined;
     const file = await open(
       join(directory, "public-key"),
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -38,6 +46,17 @@ export async function readTunnelPublicKey(directory: string): Promise<string | u
   } catch (error) {
     if (missing(error)) return undefined;
     refused(error);
+  }
+}
+
+export async function requestTunnelKeyRotation(directory: string | undefined): Promise<void> {
+  if (directory === undefined) return;
+  await writeTunnelConfiguration(directory);
+  try {
+    await rm(join(directory, "public-key"), { force: true });
+    await writeFileDurable(join(directory, ROTATE_KEY), "", 0o644);
+  } catch (error) {
+    if (!missing(error)) throw error;
   }
 }
 
