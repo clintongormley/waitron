@@ -15,6 +15,11 @@ declare module "@waitron/shared" {
     /** A clock-in while clocked in, or a break-start while already on break. */
     "attendance.already_open": { personId: string };
     "attendance.invalid": { reason: string };
+    /** A returned working-time entry disagrees with one this box holds: same id, other content, or
+     * another entry at its position. */
+    "attendance.return_entry_clash": Record<string, never>;
+    /** A returned working-time batch, or an entry in it, that this box cannot store as sent. */
+    "attendance.return_entry_invalid": Record<string, never>;
     "attendance.state_changed": Record<string, never>;
     "attendance.not_permitted": { personId: string };
     "attendance.not_pending": { entryId: string };

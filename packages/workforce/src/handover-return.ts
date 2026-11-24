@@ -2,7 +2,9 @@ import "./errors.js";
 import { getTableColumns, sql } from "drizzle-orm";
 import { foldForUniqueness, type Database, type Transaction } from "@waitron/db";
 import type { ModuleHandoverContribution } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, type ErrorCode, type Source } from "@waitron/shared";
+import { computeEntryHash } from "./chain-hash.js";
+import type { RecordExtension } from "./record-types.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { markAttendanceEntry } from "./staff-activity.js";
 
@@ -129,10 +131,10 @@ function hasKeys(row: unknown, keys: readonly string[]): boolean {
   );
 }
 
-/** Refuses, with `attendance.invalid`, a batch not in the shape {@link readWorkforceReturn} sends. */
+/** Refuses a batch not in the shape {@link readWorkforceReturn} sends. */
 export function readWorkforceBatch(raw: ReturnBatchValue): WorkforceReturnBatch {
   const refuse = () => {
-    throw new AppError("attendance.invalid", { reason: "malformed_return_batch" });
+    throw new AppError("attendance.return_entry_invalid", {});
   };
   if (!isRecord(raw) || Object.keys(raw).length !== 3) refuse();
   const { entries, staff, devices } = raw as Record<string, unknown>;
@@ -173,64 +175,162 @@ function held(tx: Transaction, table: string, id: ReturnRow[string]): ReturnRow 
   return tx.all<ReturnRow>(sql`select * from ${sql.identifier(table)} where id = ${id}`)[0];
 }
 
-/** As the fiscal return's `restoreStaff` (packages/fiscal-verifactu/src/handover-return.ts). */
-async function restorePerson(
-  tx: Transaction,
-  batch: WorkforceReturnBatch,
-  id: ReturnRow[string],
-  now: Date,
-) {
-  if (id === null || held(tx, "persons", id)) return;
-  const name = batch.staff.find((person) => person.id === id)!.displayName;
-  await insertRow(tx, "persons", {
-    id,
-    display_name: name,
-    display_name_folded: foldForUniqueness(name),
-    status: "suspended",
-    created_at: now.toISOString(),
-  });
+/**
+ * The people and device `entry` names that this box lacks, as the batch describes them; undefined
+ * when the batch leaves one of them out.
+ */
+function missingNames(tx: Transaction, batch: WorkforceReturnBatch, entry: ReturnRow) {
+  const people = [...new Set(staffIds(entry))]
+    .filter((id) => id !== null && !held(tx, "persons", id))
+    .map((id) => batch.staff.find((person) => person.id === id));
+  const deviceId = entry.captured_by_device_id;
+  const devices =
+    deviceId === null || held(tx, "devices", deviceId)
+      ? []
+      : [batch.devices.find((device) => device.id === deviceId)];
+  if (people.some((row) => !row?.displayName) || devices.some((row) => !row)) return undefined;
+  return { people: people.map((row) => row!), devices: devices.map((row) => row!) };
 }
 
-/** As the fiscal return adds a missing device (packages/fiscal-verifactu/src/handover-return.ts). */
-async function restoreDevice(
+/**
+ * A missing person is added as the fiscal return's `restoreStaff` adds one, and a missing device as
+ * it adds one (packages/fiscal-verifactu/src/handover-return.ts).
+ */
+async function restoreNames(
   tx: Transaction,
-  batch: WorkforceReturnBatch,
-  id: ReturnRow[string],
+  names: NonNullable<ReturnType<typeof missingNames>>,
   now: Date,
 ) {
-  if (id === null || held(tx, "devices", id)) return;
-  const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
-  await insertRow(tx, "devices", {
-    id,
-    label: batch.devices.find((device) => device.id === id)!.label,
-    device_profile_id: profile!.id!,
-    token_hash: "",
-    active: 0,
-    deleted_at: now.toISOString(),
-    enrolled_at: now.toISOString(),
-  });
+  for (const { id, displayName } of names.people)
+    await insertRow(tx, "persons", {
+      id,
+      display_name: displayName,
+      display_name_folded: foldForUniqueness(displayName),
+      status: "suspended",
+      created_at: now.toISOString(),
+    });
+  for (const { id, label } of names.devices) {
+    const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
+    await insertRow(tx, "devices", {
+      id,
+      label,
+      device_profile_id: profile!.id!,
+      token_hash: "",
+      active: 0,
+      deleted_at: now.toISOString(),
+      enrolled_at: now.toISOString(),
+    });
+  }
+}
+
+const nullableText = (value: ReturnRow[string]) => (value === null ? null : String(value));
+
+/** The row as {@link computeEntryHash} reads it, as `readChain` builds it from a stored row. */
+function hashInput(row: ReturnRow) {
+  const text = (key: string) => nullableText(row[key]!);
+  const extensionFields = [
+    "author_kind",
+    "correction_direction",
+    "missing_entry_kind",
+    "responds_to_entry_id",
+    "pay_period_closure_id",
+  ].map(text);
+  const selfApproved = row.self_approved === 1;
+  const [authorKind, direction, missingEntryKind, respondsToEntryId, payPeriodClosureId] =
+    extensionFields;
+  return {
+    sequenceNo: Number(row.sequence_no),
+    personId: String(row.person_id),
+    nodeId: String(row.node_id),
+    entryKind: String(row.entry_kind),
+    eventAt: String(row.event_at),
+    recordedAt: String(row.recorded_at),
+    eventOffsetMinutes: Number(row.event_offset_minutes),
+    recordedByPersonId: text("recorded_by_person_id"),
+    capturedBySource: String(row.captured_by_source) as Source,
+    capturedByDeviceId: text("captured_by_device_id"),
+    correctsEntryId: text("corrects_entry_id"),
+    correctionReason: text("correction_reason"),
+    correctionStatus: text("correction_status"),
+    correctionActorId: text("correction_actor_id"),
+    prevEntryHash: text("prev_entry_hash"),
+    extension:
+      !selfApproved && extensionFields.every((value) => value === null)
+        ? null
+        : ({
+            selfApproved,
+            authorKind,
+            direction,
+            missingEntryKind,
+            respondsToEntryId,
+            payPeriodClosureId,
+          } as RecordExtension),
+  };
+}
+
+const sameRow = (a: ReturnRow, b: ReturnRow) =>
+  [...ENTRY_COLUMNS].every((key) => a[key] === b[key]);
+
+/** Why `entry` cannot be stored next, or null when it can (or is already held as sent). */
+function checkEntry(tx: Transaction, sourceNodeId: string, entry: ReturnRow): ErrorCode | null {
+  if (
+    [...ENTRY_COLUMNS].some((key) => !(key in entry)) ||
+    entry.node_id !== sourceNodeId ||
+    !held(tx, "nodes", sourceNodeId)
+  )
+    return "attendance.return_entry_invalid";
+  const own = held(tx, "time_entries", entry.id);
+  if (own) return sameRow(own, entry) ? null : "attendance.return_entry_clash";
+  const position = Number(entry.sequence_no);
+  const atPosition = (at: number) =>
+    tx.all<ReturnRow>(sql`select * from time_entries
+      where node_id = ${sourceNodeId} and sequence_no = ${at}`)[0];
+  if (atPosition(position)) return "attendance.return_entry_clash";
+  const previous = position > 1 ? atPosition(position - 1) : undefined;
+  const continues =
+    position === 1
+      ? entry.is_first_entry === 1 && entry.prev_entry_hash === null
+      : entry.is_first_entry === 0 &&
+        previous !== undefined &&
+        previous.entry_hash === entry.prev_entry_hash;
+  if (!continues || computeEntryHash(hashInput(entry)) !== entry.entry_hash)
+    return "attendance.return_entry_invalid";
+  const pointsAtHeld = (table: string, key: string) =>
+    entry[key] === null || held(tx, table, entry[key]!) !== undefined;
+  if (
+    !pointsAtHeld("pay_period_closures", "pay_period_closure_id") ||
+    !pointsAtHeld("time_entries", "corrects_entry_id") ||
+    !pointsAtHeld("time_entries", "responds_to_entry_id")
+  )
+    return "attendance.return_entry_invalid";
+  return null;
 }
 
 /**
  * Stores a returned batch in chain order inside the caller's transaction, skipping rows already
- * held, and re-queues the days each stored row touches as an append does.
+ * held as sent, and re-queues the days each stored row touches as an append does. A refusal is
+ * returned, not thrown, so the rows stored before it stay: the main box then holds a whole prefix of
+ * the old box's chain, never a broken one.
  */
 export async function receiveWorkforceBatch(
   tx: Transaction,
-  _sourceNodeId: string,
+  sourceNodeId: string,
   batch: WorkforceReturnBatch,
   now: Date,
-): Promise<true> {
+): Promise<true | { refusal: ErrorCode }> {
   for (const entry of batch.entries) {
+    const refusal = checkEntry(tx, sourceNodeId, entry);
+    if (refusal) return { refusal };
     if (held(tx, "time_entries", entry.id)) continue;
-    for (const id of staffIds(entry)) await restorePerson(tx, batch, id, now);
-    await restoreDevice(tx, batch, entry.captured_by_device_id, now);
+    const names = missingNames(tx, batch, entry);
+    if (!names) return { refusal: "attendance.return_entry_invalid" };
+    await restoreNames(tx, names, now);
     await insertRow(tx, "time_entries", entry);
     await markAttendanceEntry(tx, {
       id: String(entry.id),
       eventAt: String(entry.event_at),
-      correctsEntryId: entry.corrects_entry_id as string | null,
-      respondsToEntryId: entry.responds_to_entry_id as string | null,
+      correctsEntryId: nullableText(entry.corrects_entry_id!),
+      respondsToEntryId: nullableText(entry.responds_to_entry_id!),
     });
   }
   return true;

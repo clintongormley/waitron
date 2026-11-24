@@ -177,7 +177,7 @@ describe("readWorkforceBatch", () => {
     ],
   ])("refuses %s", (_, raw) => {
     expect(() => readWorkforceBatch(raw)).toThrow(
-      expect.objectContaining({ code: "attendance.invalid" }) as AppError,
+      expect.objectContaining({ code: "attendance.return_entry_invalid" }) as AppError,
     );
   });
 
@@ -315,5 +315,128 @@ describe("receiveWorkforceBatch", () => {
 
     expect(await heldChain(oldBox)).toHaveLength(2);
     expect(queuedDays()).toEqual(days);
+  });
+
+  type Arrange = (entries: ReturnRow[]) => Promise<ReturnRow[] | void>;
+  const holdFirst = async (entries: ReturnRow[]) => {
+    await copyRows("time_entries", entries.slice(0, 1));
+  };
+  const swapThird = (change: ReturnRow) => (entries: ReturnRow[]) =>
+    entries.slice(1).map((row, i) => (i === 1 ? { ...row, ...change } : row));
+
+  async function nameAClosure(previous: string): Promise<TimeEntryAppend> {
+    await suite.db.run(sql`insert into pay_period_closures (id, node_id, period_start, period_end,
+      clock, scheduled_close_at, closed_at, snapshot, sequence_no, closure_hash)
+      values ('closure-1', ${oldBox}, '2026-01-01', '2026-02-01', '{}', '2026-02-01', '2026-02-01',
+        '{}', 1, ${"A".repeat(64)})`);
+    return {
+      ...clockIn(personId, 2),
+      entryKind: "confirmation",
+      recordedByPersonId: null,
+      extension: {
+        selfApproved: false,
+        authorKind: "automatic",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: previous,
+        payPeriodClosureId: "closure-1",
+      },
+    };
+  }
+
+  it.each<[string, string, Arrange, number[], boolean?]>([
+    [
+      "a held id with different content",
+      "attendance.return_entry_clash",
+      async (entries) => {
+        await holdFirst(entries);
+        await copyRows("time_entries", [
+          { ...entries[2]!, recorded_at: "2026-01-05T09:30:00.000Z" },
+        ]);
+      },
+      [1, 2, 3],
+    ],
+    [
+      "another id at a taken position",
+      "attendance.return_entry_clash",
+      async (entries) => {
+        await holdFirst(entries);
+        await copyRows("time_entries", [{ ...entries[2]!, id: "another" }]);
+      },
+      [1, 2, 3],
+    ],
+    [
+      "another box's row",
+      "attendance.return_entry_invalid",
+      async (entries) => {
+        await holdFirst(entries);
+        return swapThird({ node_id: otherBox })(entries);
+      },
+      [1, 2],
+    ],
+    [
+      "a source whose nodes row is missing",
+      "attendance.return_entry_invalid",
+      async (entries) => {
+        await main.db.run(sql`delete from nodes where id = ${oldBox}`);
+        return entries;
+      },
+      [],
+    ],
+    [
+      "a gap before the first new row",
+      "attendance.return_entry_invalid",
+      async (entries) => {
+        await holdFirst(entries);
+        return entries.slice(2);
+      },
+      [1],
+    ],
+    [
+      "a wrong hash",
+      "attendance.return_entry_invalid",
+      async (entries) => {
+        await holdFirst(entries);
+        return swapThird({ recorded_at: "2026-01-05T09:30:00.000Z" })(entries);
+      },
+      [1, 2],
+    ],
+    [
+      "a pay-period closure the main box lacks",
+      "attendance.return_entry_invalid",
+      holdFirst,
+      [1, 2],
+      true,
+    ],
+  ])("refuses %s with %s, keeping the rows before it", async (_, code, arrange, kept, closure) => {
+    const [, second] = await appendChainEntries(suite.db, oldBox, [
+      clockIn(personId, 0),
+      clockIn(personId, 1),
+    ]);
+    await appendChainEntries(suite.db, oldBox, [
+      closure ? await nameAClosure(second!) : clockIn(personId, 2),
+      clockIn(personId, 3),
+    ]);
+    const batch = await readBatch();
+    await copyRows("persons", rows(suite.db, "persons", personId));
+    const entries = (await arrange(batch.entries)) ?? batch.entries.slice(1);
+
+    expect(await receive({ ...batch, entries })).toEqual({ refusal: code });
+
+    expect((await heldChain(oldBox)).map((row) => row.sequenceNo)).toEqual(kept);
+  });
+
+  it("refuses an entry naming a person or device the batch does not describe", async () => {
+    const { deviceId } = await seedDevice(suite.db, { label: "Bar till" });
+    await appendChainEntries(suite.db, oldBox, [
+      { ...clockIn(personId, 0), origin: deviceOrigin(deviceId) },
+    ]);
+    const batch = await readBatch();
+    const refused = { refusal: "attendance.return_entry_invalid" };
+
+    expect(await receive({ ...batch, staff: [] })).toEqual(refused);
+    expect(await receive({ ...batch, devices: [] })).toEqual(refused);
+    expect(await heldChain(oldBox)).toEqual([]);
+    expect(rows(main.db, "persons", personId)).toEqual([]);
   });
 });
