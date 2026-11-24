@@ -671,7 +671,7 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([]);
   });
 
-  it("raises no alert when the chains the acknowledgement names are held here now, as after a loss order's extra return pass", async () => {
+  it("raises no alert when the chains the acknowledgement names are held here now, as after the old box's extra return pass", async () => {
     const order = await ordered();
     const ack = { orderId: order.orderId, setAside: true, lacking: { fiscal: [LACKING_CHAIN] } };
 

@@ -64,7 +64,8 @@ export function mountReturnRecordsApi(
             canonicalize(chart as unknown as CanonicalValue)
           )
             return refuseReturn("membership changed");
-          // Another box's records: no clash is asked or kept, and no takeover step moves.
+          // A clash can never be accepted for another box's records, and the takeover tracks only
+          // the sender's own.
           if (body.part === "others") {
             const now = deps.now?.() ?? new Date();
             const complete = await seat.receive(tx, source, body.payload!, now, {

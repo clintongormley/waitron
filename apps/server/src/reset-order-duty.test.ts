@@ -668,7 +668,7 @@ it("runs one more return pass for a loss order before it saves the marker", asyn
   expect(JSON.parse(main.seen[1]!.marker!)).toEqual({ phase: "wiping", setAside: true });
 });
 
-it("runs no extra return pass for an order without a loss", async () => {
+it("runs no extra return pass for an order whose answer names nothing lacking", async () => {
   const main = await standIn((seen) =>
     signedOrder(seen, { orderId: "order-1", acceptLoss: false }),
   );
