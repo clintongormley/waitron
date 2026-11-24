@@ -40,7 +40,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { StandbyIdentity } from "./reserved-identity.js";
 import type { PendingAdoption } from "./finish-adoption.js";
-import { verifyBreakGlass } from "./break-glass.js";
+import { boxKeyStored } from "./testing/box-key.js";
 
 import { writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
@@ -239,7 +239,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
+    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
@@ -288,7 +288,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect((result as unknown as { breakGlassKeyName: string }).breakGlassKeyName).toMatch(
       /^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/,
     );
-    expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
+    expect(await boxKeyStored(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {

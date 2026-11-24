@@ -28,18 +28,18 @@ export function authorityKey(masterKey: Uint8Array): Buffer {
   return derive(masterKey, "authority");
 }
 
-function checkDigest(masterKey: Uint8Array): Buffer {
-  return createHash("sha256").update(authorityKey(masterKey)).digest();
+export function masterKeyCheckValue(masterKey: Uint8Array): string {
+  return createHash("sha256").update(authorityKey(masterKey)).digest("hex");
 }
 
-export function masterKeyCheckValue(masterKey: Uint8Array): string {
-  return checkDigest(masterKey).toString("hex");
+export function authorityKeyMatches(authority: Uint8Array, checkValue: string): boolean {
+  if (authority.length !== 32 || !/^[0-9a-f]{64}$/.test(checkValue)) return false;
+  const expected = createHash("sha256").update(authority).digest();
+  return timingSafeEqual(expected, Buffer.from(checkValue, "hex"));
 }
 
 export function masterKeyMatches(masterKey: Uint8Array, checkValue: string): boolean {
-  const expected = checkDigest(masterKey);
-  if (!/^[0-9a-f]{64}$/.test(checkValue)) return false;
-  return timingSafeEqual(expected, Buffer.from(checkValue, "hex"));
+  return authorityKeyMatches(authorityKey(masterKey), checkValue);
 }
 
 /** The sealing pair's public half as SPKI DER. The private half is never returned. */

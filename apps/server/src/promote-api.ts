@@ -41,9 +41,7 @@ export interface PromoteRunResult {
 
 export interface PromoteApiDeps {
   appDb: Database;
-  /** This box's node.db, which holds the recovery-key check. */
   nodeDb: NodeDatabase;
-  /** This node's id — whose break-glass verifier is checked. */
   nodeId: string;
   /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
   credentialKeyRing: KeyRing;
@@ -233,7 +231,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
           // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
           // to the login path.
           if (typeof body.breakGlass === "string") {
-            if (!(await verifyBreakGlass(deps.nodeDb, deps.nodeId, body.breakGlass))) {
+            if (!(await verifyBreakGlass(deps.appDb, body.breakGlass))) {
               throw new AppError("promotion.break_glass_invalid", {});
             }
             await afterSignIn();

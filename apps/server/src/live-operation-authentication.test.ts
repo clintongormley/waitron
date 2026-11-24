@@ -1,11 +1,10 @@
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
-import { withNodeTransaction } from "@waitron/db";
-import { setRecoveryKeyTx, NODE_MIGRATIONS } from "@waitron/node-db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashSecret } from "@waitron/identity";
 import { readOperationAuthority } from "@waitron/module";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
+import { mintMasterKey } from "./testing/master-key.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const binding = {
@@ -15,8 +14,7 @@ const binding = {
   sourceId: "conflict-1",
   targetNodeId: "node-1",
 };
-const secret = "current-paper-key";
-const verifier = hashSecret(secret);
+let secret: string;
 const deps = {
   get db() {
     return suite.db;
@@ -28,9 +26,7 @@ const deps = {
 };
 beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
-  await withNodeTransaction(suite.node, (tx) =>
-    setRecoveryKeyTx(tx, binding.targetNodeId, verifier, "paper-1", null),
-  );
+  ({ secret } = await mintMasterKey(suite.db));
 });
 
 it("permits only a host-declared live action with key attribution and no account", async () => {
@@ -97,15 +93,7 @@ it("rechecks a key replaced while the authenticated operation waits before commi
       binding,
       secret,
       async (_authority, commit) => {
-        await withNodeTransaction(suite.node, (tx) =>
-          setRecoveryKeyTx(
-            tx,
-            binding.targetNodeId,
-            hashSecret("replacement-key"),
-            "paper-2",
-            null,
-          ),
-        );
+        await mintMasterKey(suite.db);
         return commit(async () => {
           committed = true;
         });

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, openVenueDatabase, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
+import { boxKeyStored } from "./testing/box-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 
 const suite = useVenueDb({
@@ -42,7 +44,7 @@ it("stores a non-secret name beside each newly minted verifier", async () => {
     expect.stringMatching(/^\d{4}-\d{2}-\d{2} · [34679ACDEFHJKMNPQRTUVWXY]{4}$/),
   );
   expect(name).not.toContain(secret);
-  expect(await verifyBreakGlass(suite.node, NODE, secret)).toBe(true);
+  expect(await boxKeyStored(suite.node, NODE, secret)).toBe(true);
   expect(await readName(suite.node, OTHER)).toBeUndefined();
 });
 
@@ -55,13 +57,14 @@ it("replacing a key changes its name while keeping another node's key and name",
   expect(await readName()).toEqual(expect.any(String));
   expect(await readName()).not.toBe(oldName);
   expect(await readName(suite.node, OTHER)).toBe(otherName);
-  expect(await verifyBreakGlass(suite.node, NODE, original)).toBe(false);
-  expect(await verifyBreakGlass(suite.node, NODE, replacement)).toBe(true);
-  expect(await verifyBreakGlass(suite.node, OTHER, other)).toBe(true);
+  expect(await boxKeyStored(suite.node, NODE, original)).toBe(false);
+  expect(await boxKeyStored(suite.node, NODE, replacement)).toBe(true);
+  expect(await boxKeyStored(suite.node, OTHER, other)).toBe(true);
 });
 
 it("an archived database names and authenticates the key from its own snapshot", async () => {
-  const original = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  const original = (await mintMasterKey(suite.db)).secret;
   const oldName = await readName();
   const root = await mkdtemp(join(tmpdir(), "recovery-key-name-"));
   dirs.push(root);
@@ -69,7 +72,8 @@ it("an archived database names and authenticates the key from its own snapshot",
   await mkdir(backupDir);
   await suite.db.archiveTo(join(backupDir, "venue.db"));
   await suite.node.archiveTo(join(backupDir, "node.db"));
-  const replacement = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
+  const replacement = (await mintMasterKey(suite.db)).secret;
   const newName = await readName();
   const copy = await openVenueDatabase(backupDir);
   try {
@@ -127,7 +131,7 @@ it("a refused replacement leaves both the paper name and the original verifier",
     await suite.node.execute(sql`drop trigger refuse_recovery_key_update`);
   }
   expect(await readRecoveryKeyName(suite.node, NODE)).toBe(oldName);
-  expect(await verifyBreakGlass(suite.node, NODE, original)).toBe(true);
+  expect(await boxKeyStored(suite.node, NODE, original)).toBe(true);
 });
 
 it("a paper name is not a credential, and the name reader is scoped to its node", async () => {
@@ -135,7 +139,7 @@ it("a paper name is not a credential, and the name reader is scoped to its node"
   const name = await readRecoveryKeyName(suite.node, NODE);
   expect(name).toEqual(expect.any(String));
   expect(await readRecoveryKeyName(suite.node, OTHER)).toBeNull();
-  expect(await verifyBreakGlass(suite.node, NODE, name!)).toBe(false);
+  expect(await boxKeyStored(suite.node, NODE, name!)).toBe(false);
   const rows = await suite.node.execute(sql`select * from box`);
   expect(JSON.stringify(rows)).not.toContain(secret);
 });

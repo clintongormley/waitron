@@ -6,23 +6,12 @@ import { serve, type ServerType } from "@hono/node-server";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import {
-  CORE_MIGRATIONS,
-  withNodeTransaction,
-  type Database,
-  type NodeDatabase,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, type Database, type NodeDatabase, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverRole, HandoverScenario, HandoverState } from "@waitron/handover";
-import { hashSecret } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import {
-  NODE_MIGRATIONS,
-  nodeHandoverEvents,
-  nodeHandoverOperations,
-  setRecoveryKeyTx,
-} from "@waitron/node-db";
+import { NODE_MIGRATIONS, nodeHandoverEvents, nodeHandoverOperations } from "@waitron/node-db";
 import type { PromoteApiDeps, PromoteRunResult } from "./promote-api.js";
 
 // Login, authorisation, `verifyBreakGlass` and `run` are doubled, so this pins only the endpoint's own
@@ -39,22 +28,24 @@ const {
   authorizeManager,
   endManagementSession,
   verifyBreakGlass,
+  accepted,
 } = vi.hoisted(() => ({
+  accepted: { secret: "correct-break-glass-secret" },
   // The database is `{}` here, so the real pre-check could not read it.
   checkManagerPassword: vi.fn(async () => undefined),
   loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
   authorizeManager: vi.fn(async () => {}),
   endManagementSession: vi.fn(async () => {}),
-  verifyBreakGlass: vi.fn(
-    async (_db: unknown, _nodeId: string, secret: string) =>
-      secret === "correct-break-glass-secret",
-  ),
+  verifyBreakGlass: vi.fn(async (_db: unknown, secret: unknown) => secret === accepted.secret),
 }));
 vi.mock("@waitron/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/db")>();
   return {
     ...actual,
-    withTransaction: vi.fn(async (_db: unknown, cb: (tx: unknown) => Promise<unknown>) => cb({})),
+    // The real one for the handover cases' real venue.db, which seeds their master key.
+    withTransaction: vi.fn(async (db: Database, cb: (tx: Transaction) => Promise<unknown>) =>
+      "withWriteLock" in db ? actual.withTransaction(db, cb) : cb({} as Transaction),
+    ),
   };
 });
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -73,6 +64,7 @@ vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 import { mountPromoteApi } from "./promote-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { resetObserver } from "./testing/connection-reset.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
@@ -146,7 +138,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
-    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeNode, NODE, GOOD_SECRET);
+    expect(verifyBreakGlass).toHaveBeenCalledWith(fakeDb, GOOD_SECRET);
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
   });
@@ -344,10 +336,11 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     sourceId: "promotion-1",
     targetNodeId: NODE,
   };
-  const SIGN_INS = [
-    { oldNodeNeutralised: true, breakGlass: GOOD_SECRET },
+  let key: string;
+  const signIns = () => [
+    { oldNodeNeutralised: true, breakGlass: key },
     { oldNodeNeutralised: true, personId: PERSON, password: "pw" },
-    { moduleOperation: { binding, input: null }, breakGlass: GOOD_SECRET },
+    { moduleOperation: { binding, input: null }, breakGlass: key },
     { moduleOperation: { binding, input: null }, personId: PERSON, password: "pw" },
     { moduleOperation: { binding, input: null }, noParallelRecovery: true },
   ];
@@ -372,12 +365,11 @@ describe("an ordinary promotion while a handover is open on this box", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    await withNodeTransaction(suite.node, (tx) =>
-      setRecoveryKeyTx(tx, NODE, hashSecret(GOOD_SECRET), "paper-1", null),
-    );
+    ({ secret: key } = await mintMasterKey(suite.db));
+    accepted.secret = key;
     app = new Hono();
     mountPromoteApi(app, {
-      appDb: fakeDb,
+      appDb: suite.db,
       nodeDb: suite.node,
       nodeId: NODE,
       run,
@@ -391,6 +383,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
 
   afterEach(() => {
     socket.destroy();
+    accepted.secret = GOOD_SECRET;
   });
 
   /** An operation between this box and `OTHER_BOX`, moved through `path`. */
@@ -441,7 +434,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
   async function expectRefusedNamingOperation(operationId: string): Promise<void> {
     const before = await recorded();
     const refusal = { error: { code: "handover.operation_in_progress", params: { operationId } } };
-    for (const body of SIGN_INS) {
+    for (const body of signIns()) {
       const response = await send("", body);
       expect([response.status, await response.json()]).toEqual([409, refusal]);
     }
@@ -457,7 +450,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
 
   /** The promote route reaches `run`, and the preparation route reaches `prepare`. */
   async function expectPromotesAsToday(): Promise<void> {
-    const promoted = await send("", { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
+    const promoted = await send("", { oldNodeNeutralised: true, breakGlass: key });
     expect([promoted.status, await promoted.json()]).toEqual([
       200,
       { alreadyPrimary: false, restarting: true },
