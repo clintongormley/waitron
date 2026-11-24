@@ -2194,6 +2194,28 @@ it("a second-part record clash counts as done and the pass confirms", async () =
   }
 });
 
+it("a record clash on one earlier box's batch still sends the next, and confirms only once that is accounted", async () => {
+  const twoEarlier = (held: CanonicalValue | undefined) =>
+    held === undefined ? null : ["clashing", "healthy"];
+  let healthyAccounted = false;
+  const receive = receiveByPart(async (batch) =>
+    batch === "clashing" ? { refusal: "fiscal.return_record_clash" } : healthyAccounted,
+  );
+  try {
+    const app = destination();
+    const through = async (url: string | URL | Request, init?: RequestInit) =>
+      app.request(String(url), init);
+    expect(await sendBoth(through, twoEarlier)).toBe("needs-attention");
+    expect(received).toEqual(["clashing", "healthy", "first", "second"]);
+    received = [];
+    healthyAccounted = true;
+    expect(await sendBoth(through, twoEarlier)).toBe("confirmed");
+    expect(received.slice(0, 2)).toEqual(["clashing", "healthy"]);
+  } finally {
+    receive.restore();
+  }
+});
+
 it("a second-part batch is not recorded as a return batch and moves no handover step", async () => {
   await completionBinding();
   const app = destination();

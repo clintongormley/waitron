@@ -78,16 +78,7 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
     others === null || others.length === 0
       ? null
       : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
-  const othersState: ReturnState =
-    others === null
-      ? "waiting"
-      : sentOthers === null ||
-          sentOthers.state === "confirmed" ||
-          sentOthers.state === "record-clash"
-        ? "confirmed"
-        : sentOthers.state === "clash"
-          ? "needs-attention"
-          : sentOthers.state;
+  const othersState = othersPartState(others, sentOthers);
   // Confirmed own records go again only once nothing else is left to send: a main box restored from
   // an earlier copy lacks them, and each batch is a write on the selling main box.
   const sent: Sent =
@@ -110,6 +101,18 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
       ? "confirmed"
       : sent.state;
   return own === "confirmed" ? othersState : own;
+}
+
+/**
+ * The earlier boxes' part is done once each batch was accounted or refused as a record clash. A
+ * batch the main box took but did not account for cannot be accepted as a clash can for this box's
+ * own records, so it needs the person rather than reading as `clash`.
+ */
+function othersPartState(others: Batch[] | null, sent: Sent | null): ReturnState {
+  if (others === null) return "waiting";
+  if (sent === null || sent.state === "confirmed" || sent.state === "record-clash")
+    return "confirmed";
+  return sent.state === "clash" ? "needs-attention" : sent.state;
 }
 
 /** Other boxes' records the main box lacks; `null` when some are held but no summary was heard. */
@@ -185,6 +188,7 @@ async function sendBatches(
   const authority =
     deps.stateDir === undefined ? undefined : await readVenueAuthority(deps.stateDir);
   let lastReceipt = "";
+  let recordClash = false;
   for (let index = 0; index < batches.length; index++) {
     if (deps.stopped()) return { state: "waiting" };
     const nonce = randomUUID();
@@ -221,7 +225,16 @@ async function sendBatches(
       });
       return { state: "waiting" };
     }
-    if (answer.status !== 200) return { state: refusalState(answer.text, fromRestriction) };
+    if (answer.status !== 200) {
+      const refused = refusalState(answer.text, fromRestriction);
+      // The main box takes each earlier box's batch in a transaction of its own, so a clash in one
+      // leaves the rest to send.
+      if (others && refused === "record-clash") {
+        recordClash = true;
+        continue;
+      }
+      return { state: refused };
+    }
     const checked = checkedPeerAnswer(answer.text, "return-receipt", keyOf, target.nodeId, nonce);
     if (!checked.ok) return { state: "needs-attention" };
     const receipt = checked.body;
@@ -240,6 +253,7 @@ async function sendBatches(
     lastReceipt = answer.text;
   }
   if (deps.stopped()) return { state: "waiting" };
+  if (recordClash) return { state: "record-clash" };
   return { state: "confirmed", destinationNodeId: target.nodeId, receipt: lastReceipt };
 }
 
