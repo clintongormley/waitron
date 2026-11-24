@@ -1,14 +1,14 @@
 # Product file size guard
 
-CI reports the path, count and limit when a tracked product TypeScript file exceeds 1,000 lines or its recorded cap. It also reports allowances that need lowering or removal. Seed allowances from the branch's main base by rounding each count over 1,000 up to a multiple of 250.
+CI reports the path, count and limit when a tracked product TypeScript file exceeds 1,000 lines or its recorded cap. It also reports allowances that need lowering or removal. Seed 93 allowances from main alone by rounding each count over 1,000 up to a multiple of 250. The watcher cleared this on 24 November at 15:07 and separately allowed the pay-items branch to raise two caps when it rebases.
 
 ## Scope
 
 Add `scripts/product-file-size.test.ts` to the root Vitest project and store caps in `scripts/product-file-size-limits.json`. Follow the bounded `git ls-files -z` pattern and Git environment check in `scripts/style-token-names.test.ts`. Read selected regular files once. Count physical lines, including blanks, comments and a final unterminated line.
 
-Select `.ts` files under `apps/*/src/` and `packages/*/src/`. Exclude `.test.ts`, `testing/`, `test-helpers.ts`, `.test-helpers.ts`, `.test-support.ts`, `.test-fixture.ts` and `.fixtures.ts`. Translation tables use `strings.ts`, `i18n/strings/`, package `src/starter-content.ts`, dashboard and till `i18n/codes.ts`, dashboard `i18n/alert-messages.ts`, till `i18n/help-strings.ts` and VeriFactu dashboard `conflict-recovery-strings.ts`. Exclude country packs' `src/demo/` data and the two verified generated paths `packages/printing/src/glyphs.ts` and `packages/reporting/src/dr303-layout.ts`.
+Select `.ts` files under `apps/*/src/` and `packages/*/src/`. Exclude `.test.ts`, `testing/`, `test-helpers.ts`, `.test-helpers.ts`, `.test-support.ts`, `.test-fixture.ts` and `.fixtures.ts`. Exclude translation tables at `strings.ts`, `i18n/strings/`, dashboard and till `i18n/codes.ts` and dashboard `i18n/alert-messages.ts`. Exclude country packs' `src/demo/` data and the generated `packages/reporting/src/dr303-layout.ts`.
 
-Put the rule, test name and “weaker than its name” in `CLAUDE.md`. Give the exact exclusions in the CI guide. The scan misses untracked files, other extensions, code outside `src/`, and resolver code mixed into excluded catalogues. Changes to the caps themselves need human review. A later pair of PRs can each fit a cap and exceed it together. Main's guard evaluates the combined result. File splits and CI workflow changes are outside this item.
+Put the rule, test name and “weaker than its name” in `CLAUDE.md`. The rule and failure message tell you to move code into a new file and to add or raise a cap only with the watcher's or owner's approval. Give the exact exclusions in the CI guide. The scan misses untracked files, other extensions, code outside `src/`, and product code moved under `testing/` or an excluded catalogue. Changes to the caps themselves need human review. Two PRs can each pass and together grow a file past its cap or shrink it enough to require lowering the cap. Main's guard evaluates the combined result. File splits and CI workflow changes are outside this item.
 
 ## Build and verify
 

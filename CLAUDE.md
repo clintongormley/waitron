@@ -127,6 +127,9 @@ hook, or how tests are scheduled. What named guards miss:
 - **Every CI test job should finish in about 4 minutes** (owner, 2026-10-09 and 2026-10-11).
   Fix the cause, never cut a check. Guards, weaker than the rule: the reporter only warns;
   `scripts/ci-workflow.test.mjs` pins shard counts and 10-minute limits.
+- **Keep product TypeScript files to 1,000 lines or their recorded cap.** Move code into a new file
+  when you reach the cap. Add or raise a cap only with the watcher's or owner's approval.
+  Guard: `scripts/product-file-size.test.ts`, weaker than its name. [Scope and shrinking caps](docs/developers/ci-and-gates.md#product-file-size).
 - **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
   never a plain `--merge-reports`**. Guard: the browser-merge case in
   `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, not the Vitest config. Receipt:
