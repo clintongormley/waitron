@@ -2041,6 +2041,7 @@ jobs:
         env:
           WAITRON_TEST_TRACE_FILES: >-
             src/till-app-parties.test.ts,
+            src/till-app-parties-closing.test.ts,
             src/screens/till-table-order-screen.line-detail.test.ts,
             src/widgets/bill-refund-dialog.unsaved.test.ts
           DEBUG: pw:api

@@ -1708,7 +1708,7 @@ file-progress line. An unset or empty selector emits no detail lines. Existing f
 start/end lines still feed the outer deadline's unfinished-file report.
 
 The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
-for Playwright's API log. The till shard selects the parties, line-detail and
+for Playwright's API log. The till shard selects both parties files, line-detail and
 refund-unsaved files from [A1027](../backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027)
 and enables the same browser-call log. This records reported phases and browser API calls.
 Read the last event for each file alongside the last browser call before
@@ -2879,6 +2879,10 @@ Measured on run 39404947291, which is this change plus a one-line comment in
 which CI's `changes` job answers `code=false` and runs no package's tests: the seven test steps took
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
+
+The 24 November split moves cancellation and credit, reopening a printed bill to split it, and
+the paid unserved dishes confirmation group into `till-app-parties-closing.test.ts`. The seven-shard
+duration table gives that file and `till-app-parties.test.ts` separate weights.
 
 ### The server's shards: twenty-four after A1297
 

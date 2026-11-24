@@ -565,7 +565,7 @@ three routes' refusing cases and inventory rows, CLAUDE.md §3); `till-api.sessi
   (the filled window sends the cancel's ids and needs no PIN; a device that does not take that payment
   says so; a lost answer is sent again with the same id; a pending refund offers Check again):
   `till-app-adjustments.test.ts:4088-4789`; `till-app.test.ts:26182`, `:27200`, `:28060`;
-  `till-app-parties.test.ts:13641-15014`; `till-app-bill-payments.test.ts:4461`, `:8364`,
+  `till-app-parties-closing.test.ts` (Finish table group); `till-app-bill-payments.test.ts:4461`, `:8364`,
   `:10012-10055`.
 - `apps/till/src/i18n/codes.test.ts`, `refund-wording.test.ts`: messages naming the old buttons.
 - `apps/dashboard/src/i18n/alert-messages.ts:458-465` and `apps/dashboard/src/i18n/alerts.test.ts:1048-1051`:
@@ -821,15 +821,15 @@ Files: `apps/till/src/screens/till-ticket-view.ts` and test; `till-app.ts`; `str
 
 #### Task 11: the filled window after Cancel and refund and Finish table — about 75 calls
 
-Files: `till-app.ts`; `till-app-adjustments.test.ts`, `till-app-parties.test.ts`.
+Files: `till-app.ts`; `till-app-adjustments.test.ts`, `till-app-parties-closing.test.ts`.
 
 1. Tests first: after Cancel and refund, and from Finish table's per-receipt Refund, the window opens
    on **A dish** with the cancelled lines ticked, their owed amount, the cancel's reason and the only
    payment this device can use chosen, and sends `fromCancel` with no PIN; a device that cannot take
    that payment says so. Rewrite `till-app-adjustments.test.ts:4088-4789` and
-   `till-app-parties.test.ts:13641-15014` keeping their assertions. Run, watch them fail.
+   the Finish table group in `till-app-parties-closing.test.ts` keeping their assertions. Run, watch them fail.
 2. Make the changes; `#openTenderRefund`'s fill path is no longer reached (left for PR 3).
-3. `pnpm --filter @waitron/till exec vitest run src/till-app-adjustments.test.ts src/till-app-parties.test.ts`
+3. `pnpm --filter @waitron/till exec vitest run src/till-app-adjustments.test.ts src/till-app-parties.test.ts src/till-app-parties-closing.test.ts`
 
 #### Task 12: the Pay window's Refund on a part payment — about 40 calls
 

@@ -1545,7 +1545,7 @@ the editor's remaining saved dishes refuse `bill.unsent_dishes` rather than bein
 through direct Finish/close and authenticated Finish/unpaid-departure requests. It also checks
 closing with current empty observations while another party keeps its outbox. The separate paid-food confirmation and cancellation checks are in
 `apps/server/src/finish-party-service.test.ts`; the app cases are in
-`apps/till/src/till-app-parties.test.ts`.
+`apps/till/src/till-app-parties-closing.test.ts`.
 
 The floor shows each nonempty bill/editor pair. A compact map badge may remain "Unsent" when its
 accessible label names those pairs and the expanded detail shows them, as ownership design §6
