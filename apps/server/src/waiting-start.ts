@@ -72,7 +72,10 @@ export interface WaitingStartDeps {
     readNewerMain?: () => Promise<NewerBucketMain | null>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;
-    /** Offers the download's passkey sign-in; without it the download asks for email and password only. */
+    /**
+     * Offers the download's passkey sign-in; without it the download asks for email and password
+     * only.
+     */
     passkey?: OldBoxDataDeps["passkey"];
   };
   /** The peer routes, mounted on the waiting start's own app. */
