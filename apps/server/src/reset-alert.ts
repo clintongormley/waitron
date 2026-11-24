@@ -32,7 +32,7 @@ export async function raiseSetAsideOnReset(
   args: {
     readonly nodeId: string;
     readonly orderId: string;
-    readonly acceptedLoss: boolean;
+    readonly recordsMissing: boolean;
     readonly at: Date;
   },
 ): Promise<void> {
@@ -42,7 +42,7 @@ export async function raiseSetAsideOnReset(
     error: new AppError(SET_ASIDE_ALERT, {
       nodeId: args.nodeId,
       orderId: args.orderId,
-      acceptedLoss: args.acceptedLoss,
+      recordsMissing: args.recordsMissing,
     }),
     severity: "warning",
     detectedAt: args.at,

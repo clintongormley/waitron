@@ -25,11 +25,7 @@ import {
   type NodeStanding,
 } from "@waitron/membership";
 import { verifyEnvelope } from "@waitron/handover";
-import {
-  appendHandoverEventTx,
-  beginHandoverOperationTx,
-  nodeHandoverEvents,
-} from "@waitron/node-db";
+import { beginHandoverOperationTx, nodeHandoverEvents } from "@waitron/node-db";
 import type { WaitronModule } from "@waitron/module";
 import { VERIFACTU_HANDOVER } from "@waitron/fiscal-verifactu";
 import type { BackupStatus } from "./backup-status.js";
@@ -413,26 +409,6 @@ describe("POST /api/node/reset-order refuses", () => {
     expect(events("reset_acknowledged")).toEqual([]);
     expect(await oldStanding()).toBe("sell-only");
   });
-  it("an acknowledgement naming an order that does not say whether it accepted a loss", async () => {
-    await ordered();
-    await withNodeTransaction(suite.node, (tx) =>
-      appendHandoverEventTx(tx, {
-        nodeId: main,
-        operationId: null,
-        kind: "reset_ordered",
-        detail: { targetNodeId: oldBox, orderId: "no-loss-word", personId },
-        envelope: null,
-      }),
-    );
-    const res = await ask(
-      await queryBody({ ack: { orderId: "no-loss-word", setAside: false, lacking: {} } }),
-    );
-    expect(await refusalOf(res)).toEqual({
-      code: "handover.reset_query_refused",
-      params: { reason: "order" },
-    });
-    expect(events("reset_acknowledged")).toEqual([]);
-  });
 });
 
 describe("POST /api/node/reset-order answers", () => {
@@ -719,41 +695,65 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
       },
     ]);
   });
 
-  it("a non-loss order's alert carries acceptedLoss false", async () => {
-    const order = await ordered();
-    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+  /** A one-record chain of `nodeId` this box holds, as the old box lists it with `changes`. */
+  async function heldChainWith(changes: { huella?: string; count?: number }, nodeId = main) {
+    const seriesId = randomUUID();
+    await suite.db.insert(invoiceSeries).values({ id: seriesId, nodeId, code: "A" });
+    const ids = await seedFiscalParents(suite.db, {
+      ids: { nodeId, seriesId },
+      reuseExistingParents: true,
+    });
+    await insertFiscalRecord(suite.db, ids, { numSerie: `A/${nodeId}` });
+    return { ...(await oneRecordChainOf(suite.db, ids.sifId)), ...changes };
+  }
 
-    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+  const reasonsLacking = async (chains: CanonicalValue[]) =>
+    (
+      (await VERIFACTU_HANDOVER.lacking!(liveBackupQuery(suite.db), chains)) as {
+        reason: string;
+      }[]
+    ).map((chain) => chain.reason);
 
-    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-    expect(await incidents()).toEqual([
-      {
-        code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
-      },
-    ]);
-  });
-
-  it("a loss order's alert carries acceptedLoss true", async () => {
+  it("says no records are missing when every chain this box lacks only differs, even for a loss order", async () => {
     await completedReturn();
     const order = await orderReset(
       { db: suite.db, node: suite.node, nodeId: main },
       { targetNodeId: oldBox, personId, acceptLoss: true },
     );
+    const differing = await heldChainWith({ huella: "a".repeat(64) });
+    expect(await reasonsLacking([differing])).toEqual(["hash_differs"]);
     const ack = { orderId: order.orderId, setAside: true, lacking: {} };
 
-    const res = await ask(await queryBody({ ack, holdings: { fiscal: [MISSING_CHAIN] } }));
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [differing] } }));
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: true },
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: false },
+      },
+    ]);
+  });
+
+  it("says records are missing when a chain this box holds has fewer records, beside one that differs", async () => {
+    const order = await ordered();
+    const differing = await heldChainWith({ huella: "a".repeat(64) });
+    const shorter = await heldChainWith({ count: 2 }, oldBox);
+    expect(await reasonsLacking([differing, shorter])).toEqual(["hash_differs", "fewer_records"]);
+    const ack = { orderId: order.orderId, setAside: true, lacking: {} };
+
+    const res = await ask(await queryBody({ ack, holdings: { fiscal: [differing, shorter] } }));
+
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await incidents()).toEqual([
+      {
+        code: "chain.set_aside_on_reset",
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
       },
     ]);
   });
@@ -812,7 +812,7 @@ describe("an acknowledgement", () => {
     expect(await incidents()).toEqual([
       {
         code: "chain.set_aside_on_reset",
-        params: { nodeId: oldBox, orderId: order.orderId, acceptedLoss: false },
+        params: { nodeId: oldBox, orderId: order.orderId, recordsMissing: true },
       },
     ]);
     expect(await offTheList()).toBe(true);

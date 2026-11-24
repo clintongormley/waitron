@@ -91,6 +91,7 @@ export interface ModuleHandoverContribution {
   holdings?(query: BackupQuery): Promise<CanonicalValue>;
   /**
    * Which of another box's `holdings` this database does not hold; empty when it holds them all.
+   * An entry with `reason: "hash_differs"` is held here differently rather than missing records.
    * Holdings not in the module's shape throw `MalformedHoldingsError`.
    */
   lacking?(query: BackupQuery, holdings: CanonicalValue): Promise<CanonicalValue[]>;

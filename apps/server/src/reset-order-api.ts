@@ -130,6 +130,13 @@ async function lackingFor(
   return lacking;
 }
 
+/** Whether some chain is lacking for missing records, not only because its records differ. */
+function recordsMissing(lacking: Record<string, CanonicalValue[]>): boolean {
+  return Object.values(lacking).some((chains) =>
+    chains.some((chain) => (chain as { reason?: unknown } | null)?.reason !== "hash_differs"),
+  );
+}
+
 /**
  * Records the acknowledgement and removes and clears the box as the person who ordered the reset. Under
  * node.db's lock, an order already acknowledged there writes nothing more; otherwise venue.db
@@ -159,8 +166,8 @@ async function acknowledge(
       )
       .limit(1);
     if (acknowledged !== undefined) return;
-    // This box's own comparison, not the ack's list: that was taken before a loss order's extra
-    // return pass. Made under node.db's lock, so it sees what a return committed under it.
+    // This box's own comparison, not the ack's list: the old box may have taken that before its
+    // extra return pass. Made under node.db's lock, so it sees what a return committed under it.
     const lacking = ack.setAside
       ? await lackingFor(deps, liveBackupQuery(deps.db), holdings, true)
       : {};
@@ -176,7 +183,7 @@ async function acknowledge(
         await raiseSetAsideOnReset(tx, {
           nodeId: source,
           orderId: ack.orderId,
-          acceptedLoss: order.acceptLoss,
+          recordsMissing: recordsMissing(lacking),
           at: deps.now?.() ?? new Date(),
         });
     });
