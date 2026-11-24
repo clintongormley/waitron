@@ -74,14 +74,16 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
   if (batches.length === 0) return "waiting";
   const held = await returnConfirmed(deps, operationId, inventory);
   const main = mainBoxToAsk(deps.nodeId, chart, restriction);
+  let link: Promise<Link | null> | undefined;
+  const linkOnce = () => (link ??= returnLink(deps, chart, main));
   // Sent first: the box's own records may correct one of these.
-  const othersState = await sendOthersPart(deps, chart, main);
+  const othersState = await sendOthersPart(deps, linkOnce, main.target?.nodeId);
   // Confirmed own records go again only once nothing else is left to send: a main box restored from
   // an earlier copy lacks them, and each batch is a write on the selling main box.
   const sent: Sent =
     held && othersState !== "confirmed"
       ? { state: "waiting" }
-      : await sendBatches(deps, chart, main, batches, inventory, false);
+      : await sendBatches(deps, linkOnce, batches, inventory, false);
   if (sent.state === "confirmed" && !held)
     await withNodeTransaction(deps.node, (tx) =>
       appendHandoverEventTx(tx, {
@@ -103,12 +105,12 @@ export async function runReturnRecordsPass(deps: PassDeps): Promise<ReturnState>
 /** Earlier boxes' records; a failure to read them leaves this box's own still to send. */
 async function sendOthersPart(
   deps: PassDeps,
-  chart: Awaited<ReturnType<typeof readNodeMembership>>,
-  main: ReturnType<typeof mainBoxToAsk>,
+  linkOnce: () => Promise<Link | null>,
+  destinationNodeId: string | undefined,
 ): Promise<ReturnState> {
   let others: Batch[] | null;
   try {
-    others = await readOtherBoxesBatches(deps, main.target?.nodeId);
+    others = await readOtherBoxesBatches(deps, destinationNodeId);
   } catch (error) {
     deps.log?.("warn", "return-records.others_failed", { errorCode: codeOf(error) });
     return "needs-attention";
@@ -116,7 +118,7 @@ async function sendOthersPart(
   const sent =
     others === null || others.length === 0
       ? null
-      : await sendBatches(deps, chart, main, others, returnDigest(others.map(returnDigest)), true);
+      : await sendBatches(deps, linkOnce, others, returnDigest(others.map(returnDigest)), true);
   return othersPartState(others, sent);
 }
 
@@ -206,19 +208,41 @@ type Sent =
   | { state: Exclude<ReturnState, "confirmed"> }
   | { state: "confirmed"; destinationNodeId: string; receipt: string };
 
-async function sendBatches(
+type Link = {
+  target: NonNullable<ReturnType<typeof mainBoxToAsk>["target"]>;
+  fromRestriction: boolean;
+  venue: NonNullable<Awaited<ReturnType<typeof returnVenue>>>;
+  keyOf: Awaited<ReturnType<typeof peerKeyOf>>;
+  authority: Awaited<ReturnType<typeof readVenueAuthority>> | undefined;
+};
+
+/** What every batch of a pass is sent with; `null` while there is no main box or venue to name. */
+async function returnLink(
   deps: PassDeps,
   chart: Awaited<ReturnType<typeof readNodeMembership>>,
   { target, fromRestriction }: ReturnType<typeof mainBoxToAsk>,
+): Promise<Link | null> {
+  const venue = await returnVenue(deps);
+  if (!target || !venue) return null;
+  return {
+    target,
+    fromRestriction,
+    venue,
+    keyOf: await peerKeyOf(deps, chart),
+    authority: deps.stateDir === undefined ? undefined : await readVenueAuthority(deps.stateDir),
+  };
+}
+
+async function sendBatches(
+  deps: PassDeps,
+  linkOnce: () => Promise<Link | null>,
   batches: readonly Batch[],
   inventory: string,
   others: boolean,
 ): Promise<Sent> {
-  const venue = await returnVenue(deps);
-  if (!target || !venue) return { state: "waiting" };
-  const keyOf = await peerKeyOf(deps, chart);
-  const authority =
-    deps.stateDir === undefined ? undefined : await readVenueAuthority(deps.stateDir);
+  const link = await linkOnce();
+  if (!link) return { state: "waiting" };
+  const { target, fromRestriction, venue, keyOf, authority } = link;
   let lastReceipt = "";
   let recordClash = false;
   for (let index = 0; index < batches.length; index++) {

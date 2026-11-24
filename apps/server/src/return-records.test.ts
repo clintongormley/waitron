@@ -11,6 +11,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { eq, sql } from "drizzle-orm";
 import * as loop from "./loop.js";
+import * as bootPeerCheck from "./boot-peer-check.js";
 import * as database from "@waitron/db";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -2329,6 +2330,30 @@ it("reads earlier boxes' records again only when the main box's summary changes"
     await duty.stop();
     receive.restore();
     sleep.mockRestore();
+  }
+});
+
+it("reads the venue authority once in a pass that sends both parts", async () => {
+  const authority = vi.spyOn(bootPeerCheck, "readVenueAuthority");
+  try {
+    const app = destination();
+    expect(
+      await runReturnRecordsPass({
+        db: suite.db,
+        node: suite.node,
+        ring,
+        nodeId: source,
+        modules: twoParts(earlierTail),
+        mainHoldings: () => heard("lacks"),
+        stateDir: join(tmpdir(), "waitron-return-no-state"),
+        fetch: async (url, init) => app.request(String(url), init),
+        stopped: () => false,
+      }),
+    ).toBe("confirmed");
+    expect(received).toEqual(["earlier", "first", "second"]);
+    expect(authority).toHaveBeenCalledTimes(1);
+  } finally {
+    authority.mockRestore();
   }
 });
 
