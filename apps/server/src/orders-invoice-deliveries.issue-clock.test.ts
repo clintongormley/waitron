@@ -53,7 +53,7 @@ useVenueDb({
 
 /** A full invoice on a new open bill (sent to the kitchen when `placed`), written through the core. */
 async function fullInvoice(placed = false): Promise<{ billId: string; saleId: string }> {
-  const billId = await parked(venue, "Caña");
+  const billId = await parked(venue, "Small beer");
   if (placed)
     await placeOrder(
       {
@@ -81,8 +81,8 @@ async function fullInvoice(placed = false): Promise<{ billId: string; saleId: st
       lines: [
         {
           lineNo: 1,
-          name: "Caña",
-          descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+          name: "Small beer",
+          descriptions: { [venue.cfg.locale]: "Glass of lager" },
           quantity: "1",
           unitPrice: "3.00",
           vatRate: "10",

@@ -67,9 +67,9 @@ async function seated(...names: string[]): Promise<{ partyId: string; tabId: str
   });
 }
 
-/** A party with a first bill (Paella) and a second bill (Caña) split off it. */
+/** A party with a first bill (Seafood rice) and a second bill (Small beer) split off it. */
 async function twoBills(): Promise<{ partyId: string; first: string; second: string }> {
-  const { partyId, tabId } = await seated("Paella", "Caña");
+  const { partyId, tabId } = await seated("Seafood rice", "Small beer");
   const { billId } = await inTx(venue, (tx) =>
     splitBill(tx, venue.cfg, tabId, [{ lineNo: 2 }], {
       expectedPartyRevision: revisionOf(partyId),
@@ -177,7 +177,7 @@ function invoiced(billId: string): { names: string[]; tenders: number[] } {
 
 describe("A803 move dishes route:", () => {
   it("moving to a new bill answers 200 with the new bill's id", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
@@ -203,7 +203,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a dish's id spelled in upper case moves that dish", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await post(
@@ -217,7 +217,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("401 without a session", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null), "");
@@ -235,7 +235,7 @@ describe("A803 move dishes route:", () => {
   ])(
     "lineIds %s is 400 management.request_invalid naming lineIds, changing nothing",
     async (_, lineIds) => {
-      const { partyId, tabId } = await seated("Paella", "Caña");
+      const { partyId, tabId } = await seated("Seafood rice", "Small beer");
       const body = await wellFormed(partyId, tabId, [], null);
       const revision = revisionOf(partyId);
 
@@ -252,7 +252,7 @@ describe("A803 move dishes route:", () => {
   );
 
   it("expectedEdits that are not a list are 400 management.request_invalid naming them", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
     const body = await wellFormed(partyId, tabId, [beerLineId!], null);
 
@@ -267,7 +267,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a body without toBillId is 400 management.request_invalid naming it, opening no bill", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
     const body = await wellFormed(partyId, tabId, [beerLineId!], null);
     delete body.toBillId;
@@ -288,7 +288,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a destination that is not a UUID is 409 tab.not_open", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
     const body = await wellFormed(partyId, tabId, [beerLineId!], null);
 
@@ -299,7 +299,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a paid dish is 409 bill.line_paid", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [riceLine] = lineIdsOf(tabId);
     await takeBillPayment(
       {
@@ -361,7 +361,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a dish the bill does not hold is 400 tab.line_not_found", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const missing = randomUUID();
 
     const answer = await post(tabId, await wellFormed(partyId, tabId, [missing], null));
@@ -371,7 +371,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("another person's unsent dishes on the bill are 409 draft.taken_over with the conflicts", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(tabId);
     await inTx(venue, (tx) =>
       saveDraftForTest(tx, partyId, venue.adminId, {
@@ -380,7 +380,7 @@ describe("A803 move dishes route:", () => {
         revision: 0,
         lines: [
           {
-            menuItemId: venue.offerFor("Paella"),
+            menuItemId: venue.offerFor("Seafood rice"),
             variantId: null,
             menuVersionId: null,
             quantity: "1",
@@ -410,7 +410,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("moving the last unpaid dishes off a bill whose contribution covers what stays files one invoice for it, and the moved dishes' new bill none", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer");
     await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
     expect(fiscalRecordCount(venue, tabId)).toBe(0);
@@ -431,7 +431,7 @@ describe("A803 move dishes route:", () => {
   });
 
   it("a move that leaves the source owing files nothing", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña", "Caña");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer", "Small beer");
     await contribute(tabId, "35.00");
     const [, , beerLineId] = lineIdsOf(tabId);
 
@@ -448,9 +448,9 @@ describe("A803 move dishes route:", () => {
     ["a hand-keyed card", { method: "card", entry: "manual" }],
     ["a reader card", { method: "card", entry: "reader" }],
   ])(
-    "a dish moved onto a bill whose Paella is paid by item in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
+    "a dish moved onto a bill whose Seafood rice is paid by item in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
     async (_, tender) => {
-      const { partyId, tabId } = await seated("Paella", "Caña", "Steak", "Tarta");
+      const { partyId, tabId } = await seated("Seafood rice", "Small beer", "Steak", "Tarta");
       const { billId: destination } = await inTx(venue, (tx) =>
         splitBill(tx, venue.cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }], {
           expectedPartyRevision: revisionOf(partyId),
@@ -496,7 +496,7 @@ describe("A803 move dishes route:", () => {
   );
 
   it("a move that leaves the source paid in full files its invoice alone, and the part-paid destination stays open", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña", "Steak");
+    const { partyId, tabId } = await seated("Seafood rice", "Small beer", "Steak");
     const { billId: destination } = await inTx(venue, (tx) =>
       splitBill(tx, venue.cfg, tabId, [{ lineNo: 3 }], {
         expectedPartyRevision: revisionOf(partyId),

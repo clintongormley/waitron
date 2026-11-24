@@ -145,7 +145,7 @@ describe("authority clock alerts and sales", () => {
         dining: "eat_in",
         basket: {
           zoneId: venue.zoneId,
-          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+          lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
         },
       }),
     });

@@ -177,11 +177,15 @@ async function atTwoTables(...names: string[]) {
 }
 
 /**
- * {@link atTwoTables} with Bill 1 of Caña, Caña and Bill 2 of Paella, Caña, each holding the
- * contribution that picking its last Caña leaves exact. The picks list Bill 2 first.
+ * {@link atTwoTables} with Bill 1 of Small beer, Small beer and Bill 2 of Seafood rice, Small beer, each holding the
+ * contribution that picking its last Small beer leaves exact. The picks list Bill 2 first.
  */
 async function twoBillsLeftPaidByAPick() {
-  const { partyId, tabId: bill1, leaving } = await atTwoTables("Caña", "Caña", "Paella", "Caña");
+  const {
+    partyId,
+    tabId: bill1,
+    leaving,
+  } = await atTwoTables("Small beer", "Small beer", "Seafood rice", "Small beer");
   const path = `/api/bills/${bill1}/move-dishes`;
   const split = await send(
     venue.app,
@@ -270,7 +274,7 @@ async function split(
 
 describe("A803 split: issuance", () => {
   it("a loose pick of the last unpaid dish of an item-paid bill issues its one invoice, on the staying party", async () => {
-    const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, first, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await payFor(tabId, 1, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
     expect(fiscalRecordCount(venue, tabId)).toBe(0);
@@ -291,7 +295,7 @@ describe("A803 split: issuance", () => {
   });
 
   it("when the party's first table is the one taken away, the invoice names the table that stays", async () => {
-    const { partyId, tabId, first, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, first, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await payFor(tabId, 1, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
 
@@ -307,7 +311,7 @@ describe("A803 split: issuance", () => {
   });
 
   it("the new bill holds no sale", async () => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await payFor(tabId, 1, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
 
@@ -318,7 +322,7 @@ describe("A803 split: issuance", () => {
 
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const [newBill] = answer.json.billIds as string[];
-    expect(namesOn(newBill!)).toEqual(["Caña"]);
+    expect(namesOn(newBill!)).toEqual(["Small beer"]);
     expect(salesOf(newBill!)).toEqual([]);
     expect(fiscalRecordCount(venue, newBill!)).toBe(0);
     expect(await statusOf(venue, newBill!)).toBe("open");
@@ -328,7 +332,7 @@ describe("A803 split: issuance", () => {
     ["an item payment", (billId) => payFor(billId, 1, "35.00")],
     ["a contribution", (billId) => contribute(billId, "35.00")],
   ])("a whole bill part-paid by %s issues nothing", async (_, paying) => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await paying(tabId);
 
     const answer = await split(partyId, leaving, { wholeBillIds: [tabId], loose: [] });
@@ -341,7 +345,7 @@ describe("A803 split: issuance", () => {
   });
 
   it("a split with no loose dish goes while the box's trading state would refuse an invoice", async () => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await contribute(tabId, "35.00");
 
     const answer = await split(
@@ -356,7 +360,11 @@ describe("A803 split: issuance", () => {
   });
 
   it("a loose pick that leaves the source still owing issues nothing", async () => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña", "Caña");
+    const { partyId, tabId, leaving } = await atTwoTables(
+      "Seafood rice",
+      "Small beer",
+      "Small beer",
+    );
     await contribute(tabId, "35.00");
     const beerLineId = lineIdsOf(tabId).at(-1)!;
 
@@ -372,7 +380,7 @@ describe("A803 split: issuance", () => {
   });
 
   it("a refusal by the trading admission rolls the whole split back", async () => {
-    const { partyId, tabId, leaving } = await atTwoTables("Paella", "Caña");
+    const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
     const before = counts();
@@ -390,7 +398,7 @@ describe("A803 split: issuance", () => {
     expect(counts()).toEqual(before);
     expect(joinedTo(partyId)).toContain(leaving);
     expect(revisionOf(partyId)).toBe(revision);
-    expect(namesOn(tabId)).toEqual(["Paella", "Caña"]);
+    expect(namesOn(tabId)).toEqual(["Seafood rice", "Small beer"]);
     expect(await statusOf(venue, tabId)).toBe("open");
   });
 
@@ -410,7 +418,7 @@ describe("A803 split: issuance", () => {
     expect(recordOf(bill2).previousNumSerie).toBe(recordOf(bill1).numSerie);
     expect(recordOf(bill2).previousHuella).toBe(recordOf(bill1).huella);
     const [newBill] = answer.json.billIds as string[];
-    expect(namesOn(newBill!)).toEqual(["Caña", "Caña"]);
+    expect(namesOn(newBill!)).toEqual(["Small beer", "Small beer"]);
     expect(salesOf(newBill!)).toEqual([]);
   });
 
@@ -448,7 +456,7 @@ describe("A803 split: issuance", () => {
         .map((call: unknown[]) => (call[1] as { key: string }).key)
         .filter((key) => key.startsWith("service:"));
 
-    const looseParty = await atTwoTables("Paella", "Caña");
+    const looseParty = await atTwoTables("Seafood rice", "Small beer");
     const [, beerLineId] = lineIdsOf(looseParty.tabId);
     const loose = await split(
       looseParty.partyId,
@@ -465,7 +473,7 @@ describe("A803 split: issuance", () => {
     ).toEqual([looseParty.tabId, newBill!].sort());
 
     recorder.mockClear();
-    const wholeParty = await atTwoTables("Paella");
+    const wholeParty = await atTwoTables("Seafood rice");
     const whole = await split(
       wholeParty.partyId,
       wholeParty.leaving,

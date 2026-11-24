@@ -128,7 +128,7 @@ function lineIdsAt(billId: string, lineNos: number[]): string[] {
 
 async function splitAtTwoParties(names: string[], lineNos: number[]) {
   const firstParty = await seatedWith(venue, ...names);
-  const secondParty = await seatedWith(venue, "Caña");
+  const secondParty = await seatedWith(venue, "Small beer");
   const split = await post(
     `/api/bills/${firstParty.tabId}/move-dishes`,
     await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/move-dishes`, {
@@ -337,7 +337,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   });
 
   it("sends the dish of a pay-first counter order moved into a party while its card is at the reader, and the card settles it", async () => {
-    const seatedParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Small beer");
     const orderId = await prepayOrder("Octopus");
     const { release, paying } = await wholeBillAtReader(orderId);
 
@@ -354,7 +354,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   });
 
   it("sends the dish of a pay-first counter order when it moves into a party, and paying in cash sends nothing again", async () => {
-    const seatedParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Small beer");
     const orderId = await prepayOrder("Octopus");
 
     const moved = await moveTo(orderId, seatedParty.tableId);
@@ -373,7 +373,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 describe("money on a moved bill", () => {
   it("finishes a card payment still at the reader on the bill it began on, after the bill moved party", async () => {
     const firstParty = await seatedWith(venue, "Tarta", "Octopus"); // €18.00 + €20.00
-    const secondParty = await seatedWith(venue, "Caña");
+    const secondParty = await seatedWith(venue, "Small beer");
     const split = await send(
       venue.app,
       venue.cookie,
@@ -515,7 +515,7 @@ describe("money on a moved bill", () => {
   });
 
   it("collects a presented counter bill moved into a party in another zone by settling its one invoice", async () => {
-    const firstParty = await seatedWith(venue, "Caña");
+    const firstParty = await seatedWith(venue, "Small beer");
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
     await parkOrder(deps, venue.cfg, {
@@ -583,7 +583,7 @@ describe("the counter's held list after a move", () => {
   });
 
   it("lists a party's bill still at its table with that party, owing its whole total and holding no payment", async () => {
-    const seatedParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Small beer");
 
     expect(await heldRow(seatedParty.tabId)).toMatchObject({
       partyId: seatedParty.partyId,
@@ -640,7 +640,7 @@ describe("paying a moved bill, by its state", () => {
   });
 
   it("takes a bill payment on a presented bill moved into a party, settling its one sale, and the party then finishes", async () => {
-    const firstParty = await seatedWith(venue, "Caña");
+    const firstParty = await seatedWith(venue, "Small beer");
     const beerPayment = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -731,14 +731,14 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(paid.json).toMatchObject({ outcome: "received" });
     expect(await statusOf(venue, secondParty.tabId)).toBe("settled");
     expect(fiscalRecordCount(venue, secondParty.tabId)).toBe(1);
-    expect(linesNamed(secondParty.tabId)).toEqual(["Caña"]);
+    expect(linesNamed(secondParty.tabId)).toEqual(["Small beer"]);
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(secondParty.partyId);
     expect(linesNamed(billId)).toEqual(["Octopus"]);
   });
 
   it("keeps a counter order being paid in full separate from the party's bill made at seating, and its card completes on it", async () => {
-    const seatedParty = await seatedWith(venue, "Caña");
+    const seatedParty = await seatedWith(venue, "Small beer");
     const orderId = await counterOrder("Tarta");
     const { release, paying } = await wholeBillAtReader(orderId);
 
@@ -754,7 +754,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(partyOfBill(orderId)).toBe(seatedParty.partyId);
     expect(linesNamed(orderId)).toEqual(["Tarta"]);
     expect(await statusOf(venue, seatedParty.tabId)).toBe("open");
-    expect(linesNamed(seatedParty.tabId)).toEqual(["Caña"]);
+    expect(linesNamed(seatedParty.tabId)).toEqual(["Small beer"]);
   });
 
   it("keeps the moved bill separate from the receiving table's bill made at seating, with a card refund in progress", async () => {
@@ -806,8 +806,8 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
 describe("two tills moving one counter order", () => {
   for (const first of ["A", "B"] as const) {
     it(`refuses the second till's move, read with no party, as party.out_of_date (till ${first} first)`, async () => {
-      const firstParty = await seatedWith(venue, "Caña");
-      const secondParty = await seatedWith(venue, "Caña");
+      const firstParty = await seatedWith(venue, "Small beer");
+      const secondParty = await seatedWith(venue, "Small beer");
       const orderId = await counterOrder("Tarta");
       // Each till read the order at the counter, with no party.
       const tillA = () =>
@@ -1082,7 +1082,7 @@ describe("the move route", () => {
       submissionId: randomUUID(),
       expectedPartyRevision: revisionOf(firstParty.partyId),
       groups: [
-        { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
       ],
     });
@@ -1241,7 +1241,7 @@ describe("the move route", () => {
 
   it("moving Bill 1 onto a party with a Bill 1 numbers the incoming bill 2", async () => {
     const firstParty = await seatedWith(venue, "Tarta");
-    const secondParty = await seatedWith(venue, "Caña");
+    const secondParty = await seatedWith(venue, "Small beer");
     const numberOf = (billId: string) =>
       venue.db.all(sql`select bill_number from working_orders where id = ${billId}`);
     expect(numberOf(firstParty.tabId)).toEqual([{ bill_number: 1 }]);

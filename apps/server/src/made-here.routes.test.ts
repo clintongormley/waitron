@@ -59,7 +59,7 @@ let barPrinterId: string;
 let grillPrinterId: string;
 let grillStationId: string;
 let counterOffer: string;
-let counterPaellaOffer: string;
+let counterSeafoodRiceOffer: string;
 let cancelReasonId: string;
 /** A supervisor signed in on the first till: a sent drink's cancel needs the refund permission. */
 let supervisorCookie: string;
@@ -92,11 +92,11 @@ useVenueDb({
       });
       const grill = await createStation(tx, { name: "Grill" });
       grillStationId = grill.id;
-      const [paella] = await tx
+      const [seafoodRice] = await tx
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.name, "Paella"));
-      await routeProductTo(tx, paella!.id, grill.id);
+        .where(eq(products.name, "Seafood rice"));
+      await routeProductTo(tx, seafoodRice!.id, grill.id);
       const grillPrinter = await createPrinter(tx, {
         name: "Grill",
         transport: "cloud_poll",
@@ -110,7 +110,7 @@ useVenueDb({
       const [lager] = await tx
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.name, "Caña"));
+        .where(eq(products.name, "Small beer"));
       const [croquettes] = await tx
         .select({ id: products.id })
         .from(products)
@@ -135,10 +135,10 @@ useVenueDb({
       await writeProductModifiers(tx, lager!.id, [{ kind: "extras", id: garnishListId }]);
       const offers = await offerProducts(tx, {
         zone: "counter",
-        productIds: [lager!.id, paella!.id],
+        productIds: [lager!.id, seafoodRice!.id],
       });
       counterOffer = offers.offerFor(lager!.id);
-      counterPaellaOffer = offers.offerFor(paella!.id);
+      counterSeafoodRiceOffer = offers.offerFor(seafoodRice!.id);
       cancelReasonId = (
         await createAdjustmentReason(tx, {
           name: "Cancel made-here",
@@ -261,7 +261,9 @@ async function ordinaryBarDish() {
     {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
-      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
+      ],
     },
   );
   expect(sent.status).toBe(200);
@@ -290,7 +292,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -340,8 +342,8 @@ describe("made-here route wiring", () => {
         groups: [
           {
             lines: [
-              { menuItemId: venue.offerFor("Caña"), quantity: "1" },
-              { menuItemId: venue.offerFor("Paella"), quantity: "1" },
+              { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
+              { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
             ],
             release: "hold",
           },
@@ -458,7 +460,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -502,8 +504,8 @@ describe("made-here route wiring", () => {
         groups: [
           {
             lines: [
-              { menuItemId: venue.offerFor("Caña"), quantity: "1" },
-              { menuItemId: venue.offerFor("Paella"), quantity: "1" },
+              { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
+              { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
             ],
             release: "fire",
           },
@@ -549,7 +551,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         ],
       },
     );
@@ -572,8 +574,12 @@ describe("made-here route wiring", () => {
         dining: "eat_in",
         revision: order!.revision,
         lines: [
-          { workingOrderLineId: drink!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
-          { menuItemId: venue.offerFor("Paella"), quantity: "1" },
+          {
+            workingOrderLineId: drink!.id,
+            menuItemId: venue.offerFor("Small beer"),
+            quantity: "1",
+          },
+          { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
         ],
       },
     );
@@ -602,7 +608,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -622,8 +628,12 @@ describe("made-here route wiring", () => {
         dining: "eat_in",
         revision: order!.revision,
         lines: [
-          { workingOrderLineId: drink!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
-          { menuItemId: venue.offerFor("Paella"), quantity: "1" },
+          {
+            workingOrderLineId: drink!.id,
+            menuItemId: venue.offerFor("Small beer"),
+            quantity: "1",
+          },
+          { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
         ],
       },
     );
@@ -650,7 +660,7 @@ describe("made-here route wiring", () => {
       dining: "eat_in",
       id: orderId,
       lines: [
-        { menuItemId: counterPaellaOffer, quantity: "1", courseId: first.id },
+        { menuItemId: counterSeafoodRiceOffer, quantity: "1", courseId: first.id },
         { menuItemId: counterOffer, quantity: "1", courseId: later.id },
       ],
     });
@@ -704,7 +714,7 @@ describe("made-here route wiring", () => {
       lines: [
         {
           workingOrderLineId: burger!.id,
-          menuItemId: counterPaellaOffer,
+          menuItemId: counterSeafoodRiceOffer,
           quantity: "1",
           courseId: first.id,
         },
@@ -714,7 +724,7 @@ describe("made-here route wiring", () => {
           quantity: "1",
           courseId: later.id,
         },
-        { menuItemId: counterPaellaOffer, quantity: "1", courseId: later.id },
+        { menuItemId: counterSeafoodRiceOffer, quantity: "1", courseId: later.id },
       ],
     });
     expect(edited.status, JSON.stringify(edited.json)).toBe(200);
@@ -795,7 +805,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         ],
       },
     );
@@ -815,7 +825,7 @@ describe("made-here route wiring", () => {
         dining: "eat_in",
         revision: order!.revision,
         lines: [
-          { workingOrderLineId: line!.id, menuItemId: venue.offerFor("Caña"), quantity: "2" },
+          { workingOrderLineId: line!.id, menuItemId: venue.offerFor("Small beer"), quantity: "2" },
         ],
       },
     );
@@ -856,7 +866,7 @@ describe("made-here route wiring", () => {
         { ...venue.cfg, sendingDeviceId: deviceId },
         party,
         {
-          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: String(quantity) }],
+          lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: String(quantity) }],
           release: "fire",
         },
         venue.operatorId,
@@ -875,7 +885,7 @@ describe("made-here route wiring", () => {
               expectedPartyRevision: party.revision,
               groups: [
                 {
-                  lines: [{ menuItemId: venue.offerFor("Caña"), quantity: String(quantity) }],
+                  lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: String(quantity) }],
                   release: "fire",
                 },
               ],
@@ -942,8 +952,8 @@ describe("made-here route wiring", () => {
         groups: [
           {
             lines: [
-              { menuItemId: venue.offerFor("Caña"), quantity: "1" },
-              { menuItemId: venue.offerFor("Paella"), quantity: "1" },
+              { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
+              { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
             ],
             release: "fire",
           },
@@ -1087,7 +1097,7 @@ describe("made-here route wiring", () => {
           {
             lines: [
               {
-                menuItemId: venue.offerFor("Caña"),
+                menuItemId: venue.offerFor("Small beer"),
                 quantity: "1",
                 extras: [
                   { listId: garnishListId, picks: [{ productId: garnishProductId, quantity: 1 }] },
@@ -1143,7 +1153,10 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+          {
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+            release: "hold",
+          },
         ],
       },
     );
@@ -1166,7 +1179,7 @@ describe("made-here route wiring", () => {
         expectedPartyRevision: await revisionOf(party.partyId),
         joinGroupId: group!.id,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -1197,7 +1210,10 @@ describe("made-here route wiring", () => {
         expectedPartyRevision: await revisionOf(party.partyId),
         joinGroupId: group!.id,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+          {
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+            release: "hold",
+          },
         ],
       },
     );
@@ -1209,7 +1225,7 @@ describe("made-here route wiring", () => {
     expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain(
       kitchenTicketWords("es").holdChanged,
     );
-    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("+1 x PAELLA");
+    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("+1 x RICE PAN");
     expect(
       await inTx(venue, (tx) =>
         tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
@@ -1234,7 +1250,10 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+          {
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+            release: "hold",
+          },
         ],
       },
     );
@@ -1252,7 +1271,7 @@ describe("made-here route wiring", () => {
         expectedPartyRevision: await revisionOf(party.partyId),
         joinGroupId: group!.id,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -1283,10 +1302,14 @@ describe("made-here route wiring", () => {
     const answer = await send(venue.app, venue.cookie, "POST", path, body);
     expect(answer.status).toBe(200);
     expect(answer.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+      expect.objectContaining({
+        name: "Small beer",
+        quantity: "1.000",
+        lineId: expect.any(String),
+      }),
     ]);
-    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("Caña de cerveza");
-    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("CANA");
+    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("Glass of lager");
+    expect((answer.json.madeHere as { name: string }[])[0]!.name).not.toBe("BEER SMALL");
     const replay = await send(venue.app, venue.cookie, "POST", path, body);
     expect(replay.status).toBe(200);
     expect(replay.json.madeHere).toEqual(answer.json.madeHere);
@@ -1361,7 +1384,7 @@ describe("made-here route wiring", () => {
         const [lager] = await tx
           .select({ id: products.id })
           .from(products)
-          .where(eq(products.name, "Caña"));
+          .where(eq(products.name, "Small beer"));
         const offers = await offerProducts(tx, {
           zone: { zoneId: zone!.id },
           orderStart: "counter",
@@ -1390,7 +1413,11 @@ describe("made-here route wiring", () => {
       );
       expect(answer.status).toBe(200);
       expect(answer.json.madeHere).toEqual([
-        expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+        expect.objectContaining({
+          name: "Small beer",
+          quantity: "1.000",
+          lineId: expect.any(String),
+        }),
       ]);
       const replay = await send(
         venue.app,
@@ -1425,7 +1452,7 @@ describe("made-here route wiring", () => {
     );
     expect(answer.status).toBe(200);
     expect(answer.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+      expect.objectContaining({ name: "Small beer", quantity: "1.000" }),
     ]);
     await check();
   });
@@ -1437,7 +1464,9 @@ describe("made-here route wiring", () => {
     const body = {
       submissionId,
       expectedPartyRevision: party.revision,
-      groups: [{ lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" }],
+      groups: [
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
+      ],
     };
     const answer = await send(
       venue.app,
@@ -1448,7 +1477,11 @@ describe("made-here route wiring", () => {
     );
     expect(answer.status).toBe(200);
     expect(answer.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000", lineId: expect.any(String) }),
+      expect.objectContaining({
+        name: "Small beer",
+        quantity: "1.000",
+        lineId: expect.any(String),
+      }),
     ]);
     const replay = await send(
       venue.app,
@@ -1472,7 +1505,7 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         ],
       },
     );
@@ -1491,7 +1524,7 @@ describe("made-here route wiring", () => {
         billId: party.tabId,
         draftId: null,
         revision: 0,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       },
     );
     expect(saved.status).toBe(200);
@@ -1514,13 +1547,13 @@ describe("made-here route wiring", () => {
     );
     expect(answer.status).toBe(200);
     expect(answer.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+      expect.objectContaining({ name: "Small beer", quantity: "1.000" }),
     ]);
     await check();
   });
 
   it("PUT /api/working-orders/:id sends an added line from the device", async () => {
-    const party = await seatedWith(venue, "Paella");
+    const party = await seatedWith(venue, "Seafood rice");
     const jobsBefore = await inTx(venue, (tx) =>
       tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
@@ -1552,8 +1585,12 @@ describe("made-here route wiring", () => {
         dining: "eat_in",
         revision: order!.revision,
         lines: [
-          { workingOrderLineId: lines[0]!.id, menuItemId: venue.offerFor("Paella"), quantity: "1" },
-          { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+          {
+            workingOrderLineId: lines[0]!.id,
+            menuItemId: venue.offerFor("Seafood rice"),
+            quantity: "1",
+          },
+          { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
         ],
       },
     );
@@ -1623,7 +1660,7 @@ describe("made-here route wiring", () => {
     );
     expect(paid.status).toBe(200);
     expect(paid.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", lineId: expect.any(String) }),
+      expect.objectContaining({ name: "Small beer", lineId: expect.any(String) }),
     ]);
     const replay = await send(
       venue.app,
@@ -1647,8 +1684,11 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
+          { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
+          {
+            lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
+            release: "hold",
+          },
         ],
       },
     );
@@ -1679,7 +1719,7 @@ describe("made-here route wiring", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, party.tabId)),
     );
-    // The whole-order save refuses to leave out the fired Caña, so it keeps it.
+    // The whole-order save refuses to leave out the fired Small beer, so it keeps it.
     const [fired] = await inTx(venue, (tx) =>
       tx
         .select({ id: workingOrderLines.id })
@@ -1697,8 +1737,12 @@ describe("made-here route wiring", () => {
       {
         dining: "eat_in",
         lines: [
-          { workingOrderLineId: fired!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
-          { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+          {
+            workingOrderLineId: fired!.id,
+            menuItemId: venue.offerFor("Small beer"),
+            quantity: "1",
+          },
+          { menuItemId: venue.offerFor("Small beer"), quantity: "1" },
         ],
         revision: order!.revision,
       },
@@ -1706,7 +1750,7 @@ describe("made-here route wiring", () => {
 
     expect(edited.status).toBe(200);
     expect(edited.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+      expect.objectContaining({ name: "Small beer", quantity: "1.000" }),
     ]);
     const replay = await send(
       venue.app,
@@ -1724,7 +1768,7 @@ describe("made-here route wiring", () => {
     const submitted = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
       dining: "eat_in",
       id: billId,
-      lines: [{ menuItemId: counterPaellaOffer, quantity: "1" }],
+      lines: [{ menuItemId: counterSeafoodRiceOffer, quantity: "1" }],
     });
     expect(submitted.status).toBe(200);
     const payment = {
@@ -1762,7 +1806,7 @@ describe("made-here route wiring", () => {
 
     expect(edited.status).toBe(200);
     expect(edited.json.madeHere).toEqual([
-      expect.objectContaining({ name: "Caña", quantity: "1.000" }),
+      expect.objectContaining({ name: "Small beer", quantity: "1.000" }),
     ]);
     const replay = await send(
       venue.app,
@@ -1834,7 +1878,7 @@ describe("made-here route wiring", () => {
       body,
     );
     expect(first.status).toBe(200);
-    expect(first.json.madeHere).toEqual([expect.objectContaining({ name: "Caña", lineId })]);
+    expect(first.json.madeHere).toEqual([expect.objectContaining({ name: "Small beer", lineId })]);
     const replay = await send(
       venue.app,
       venue.cookie,
@@ -1951,7 +1995,7 @@ describe("made-here route wiring", () => {
         lines: [
           {
             workingOrderLineId: dish.lineId,
-            menuItemId: venue.offerFor("Caña"),
+            menuItemId: venue.offerFor("Small beer"),
             quantity: "1",
             note: "cold",
           },
@@ -1973,7 +2017,8 @@ describe("made-here route wiring", () => {
     expect(fresh.some((ticket) => ticket.includes(kitchenTicketWords("es").recalled))).toBe(true);
     expect(
       fresh.some(
-        (ticket) => ticket.includes("CANA") && !ticket.includes(kitchenTicketWords("es").recalled),
+        (ticket) =>
+          ticket.includes("BEER SMALL") && !ticket.includes(kitchenTicketWords("es").recalled),
       ),
     ).toBe(true);
   });
@@ -1993,7 +2038,11 @@ describe("made-here route wiring", () => {
       dining: "eat_in",
       revision: order!.revision,
       lines: [
-        { workingOrderLineId: dish.lineId, menuItemId: venue.offerFor("Caña"), quantity: "2" },
+        {
+          workingOrderLineId: dish.lineId,
+          menuItemId: venue.offerFor("Small beer"),
+          quantity: "2",
+        },
       ],
     });
     expect(raised.status).toBe(200);

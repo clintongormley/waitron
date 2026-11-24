@@ -128,11 +128,11 @@ function refusedFor(count: number) {
   };
 }
 
-/** A walk-up counter sale of one Paella, paid in cash. */
+/** A walk-up counter sale of one Seafood rice, paid in cash. */
 async function counterSale(): Promise<string> {
   const id = randomUUID();
   const sold = await counterCash(id, "35.00", {
-    lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+    lines: [{ menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" }],
   });
   expect(sold.status).toBe(200);
   return id;
@@ -154,9 +154,9 @@ function counterCash(
   });
 }
 
-/** A seated party's bill with a Paella sent to the kitchen, paid in cash; the party stays seated. */
+/** A seated party's bill with a Seafood rice sent to the kitchen, paid in cash; the party stays seated. */
 async function paidPartyBill(): Promise<{ partyId: string; tabId: string }> {
-  const party = await seatedWith(venue, "Paella");
+  const party = await seatedWith(venue, "Seafood rice");
   const paid = await cashPayment(venue, venue.cookie, party.tabId, "35.00");
   expect(paid.status).toBe(200);
   expect(statusOf(party.tabId)).toBe("settled");
@@ -171,7 +171,7 @@ describe("a receipt-language change while orders are open", () => {
       dining: "eat_in",
       id,
       zoneId: counter.zoneId,
-      lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+      lines: [{ menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" }],
     });
     expect(parked.status).toBe(200);
 
@@ -180,7 +180,7 @@ describe("a receipt-language change while orders are open", () => {
 
     const paid = await counterCash(id, "35.00", {
       revision: parked.json.revision as number,
-      lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+      lines: [{ menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" }],
     });
     expect(paid.status).toBe(200);
     expect(await changeTo("gl-ES")).toMatchObject({
@@ -192,14 +192,14 @@ describe("a receipt-language change while orders are open", () => {
 
   it("counts every blocking order", async () => {
     reset();
-    await seatedWith(venue, "Paella");
+    await seatedWith(venue, "Seafood rice");
     await seatedWith(venue, "Tarta");
     expect(await changeTo("gl-ES")).toEqual(refusedFor(2));
   });
 
   it("accepts the language already saved while an order is open, writing nothing new", async () => {
     reset();
-    await seatedWith(venue, "Paella");
+    await seatedWith(venue, "Seafood rice");
     expect(await changeTo("es-ES")).toMatchObject({
       status: 200,
       json: { receiptLanguage: "es-ES" },
@@ -221,7 +221,7 @@ describe("a receipt-language change while orders are open", () => {
       dining: "eat_in",
       basket: {
         zoneId: counter.zoneId,
-        lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+        lines: [{ menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" }],
       },
     });
     try {
@@ -349,7 +349,7 @@ describe("a receipt-language change while orders are open", () => {
     venue.db.run(sql`update kitchen_stations set active = 0`);
     try {
       const sold = await counterCash(id, "35.00", {
-        lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+        lines: [{ menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" }],
       });
       expect(sold.status).toBe(200);
     } finally {
@@ -369,7 +369,7 @@ describe("a receipt-language change while orders are open", () => {
       const grill = await createStation(tx, { name: "Plancha" });
       await setRoutingCell(
         tx,
-        { row: { kind: "product", productId: productId("Paella") }, zoneId: null },
+        { row: { kind: "product", productId: productId("Seafood rice") }, zoneId: null },
         { kind: "station", stationId: grill.id },
       );
     });
@@ -378,7 +378,7 @@ describe("a receipt-language change while orders are open", () => {
     try {
       const sold = await counterCash(id, "53.00", {
         lines: [
-          { menuItemId: counter.offerFor(productId("Paella")), quantity: "1" },
+          { menuItemId: counter.offerFor(productId("Seafood rice")), quantity: "1" },
           { menuItemId: counter.offerFor(productId("Tarta")), quantity: "1" },
         ],
       });
@@ -406,7 +406,7 @@ describe("a receipt-language change while orders are open", () => {
         dining: "eat_in",
         id,
         zoneId: placing.zoneId,
-        lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
+        lines: [{ menuItemId: placing.offerFor(productId("Seafood rice")), quantity: "1" }],
       });
       expect(parked.status).toBe(200);
       const placed = await till("POST", `/api/working-orders/${id}/place`);
@@ -429,7 +429,7 @@ describe("a receipt-language change while orders are open", () => {
           sql`select sl.descriptions from sale_lines sl join sales s on s.id = sl.sale_id
               where s.working_order_id = ${id}`,
         ).map((line) => JSON.parse(line.descriptions) as unknown),
-      ).toEqual([{ "es-ES": "Paella valenciana" }]);
+      ).toEqual([{ "es-ES": "Valencian rice" }]);
     } finally {
       await withTransaction(venue.db, (tx) =>
         offerProducts(tx, { zone: "counter", orderStart: "counter" }),
@@ -455,7 +455,7 @@ describe("a receipt-language change while orders are open", () => {
         dining: "eat_in",
         id,
         zoneId: placing.zoneId,
-        lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
+        lines: [{ menuItemId: placing.offerFor(productId("Seafood rice")), quantity: "1" }],
       });
       expect(parked.status).toBe(200);
       await issueOrderInvoice(
@@ -495,7 +495,7 @@ describe("a receipt-language change while orders are open", () => {
 
   it("does not count a seated party's abandoned bill, which is no longer open", async () => {
     reset();
-    const party = await seatedWith(venue, "Paella", "Tarta");
+    const party = await seatedWith(venue, "Seafood rice", "Tarta");
     const split = await till(
       "POST",
       `/api/bills/${party.tabId}/move-dishes`,
@@ -541,7 +541,7 @@ describe("a receipt-language change while orders are open", () => {
   // a named refusal: a known gap, kept here so a change to it is seen.
   it("a dish move off a bill holding a line fails once the language is changed underneath it, which is why such a bill blocks a change", async () => {
     reset();
-    const party = await seatedWith(venue, "Paella", "Tarta");
+    const party = await seatedWith(venue, "Seafood rice", "Tarta");
     const before = dishLines(party.tabId);
     venue.db.run(
       sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["gl-ES"]')) where module = 'venue'`,
@@ -568,7 +568,7 @@ describe("PUT /management-api/venue-defaults while orders are open", () => {
 
   it("refuses a changed receipt language and writes neither it nor the takeaway rate beside it", async () => {
     reset();
-    await seatedWith(venue, "Paella");
+    await seatedWith(venue, "Seafood rice");
     const before = takeawayRate();
     expect(before).not.toBe("4.00");
 

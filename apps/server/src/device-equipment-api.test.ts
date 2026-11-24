@@ -256,7 +256,7 @@ async function pay(cookie: string, readerId?: string) {
       dining: "eat_in",
       basket: {
         zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
       },
       ...(readerId === undefined ? {} : { readerId }),
     },

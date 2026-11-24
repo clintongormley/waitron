@@ -307,7 +307,7 @@ it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspe
 );
 
 it("checks every original source zone for all four routes and admits them once allowed", async () => {
-  const first = await placedIssuedBill(venue, "Caña");
+  const first = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, first, "3.00")).status).toBe(200);
   const [source] = await store.db.select().from(sales).where(eq(sales.workingOrderId, first));
   const t = await pendingCard();

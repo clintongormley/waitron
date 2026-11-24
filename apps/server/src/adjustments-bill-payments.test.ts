@@ -155,7 +155,7 @@ async function newTicket(before: Set<string>) {
 
 describe("a paid line (design §8 test 5)", () => {
   it("refuses a comp and a discount of an item already paid for, changing nothing", async () => {
-    const billId = await tabWith(venue, "Paella", "Steak", "Caña");
+    const billId = await tabWith(venue, "Seafood rice", "Steak", "Small beer");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -181,7 +181,7 @@ describe("a paid line (design §8 test 5)", () => {
 
 describe("a bill discount over a paid line", () => {
   it("refuses a discount of the whole bill that would lower an item already paid for", async () => {
-    const billId = await tabWith(venue, "Paella", "Steak");
+    const billId = await tabWith(venue, "Seafood rice", "Steak");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -217,7 +217,7 @@ describe("a bill discount over a paid line", () => {
 });
 
 it("closes a bill when a fixed-amount comp brings it to zero", async () => {
-  const billId = await tabWith(venue, "Caña");
+  const billId = await tabWith(venue, "Small beer");
 
   const adjusted = await adjust(billId, 1, { action: "discount_amount", amount: "3.00" });
 

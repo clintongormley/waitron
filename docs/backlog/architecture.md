@@ -104,7 +104,8 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   its Spanish product names, customer wording and fiscal defaults remain.
   BillVenue uses Croquettes and Octopus as staff keys, with their matching selectors and
   readbacks; customer Croquetas de jamón / Pulpo a la gallega and kitchen CROQ / PULPO stay.
-  Its Tarta, Caña and Paella keys remain, along with the other fixture work below.
+  BillVenue also uses Seafood rice and Small beer, each with separate customer and kitchen names.
+  Its Tarta key remains, along with the other fixture work below.
   The nine local party suites use English table, party, course and printer samples; shared
   party-venue defaults, dish selectors and till-API samples remain.
   The filing order-portion suite still has Spanish dish samples. Shared helpers' dish names and selectors
@@ -483,8 +484,9 @@ also qualifies the historical operation-description references in this section.
   Other display samples in those files remain.
   The shared `setupVenue` uses Administrator,
   Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
-  and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
-  Caña, Paella and its other labels remain. PartyVenue uses Red wine bottle and Water as
+  and Octopus as staff keys, with their earlier customer and kitchen names. Seafood rice and
+  Small beer have English staff, customer and kitchen names. Tarta and the other labels remain.
+  PartyVenue uses Red wine bottle and Water as
   staff keys, retaining customer Rioja crianza / Agua mineral, kitchen TINTO / AGUA and the
   independent recorded Vino.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;

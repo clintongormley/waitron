@@ -32,7 +32,7 @@ interface OpenVenue {
 async function openVenue(db: Database): Promise<OpenVenue> {
   const venue = await provisionBillVenue(db);
   const counter = await inTx(venue, (tx) => offerProducts(tx));
-  const [dish] = db.all<{ id: string }>(sql`select id from products where name = 'Paella'`);
+  const [dish] = db.all<{ id: string }>(sql`select id from products where name = 'Seafood rice'`);
   db.run(sql`
     update device_profiles
     set capabilities = json_insert(json_insert(capabilities, '$[#]', 'print-receipt'), '$[#]', 'clock-in')

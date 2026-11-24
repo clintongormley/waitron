@@ -43,7 +43,7 @@ describe("cash sales while reconciliation is unknown", () => {
             tendered: "35.00",
             basket: {
               zoneId: v.zoneId,
-              lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
+              lines: [{ menuItemId: v.offerFor("Seafood rice"), quantity: "1" }],
             },
           }),
         });

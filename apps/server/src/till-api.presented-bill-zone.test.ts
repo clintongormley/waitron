@@ -161,7 +161,7 @@ async function indoorContext() {
 }
 
 async function presentedSplit(...names: string[]) {
-  const anna = await seatedWith(venue, "Caña", ...names);
+  const anna = await seatedWith(venue, "Small beer", ...names);
   const split = await post(
     `/api/bills/${anna.tabId}/move-dishes`,
     await observedBillActionBody(venue.db, `/api/bills/${anna.tabId}/move-dishes`, {

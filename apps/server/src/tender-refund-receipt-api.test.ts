@@ -147,7 +147,7 @@ it("reads a separate payment acknowledgment with the filed issuer and immutable 
   expect(await printed()).toEqual(jobs);
 });
 it("retains only the returned capture's card suffix", async () => {
-  const order = await placedIssuedBill(venue, "Caña");
+  const order = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, order, "3.00")).status).toBe(200);
   const [sale] = await store.db.select().from(sales).where(eq(sales.workingOrderId, order));
   const row = await target(
@@ -251,7 +251,7 @@ it("queues only the first till print even when two requests arrive together", as
 });
 
 it("keeps a bill refund's payment reference when the bill is later invoiced", async () => {
-  const order = await parked(venue, "Caña");
+  const order = await parked(venue, "Small beer");
   const deps = {
     db: store.db,
     backend: venue.backend,
@@ -380,7 +380,7 @@ it("refuses a removed session or deactivated device on read and reprint", async 
   expect(await print(row.id)).toMatchObject({ status: 401, json: { code: "device.unauthorized" } });
 });
 it("checks every original source zone on read and reprint and admits the allowed case", async () => {
-  const order = await placedIssuedBill(venue, "Caña");
+  const order = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, order, "3.00")).status).toBe(200);
   const [sale] = await store.db.select().from(sales).where(eq(sales.workingOrderId, order));
   const row = await target({}, sale!.id);
@@ -470,7 +470,7 @@ it("rolls the document job back when its audit cannot commit", async () => {
 });
 
 it("requires every substituted original order's zone before exposing an acknowledgment", async () => {
-  const first = await placedIssuedBill(venue, "Caña");
+  const first = await placedIssuedBill(venue, "Small beer");
   expect((await collect(venue, first, "3.00")).status).toBe(200);
   const [sale] = await store.db.select().from(sales).where(eq(sales.workingOrderId, first));
   const party = await seatedWith(venue, "Tarta");

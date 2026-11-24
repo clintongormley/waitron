@@ -74,7 +74,7 @@ async function venue() {
 }
 const request = (v: BillVenue, method: string, path: string, body?: unknown) =>
   send(v.app, v.cookie, method, path, body);
-const line = (v: BillVenue) => ({ menuItemId: v.offerFor("Caña"), quantity: "1" });
+const line = (v: BillVenue) => ({ menuItemId: v.offerFor("Small beer"), quantity: "1" });
 const refused = (v: BillVenue) => ({
   status: 409,
   json: { code: "service_zone.closed", params: { zoneId: v.zoneId } },
@@ -178,7 +178,7 @@ describe("closed zones take no new service", () => {
       code: "menu_period.ended",
       params: {
         menus: [{ menuId: period.menuId, periodName: "Always" }],
-        menuItemIds: [v.offerFor("Caña")],
+        menuItemIds: [v.offerFor("Small beer")],
         needsManager: false,
       },
     });
@@ -364,7 +364,7 @@ describe("existing service in a closed zone", () => {
     const v = await venue();
     const offers = (await request(v, "GET", `/api/service-zones/${v.zoneId}/offers`)).json
       .offers as { id: string; productId: string; menuId: string }[];
-    const cana = offers.find((offer) => offer.id === v.offerFor("Caña"))!;
+    const smallBeer = offers.find((offer) => offer.id === v.offerFor("Small beer"))!;
     const extras = await withTransaction(suite.db, async (tx) => {
       const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
       const [period] = await tx
@@ -411,8 +411,8 @@ describe("existing service in a closed zone", () => {
         },
         v.cfg.locale,
       );
-      await writeProductModifiers(tx, cana.productId, [{ kind: "extras", id: list.id }]);
-      await publishWorkingMenu(tx, cana.menuId);
+      await writeProductModifiers(tx, smallBeer.productId, [{ kind: "extras", id: list.id }]);
+      await publishWorkingMenu(tx, smallBeer.menuId);
       return [{ listId: list.id, picks: [{ productId: lemon.id, quantity: 1 }] }];
     });
     at("22:30");
@@ -438,9 +438,9 @@ describe("existing service in a closed zone", () => {
       });
     expect(await addLemon()).toMatchObject({
       status: 409,
-      json: { code: "menu_period.ended", params: { menuItemIds: [cana.id] } },
+      json: { code: "menu_period.ended", params: { menuItemIds: [smallBeer.id] } },
     });
-    expect((await addLemon({ menuIds: [cana.menuId] })).status).toBe(200);
+    expect((await addLemon({ menuIds: [smallBeer.menuId] })).status).toBe(200);
     expect(
       await suite.db
         .select({ id: workingOrderLines.id })

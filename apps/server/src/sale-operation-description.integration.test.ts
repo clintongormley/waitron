@@ -109,7 +109,7 @@ async function payOnReader(
 const request = (id = randomUUID()) => ({
   id,
   zoneId: venue.zoneId,
-  lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+  lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
   simulationOutcome: "captured" as const,
 });
 async function open() {
@@ -156,7 +156,7 @@ it("a counter sale sent without a zone records the selected zone and files that 
     return { ...offers, departmentId: zone!.departmentId };
   });
   const product = venue.db.all<{ id: string }>(
-    sql`select product_id as id from menu_items where id = ${venue.offerFor("Caña")}`,
+    sql`select product_id as id from menu_items where id = ${venue.offerFor("Small beer")}`,
   )[0]!;
   const id = randomUUID();
   const result = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
@@ -369,7 +369,7 @@ it("a description cleared during capture leaves payment recovery pending, then r
 });
 
 it("replays a card receipt after its department description is cleared", async () => {
-  const id = await tabWith(venue, "Caña");
+  const id = await tabWith(venue, "Small beer");
   await placeOrder(
     { ...deps(), admission: testTradingAdmission() },
     venue.cfg,
@@ -444,7 +444,7 @@ it.each(["cash", "integrated"] as const)(
 it.each(["cash", "card"] as const)(
   "a fully funded %s bill files its department description",
   async (method) => {
-    const id = await tabWith(venue, "Caña");
+    const id = await tabWith(venue, "Small beer");
     const answer = await payBill(id, method, method === "card" ? "reader" : undefined);
     expect(answer.status).toBe(200);
     expect(records(id)).toEqual([{ description: "Dining meals" }]);
@@ -517,7 +517,7 @@ it.each([undefined, "", "   "])(
 it.each(["cash", "card"] as const)(
   "a missing description refuses a new %s bill payment before money or drawer work",
   async (method) => {
-    const id = await tabWith(venue, "Caña");
+    const id = await tabWith(venue, "Small beer");
     await authored();
     const before = facts();
     const calls = venue.card.collectCalls.length;
@@ -568,7 +568,7 @@ it("missing description leaves an unfiled capture recoverable without touching t
 it.each(["cash", "card"] as const)(
   "a missing department refuses a %s bill payment with its own code and unchanged records",
   async (method) => {
-    const id = await tabWith(venue, "Caña");
+    const id = await tabWith(venue, "Small beer");
     await venue.db.run(
       sql`update working_orders set zone_id = null, department_id = null, service_mode = null where id = ${id}`,
     );

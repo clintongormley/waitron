@@ -146,11 +146,11 @@ interface SubmitAnswer {
   groups: { id: string; state: string; lineIds: string[] }[];
 }
 
-/** A seated party holding a fired Caña group and held Tarta and Croquettes groups, in that order. */
+/** A seated party holding a fired Small beer group and held Tarta and Croquettes groups, in that order. */
 async function withGroups() {
   const party = await seated();
   const submitted = await submit(party.partyId, [
-    { lines: [dish("Caña")], release: "fire" },
+    { lines: [dish("Small beer")], release: "fire" },
     { lines: [dish("Tarta")], release: "hold" },
     { lines: [dish("Croquettes")], release: "hold" },
   ]);
@@ -221,7 +221,7 @@ describe("POST /api/parties/:id/groups", () => {
       // A body naming an operator is not who acts: the session's person is.
       operatorId: venue.adminId,
       groups: [
-        { lines: [dish("Caña", "2")], release: "fire" },
+        { lines: [dish("Small beer", "2")], release: "fire" },
         { lines: [dish("Tarta"), dish("Croquettes")], release: "hold" },
       ],
     });
@@ -240,10 +240,10 @@ describe("POST /api/parties/:id/groups", () => {
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
-          // Caña ×2 is two portions, each its own line (A803).
+          // Small beer ×2 is two portions, each its own line (A803).
           lineIds: [lines[0]!.id, lines[1]!.id],
           courseIds: [],
-          summary: "2 × Caña",
+          summary: "2 × Small beer",
         },
         {
           id: lines[2]!.groupId,
@@ -308,7 +308,9 @@ describe("POST /api/parties/:id/groups", () => {
 
   it("puts the lines on the bill of the party billId names, and refuses the same id naming another bill 409 submission.id_reused", async () => {
     const party = await seated();
-    await submit(party.partyId, [{ lines: [dish("Caña"), dish("Octopus")], release: "fire" }]);
+    await submit(party.partyId, [
+      { lines: [dish("Small beer"), dish("Octopus")], release: "fire" },
+    ]);
     const command = {
       expectedPartyRevision: await revisionOf(party.partyId),
       operatorId: venue.operatorId,
@@ -347,9 +349,13 @@ describe("POST /api/parties/:id/groups", () => {
       const party = await seated();
       const before = await snapshot(party);
 
-      const refused = await submit(party.partyId, [{ lines: [dish("Caña")], release: "fire" }], {
-        billId,
-      });
+      const refused = await submit(
+        party.partyId,
+        [{ lines: [dish("Small beer")], release: "fire" }],
+        {
+          billId,
+        },
+      );
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field: "billId" }));
@@ -860,7 +866,7 @@ describe("GET /api/parties/:id/groups", () => {
           remindAt: null,
           lineIds: [lines[0]!.id],
           courseIds: [],
-          summary: "1 × Caña",
+          summary: "1 × Small beer",
         },
         {
           id: party.cake.id,
@@ -904,7 +910,7 @@ describe("GET /api/parties/:id/groups", () => {
 describe("GET /api/working-orders/:id/lines", () => {
   it("names the group each line belongs to, and none on a bill with no party", async () => {
     const party = await withGroups();
-    const counter = await tabWith(venue, "Paella");
+    const counter = await tabWith(venue, "Seafood rice");
 
     const tab = await call("GET", `/api/working-orders/${party.tabId}/lines`);
     const noParty = await call("GET", `/api/working-orders/${counter}/lines`);
@@ -1074,7 +1080,7 @@ describe("the line-editing routes act as the session's operator", () => {
 
     expect(changed.status).toBe(200);
     const added = (await dishLines(party.tabId)).at(-1)!;
-    expect(added).toMatchObject({ name: "Caña", creditedTo: venue.operatorId });
+    expect(added).toMatchObject({ name: "Small beer", creditedTo: venue.operatorId });
     expect(added.groupId).not.toBe(party.fired.id);
     expect(await eventsOfGroup(added.groupId!)).toEqual([
       { kind: "group.submitted", actorId: venue.operatorId },
@@ -1399,7 +1405,9 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
 describe("the served routes while a card payment runs on the bill", () => {
   it("takes each served route while a card payment runs on the bill, moving the party's revision and never the bill's", async () => {
     const party = await seated();
-    const submitted = await submitGrouped(party, [{ lines: [dish("Caña", "2")], release: "fire" }]);
+    const submitted = await submitGrouped(party, [
+      { lines: [dish("Small beer", "2")], release: "fire" },
+    ]);
     const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const lineId = fired.lineIds[0]!;
     // Taken before the setup serve, so a stray write every served mark makes alike still shows.
@@ -1451,7 +1459,7 @@ describe("the served routes while a card payment runs on the bill", () => {
   it("takes a served mark while a card is at the reader for the bill, and the card then completes on it", async () => {
     const party = await seated();
     const submitted = await submit(party.partyId, [
-      { lines: [dish("Caña", "2")], release: "fire" },
+      { lines: [dish("Small beer", "2")], release: "fire" },
     ]);
     const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const release = venue.card.holdNextCollect();
@@ -2447,7 +2455,7 @@ describe("per-group HTTP destinations direct", () => {
     const { party, first, second } = await prepared();
 
     const groups = [
-      { release: "fire", lines: [dish("Caña")] },
+      { release: "fire", lines: [dish("Small beer")] },
       { release: "hold", joinGroupId: first.toUpperCase(), lines: [dish("Octopus")] },
       { release: "hold", joinGroupId: second, lines: [dish("Croquettes")] },
       { release: "hold", afterGroupId: first.toUpperCase(), lines: [dish("Tarta")] },
@@ -2482,7 +2490,7 @@ describe("per-group HTTP destinations direct", () => {
         const refused = await call("POST", `/api/parties/${party.partyId}/groups`, {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(party.partyId),
-          groups: [{ release: "hold", [field]: value, lines: [dish("Caña")] }],
+          groups: [{ release: "hold", [field]: value, lines: [dish("Small beer")] }],
         });
         expect(refused.status).toBe(400);
         expect(refused.json).toMatchObject({
@@ -2497,7 +2505,7 @@ describe("per-group HTTP destinations direct", () => {
 
 it("direct group HTTP cannot claim an existing bill line using the internal resend field", async () => {
   const party = await seated();
-  const existing = await submit(party.partyId, [{ lines: [dish("Caña")], release: "hold" }]);
+  const existing = await submit(party.partyId, [{ lines: [dish("Small beer")], release: "hold" }]);
   const first = existing.json as unknown as SubmitAnswer;
   const originalId = first.groups[0]!.lineIds[0]!;
   const response = await call("POST", `/api/parties/${party.partyId}/groups`, {

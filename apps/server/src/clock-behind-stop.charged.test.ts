@@ -254,7 +254,7 @@ it("a card charged as the stop begins on an already-invoiced order is recorded, 
 it("a card part payment charged as the stop begins is received, dated by the provider", async () => {
   const now = nowMs();
   const behind = now - 10 * MINUTE;
-  const billId = await tabWith(venue, "Paella");
+  const billId = await tabWith(venue, "Seafood rice");
   const records = allRecords();
   const before = collects();
   const reader = movableClock(now);
@@ -281,7 +281,7 @@ it.each(["counter", "bill"] as const)(
   "a %s card captured before the clock becomes unusable recovers once without another charge",
   async (surface) => {
     const now = nowMs();
-    const id = surface === "counter" ? randomUUID() : await tabWith(venue, "Paella");
+    const id = surface === "counter" ? randomUUID() : await tabWith(venue, "Seafood rice");
     const records = allRecords();
     const before = collects();
     const reader = movableClock(now + MINUTE);

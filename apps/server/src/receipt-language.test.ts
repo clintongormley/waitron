@@ -464,7 +464,7 @@ describe("a bill paid in parts and an unpaid invoice file the venue's language w
 
   it("files a bill paid in two parts in Catalan", async () => {
     const venue = await catalanBillVenue();
-    const billId = await tabWith(venue, "Tarta", "Caña");
+    const billId = await tabWith(venue, "Tarta", "Small beer");
 
     expect((await cashContribution(venue, billId, "10.00")).status).toBe(200);
     const last = await cashContribution(venue, billId, "11.00");
@@ -1352,7 +1352,7 @@ describe("the receipt language staff choose is saved on the order", () => {
 
   it("refuses a settled bill", async () => {
     const venue = await choosingVenue();
-    const billId = await tabWith(venue, "Caña");
+    const billId = await tabWith(venue, "Small beer");
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -1536,12 +1536,12 @@ describe("a sale files in the receipt language saved on its order", () => {
   const SPANISH = {
     locale: "es-ES",
     invoiceLocales: ["ca-ES", "es-ES"],
-    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Caña" }],
+    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Small beer" }],
   };
   const CATALAN = {
     locale: "ca-ES",
     invoiceLocales: ["ca-ES"],
-    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Caña" }],
+    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Small beer" }],
   };
   const CHOICES = [
     ["es-ES", SPANISH],
@@ -1564,7 +1564,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files a bill paid in two parts", async () => {
       const venue = await barcelonaVenue();
-      const billId = await billWith(venue, "Tarta", "Caña");
+      const billId = await billWith(venue, "Tarta", "Small beer");
 
       expect((await cash(venue, billId, "10.00")).status).toBe(200);
       const last = await cash(venue, billId, "11.00");
@@ -1576,7 +1576,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files a bill a discount leaves paid", async () => {
       const venue = await barcelonaVenue();
-      const billId = await billWith(venue, "Tarta", "Caña");
+      const billId = await billWith(venue, "Tarta", "Small beer");
       expect((await cash(venue, billId, "18.00")).status).toBe(200);
       const reasonId = await inTx(
         venue,
@@ -1607,7 +1607,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files a bill a partial Cancel item leaves paid", async () => {
       const venue = await barcelonaVenue();
-      const billId = await groupedBillWith(venue, "Tarta", "Caña");
+      const billId = await groupedBillWith(venue, "Tarta", "Small beer");
       const line = (quantity: string) =>
         revisionOfOrder(venue, billId).then(async (revision) =>
           send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/2`, {
@@ -1630,7 +1630,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files a bill a card the payment loop finishes leaves paid", async () => {
       const venue = await barcelonaVenue();
-      const billId = await billWith(venue, "Tarta", "Caña");
+      const billId = await billWith(venue, "Tarta", "Small beer");
       expect((await cash(venue, billId, "18.00")).status).toBe(200);
       venue.card.crashNextCollect("captured");
       const crashed = await send(
@@ -1666,7 +1666,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files the invoice of a table that left without paying", async () => {
       const venue = await barcelonaVenue();
-      const party = await seatedWith(venue, "Tarta", "Caña");
+      const party = await seatedWith(venue, "Tarta", "Small beer");
       if (stored !== null) await choose(venue, party.tabId, stored);
       const [row] = venue.db.all<{ revision: number }>(
         sql`select revision from parties where id = ${party.partyId}`,

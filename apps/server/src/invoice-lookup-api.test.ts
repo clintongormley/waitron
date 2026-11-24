@@ -21,7 +21,7 @@ const suite = useVenueDb({
     });
     const series = await db.select().from(invoiceSeries);
     const add = async (code: string, number: number, name: string, issuedAt: string) => {
-      const party = await seatedWith(venue, "Caña");
+      const party = await seatedWith(venue, "Small beer");
       await withTransaction(db, async (tx) => {
         await tx.insert(sales).values({
           source: "device",

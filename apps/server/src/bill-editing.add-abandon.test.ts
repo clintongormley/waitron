@@ -48,7 +48,7 @@ async function save(p: Fixture, operatorId = venue.operatorId) {
       expectedEdit: current,
       draftId: current.draftId,
       revision: current.draftRevision ?? 0,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
     }),
   );
 }
@@ -77,13 +77,15 @@ const foreign = (e: BillEditState) => ({
   ownerName: e.editorName,
   edit: e,
 });
-/** One Caña placed and fired at once on `p`'s bill by `placeGroups`, under the authority as given. */
+/** One Small beer placed and fired at once on `p`'s bill by `placeGroups`, under the authority as given. */
 function add(p: Fixture, authority: { operatorId: string | undefined; expectedEdit: unknown }) {
   return inTx(venue, (tx) =>
     placeGroups(tx, venue.cfg, p.partyId!, {
       ...(authority as Pick<PlaceGroupsInput, "operatorId" | "expectedEdit">),
       billId: p.id,
-      groups: [{ release: "fire", lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] }],
+      groups: [
+        { release: "fire", lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }] },
+      ],
     }),
   );
 }
@@ -226,7 +228,7 @@ for (const op of operations)
       expect(lines).toHaveLength(op === "add" ? 2 : 1);
       if (op === "add")
         expect(lines.find((line) => line.lineNo === 2)).toMatchObject({
-          name: "Caña",
+          name: "Small beer",
           quantity: 1000,
           unitPriceGross: 300,
         });

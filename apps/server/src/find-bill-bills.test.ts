@@ -62,7 +62,7 @@ const query = (values: Record<string, string> = {}) => parseBillsQuery(new URLSe
 const list = (values: Record<string, string> = {}) =>
   inTx(venue, (tx) => readFindBills(tx, query(values)));
 async function named(label: string, ...names: string[]) {
-  const id = await parked(venue, ...(names.length ? names : ["Caña"]));
+  const id = await parked(venue, ...(names.length ? names : ["Small beer"]));
   await inTx(venue, (tx) =>
     tx.update(workingOrders).set({ label }).where(eq(workingOrders.id, id)),
   );
@@ -91,7 +91,7 @@ async function contribute(
 
 describe("Find Bills SQL paging", () => {
   it("counts whole portions and ignores extras and cancelled portions", async () => {
-    const id = await named("Counted dishes", "Caña");
+    const id = await named("Counted dishes", "Small beer");
     let parentId!: string;
     await inTx(venue, async (tx) => {
       const lines = await tx
@@ -133,7 +133,7 @@ describe("Find Bills SQL paging", () => {
   ] as const)(
     "counts a saved whole-portion rule %s, quantity %s and cancelled %s as %s",
     async (countAsPortions, quantity, cancelled, want) => {
-      const id = await named("Saved dish", "Caña");
+      const id = await named("Saved dish", "Small beer");
       await inTx(venue, async (tx) => {
         const [line] = await tx
           .update(workingOrderLines)
@@ -154,7 +154,7 @@ describe("Find Bills SQL paging", () => {
   );
 
   it("sorts a saved measure by its original item count after its unit changes", async () => {
-    const menuItemId = venue.offerFor("Caña");
+    const menuItemId = venue.offerFor("Small beer");
     const { productId, variantId } = await inTx(venue, async (tx) => {
       const [offer] = await tx
         .select({ productId: menuItems.productId })
@@ -242,7 +242,7 @@ describe("Find Bills SQL paging", () => {
         revision: 0,
         lines: [
           {
-            menuItemId: venue.offerFor("Caña"),
+            menuItemId: venue.offerFor("Small beer"),
             variantId: null,
             menuVersionId: null,
             options: [],
@@ -497,7 +497,7 @@ describe("Find Bills SQL paging", () => {
     expect(await list({ state: "part-paid" })).toMatchObject({ rows: [], total: 0, openCount: 1 });
   });
   it("includes open and placed bills and paid counter orders awaiting handover", async () => {
-    const held = await parked(venue, "Caña");
+    const held = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const placed = await parked(venue, "Octopus");
     await placeOrder(
@@ -513,7 +513,7 @@ describe("Find Bills SQL paging", () => {
     );
     const issued = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
-    const abandoned = await parked(venue, "Caña");
+    const abandoned = await parked(venue, "Small beer");
     await abandonHeldOrder({ db: venue.db }, venue.cfg, abandoned);
     const rows = (await list()).rows;
     expect(new Set(rows.map((r) => r.workingOrderId))).toEqual(
@@ -587,7 +587,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("finds a selected bill’s debt while its table stays open for another bill", async () => {
-    const first = await seatedWith(venue, "Caña");
+    const first = await seatedWith(venue, "Small beer");
     const second = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
       combineParties(tx, venue.cfg, {
@@ -626,7 +626,7 @@ describe("Find Bills SQL paging", () => {
   });
 
   it("reads issued debt and fresh selection independently of filters", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
       total: "3.00",
@@ -645,10 +645,10 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("filters zone, any credited staff and state before counts, with no-zone allowed controls", async () => {
-    const own = await parked(venue, "Caña", "Tarta");
+    const own = await parked(venue, "Small beer", "Tarta");
     const other = await parkedBy(venue, venue.supervisorId, "Octopus");
-    await parkedBy(venue, venue.operatorId, "Caña");
-    const placed = await parkedBy(venue, venue.supervisorId, "Caña");
+    await parkedBy(venue, venue.operatorId, "Small beer");
+    const placed = await parkedBy(venue, venue.supervisorId, "Small beer");
     await placeOrder(
       {
         admission: testTradingAdmission(),
@@ -660,7 +660,7 @@ describe("Find Bills SQL paging", () => {
       placed,
       venue.supervisorId,
     );
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)
@@ -707,7 +707,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("retains both staff credits, table names and exact row facts", async () => {
-    const party = await seatedWith(venue, "Tarta", "Caña");
+    const party = await seatedWith(venue, "Tarta", "Small beer");
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
@@ -763,7 +763,7 @@ describe("Find Bills SQL paging", () => {
     ).toContain(exact);
   });
   it("sorts money numerically both ways and leaves missing labels last", async () => {
-    const two = await named("Alpha", "Caña");
+    const two = await named("Alpha", "Small beer");
     const ten = await named("Beta", "Croquettes");
     const empty = await inTx(venue, async (tx) => {
       await tx
@@ -880,8 +880,8 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("sorts each semantic column in both directions with stable ties", async () => {
-    const first = await parkedBy(venue, venue.supervisorId, "Caña");
-    const second = await parkedBy(venue, venue.operatorId, "Tarta", "Caña");
+    const first = await parkedBy(venue, venue.supervisorId, "Small beer");
+    const second = await parkedBy(venue, venue.operatorId, "Tarta", "Small beer");
     const third = await placedIssuedBill(venue, "Croquettes");
     await contribute(second, "1.00");
     await inTx(venue, async (tx) => {
@@ -933,7 +933,7 @@ describe("Find Bills SQL paging", () => {
     }
   });
   it("sorts and filters distinct recorded zones while keeping no-zone rows last", async () => {
-    const counter = await parked(venue, "Caña");
+    const counter = await parked(venue, "Small beer");
     const party = await seatedWith(venue, "Tarta");
     const noZone = await inTx(venue, (tx) =>
       seedWorkingOrder(tx, {
@@ -959,7 +959,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("keeps original issued totals but reads corrected debt and departed receipt identity", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     await credit(venue, id, "1.00", "-1.10");
     const row = await inTx(venue, (tx) => readFindBill(tx, id));
     expect(row).toMatchObject({
@@ -984,7 +984,7 @@ describe("Find Bills SQL paging", () => {
     ]);
   });
   it("reads a replaced bill as owing what it owed, and less after a refund of its replacement", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     const owed = async () => {
       const row = await inTx(venue, (tx) => readFindBill(tx, id));
       const issued = await inTx(venue, (tx) => readIssuedSales(tx, [id]));
@@ -1002,7 +1002,7 @@ describe("Find Bills SQL paging", () => {
     expect(await owed()).toEqual(["1.79", "1.79"]);
   });
   it("collects a replaced bill whose replacement was refunded at what is left", async () => {
-    const id = await placedIssuedBill(venue, "Caña");
+    const id = await placedIssuedBill(venue, "Small beer");
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
     );
@@ -1020,7 +1020,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("marks earlier days at the venue business boundary rather than midnight", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     await inTx(venue, (tx) =>
       tx
         .update(workingOrders)
@@ -1039,7 +1039,7 @@ describe("Find Bills SQL paging", () => {
   });
 
   it("offers collection only while the legacy collector can take a positive debt", async () => {
-    const cleared = await placedIssuedBill(venue, "Caña");
+    const cleared = await placedIssuedBill(venue, "Small beer");
     await credit(venue, cleared, "2.73", "-3.00");
     expect(await inTx(venue, (tx) => readFindBill(tx, cleared))).toMatchObject({
       stillOwed: "0.00",

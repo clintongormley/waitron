@@ -28,7 +28,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const settled = await send(
       venue.app,
       venue.cookie,

@@ -1529,11 +1529,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Full-invoice recipient: country code names** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-country-code-names)
 
-- **Spanish text in a server test venue, for A913's English-only audit.**
-  `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
-  test's venue the Spanish refund dialog shows the reason "Mistake" in English. Found by A798-B
-  slice 8 (#2012).
-
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
   screen languages, themes and phone/desktop widths when the stack is available. The regional cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

@@ -31,7 +31,7 @@ useVenueDb({
 const modes = ["finish", "close", "finish-http", "departure-http"] as const;
 type Mode = (typeof modes)[number];
 async function fixture(mode: Mode) {
-  const billId = await tabWith(venue, ...(mode === "departure-http" ? ["Paella"] : []));
+  const billId = await tabWith(venue, ...(mode === "departure-http" ? ["Seafood rice"] : []));
   if (mode === "departure-http") await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
   const party = (await inTx(venue, (tx) => partyRevisionOfOrder(tx, billId)))!;
   return { billId, partyId: party.id, revision: party.revision };
@@ -46,7 +46,7 @@ async function own(p: Fixture, personId = venue.adminId) {
       expectedEdit,
       draftId: null,
       revision: 0,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
     }),
   );
 }

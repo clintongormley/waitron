@@ -128,9 +128,9 @@ describe("the table action routes", () => {
 
   it("move guests to another party's table keeps every bill, for each of two moves sending the same request", async () => {
     const anna = await seatedWith(venue, "Tarta");
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
     const beth = await seatedWith(venue, "Octopus");
-    const chris = await seatedWith(venue, "Caña");
+    const chris = await seatedWith(venue, "Small beer");
 
     const merged = await post(`/api/parties/${anna.partyId}/move`, {
       toTableId: lewis.tableId,
@@ -156,7 +156,7 @@ describe("the table action routes", () => {
 
   it("join tables, answering the party that holds them all", async () => {
     const anna = await seatedWith(venue, "Tarta");
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
 
     const answer = await post(`/api/parties/${anna.partyId}/join`, {
       tableId: lewis.tableId,
@@ -193,7 +193,7 @@ describe("the table action routes", () => {
       submissionId: randomUUID(),
       expectedPartyRevision: revisionOf(anna.partyId),
       groups: [
-        { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
       ],
     });
@@ -305,7 +305,7 @@ describe("the table action routes", () => {
       `A803 no merge flag: ${path} with a bills key of any value, including an invalid one, ignores it (%j)`,
       async (bills) => {
         const anna = await seatedWith(venue, "Tarta");
-        const lewis = await seatedWith(venue, "Caña");
+        const lewis = await seatedWith(venue, "Small beer");
 
         const answer = await post(`/api/parties/${anna.partyId}/${path}`, {
           [field]: lewis.tableId,
@@ -581,7 +581,7 @@ describe("the table action routes", () => {
 
   it("answers each refusal of the actions with 409, changing no revision", async () => {
     const { anna, second, billId } = await annaAtTwo();
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
     const alone = await seatedWith(venue);
     const revision = revisionOf(anna.partyId);
     const splitOf = (partyId: string, tableId: string, bill: string | null, rev = revision) =>
@@ -676,7 +676,7 @@ describe("A803 action results:", () => {
 
   it("Move guests onto a seated table answers the receiving party's bills, its own first", async () => {
     const anna = await seatedWith(venue, "Tarta");
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
 
     const answer = await post(`/api/parties/${anna.partyId}/move`, {
       toTableId: lewis.tableId,
@@ -695,7 +695,7 @@ describe("A803 action results:", () => {
 
   it("Join a seated table answers the joining party's bills, its own first", async () => {
     const anna = await seatedWith(venue, "Tarta");
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
 
     const answer = await post(`/api/parties/${anna.partyId}/join`, {
       tableId: lewis.tableId,
@@ -843,7 +843,7 @@ describe("A803 action results:", () => {
 
   it("no answer carries mainBillId", async () => {
     const { anna, second, billId } = await annaAtTwo();
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
     const beth = await seatedWith(venue, "Octopus");
 
     const answers = [
@@ -989,7 +989,7 @@ describe("Split a table's guest counts", () => {
 
   it("leaves the count as it was when the split is refused after its revision check", async () => {
     const { anna, second } = await annaOfFive();
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
     const alone = await seatedWith(venue);
     const counted = await send(
       venue.app,
@@ -1029,7 +1029,7 @@ describe("Split a table's guest counts", () => {
 
 describe("Join tables' guest counts", () => {
   async function seatedCounting(guestCount: number) {
-    const seated = await seatedWith(venue, "Caña");
+    const seated = await seatedWith(venue, "Small beer");
     const counted = await send(
       venue.app,
       venue.cookie,
@@ -1098,7 +1098,7 @@ describe("A803 split: the route", () => {
   }
 
   it("a selection answers the new party and its bills, whole first and the new bill last, and no source", async () => {
-    const { anna, second, octopusBill } = await annaWith("Tarta", "Caña");
+    const { anna, second, octopusBill } = await annaWith("Tarta", "Small beer");
     const [, beer] = lineIdsOf(anna.tabId);
 
     const answer = await post(
@@ -1121,7 +1121,7 @@ describe("A803 split: the route", () => {
   });
 
   it("upper-case ids name the same bills and dishes, and are answered lower-cased", async () => {
-    const { anna, second, octopusBill } = await annaWith("Tarta", "Caña");
+    const { anna, second, octopusBill } = await annaWith("Tarta", "Small beer");
     const [, beer] = lineIdsOf(anna.tabId);
 
     const answer = await post(
@@ -1139,7 +1139,7 @@ describe("A803 split: the route", () => {
   });
 
   it("an empty selection opens a new empty bill at the leaving table", async () => {
-    const { anna, second } = await annaWith("Tarta", "Caña");
+    const { anna, second } = await annaWith("Tarta", "Small beer");
 
     const answer = await post(
       `/api/parties/${anna.partyId}/split-table`,
@@ -1228,7 +1228,7 @@ describe("A803 split: the route", () => {
     ],
     ["a whole id twice", (billId) => ({ wholeBillIds: [billId, billId], loose: [] })],
   ])("%s is refused management.request_invalid on selection, changing nothing", async (_, make) => {
-    const { anna, second } = await annaWith("Tarta", "Caña");
+    const { anna, second } = await annaWith("Tarta", "Small beer");
     const [cake] = lineIdsOf(anna.tabId);
     const revision = revisionOf(anna.partyId);
 
@@ -1317,7 +1317,7 @@ describe("A803 split: the route", () => {
     }
 
     it("a dish the bill does not hold: 400 tab.line_not_found", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
+      const { anna, second } = await annaWith("Tarta", "Small beer");
 
       const answer = await refusal(anna, second, randomUUID());
 
@@ -1326,7 +1326,7 @@ describe("A803 split: the route", () => {
     });
 
     it("a paid dish: 409 bill.line_paid", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
+      const { anna, second } = await annaWith("Tarta", "Small beer");
       const paid = await pay(anna.tabId, {
         kind: "items",
         lines: [{ lineNo: 1 }],
@@ -1342,7 +1342,7 @@ describe("A803 split: the route", () => {
     });
 
     it("a pick leaving less than was received: 409 bill.received_exceeds_total", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
+      const { anna, second } = await annaWith("Tarta", "Small beer");
       const paid = await pay(anna.tabId, {
         kind: "contribution",
         amount: "18.00",
@@ -1361,7 +1361,7 @@ describe("A803 split: the route", () => {
       const { anna, second } = await annaWith("Tarta");
       const [cake] = lineIdsOf(anna.tabId);
       const beer = await inTx(venue, (tx) =>
-        addFixtureExtra(tx, venue.cfg, anna.tabId, cake!, venue.offerFor("Caña")),
+        addFixtureExtra(tx, venue.cfg, anna.tabId, cake!, venue.offerFor("Small beer")),
       );
 
       const answer = await refusal(anna, second, beer!);
@@ -1371,7 +1371,7 @@ describe("A803 split: the route", () => {
     });
 
     it("a new bill over the simplified-invoice limit: 409 sale.total_exceeds_simplified_limit", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
+      const { anna, second } = await annaWith("Tarta", "Small beer");
       const app = new Hono();
       mountTillApi(
         app,
@@ -1394,7 +1394,7 @@ describe("A803 split: the route", () => {
     });
 
     it("another person's unsent dishes on the source: 409 draft.taken_over with the conflicts", async () => {
-      const { anna, second } = await annaWith("Tarta", "Caña");
+      const { anna, second } = await annaWith("Tarta", "Small beer");
       await withTransaction(venue.db, (tx) =>
         saveDraftForTest(tx, anna.partyId, venue.adminId, {
           billId: anna.tabId,
@@ -1402,7 +1402,7 @@ describe("A803 split: the route", () => {
           revision: 0,
           lines: [
             {
-              menuItemId: venue.offerFor("Paella"),
+              menuItemId: venue.offerFor("Seafood rice"),
               variantId: null,
               menuVersionId: null,
               quantity: "1",
@@ -1648,7 +1648,7 @@ describe("A803 split: the panel's read", () => {
   }
 
   async function lewisWithAnnaFamilyBill(...dishes: string[]) {
-    const anna = await seatedWith(venue, "Caña");
+    const anna = await seatedWith(venue, "Small beer");
     const paid = await payItems(anna.tabId, 1, "3.00");
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const lewis = await seatedWith(venue, ...dishes);
@@ -1665,12 +1665,12 @@ describe("A803 split: the panel's read", () => {
   it("answers the party's open and presented bills in number order, each with the dishes and balance of its own reads", async () => {
     const { familyParty, lewis } = await lewisWithAnnaFamilyBill(
       "Tarta",
-      "Caña",
+      "Small beer",
       "Octopus",
-      "Caña",
-      "Caña",
+      "Small beer",
+      "Small beer",
       "Octopus",
-      "Caña",
+      "Small beer",
     );
     const partPaid = lewis.tabId;
     const family = await splitOff(partPaid, lewis.partyId, 7);
@@ -1765,7 +1765,7 @@ describe("A803 split: the panel's read", () => {
   });
 
   it("lists a bill moved onto the table by its number, below a bill opened after it", async () => {
-    const anna = await seatedWith(venue, "Caña");
+    const anna = await seatedWith(venue, "Small beer");
     const lewis = await seatedWith(venue, "Octopus");
     const moved = await post(`/api/bills/${anna.tabId}/move`, {
       partyId: anna.partyId,
@@ -1804,7 +1804,7 @@ describe("A803 split: the panel's read", () => {
       submissionId: randomUUID(),
       expectedPartyRevision: revisionOf(anna.partyId),
       groups: [
-        { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }], release: "fire" },
         { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
       ],
     });
@@ -1831,7 +1831,7 @@ describe("A803 split: the panel's read", () => {
       };
     };
     const waiting = [
-      ["Caña", undefined],
+      ["Small beer", undefined],
       ["Tarta", true],
     ];
     expect(await marks()).toEqual({ sources: waiting, bill: waiting });
@@ -1843,7 +1843,7 @@ describe("A803 split: the panel's read", () => {
     expect(fired.status, JSON.stringify(fired.json)).toBe(200);
 
     const none = [
-      ["Caña", undefined],
+      ["Small beer", undefined],
       ["Tarta", undefined],
     ];
     expect(await marks()).toEqual({ sources: none, bill: none });
@@ -2155,7 +2155,7 @@ describe("A803 split: the panel's read", () => {
   });
 
   it("requires a session", async () => {
-    const { partyId } = await seatedWith(venue, "Caña");
+    const { partyId } = await seatedWith(venue, "Small beer");
 
     const answer = await send(venue.app, "", "GET", `/api/parties/${partyId}/split-sources`);
 
@@ -2164,7 +2164,7 @@ describe("A803 split: the panel's read", () => {
   });
 
   it("reading it does not stamp the device as seen, where the bills read does", async () => {
-    const { partyId } = await seatedWith(venue, "Caña");
+    const { partyId } = await seatedWith(venue, "Small beer");
     const longAgo = "2020-01-01T00:00:00.000Z";
     await inTx(venue, (tx) =>
       tx.update(devices).set({ lastSeenAt: longAgo }).where(eq(devices.id, venue.deviceId)),

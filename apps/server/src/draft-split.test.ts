@@ -42,7 +42,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     await inTx(venue, async (tx) => {
       const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.zoneId);
-      const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
+      const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Seafood rice"))!;
       const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquettes"))!;
       const list = await createExtraList(
         tx,
@@ -117,8 +117,8 @@ async function withSentFood(
   shape?: "grouped",
 ) {
   const lines = [
-    { menuItemId: venue.offerFor("Paella"), quantity: "2", extras: selections },
-    ...(keepSent ? [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] : []),
+    { menuItemId: venue.offerFor("Seafood rice"), quantity: "2", extras: selections },
+    ...(keepSent ? [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }] : []),
   ];
   if (shape === "grouped") {
     await inTx(venue, async (tx) => {

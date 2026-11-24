@@ -106,7 +106,7 @@ function sale(app: Hono, id: string, method: "cash" | "card" = "cash") {
     ...(method === "cash" ? { tendered: "3.00" } : { entry: "manual" }),
     basket: {
       zoneId: venue.zoneId,
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
     },
   });
 }
@@ -254,7 +254,7 @@ describe("the sale routes while the full-disk stop holds", () => {
   });
 
   it("refuses a bill's cash and manual card payments, and answers one already taken", async () => {
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
     const noted = venue.appWith({ disk: notedState() });
 
     expect(refusal(await contribution(billId, "cash")(noted))).toEqual(REFUSED);
@@ -432,7 +432,7 @@ describe("the sale routes while the full-disk stop holds", () => {
 
   it("takes a bill's cash payment again once the folder has 16 MiB free", async () => {
     const disk = notedState({ bytes: FULL_DISK_BYTES });
-    const billId = await tabWith(venue, "Paella");
+    const billId = await tabWith(venue, "Seafood rice");
 
     const answer = await contribution(billId, "cash")(venue.appWith({ disk }));
 

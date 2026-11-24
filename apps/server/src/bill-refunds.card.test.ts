@@ -616,7 +616,7 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
   });
 
   it("leaves another bill of the same party alone", async () => {
-    const billId = await bill("Octopus", "Croquettes", "Croquettes", "Caña");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes", "Small beer");
     const split = await send(
       venue.app,
       venue.cookie,

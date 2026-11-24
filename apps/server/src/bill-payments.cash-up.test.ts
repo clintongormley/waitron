@@ -112,7 +112,7 @@ function dailyClose(businessDay: string) {
 
 describe("the cash-up counts money on the day and device it moves (bill payments design §9a)", () => {
   it("dates retained net money to capture day, leaving the outside refund out of bill returns", async () => {
-    const billId = await tabWith(venue, "Paella", "Paella");
+    const billId = await tabWith(venue, "Seafood rice", "Seafood rice");
     await withTransaction(venue.db, async (tx) => {
       const [bill] = await tx
         .insert(billPayments)
@@ -163,7 +163,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(
       venue,
-      "Paella",
+      "Seafood rice",
       "Steak",
       "Red wine bottle",
       "House salad",
@@ -237,7 +237,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(
       venue,
-      "Paella",
+      "Seafood rice",
       "Steak",
       "Red wine bottle",
       "House salad",
@@ -293,7 +293,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
           dining: "eat_in",
           basket: {
             zoneId: venue.zoneId,
-            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
+            lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "2" }],
           },
         }),
       });
@@ -316,7 +316,7 @@ describe("the cash-up counts money on the day and device it moves (bill payments
   it("shows zero net cash and reports card-only takings separately (test 27)", async () => {
     const billId = await tabWith(
       venue,
-      "Paella",
+      "Seafood rice",
       "Steak",
       "Red wine bottle",
       "House salad",

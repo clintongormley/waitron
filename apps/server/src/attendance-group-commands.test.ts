@@ -110,7 +110,9 @@ function command(app: Hono, action: Action, p: Awaited<ReturnType<typeof prepare
   if (action === "submit" || action === "join")
     return send(app, v.cookie, "POST", base, {
       ...common,
-      groups: [{ release: "hold", lines: [{ menuItemId: v.offerFor("Caña"), quantity: "1" }] }],
+      groups: [
+        { release: "hold", lines: [{ menuItemId: v.offerFor("Small beer"), quantity: "1" }] },
+      ],
       ...(action === "join" ? { joinGroupId: p.groupId } : {}),
     });
   if (action === "fire") return send(app, v.cookie, "POST", `${base}/${p.groupId}/fire`, common);

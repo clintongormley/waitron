@@ -111,7 +111,7 @@ async function serveOnly(zoneId: string): Promise<void> {
   });
 }
 
-const MEAL = ["Paella", "Steak", "Red wine bottle", "House salad", "Tarta"];
+const MEAL = ["Seafood rice", "Steak", "Red wine bottle", "House salad", "Tarta"];
 
 /** A €120.00 bill at a fresh table, its dishes sent. Tables are labelled with a bare number, as the
  * Spain demo floor labels them; a label no other table in the file has unless one is given. */

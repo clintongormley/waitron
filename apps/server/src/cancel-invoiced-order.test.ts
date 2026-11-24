@@ -175,7 +175,7 @@ useVenueDb({
       );
       portionListId = portions.id;
       await writeProductModifiers(tx, created.get("Café")!, [{ kind: "extras", id: extras.id }]);
-      const [beer] = db.all<{ id: string }>(sql`select id from products where name = 'Caña'`);
+      const [beer] = db.all<{ id: string }>(sql`select id from products where name = 'Small beer'`);
       await setTakeawayVatRate(tx, beer!.id, "21.00");
       await writeProductModifiers(tx, created.get("Mosto")!, [{ kind: "extras", id: portions.id }]);
       return new Map(
@@ -416,7 +416,7 @@ const negate = (amount: string) => negateDecimal(decimal(amount));
 
 describe("cancelling a placed order whose invoice was issued", () => {
   it("credits the whole invoice in the corrective series, settles it owing nothing, and abandons the order", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     expect(original.total).toBe(300);
     // The requesting device is not the configuration's own, so the two cannot be confused below.
@@ -501,8 +501,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
       id,
       zoneId: ticketThenPayZone,
       lines: [
-        { menuItemId: offerOf("Caña"), quantity: "1" },
-        { menuItemId: offerOf("Caña"), quantity: "2" },
+        { menuItemId: offerOf("Small beer"), quantity: "1" },
+        { menuItemId: offerOf("Small beer"), quantity: "2" },
       ],
     });
     expect(parked.status).toBe(200);
@@ -555,7 +555,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("credits a two-rate invoice line by line, an extras pick under its dish, each rate the exact negative of the invoice's", async () => {
     const id = await placed(
       [
-        { name: "Caña", quantity: "2" },
+        { name: "Small beer", quantity: "2" },
         {
           name: "Café",
           quantity: "1",
@@ -584,7 +584,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     );
     const invoiced = await linesOf(original.id);
     expect(invoiced.map((line) => [line.name, line.quantity, line.parentLineNo])).toEqual([
-      ["Caña", 2000, null],
+      ["Small beer", 2000, null],
       ["Café", 1000, null],
       ["Leche", 2000, 2],
     ]);
@@ -699,7 +699,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
 
   it("names, on each corrective line, the invoice line with the same number that it reverses", async () => {
     const id = await placed([
-      { name: "Caña", quantity: "2" },
+      { name: "Small beer", quantity: "2" },
       {
         name: "Café",
         quantity: "1",
@@ -733,7 +733,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses an operator without sale.rectify and no override, writing nothing and using no invoice number", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
 
     const answer = cancel(id, venue.cookie);
     await expectRefusedUnwritten(id, answer, {
@@ -744,7 +744,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses a bill holding a payment, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     await receivePayment(id);
 
     await expectRefusedUnwritten(id, cancel(id), {
@@ -754,7 +754,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("credits a bill its party left unpaid after its part payment was given back in full, tendering nothing", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -814,7 +814,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses an operator without sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     await receivePayment(id);
 
     const answer = cancel(id, venue.cookie);
@@ -826,7 +826,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses a second cancel, leaving exactly one corrective", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     expect((await cancel(id)).status).toBe(200);
     const original = await invoiceOf(id);
 
@@ -840,7 +840,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses when the node has no live corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const retired = await activeCorrective();
     await inTx(venue, (tx) =>
       tx
@@ -863,7 +863,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses an operator without sale.rectify before looking for a corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const retired = await activeCorrective();
     await inTx(venue, (tx) =>
       tx
@@ -971,7 +971,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("credits and abandons a bill its party left without paying, leaving the departure as recorded", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const departed = await send(
       venue.app,
       supervisorCookie,
@@ -1021,7 +1021,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("fails loudly when the node has two live corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const code = `R${randomUUID().slice(0, 8)}`;
     await inTx(venue, (tx) =>
       insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "corrective" }]),
@@ -1045,10 +1045,10 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
   it("refuses an invoice already partly credited, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const series = await activeCorrective();
-    // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
+    // 0.83 at 21% is 1.00 of the Small beer's 3.00, so a credit of the whole 3.00 would exceed it.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
         operationDescription: "Restaurante",
@@ -1060,8 +1060,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
         lines: [
           {
             lineNo: 1,
-            name: "Caña",
-            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            name: "Small beer",
+            descriptions: { [venue.cfg.locale]: "Glass of lager" },
             quantity: "-0.333",
             unitPrice: "2.48",
             vatRate: "21.00",
@@ -1088,10 +1088,10 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("refuses an invoice already credited upwards, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const series = await activeCorrective();
-    // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
+    // 0.83 at 21% is 1.00 added to the Small beer's 3.00, so a credit of 3.00 would leave it 1.00.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
         operationDescription: "Restaurante",
@@ -1103,8 +1103,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
         lines: [
           {
             lineNo: 1,
-            name: "Caña",
-            descriptions: { [venue.cfg.locale]: "Caña de cerveza" },
+            name: "Small beer",
+            descriptions: { [venue.cfg.locale]: "Glass of lager" },
             quantity: "0.333",
             unitPrice: "2.48",
             vatRate: "21.00",
@@ -1132,7 +1132,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   // The route sends only a reason; both refusals below come from the invoice as stored, so a
   // retry meets the same one.
   it("answers 409 when the invoice's stored lines disagree with its breakdown, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     await inTx(venue, (tx) =>
       tx.insert(saleLines).values({
@@ -1154,7 +1154,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("answers 409 when the invoice's stored breakdown does not sum to its total, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const [trigger] = venue.db.all<{ sql: string }>(
       sql`select sql from sqlite_master where type = 'trigger' and name = 'sales_append_only_update'`,
@@ -1181,7 +1181,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   // a value stored as bytes: it reads back as a new byte array each time, so the cancel's copy and
   // the one `recordCorrection` reads are not the same value.
   it("answers 409 when a stored invoice line's product reads back unlike itself, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     await inTx(venue, (tx) =>
       tx.insert(saleLines).values({
@@ -1204,7 +1204,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("answers 409 when a stored invoice line's id reads back unlike itself, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     await inTx(venue, (tx) =>
       tx.insert(saleLines).values({
@@ -1227,7 +1227,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const series = await activeCorrective();
 
@@ -1243,7 +1243,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   });
 
   it("keeps none of the credit when a write after it fails", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     // The cancel's last write is its amendment, after the credit, its number, its record, the
     // chain's move and the invoice's settlement.
@@ -1308,7 +1308,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   }
 
   it("credits the invoice for an operator without sale.rectify, naming the supervisor as authorising", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
 
     const answer = await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id);
@@ -1331,7 +1331,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses a wrong supervisor PIN as pin.invalid, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
 
     await expectRefusedUnwritten(id, cancelWith({ personId: supervisorId, pin: "0000" })(id), {
       status: 401,
@@ -1340,7 +1340,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses the PIN of someone who does not hold sale.rectify, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
 
     await expectRefusedUnwritten(id, answer, { status: 403, code: "authorization.not_permitted" });
@@ -1365,13 +1365,13 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
       { status: 401, code: "pin.invalid" },
     ],
   ])("refuses %s, writing nothing", async (_, override, refusal) => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
 
     await expectRefusedUnwritten(id, cancelWith(override())(id), refusal);
   });
 
   it("never checks an override sent by someone who holds sale.rectify, and credits on their own authority", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
 
     const answer = await cancelWith(
@@ -1386,7 +1386,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("counts wrong PINs in the till's override bucket: after four even the right one is 429, the drawer too, until the wait is over", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const { app, clockAt } = throttledApp();
     const right = { personId: supervisorId, pin: SUPERVISOR_PIN };
@@ -1419,7 +1419,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses the PIN of someone who does not hold sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     await receivePayment(id);
     const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
 
@@ -1428,7 +1428,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses a wrong PIN on a bill holding a payment as pin.invalid, and counts it: after four even the right one is 429", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     await receivePayment(id);
     const { app } = throttledApp();
     const withPin = (pin: string) =>
@@ -1444,7 +1444,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses a sale.rectify holder's PIN on a bill holding a payment as bill.payments_received, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     await receivePayment(id);
 
     await expectRefusedUnwritten(
@@ -1455,11 +1455,11 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("lets a refused cancel that never reaches the PIN check leave the wrong-PIN count to go idle", async () => {
-    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    const cancelled = await placed([{ name: "Small beer", quantity: "1" }]);
     expect(
       (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
     ).toBe(200);
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const { app, clockAt } = throttledApp();
     const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
     for (let i = 0; i < 4; i += 1) expect((await wrong(id)).status).toBe(401);
@@ -1478,7 +1478,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
   });
 
   it("refuses a cancel of a cancelled order as before when deriving the override PIN's key fails", async () => {
-    const cancelled = await placed([{ name: "Caña", quantity: "1" }]);
+    const cancelled = await placed([{ name: "Small beer", quantity: "1" }]);
     expect(
       (await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(cancelled)).status,
     ).toBe(200);
@@ -1509,18 +1509,18 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
 
     for (let i = 0; i < 5; i += 1) {
-      const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
+      const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
       expect((await wrong(id)).status).toBe(200);
       expect(await statusOf(venue, id)).toBe("abandoned");
     }
-    const invoiced = await placed([{ name: "Caña", quantity: "1" }]);
+    const invoiced = await placed([{ name: "Small beer", quantity: "1" }]);
     const right = cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN }, venue.cookie, app);
     expect((await right(invoiced)).status).toBe(200);
   });
 
   it("refuses an override that is not an object even on an order with no invoice, writing nothing", async () => {
     const ticketFirst = await noInvoiceZone("Barra sin factura, mal formada");
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
+    const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
     const before = fiscalSnapshot();
 
     const answer = await cancelWith(SUPERVISOR_PIN)(id);
@@ -1541,16 +1541,17 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     const byStaff = (pin: string) => cancelWith({ personId: supervisorId, pin }, venue.cookie, app);
     const bySupervisor = (pin: string) =>
       cancelWith({ personId: supervisorId, pin }, supervisorCookie, app);
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
 
     for (let i = 0; i < 3; i += 1) {
       expect((await byStaff("0000")(id)).status).toBe(401);
     }
     expect(
-      (await bySupervisor("0000")(await placed([{ name: "Caña", quantity: "1" }]))).status,
+      (await bySupervisor("0000")(await placed([{ name: "Small beer", quantity: "1" }]))).status,
     ).toBe(200);
     expect(
-      (await bySupervisor(SUPERVISOR_PIN)(await placed([{ name: "Caña", quantity: "1" }]))).status,
+      (await bySupervisor(SUPERVISOR_PIN)(await placed([{ name: "Small beer", quantity: "1" }])))
+        .status,
     ).toBe(200);
     // Had the supervisor's wrong PIN counted, this would already be 429; had their right PIN
     // cleared the count, the right PIN after it would be accepted.
@@ -1577,7 +1578,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
   }
 
   it("credits the invoice while another writer commits during the PIN check, deriving the key once", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
 
@@ -1598,7 +1599,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
         orderStart: "counter",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
+    const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
     watchDerivations(SUPERVISOR_PIN, anotherWriter);
 
     const answer = await cancelWithSupervisor(id);
@@ -1697,7 +1698,7 @@ function payThreeEuroByReader(id: string, submissionId = randomUUID()) {
 
 describe("cancelling an invoiced order while a card is paying it", () => {
   it("refuses while the card is at the reader, writing nothing, and the card then settles the invoice", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const provider = new CardAtTheReader();
     const personId = venue.operatorId;
@@ -1731,7 +1732,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("refuses cancellation while a captured card has not settled the invoice", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     venue.card.crashNextCollect("captured");
     const submissionId = randomUUID();
     const pay = () => payThreeEuroByReader(id, submissionId);
@@ -1752,7 +1753,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("refuses an operator without sale.rectify as not permitted while a captured card has not settled the invoice, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     venue.card.crashNextCollect("captured");
     const lost = await payThreeEuroByReader(id);
     expect(lost.status).toBe(500);
@@ -1766,7 +1767,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("refuses while the card is at a reader that has written no payment yet, and the card then settles the invoice", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
@@ -1792,7 +1793,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("refuses an operator without sale.rectify as not permitted while the card is at a reader that has written no payment yet, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const paying = payThreeEuroByReader(id);
@@ -1812,7 +1813,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("credits the invoice once a declined card has left the reader", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
@@ -1833,7 +1834,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
   });
 
   it("refuses a card for an order cancelled before it reached the reader, asking no reader", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
     expect((await cancel(id)).status).toBe(200);
     const calls = venue.card.collectCalls.length;
 
@@ -1874,7 +1875,7 @@ describe("cancelling a placed order with no invoice", () => {
         orderStart: "counter",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
+    const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
     const before = fiscalSnapshot() as Record<string, unknown>;
 
     expect((await cancel(id, venue.cookie)).status).toBe(200);
@@ -1895,7 +1896,7 @@ describe("cancelling a placed order with no invoice", () => {
         orderStart: "counter",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
+    const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const paying = payThreeEuroByReader(id);
@@ -1942,7 +1943,7 @@ describe("a party's bills name the invoice and its correctives (GET /api/parties
 
   /** A party's main bill, placed with its invoice issued by the party leaving without paying. */
   async function invoicedPartyBill() {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const departed = await send(
       venue.app,
       supervisorCookie,
@@ -1984,7 +1985,7 @@ describe("a party's bills name the invoice and its correctives (GET /api/parties
   });
 
   it("names neither on a placed bill with no invoice", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const place = await send(
       venue.app,
       venue.cookie,

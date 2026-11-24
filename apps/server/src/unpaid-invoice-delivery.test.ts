@@ -49,7 +49,7 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") {
-  const orderId = await tabWith(venue, "Caña");
+  const orderId = await tabWith(venue, "Small beer");
   const pagePrinterId = randomUUID();
   await withTransaction(suite.db, async (tx) => {
     await insertA4Printer(tx, { id: pagePrinterId, name: "Office", host: pagePrinterId });
@@ -212,7 +212,7 @@ describe("unpaid invoice delivery", () => {
   );
 
   it("stores each line's unit price before any discount on an unpaid invoice, and nothing on an untouched line", async () => {
-    const orderId = await tabWith(venue, "Caña", "Caña");
+    const orderId = await tabWith(venue, "Small beer", "Small beer");
     await withTransaction(suite.db, (tx) =>
       tx
         .update(workingOrderLines)

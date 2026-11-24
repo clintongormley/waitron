@@ -112,7 +112,7 @@ it("a trading boot never names a module with no set of its own as waiting to be 
           tendered: "3.00",
           basket: {
             zoneId: venue.zoneId,
-            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+            lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
           },
         }),
       },

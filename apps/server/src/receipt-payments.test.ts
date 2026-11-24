@@ -89,11 +89,11 @@ function read(saleId: string, billId: string | null) {
   });
 }
 
-/** A seated party's bill of Paella and Steak (60.00), served, its ticket issued by Print the bill. */
+/** A seated party's bill of Seafood rice and Steak (60.00), served, its ticket issued by Print the bill. */
 async function printedBill(
   staged?: (billId: string) => Promise<void>,
 ): Promise<{ partyId: string; billId: string }> {
-  const party = await seatedWith(venue, "Paella", "Steak");
+  const party = await seatedWith(venue, "Seafood rice", "Steak");
   await staged?.(party.tabId);
   const lines = venue.db.all<{ id: string; quantity: number }>(
     sql`select id, quantity from working_order_lines where working_order_id = ${party.tabId}`,
@@ -183,7 +183,7 @@ async function adminSessionId(tx: Transaction): Promise<{ id: string; token: str
 }
 
 it("an unpaid departure owes the whole amount due", async () => {
-  const party = await seatedWith(venue, "Paella", "Steak");
+  const party = await seatedWith(venue, "Seafood rice", "Steak");
   const session = await inTx(venue, adminSessionId);
   const [, ...device] = venue.cookie.split("; ");
   const cookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
@@ -343,7 +343,7 @@ it("a full invoice printed on A4 before it is paid carries its payment and what 
 });
 
 it("a settled sale owes nothing", async () => {
-  const billId = await tabWith(venue, "Paella", "Steak");
+  const billId = await tabWith(venue, "Seafood rice", "Steak");
   const answer = await send(
     venue.app,
     venue.cookie,
@@ -376,7 +376,7 @@ it("a settled sale owes nothing", async () => {
 });
 
 it("a deferred close owes nothing", async () => {
-  const billId = await tabWith(venue, "Paella", "Steak");
+  const billId = await tabWith(venue, "Seafood rice", "Steak");
   await printOrderForTest(deps(), venue.cfg, billId, venue.operatorId);
   const saleId = await saleOf(billId);
   // The tender and settlement a deferred close (`closeBillDeferredTx`) writes.
@@ -402,7 +402,7 @@ it("a deferred close owes nothing", async () => {
 });
 
 it("a replacement of a paid ticket owes nothing", async () => {
-  const billId = await tabWith(venue, "Paella", "Steak");
+  const billId = await tabWith(venue, "Seafood rice", "Steak");
   await send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
     submissionId: randomUUID(),
     kind: "contribution",

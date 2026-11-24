@@ -254,7 +254,7 @@ describe("a pending card refund and the table actions", () => {
     "joins another party's table %s: neither bill changes, and they stay apart",
     async (_asking, bills) => {
       const anna = await refundParty();
-      const lewis = await seatedWith(venue, "Caña");
+      const lewis = await seatedWith(venue, "Small beer");
       const before = await charges(anna.tabId);
       const lewisBefore = await charges(lewis.tabId);
 
@@ -283,7 +283,7 @@ describe("a pending card refund and the table actions", () => {
     "has its table joined by another party %s: the bill moves across whole and stays locked",
     async (_asking, bills) => {
       const anna = await refundParty();
-      const lewis = await seatedWith(venue, "Caña");
+      const lewis = await seatedWith(venue, "Small beer");
       const before = await charges(anna.tabId);
 
       const joined = await post(`/api/parties/${lewis.partyId}/join`, {
@@ -305,7 +305,7 @@ describe("a pending card refund and the table actions", () => {
   );
 
   it("has its table joined while another bill holds the refund: every bill stays its own, the refund's bill does not change", async () => {
-    const anna = await seatedWith(venue, "Caña", "Octopus", "Croquettes", "Croquettes");
+    const anna = await seatedWith(venue, "Small beer", "Octopus", "Croquettes", "Croquettes");
     const splitBill = await post(`/api/bills/${anna.tabId}/move-dishes`, {
       lineIds: lineIdsOf(anna.tabId).slice(1),
       toBillId: null,
@@ -314,7 +314,7 @@ describe("a pending card refund and the table actions", () => {
     expect(splitBill.status).toBe(200);
     const billId = splitBill.json.billId as string;
     await pendingRefundOn(billId);
-    const lewis = await seatedWith(venue, "Caña");
+    const lewis = await seatedWith(venue, "Small beer");
     const before = await charges(billId);
     expectPendingFigures(before);
 
@@ -369,7 +369,7 @@ describe("a pending card refund and the table actions", () => {
   });
 
   it("unjoins a table taking the bill: it moves to the new party whole and stays locked", async () => {
-    const anna = await seatedWith(venue, "Caña", "Octopus", "Croquettes", "Croquettes");
+    const anna = await seatedWith(venue, "Small beer", "Octopus", "Croquettes", "Croquettes");
     const second = await freeTable();
     const joined = await post(`/api/parties/${anna.partyId}/join`, {
       tableId: second,

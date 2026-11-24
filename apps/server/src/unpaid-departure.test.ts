@@ -699,7 +699,7 @@ describe("the reason", () => {
 
 describe("bills already presented", () => {
   it("files no second invoice for a bill invoiced when it was placed, and records what that invoice still owes", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await creditTwoEuros(placedId);
     const [invoiced] = await salesOf(placedId);
@@ -721,7 +721,7 @@ describe("bills already presented", () => {
   });
 
   it("invoices in full a bill placed without an invoice", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     expect(await salesOf(placedId)).toEqual([]);
 
@@ -742,7 +742,7 @@ describe("bills already presented", () => {
   });
 
   it("records a bill presented after a part payment at the counter as left unpaid", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const id = await placedCounterBillMovedTo(venue, prepayZone, party, false, async (sent) => {
       const part = await send(
         venue.app,
@@ -816,7 +816,7 @@ describe("a presented bill whose card is in flight", () => {
       placedCounterBillMovedTo(venue, issued ? ticketThenPayZone : prepayZone, party, issued);
 
     it("refuses a departure while the bill's card is at the reader, writing nothing, and the card then pays the bill", async () => {
-      const party = await seatedWith(venue, "Caña");
+      const party = await seatedWith(venue, "Small beer");
       const placedId = await presented(party);
       const salesBefore = await salesOf(placedId);
       const calls = venue.card.collectCalls.length;
@@ -868,7 +868,7 @@ describe("a presented bill whose card is in flight", () => {
     });
 
     it("refuses a departure while a card captured for the bill is not yet on a sale, writing nothing", async () => {
-      const party = await seatedWith(venue, "Caña");
+      const party = await seatedWith(venue, "Small beer");
       const placedId = await presented(party);
       const salesBefore = await salesOf(placedId);
       venue.card.crashNextCollect("captured");
@@ -895,7 +895,7 @@ describe("a presented bill whose card is in flight", () => {
     });
 
     it("records the departure after the bill's card was declined", async () => {
-      const party = await seatedWith(venue, "Caña");
+      const party = await seatedWith(venue, "Small beer");
       const placedId = await presented(party);
       venue.card.failNextCollect();
       expect(await pay(placedId)).toMatchObject({ status: 200, json: { outcome: "declined" } });
@@ -917,7 +917,7 @@ describe("a presented bill whose card is in flight", () => {
     });
   });
   it("refuses a departure while a card captured for the party's second presented bill is not yet on a sale, writing nothing", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const firstId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     const secondId = await placedCounterBillMovedTo(venue, prepayZone, party);
     venue.card.crashNextCollect("captured");
@@ -987,7 +987,7 @@ describe("a bill that owes nothing", () => {
   });
 
   it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
-    const anna = await seatedWith(venue, "Caña");
+    const anna = await seatedWith(venue, "Small beer");
     await seedGivenAwayLine(venue, anna.tabId, 1);
     const lewis = await seatedWith(venue, "Red wine bottle");
     const joined = await send(
@@ -1057,7 +1057,7 @@ describe("a bill that owes nothing", () => {
   });
 
   it("closes a party whose only owing bill was given away in full, invoicing it at 0.00 and settling it", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     await seedGivenAwayLine(venue, party.tabId, 1);
 
     const answer = await depart(party.partyId, {
@@ -1123,7 +1123,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
   });
 
   it("gives no amount due for a bill with no invoice", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
 
     const bill = (await billsOf(party.partyId)).find((b) => b.workingOrderId === party.tabId);
 
@@ -1371,7 +1371,7 @@ describe("a departure sent together with a payment or Finish table on the same p
   it.each(orders)(
     "closes a party whose only bill was given away in full once when Finish table is sent too, with %s",
     async (_, first) => {
-      const party = await seatedWith(venue, "Caña");
+      const party = await seatedWith(venue, "Small beer");
       await seedGivenAwayLine(venue, party.tabId, 1);
       const revision = revisionOf(party.partyId);
 
@@ -2500,7 +2500,7 @@ describe("left unpaid with part paid", () => {
   });
 
   it("refuses a Counter bill moved to the table with a pending card part payment, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     const id = await placedCounterBillMovedTo(venue, prepayZone, party);
     await pendingCard(id);
 

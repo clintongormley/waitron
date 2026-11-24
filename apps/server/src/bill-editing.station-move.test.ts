@@ -39,7 +39,7 @@ useVenueDb({
 });
 const edit = (id: string) => inTx(venue, (tx) => readBillEditState(tx, id));
 async function fixture() {
-  const p = await seatedWith(venue, "Paella", "Caña");
+  const p = await seatedWith(venue, "Seafood rice", "Small beer");
   const lines = await venue.db
     .select()
     .from(workingOrderLines)
@@ -299,7 +299,7 @@ describe("station movement checks bill editing authority", () => {
         tx,
         venue.cfg,
         tabId,
-        [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+        [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
         null,
         { zoneId: venue.zoneId },
       );

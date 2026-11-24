@@ -17,7 +17,7 @@ it("returns stored invoice evidence on a cash sale and on its replay and receipt
     dining: "eat_in",
     basket: {
       zoneId: v.zoneId,
-      lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
+      lines: [{ menuItemId: v.offerFor("Seafood rice"), quantity: "1" }],
     },
   };
   const pay = () =>

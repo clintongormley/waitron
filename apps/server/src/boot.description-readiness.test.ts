@@ -86,7 +86,7 @@ it("a trading boot without a fiscal description field accepts a department's emp
           tendered: "3.00",
           basket: {
             zoneId: venue.zoneId,
-            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+            lines: [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
           },
         }),
       },

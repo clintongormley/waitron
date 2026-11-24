@@ -74,7 +74,7 @@ async function save(p: Fixture, billId: string, operatorId = venue.operatorId) {
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,
       expectedEdit,
-      lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Seafood rice"), quantity: "1" }],
     }),
   );
 }

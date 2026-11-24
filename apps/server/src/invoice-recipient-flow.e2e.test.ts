@@ -113,7 +113,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
         tx,
         venue.cfg,
         id,
-        [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        [{ menuItemId: venue.offerFor("Small beer"), quantity: "1" }],
         null,
         {
           zoneId: walkupZone,
@@ -154,7 +154,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     expect(await state()).toEqual(before);
   });
   it("issues one full invoice using the held order's saved identity after placement and cash payment", async () => {
-    const id = await parked(venue, "Caña");
+    const id = await parked(venue, "Small beer");
     await choose(id, recipient);
     await saved(id, recipient);
     await placeOrder(
@@ -209,7 +209,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     ]);
   });
   it("keeps party bill reads and payment completion on the same identity", async () => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     await choose(party.tabId, recipient);
     const bills = await inTx(venue, (tx) => readPartyBills(tx, party.partyId));
     expect(bills.find((b) => b.workingOrderId === party.tabId)!.recipient).toEqual(recipient);
@@ -236,7 +236,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
   });
 });
 it("revisions distinguish an identity-only edit and F2 clears both metadata fields", async () => {
-  const id = await parked(venue, "Caña");
+  const id = await parked(venue, "Small beer");
   const first = await choose(id, foreign);
   const second = await choose(
     id,
@@ -268,7 +268,7 @@ it("revisions distinguish an identity-only edit and F2 clears both metadata fiel
   });
 });
 it("refuses missing identity on a saved choice before numbering, provider or drawer changes", async () => {
-  const id = await parked(venue, "Caña");
+  const id = await parked(venue, "Small beer");
   const before = await state();
   const answer = await send(
     venue.app,
@@ -287,7 +287,7 @@ it("refuses missing identity on a saved choice before numbering, provider or dra
 it.each(["cash", "manual", "reader"] as const)(
   "refuses a missing saved identifier before %s payment work",
   async (method) => {
-    const party = await seatedWith(venue, "Caña");
+    const party = await seatedWith(venue, "Small beer");
     await choose(party.tabId, domestic);
     await suite.db
       .update(workingOrders)
