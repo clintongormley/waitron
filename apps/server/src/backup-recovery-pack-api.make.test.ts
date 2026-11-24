@@ -1322,6 +1322,19 @@ describe("the status route", () => {
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
   });
 
+  it("names no pack for a master key when a plain pack was made at the same instant as the pack that showed it", async () => {
+    const f = fixture({ now: () => new Date("2026-10-30T09:00:00.000Z") });
+    const response = await f.make(true);
+    const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
+    await response.arrayBuffer();
+    await (await f.make(false)).arrayBuffer();
+    const third = await f.make(false);
+    expect(third.headers.get("x-waitron-recovery-pack")).toBe("3");
+    const file = await readRecoveryPackPdf(new Uint8Array(await third.arrayBuffer()));
+    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([null, name, null]);
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: null } });
+  });
+
   it("names no pack for a master key no pack on this box showed", async () => {
     await withTransaction(suite.db, (tx) =>
       insertMasterKey(tx, {
