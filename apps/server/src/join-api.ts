@@ -25,9 +25,11 @@ import { requireDeviceName } from "./device.js";
 import {
   acceptDeviceJoinRequest,
   acceptPrintAgentJoinRequest,
+  agentWasPreviouslyDenied,
   challengeFor,
   checkDeviceJoinNumber,
   denyJoinRequest,
+  discardLapsedAgentRequests,
   discardLapsedDeviceRequests,
   findJoinRequest,
   listPendingJoinRequests,
@@ -126,6 +128,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     let dropped: string[] = [];
     const result = await withTransaction(deps.db, async (tx) => {
       dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      await discardLapsedAgentRequests(tx, deps.cfg, deps.pairingMode);
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
@@ -150,6 +153,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     let dropped: string[] = [];
     const result = await withTransaction(deps.db, async (tx) => {
       dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      await discardLapsedAgentRequests(tx, deps.cfg, deps.pairingMode);
       const row = isUuid(id) ? await findJoinRequest(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -213,6 +217,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       // release strands are discarded here, after it.
       const dropped = await gated(sessionId, "hardware.manage", async (tx) => {
         deps.pairingMode.release(holdId);
+        await discardLapsedAgentRequests(tx, deps.cfg, deps.pairingMode);
         return discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
       });
       for (const id of dropped) deps.pairingMode.dropClaim(id);
@@ -227,7 +232,18 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const kind = requireKind(c.req.query("kind"));
       const { rows, returning } = await gated(sessionId, PERMISSION_FOR[kind], async (tx) => {
         const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
-        if (kind === "print_agent") return { rows, returning: null };
+        if (kind === "print_agent") {
+          const marked = rows.map((row) => ({
+            ...row,
+            ...(agentWasPreviouslyDenied(deps.pairingMode, row.id)
+              ? { previouslyDenied: true }
+              : {}),
+          }));
+          marked.sort(
+            (a, b) => Number(a.previouslyDenied === true) - Number(b.previouslyDenied === true),
+          );
+          return { rows: marked, returning: null };
+        }
         const ids = rows.map((row) => row.id);
         return { rows, returning: await returningDevicesOf(tx, ids) };
       });
@@ -275,7 +291,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const claim = deps.pairingMode.claimOf(id);
         if (claim !== undefined && claim.sessionKey !== sessionKey)
           throw new AppError("join_request.claimed", {});
-        return denyJoinRequest(tx, deps.cfg, id);
+        return denyJoinRequest(tx, deps.cfg, id, deps.pairingMode);
       });
       deps.pairingMode.dropClaim(id);
       return c.body(null, 204);

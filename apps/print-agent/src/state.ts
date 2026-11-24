@@ -57,6 +57,9 @@ export class FileState {
         ) {
           config.pendingVerificationNumber = parsed.pendingVerificationNumber;
         }
+        if ("previouslyDenied" in parsed && parsed.previouslyDenied === true) {
+          config.previouslyDenied = true;
+        }
         if ("servers" in parsed && Array.isArray(parsed.servers)) {
           config.servers = parsed.servers
             .map(rememberedServer)

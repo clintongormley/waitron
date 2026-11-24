@@ -2685,6 +2685,11 @@ export class PrintersScreen extends LitElement {
               <span data-test="join-asked-${request.id}"
                 >${formatIsoMinute(request.createdAt)}</span
               >
+              ${
+                request.previouslyDenied
+                  ? html`<span> · ${t("printers.join_previously_denied")}</span>`
+                  : nothing
+              }
             </span>
           </div>
           <wt-button

@@ -95,7 +95,7 @@ export type Failure =
 
 export type Result<T> = { ok: true; value: T } | { ok: false; failure: Failure };
 
-export type JoinStatus = "pending" | "approved" | "not_approved";
+export type JoinStatus = "pending" | "approved" | "not_approved" | "denied" | "revoked";
 
 /** `verificationNumber` is what the operator reads back to confirm which device they approve. */
 export interface JoinReply {
@@ -176,7 +176,7 @@ export type PageJobOutcome =
 
 export interface AgentClient {
   probeNode(url: string): Promise<Result<NodeProbe>>;
-  join(url: string, name: string): Promise<Result<JoinReply>>;
+  join(url: string, name: string, previouslyDenied?: boolean): Promise<Result<JoinReply>>;
   /** Enrol on THIS box's own loopback, never through a pairing window: any status but 201 is
    * `refused`. */
   enrolSelf(url: string, name: string): Promise<Result<{ token: string }>>;
@@ -543,7 +543,7 @@ export function createClient(opts: {
     probeNode(url) {
       return foldFetch(opts.fetch, `${url}/api/node`, timeoutMs, {}, parseNodeProbe);
     },
-    join(url, name) {
+    join(url, name, previouslyDenied) {
       return foldFetch(
         opts.fetch,
         `${url}/print-api/agent/join`,
@@ -551,7 +551,10 @@ export function createClient(opts: {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({
+            name,
+            ...(previouslyDenied === true ? { previouslyDenied } : {}),
+          }),
         },
         async (response) => {
           const b = await readJson(response);
@@ -606,6 +609,10 @@ export function createClient(opts: {
         async (response) => {
           const b = await readJson(response);
           const s = b?.status;
+          if (s === "not_approved") {
+            if (b?.revoked === true) return "revoked";
+            if (b?.denied === true) return "denied";
+          }
           return s === "pending" || s === "approved" || s === "not_approved" ? s : undefined;
         },
       );

@@ -1925,6 +1925,42 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=join-origin]")).toBe(window.location.origin);
   });
 
+  it.each([
+    ["en", en["printers.join_previously_denied"], en["printers.join_review"]],
+    ["es-ES", es["printers.join_previously_denied"], es["printers.join_review"]],
+  ] as const)(
+    "shows a previously denied agent below new requests in %s",
+    async (locale, label, letIn) => {
+      await setLocale(locale);
+      const api = stubApi({
+        joinRequests: vi.fn().mockResolvedValue([
+          {
+            id: "new",
+            kind: "print_agent",
+            label: "Counter agent",
+            createdAt: "2026-09-08T10:02:00Z",
+          },
+          {
+            id: "denied",
+            kind: "print_agent",
+            label: "Kitchen agent",
+            createdAt: "2026-09-08T10:01:00Z",
+            previouslyDenied: true,
+          },
+        ]),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      const rows = [...q(el, "[data-test=join-panel]")!.querySelectorAll("li")];
+      expect(rows.map((row) => row.dataset.test)).toEqual(["join-row-new", "join-row-denied"]);
+      expect(rows[0]!.textContent).not.toContain(label);
+      expect(rows[1]!.textContent).toContain(label);
+      expect(text(el, "[data-test=join-review-denied]")).toBe(letIn);
+    },
+  );
+
   it("never renders the request's verification number in the pending list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

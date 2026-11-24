@@ -111,7 +111,9 @@ To use an agent you still trust, choose **Add an agent** and **Add** beside its 
 
 An agent marked **On another box** belongs to another of the venue's boxes, such as the spare. It prints through the main box, so keep it while that box is in use.
 
-To add a different agent, follow the setup steps in **Add an agent** and match its number. After pairing a new agent, find and add its A4 printers again.
+To add a different agent, follow the setup steps in **Add an agent** and match its number. If you close the dialog before approving the agent, open it again and wait for the agent to ask for a new number. After pairing, find and add its A4 printers again.
+
+If you deny a request, the agent can appear again under the other requests as **Previously denied**. Choose **Let in** and match its current number if you want to approve it.
 
 ## Card readers {#card-readers}
 

@@ -73,6 +73,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
           name: opts.env.name ?? saved?.name ?? FALLBACK_NAME,
           environment: saved?.environment,
           pendingVerificationNumber: saved?.pendingVerificationNumber,
+          previouslyDenied: saved?.previouslyDenied,
           servers: saved?.servers,
         };
       }

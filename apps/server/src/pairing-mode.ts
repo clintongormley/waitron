@@ -22,6 +22,12 @@ export interface PairingClaim {
   personName: string;
 }
 
+interface AgentPairingRequest {
+  id: string;
+  createdAt: string;
+  previouslyDenied: boolean;
+}
+
 export interface PairingMode {
   open(): { holdId: string; openUntil: string };
   renew(holdId: string): { openUntil: string } | null;
@@ -35,6 +41,10 @@ export interface PairingMode {
   claimOf(requestId: string): PairingClaim | undefined;
   orphanedClaims(): string[];
   dropClaim(requestId: string): void;
+  trackAgentRequest(opening: number, request: AgentPairingRequest): void;
+  agentRequests(from: string, to: string): ReadonlyMap<string, AgentPairingRequest>;
+  rememberDeniedAgent(id: string, tokenHash: string): void;
+  deniedAgentHash(id: string): string | undefined;
 }
 
 export function createPairingMode(
@@ -55,6 +65,8 @@ export function createPairingMode(
   } = opts;
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
+  const agentRequests = new Map<string, AgentPairingRequest>();
+  const deniedAgents = new Map<string, string>();
   let openSinceMs: number | null = null;
   let openings = 0;
   let lapse: ReturnType<typeof setTimeout> | undefined;
@@ -76,8 +88,12 @@ export function createPairingMode(
     const t = steady();
     const before = holds.size;
     for (const [id, until] of holds) if (until <= t) holds.delete(id);
-    if (holds.size === 0) openSinceMs = null;
-    else if (openSinceMs !== null) openSinceMs = Math.min(openSinceMs, now());
+    if (holds.size === 0) {
+      openSinceMs = null;
+      agentRequests.clear();
+    } else if (openSinceMs !== null) {
+      openSinceMs = Math.min(openSinceMs, now());
+    }
     if (holds.size !== before) {
       arm();
       changed?.();
@@ -150,6 +166,24 @@ export function createPairingMode(
     },
     dropClaim(requestId) {
       if (claims.delete(requestId)) changed?.();
+    },
+    trackAgentRequest(opening, request) {
+      prune();
+      if (holds.size > 0 && opening === openings) agentRequests.set(request.id, request);
+    },
+    agentRequests(from, to) {
+      prune();
+      for (const [id, { createdAt }] of agentRequests) {
+        if (createdAt < from || createdAt > to) agentRequests.delete(id);
+      }
+      return agentRequests;
+    },
+    rememberDeniedAgent(id, tokenHash) {
+      deniedAgents.set(id, tokenHash);
+      if (deniedAgents.size > 100) deniedAgents.delete(deniedAgents.keys().next().value!);
+    },
+    deniedAgentHash(id) {
+      return deniedAgents.get(id);
     },
   };
 }

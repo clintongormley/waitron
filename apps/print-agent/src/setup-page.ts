@@ -144,7 +144,7 @@ ${lastError}
     }
     case "unauthorized":
       return `<h1>Waitron print agent</h1>
-<p>This agent was denied or disabled. Save the box address below and approve the new join in the dashboard.</p>`;
+<p>This agent was disabled. Save the box address below and approve the new join in the dashboard.</p>`;
     case "unreachable": {
       const detail =
         status.lastError !== undefined

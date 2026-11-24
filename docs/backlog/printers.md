@@ -265,14 +265,6 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
   of 2026-10-16 put the «Comensales» field on the payment screen only; this records the gap
   without deciding whether Find a bill should ask too.
 
-## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
-
-A268 discards a waiting device's request when the last Add dialog closes. An agent told
-`not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
-the `not_approved` branch), so its request outlives a shut window instead. **Next action:** find a
-path, for example an agent that asks again on its own after a refusal, so agents follow the
-device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-design.md#4-pairing-on-the-server).
-
 ## One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still open
 
 - The paper-width dropdown names widths only, not printers, so two printers of one width at
@@ -453,8 +445,6 @@ Hardware and inbox checks to complete in the owner session.
   Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29; it waits for a
   device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
   Cloud over mobile data at once? [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
-- **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
-  [Detail](printers.md#a-print-agent-cannot-be-discarded-when-the-join-window-shuts-a269-owner-2026-10-04--open)
 
 ## Bundle: Guest count
 

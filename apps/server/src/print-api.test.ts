@@ -65,7 +65,8 @@ import { formatPrinterTestPage } from "./printer-test-page.js";
 import { readPrintedVenue } from "./receipt-print.js";
 import { opensDrawer, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
-import { createPairingMode } from "./pairing-mode.js";
+import { createPairingMode, type PairingMode } from "./pairing-mode.js";
+import { mountJoinApi } from "./join-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 import {
@@ -167,6 +168,7 @@ function mountApp(
     gate?: HandoverGate;
     stopping?: AbortSignal;
     pairingOpen?: boolean;
+    pairingMode?: PairingMode;
     enrolRateLimiter?: EnrolRateLimiter;
     venueLocale?: SupportedLocale;
     listIpv4?: () => string[];
@@ -178,7 +180,7 @@ function mountApp(
 ): Hono {
   const app = new Hono();
   if (opts.gate) app.use("*", opts.gate.middleware);
-  const pairingMode = createPairingMode();
+  const pairingMode = opts.pairingMode ?? createPairingMode();
   if (opts.pairingOpen ?? true) pairingMode.open();
   mountPrintApi(
     app,
@@ -420,6 +422,95 @@ describe("POST /print-api/agent/join (the knock)", () => {
     fakeNow += ENROL_RATE_WINDOW_MS + 1;
     const after = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
     expect(after.status).toBe(201);
+  });
+});
+
+describe("remote print agent pairing retries", () => {
+  it("discards a closed window’s request and allows a marked retry with its fresh number", async () => {
+    const mode = createPairingMode({ now: () => 0 });
+    const app = mountApp({ pairingOpen: false, pairingMode: mode });
+    mountJoinApi(app, { db: suite.db, cfg, pairingMode: mode, deviceAddress: "" }, noopLog);
+    const firstHold = mode.open();
+    const first = await knock(app, "Kitchen");
+    mode.release(firstHold.holdId);
+    mode.open();
+    const accept = (id: string, choice: string) =>
+      send(app, "POST", `/management-api/print-agent-join-requests/${id}/accept`, {
+        cookie: managerCookie,
+        body: { choice },
+      });
+    expect((await accept(first.joinId, first.verificationNumber)).status).toBe(404);
+    const poll = (bearer: string) => send(app, "GET", "/print-api/agent/join/status", { bearer });
+    expect(await (await poll(first.token)).json()).toEqual({ status: "not_approved" });
+
+    const denied = await knock(app, "Kitchen");
+    expect(
+      (
+        await send(app, "POST", `/management-api/join-requests/${denied.joinId}/deny`, {
+          cookie: managerCookie,
+          body: {},
+        })
+      ).status,
+    ).toBe(204);
+    expect(await (await poll(denied.token)).json()).toEqual({
+      status: "not_approved",
+      denied: true,
+    });
+    expect(await (await poll(`${denied.joinId}.wrong`)).json()).toEqual({ status: "not_approved" });
+
+    const retried = await send(app, "POST", "/print-api/agent/join", {
+      body: { name: "Kitchen", previouslyDenied: true },
+    });
+    expect(retried.status).toBe(201);
+    const { token, verificationNumber } = (await retried.json()) as {
+      token: string;
+      verificationNumber: string;
+    };
+    const retryId = token.split(".")[0]!;
+    const other = await knock(app, "Kitchen");
+    const rows = await send(app, "GET", "/management-api/join-requests?kind=print_agent", {
+      cookie: managerCookie,
+    });
+    expect(await rows.json()).toMatchObject([
+      { id: other.joinId },
+      { id: retryId, previouslyDenied: true },
+    ]);
+    expect((await accept(retryId, verificationNumber)).status).toBe(204);
+    expect(await (await poll(token)).json()).toEqual({ status: "approved" });
+  });
+
+  it("refuses admission if the pairing window reopens before the write", async () => {
+    const mode = createPairingMode({ now: () => 0 });
+    const app = mountApp({ pairingOpen: false, pairingMode: mode });
+    const first = mode.open();
+    const write = suite.db.withWriteLock.bind(suite.db);
+    const waiting = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce((body) => {
+      mode.release(first.holdId);
+      mode.open();
+      return write(body);
+    });
+    try {
+      const response = await send(app, "POST", "/print-api/agent/join", {
+        body: { name: "Kitchen" },
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: { code: "device.pairing_closed" } });
+      expect(await suite.db.select().from(joinRequests)).toEqual([]);
+    } finally {
+      waiting.mockRestore();
+    }
+  });
+
+  it("identifies a revoked approval only to its matching token", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
+      cookie: managerCookie,
+    });
+    expect(revoke.status).toBe(204);
+    const poll = (bearer: string) => send(app, "GET", "/print-api/agent/join/status", { bearer });
+    expect(await (await poll(token)).json()).toEqual({ status: "not_approved", revoked: true });
+    expect(await (await poll(`${agentId}.wrong`)).json()).toEqual({ status: "not_approved" });
   });
 });
 

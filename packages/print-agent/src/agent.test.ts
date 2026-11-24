@@ -216,7 +216,7 @@ describe("createAgent — phases", () => {
     expect(await host.token()).toBe("a1.s");
   });
 
-  it("have token, status not_approved (denied) → clears token, unauthorized, halts", async () => {
+  it("have token, status not_approved without a pending number → clears token, unauthorized, halts", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("not_approved")) });
     const agent = createAgent({ host, client: c });
@@ -229,20 +229,56 @@ describe("createAgent — phases", () => {
     expect(c.joinStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("a denial drops the persisted verification number so a restart shows no stale code", async () => {
-    const pinned = { ...CONFIG, environment: "preproduction" };
+  it("retries a denied pending request on elapsed time and carries the denial forward", async () => {
     const host = fakeHost({
-      config: { ...pinned, pendingVerificationNumber: "07" },
+      config: { ...CONFIG, environment: "preproduction", pendingVerificationNumber: "07" },
       token: "a1.s",
     });
-    const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("not_approved")) });
-    await createAgent({ host, client: c }).runOnce();
-    expect((await host.config())?.pendingVerificationNumber).toBeUndefined();
-    expect(await host.config()).toEqual(pinned);
-    expect(host.statuses.at(-1)).toMatchObject({
-      phase: "unauthorized",
-      verificationCode: undefined,
+    const join = vi
+      .fn()
+      .mockResolvedValueOnce(failR({ kind: "pairing_closed" }))
+      .mockResolvedValueOnce(okR({ token: "a2.s", verificationNumber: "42" }));
+    const c = client({
+      join,
+      joinStatus: vi.fn(async () => okR<JoinStatus>("denied")),
     });
+    let steady = 0;
+    const agent = createAgent({ host, client: c, steady: () => steady });
+    await agent.runOnce();
+    expect(await host.token()).toBeNull();
+    expect(await host.config()).toMatchObject({ previouslyDenied: true });
+    expect((await host.config())?.pendingVerificationNumber).toBeUndefined();
+    expect(agent.status).toMatchObject({ phase: "pairing_closed", verificationCode: undefined });
+
+    steady = 29_999;
+    await agent.runOnce();
+    expect(join).not.toHaveBeenCalled();
+    steady = 30_000;
+    await agent.runOnce();
+    expect(join).toHaveBeenCalledExactlyOnceWith(A, CONFIG.name, true);
+    steady = 59_999;
+    await agent.runOnce();
+    expect(join).toHaveBeenCalledTimes(1);
+    steady = 60_000;
+    await agent.runOnce();
+    expect(await host.token()).toBe("a2.s");
+    expect(agent.status).toMatchObject({ phase: "pending", verificationCode: "42" });
+    expect(c.pullJobs).not.toHaveBeenCalled();
+  });
+
+  it("halts a matching revoked agent even when its last saved number is still pending", async () => {
+    const host = fakeHost({
+      config: { ...CONFIG, pendingVerificationNumber: "07" },
+      token: "a1.s",
+    });
+    const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("revoked")) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(agent.status.phase).toBe("unauthorized");
+    expect(await host.token()).toBeNull();
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.pullJobs).not.toHaveBeenCalled();
   });
 
   it("status approved → pulls this same tick and reports running", async () => {

@@ -80,7 +80,11 @@ import {
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
-import { createJoinRequest, readAgentJoinStatus } from "./join-requests.js";
+import {
+  createJoinRequest,
+  discardLapsedAgentRequests,
+  readAgentJoinStatus,
+} from "./join-requests.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
@@ -817,13 +821,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // Rate limit, then the window, both before any DB work, so a flood on this unauthenticated route
       // creates no row.
       enrolLimiter.check();
-      if (!deps.pairingMode.isOpen()) {
-        throw new AppError("device.pairing_closed", {});
-      }
-      const body = await readJsonBody<{ name?: unknown }>(c);
+      const opening = deps.pairingMode.opening();
+      if (opening === null) throw new AppError("device.pairing_closed", {});
+      const body = await readJsonBody<{ name?: unknown; previouslyDenied?: unknown }>(c);
       const name = requireString(body.name, "name");
+      if (body.previouslyDenied !== undefined && typeof body.previouslyDenied !== "boolean")
+        throw new AppError("management.request_invalid", { field: "previouslyDenied" });
       const made = await withTransaction(deps.db, async (tx) => {
-        return createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
+        if (deps.pairingMode.opening() !== opening) throw new AppError("device.pairing_closed", {});
+        await discardLapsedAgentRequests(tx, deps.cfg, deps.pairingMode);
+        const request = await createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
+        deps.pairingMode.trackAgentRequest(opening, {
+          id: request.joinId,
+          createdAt: request.createdAt,
+          previouslyDenied: body.previouslyDenied === true,
+        });
+        return request;
       });
       // The joinId becomes the agent id on accept, so this Bearer works unchanged after approval. The
       // secret leaves the process only here.
@@ -843,7 +856,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const joinId = dot > 0 ? bearer.slice(0, dot) : "";
       const secret = dot > 0 ? bearer.slice(dot + 1) : "";
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
-      const status = await readAgentJoinStatus(deps.db, deps.cfg, joinId, secret);
+      const status = await readAgentJoinStatus(deps.db, deps.cfg, joinId, secret, deps.pairingMode);
+      if (status === "denied") return c.json({ status: "not_approved", denied: true });
+      if (status === "revoked") return c.json({ status: "not_approved", revoked: true });
       return c.json({ status });
     }),
   );

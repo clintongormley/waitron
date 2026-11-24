@@ -1045,6 +1045,8 @@ export interface JoinRequestRow {
   kind: "device" | "print_agent";
   label: string;
   createdAt: string;
+  /** Print agents only, when this request follows an explicit denial. */
+  previouslyDenied?: true;
   /** Device rows only: the manager whose number check claimed the request, if any. */
   pairingBy?: { name: string; mine: boolean } | null;
   /** Device rows only: set when the knock came from a disabled device's browser, which proved it is

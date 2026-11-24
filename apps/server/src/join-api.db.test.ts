@@ -84,9 +84,21 @@ async function errorOf(res: Response): Promise<ErrorBody["error"]> {
  *  REAL number so the accept tests can name a wrong one; the decoys stay random. */
 async function knock(
   venue: Venue,
-  input: { kind: JoinRequestKind; label: string; numbers?: () => number },
+  input: { kind: JoinRequestKind; label: string; numbers?: () => number; mode?: PairingMode },
 ): Promise<{ joinId: string; verificationNumber: string; token: string; createdAt: string }> {
-  return withTransaction(suite.db, (tx) => createJoinRequest(tx, venue.cfg, input));
+  return withTransaction(suite.db, async (tx) => {
+    const made = await createJoinRequest(tx, venue.cfg, input);
+    if (input.mode !== undefined) {
+      const opening = input.mode.opening();
+      if (opening === null) throw new Error("The agent test needs an open pairing window");
+      input.mode.trackAgentRequest(opening, {
+        id: made.joinId,
+        createdAt: made.createdAt,
+        previouslyDenied: false,
+      });
+    }
+    return made;
+  });
 }
 
 let profileCounter = 0;
@@ -430,9 +442,9 @@ describe("the join window's holds", () => {
 describe("GET /management-api/join-requests", () => {
   it("lists only the asked-for kind, and never the number", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     const device = await knock(venue, { kind: "device", label: "Bar till" });
-    await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
 
     const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.managerCookie,
@@ -454,8 +466,8 @@ describe("GET /management-api/join-requests", () => {
 
   it("lists only the requested print_agent kind for a hardware manager", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, mode } = openApp(venue.cfg);
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     await knock(venue, { kind: "device", label: "Bar till" });
 
     const res = await send(app, "GET", "/management-api/join-requests?kind=print_agent", {
@@ -522,8 +534,8 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
 
   it("takes its permission from the row's kind", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, mode } = openApp(venue.cfg);
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const ok = await send(app, "GET", `/management-api/join-requests/${agent.joinId}/challenge`, {
       cookie: venue.managerCookie,
     });
@@ -572,9 +584,9 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 
   it("a device's deny must name the ask; a print agent's needs no body", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const unnamed = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
       cookie: venue.managerCookie,
     });
@@ -596,8 +608,8 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 
   it("denies a print_agent request under hardware.manage", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, mode } = openApp(venue.cfg);
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const refused = await send(app, "POST", `/management-api/join-requests/${agent.joinId}/deny`, {
       cookie: venue.staffCookie,
     });
@@ -723,9 +735,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
 
   it("refuses a print_agent request with 404, which survives", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -906,8 +918,8 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("enrols the agent when the number matches, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, mode } = openApp(venue.cfg);
+    const made = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -927,9 +939,10 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("a wrong number is 400 device.join_mismatch, no print_agents row, and the request is gone on a FRESH retry", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     const made = await knock(venue, {
       kind: "print_agent",
+      mode,
       label: "Kitchen agent",
       numbers: () => 42,
     });
@@ -954,7 +967,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("this route 404s a DEVICE request, and the device accept route 404s a print_agent request (kind filtering)", async () => {
     const venue = await setupVenue(suite.db);
-    const { app } = openApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     const device = await knock(venue, { kind: "device", label: "Bar till" });
     // The print accept route cannot consume a device request.
     const asPrint = await send(
@@ -967,7 +980,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect((await errorOf(asPrint)).code).toBe("join_request.not_found");
 
     // The device accept route cannot consume a print_agent request (the mirror predicate).
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const profileId = await seedProfile("till");
     const asDevice = await send(
       app,
@@ -985,8 +998,8 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("needs hardware.manage — a staff session is 403 and the request survives", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, mode } = openApp(venue.cfg);
+    const made = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -1001,7 +1014,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
   it("is 404 for an unknown or malformed id, and screens a missing choice", async () => {
     const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
+    const { app, mode } = openApp(venue.cfg);
     for (const id of [randomUUID(), "not-a-uuid"]) {
       const res = await send(
         app,
@@ -1015,7 +1028,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       expect(res.status).toBe(404);
       expect((await errorOf(res)).code).toBe("join_request.not_found");
     }
-    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const made = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const noChoice = await send(
       app,
       "POST",
@@ -1393,21 +1406,21 @@ describe("device pairing: check, claim, approve", () => {
     expect((await errorOf(challenged)).code).toBe("join_request.not_found");
   });
 
-  it("keeps a print agent's request when the window shuts", async () => {
+  it("discards a print agent's request when the window shuts", async () => {
     const venue = await setupVenue(suite.db);
-    const { app, holdId } = await pairingApp(venue);
-    await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, holdId, mode } = await pairingApp(venue);
+    await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const released = await send(app, "DELETE", `/management-api/pairing-mode/holds/${holdId}`, {
       cookie: venue.managerCookie,
     });
     expect(released.status).toBe(204);
-    expect(await pendingCount()).toBe(1);
+    expect(await pendingCount()).toBe(0);
   });
 
   it("refuses a print agent's request on the check route 404, and leaves it", async () => {
     const venue = await setupVenue(suite.db);
-    const { app, holdId } = await pairingApp(venue);
-    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
+    const { app, holdId, mode } = await pairingApp(venue);
+    const agent = await knock(venue, { kind: "print_agent", mode, label: "Kitchen agent" });
     const wrong = agent.verificationNumber === "00" ? "01" : "00";
     const res = await check(app, venue.managerCookie, agent.joinId, { choice: wrong, holdId });
     expect(res.status).toBe(404);

@@ -103,6 +103,7 @@ describe("createContainerHost — config()", () => {
       name: "saved",
       environment: "production",
       pendingVerificationNumber: "07",
+      previouslyDenied: true,
       servers: [{ url: "https://standby", nodeId: "n2" }],
     });
     const host = createContainerHost({
@@ -115,6 +116,7 @@ describe("createContainerHost — config()", () => {
       name: "saved",
       environment: "production",
       pendingVerificationNumber: "07",
+      previouslyDenied: true,
       servers: [{ url: "https://standby", nodeId: "n2" }],
     });
   });

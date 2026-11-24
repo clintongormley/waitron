@@ -108,6 +108,8 @@ device and cannot be changed.
   its own setup page (`packages/print-agent/src/agent.ts`, the `not_approved` branch), so discarding
   its request when the window shuts would strand it. Its request survives a shut window, as now.
   Finding a way to apply the device rule to agents is A269.
+  Update, 2026-11-24. A269 discards an agent’s request when its pairing window closes. The agent asks
+  again and carries a previous denial into its next request.
 - **Dev mode is unchanged:** a knock is still accepted at once with the first `till` profile,
   without the window (`apps/server/src/device-api.ts`). `apps/server/scripts/dev-setup.ts` seeds its
   devices through `enrolDeviceForTest` (`apps/server/src/testing/enrol.ts`), which calls
