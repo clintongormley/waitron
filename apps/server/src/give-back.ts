@@ -1,5 +1,9 @@
 import { inArray } from "drizzle-orm";
-import { adjustmentRefunds, findAdjustmentReason } from "@waitron/adjustments";
+import {
+  adjustmentRefunds,
+  findAdjustmentReason,
+  listAdjustmentReasons,
+} from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import {
@@ -54,10 +58,48 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import "./errors.js";
 
+const reasonText = (name: string, note: string | null) =>
+  (note === null ? name : `${name}: ${note}`).slice(0, 500);
+
 async function reasonTextOf(tx: Transaction, ask: GiveBackWrite): Promise<string> {
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
-  return (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(0, 500);
+  return reasonText(reason.name, ask.note);
+}
+
+/**
+ * The reason text the press's rows were stored under, once `ask`'s reason and note are found to
+ * have written it; otherwise refuses `reused`. The rows hold only the text, so a reason renamed
+ * since is matched by the text alone: the note must be the one the text ends with and no reason
+ * may still bear the name before it, and then which reason it was is not checked. A name or a
+ * note holding ": " cannot be split from the text, so such a press is matched only while its
+ * reason keeps its name.
+ */
+async function storedReasonOf(
+  tx: Transaction,
+  ask: GiveBackWrite,
+  rows: readonly { reason: string }[],
+  reused: () => AppError,
+): Promise<string> {
+  const texts = new Set(rows.map((row) => row.reason));
+  if (texts.size !== 1) throw reused();
+  const [text] = [...texts] as [string];
+  const reasons = await listAdjustmentReasons(tx);
+  const writer = reasons.find((reason) => reasonText(reason.name, ask.note) === text);
+  if (writer !== undefined) {
+    if (writer.id !== ask.reasonId) throw reused();
+    return text;
+  }
+  const suffix = ask.note === null ? "" : `: ${ask.note}`;
+  const name = text.slice(0, text.length - suffix.length);
+  if (
+    text.length >= 500 ||
+    !text.endsWith(suffix) ||
+    name.includes(": ") ||
+    reasons.some((reason) => reason.name === name)
+  )
+    throw reused();
+  return text;
 }
 
 /** Whether any of `rows` is a reader card's refund, whose press writes its parts one at a time. */
@@ -91,7 +133,12 @@ async function checkResend(
         amountOf("extra") !== cents(ask.request.extra)
   )
     throw reused();
-  const reason = await reasonTextOf(tx, ask);
+  const reason = await storedReasonOf(
+    tx,
+    ask,
+    [...stored.refund, ...stored.extra, ...legs, ...(stored.correction ? [stored.correction] : [])],
+    reused,
+  );
   const kinds = new Set(ask.expected.map((part) => part.kind));
   if (
     (stored.refund.length > 0 &&
@@ -145,8 +192,7 @@ async function checkResend(
       const row = stored.correction!;
       if (
         row.gross !== part.amount ||
-        JSON.stringify([...(row.lineIds ?? [])].sort()) !== JSON.stringify(part.lineIds ?? []) ||
-        row.reason !== reason
+        JSON.stringify([...(row.lineIds ?? [])].sort()) !== JSON.stringify(part.lineIds ?? [])
       )
         throw new AppError("submission.id_reused", { submissionId: ask.ids.correction });
       continue;

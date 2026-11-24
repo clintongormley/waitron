@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { adjustments, createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
+import {
+  adjustments,
+  createAdjustmentReason,
+  listAdjustmentReasons,
+  updateAdjustmentReason,
+} from "@waitron/adjustments";
 import {
   deviceProfiles,
   devices,
@@ -2647,4 +2652,53 @@ describe("POST …/give-back: resends checked against the press's own fields", (
     expect(await give(saleId, body)).toEqual(first);
     expect(effects()).toEqual(after);
   });
+});
+
+describe("POST …/give-back: a resend after the reason is renamed", () => {
+  /** A reason of its own, named once, so renaming it touches no other test. */
+  async function ownReason(): Promise<{ id: string; name: string }> {
+    const name = `Goodwill ${randomUUID().slice(0, 8)}`;
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, { ...REASONS.house, name, names: { en: name } }),
+    );
+    return { id: reason.id, name };
+  }
+  const rename = (id: string, name: string) =>
+    inTx(venue, (tx) =>
+      updateAdjustmentReason(tx, id, { ...REASONS.house, name, names: { en: name } }),
+    );
+
+  for (const [label, request, paid] of [
+    ["the extra alone", ask("extra", "3.00"), "3.00"],
+    ["a goodwill correction", ask("goodwill", "3.00"), "0.00"],
+  ] as const)
+    it(`answers an identical resend of ${label} in cash as its first send once the reason is renamed; refuses another reason while the first keeps its name, and another note after`, async () => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ cash: "34.00" }], paid);
+      const reason = await ownReason();
+      const other = await ownReason();
+      const body = { ...(await giveBody(saleId, request)), reasonId: reason.id };
+      const first = await give(saleId, body);
+      expect(first.status, JSON.stringify(first.json)).toBe(200);
+      expect(await give(saleId, body)).toEqual(first);
+      const after = effects();
+      expectRefusedUnwritten(
+        await give(saleId, { ...body, reasonId: other.id }),
+        "submission.id_reused",
+        after,
+      );
+      await rename(reason.id, `${reason.name} renamed`);
+      expect(await give(saleId, body)).toEqual(first);
+      expect(effects()).toEqual(after);
+      expectRefusedUnwritten(
+        await give(saleId, { ...body, note: "Too salty" }),
+        "submission.id_reused",
+        after,
+      );
+      expectRefusedUnwritten(
+        await give(saleId, { ...body, note: null }),
+        "submission.id_reused",
+        after,
+      );
+    });
 });

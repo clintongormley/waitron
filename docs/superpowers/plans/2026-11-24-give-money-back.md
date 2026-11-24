@@ -356,7 +356,10 @@ manualConfirmed?, override? }`. In this order:
 2. **A resend answers, never re-routes:** if any of the submission ids already has a `refunds` or
    `invoice_corrections` row on this sale, the route answers from the stored rows (checking each
    row's fingerprint, as today's replays do) and writes nothing. It is authorized as its first send
-   was, from the same body.
+   was, from the same body. The rows keep the reason only as text, so the resend's reason is
+   checked against that text, never against today's settings: a reason renamed since still matches
+   an identical resend, but once no reason bears the stored name, which reason the resend names is
+   not checked (the note still is).
 3. Otherwise it plans again and refuses `give_back.changed` (409) when the parts differ from
    `expected` (what the preview showed). Then it writes (5.3).
 
