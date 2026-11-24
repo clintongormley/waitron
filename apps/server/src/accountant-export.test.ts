@@ -1723,7 +1723,9 @@ describe("refunds without a corrective invoice", () => {
       expect(row(xml, 2)).toEqual(words.refundColumns);
       expect(row(xml, 2)).toHaveLength(15);
       expect(row(xml, 2)[10]).toBe(
-        language === "en" ? "Customer on the invoice" : "Cliente de la factura",
+        language === "en"
+          ? "Customer on the invoice"
+          : ACCOUNTANT_EXPORT_WORDS.es.refundColumns[10],
       );
       const card = words.paymentMethods.card;
       const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
