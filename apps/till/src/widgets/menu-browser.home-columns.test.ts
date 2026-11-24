@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
-import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -69,7 +70,7 @@ it.each(cases)(
         unit: {
           staffName: "Staff unit",
           staffAbbreviation: "su",
-          id: "unit-each",
+          id: EACH_UNIT_ID,
           name: { es: "unidad" },
           abbreviation: { es: "ud" },
           precision: 0,
@@ -81,6 +82,24 @@ it.each(cases)(
         allergens: null,
         image: "photo.svg",
         color: "#256bb1",
+      }));
+      const measured = products[2]!;
+      measured.unit = {
+        id: "unit-kg",
+        staffName: "Kilogram",
+        staffAbbreviation: "kg",
+        name: { es: "kg" },
+        abbreviation: { es: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      };
+      measured.variants = ["12.50", "85.00"].map((unitPrice, index) => ({
+        ...sellingValuesOf(measured),
+        id: `v${index}`,
+        name: `Size ${index}`,
+        unitPrice,
+        unitPriceDifference: null,
+        available: true,
       }));
       const members = products.map((product) => ({
         kind: "product" as const,
@@ -167,6 +186,9 @@ it.each(cases)(
           }
         }
       }
+      expect([...grid.querySelectorAll(".price")].map((price) => price.textContent)).toContain(
+        "12,50\u00a0€–85,00\u00a0€/kg",
+      );
       expect(grid.querySelector('[data-kind="section"] wt-icon')).not.toBeNull();
       if (width === 360 && columns === 3) await expectNoA11yViolations(host);
     } finally {

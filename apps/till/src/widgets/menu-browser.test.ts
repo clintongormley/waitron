@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney, HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shared";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -17,7 +18,7 @@ import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/cli
 const EACH = {
   staffName: "Staff unit",
   staffAbbreviation: "su",
-  id: "unit-each",
+  id: EACH_UNIT_ID,
   name: { es: "unidad", en: "each" },
   abbreviation: { es: "ud", en: "ea" },
   precision: 0,
@@ -889,6 +890,20 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "structure"))).toContain("Agua");
     });
 
+    it("shows a variant price range on a product tile", async () => {
+      const glass = wine.variants![0]!;
+      const product = {
+        ...wine,
+        variants: [glass, { ...glass, id: "v-bottle", name: "Bottle", unitPrice: "9.00" }],
+      };
+      const { el } = await mount({ products: [product] });
+      await tap(el, entry(el, "structure", "Comida (ES)"));
+      const price = entry(el, "section", "Vino").querySelector(".price")!.textContent;
+      expect(price).toBe(
+        `${formatMoney("3.00", currentLocale())}–${formatMoney("9.00", currentLocale())}`,
+      );
+    });
+
     it("lists the menu's top level in the structure, sections and products in order", async () => {
       const { el } = await mount();
       expect(names(entries(el, "structure"))).toEqual([
@@ -907,7 +922,7 @@ describe("till-menu-browser", () => {
       ]);
     });
 
-    it("tells a section from a product by text and an icon, not colour alone", async () => {
+    it("distinguishes a section from a product by its folder and accessible name", async () => {
       const { el } = await mount();
       const sectionEntry = entry(el, "shortcuts", "Drinks (EN)");
       const productEntry = entry(el, "shortcuts", "Café");
@@ -915,11 +930,14 @@ describe("till-menu-browser", () => {
       expect(icon.getAttribute("name")).toBe("menu-section");
       await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       expect(icon.shadowRoot!.querySelector("svg path")).not.toBeNull();
-      expect(sectionEntry.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+      await expect
+        .element(page.elementLocator(sectionEntry.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleName("Drinks (EN) Section");
+      expect(sectionEntry.querySelector(".kind")).toBeNull();
       expect(productEntry.querySelector("wt-icon")).toBeNull();
       expect(productEntry.querySelector(".kind")).toBeNull();
       expect(productEntry.querySelector(".price")!.textContent).toBe(
-        `${formatMoney("1.50", currentLocale())}/ea`,
+        `${formatMoney("1.50", currentLocale())}`,
       );
     });
 
@@ -1218,8 +1236,11 @@ describe("till-menu-browser", () => {
             `/media/renditions/v1/${mediaTestReference("drinks.webp")}/till/7500-2500-200.webp`,
           ),
         );
-        expect(sectionTile.querySelector("wt-icon")).toBeNull();
-        expect(sectionTile.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+        const folder = sectionTile.querySelector('wt-icon[name="menu-section"]')!;
+        expect(folder?.parentElement?.contains(image(sectionTile))).toBe(true);
+        await expect
+          .element(page.elementLocator(sectionTile.shadowRoot!.querySelector("button")!))
+          .toHaveAccessibleName("Pictured (EN) Section");
 
         const colours = await mount({
           menu: tiled({ tiles: "colours" }),
@@ -1244,7 +1265,7 @@ describe("till-menu-browser", () => {
         expect(tile.hasAttribute("style")).toBe(false);
         expect(tile.querySelector(".name")!.textContent!.trim()).toBe("Bare");
         expect(tile.querySelector(".price")!.textContent).toBe(
-          `${formatMoney("1.50", currentLocale())}/ea`,
+          `${formatMoney("1.50", currentLocale())}`,
         );
       });
 
@@ -1309,7 +1330,7 @@ describe("till-menu-browser", () => {
           unit: {
             staffName: "Staff unit",
             staffAbbreviation: "su",
-            id: "unit-each",
+            id: "unit-piece",
             name: { fr: "pièce", en: "each" },
             abbreviation: { fr: "pc", en: "ea" },
             precision: 0,
@@ -1514,9 +1535,10 @@ describe("till-menu-browser", () => {
         "Comida (ES)",
         "plain-internal",
       ]);
-      expect(
-        entry(el, "structure", "Bebidas (ES)").querySelector(".kind")!.textContent!.trim(),
-      ).toBe("Sección");
+      const button = entry(el, "structure", "Bebidas (ES)").shadowRoot!.querySelector("button")!;
+      await expect
+        .element(page.elementLocator(button))
+        .toHaveAccessibleName("Bebidas (ES) Sección");
       await tap(el, entry(el, "structure", "Bebidas (ES)"));
       expect(breadcrumb(el)).toBe("Inicio › Bebidas (ES)");
     });
@@ -1858,10 +1880,10 @@ describe("till-menu-browser", () => {
       ]);
       const price = (tile: Button) => tile.querySelector(".price")!.textContent;
       expect(price(groupEntry(el, "menu-lunch", "Cola"))).toBe(
-        `${formatMoney("1.50", currentLocale())}/ea`,
+        `${formatMoney("1.50", currentLocale())}`,
       );
       expect(price(groupEntry(el, "menu-drinks", "Cola"))).toBe(
-        `${formatMoney("2.20", currentLocale())}/ea`,
+        `${formatMoney("2.20", currentLocale())}`,
       );
       await tap(el, groupEntry(el, "menu-drinks", "Cola"));
       expect(store.lines).toHaveLength(1);
@@ -2455,14 +2477,19 @@ describe("till-menu-browser", () => {
         expect(readings.filter(({ seen }) => seen < 4.5)).toEqual([]);
       });
 
-      it("paints a coloured section's tile and its Section label", async () => {
+      it("paints a coloured section's tile, folder and filter notice", async () => {
         const el = await mountPainted(theme);
         const tile = entry(el, "structure", "Red (EN)");
         expect(background(tile)).toBe("rgb(177, 37, 37)");
         expect(ink(tile, ".name")).toBe(WHITE);
-        expect(ink(tile, ".kind")).toBe(WHITE);
         const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
         expect(getComputedStyle(icon).fill).toBe(WHITE);
+        el.products = painted.filter((product) => product !== inside);
+        el.unfilteredProducts = painted;
+        await el.updateComplete;
+        const filtered = entry(el, "structure", "Red (EN)");
+        expect(filtered.querySelector(".kind")!.textContent).toBe("Nothing matches the filter");
+        expect(ink(filtered, ".kind")).toBe(WHITE);
       });
 
       it("draws a null, a missing and a malformed colour neutral", async () => {
@@ -3535,10 +3562,13 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
 
 describe("Spanish pricing-unit labels", () => {
   it.each([
-    { unit: EACH, label: "ud" },
-    { unit: { ...EACH, name: { en: "Each" }, abbreviation: { en: "ea" } }, label: "ea" },
-    { unit: undefined, label: "ud" },
-  ])("shows /$label on the dish tile without exposing a unit id", async ({ unit, label }) => {
+    { unit: { ...EACH, id: "unit-piece" }, suffix: "/ud" },
+    {
+      unit: { ...EACH, id: "unit-serving", name: { en: "Serving" }, abbreviation: { en: "ea" } },
+      suffix: "/ea",
+    },
+    { unit: undefined, suffix: "" },
+  ])("shows a localised price with suffix '$suffix'", async ({ unit, suffix }) => {
     setLocale("es-ES");
     setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
     const dish = product("cafe", "Café", { unit, pricingUnit: "each" });
@@ -3547,7 +3577,7 @@ describe("Spanish pricing-unit labels", () => {
       products: [dish],
     });
     const price = entry(el, "structure", "Café").querySelector(".price")!.textContent;
-    expect(price).toBe(`1,50\u00a0€/${label}`);
+    expect(price).toBe(`1,50\u00a0€${suffix}`);
     expect(price).not.toMatch(/[0-9a-f]{8}-[0-9a-f-]{27}/i);
   });
 });

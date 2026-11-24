@@ -571,9 +571,11 @@ offer 2–3 columns and till settings 4–10. The handheld grid and its preview 
 own phone-width padding; narrower grids keep the same reading order. In Colours
 mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
 4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
-Colours mode, or neutral. A section tile always has a second line under its name — "Section", or
-on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
-differ without colour; its image, when shown, takes the folder icon's place.
+Colours mode, or neutral. A folder identifies a section and sits on a badge when the tile has a
+photo. The accessible name includes "Section". On the till, a section emptied by a diet filter
+still shows "Nothing matches the filter". A product tile shows its menu price or the range of its
+variant prices, with one amount when they are equal. It appends the unit once for units other
+than Each.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
 The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the

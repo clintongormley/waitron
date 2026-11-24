@@ -336,6 +336,8 @@ set menu to the tills. Each later edit reaches the tills when you publish the fu
 ## Check the menu's home page {#menu-home}
 
 Open a menu's **Home page** tab to arrange its shortcuts and choose its tile layout.
+Look for the folder icon to open a section in the preview. On a product tile, a range shows the
+prices of its variants. You see a unit on prices such as €89.00/kg.
 Choose **Till** to check the **Table order preview**: it represents a till as wide as the frame,
 with space reserved for the order. Use it to judge how many columns fit beside the order.
 At narrower widths, the menu takes the full frame, as it does when the till shows Menu on its own.

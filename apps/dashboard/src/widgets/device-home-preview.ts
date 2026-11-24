@@ -1,3 +1,4 @@
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import {
@@ -30,7 +31,6 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import {
   foldForSearch,
-  formatMoney,
   searchFor,
   HOME_GRID_COLUMNS,
   arrangeHome,
@@ -39,6 +39,7 @@ import {
   sectionTrail,
   shownMembers,
   tileFill,
+  tilePrice,
   tilePaths,
   type HomeIndex,
   type SectionStep,
@@ -210,8 +211,7 @@ export class DeviceHomePreview extends LitElement {
 
       .note,
       .empty,
-      .price,
-      .kind {
+      .price {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -249,6 +249,25 @@ export class DeviceHomePreview extends LitElement {
         aspect-ratio: 4 / 3;
         object-fit: cover;
         border-radius: var(--wt-radius-sm);
+      }
+
+      .section-photo {
+        position: relative;
+        width: 100%;
+      }
+
+      wt-icon.folder-badge {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-start: var(--wt-space-1);
+        padding: var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+      }
+
+      .section-kind {
+        ${visuallyHiddenStyles}
       }
 
       .tile,
@@ -304,7 +323,6 @@ export class DeviceHomePreview extends LitElement {
       }
 
       .tile[data-painted] .price,
-      .tile[data-painted] .kind,
       .tile[data-painted] wt-icon {
         color: inherit;
       }
@@ -812,12 +830,12 @@ export class DeviceHomePreview extends LitElement {
   }
 
   #productTile(offer: FrozenOffer, mode: HomeTileMode): TemplateResult {
-    const unit = unitPresentation(
-      offer.unit,
-      currentLocale(),
-      currentContentLanguages(),
-    ).abbreviation;
-    const price = `${formatMoney(offer.unitPrice, currentLocale())}/${unit}`;
+    const locale = currentLocale();
+    const unit =
+      offer.unit.id === EACH_UNIT_ID
+        ? ""
+        : unitPresentation(offer.unit, locale, currentContentLanguages()).abbreviation;
+    const price = tilePrice(offer.unitPrice, offer.variants, unit, locale);
     const fill = tileFill(mode, offer.image, offer.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<div
@@ -847,9 +865,16 @@ export class DeviceHomePreview extends LitElement {
       }}
     >
       <span class="label">
-        ${fill.kind === "image" ? thumb(fill.image) : html`<wt-icon name="folder"></wt-icon>`}
+        ${
+          fill.kind === "image"
+            ? html`<span class="section-photo">
+                ${thumb(fill.image)}
+                <wt-icon class="folder-badge" name="folder" aria-hidden="true"></wt-icon>
+              </span>`
+            : html`<wt-icon name="folder" aria-hidden="true"></wt-icon>`
+        }
         <span class="name">${this.#sectionName(section)}</span>
-        <span class="kind">${t("home.tile_section")}</span>
+        <span class="section-kind">${t("home.tile_section")}</span>
       </span>
     </wt-button>`;
   }

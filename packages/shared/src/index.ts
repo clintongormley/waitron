@@ -343,6 +343,7 @@ export {
 export {
   resolveMenuText,
   menuPriceRange,
+  tilePrice,
   type MenuView,
   type MenuText,
 } from "./menu-document/customer-menu-presentation.js";

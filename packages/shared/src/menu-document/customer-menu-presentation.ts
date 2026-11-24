@@ -3,8 +3,9 @@ import {
   contentLanguageTag,
   type ContentLanguages,
 } from "../content-languages.js";
+import { formatMoney } from "../money-format.js";
 import { compareDecimal, decimal } from "../money.js";
-import type { FrozenOffer } from "./menu-document-types.js";
+import type { FrozenOfferVariant } from "./menu-document-types.js";
 
 export type MenuView = { kind: "internal" } | { kind: "customer"; language: string };
 export interface MenuText {
@@ -58,7 +59,10 @@ export function resolveMenuText(
   return { text: "", origin: "missing", language: null, missingRequested: true };
 }
 
-export function menuPriceRange(offer: FrozenOffer): { min: string; max: string } {
+export function menuPriceRange(offer: {
+  unitPrice: string;
+  variants: readonly Pick<FrozenOfferVariant, "unitPrice">[];
+}): { min: string; max: string } {
   const prices =
     offer.variants.length === 0
       ? [offer.unitPrice]
@@ -70,4 +74,16 @@ export function menuPriceRange(offer: FrozenOffer): { min: string; max: string }
     if (compareDecimal(decimal(price), decimal(max)) > 0) max = price;
   }
   return { min, max };
+}
+
+export function tilePrice(
+  unitPrice: string,
+  variants: readonly Pick<FrozenOfferVariant, "unitPrice">[],
+  unit: string,
+  locale: string,
+): string {
+  const { min, max } = menuPriceRange({ unitPrice, variants });
+  const low = formatMoney(min, locale);
+  const price = min === max ? low : `${low}–${formatMoney(max, locale)}`;
+  return unit === "" ? price : `${price}/${unit}`;
 }

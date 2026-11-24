@@ -393,14 +393,31 @@ describe("dashboard-device-home-preview", () => {
     expect(frame(el).textContent).toContain("Table order preview");
   });
 
-  it("shows a product's staff name and its price with its unit, as the till does", async () => {
+  it("shows a product's staff name and a unit only when the price needs one", async () => {
     const { el } = await mount();
     const lemonade = tile(el, "structure", "Lemonade");
     expect(lemonade.querySelector(".price")!.textContent!.trim()).toBe(
-      `${formatMoney("2.50", currentLocale())}/ea`,
+      formatMoney("2.50", currentLocale()),
     );
     expect(tile(el, "structure", "Ham").querySelector(".price")!.textContent!.trim()).toBe(
       `${formatMoney("3.00", currentLocale())}/kg`,
+    );
+  });
+
+  it("shows the range of the variants' menu prices", async () => {
+    const document = lunch();
+    const offer = document.offers["mi-lemonade"]!;
+    offer.variants = ["3.00", "5.00"].map((unitPrice, index) => ({
+      ...offer,
+      id: `size-${index}`,
+      name: `Size ${index}`,
+      unitPrice,
+      menuPrice: unitPrice,
+      pricingUnit: "each",
+    }));
+    const { el } = await mount({ document });
+    expect(tile(el, "structure", "Lemonade").querySelector(".price")!.textContent).toBe(
+      `${formatMoney("3.00", currentLocale())}–${formatMoney("5.00", currentLocale())}`,
     );
   });
 
@@ -408,6 +425,7 @@ describe("dashboard-device-home-preview", () => {
     const document = lunch();
     document.offers["mi-water"]!.unit = {
       ...document.offers["mi-water"]!.unit,
+      id: "unit-serving",
       abbreviation: {},
     };
     const { el } = await mount({ document });
@@ -427,7 +445,8 @@ describe("dashboard-device-home-preview", () => {
       expect(image(section)).toBeNull();
       expect(section.hasAttribute("data-painted")).toBe(true);
       expect(fillOf(section)).toBe("rgb(177, 37, 37)");
-      expect(section.querySelector(".kind")!.textContent!.trim()).toBe("Section");
+      expect(section.querySelector('wt-icon[name="folder"]')).not.toBeNull();
+      expect(section.querySelector(".kind")).toBeNull();
       const water = tile(el, "structure", "Water");
       expect(water.hasAttribute("data-painted")).toBe(false);
     });
@@ -459,9 +478,11 @@ describe("dashboard-device-home-preview", () => {
         ),
       );
       expect(section.hasAttribute("data-painted")).toBe(false);
-      expect(section.querySelector(".kind")!.textContent!.trim()).toBe("Section");
-      // The thumbnail takes the folder icon's place.
-      expect(section.querySelector("wt-icon")).toBeNull();
+      const folder = section.querySelector('wt-icon[name="folder"]')!;
+      expect(folder?.parentElement?.contains(image(section))).toBe(true);
+      await expect
+        .element(page.elementLocator(section.shadowRoot!.querySelector("button")!))
+        .toHaveAccessibleName("Drinks para clientes Section");
     });
 
     it("draws a product with neither image nor colour neutral in Thumbnails mode, name and price shown", async () => {
@@ -472,7 +493,7 @@ describe("dashboard-device-home-preview", () => {
       expect(water.hasAttribute("style")).toBe(false);
       expect(water.querySelector(".name")!.textContent!.trim()).toBe("Water");
       expect(water.querySelector(".price")!.textContent!.trim()).toBe(
-        `${formatMoney("3.00", currentLocale())}/ea`,
+        formatMoney("3.00", currentLocale()),
       );
     });
 
@@ -1647,6 +1668,7 @@ it("keeps the staff unit abbreviation on a menu preview tile with empty customer
   const document = lunch();
   document.offers["mi-water"]!.unit = {
     ...document.offers["mi-water"]!.unit,
+    id: "unit-serving",
     staffName: "Staff serving",
     staffAbbreviation: "ss",
     name: {},
