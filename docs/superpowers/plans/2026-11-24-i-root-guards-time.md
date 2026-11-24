@@ -3,38 +3,33 @@
 Get the root guard results back in about four minutes while running every case and enforcing the
 existing 98/98/98/95 root coverage thresholds.
 
-| Run (attempt 1) | Runner | Job / Vitest step / checkout |
-| --- | --- | --- |
-| [45417839560](https://github.com/clintongormley/waitron/actions/runs/45417839560), file-size guard on main | GitHub | 260 / 230 / 11 s |
-| [45415535862](https://github.com/clintongormley/waitron/actions/runs/45415535862), file-size guard PR | Server | 216 / 186 / 12 s |
-| [45418943035](https://github.com/clintongormley/waitron/actions/runs/45418943035), subsequent main | Server | 220 / 180 / 11 s |
+After the file-size guard, the watcher read 54 successful jobs on 24 November. GitHub took
+246–275 s on the faster runners and 339–372 s on the slower ones. The server took 198–277 s, with
+15 of 47 jobs over 240 s. Slow GitHub [job 138541017574](https://github.com/clintongormley/waitron/actions/runs/45421132097/job/138541017574)
+took 372 s, with 335 s in the test step and 755 s summed across test files. The seven-file split
+is estimated to put both jobs near 240 s on that runner speed. Measure their actual times in CI.
 
-Checkout puts those runs outside the ten-second qualification cutoff. Earlier qualified PRs
-[45368398364](https://github.com/clintongormley/waitron/actions/runs/45368398364) and
-[45388224759](https://github.com/clintongormley/waitron/actions/runs/45388224759) took 259 and 205 s.
-The file-size guard took 90 ms on GitHub. The `waitron-sh`, `pre-push`, `tunnel-container` and
-`ci-setup-pnpm` suites took 195 s of the combined 549 s of file time. Replaying the cold Vitest order
-with three workers puts the remaining tests at 120 s of execution and the four process suites at
-91 s, before import, coverage and setup.
-Vitest listed 220 and 4 files with those filters, exactly the 224 in the unfiltered list.
+1. Run the unfiltered root coverage twice at the same source and compare per-file covered and
+   total counts with a third run that excludes `waitron-sh`, `pre-push`, `tunnel-container`,
+   `ci-setup-pnpm`, `waitron-box-sh`, `personal-log-params` and `deploy-image-env`. Require passing thresholds and take any difference beyond the control runs to the watcher.
+2. In `.github/workflows/ci.yml`, keep `root-guards` under its existing name, condition,
+   routing and full-history checkout. Run the rest of the root project there with coverage. Run
+   the seven suites on `ubuntu-latest` in `root-process-guards`, which uses the same job condition
+   and the standard bounded setup. Use one workflow list for both commands, add the second job
+   to `ci.needs`, and keep both jobs independent. The published server controller expects the
+   original root job name and refuses a second root label.
+3. In `scripts/ci-workflow.test.mjs`, run both extracted check commands against a pnpm stub,
+   check every named file exists, and require coverage only on the first job. Extend the existing
+   failure and cancellation checks for the new job and retain the full-history checkout checks.
+   Record the red run before editing the workflow. Expect about 65 workflow lines and 35 test
+   lines added, with no new scripts or test support.
+4. On the current PR head, check both jobs’ file and case totals against the baseline, allowing
+   the new workflow cases, and read the root coverage result. Record both job times, elapsed time
+   from first start to last finish and queue waits. Compare hosted runs at the same speed, using
+   Vitest’s file times. Seek a gain of at least 20 s and both jobs within 240 s on slow GitHub
+   runners. Report server timings separately. Check for GitHub incidents and failed downloads,
+   and report checkout duration. Bring a missed target to the watcher. Update the CI guide and
+   the existing CI routing qualification backlog with the second job’s server dependency.
 
-1. Before editing the workflow, compare the root coverage JSON counts per file with and without
-   those four suites, at the same source and with the current thresholds. Require identical covered
-   and total counts and the same passing thresholds. Take a difference to the watcher before building.
-2. In `.github/workflows/ci.yml`, use one `root-guards` matrix with legs 1 and 2 and retain the
-   current condition and full-history checkout. Derive leg 1's exclusions and leg 2's positional
-   arguments from one list in the job. Leg 1 runs the rest of root Vitest with full root coverage.
-   Leg 2 runs the four process suites. Keep `ci` depending on the matrix and update the planner and
-   watchdog family to two indexed jobs. This adds one runner per run and uses one more server slot
-   when available. Root coverage is still produced in one job.
-3. In `scripts/ci-workflow.test.mjs`, make the existing root job guard exercise both commands
-   against a pnpm stub. Pin complementary arguments, coverage on leg 1, the required matrix,
-   both routing indices and the failed-classifier and server-probe paths. Keep both full-history
-   checkout checks. Record the red run first, finish with the focused file and cite changed guards
-   in the PR. Estimate 20–30 added workflow lines and 35–50 added test lines, with no test support.
-4. Compare the current PR head's test files and case counts with the baseline, allowing the named
-   new workflow cases. Check the root coverage result. Report both job times and the elapsed time
-   from first start to last finish, including waits. Seek qualified hosted evidence of at least a
-   20 s improvement and completion within 240 s, with server timings reported separately. Check
-   checkout, download errors and GitHub incident history. Take a missed target to the watcher.
-   Update the CI guide and CI timing pointer in the backlog with the measured result.
+Claude reviewed the split on 24 November. The watcher cleared it at 16:14 with seven suites, two
+coverage controls and the slower GitHub timing target, then cleared the hosted second job at 16:29.
