@@ -886,8 +886,7 @@ async function readStoredGiveBack(
         eq(refundRows.saleId, saleId),
         inArray(refundRows.submissionId, [...idsOfPart(ids.refund), ...idsOfPart(ids.extra)]),
       ),
-    )
-    .orderBy(asc(refundRows.createdAt), asc(refundRows.id));
+    );
   const [correction] = await tx
     .select()
     .from(invoiceCorrections)
@@ -898,9 +897,13 @@ async function readStoredGiveBack(
       ),
     );
   if (rows.length === 0 && correction === undefined) return undefined;
+  // In payment order: a part's refunds share one time, and its `index`th refund is on the
+  // `index`th payment it took money from.
   const of = (submissionId: string) => {
-    const own = new Set(idsOfPart(submissionId));
-    return rows.filter((row) => own.has(row.submissionId!));
+    const own = idsOfPart(submissionId);
+    return rows
+      .filter((row) => own.includes(row.submissionId!))
+      .sort((a, b) => own.indexOf(a.submissionId!) - own.indexOf(b.submissionId!));
   };
   return { refund: of(ids.refund), extra: of(ids.extra), correction };
 }

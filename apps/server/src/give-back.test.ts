@@ -231,12 +231,13 @@ async function tab(
   };
 }
 
-type Part = { cash: string } | { card: string } | { reader: string };
+/** `tip`, when given, is that payment's own extra in place of the first payment's `tip`. */
+type Part = ({ cash: string } | { card: string } | { reader: string }) & { tip?: string };
 
 /** Pays the bill in `parts`, the first carrying `tip`; answers the sale. */
 async function pay(b: Tab, parts: readonly Part[], tip = "0.00") {
   for (const [index, part] of parts.entries()) {
-    const partTip = index === 0 ? tip : "0.00";
+    const partTip = part.tip ?? (index === 0 ? tip : "0.00");
     const amount = "cash" in part ? part.cash : "card" in part ? part.card : part.reader;
     const withTip = centsToDecimal(
       decimalToCents(decimal(amount)) + decimalToCents(decimal(partTip)),
@@ -1284,9 +1285,18 @@ describe("POST …/give-back in cash", () => {
     onTestFinished(() => {
       filingFault.armed = false;
     });
-    const answer = await give(saleId, body);
+    const logged: unknown[][] = [];
+    const answer = await give(
+      saleId,
+      body,
+      adminCookie,
+      venue.appWith({ log: (...line: unknown[]) => void logged.push(line) }),
+    );
     expect(filingFault.armed).toBe(false);
-    expect(answer.status).toBe(500);
+    // The boundary answers an error that is not a refusal as `server.internal` and logs it under
+    // the route's tag.
+    expect(answer).toEqual({ status: 500, json: { code: "server.internal" } });
+    expect(logged).toContainEqual(["error", "give_back.failed", expect.anything()]);
     expect(effects()).toEqual(before);
   });
 
@@ -1308,7 +1318,7 @@ describe("POST …/give-back in cash", () => {
       expected: [{ kind: "correction", amount: "9.00", way: "cash", lineIds: [] }],
     });
     expect(changed.status).toBe(409);
-    expect(changed.json).toMatchObject({ code: "give_back.changed" });
+    expectRefusedUnwritten(changed, "give_back.changed", before);
   });
 
   it("answers a resend with its first result, writing nothing and opening no drawer, and refuses the same ids with another amount (I1)", async () => {
@@ -1371,5 +1381,79 @@ describe("POST …/give-back in cash", () => {
     const answer = await give(saleId, body, otherDevice);
     expect(answer).toEqual({ status: 401, json: { code: "device.unauthorized", params: {} } });
     expect(effects()).toEqual(before);
+  });
+
+  it("splits the cancelled paella and the extra over two cash payments, oldest first, opening the drawer once, and a resend writes nothing", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [
+      { cash: "10.00", tip: "1.00" },
+      { cash: "24.00", tip: "2.00" },
+    ]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const [firstCash, secondCash] = [
+      await tenderOf(saleId, "cash"),
+      await tenderOf(saleId, "cash", 1),
+    ];
+    const paella = [lineOf(await read(saleId), "Paella").id];
+    const before = effects();
+    const body = await giveBody(saleId, ask("dishes", "18.50", { lineIds: paella, extra: "2.50" }));
+    expect(body.expected).toEqual([
+      { kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] },
+      { kind: "extra", amount: "2.50", way: "cash" },
+    ]);
+    const first = await give(saleId, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(first.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "extra", amount: "2.50", state: "completed" },
+      ],
+      refusal: null,
+      underWay: null,
+      rest: null,
+    });
+    const written = await venue.db
+      .select()
+      .from(refunds)
+      .where(eq(refunds.saleId, saleId))
+      .orderBy(asc(refunds.appliedAmount), asc(refunds.tipAmount));
+    const moved = written.map((row) => ({
+      tenderId: row.tenderId,
+      applied: row.appliedAmount,
+      tip: row.tipAmount,
+      state: row.state,
+    }));
+    expect(moved).toEqual(
+      expect.arrayContaining([
+        { tenderId: firstCash, applied: 1000, tip: 0, state: "completed" },
+        { tenderId: secondCash, applied: 850, tip: 0, state: "completed" },
+        { tenderId: firstCash, applied: 0, tip: 100, state: "completed" },
+        { tenderId: secondCash, applied: 0, tip: 150, state: "completed" },
+      ]),
+    );
+    expect(moved).toHaveLength(4);
+    const parts = (first.json as { parts: { refundId: string }[] }).parts;
+    const tenderOfRefund = (id: string) => written.find((row) => row.id === id)!.tenderId;
+    expect(parts.map((part) => tenderOfRefund(part.refundId))).toEqual([firstCash, firstCash]);
+    const links = await venue.db.all<{ refund_id: string; adjustment_id: string; amount: number }>(
+      sql`select refund_id, adjustment_id, amount from adjustment_refunds where adjustment_id = ${cancelId}`,
+    );
+    expect(links.reduce((sum, link) => sum + link.amount, 0)).toBe(1850);
+    for (const row of written.filter((refund) => refund.appliedAmount > 0))
+      expect(links.find((link) => link.refund_id === row.id)?.amount).toBe(row.appliedAmount);
+    expect(lineOf(await read(saleId), "Paella").cancelled).toMatchObject({
+      owed: "0.00",
+      back: "18.50",
+    });
+    const after = effects();
+    expect(after).toEqual({
+      ...before,
+      refunds: before.refunds + 4,
+      drawerJobs: before.drawerJobs + 1,
+      drawerOpens: before.drawerOpens + 1,
+      drawerCents: before.drawerCents - 2100,
+    });
+    expect(await give(saleId, body)).toEqual(first);
+    expect(effects()).toEqual(after);
   });
 });
