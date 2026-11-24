@@ -86,7 +86,8 @@ export interface ShareHolder extends PaidDish {
 
 const NO_HOLDERS: { free: ShareHolder[]; paid: PaidDish[] } = { free: [], paid: [] };
 
-const isFree = (line: Stored) =>
+/** A dish line charged €0 whose menu price is above €0: given free. */
+export const isFree = (line: Stored) =>
   line.parentLineId === null && line.lineTotal === 0 && (line.listUnitPriceGross ?? 0) > 0;
 
 /**
@@ -254,15 +255,12 @@ function refundValues(filing: BillFiling, lineIds: readonly string[]): (Value | 
   });
 }
 
-/** Unbound lines, each paired by position with a filed row no portion is linked to. */
-function byPosition(
-  stored: readonly Stored[],
-  filed: readonly Filed[],
-  lineId: string,
-): { quantity: string; gross: string } | undefined {
-  if (
-    stored.length !== filed.length ||
-    stored.some((row, i) => {
+/** Whether each stored line pairs with the filed row at its position: same count, quantities and
+ * parents. */
+function pairsByPosition(stored: readonly Stored[], filed: readonly Filed[]): boolean {
+  return (
+    stored.length === filed.length &&
+    !stored.some((row, i) => {
       const frozen = filed[i]!;
       const parent = stored.findIndex((candidate) => candidate.id === row.parentLineId);
       return (
@@ -270,8 +268,39 @@ function byPosition(
         frozen.parentLineId !== (parent === -1 ? null : filed[parent]!.id)
       );
     })
-  )
-    return undefined;
+  );
+}
+
+/** The filed dish row the dish line `lineId` is paired with, as {@link refundValueIn} pairs them;
+ * none where it pairs none. */
+export function filedDishRowOf(filing: BillFiling, lineId: string): string | undefined {
+  const { stored, filed, bindings, links } = filing;
+  if (!stored.some((row) => row.id === lineId && row.parentLineId === null)) return undefined;
+  const atPosition = (lines: readonly Stored[], rows: readonly Filed[]) =>
+    pairsByPosition(lines, rows)
+      ? rows[lines.findIndex((row) => row.id === lineId)]!.id
+      : undefined;
+  if (bindings.size === 0) return atPosition(stored, filed);
+  if (!bindings.has(lineId)) {
+    const linked = new Set(links.map((link) => link.saleLineId));
+    return atPosition(
+      stored.filter((row) => !bindings.has(row.parentLineId ?? row.id)),
+      filed.filter((row) => !linked.has(row.id)),
+    );
+  }
+  const rows = new Set(
+    links.filter((link) => link.dishLineId === lineId).map((link) => link.saleLineId),
+  );
+  return filed.find((row) => rows.has(row.id) && row.parentLineId === null)?.id;
+}
+
+/** Unbound lines, each paired by position with a filed row no portion is linked to. */
+function byPosition(
+  stored: readonly Stored[],
+  filed: readonly Filed[],
+  lineId: string,
+): { quantity: string; gross: string } | undefined {
+  if (!pairsByPosition(stored, filed)) return undefined;
   let gross = decimal("0.00");
   let quantity = 0;
   for (const [i, row] of stored.entries()) {
