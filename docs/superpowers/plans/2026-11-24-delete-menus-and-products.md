@@ -20,3 +20,7 @@
 Use `leaveBehindWhenFalse: "active"` in `packages/db/src/configuration-transfer.ts` for the rows each slice deletes. The configuration transfer suite owns the round trip and dependent rows. Keep the existing course and routing assertions. Update both language guides, design system and the affected developer and backlog entries. Capture each slice’s approved windows and filters at desktop and phone widths, in both languages and themes. Get the owner’s recorded answer before each merge.
 
 Slice 1 estimate is 520 product and 600 test lines, counting additions and removals. Slice 2 previously estimated 725 product and 875 test lines. Re-estimate after the watcher’s cuts before starting it. Above 1,500 changed lines, put pure code renames in a third PR. The watcher cleared these edits on 24 November at 16:49 after Claude’s review and final read.
+
+**Review decision, 24 November at 21:19:** Keep a deleted product’s unit link for open draft counts.
+Unit Delete clears the retained links once no current product uses it. The photo still comes off at
+product deletion. The watcher cleared this small change after the 150 g draft check.

@@ -63,7 +63,7 @@ when either field is blank in that language, counting it once when both are blan
 **Edit translations** opens the same editor from every main-language row. **Missing in** starts with
 the language you chose; select **All names** to include items that already have text. Use **Kind**
 and search to narrow the rows. The report includes missing default-language names and names
-with no translations at all. Archived products and disabled lists are excluded. An extras
+with no translations at all. Deleted products and disabled lists are excluded. An extras
 list's own name is included even though it does not print on a receipt; an entry on that list
 takes its product's name.
 

@@ -353,8 +353,8 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 `menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
 `field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
 order. `menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
-including the menu's own root, and a Archived product, which no list holds. A shortcut to a product
-archived later becomes a missing tile in its place, which publishes as an empty slot with a
+including the menu's own root, and a deleted product, which no list holds. A shortcut to a product
+deleted later becomes a missing tile in its place, which publishes as an empty slot with a
 `shortcut_missing` warning. `menu_section.wrong_role` (400, `sectionId`, `role`) refuses a Device Home Page section,
 this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
 member the menu's Device Home Page does not hold: 400 when the shortcut add's `ref` names the
@@ -449,9 +449,9 @@ sit under different parents.
 When there are any, a paragraph below the question counts the routing rules on a selected
 category's own row, which go whichever answer is chosen.
 
-A category is deleted without confirmation only when it holds no products (archived ones
+A category is deleted without confirmation only when it holds no products (deleted ones
 included), no subcategories and no routing rules. When no selected category holds active products
-or subcategories, the confirmation asks nothing about contents, because any archived products
+or subcategories, the confirmation asks nothing about contents, because any deleted products
 inside move up whichever answer is chosen; it says nothing about those products, and says how many
 routing rules go with the categories, if any. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
@@ -459,21 +459,21 @@ to approve unknown contents. The dialog lists each category being deleted by its
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. A change in archived products alone never stops that check, whether or not the dialog
+confirm again. A change in deleted products alone never stops that check, whether or not the dialog
 asked about contents: the dialog neither counts those products nor asks about them. The delete
 request carries the counts
-the dashboard read before deleting, the number of all products, archived ones included, among them,
+the dashboard read before deleting, the number of all products, deleted ones included, among them,
 and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog reads the counts again. When a count it
 shows (subcategories, active products or routing rules) has changed, it shows the new counts with
-the refusal's own message; when none has (only archived products changed, or the change was undone
+the refusal's own message; when none has (only deleted products changed, or the change was undone
 before the dialog read again), it says the contents changed, that what it shows is up to date, and
 asks you to choose **Delete** again. If a category with nothing in it at all, which is deleted
 without confirmation, has gained anything by then, the server refuses and the dialog opens,
 choosing its message the same way: when it now holds subcategories, active products or routing
-rules, it shows their counts with the refusal's message; when all it gained is archived products,
+rules, it shows their counts with the refusal's message; when all it gained is deleted products,
 or the gain was undone before the dialog read again, it opens with that second message instead,
-shows no counts of contents, asks nothing about contents, and its **Delete** moves any archived
+shows no counts of contents, asks nothing about contents, and its **Delete** moves any deleted
 products up.
 A refused action
 keeps its dialog open with a message at the bottom.
@@ -506,7 +506,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
 | `POST /management-api/products/menus` | `{ productIds }` → 200, `{ menus }`. Counts each active menu that reaches at least one product, including through another menu. A size counts by its product. A Device Home Page shortcut alone counts nothing. Repeated IDs are allowed. An empty array returns `{ menus: 0 }`. If `productIds` is missing or is not an array of strings, the route returns `management.request_invalid` (400). A malformed UUID returns `shared.invalid_id` (400). |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes archived products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes deleted products, `activeProducts` leaves them out; `routes` counts the routing cells on the category's row or the row of any category below it, `ownRoutes` those on the category's own row |
 
 For move and delete, both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,

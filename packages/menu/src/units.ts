@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   settings,
   decodeSettingsRow,
@@ -263,11 +263,18 @@ export async function clearProductUnit(tx: Transaction, productId: string): Prom
 export async function productsUsingUnit(
   tx: Transaction,
   unitId: string,
+  { activeOnly = false }: { activeOnly?: boolean } = {},
 ): Promise<ProductUsingUnit[]> {
   return tx
     .select({ id: products.id, name: products.name, active: products.active })
     .from(products)
-    .where(and(eq(products.unitId, unitId), isTopLevelProduct))
+    .where(
+      and(
+        eq(products.unitId, unitId),
+        isTopLevelProduct,
+        activeOnly ? eq(products.active, true) : undefined,
+      ),
+    )
     .orderBy(asc(products.id));
 }
 
@@ -287,14 +294,10 @@ export async function countProductsWithAttachedExtras(
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
   const [existing] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (existing === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await productsUsingUnit(tx, unitId);
+  const references = await productsUsingUnit(tx, unitId, { activeOnly: true });
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  // Variants never read their own assignment, but its foreign key still restricts deletion.
-  await tx
-    .update(products)
-    .set({ unitId: null })
-    .where(and(eq(products.unitId, unitId), isNotNull(products.parentId)));
+  await tx.update(products).set({ unitId: null }).where(eq(products.unitId, unitId));
   await tx.delete(units).where(eq(units.id, unitId));
 }

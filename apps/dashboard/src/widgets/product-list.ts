@@ -328,7 +328,6 @@ export class ProductList extends LitElement {
         grid-row: 2;
         grid-column: 1 / -1;
       }
-      /* Drawn as one more section of the Filters panel, above the column filters. */
     `,
     productMediaStyles,
   ];
@@ -894,7 +893,6 @@ export class ProductList extends LitElement {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
-  /** Removed variants are kept but not counted: Show archived starts off. */
   #variantCount(product: Product) {
     const count = product.variants.filter(({ active }) => active).length;
     return count === 0

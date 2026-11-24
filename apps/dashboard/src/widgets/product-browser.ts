@@ -901,11 +901,6 @@ export class ProductBrowser extends LitElement {
     </wt-modal>`;
   }
 
-  #allDisabled({ productIds, categoryIds }: ProductSelection): boolean {
-    if (!productIds.length || categoryIds.length) return false;
-    const disabled = new Set(this.products.filter(({ active }) => !active).map(({ id }) => id));
-    return productIds.every((id) => disabled.has(id));
-  }
   #unroutedFolderIds(): string[] {
     return [...this.#folderMadeAt].filter(([, made]) => !isRouted(made)).map(([id]) => id);
   }
@@ -984,7 +979,6 @@ export class ProductBrowser extends LitElement {
   }
   override render() {
     const renamed = this.#renamed(this.nameDraft);
-    const selection = this.#selection(this.selected);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     return html`<dashboard-product-list
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
@@ -1108,17 +1102,13 @@ export class ProductBrowser extends LitElement {
                           @click=${() => this.#openMove()}
                           >${t("folders.move")}</wt-button
                         >
-                        ${
-                          this.#allDisabled(selection)
-                            ? nothing
-                            : html`<wt-button
-                                data-test="delete"
-                                variant=${this.#deleteWaiting ? "secondary" : "danger"}
-                                .disabled=${this.#deleteWaiting || this.operationBusy}
-                                @click=${() => void this.#openDelete()}
-                                >${t("action.delete")}</wt-button
-                              >`
-                        }
+                        <wt-button
+                          data-test="delete"
+                          variant=${this.#deleteWaiting ? "secondary" : "danger"}
+                          .disabled=${this.#deleteWaiting || this.operationBusy}
+                          @click=${() => void this.#openDelete()}
+                          >${t("action.delete")}</wt-button
+                        >
                         <wt-button
                           data-test="cancel-selection"
                           variant="secondary"

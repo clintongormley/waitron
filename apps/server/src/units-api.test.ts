@@ -2,7 +2,7 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -381,7 +381,7 @@ describe("unit management routes", () => {
     expect(((await response.json()) as { id: string }[]).map((p) => p.id)).toEqual([b]);
   });
 
-  it("GET /management-api/units/:id/products returns the products using the unit", async () => {
+  it("GET /management-api/units/:id/products lists current users of the unit", async () => {
     const unit = (await (
       await send("POST", "/management-api/units", {
         staffName: "Staff unit",
@@ -392,7 +392,12 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTransaction(suite.db, async (tx) => seedProduct(tx, "A", unit.id));
+    const p1 = await withTransaction(suite.db, async (tx) => {
+      const active = await seedProduct(tx, "A", unit.id);
+      const deleted = await seedProduct(tx, "Deleted", unit.id);
+      await tx.update(products).set({ active: false }).where(eq(products.id, deleted));
+      return active;
+    });
 
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(res.status).toBe(200);

@@ -306,12 +306,14 @@ describe("unit operations", () => {
 
       const productId = await product(tx, "Soup");
       await assignProductUnit(tx, productId, unit.id);
-      await tx.execute(sql`
-        update products set active = false where id = ${productId}`);
       expect(await refusalOf(deleteUnit(tx, unit.id))).toEqual({
         code: "unit.in_use",
-        params: { products: [{ id: productId, name: "Soup", active: false }] },
+        params: { products: [{ id: productId, name: "Soup", active: true }] },
       });
+      await tx.execute(sql`
+        update products set active = false where id = ${productId}`);
+      await deleteUnit(tx, unit.id);
+      expect(await listUnits(tx)).toEqual([]);
     });
   });
 

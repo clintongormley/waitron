@@ -134,8 +134,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/widgets/price-source.test.ts",
   "apps/dashboard/src/widgets/printer-delete-copy.test.ts",
   "apps/dashboard/src/widgets/product-browser.test.ts",
-  "apps/dashboard/src/widgets/product-details.a11y.test.ts",
-  "apps/dashboard/src/widgets/product-details.test.ts",
   "apps/dashboard/src/widgets/product-editor.a11y.test.ts",
   "apps/dashboard/src/widgets/product-editor.save-state.test.ts",
   "apps/dashboard/src/widgets/product-editor.test.ts",

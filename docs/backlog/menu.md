@@ -689,7 +689,8 @@ ties, disables diet-empty sections, and opens a section without changing the bas
   Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name
   with a new id. Deleting a course clears product defaults, including archived products;
   recorded draft and order choices keep the original course. Courses and stations left as
-  history are excluded from configuration exports; being archived does not leave a product behind.
+  history are excluded from configuration exports. Products and variants now follow the same export
+  rule when deleted (owner, 2026-11-24).
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
@@ -716,6 +717,8 @@ product has no replacement for; the backlog entry marked that matching "assumed,
 choices. The switched-off-station example above records A463's earlier decision; Task 9's
 integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
 column and filter were deleted.)
+**2026-11-24 update:** The permanent Delete design removes Show archived and its View action.
+Availability stays on Products for current products and variants.
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

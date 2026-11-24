@@ -89,29 +89,33 @@ async function queue(menuId: string, activatesAt: Date) {
 const holding = (ids: string[], at = T0) => app((tx) => publishedMenusHolding(tx, ids, at));
 const menuIds = async (id: string, at = T0) => (await holding([id], at)).get(id)?.map((m) => m.id);
 
-it.each(["dish", "variant", "variant omitted from the save"])(
-  "lets the photo be deleted separately after deleting a %s",
-  async (kind) => {
-    const f = await menusFixture(fx.db);
-    const photo = `${"b".repeat(64)}.png`;
-    const id = kind === "dish" ? f.lemonade : f.large;
-    await seedPhotoMetadata(fx.db, { filename: photo, names: {} });
-    await app((tx) => updateProduct(tx, id, { image: photo }));
-    const deletePhoto = () =>
-      app((tx) => tx.delete(mediaImages).where(eq(mediaImages.filename, photo)).returning());
-    await expect(deletePhoto()).rejects.toThrow("products_media_image_fk");
+it.each([
+  "dish",
+  "dish with a photo in the delete request",
+  "variant",
+  "variant omitted from the save",
+])("lets the photo be deleted separately after deleting a %s", async (kind) => {
+  const f = await menusFixture(fx.db);
+  const photo = `${"b".repeat(64)}.png`;
+  const id = kind.startsWith("dish") ? f.lemonade : f.large;
+  await seedPhotoMetadata(fx.db, { filename: photo, names: {} });
+  await app((tx) => updateProduct(tx, id, { image: photo }));
+  const deletePhoto = () =>
+    app((tx) => tx.delete(mediaImages).where(eq(mediaImages.filename, photo)).returning());
+  await expect(deletePhoto()).rejects.toThrow("products_media_image_fk");
 
-    if (kind === "dish") await app((tx) => archiveProducts(tx, [id], "person-1"));
-    else if (kind === "variant omitted from the save")
-      await app((tx) => setProductVariants(tx, f.lemonade, [], "en"));
-    else {
-      const [variant] = await app((tx) => listProductVariants(tx, f.lemonade));
-      await app((tx) => setProductVariants(tx, f.lemonade, [{ ...variant!, active: false }], "en"));
-    }
+  if (kind === "dish") await app((tx) => archiveProducts(tx, [id], "person-1"));
+  else if (kind === "dish with a photo in the delete request")
+    await app((tx) => updateProduct(tx, id, { active: false, image: photo }));
+  else if (kind === "variant omitted from the save")
+    await app((tx) => setProductVariants(tx, f.lemonade, [], "en"));
+  else {
+    const [variant] = await app((tx) => listProductVariants(tx, f.lemonade));
+    await app((tx) => setProductVariants(tx, f.lemonade, [{ ...variant!, active: false }], "en"));
+  }
 
-    expect(await deletePhoto()).toEqual([expect.objectContaining({ filename: photo })]);
-  },
-);
+  expect(await deletePhoto()).toEqual([expect.objectContaining({ filename: photo })]);
+});
 
 it.each(["published", "queued"])(
   "names a %s parent after its draft drops the include",

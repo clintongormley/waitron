@@ -468,7 +468,7 @@ it("skips an archived selection already moved off the source while moving an act
   expect(await app((tx) => storedUnitId(tx, archived))).toBe(other.id);
 });
 
-it("retains an archived product's unit and refuses deletion or reassignment without any write", async () => {
+it("keeps a deleted product's unit until removing the unit and refuses reassignment", async () => {
   await seedTaxpayer(suite.db);
   const archivedId = await product();
   const source = await app((tx) =>
@@ -510,11 +510,7 @@ it("retains an archived product's unit and refuses deletion or reassignment with
       units: await tx.select().from(units),
     }));
   const before = await snapshot();
-  await expect(app((tx) => deleteUnit(tx, source.id))).rejects.toMatchObject({
-    code: "unit.in_use",
-    params: { products: [{ id: archivedId, name: "Soup", active: false }] },
-  });
-  expect(await snapshot()).toEqual(before);
+  expect(await app((tx) => storedUnitId(tx, archivedId))).toBe(source.id);
   for (const destination of [null, target.id]) {
     await expect(
       app((tx) => reassignProductsToUnit(tx, source.id, [archivedId], destination)),
@@ -524,8 +520,9 @@ it("retains an archived product's unit and refuses deletion or reassignment with
     });
     expect(await snapshot()).toEqual(before);
   }
-  await app((tx) => deleteUnit(tx, target.id));
-  expect(await app((tx) => listUnits(tx))).toEqual([source]);
+  await app((tx) => deleteUnit(tx, source.id));
+  expect(await app((tx) => storedUnitId(tx, archivedId))).toBeNull();
+  expect(await app((tx) => listUnits(tx))).toEqual([target]);
 });
 
 it("lets a manager delete the unit separately after deleting its last product", async () => {
@@ -536,6 +533,7 @@ it("lets a manager delete the unit separately after deleting its last product", 
   await expect(app((tx) => deleteUnit(tx, unit.id))).rejects.toMatchObject({ code: "unit.in_use" });
 
   await app((tx) => updateProduct(tx, id, { active: false, unitId: unit.id }));
+  expect(await app((tx) => storedUnitId(tx, id))).toBe(unit.id);
   expect(await app((tx) => listUnits(tx))).toContainEqual(unit);
   await app((tx) => deleteUnit(tx, unit.id));
   expect(await app((tx) => listUnits(tx))).not.toContainEqual(unit);

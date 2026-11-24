@@ -11,22 +11,27 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   lineServiceCancellations,
+  menuItems,
   nowIso,
   orderDrafts,
   parties,
   products,
+  sectionMembers,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  addProductToMenu,
   assignProductUnit,
   clearProductUnit,
   createExtraList,
   createProduct,
   createUnit,
+  removeMember,
   setProductVariants,
   units,
+  updateProduct,
   writeProductModifiers,
 } from "@waitron/menu";
 import { listHeldOrders } from "./working-order-held-read.js";
@@ -959,6 +964,42 @@ describe("readOrderStateCounts on a party's bill", () => {
       tx.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, draft.id)),
     );
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
+  });
+
+  it("keeps a 150 gram draft as one dish after product deletion", async () => {
+    const { id, menuItemId } = await inTx(venue, async (tx) => {
+      const [existing] = await tx
+        .select({ menuId: menuItems.menuId, unitId: products.unitId })
+        .from(menuItems)
+        .innerJoin(products, eq(products.id, menuItems.productId))
+        .where(eq(menuItems.id, venue.offerFor("Seafood rice")));
+      const { id } = await createProduct(tx, {
+        name: "Rice special",
+        categoryId: null,
+        unitId: existing!.unitId,
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      const item = await addProductToMenu(tx, { menuId: existing!.menuId, productId: id });
+      await republishMenus(tx);
+      return { id, menuItemId: item.id };
+    });
+    const { partyId, billId } = await seatParty();
+    await saveBillDraft(partyId, billId, [{ ...draftLine("Seafood rice", "150"), menuItemId }]);
+    const one = { ...zero, ordered: 1, unsent: 1 };
+    expect(await countsOfBill(billId)).toEqual(one);
+
+    await inTx(venue, async (tx) => {
+      const [member] = await tx
+        .select()
+        .from(sectionMembers)
+        .where(eq(sectionMembers.productId, id));
+      await removeMember(tx, member!.sectionId, member!.id);
+      await republishMenus(tx);
+      await updateProduct(tx, id, { active: false });
+    });
+
+    expect(await countsOfBill(billId)).toEqual(one);
   });
 
   it("counts cancellations out: one of three, and a weighed dish cancelled whole", async () => {

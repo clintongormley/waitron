@@ -101,7 +101,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       return c.json(
         await gated(sessionId, async (tx) => {
           await getUnit(tx, id); // 404 for an unknown unit
-          return productsUsingUnit(tx, id);
+          return productsUsingUnit(tx, id, { activeOnly: true });
         }),
       );
     }),
@@ -154,7 +154,7 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         await gated(sessionId, async (tx) => {
           await getUnit(tx, id); // 404 for an unknown source unit
           await reassignProductsToUnit(tx, id, productIds, targetUnitId);
-          return productsUsingUnit(tx, id);
+          return productsUsingUnit(tx, id, { activeOnly: true });
         }),
       );
     }),

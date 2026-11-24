@@ -66,7 +66,7 @@ pendiente en un idioma cuando falta cualquiera de los dos campos, y cuenta una s
 **Editar traducciones** abre el mismo editor desde cualquier fila de idioma principal. **Falta en** empieza
 con el idioma que elegiste. Selecciona **Todos los nombres** para incluir los que ya tienen texto.
 Usa **Tipo** y la búsqueda para reducir las filas. El informe incluye nombres que faltan en el
-idioma predeterminado y nombres sin ninguna traducción. Los productos archivados y las listas
+idioma predeterminado y nombres sin ninguna traducción. Los productos eliminados y las listas
 desactivadas quedan fuera. El nombre propio de una lista de extras aparece aunque no se imprima en
 un ticket; un elemento de esa lista toma el nombre de su producto.
 
