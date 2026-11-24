@@ -112,7 +112,10 @@ function choice(offer: SetMenuOffer, discount?: SetMenuGroupingDiscount): Choice
     discount?.kind === "comp"
       ? 0
       : SCALE - (discount?.kind === "percent" ? discount.basisPoints : 0);
-  const round = factor > 0 && factor < SCALE;
+  const fractional = (cents: number) => (cents * factor) % SCALE !== 0;
+  const round =
+    fractional(offer.priceCents) ||
+    offer.dishes.some(({ surchargeCents }) => fractional(surchargeCents));
   return {
     offer,
     discount,
@@ -123,8 +126,8 @@ function choice(offer: SetMenuOffer, discount?: SetMenuGroupingDiscount): Choice
   };
 }
 
-function supplementBound({ supplement }: Arc, { factor, allowance }: Choice): number {
-  return Math.max(0, supplement * factor - allowance);
+function supplementBound({ supplement }: Arc, { factor, allowance }: Choice, pinned = 0): number {
+  return Math.max(0, supplement * factor - Math.max(0, allowance - pinned * SCALE));
 }
 
 function selectCounts(
@@ -440,18 +443,22 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     allow?: (arc: Arc) => boolean,
   ): (Assignment | undefined)[] {
     const capacities = slots.map(({ capacity }) => capacity);
-    pins.forEach((pin) => {
-      if (pin)
-        capacities[slots.findIndex(({ menu, line }) => menu === pin[0] && line === pin[1])]!--;
-    });
+    const pinnedSupplement = menus.map(() => 0);
+    for (const pin of pins) {
+      if (!pin) continue;
+      const [menu, line, supplement] = pin;
+      capacities[slots.findIndex((slot) => slot.menu === menu && slot.line === line)]!--;
+      pinnedSupplement[menu]! += supplement;
+    }
     const weight = dishes.length + 1;
     const solution = solvePlacement({
       capacities,
       uncoveredCost: 0,
       classes: dishes.map(({ id }, i) => {
+        if (pins[i] || omitted?.[i] || matches[i]!.length === 0) return { count: 0, arcs: [] };
         const previous = oldPlace.get(id);
         return {
-          count: pins[i] || omitted?.[i] || matches[i]!.length === 0 ? 0 : 1,
+          count: 1,
           uncoveredCost: aLaCarte[i]! * SCALE * weight + Number(previous != null),
           arcs: matches[i]!.flatMap((arc) => {
             const { menu, line, choice } = slots[arc.pair]!;
@@ -462,7 +469,9 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
             return [
               {
                 pair: arc.pair,
-                cost: supplementBound(arc, choices[choice]!) * weight + Number(moved),
+                cost:
+                  supplementBound(arc, choices[choice]!, pinnedSupplement[menu]!) * weight +
+                  Number(moved),
               },
             ];
           }),
@@ -622,7 +631,12 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
     solves++;
     const candidate = materialize(menus, first);
     consider(candidate);
-    if (percentCount > 0 && oldPlace.size > 0 && solves < PLACEMENT_LIMIT) {
+    if (
+      percentCount > 0 &&
+      candidate.totalCents === best.totalCents &&
+      oldPlace.size > 0 &&
+      solves < PLACEMENT_LIMIT
+    ) {
       const saved = retainedPlaces(menus, layout);
       if (saved.some((pin, i) => pin && (pin[0] !== first[i]?.[0] || pin[1] !== first[i]?.[1]))) {
         solves++;
@@ -691,8 +705,19 @@ export function groupSetMenus(input: SetMenuGroupingInput): SetMenuGrouping {
   if (exact) {
     if (pins.some((pin) => pin !== undefined) && discounts.length > 0) {
       // A grant can move to a better holder without moving the saved dishes.
-      const savedWithNewDishes = assign(savedFit, savedLayout, pins);
-      consider(materialize(savedFit, savedWithNewDishes, "all"));
+      const occupied = new Set(pins.flatMap((pin) => (pin ? [pin[0]] : [])));
+      const savedChoices = savedFit.map((menu) => ({
+        id: menu.id,
+        option: optionsFor(oldMenu.get(menu.id)!).reduce(
+          (best, option) => (choices[option]!.baseCost < choices[best]!.baseCost ? option : best),
+          menu.option,
+        ),
+      }));
+      const layout = menuPlacement(savedChoices);
+      const savedWithNewDishes = assign(savedChoices, layout, pins, undefined, ({ pair }) =>
+        occupied.has(layout.slots[pair]!.menu),
+      );
+      consider(materialize(savedChoices, savedWithNewDishes, "all"));
     }
     return { ...best, exact };
   }

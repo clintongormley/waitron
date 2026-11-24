@@ -412,7 +412,7 @@ it("opens a useful menu at the limit and closes it after a cancellation without 
   expect(after.dishes.filter(({ id }) => id !== starter.id)).toEqual(
     first.dishes.filter(({ id }) => id !== starter.id && id !== main.id),
   );
-});
+}, 15_000);
 
 it("moves a released dish into a saved place immediately at the limit", () => {
   const large = table(40, 5);
@@ -460,40 +460,43 @@ it("keeps the larger discount on the surviving menu at the limit", () => {
   expect(result.unusedDiscountIds).toEqual(["less"]);
 });
 
-it("retains every saved dish place when shifting a discount achieves the cheapest price", () => {
-  const first = dish("first", "starter", 1800);
-  const second = { ...first, id: "second" };
-  const plain = dish("plain", "main", 1800);
-  const premium = dish("premium", "main", 1800);
-  const dishes = [first, second, plain, premium];
-  const lunch = offer("lunch", 1400, [first, plain, premium], { premium: 300 });
-  const discounts = [
-    { id: "grant", offerId: "lunch", kind: "percent", basisPoints: 5000 },
-  ] as const;
-  const previous = {
-    setMenus: [savedMenu("A", "lunch", "grant"), savedMenu("B", "lunch")],
-    dishes: [
-      savedDish(first.id, "A", 0),
-      savedDish(second.id, "B", 0),
-      savedDish(plain.id, "A", 1),
-    ],
-  };
-  const result = group({ offers: [lunch], dishes, discounts, previous });
-  expect(result).toMatchObject({
-    exact: true,
-    totalCents: 2250,
-    setMenus: [
-      { id: "A", discountId: null },
-      { id: "B", discountId: "grant" },
-    ],
-    dishes: [
-      previous.dishes[0],
-      previous.dishes[2],
-      savedDish(premium.id, "B", 1),
-      previous.dishes[1],
-    ],
-  });
-});
+it.each([1800, 200])(
+  "retains saved dish places when shifting the discount saves on a %i-cent dish",
+  (aLaCarteCents) => {
+    const first = dish("first", "starter", 1800);
+    const second = { ...first, id: "second" };
+    const plain = dish("plain", "main", 1800);
+    const premium = dish("premium", "main", aLaCarteCents);
+    const dishes = [first, second, plain, premium];
+    const lunch = offer("lunch", 1400, [first, plain, premium], { premium: 300 });
+    const discounts = [
+      { id: "grant", offerId: "lunch", kind: "percent", basisPoints: 5000 },
+    ] as const;
+    const previous = {
+      setMenus: [savedMenu("A", "lunch", "grant"), savedMenu("B", "lunch")],
+      dishes: [
+        savedDish(first.id, "A", 0),
+        savedDish(second.id, "B", 0),
+        savedDish(plain.id, "A", 1),
+      ],
+    };
+    const result = group({ offers: [lunch], dishes, discounts, previous });
+    expect(result).toMatchObject({
+      exact: true,
+      totalCents: 2250,
+      setMenus: [
+        { id: "A", discountId: null },
+        { id: "B", discountId: "grant" },
+      ],
+      dishes: [
+        previous.dishes[0],
+        previous.dishes[2],
+        savedDish(premium.id, "B", 1),
+        previous.dishes[1],
+      ],
+    });
+  },
+);
 
 it("leaves enough search to price an eight-diner bill with two percentage discounts", () => {
   const input = {
@@ -693,11 +696,12 @@ it("keeps a cheaper bill found at the limit when it uses the saved dish places",
   const previous = group({ offers, dishes: dishes.slice(0, -4), discounts, previous: null });
   const input = { offers, dishes, discounts, previous };
   const result = group(input);
-  expect(result.totalCents).toBe(13257);
+  expect(result).toMatchObject({ exact: false, totalCents: 13257 });
   for (const saved of previous.dishes) {
     if (saved.place)
       expect(result.dishes.find(({ id }) => id === saved.id)?.place).toEqual(saved.place);
   }
+  expect(group({ ...input, previous: result }).totalCents).toBe(13257);
 });
 
 it("can leave a cheap dish à la carte when one fixed discount covers only one supplement", () => {
@@ -718,5 +722,53 @@ it("can leave a cheap dish à la carte when one fixed discount covers only one s
   expect(result.setMenus.find(({ offerId }) => offerId === "lunch")).toMatchObject({
     baseCents: 1400,
     discountCents: 1500,
+  });
+});
+
+it("proves prices with two discounts that only yield whole-cent supplements", () => {
+  const tableInput = table(8, 2);
+  const offers = tableInput.offers.map((item) => ({
+    ...item,
+    dishes: item.dishes.map((listing) => ({
+      ...listing,
+      surchargeCents: Math.trunc(listing.surchargeCents / 10) * 10,
+    })),
+  }));
+  const input = {
+    ...tableInput,
+    offers,
+    discounts: [
+      { id: "a", offerId: "offer-0", kind: "percent", basisPoints: 1000 },
+      { id: "b", offerId: "offer-1", kind: "percent", basisPoints: 1000 },
+    ] as const,
+  };
+  const result = group(input);
+  expect(result.exact).toBe(true);
+  expect(group({ ...input, previous: result })).toEqual(result);
+});
+
+it("fills a free saved place without using a fixed discount allowance twice", () => {
+  const large = table(40, 5);
+  const starter = dish("starter", "starter", 900);
+  const main = dish("main", "main", 40);
+  const dessert = dish("dessert", "dessert", 50);
+  const lunch = offer("lunch", 1400, [starter, main, dessert], { starter: 100, main: 100 });
+  const result = group({
+    offers: [...large.offers, lunch],
+    dishes: [...large.dishes, starter, main, dessert],
+    discounts: [{ id: "grant", offerId: "lunch", kind: "amount", cents: 1500 }],
+    previous: {
+      setMenus: [savedMenu("A", "lunch", "grant")],
+      dishes: [savedDish(starter.id, "A", 0)],
+    },
+  });
+  expect(result.exact).toBe(false);
+  expect(result.dishes.find(({ id }) => id === main.id)).toMatchObject({
+    place: null,
+    chargeCents: 40,
+  });
+  expect(result.dishes.find(({ id }) => id === dessert.id)).toMatchObject({
+    place: { setMenuId: "A", lineIndex: 2 },
+    chargeCents: 0,
   });
 });

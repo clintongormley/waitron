@@ -56,8 +56,8 @@ keep their à la carte charges.
   hake 1,500¢ and flan 500¢ cost 1,400¢ grouped or 1,850¢ after halving the hake. Check comps and variants.
 - Base 1,401¢, supplement 300¢ and extras 200¢ cost 1,050¢ at half off, 401¢ at 1,500¢ off, or
   200¢ comped. With one fixed discount and two menus, the supplemented one wins at 1,802¢ total.
-- A 1,000¢ starter at 10% and 1,000¢ main at 21% group for 1,400¢ on a takeaway bill.
-  A pair at each rate forms two takeaway menus at 2,800¢.
+- Two 1,000¢ starters and two 1,000¢ mains form two 1,400¢ menus. The grouping takes the same
+  inputs for eat-in and takeaway.
 - Two 1,400¢ menus hold a 900¢ starter and 1,500¢ main each. Cancel one main and keep the other
   menu and both its dishes at 2,300¢. Show a different tie without the saved layout, retain a
   saved discount holder and à la carte dish, and show a one-cent saving beats the saved fit.
