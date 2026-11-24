@@ -82,3 +82,11 @@ it("discards the key through the shared leave question, without making a request
   await screen.updateComplete;
   expect(keyInput(screen).shadowRoot!.querySelector("input")!.value).toBe("");
 });
+it("counts a partly typed key as the page's own draft", async () => {
+  const screen = await mount();
+  const input = keyInput(screen).shadowRoot!.querySelector("input")!;
+  input.value = "ABCD";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  expect(leaveCoordinatorFor(screen)?.isDirty([screen])).toBe(true);
+});

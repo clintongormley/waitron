@@ -755,6 +755,7 @@ export class RecoveryHourEntry extends LitElement {
           promote
             ? nothing
             : html`<wt-master-key-input
+                  .draftParent=${this}
                   required
                   .keyName=${context.selection.keyName}
                   .copy=${keyWords}

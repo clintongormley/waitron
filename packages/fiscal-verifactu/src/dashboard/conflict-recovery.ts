@@ -440,6 +440,7 @@ export class ConflictRecovery extends LitElement {
               </section>`
             : html` <wt-master-key-input
                   required
+                  .draftParent=${this}
                   .copy=${keyWords}
                   .readPack=${readPack}
                   .maxPdfBytes=${MAX_PACK_PDF}

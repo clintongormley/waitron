@@ -322,6 +322,7 @@ export class SetupRecoveryAllocation extends LitElement {
       ></wt-textarea>
       <wt-master-key-input
         class="field"
+        .draftParent=${this}
         ?required=${this.#hasDraft}
         .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
         .copy=${copy}

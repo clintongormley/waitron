@@ -424,6 +424,26 @@ class KeyShell extends LitElement {
 }
 customElements.define("master-key-input-test-shell", KeyShell);
 
+class ParentedKeyShell extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<wt-master-key-input .copy=${EN} .draftParent=${this}></wt-master-key-input
+      >${this.leave.render({ heading: "Discard?", message: "Unsaved key", keepLabel: "Keep", discardLabel: "Discard" })}`;
+  }
+}
+customElements.define("master-key-input-parented-shell", ParentedKeyShell);
+
+test("a partly typed key is a draft of the host's scope", async () => {
+  const shell = (await mount(
+    "<master-key-input-parented-shell></master-key-input-parented-shell>",
+  )) as ParentedKeyShell;
+  const el = shell.shadowRoot!.querySelector("wt-master-key-input")!;
+  await el.updateComplete;
+  expect(shell.leave.coordinator.isDirty([shell])).toBe(false);
+  await type(el, "ABCD");
+  expect(shell.leave.coordinator.isDirty([shell])).toBe(true);
+});
+
 test("typing marks the draft scope changed, and clear() restores it empty", async () => {
   const shell = (await mount(
     "<master-key-input-test-shell></master-key-input-test-shell>",

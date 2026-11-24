@@ -91,6 +91,8 @@ export class WtMasterKeyInput extends LitElement {
   ];
 
   @property() name = "master-key";
+  /** The host's draft scope, read when the field connects, so a partly typed key counts as the host's draft. */
+  @property({ attribute: false }) draftParent?: object;
   /** The name of the key the field expects: a pack for another key is refused with it. */
   @property({ attribute: false }) keyName?: string;
   @property({ attribute: false }) readPack?: RecoveryPackReaderLoader;
@@ -122,6 +124,7 @@ export class WtMasterKeyInput extends LitElement {
     super.connectedCallback();
     this.#scope = draftScopeFor(this, {
       id: this,
+      parent: this.draftParent,
       current: () => ({ value: this.value, file: this.#file }),
       snapshot: (draft) => ({ ...draft }),
       equal: (a, b) => a.value === b.value && a.file === b.file,

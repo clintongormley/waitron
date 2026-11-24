@@ -719,6 +719,18 @@ it("tracks declarations and clears native fields and selected input on Discard",
   ).toBe(false);
   expect(shell.leave.coordinator.isDirty([el])).toBe(false);
 });
+it("counts a partly typed key as the recovery form's draft", async () => {
+  const shell = document.createElement("recovery-hour-test-shell") as RecoveryShell;
+  document.body.append(shell);
+  hosts.push(shell);
+  await shell.updateComplete;
+  const { el } = await mount();
+  shell.append(el);
+  await el.updateComplete;
+  await typeKey(el, "ABCD");
+  await el.updateComplete;
+  expect(shell.leave.coordinator.isDirty([el])).toBe(true);
+});
 it("places the recovery authenticator's real refusal beside the key and leaves Proceed enabled to send it again", async () => {
   const { el } = await mount(
     vi.fn(async () => {
