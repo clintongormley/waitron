@@ -113,13 +113,12 @@ export async function openIdentityChange(
   const plan = await planIdentityChange(db, nodeId, note, secondClock);
   if (plan.kind !== "open") return plan.kind;
   // A commented decision (A993 decision 10): the plan reads the time service, which can take
-  // seconds, outside the write lock; this transaction repeats its head read, and the activation's
-  // used-name refusal catches a minute taken in between.
+  // seconds, outside the write lock. This transaction checks only that the open installation is
+  // still the plan's; the activation refuses a name already in `verifactu_identities`.
   await withTransaction(db, async (tx) => {
     if (!(await mayOpen(tx))) waiting("not_sole_primary");
     const head = await readHead(tx, nodeId);
-    if (head?.sifId !== plan.sourceSifId || head.nif !== note.fromProducerTaxId)
-      waiting("head_moved");
+    if (head?.sifId !== plan.sourceSifId) waiting("head_moved");
     const identity = encodeMinuteIdentity(plan.minuteMs);
     const issuedAt = new Date(plan.minuteMs).toISOString();
     const bases = await liveSeriesBases(tx, { nodeId });

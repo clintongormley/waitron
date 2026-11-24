@@ -312,15 +312,24 @@ describe("openIdentityChange", () => {
       [`F-${NEW_NAME}`, "standard", "live"],
     ]);
 
+    const clock = {
+      ...steadyClock,
+      now: () => ({ ...steadyClock.now(), instant: new Date(NOW) }),
+    };
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: steadyClock,
+      clock,
       db: suite.db,
       identity: runningIdentity("production"),
     });
     const seriesId = series.find((row) => row.retiredAt === null)!.id as SeriesId;
+    const sale = saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId, clock });
+    const settlement = {
+      kind: "immediate" as const,
+      tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: new Date(NOW) }],
+    };
     const { saleId } = await withTransaction(suite.db, (tx) =>
-      recordSale(tx, backend, saleInput({ nodeId: TAXPAYER_A.nodeId, seriesId })),
+      recordSale(tx, backend, { ...sale, settlement }),
     );
     const [sold] = await suite.db
       .select()
@@ -328,6 +337,7 @@ describe("openIdentityChange", () => {
       .where(eq(verifactuRecords.saleId, saleId));
     expect(sold!.sifId).toBe(live[0]!.id);
     expect(sold!.primerRegistro).toBe(true);
+    expect(sold!.fechaHoraHusoGenRegistro).toEqual(new Date(NOW));
     expect(sold!.sistemaInformatico).toMatchObject({
       NIF: PRODUCER_B,
       NumeroInstalacion: NEW_NAME,
