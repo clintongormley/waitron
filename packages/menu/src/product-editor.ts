@@ -97,7 +97,7 @@ async function readInherited(
 }
 
 /** Today's takeaway rate of the product's own rows, and of its parent's when it has one. A variant
- * without rows of its own is absent; a product with no parent always has one. */
+ * without rows of its own is absent. */
 async function takeawayRatesOf(
   tx: Transaction,
   productId: string,

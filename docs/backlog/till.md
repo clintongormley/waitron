@@ -1511,8 +1511,8 @@ Held, Fire and the table's Send controls retain their own meanings.
 
 Use the existing modifiers window for line details. Sent extras and notes remain read-only; moving
 a sent unpaid Counter dish uses its separate current movement facts. A739 owns the payment-window
-redesign. Sent-dish removal uses Cancel item. The custom item's permission and
-menu/report/invoice identity remain undecided.
+redesign. Sent-dish removal uses Cancel item. The custom item's permission and identity are decided:
+see [its entry](#custom-item-on-the-counter-a738-residual).
 
 
 ### Installed modules release removed tables (A894, owner decision 2026-10-19)
@@ -2208,7 +2208,8 @@ The manager can set an idle timeout on the profile.
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
 2026-10-20: the Counter cleanup has a current [UI contract](../developers/design-system.md#counter-basket-and-payment-space).
-Custom items remain an undecided A738 residual; A739 remains separate. The dated source record below
+Custom items are [decided and being built](#custom-item-on-the-counter-a738-residual); A739 remains
+separate. The dated source record below
 describes the earlier starting point.
 
 2026-10-17: A740 implements device zones and period-scoped menu memory. The remaining Counter
@@ -2245,10 +2246,11 @@ order off a short screen.
 
 ### Custom item on the Counter (A738 residual)
 
-A1564. Decided by the owner on 2026-11-21 and queued for building:
+A1564. Decided by the owner on 2026-11-21; the first of three pull requests, the data and the reports,
+is built (what that leaves is in the index entry):
 [design](../superpowers/specs/2026-11-21-counter-custom-item-design.md) and
 [plan](../superpowers/plans/2026-11-21-counter-custom-item.md). A hidden product per takeaway VAT
-rate sits behind each line; the permission `order.custom_item` can be given to anyone, and
+rate, or one whose rate nobody chose, sits behind each line; the permission `order.custom_item` can be given to anyone, and
 supervisors and managers hold it by default. The plan's last task deletes this entry.
 
 ### A738. The counter screen: fewer distractions

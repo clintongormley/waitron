@@ -1264,6 +1264,7 @@ for (const locale of ["en", "es"] as const) {
           "sale.void",
           "sale.refund",
           "sale.rectify",
+          "order.custom_item",
           "venue.view",
           "report.view",
           "cash.drawer",
@@ -1276,6 +1277,7 @@ for (const locale of ["en", "es"] as const) {
           "sale.void",
           "sale.refund",
           "sale.rectify",
+          "order.custom_item",
           "person.manage",
           "menu.manage",
           "person.admin",
@@ -1482,7 +1484,15 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(products.rows)) row.takeaway_vat_class = null;
+      products.columns.splice(
+        products.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        { name: "custom_item_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(products.rows)) {
+        row.takeaway_vat_class = null;
+        row.custom_item_key = null;
+      }
       const salePolicies = expected[phase].tables.department_sale_policies!;
       for (const name of ["dining", "dining_starts_as"]) {
         salePolicies.columns.push({

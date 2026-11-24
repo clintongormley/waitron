@@ -676,6 +676,7 @@ export class SalesScreen extends LitElement {
     if (node.kind === "not_recorded") return t("sales.not_recorded");
     if (node.kind === "payments_on_account") return t("sales.payments_on_account");
     if (node.kind === "set_menus") return t("sales.set_menus");
+    if (node.kind === "custom_items") return t("sales.custom_items");
     return node.name;
   }
 

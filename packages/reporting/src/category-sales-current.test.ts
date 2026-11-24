@@ -31,6 +31,7 @@ const TODAY: Record<string, SaleLineClassification> = {
   "p-water": classified([]),
   "p-burger": classified(chain(["cat-food", "Food"], ["cat-burgers", "Burgers"])),
   "p-cheese": classified(chain(["cat-extras", "Extras"])),
+  "p-custom": classified(chain(["custom_items", ""])),
 };
 
 function todaysClassifier() {
@@ -139,6 +140,20 @@ describe("computeCategorySales in current categories", () => {
       },
     ]);
     expect(report).toMatchObject({ grossComplete: false, linesWithoutGross: 1 });
+  });
+
+  it("puts custom items on a row of their own", async () => {
+    await sell("2026-08-04", [
+      { productId: "p-custom", net: "3.00", gross: "3.30", cls: classified([]) },
+      { productId: "p-water", net: "4.00", gross: "4.40" },
+    ]);
+
+    const report = await run(todaysClassifier());
+
+    expect(report.tree.map((n) => [n.kind, n.id, n.name, n.gross])).toEqual([
+      ["custom_items", "custom_items", "", "3.30"],
+      ["uncategorised", "uncategorised", "", "4.40"],
+    ]);
   });
 
   it("subtracts a void under today's classification of its product", async () => {

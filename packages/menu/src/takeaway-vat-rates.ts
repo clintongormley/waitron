@@ -51,9 +51,9 @@ export function checkPickableTakeawayVatRate(rate: unknown, rates: AreaVatRates)
 
 /**
  * Replaces the product's takeaway rates with one row from the beginning of time at `rate`, one of
- * the area's pickable rates. Null clears a variant's rows, so it takes its parent's; a top-level
- * product always keeps a rate, so null is refused there. A caller saving several products passes
- * `rates` from one {@link readVenueVatRates}; without it the area is read here.
+ * the area's pickable rates. Null clears a variant's rows, so it takes its parent's; null is
+ * refused for a top-level product. A caller saving several products passes `rates` from one
+ * {@link readVenueVatRates}; without it the area is read here.
  */
 export async function setTakeawayVatRate(
   tx: Transaction,
@@ -85,6 +85,12 @@ export async function insertFirstTakeawayVatRate(
   await tx
     .insert(productTakeawayVatRates)
     .values({ productId, startsOn: null, rate: stringToBasisPoints(rate) });
+}
+
+/** Leaves a top-level product with no takeaway rate; {@link setTakeawayVatRate} refuses null for
+ * one. */
+export async function clearTakeawayVatRates(tx: Transaction, productId: string): Promise<void> {
+  await tx.delete(productTakeawayVatRates).where(eq(productTakeawayVatRates.productId, productId));
 }
 
 /**
@@ -169,8 +175,7 @@ export async function takeawayVatRatesToday(
   const today = dated ? await venueToday(tx) : null;
   const rates = new Map<string, string>();
   for (const [productId, schedule] of schedules) {
-    // A product with no rows at all, which no venue reaches (plan D3), is refused as `rateOn`
-    // refuses an empty list.
+    // A product with no rows at all is refused as `rateOn` refuses an empty list.
     if (schedule.length === 0)
       throw new AppError("vat_rate.schedule_invalid", {
         caller: "rateOn",

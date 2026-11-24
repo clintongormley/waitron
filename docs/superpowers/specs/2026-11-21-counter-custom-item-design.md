@@ -5,6 +5,15 @@ then this, then reading scale-label barcodes); see
 `docs/handoffs/2026-11-21-keyboard-custom-item-scales.md`. Replaces the open questions in
 `docs/backlog/till.md`, "Custom item on the Counter (A738 residual)".
 
+2026-11-24: where the build differs from this design; the
+[plan](../plans/2026-11-21-counter-custom-item.md) has the rest. The watcher, not the owner, cleared
+the pull request that makes one more hidden product, with no takeaway rate, for an item whose rate
+nobody chose; and that the rate staff chose is the one a taken-away item files even if the law changes
+before it is paid (Decision 10), which is an exception to "the owner's VAT model holds unchanged"
+below. The hidden products are created on first use, not as starting data. "A manager cannot edit,
+place or delete them" is met by never listing their ids: the server does not refuse a request that
+names one.
+
 ## Why
 
 Now and then a customer at the counter wants something that is not on the menu — a bottle the

@@ -12,6 +12,7 @@ interface CategorySalesWords {
   notRecorded: string;
   paymentsOnAccount: string;
   setMenus: string;
+  customItems: string;
   /** Not recorded's own part: its lines that carry no free-text category either. */
   noCategoryRecorded: string;
   directlyIn: (name: string) => string;
@@ -31,6 +32,7 @@ export const CATEGORY_SALES_WORDS: Readonly<Record<SupportedLocale, CategorySale
     notRecorded: "Not recorded",
     paymentsOnAccount: "Payments on account",
     setMenus: "Set menus",
+    customItems: "Custom items",
     noCategoryRecorded: "Category unknown",
     directlyIn: (name) => `Directly in ${name}`,
     total: "Total",
@@ -51,6 +53,7 @@ export const CATEGORY_SALES_WORDS: Readonly<Record<SupportedLocale, CategorySale
     notRecorded: "No registrada",
     paymentsOnAccount: "Pagos a cuenta",
     setMenus: "Menús",
+    customItems: "Artículos libres",
     noCategoryRecorded: "Categoría desconocida",
     directlyIn: (name) => `Directamente en ${name}`,
     total: "Total",

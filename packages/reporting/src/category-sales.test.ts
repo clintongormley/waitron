@@ -399,6 +399,55 @@ describe("computeCategorySales at time of sale", () => {
     expect(report.tree[3]!.children.map((n) => n.kind)).toEqual(["free_text", "free_text"]);
   });
 
+  it("puts custom items on one row of their own, after Set menus and before Uncategorised", async () => {
+    const customItem = classified(chain(["custom_items", ""]));
+    await sell("2026-08-04", [
+      { net: "1.00" },
+      { net: "2.00", gross: "2.20", cls: classified([]) },
+      { net: "3.00", gross: "3.30", productId: "p-custom-21", cls: customItem },
+      { net: "4.00", gross: "4.40", productId: "p-custom-10", cls: customItem },
+      { net: "5.00", gross: "5.50", setMenuRole: "set_menu" },
+      { net: "6.00", gross: "6.60", cls: classified(chain(["cat-wine", "Wine"])) },
+    ]);
+
+    const report = await run();
+
+    expect(report.tree.map((n) => [n.kind, n.id, n.name])).toEqual([
+      ["category", "cat-wine", "Wine"],
+      ["set_menus", "set_menus", ""],
+      ["custom_items", "custom_items", ""],
+      ["uncategorised", "uncategorised", ""],
+      ["not_recorded", "not_recorded", ""],
+    ]);
+    expect(report.tree[2]).toMatchObject({
+      depth: 0,
+      gross: "7.70",
+      net: "7.00",
+      direct: { gross: "7.70", net: "7.00", lines: 2 },
+      children: [],
+    });
+  });
+
+  it("takes a refund and a void of a custom item off its own row", async () => {
+    const customItem = classified(chain(["custom_items", ""]));
+    const voided = await sell("2026-07-30", [{ net: "3.00", gross: "3.30", cls: customItem }]);
+    await seedVoid(suite.db, { saleId: voided }, at("2026-08-05"));
+    const refunded = await sell("2026-08-04", [{ net: "9.00", gross: "9.90", cls: customItem }]);
+    await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-06"),
+      [{ net: "-4.00", gross: "-4.40", cls: customItem }],
+      refunded,
+    );
+
+    const report = await run();
+
+    expect(report.tree.map((n) => [n.kind, n.gross, n.net])).toEqual([
+      ["custom_items", "2.20", "2.00"],
+    ]);
+  });
+
   it("puts a line that names its product but recorded no classification under Not recorded, by its free-text category", async () => {
     await sell("2026-08-04", [
       { net: "1.00", productId: "prod-negroni", category: "Cócteles" },

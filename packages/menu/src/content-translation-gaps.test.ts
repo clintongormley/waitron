@@ -25,6 +25,7 @@ import {
   listTranslationGapCounts,
 } from "./content-translation-report.js";
 import { listTranslationTargets, listTranslationGapRows } from "./content-translation-targets.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { addMember } from "./sections.js";
 import { setIncludeFolder } from "./include-folder.js";
 
@@ -117,6 +118,30 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
 }
 
 describe("complete translation gap predicates", () => {
+  it("leaves out the hidden products behind a custom item", async () => {
+    await seedTaxpayer(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, config);
+      const { id } = await createProduct(tx, {
+        categoryId: null,
+        name: "STAFF Product",
+        unitId: null,
+        unitPrice: "3.00",
+      });
+      await customItemProduct(tx, 2100);
+      await customItemProduct(tx, null);
+      const report = await listTranslationGapReport(tx, config);
+      expect(report.map(({ language, gaps }) => [language, gaps.map((gap) => gap.id)])).toEqual([
+        ["es", [id]],
+        ["en", [id]],
+      ]);
+      expect(await listTranslationGapCounts(tx, config)).toEqual([
+        { language: "es", count: 1 },
+        { language: "en", count: 1 },
+      ]);
+    });
+  });
+
   it.each([
     ["null", null],
     ["empty", {}],

@@ -13,6 +13,8 @@ export const en = {
     "Refund payments and authorise removing charges for dishes already sent or served. Refunding money during an invoice correction needs this permission too.",
   "permission.sale.rectify.help":
     "Authorise correcting an issued invoice, including cancelling an invoiced order. Refunding its payment is a separate permission.",
+  "permission.order.custom_item.help":
+    "Ring up something that is not on the menu, with a name and price typed at the till. Someone without it can ask a person who has it to enter their PIN.",
   "permission.cash.drawer.help":
     "Open a cash drawer manually from the till or Printers. Opening the drawer this way records who requested and authorised it. Using Printers also needs Manage devices and printers.",
   "permission.adjustment.apply.help":
@@ -96,6 +98,7 @@ export const en = {
   "permission.sale.void": "Void sales",
   "permission.sale.refund": "Refund payments",
   "permission.sale.rectify": "Correct invoices",
+  "permission.order.custom_item": "Add custom items",
   "permission.cash.drawer": "Open cash drawers",
   "permission.adjustment.apply": "Apply comps",
   "permission.adjustment.approve": "Approve comps",
@@ -3209,6 +3212,7 @@ export const en = {
   "sales.not_recorded": "Not recorded",
   "sales.payments_on_account": "Payments on account",
   "sales.set_menus": "Set menus",
+  "sales.custom_items": "Custom items",
   "sales.no_category_recorded": "Category unknown",
   "sales.gross_incomplete":
     "Gross total incomplete: {count} lines recorded before classification began",
@@ -4808,6 +4812,8 @@ export const es: Record<StringKey, string> = {
     "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. También necesitas este permiso para devolver dinero durante una rectificación de factura.",
   "permission.sale.rectify.help":
     "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver su pago requiere un permiso aparte.",
+  "permission.order.custom_item.help":
+    "Añade a la venta algo que no está en la carta, con un nombre y un precio escritos en la caja. Quien no tenga este permiso puede pedir a alguien que lo tenga que introduzca su PIN.",
   "permission.cash.drawer.help":
     "Abre un cajón de efectivo manualmente desde la caja o Impresoras. Esta apertura registra quién la pidió y quién la autorizó. Para usar Impresoras también necesitas Gestionar dispositivos e impresoras.",
   "permission.adjustment.apply.help":
@@ -4890,6 +4896,7 @@ export const es: Record<StringKey, string> = {
   "permission.sale.void": "Anular ventas",
   "permission.sale.refund": "Devolver pagos",
   "permission.sale.rectify": "Rectificar facturas",
+  "permission.order.custom_item": "Añadir artículos libres",
   "permission.cash.drawer": "Abrir cajones",
   "permission.adjustment.apply": "Aplicar invitaciones",
   "permission.adjustment.approve": "Aprobar invitaciones",
@@ -8072,6 +8079,7 @@ export const es: Record<StringKey, string> = {
   "sales.not_recorded": "No registrada",
   "sales.payments_on_account": "Pagos a cuenta",
   "sales.set_menus": "Menús",
+  "sales.custom_items": "Artículos libres",
   "sales.no_category_recorded": "Categoría desconocida",
   "sales.gross_incomplete":
     "Total bruto incompleto: {count} líneas registradas antes de que empezara la clasificación",

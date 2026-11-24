@@ -8,6 +8,12 @@ model replaces.
 
 So a product carries up to three names, and so does each of its variants.
 
+Waitron also keeps hidden products behind custom items (`custom_item_key` set). A read that offers
+every product to a person leaves them out (`notCustomItem`, `packages/menu/src/variant-fallback.ts`);
+nothing checks that a new one does. Pricing, reporting and kitchen routing still find one by its id.
+No list offers their ids unless one has been placed; the managers' routes that save or place a product
+do not refuse a hand-written request that names one.
+
 You create a product independently of menus. `products` has no menu ownership; `menu_items` offers it on each menu, with that offer’s price.
 
 ## The three names

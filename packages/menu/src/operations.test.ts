@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { readMenuStructure } from "./menu-structure.js";
+import { customItemProduct } from "./custom-item-products.js";
 import { listProductVariants, setMenuVariants, setProductVariants } from "./variants.js";
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
@@ -2083,6 +2084,31 @@ it("records an archived menu once with its name and the given person", async () 
   });
   await withTransaction(fx.db, (tx) => deactivateMenu(tx, menu.id, personId));
   expect(await readActivityForSubject(fx.db, { kind: "menu", id: menu.id })).toEqual(entries);
+});
+
+describe("the hidden products behind a custom item", () => {
+  it.each([
+    ["listProducts", listProducts],
+    [
+      "listAvailableProducts",
+      async (tx: Transaction) => (await listAvailableProducts(tx)).products,
+    ],
+  ])("are left out of %s", async (_name, list) => {
+    await seedTaxpayer(fx.db);
+    await seedVenueSettings(fx.db);
+    await withTransaction(fx.db, async (tx) => {
+      const tea = await createProduct(tx, {
+        categoryId: null,
+        name: "Tea",
+        unitId: null,
+        unitPrice: "2.00",
+      });
+      await customItemProduct(tx, 2100);
+      expect((await list(tx)).map(({ id }) => id)).toEqual([tea.id]);
+      await customItemProduct(tx, null);
+      expect((await list(tx)).map(({ id }) => id)).toEqual([tea.id]);
+    });
+  });
 });
 
 describe("a new product's takeaway VAT rate", () => {

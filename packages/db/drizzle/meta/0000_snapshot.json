@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9b420d52-f3fa-4d02-a41d-1bc731e0b9fb",
+  "id": "18455f8a-96a2-42b6-a0b0-b659c018f36c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7872,6 +7872,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "custom_item_key": {
+          "name": "custom_item_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -7909,6 +7916,13 @@
             "course_id"
           ],
           "isUnique": false
+        },
+        "products_custom_item_key": {
+          "name": "products_custom_item_key",
+          "columns": [
+            "custom_item_key"
+          ],
+          "isUnique": true
         },
         "products_parent_id_key": {
           "name": "products_parent_id_key",
