@@ -33,6 +33,7 @@ import { oldBoxDataRoute } from "./old-box-data-page.js";
 import { mountOldBoxDataPeerApi, type OldBoxDataPeerDeps } from "./old-box-data-peer-api.js";
 import { oneBuildAtATime } from "./old-box-data-turn.js";
 import { makeOldBoxWorkbook } from "./old-box-data-workbook.js";
+import { restrictedDownloadDeps } from "./restricted-page.js";
 import { returnVenue } from "./return-records.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { row, sheetNamed } from "./testing/xlsx-rows.js";
@@ -475,7 +476,7 @@ describe("the one build at a time the old box's page and its peer route share", 
     });
     const page = new Hono();
     oldBoxDataRoute({
-      page: { venue: suite.db, node: suite.node, nodeId: source, log },
+      ...restrictedDownloadDeps({ venue: suite.db, node: suite.node, nodeId: source, log }),
       modules: [sample],
       totpKeyRing: TOTP_KEY_RING,
       turn,
