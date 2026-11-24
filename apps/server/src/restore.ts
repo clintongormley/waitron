@@ -462,7 +462,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     try {
       const node = await resolveArtifactNode(opened.db, validated.secretEntries);
       const name = (await readCurrentMasterKey(opened.db))?.name;
-      if (name !== undefined) log("info", "restore.recovery_key_selected", { name });
+      if (name?.trim()) log("info", "restore.recovery_key_selected", { name });
       await runRestoreHooks({
         db: opened.db,
         nodeDb: opened.node,

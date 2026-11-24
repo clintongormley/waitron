@@ -11,6 +11,7 @@ import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-pat
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import {
   invoiceSeries,
+  masterKeys,
   readStandardSeriesId,
   openVenueDatabase,
   stampDeployment,
@@ -39,7 +40,6 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
-import { box } from "@waitron/node-db";
 import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -258,7 +258,7 @@ export async function stagedHourCrash(
       try {
         return {
           submissions: await copy.venue.select().from(verifactuSubmissions),
-          nodeKeys: await copy.node.select().from(box),
+          masterKeys: await copy.venue.select().from(masterKeys),
           allocations: await allocationRows(copy.venue),
           registrations: await copy.venue.select().from(verifactuIdentities),
           series: await copy.venue.select(seriesWithNextNumber).from(invoiceSeries),
