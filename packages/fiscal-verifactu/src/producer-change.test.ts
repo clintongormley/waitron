@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { SistemaInformatico } from "@waitron/verifactu";
 import { captureError } from "@waitron/db";
+import type { IdentityChangeNote } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -10,7 +11,7 @@ import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { refuseProducerChange } from "./producer-change.js";
 import { registerSif } from "./registro-sif.js";
-import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
+import { PRODUCER_PENDING, SOFTWARE_IDENTITY, softwareVersion } from "./software-identity.js";
 import type { SoftwareIdentity } from "./software-identity.js";
 import { altaFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 
@@ -165,6 +166,118 @@ describe("refuseProducerChange", () => {
     );
 
     expect(error).toMatchObject({ code: "sif.producer_changed" });
+  });
+});
+
+describe("refuseProducerChange with an upgrade's note", () => {
+  const OLD = FILED_UNDER.NIF;
+  const NEW = "11111111H";
+  const note = (overrides: Partial<IdentityChangeNote> = {}): IdentityChangeNote => ({
+    release: softwareVersion(),
+    producerTaxId: NEW,
+    fromProducerTaxId: OLD,
+    ...overrides,
+  });
+  const checkWith = (
+    node: SeededNode,
+    naming: IdentityChangeNote,
+    options: { producer?: SoftwareIdentity["producer"]; environment?: string } = {},
+  ) =>
+    suite.db.transaction((tx) =>
+      refuseProducerChange(
+        tx,
+        node.nodeId,
+        running(options.producer ?? { name: "PRODUCER PERSON", nif: NEW }),
+        options.environment ?? "production",
+        naming,
+      ),
+    );
+
+  it("answers pending for a note naming this release, this producer and the head's", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+
+    await expect(checkWith(node, note())).resolves.toBe("pending");
+  });
+
+  it.each([
+    ["another release", { release: "9.9.9" }],
+    ["another producer than the running one", { producerTaxId: "22222222J" }],
+    ["another producer than the head's", { fromProducerTaxId: "22222222J" }],
+  ])("refuses a note naming %s", async (_label, overrides) => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+
+    const error = await captureError(() => checkWith(node, note(overrides)));
+
+    expect(error).toMatchObject({ code: "sif.producer_changed" });
+  });
+
+  it("refuses a head filed under a foreign id", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1, {
+      NombreRazon: "PRODUCER PERSON",
+      NIF: undefined,
+      IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR00000000000" },
+    });
+
+    const error = await captureError(() => checkWith(node, note()));
+
+    expect(error).toMatchObject({ code: "sif.producer_changed" });
+  });
+
+  it("answers nothing pending once the head names the running producer", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1, { NombreRazon: "PRODUCER PERSON", NIF: NEW });
+
+    await expect(checkWith(node, note())).resolves.toBeUndefined();
+    await expect(checkWith(node, note({ fromProducerTaxId: NEW }))).resolves.toBeUndefined();
+  });
+
+  it("answers nothing pending on a chain with no records", async () => {
+    const node = await seedNode(suite.db);
+
+    await expect(checkWith(node, note())).resolves.toBeUndefined();
+  });
+
+  it("answers nothing pending outside production, or while no producer is set", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+
+    await expect(
+      checkWith(node, note(), { environment: "preproduction" }),
+    ).resolves.toBeUndefined();
+    await expect(checkWith(node, note(), { producer: PRODUCER_PENDING })).resolves.toBeUndefined();
+  });
+
+  it("refuses an invalid producer setting", async () => {
+    const node = await seedNode(suite.db);
+    const invalid = new AppError("sif.producer_invalid", {
+      setting: "WAITRON_PRODUCER_TAX_ID",
+      reason: "check_failed",
+    });
+
+    const error = await captureError(() => checkWith(node, note(), { producer: { invalid } }));
+
+    expect(error).toBe(invalid);
+  });
+
+  it("reaches the backend's check", async () => {
+    const node = await seedNode(suite.db);
+    await append(node, 1);
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      identity: running({ name: "PRODUCER PERSON", nif: NEW }),
+    });
+    const seat = (naming: IdentityChangeNote) =>
+      suite.db.transaction((tx) => backend.checkFilingIdentity(tx, node.nodeId, naming));
+
+    await expect(seat(note())).resolves.toEqual({ pending: true });
+    expect(await captureError(() => seat(note({ release: "9.9.9" })))).toMatchObject({
+      code: "sif.producer_changed",
+    });
   });
 });
 

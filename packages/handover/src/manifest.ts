@@ -286,6 +286,12 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "Not carried: the pending notice describes this box's own clock step",
   },
   {
+    item: "identity-change.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Not carried: an upgrade's note is for the box that was upgraded",
+  },
+  {
     item: "checked-addresses.json",
     where: "state",
     class: "destination-owned",

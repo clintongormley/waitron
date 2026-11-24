@@ -15,6 +15,7 @@ import { assertNotAhead } from "./upgrade-schema-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { isCopyIntact } from "./handover-integrity.js";
 import { makeFiscalBackend } from "./till-backend.js";
+import { readIdentityChangeNote } from "./identity-change-note.js";
 import { readFilingModule } from "./node-config.js";
 import { listOrders, readOrderDetail } from "./orders-list.js";
 import { closeListener } from "./close-listener.js";
@@ -86,8 +87,9 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
           throw new Error(`Upgrade integrity check failed: ${file}`);
       }
       const backend = makeFiscalBackend(modules, await readFilingModule(db, node), db, env);
+      const note = await readIdentityChangeNote(config.stateDir);
       return await withTransaction(db, async (tx) => {
-        await backend.checkFilingIdentity?.(tx, node.nodeId);
+        const identity = await backend.checkFilingIdentity?.(tx, node.nodeId, note);
         const integrity = await backend.checkIntegrity(tx, node.nodeId);
         if (!integrity.ok) throw new Error("Upgrade fiscal history check failed");
         const menuRows = await tx.select({ id: menus.id }).from(menus);
@@ -107,6 +109,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
           // `checked` counts what the integrity read looked at, which need not be the whole chain.
           fiscalRecords:
             (await backend.latestRecord?.(tx, node.nodeId))?.position ?? integrity.checked,
+          ...(identity?.pending ? { identityChange: "pending" as const } : {}),
         };
       });
     } finally {

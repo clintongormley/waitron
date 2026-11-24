@@ -67,6 +67,7 @@ export const FIRST_SETUP_FILE = "flows/setup/record.json";
 export const FISCAL_READINESS_FILE = "flows/setup/readiness.json";
 export const SETUP_OPERATION_FILE = "flows/setup/operation.json";
 export const SETUP_CLOCK_STEP_FILE = "setup-clock-step.json";
+export const IDENTITY_CHANGE_FILE = "identity-change.json";
 export const CONFIGURATION_IMPORT_FILE = "flows/setup/import/marker.json";
 export const CONFIGURATION_IMPORT_ARTIFACT = "flows/setup/import/artifact";
 export const CONFIGURATION_IMPORT_KEY = "flows/setup/import/key";
@@ -193,6 +194,13 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Clock steps made before the venue existed, alerted at its first full start that is neither a mirror nor fenced.",
+  },
+  {
+    name: IDENTITY_CHANGE_FILE,
+    backup: { exclude: "An upgrade's note for this box's own next start." },
+    kind: "file",
+    reset: "deleted",
+    why: "An upgrade names its change of producer to the start that opens a new installation.",
   },
   {
     name: SECRETS_ENV_FILE,

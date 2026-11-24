@@ -513,9 +513,14 @@ export interface FiscalBackend {
   /**
    * Throws when this backend's producer settings are malformed, and, in production, when this
    * node's open chain was made under a different software producer from the one this backend files
-   * under. Reads only. Optional: a backend that names no producer omits it.
+   * under, unless `note` names that change: then it answers `pending`, and nothing may be recorded
+   * on that chain. Reads only. Optional: a backend that names no producer omits it.
    */
-  checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>;
+  checkFilingIdentity?(
+    tx: Transaction,
+    nodeId: NodeId,
+    note?: IdentityChangeNote | null,
+  ): Promise<{ pending: true } | undefined>;
 
   /**
    * When this node's open chain was filed under the producer `note` moves from, opens a new

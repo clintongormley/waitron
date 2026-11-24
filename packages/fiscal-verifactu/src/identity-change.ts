@@ -20,10 +20,10 @@ import { projectHourHistory } from "./hour-history.js";
 import { encodeMinuteIdentity, EPOCH_MS, MINUTE_MS } from "./hour-identity.js";
 import { readHourRelease } from "./hour-release.js";
 import { withIdentityChangeAuthority } from "./identity-change-authority.js";
-import { readHeadProducer } from "./producer-change.js";
+import { notedForRunning, readHeadProducer } from "./producer-change.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
-import { PRODUCER_PENDING, softwareVersion, type SoftwareIdentity } from "./software-identity.js";
+import { PRODUCER_PENDING, type SoftwareIdentity } from "./software-identity.js";
 import "./errors.js";
 
 /** The producer and environment a backend files under. */
@@ -60,11 +60,7 @@ export async function planIdentityChange(
 ): Promise<IdentityChangePlan> {
   const producer = filing.identity.producer;
   if (typeof producer === "object" && "invalid" in producer) throw producer.invalid;
-  if (
-    producer === PRODUCER_PENDING ||
-    note.release !== softwareVersion() ||
-    note.producerTaxId !== producer.nif
-  )
+  if (producer === PRODUCER_PENDING || !notedForRunning(note, producer.nif))
     return { kind: "not-named" };
   const { environment } = filing;
   if (environment !== "production") return { kind: "nothing-to-open" };

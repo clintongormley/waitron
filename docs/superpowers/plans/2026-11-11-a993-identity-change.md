@@ -829,6 +829,10 @@ review can take, Tasks 5c, 6a and 6b go into a pull request of their own before 
   and `version: 1`; anything else answers `null`.
 - `deleteIdentityChangeNote(stateDir: string): Promise<void>`. A missing file is not an error.
 
+As built 2026-11-24: `checkFilingIdentity` answers `{ pending: true } | undefined`, because an
+existing unedited case in `producer-change.test.ts` pins `undefined`; an unreadable note counts as
+absent.
+
 - [ ] **Step 1: Write the failing tests.**
   - The reader: absent, empty, malformed, an extra key, `version: 2` → `null`; well formed → the
     three fields.

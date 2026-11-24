@@ -800,8 +800,19 @@ export class VerifactuBackend implements FiscalBackend {
     return verifyChain(tx, nodeId);
   }
 
-  checkFilingIdentity(tx: Transaction, nodeId: NodeId): Promise<void> {
-    return refuseProducerChange(tx, nodeId, this.identity, this.deploymentEnvironment);
+  async checkFilingIdentity(
+    tx: Transaction,
+    nodeId: NodeId,
+    note?: IdentityChangeNote | null,
+  ): Promise<{ pending: true } | undefined> {
+    const answer = await refuseProducerChange(
+      tx,
+      nodeId,
+      this.identity,
+      this.deploymentEnvironment,
+      note,
+    );
+    return answer === "pending" ? { pending: true } : undefined;
   }
 
   /** Opens its own transactions: see `openIdentityChange`. */
