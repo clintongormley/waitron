@@ -34,9 +34,14 @@ import { printsAsFullInvoice } from "./invoice-typing.js";
 import {
   groupByParent,
   isCoveredDish,
+  isCoveredOnFullInvoice,
+  isDividedSetMenu,
+  isDividedSetMenuHeading,
   isSurcharge,
   mergeIdenticalGroups,
+  printsOnFullInvoice,
   printsOnTicket,
+  soldGross,
   type LineGroup,
   type ReceiptAdjustment,
   type TillSaleLine,
@@ -90,7 +95,8 @@ export interface ReceiptDocumentInput {
 export const CONTACT_SEPARATOR = " · ";
 
 /** A row of a full invoice's table, before VAT. Amounts are what the row adds: a discount's are
- *  negative. A set menu's covered dish has no money figures. */
+ *  negative. A set menu's covered dish has no money figures, and a divided set menu's own row
+ *  is a heading with no rate either. */
 export interface FiledFigureRow {
   kind: "line" | "option" | "answer" | "discount" | "advance";
   units: string;
@@ -126,7 +132,8 @@ export interface WithVatFigures {
   amount?: Decimal;
   /** A set-menu surcharge on a simplified invoice: its amount and price each print with a plus. */
   surcharge?: true;
-  /** "" when the bill has one rate, or the line none. */
+  /** "" when the bill has one rate, or the line none; on a covered dish, unless its set menu was
+   *  divided. */
   rateLetter: string;
   /** The price each, with the unit it is per; no `unitName` for a count. */
   perUnit?: { price: Decimal; unitName?: string };
@@ -263,8 +270,11 @@ export function receiptFigures({
   const letters = simplified ? rateLetters(result.vatBreakdown) : null;
   const rateLetter = (rate: string): string | undefined =>
     letters === null ? undefined : [...letters].find(([seen]) => sameRate(seen, rate))?.[1];
-  const letter = ({ vatRate }: TillSaleLine): string =>
-    (vatRate === undefined ? undefined : rateLetter(vatRate)) ?? "";
+  // A divided set menu's own row has no rate of its own on the ticket: its dishes carry them.
+  const letter = (line: TillSaleLine): string =>
+    (line.vatRate === undefined || (line.setMenuRole === "set_menu" && isDividedSetMenu(line))
+      ? undefined
+      : rateLetter(line.vatRate)) ?? "";
   const sharedLetter = (covered: readonly TillSaleLine[]): string => {
     const [first, ...rest] = covered.map(letter);
     return rest.every((one) => one === first) ? first! : "";
@@ -284,7 +294,15 @@ export function receiptFigures({
 
   const anyFiled = !simplified && filedRates(result.lines).length > 0;
   const billAdjustments = result.billAdjustments ?? [];
-  const figured = (line: FiledLine): FiguredLine => ({ line, figures: beforeVatFigures(line) });
+  const figured = (line: FiledLine): FiguredLine => {
+    // A divided set menu's dishes file what was charged for it, so its own row loses nothing.
+    if (!isDividedSetMenuHeading(line)) return { line, figures: beforeVatFigures(line) };
+    const heading = { ...line };
+    delete heading.listGross;
+    delete heading.listUnitPriceGross;
+    delete heading.adjustments;
+    return { line: heading, figures: beforeVatFigures(heading) };
+  };
   const groups = groupByParent(result.lines);
   const filedGroups: FiguredGroup[] = [];
   if (!simplified) {
@@ -309,14 +327,15 @@ export function receiptFigures({
     indent: number,
   ): FiledFigureRow => {
     const { line, figures } = figuredLine;
-    const row: FiledFigureRow = {
+    const heading: FiledFigureRow = {
       kind: line.advance === undefined ? kind : "advance",
       units: quantityText(line, namesLocale, locale),
       item: itemName(line),
       indent,
-      rate: decimal(line.net.rate),
     };
-    if (isCoveredDish(line)) return row;
+    if (isDividedSetMenuHeading(line)) return heading;
+    const row: FiledFigureRow = { ...heading, rate: decimal(line.net.rate) };
+    if (isCoveredOnFullInvoice(line)) return row;
     return {
       ...row,
       unitPrice: figures.price,
@@ -367,13 +386,14 @@ export function receiptFigures({
     // Without its filed figures, a dish priced per pack prints its quantity, not its packs.
     const { quantity: count, unitName, soldInEach } = dish;
     const shown = quantityText({ quantity: count, unitName, soldInEach }, namesLocale, locale);
-    const amount = decimal(dish.listGross ?? dish.gross);
+    const amount = dish.listGross === undefined ? soldGross(dish) : decimal(dish.listGross);
     const group: WithVatFigures = {
       quantity: shown,
       item: itemName(dish),
       ...(isCoveredDish(dish) ? {} : { amount }),
       ...(simplified && isSurcharge(dish, amount) ? { surcharge: true as const } : {}),
-      rateLetter: letter(dish),
+      // A covered dish prints its letter only to name the goods its divided set menu filed at it.
+      rateLetter: isCoveredDish(dish) && !isDividedSetMenu(dish) ? "" : letter(dish),
       answers: answers(dish),
       options: [],
       adjustments: [],
@@ -435,10 +455,7 @@ export function receiptFigures({
         ...group.options.map((option) => option.amount),
         ...group.adjustments.map((adjustment) => adjustment.amount),
       ]);
-      const billShare = subtractDecimal(
-        shown,
-        sumDecimals([dish, ...options].map((line) => decimal(line.gross))),
-      );
+      const billShare = subtractDecimal(shown, sumDecimals([dish, ...options].map(soldGross)));
       if (compareDecimal(billShare, ZERO) > 0) {
         group.adjustments.push({
           item:
@@ -462,7 +479,8 @@ export function receiptFigures({
   printed.forEach((group, at) => {
     const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
     // Left out only after the filed rows are paired by position, so later rows keep their figures.
-    if (!printsOnTicket(group) && !discounts.under.has(at)) return;
+    if (!(simplified ? printsOnTicket : printsOnFullInvoice)(group) && !discounts.under.has(at))
+      return;
     const print = (): void => {
       if (filed !== undefined) {
         tableGroup(filed);

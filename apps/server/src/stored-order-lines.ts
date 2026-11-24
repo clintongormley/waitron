@@ -15,6 +15,7 @@ import {
 } from "@waitron/db";
 import {
   parentProducts,
+  effectiveProductColumns,
   parentJoin,
   type LockedLine,
   type GrossLines,
@@ -22,13 +23,12 @@ import {
 } from "@waitron/menu";
 import {
   type DatedRate,
-  type VatClass,
-  AppError,
+  type Decimal,
   centsToDecimal,
+  AppError,
   thousandthsToDecimal,
   optionSnapshotNames,
   type SaleLineClassification,
-  type Decimal,
   decimal,
   compareDecimal,
   type SaleId,
@@ -42,7 +42,6 @@ import { readLineCancellations } from "./line-service-state.js";
 import { readLineVatRates } from "./line-vat-rates.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { type PortionBinding, projectPortionSale } from "./portion-sale-projection.js";
-import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import { stillMovable } from "./station-move.js";
 import type { TradingContext } from "./trading-context.js";
 import { dishesWithHeldExtra, dishWaitsInHeldGroup } from "./working-order-serving.js";
@@ -103,21 +102,26 @@ export async function readLockedLines(
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
-  refuseSetMenus: boolean,
 ): Promise<{
   lines: (StoredOrderLine & { payable: boolean })[];
   grouped: StoredOrderLine[];
   /** Each grouped line's dated rates, at its index. */
   rates: (readonly DatedRate[])[];
+  /** Each grouped line's covered dishes' weights in their set menus, taken away, at its index. */
+  setMenuParts: { setMenuLineNo: number; weight: Decimal }[][];
 }> {
   const rows = await tx
     .select({
       ...storedLineColumns,
       ...portionColumns,
       dining: workingOrders.dining,
-      takeawayVatClass: workingOrderLines.takeawayVatClass,
       sentAt: workingOrderLines.sentAt,
       active: productActive,
+      setMenuId: workingOrderLines.setMenuId,
+      setMenuVersionId: workingOrderLines.setMenuVersionId,
+      setMenuLineId: workingOrderLines.setMenuLineId,
+      menuVersionId: workingOrderLines.menuVersionId,
+      productPrice: effectiveProductColumns.unitPrice,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
@@ -125,21 +129,27 @@ async function readLockedLinesForIssuance(
     .leftJoin(parentProducts, parentJoin)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  if (refuseSetMenus) await refuseTakeawaySetMenuMoney(tx, workingOrderId, rows, rows[0]?.dining);
   const stored = toStoredLines(rows);
   const grouped = groupedByPortion(rows, stored);
-  const rowRates = await readLineVatRates(
+  const { rates: rowRates, weights } = await readLineVatRates(
     tx,
     rows[0]!.dining,
     rows.map((row) => ({
+      id: row.id,
       productId: row.productId,
       setMenuRole: row.setMenuRole,
-      takeawayVatClass: row.takeawayVatClass as VatClass,
+      setMenuId: row.setMenuId,
+      setMenuVersionId: row.setMenuVersionId,
+      setMenuLineId: row.setMenuLineId,
+      menuVersionId: row.menuVersionId,
+      productPrice: row.productId === null ? null : centsToDecimal(row.productPrice),
     })),
   );
   // A grouped row carries the id of the first working line it stands for; the lines it stands for
   // share everything their rates depend on.
   const ratesById = new Map(rows.map((row, i) => [row.id, rowRates[i]!]));
+  const rowIndex = new Map(rows.map((row, i) => [row.id, i]));
+  const lineNoById = new Map(grouped.map((line, i) => [line.identity.id, i + 1]));
   return {
     lines: stored.map((line, i) => ({
       ...line,
@@ -148,6 +158,15 @@ async function readLockedLinesForIssuance(
     })),
     grouped,
     rates: grouped.map((line) => ratesById.get(line.identity.id)!),
+    setMenuParts: grouped.map(({ identity }) =>
+      (identity.lineIds ?? [identity.id]).flatMap((id) => {
+        const at = rowIndex.get(id)!;
+        const weight = weights[at];
+        return weight == null
+          ? []
+          : [{ setMenuLineNo: lineNoById.get(rows[at]!.setMenuLineId!)!, weight }];
+      }),
+    ),
   };
 }
 const portionColumns = {
@@ -298,27 +317,32 @@ export async function readStoredOrder(
 }
 /**
  * Use `refuseUnsentUnavailable: false` only to record money already captured. That path must
- * still record it after product deletion or on a takeaway bill holding a set menu.
+ * still record it after product deletion.
  */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
   options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<GrossOrder> {
-  const { lines, grouped, rates } = await readLockedLinesForIssuance(
+  const { lines, grouped, rates, setMenuParts } = await readLockedLinesForIssuance(
     tx,
     workingOrderId,
-    options.refuseUnsentUnavailable,
   );
   const unpayable = lines.find((line) => !line.payable);
   if (options.refuseUnsentUnavailable && unpayable !== undefined) {
     throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
   }
+  const gross = grossLockedLines(
+    grouped.map(({ locked }) => locked),
+    rates,
+  );
   return {
-    gross: grossLockedLines(
-      grouped.map(({ locked }) => locked),
-      rates,
-    ),
+    gross: {
+      ...gross,
+      lines: gross.lines.map((line, i) =>
+        setMenuParts[i]!.length === 0 ? line : { ...line, setMenuParts: setMenuParts[i]! },
+      ),
+    },
     identities: grouped.map(({ identity }) => identity),
   };
 }

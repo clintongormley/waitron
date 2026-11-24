@@ -345,7 +345,8 @@ function mealView(
  * `invoiceLines`, in allocation order. The quantity is the invoice line's, negated: an amount
  * correction's quantity is the scope shown, never units returned. The list gross is a line amount,
  * not a frozen fact, so it is left out; an extra points at its dish only when the dish is corrected
- * too.
+ * too. An amount taken off a divided set menu's dish comes off its part first, then off its sold
+ * amount.
  */
 export function correctionLinesFor(
   invoiceLines: readonly InvoiceLine[],
@@ -357,6 +358,7 @@ export function correctionLinesFor(
   );
   return allocations.map((allocation, index) => {
     const line = byId.get(allocation.saleLineId)!;
+    const taken = decimalToCents(allocation.gross);
     return {
       lineNo: index + 1,
       name: line.name,
@@ -368,7 +370,7 @@ export function correctionLinesFor(
       unitPrice: centsToDecimal(line.unitPrice),
       vatRate: basisPointsToDecimal(line.vatRate),
       lineTotal: centsToDecimal(-decimalToCents(allocation.base)),
-      lineGross: centsToDecimal(-decimalToCents(allocation.gross)),
+      lineGross: centsToDecimal(-taken),
       optionSnapshots: line.optionSnapshots,
       variantName: line.variantName,
       variantDescriptions: line.variantDescriptions,
@@ -388,6 +390,10 @@ export function correctionLinesFor(
       advanceRole: line.advanceRole,
       deductsSaleId: line.deductsSaleId,
       setMenuRole: line.setMenuRole,
+      setMenuPart:
+        line.setMenuPart !== null && line.setMenuPart > 0
+          ? centsToDecimal(-Math.min(taken, line.setMenuPart))
+          : null,
     } satisfies Required<RecordSaleLine>;
   });
 }

@@ -175,6 +175,32 @@ it("takes preview and a first part payment after a placed Counter bill is invoic
   ).toEqual([]);
 });
 
+it("says on the placed read whether a Counter order's invoice is issued", async () => {
+  const venue = await provisionBillVenue(suite.db);
+  const id = randomUUID();
+  const deps = {
+    db: suite.db,
+    backend: venue.backend,
+    clock: venue.clock,
+    admission: testTradingAdmission(),
+  };
+  await parkOrder(deps, venue.cfg, {
+    id,
+    lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
+    zoneId: venue.zoneId,
+    operatorId: venue.operatorId,
+  });
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  const read = async () => {
+    const answer = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}/placed`);
+    expect(answer.status).toBe(200);
+    return answer.json;
+  };
+  expect(await read()).not.toHaveProperty("invoiced");
+  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  expect(await read()).toMatchObject({ id, invoiced: true });
+});
+
 describe("Counter full invoice through the bill window", () => {
   it.each(["F1", "F2"] as const)(
     "issues one %s sale on the last part, with the emailed original an F1 chose before payment",

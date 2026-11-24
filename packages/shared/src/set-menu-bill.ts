@@ -1,6 +1,6 @@
 import { stringToCents } from "./cents.js";
 import { hasCode, isAppError } from "./errors.js";
-import type { ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
+import type { PublishedSetMenu, ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
 import {
   fitSetMenus,
   type SetMenuFit,
@@ -50,6 +50,27 @@ export function setMenuOfferOf(copy: ServedSetMenuCopy): SetMenuOffer {
     lines: copy.terms.lines,
     dishes,
   };
+}
+
+/** Every product the published set menu can hold, extras included, each once. */
+export function setMenuProductIds(copy: PublishedSetMenu): string[] {
+  const accepted = new Set<string | null>(copy.terms.lines.flatMap(({ courseIds }) => courseIds));
+  const productIds = new Set<string>();
+  for (const offer of Object.values(copy.offers)) {
+    if (offer.unit.measure) continue;
+    const dishes =
+      offer.variants.length === 0
+        ? [{ id: offer.productId, countsAsCourseId: offer.countsAsCourseId }]
+        : offer.variants;
+    const held = dishes.filter(({ countsAsCourseId }) => accepted.has(countsAsCourseId));
+    if (held.length === 0) continue;
+    for (const { id } of held) productIds.add(id);
+    for (const list of offer.offeredModifiers) {
+      if (list.kind !== "extras") continue;
+      for (const { productId } of list.items) productIds.add(productId);
+    }
+  }
+  return [...productIds];
 }
 
 export function setMenuCopyOf(copy: ServedSetMenuCopy, versionId: string): SetMenuCopy {

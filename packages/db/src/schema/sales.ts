@@ -274,6 +274,7 @@ export const saleLines = table(
     advanceRole: saleLineAdvanceRole("advance_role"),
     deductsSaleId: id("deducts_sale_id"),
     setMenuRole: saleLineSetMenuRole("set_menu_role"),
+    setMenuPart: money("set_menu_part"),
   },
   (t) => [
     foreignKey({

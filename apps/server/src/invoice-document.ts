@@ -25,6 +25,7 @@ import { readReceiptLanguage } from "@waitron/menu";
 import type { TradingContext } from "./trading-context.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
+import { withPrintedParts } from "./printed-set-menu-parts.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
 import { resolvePrintedLogo } from "./receipt-venue-logo.js";
@@ -79,11 +80,9 @@ async function readDocument(
   if (issued === undefined) throw new AppError("invoice_delivery.not_found", {});
   const { sale } = issued;
   if (!admits(sale)) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const rows = await tx
-    .select()
-    .from(saleLines)
-    .where(eq(saleLines.saleId, saleId))
-    .orderBy(saleLines.lineNo);
+  const rows = withPrintedParts(
+    await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId)).orderBy(saleLines.lineNo),
+  );
   const byId = new Map(rows.map((row) => [row.id, row.lineNo]));
   // `receiptLines` adds the lines that take an advance off, naming each advance.
   const dishes = rows.filter((row) => row.advanceRole !== "deduction");
@@ -110,7 +109,8 @@ async function readDocument(
         unitPrecision: row.unitPrecision,
         quantity: thousandthsToDecimal(row.quantity),
         priceQuantity: thousandthsToDecimal(row.priceQuantity),
-        lineGross: centsToDecimal(row.lineGross ?? row.lineTotal),
+        // `receiptLines` adds a divided set menu's part back.
+        lineGross: centsToDecimal((row.lineGross ?? row.lineTotal) - (row.setMenuPart ?? 0)),
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
         setMenuRole: row.setMenuRole,
       })),

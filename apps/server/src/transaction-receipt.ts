@@ -26,6 +26,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
+import { withPrintedParts } from "./printed-set-menu-parts.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readInvoiceTyping } from "./invoice-typing.js";
@@ -78,7 +79,7 @@ function receiptGrosses(
  * stored order (`readStoredOrder`), whose line numbers can have gaps where the filed rows' have
  * none. `identities` is null when there is no stored bill or it no longer prices to the filed rows,
  * as stored or with each free item given its share (`freeItemShares`); the receipt then prints one
- * entry per dish, without a percentage.
+ * entry per dish, without a percentage. `grosses` holds each row's sold amount.
  */
 async function billLinesFiled(
   tx: Transaction,
@@ -146,13 +147,20 @@ export async function readTransactionReceipt(
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("sale.not_found", { saleId });
   const { sale } = issued;
-  const rows = await tx
-    .select()
-    .from(saleLines)
-    .where(eq(saleLines.saleId, saleId))
-    .orderBy(saleLines.lineNo);
+  const rows = withPrintedParts(
+    await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId)).orderBy(saleLines.lineNo),
+  );
   const byId = new Map(rows.map((row) => [row.id, row.lineNo]));
-  const grosses = receiptGrosses(rows, sale.vatBreakdown);
+  const filedGrosses = receiptGrosses(rows, sale.vatBreakdown);
+  // What each row was sold at: a divided set menu's part is the set menu's price, not the row's.
+  const grosses = new Map(
+    rows.map((row) => [
+      row.id,
+      row.setMenuPart === null
+        ? filedGrosses.get(row.id)!
+        : subtractDecimal(filedGrosses.get(row.id)!, centsToDecimal(row.setMenuPart)),
+    ]),
+  );
   // `receiptLines` adds the lines that take an advance off, naming each advance.
   const dishes = rows.filter((row) => row.advanceRole !== "deduction");
   const bill = await billLinesFiled(tx, sale.workingOrderId, dishes, grosses);

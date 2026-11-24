@@ -196,7 +196,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     if (figure.kind === "answer") {
       return { units: "", item: figure.item, ...indent, price: "", amount: "" };
     }
-    const rate = { rate: formatVatRate(figure.rate!, locale) };
+    const rate = figure.rate === undefined ? {} : { rate: formatVatRate(figure.rate, locale) };
     if (figure.kind === "discount") {
       const amount = `-${formatAmount(negateDecimal(figure.amountExVat!), locale)}`;
       return { units: "", item: figure.item, ...indent, price: "", amount, ...rate };
@@ -217,7 +217,7 @@ export function buildReceiptDocument(input: ReceiptDocumentInput): ReceiptDocume
     row(
       `${quantity}${group.item}${included}`,
       group.amount === undefined
-        ? ""
+        ? group.rateLetter
         : `${plus}${itemAmount(group.amount)}${lettered(group.rateLetter)}`,
       { after: quantity },
     );

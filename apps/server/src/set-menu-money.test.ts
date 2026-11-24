@@ -1,19 +1,38 @@
-import { and, eq, isNotNull } from "drizzle-orm";
-import { expect, it } from "vitest";
-import { sales, workingOrderLines, workingOrders } from "@waitron/db";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  products,
+  productTakeawayVatRates,
+  readVenueClock,
+  sales,
+  taxpayer,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { createPinThrottle } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { decimal, type Dining } from "@waitron/shared";
+import { setTakeawayVatRate } from "@waitron/menu";
+import {
+  decimal,
+  decimalToCents,
+  saleId as brandSaleId,
+  sumDecimals,
+  type Dining,
+} from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
+import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
+import { setSetMenuCount } from "./set-menu-count.js";
+import { splitAfterPrint } from "./split-after-print.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
 import { issueIfFullyPaid, type BillPaymentRequest } from "./bill-payments.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
+import { setOrderInvoiceChoice } from "./working-order-invoice.js";
 import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
@@ -28,16 +47,25 @@ import {
   seatWithNoAllergies,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { capturedCardPayment, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
 import {
+  capturedCardPayment,
+  saveSetMenuDraft,
+  seedBillSetMenu,
+} from "./testing/set-menu-bill-fixture.js";
+import { RECIPIENT } from "./testing/deferred-close-fixture.js";
+import {
+  addSpecLunch,
   saveSpecDishes,
   sendSpecDraft,
+  serveSpecBill,
+  specDeps,
   setSpecCount,
   printSpecBill,
   setupSetMenuSpecVenue,
   specBill,
   specRows,
   specSaleLines,
+  type SpecLunch,
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -256,7 +284,7 @@ it("a dish added after a payment is placed as any dish is", async () => {
 });
 
 it.each(["takeaway", "eat_in"] as const)(
-  "a takeaway set-menu bill still refuses money, and the same bill eaten here takes it: %s",
+  "a takeaway set-menu bill takes money, as the same bill eaten here does: %s",
   async (dining) => {
     const daily = async () => {
       const seated = await seatedBill(dining);
@@ -269,26 +297,23 @@ it.each(["takeaway", "eat_in"] as const)(
         () => "accepted",
         (error: { code?: string }) => error.code,
       );
-    const expected = dining === "takeaway" ? "set_menu.payment_not_ready" : "accepted";
-
     const paid = await daily();
-    expect(await outcome(cashContribution(venue, paid.tabId, "5.00"))).toBe(expected);
+    expect(await outcome(cashContribution(venue, paid.tabId, "5.00"))).toBe("accepted");
     const comped = await daily();
-    expect(await outcome(applyArgs(await adjustmentArgs(comped.tabId, 2, "comp")))).toBe(expected);
+    expect(await outcome(applyArgs(await adjustmentArgs(comped.tabId, 2, "comp")))).toBe(
+      "accepted",
+    );
     const printed = await daily();
-    expect(await outcome(printBill(printed.partyId, printed.tabId))).toBe(expected);
+    expect(await outcome(printBill(printed.partyId, printed.tabId))).toBe("accepted");
 
-    const taken = dining === "takeaway" ? 0 : 1;
-    expect(await paymentsOf(venue, paid.tabId)).toHaveLength(taken);
+    expect(await paymentsOf(venue, paid.tabId)).toHaveLength(1);
     expect(
       await venue.db
         .select({ id: adjustments.id })
         .from(adjustments)
         .where(eq(adjustments.workingOrderId, comped.tabId)),
-    ).toHaveLength(taken);
-    expect((await billRow(venue, printed.tabId)).status).toBe(
-      dining === "takeaway" ? "open" : "placed",
-    );
+    ).toHaveLength(1);
+    expect((await billRow(venue, printed.tabId)).status).toBe("placed");
   },
 );
 
@@ -326,13 +351,16 @@ async function expectFiledAsStored(billId: string) {
   expect(sale!.total).toBe(7300);
 }
 
-async function payAtReader(billId: string) {
-  const provider = new FakePaymentProvider(venue.db);
+async function payAtReader(
+  billId: string,
+  total = "73.00",
+  provider = new FakePaymentProvider(venue.db),
+) {
   await takeReaderBillPayment(
     { ...deps(), provider },
     venue.cfg,
     billId,
-    { ...wholePayment("73.00"), method: "card", entry: "reader" },
+    { ...wholePayment(total), method: "card", entry: "reader" },
     venue.operator,
   );
   expect(provider.collectCalls).toHaveLength(1);
@@ -340,28 +368,33 @@ async function payAtReader(billId: string) {
 
 async function payWhole(
   billId: string,
+  total = "73.00",
   request: Parameters<typeof takeBillPayment>[3] = {
-    ...wholePayment("73.00"),
+    ...wholePayment(total),
     method: "cash",
-    tendered: "73.00",
+    tendered: total,
   },
 ) {
   await takeBillPayment(deps(), venue.cfg, billId, request, venue.operator);
-  expect(await paymentsOf(venue, billId)).toMatchObject([{ applied: 7300, state: "received" }]);
+  expect(await paymentsOf(venue, billId)).toMatchObject([
+    { applied: decimalToCents(decimal(total)), state: "received" },
+  ]);
 }
 
-const paths: Record<string, (tab: { partyId: string; tabId: string }) => Promise<void>> = {
-  "whole by cash": ({ tabId }) => payWhole(tabId),
-  "whole by hand-keyed card": ({ tabId }) =>
-    payWhole(tabId, { ...wholePayment("73.00"), method: "card", entry: "manual" }),
-  "whole at the reader": ({ tabId }) => payAtReader(tabId),
-  "placed, then collected": async ({ tabId }) => {
+type Path = (tab: { partyId: string; tabId: string }, total: string) => Promise<void>;
+
+const paths: Record<string, Path> = {
+  "whole by cash": ({ tabId }, total) => payWhole(tabId, total),
+  "whole by hand-keyed card": ({ tabId }, total) =>
+    payWhole(tabId, total, { ...wholePayment(total), method: "card", entry: "manual" }),
+  "whole at the reader": ({ tabId }, total) => payAtReader(tabId, total),
+  "placed, then collected": async ({ tabId }, total) => {
     await placeByHand(venue, tabId);
-    await payWhole(tabId);
+    await payWhole(tabId, total);
   },
-  "placed, then collected at the reader": async ({ tabId }) => {
+  "placed, then collected at the reader": async ({ tabId }, total) => {
     await placeByHand(venue, tabId);
-    await payAtReader(tabId);
+    await payAtReader(tabId, total);
   },
   "unpaid departure": async ({ partyId, tabId }) => {
     const expectedPartyRevision = await revisionOf(venue, partyId);
@@ -382,32 +415,66 @@ const paths: Record<string, (tab: { partyId: string; tabId: string }) => Promise
     );
     expect(await revisionOf(venue, partyId)).toBeGreaterThan(expectedPartyRevision);
   },
-  "deferred close": async ({ tabId }) => {
-    await inTx(venue, async (tx) =>
-      closeBillDeferredTx(
-        tx,
-        { ...deps(), admitPartyRelease: async () => "allowed" },
-        venue.cfg,
-        {
-          id: tabId,
-          submissionId: crypto.randomUUID(),
-          expectedRevision: await readOrderRevision(tx, tabId),
-          expectedEdit: await readBillEditState(tx, tabId),
-          expectedTotal: "73.00",
-          invoiceType: "F2",
-          recipient: null,
-          receiptLanguage: venue.cfg.locale,
-          delivery: null,
-          partyFinish: null,
-        },
-        venue.operator.personId,
-      ),
-    );
-    expect((await billRow(venue, tabId)).status).not.toBe("open");
-  },
+  "deferred close": ({ tabId }, total) => closeDeferred(tabId, total, "F2"),
   "Print the bill": async ({ partyId, tabId }) => {
     await printBill(partyId, tabId);
     expect((await billRow(venue, tabId)).status).toBe("placed");
+  },
+};
+
+async function closeDeferred(tabId: string, total: string, invoiceType: "F1" | "F2") {
+  if (invoiceType === "F1")
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, tabId, {
+      revision: await inTx(venue, (tx) => readOrderRevision(tx, tabId)),
+      invoiceType,
+      recipient: RECIPIENT,
+      operatorId: venue.operator.personId,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
+    });
+  await inTx(venue, async (tx) =>
+    closeBillDeferredTx(
+      tx,
+      { ...deps(), admitPartyRelease: async () => "allowed" },
+      venue.cfg,
+      {
+        id: tabId,
+        submissionId: crypto.randomUUID(),
+        expectedRevision: await readOrderRevision(tx, tabId),
+        expectedEdit: await readBillEditState(tx, tabId),
+        expectedTotal: total,
+        invoiceType,
+        recipient: invoiceType === "F1" ? RECIPIENT : null,
+        receiptLanguage: venue.cfg.locale,
+        delivery: null,
+        partyFinish: null,
+      },
+      venue.operator.personId,
+    ),
+  );
+  expect((await billRow(venue, tabId)).status).not.toBe("open");
+}
+
+/** {@link paths}, and the paths that issue a bill without a payment taken at the till. */
+const issuingPaths: Record<string, Path> = {
+  ...paths,
+  "close of day": async ({ tabId }) => {
+    const outcome = await inTx(venue, async (tx) =>
+      issueBillAtClose(
+        tx,
+        deps(),
+        closeOfDayConfig(venue.cfg),
+        tabId,
+        // Every bill opened so far counts as due.
+        { dayStartedAt: new Date("2999-01-01T00:00:00Z"), venueClock: await readVenueClock(tx) },
+      ),
+    );
+    expect(outcome.kind).toBe("issued");
+  },
+  "deferred close with a full invoice": ({ tabId }, total) => closeDeferred(tabId, total, "F1"),
+  "a captured card": async ({ tabId }, total) => {
+    await inTx(venue, (tx) => capturedCardPayment(tx, venue, tabId, total));
+    const result = await settlePendingBillPayments({ ...deps(), cfg: venue.cfg });
+    expect(result).toMatchObject({ received: 1, pending: 0, errors: [] });
   },
 };
 
@@ -415,7 +482,7 @@ it.each(Object.keys(paths))(
   "a set-menu bill is paid whole or issued through each path: %s",
   async (path) => {
     const tab = await specBill(spec, "fire");
-    await paths[path]!(tab);
+    await paths[path]!(tab, "73.00");
     await expectFiledAsStored(tab.tabId);
   },
 );
@@ -444,7 +511,7 @@ it("still lets staff cancel a dish on a set-menu bill", async () => {
   expect(adjustmentIds).toHaveLength(1);
 });
 
-it("keeps the cancellation when the remaining takeaway set-menu bill matches cash already received", async () => {
+it("keeps the cancellation when the remaining takeaway set-menu bill matches cash already received, and issues the bill the received cash covers", async () => {
   const id = await bill(false, "takeaway");
   await order(venue, id, "Paella");
   const paymentId = await cashContribution(venue, id, "26.00");
@@ -454,8 +521,8 @@ it("keeps the cancellation when the remaining takeaway set-menu bill matches cas
     await cancelItemForTest(tx, venue.cfg, id, 2, undefined, venue.operator.personId);
     return issueIfFullyPaid(tx, deps(), venue.cfg, id, venue.operator.personId);
   });
-  expect(invoice).toBeNull();
-  expect((await billRow(venue, id)).status).toBe("open");
+  expect(invoice).not.toBeNull();
+  expect((await billRow(venue, id)).status).toBe("settled");
   expect(await paymentsOf(venue, id)).toMatchObject([
     { id: paymentId, applied: 2600, state: "received" },
   ]);
@@ -466,8 +533,8 @@ it("keeps the cancellation when the remaining takeaway set-menu bill matches cas
     .orderBy(workingOrderLines.lineNo);
   expect(lines).toEqual([{ lineNo: 1 }, { lineNo: 3 }]);
   expect(
-    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
-  ).toEqual([]);
+    await venue.db.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, id)),
+  ).toEqual([{ total: 2600 }]);
 });
 
 it("recovers a captured card payment that covers the whole set-menu bill without another charge", async () => {
@@ -489,4 +556,275 @@ it("recovers a captured card payment that covers the whole set-menu bill without
       .from(payments)
       .where(eq(payments.workingOrderId, id)),
   ).toEqual([{ state: "captured", saleId: billed[0]!.id }]);
+});
+
+describe("a takeaway set menu whose dishes' rates differ", () => {
+  let lunch: SpecLunch;
+  let saved: {
+    rates: (typeof productTakeawayVatRates.$inferSelect)[];
+    domicile: string | null;
+  };
+  const dishIds = () => [spec.productIds.Soup, spec.productIds.Hake];
+  beforeAll(async () => {
+    saved = await inTx(venue, async (tx) => ({
+      rates: await tx
+        .select()
+        .from(productTakeawayVatRates)
+        .where(inArray(productTakeawayVatRates.productId, dishIds())),
+      domicile: (await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer))[0]!
+        .domicile,
+    }));
+    lunch = await addSpecLunch(spec);
+    // A full invoice names the seller's domicile.
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
+  });
+  afterAll(() =>
+    inTx(venue, async (tx) => {
+      await tx
+        .delete(productTakeawayVatRates)
+        .where(inArray(productTakeawayVatRates.productId, dishIds()));
+      if (saved.rates.length > 0) await tx.insert(productTakeawayVatRates).values(saved.rates);
+      await tx.update(taxpayer).set({ taxpayerDomicile: saved.domicile });
+    }),
+  );
+  beforeEach(() => pricedAt({ Soup: 550, Hake: 1250 }));
+  afterEach(async () => {
+    await pricedAt({ Soup: 600, Hake: 1600 });
+    await lemonadeAt("21.00");
+  });
+
+  function pricedAt(prices: Record<"Soup" | "Hake", number>) {
+    return inTx(venue, async (tx) => {
+      for (const dish of ["Soup", "Hake"] as const)
+        await tx
+          .update(products)
+          .set({ unitPrice: prices[dish] })
+          .where(eq(products.id, spec.productIds[dish]));
+    });
+  }
+
+  function lemonadeAt(rate: string | null) {
+    return inTx(venue, async (tx) => {
+      if (rate === null)
+        await tx
+          .delete(productTakeawayVatRates)
+          .where(eq(productTakeawayVatRates.productId, lunch.lemonadeId));
+      else await setTakeawayVatRate(tx, lunch.lemonadeId, rate);
+    });
+  }
+
+  /** A bill set to take away as it is seated, holding a Lunch menu with Soup, Hake and Lemonade
+   * sent from it, fired unless told: 14.00. */
+  async function lunchBill(release: "hold" | "fire" = "fire") {
+    const bill = await seatedBill("takeaway");
+    await inTx(venue, (tx) =>
+      setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, 1, venue.operator.personId),
+    );
+    const draft = await saveSetMenuDraft(
+      venue,
+      bill,
+      ...(["Soup", "Hake", "Lemonade"] as const).map((dish) => ({
+        menuItemId: lunch.items[dish],
+        menuVersionId: lunch.versionId,
+        setMenuId: lunch.menuId,
+        quantity: "1",
+      })),
+    );
+    await sendSpecDraft(spec, bill.partyId, draft.id, release);
+    return bill;
+  }
+
+  /** The sale's lines (name, gross, rate, set-menu part), its total, the VAT breakdown it filed and
+   * its record's VAT. */
+  async function filed(billId: string, saleId?: string) {
+    const lines = await specSaleLines(spec, billId, saleId);
+    const [sale] = await venue.db
+      .select({ total: sales.total, vat: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, lines[0]!.saleId));
+    const id = brandSaleId(lines[0]!.saleId);
+    // Readable only while the record's VAT and total fields agree with its breakdown.
+    const record = (await inTx(venue, (tx) => venue.backend.filedFiguresFor!(tx, [id]))).get(id);
+    expect(record?.readable).toBe(true);
+    if (record?.readable !== true) throw new Error("the sale's record is unreadable");
+    return {
+      rows: lines.map(({ name, lineGross, vatRate, setMenuPart }) => [
+        name,
+        lineGross,
+        vatRate,
+        setMenuPart,
+      ]),
+      total: sale!.total,
+      vat: sale!.vat,
+      recordVat: sumDecimals(record.newest.vatBreakdown.map((line) => line.tax)),
+    };
+  }
+
+  // The plan's worked example.
+  const DIVIDED = {
+    rows: [
+      ["Lunch menu", 0, 1000, -1400],
+      ["Soup", 358, 1000, 358],
+      ["Hake", 814, 1000, 814],
+      ["Lemonade", 228, 2100, 228],
+    ],
+    total: 1400,
+    vat: [
+      { rate: "10.00", base: "10.65", tax: "1.07" },
+      { rate: "21.00", base: "1.88", tax: "0.40" },
+    ],
+    recordVat: "1.47",
+  };
+  // S3: every dish at 10%, so the set menu files its whole price.
+  const WHOLE = {
+    rows: [
+      ["Lunch menu", 1400, 1000, null],
+      ["Soup", 0, 1000, null],
+      ["Hake", 0, 1000, null],
+      ["Lemonade", 0, 1000, null],
+    ],
+    total: 1400,
+    vat: [{ rate: "10.00", base: "12.73", tax: "1.27" }],
+    recordVat: "1.27",
+  };
+
+  describe.each([
+    ["21.00", DIVIDED],
+    ["10.00", WHOLE],
+  ])("with Lemonade taken away at %s", (rate, expected) => {
+    it.each(Object.keys(issuingPaths))("is issued through each path: %s", async (path) => {
+      await lemonadeAt(rate);
+      const tab = await lunchBill();
+      await issuingPaths[path]!(tab, "14.00");
+      expect(await filed(tab.tabId)).toEqual(expected);
+    });
+  });
+
+  it.each(["cash", "hand-keyed", "reader"] as const)(
+    "a bill printed before its rates changed is paid as printed: %s",
+    async (method) => {
+      await lemonadeAt("10.00");
+      const tab = await lunchBill();
+      await printBill(tab.partyId, tab.tabId);
+      expect(await filed(tab.tabId)).toEqual(WHOLE);
+      await lemonadeAt("21.00");
+
+      if (method === "reader") await payAtReader(tab.tabId, "14.00");
+      else
+        await payWhole(
+          tab.tabId,
+          "14.00",
+          method === "cash"
+            ? { ...wholePayment("14.00"), method: "cash", tendered: "14.00" }
+            : { ...wholePayment("14.00"), method: "card", entry: "manual" },
+        );
+
+      expect((await billRow(venue, tab.tabId)).status).toBe("settled");
+      expect(await filed(tab.tabId)).toEqual(WHOLE);
+    },
+  );
+
+  it("a split after printing credits what was filed and divides the new bill at its own rates", async () => {
+    await lemonadeAt("10.00");
+    const tab = await lunchBill();
+    await serveSpecBill(spec, tab.partyId, tab.tabId);
+    const { saleId } = await printBill(tab.partyId, tab.tabId);
+    await lemonadeAt("21.00");
+
+    const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, tab.tabId, {
+      ...venue.operator,
+      attempts: { throttle: createPinThrottle(), slot: "split" },
+    });
+    const [credit] = await venue.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.correctsSaleId, saleId!));
+    expect(await filed(tab.tabId, credit!.id)).toEqual({
+      rows: [
+        ["Lunch menu", -1400, 1000, null],
+        ["Soup", 0, 1000, null],
+        ["Hake", 0, 1000, null],
+        ["Lemonade", 0, 1000, null],
+      ],
+      total: -1400,
+      vat: [{ rate: "10.00", base: "-12.73", tax: "-1.27" }],
+      recordVat: "-1.27",
+    });
+
+    await payWhole(billId, "14.00");
+    expect(await filed(billId)).toEqual(DIVIDED);
+  });
+
+  it("part paid, then a rate changed, then paid, issues the division at the new rate", async () => {
+    await lemonadeAt("10.00");
+    const tab = await lunchBill();
+    await cashContribution(venue, tab.tabId, "5.00");
+    await lemonadeAt("21.00");
+    await cashContribution(venue, tab.tabId, "9.00");
+    expect((await billRow(venue, tab.tabId)).status).toBe("settled");
+    expect(await filed(tab.tabId)).toEqual(DIVIDED);
+  });
+
+  it("cash that covers the bill after a cancel issues it", async () => {
+    const tab = await lunchBill();
+    await order(venue, tab.tabId, "Burger");
+    const burger = (await specRows(spec, tab.tabId)).find(({ name }) => name === "Burger")!;
+    await cashContribution(venue, tab.tabId, "14.00");
+    const invoice = await inTx(venue, async (tx) => {
+      await cancelItemForTest(
+        tx,
+        venue.cfg,
+        tab.tabId,
+        burger.lineNo,
+        undefined,
+        venue.operator.personId,
+      );
+      return issueIfFullyPaid(tx, deps(), venue.cfg, tab.tabId, venue.operator.personId);
+    });
+    expect(invoice).not.toBeNull();
+    expect(await filed(tab.tabId)).toEqual(DIVIDED);
+  });
+
+  it("a rate saved while the reader collects files the division", async () => {
+    await lemonadeAt("10.00");
+    const tab = await lunchBill();
+    const provider = new FakePaymentProvider(venue.db);
+    const release = provider.holdNextCollect();
+    const paid = payAtReader(tab.tabId, "14.00", provider);
+    await vi.waitFor(() => expect(provider.collectCalls).toHaveLength(1));
+    await lemonadeAt("21.00");
+    release();
+    await paid;
+    expect(await filed(tab.tabId)).toEqual(DIVIDED);
+  });
+
+  it("a product with no rate refuses as any line does", async () => {
+    await lemonadeAt(null);
+    const tab = await lunchBill();
+    await expect(
+      takeBillPayment(
+        deps(),
+        venue.cfg,
+        tab.tabId,
+        { ...wholePayment("14.00"), method: "cash", tendered: "14.00" },
+        venue.operator,
+      ),
+    ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 4 } });
+    expect(await paymentsOf(venue, tab.tabId)).toEqual([]);
+
+    const paymentId = await inTx(venue, (tx) => capturedCardPayment(tx, venue, tab.tabId, "14.00"));
+    const left = await settlePendingBillPayments({ ...deps(), cfg: venue.cfg });
+    expect(left).toMatchObject({ received: 0, pending: 1 });
+    expect(await paymentsOf(venue, tab.tabId)).toMatchObject([{ id: paymentId, state: "pending" }]);
+
+    // Settled once the rate is back, so no later case's settlement finds it pending.
+    await lemonadeAt("21.00");
+    expect(await settlePendingBillPayments({ ...deps(), cfg: venue.cfg })).toMatchObject({
+      received: 1,
+      pending: 0,
+    });
+    expect(await filed(tab.tabId)).toEqual(DIVIDED);
+  });
 });

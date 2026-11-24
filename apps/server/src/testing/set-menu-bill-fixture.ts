@@ -17,7 +17,7 @@ import {
   requireMenuRoot,
 } from "@waitron/menu";
 import { insertCapturedPayment } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
+import { decimal, decimalToCents } from "@waitron/shared";
 import { saveDraftForTest } from "./draft-command-fixture.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
 import { publishWorkingMenu } from "./publish-menu.js";
@@ -94,6 +94,7 @@ export async function capturedCardPayment(
   tx: Transaction,
   venue: PartyVenue,
   workingOrderId: string,
+  amount = "26.00",
 ): Promise<string> {
   const [{ id: paymentId }] = await tx
     .insert(billPayments)
@@ -103,7 +104,7 @@ export async function capturedCardPayment(
       fingerprint: "pending-card-payment",
       kind: "contribution",
       method: "card",
-      applied: 2600,
+      applied: decimalToCents(decimal(amount)),
       state: "pending",
       requestedBy: venue.operator.personId,
       source: venue.cfg.origin.source,
@@ -117,7 +118,7 @@ export async function capturedCardPayment(
     billPaymentId: paymentId,
     provider: "fake",
     paymentRef: randomUUID(),
-    amount: decimal("26.00"),
+    amount: decimal(amount),
     settledAt: venue.clock.now().instant,
   });
   return paymentId;

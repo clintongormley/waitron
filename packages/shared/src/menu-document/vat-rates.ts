@@ -1,5 +1,5 @@
 import { AppError } from "../errors.js";
-import { decimal, toScale } from "../money.js";
+import { compareDecimal, decimal, toScale } from "../money.js";
 import type { Decimal } from "../money.js";
 import { RATE_SCALE } from "../scales.js";
 
@@ -30,6 +30,8 @@ export const VAT_RATE_TABLE: VatRateTable = Object.freeze({
 
 type Caller = "vatRateOn" | "vatRatesOn" | "rateOn";
 
+/** The earliest date {@link isCalendarDate} accepts. */
+const EARLIEST_DATE = "0000-01-01";
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Whether `value` is a real calendar day written `YYYY-MM-DD`. */
@@ -90,6 +92,18 @@ export function rateOn(schedule: readonly DatedRate[], date: string): Decimal {
     throw new AppError("vat_rate.schedule_invalid", { caller: "rateOn", reason });
   }
   return toScale(rateIn(schedule, date), RATE_SCALE);
+}
+
+/** Each day's highest rate, as one dated list. Empty when there are no lists or one is empty. */
+export function highestRates(schedules: readonly (readonly DatedRate[])[]): readonly DatedRate[] {
+  if (schedules.length === 0 || schedules.some((schedule) => schedule.length === 0)) return [];
+  const starts = new Set(schedules.flat().flatMap(({ from }) => from ?? []));
+  return [null, ...[...starts].sort()].map((from) => ({
+    from,
+    rate: schedules
+      .map((schedule) => rateOn(schedule, from ?? EARLIEST_DATE))
+      .reduce((highest, rate) => (compareDecimal(rate, highest) > 0 ? rate : highest)),
+  }));
 }
 
 /** The rate `vatClass` carries on the local calendar date `date` (`YYYY-MM-DD`). */

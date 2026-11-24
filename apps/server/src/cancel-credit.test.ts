@@ -37,6 +37,7 @@ function row(overrides: Partial<Row>): Row {
     advanceRole: null,
     deductsSaleId: null,
     setMenuRole: null,
+    setMenuPart: null,
     ...overrides,
   };
 }
@@ -67,5 +68,16 @@ describe("reversedLines", () => {
       advanceRole: "deduction",
       deductsSaleId: "advance-sale",
     });
+  });
+
+  it("a whole credit reverses each line's set-menu part, and keeps an absent one null", () => {
+    const [setMenu, dish, plain] = reversedLines([
+      row({ id: "menu-line", setMenuRole: "set_menu", setMenuPart: -1400 }),
+      row({ id: "dish-line", lineNo: 2, setMenuRole: "dish", setMenuPart: 358 }),
+      row({ id: "plain-line", lineNo: 3 }),
+    ]);
+    expect(setMenu).toMatchObject({ setMenuPart: "14.00" });
+    expect(dish).toMatchObject({ setMenuPart: "-3.58" });
+    expect(plain).toMatchObject({ setMenuPart: null });
   });
 });

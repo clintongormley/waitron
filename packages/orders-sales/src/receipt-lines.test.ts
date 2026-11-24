@@ -102,6 +102,24 @@ describe("withReceiptListPrices", () => {
 
     expect(portioned).toMatchObject({ listGross: "0.03", listUnitPriceGross: "0.01" });
   });
+
+  it("compares a divided set menu's list prices with the amounts its rows were sold at", () => {
+    // VAT rates piece B, S9: the plan's worked example, with a 2.00 supplement on hake.
+    const [menu, hake, discounted] = withReceiptListPrices(
+      [
+        { ...filed("1.000", "0.00"), setMenuPart: decimal("-14.00") },
+        { ...filed("1.000", "10.14"), setMenuPart: decimal("8.14") },
+        { ...filed("1.000", "0.00"), setMenuPart: decimal("-12.60") },
+      ],
+      [decimal("14.00"), decimal("2.00"), decimal("14.00")].map((listUnitGross) => ({
+        listUnitGross,
+      })),
+    );
+
+    expect(menu).not.toHaveProperty("listGross");
+    expect(hake).not.toHaveProperty("listGross");
+    expect(discounted).toMatchObject({ listGross: "14.00", listUnitPriceGross: "14.00" });
+  });
 });
 
 describe("ticketLinesFrom", () => {

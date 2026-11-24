@@ -10,11 +10,13 @@ import {
   adjustmentLines,
   departments,
   invoiceSeries,
+  products,
   sales,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
+import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
 import {
   civilDateOf,
   periodDays,
@@ -36,7 +38,6 @@ import {
   type DatedRate,
   type Decimal,
   type Dining,
-  type VatClass,
 } from "@waitron/shared";
 import { addDays } from "@waitron/venue-service";
 import { inIds } from "./in-ids.js";
@@ -149,6 +150,7 @@ export async function listFreeItems(
   // bill.
   const reduced = await tx
     .select({
+      lineId: workingOrderLines.id,
       adjustmentId: adjustmentLines.adjustmentId,
       reduction: adjustmentLines.reduction,
       reducedQuantity: adjustmentLines.quantity,
@@ -157,8 +159,12 @@ export async function listFreeItems(
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
       setMenuRole: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
+      setMenuVersionId: workingOrderLines.setMenuVersionId,
+      setMenuLineId: workingOrderLines.setMenuLineId,
+      menuVersionId: workingOrderLines.menuVersionId,
+      productPrice: effectiveProductColumns.unitPrice,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
-      takeawayVatClass: workingOrderLines.takeawayVatClass,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       quantity: workingOrderLines.quantity,
@@ -167,6 +173,8 @@ export async function listFreeItems(
     .from(adjustmentLines)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
     .where(
       and(
         inIds(
@@ -182,13 +190,18 @@ export async function listFreeItems(
   const ratesOf = new Map<(typeof reduced)[number], readonly DatedRate[]>();
   for (const dining of ["eat_in", "takeaway"] as const satisfies readonly Dining[]) {
     const lines = reduced.filter((line) => line.dining === dining);
-    const rates = await readLineVatRates(
+    const { rates } = await readLineVatRates(
       tx,
       dining,
       lines.map((line) => ({
+        id: line.lineId,
         productId: line.productId,
         setMenuRole: line.setMenuRole,
-        takeawayVatClass: line.takeawayVatClass as VatClass,
+        setMenuId: line.setMenuId,
+        setMenuVersionId: line.setMenuVersionId,
+        setMenuLineId: line.setMenuLineId,
+        menuVersionId: line.menuVersionId,
+        productPrice: line.productId === null ? null : centsToDecimal(line.productPrice),
       })),
     );
     lines.forEach((line, i) => ratesOf.set(line, rates[i]!));

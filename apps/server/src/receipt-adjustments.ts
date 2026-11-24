@@ -18,11 +18,13 @@ import {
 } from "@waitron/shared";
 import {
   groupByParent,
+  soldGross,
   ticketLinesFrom,
   trimQuantityForDisplay,
   type ReceiptSource,
 } from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { withPrintedParts } from "./printed-set-menu-parts.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 import {
   hasStoredLines,
@@ -114,6 +116,8 @@ async function readFiledLines(tx: Transaction, saleId: string) {
       gross: saleLines.lineGross,
       listGross: saleLines.listGross,
       listUnitPriceGross: saleLines.listUnitPriceGross,
+      setMenuPart: saleLines.setMenuPart,
+      setMenuRole: saleLines.setMenuRole,
       counterpartyTaxId: sales.counterpartyTaxId,
       advanceRole: saleLines.advanceRole,
       advanceCode: advanceSeries.code,
@@ -127,7 +131,7 @@ async function readFiledLines(tx: Transaction, saleId: string) {
     .leftJoin(advanceSeries, eq(advanceSeries.id, advanceSales.seriesId))
     .where(eq(sales.id, saleId))
     .orderBy(saleLines.lineNo);
-  return rows.map(
+  return withPrintedParts(rows).map(
     ({ advanceRole, advanceCode, advanceNumber, advanceIssuedAt, advanceOffset, ...row }) => ({
       ...row,
       advance:
@@ -192,10 +196,27 @@ async function dishLines(
   ).map((line, i) => (each.has(identities[i]!.id) ? { ...line, soldInEach: true as const } : line));
   if (filed !== undefined) {
     const byLineNo = new Map(filed.map((line) => [line.lineNo, line]));
+    // A filed dish names no set menu, so a dish that took no part is listed under its divided set
+    // menu only when every set menu on the ticket was divided.
+    const menus = filed.filter((row) => row.setMenuRole === "set_menu");
+    const allDivided =
+      !fullInvoice && menus.length > 0 && menus.every((row) => row.setMenuPart !== null);
+    // Every caller gives a line's sold amount, so a divided set menu's filed part is added back.
     lines = lines.map((line, i) => {
-      const lineNo = priced.lines[i]!.lineNo;
-      const vatRate = basisPointsToDecimal(byLineNo.get(lineNo)!.rate);
-      return { ...line, vatRate };
+      const row = byLineNo.get(priced.lines[i]!.lineNo)!;
+      const vatRate = basisPointsToDecimal(row.rate);
+      if (row.setMenuPart === null) {
+        return allDivided && row.setMenuRole === "dish"
+          ? { ...line, vatRate, setMenuPart: "0.00" }
+          : { ...line, vatRate };
+      }
+      const setMenuPart = centsToDecimal(row.setMenuPart);
+      return {
+        ...line,
+        vatRate,
+        gross: addDecimal(decimal(line.gross), setMenuPart),
+        setMenuPart,
+      };
     });
     if (fullInvoice) {
       lines = lines.map((line, i) => {
@@ -321,9 +342,11 @@ function withFamilies(
   });
 }
 
+/** What the bill's comps and discounts left the line at: a divided set menu's rows are judged by
+ * their sold amounts, which the records were made on, not by the parts they file. */
 function chargedAmount(line: TillSaleLine) {
-  return line.net?.tax === undefined
-    ? decimal(line.gross)
+  return line.net?.tax === undefined || line.setMenuPart !== undefined
+    ? soldGross(line)
     : addDecimal(decimal(line.net.base), decimal(line.net.tax));
 }
 

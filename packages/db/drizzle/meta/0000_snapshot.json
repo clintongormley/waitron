@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3696b9dd-5a3b-439c-84fb-fd7687069eca",
+  "id": "84b5195b-e266-4a72-bf16-1099f0a5f204",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9345,6 +9345,13 @@
         "set_menu_role": {
           "name": "set_menu_role",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "set_menu_part": {
+          "name": "set_menu_part",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

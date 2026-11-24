@@ -1517,6 +1517,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       classification: index === 0 ? cocktails : lemon,
       listGross: index === 0 ? "13.31" : undefined,
       listUnitPriceGross: index === 0 ? "6.66" : undefined,
+      setMenuPart: index === 0 ? decimal("3.58") : null,
     }));
   }
 
@@ -1555,6 +1556,17 @@ describe("recordSale — what each line sold and how it was classified", () => {
         classification: lemon,
       },
     ]);
+  });
+
+  it("reads back each line's set-menu part as stored, and null where the line names none", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { lines: classifiedLines() });
+
+    const saved = await suite.db
+      .select({ setMenuPart: saleLines.setMenuPart })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    expect(saved.map((line) => line.setMenuPart)).toEqual([358, null]);
   });
 
   it("leaves every new field null on a line that names none of them", async () => {
@@ -1625,6 +1637,7 @@ describe("recordSale — what each line sold and how it was classified", () => {
       "advance_role",
       "deducts_sale_id",
       "set_menu_role",
+      "set_menu_part",
     ];
     const tableColumns = await rows<{ name: string }>(
       sql`select name from pragma_table_info('sale_lines')`,

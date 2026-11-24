@@ -3,6 +3,7 @@ import { decimal } from "../money.js";
 import { isAppError } from "../errors.js";
 import {
   VAT_RATE_TABLE,
+  highestRates,
   isCalendarDate,
   localCalendarDate,
   localToday,
@@ -308,6 +309,59 @@ describe("a table checked once", () => {
       (VAT_RATE_TABLE as Record<string, unknown>).general = [];
     }).toThrow(TypeError);
     expect(vatRateOn("general", "2028-01-01")).toBe(decimal("21.00"));
+  });
+});
+
+describe("highestRates", () => {
+  const always = (rate: string): DatedRate[] => [{ from: null, rate }];
+  const from = (start: string, rate: string): DatedRate => ({ from: start, rate });
+
+  it("gives one entry where every list holds the same rate", () => {
+    expect(highestRates([always("10.00"), always("10.00")])).toEqual(always("10.00"));
+  });
+
+  it("gives each day's highest rate, from every day a list changes", () => {
+    expect(
+      highestRates([
+        [...always("10.00"), from("2026-12-01", "21.00")],
+        [...always("4.00"), from("2026-11-01", "10.00")],
+      ]),
+    ).toEqual([...always("10.00"), from("2026-11-01", "10.00"), from("2026-12-01", "21.00")]);
+  });
+
+  it("falls when the list that held the highest rate falls", () => {
+    expect(
+      highestRates([[...always("21.00"), from("2026-12-01", "4.00")], always("10.00")]),
+    ).toEqual([...always("21.00"), from("2026-12-01", "10.00")]);
+  });
+
+  it("gives one entry for a day on which two lists change", () => {
+    expect(
+      highestRates([
+        [...always("4.00"), from("2026-12-01", "10.00")],
+        [...always("10.00"), from("2026-12-01", "21.00")],
+      ]),
+    ).toEqual([...always("10.00"), from("2026-12-01", "21.00")]);
+  });
+
+  it("compares rates by value, not as text", () => {
+    expect(highestRates([always("9.00"), always("10.00")])).toEqual(always("10.00"));
+    expect(highestRates([always("10.00"), always("9.00")])).toEqual(always("10.00"));
+  });
+
+  it("has no rates when there are no lists", () => {
+    expect(highestRates([])).toEqual([]);
+  });
+
+  it("has no rates when a list has none", () => {
+    expect(highestRates([always("10.00"), []])).toEqual([]);
+  });
+
+  it("refuses a list that does not cover the beginning of time", () => {
+    expect(refusal(() => highestRates([always("10.00"), [from("2026-12-01", "21.00")]]))).toEqual({
+      code: "vat_rate.schedule_invalid",
+      params: { caller: "rateOn", reason: "first_entry_missing_or_dated" },
+    });
   });
 });
 

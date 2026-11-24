@@ -1,4 +1,4 @@
-import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
+import type { Decimal, OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 
 /** One line of a sale as the caller hands it in. Declared here, apart from `record-sale.ts`, so a
  * browser consumer can name the type without its program gaining that file's database imports. */
@@ -67,4 +67,7 @@ export interface RecordSaleLine {
   /** Marks a set menu's own line, and each dish placed in one; `null` on any other line,
    * a paid extra of a set-menu dish included. Presentation and reporting only, never hashed. */
   setMenuRole?: "set_menu" | "dish" | null;
+  /** On a dish's row of a divided takeaway set menu, how much of its total is the set menu's price;
+   * on the set menu's own row, minus the whole amount moved off it. Never hashed. */
+  setMenuPart?: Decimal | null;
 }

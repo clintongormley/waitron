@@ -423,7 +423,9 @@ function tableRows(facts: ReceiptFacts): TableRow[] {
           ? ""
           : `${plus}${money(group.perUnit.price)}${group.perUnit.unitName === undefined ? "" : `/${group.perUnit.unitName}`}`;
       const amount =
-        group.amount === undefined ? "" : `${plus}${lettered(group.amount, group.rateLetter)}`;
+        group.amount === undefined
+          ? group.rateLetter
+          : `${plus}${lettered(group.amount, group.rateLetter)}`;
       rows.push(withVat(group.item, group.quantity, price, amount, 0));
       for (const answer of group.answers) rows.push(withVat(answer, "", "", "", 2));
       for (const option of group.options) {
