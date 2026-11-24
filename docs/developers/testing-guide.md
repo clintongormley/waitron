@@ -4757,3 +4757,11 @@ does not see.
 
 > Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
 > include paths are not package-anchored.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Stream test loopback MTU
+
+> it reads `ci.yml` as text.

@@ -6026,3 +6026,93 @@ inert library entered ordinary startup and wrote recovery state. The ahead check
 environment, and requires no output or state files. It then invokes the exported checks against a
 copied venue and packaged migrations. This guards this entry's packaging and invocation; it does
 not qualify the container, a complete upgrade, a test sale or power loss.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### CI scope overview
+
+> scoped package tests run in PR CI; main pushes run quick checks; the nightly or manual full run enforces package coverage.
+
+
+### Server shard packing
+
+> checks packing, not a Vitest run or freshness.
+
+
+### CI job duration
+
+> the reporter only warns;
+
+> pins shard counts and 10-minute limits.
+
+
+### Browser shard coverage
+
+> reads text, not the Vitest config.
+
+
+### Sharp in Node bundles
+
+> : read text; bundle-smoke reads only `dist/server.js`
+
+
+### Workflow job timeouts
+
+> reads text.
+
+
+### Bounded package installation
+
+> read text, not retries;
+
+
+### Bounded pnpm setup
+
+> : reads text
+
+
+### Process tree deadlines on ubuntu-26.04
+
+> also checks ci-diff-paths' GNU preference and deadline arguments.
+
+
+### Bounded Node setup
+
+> reads workflow text.
+
+
+### Bounded checkout
+
+> reads text, never runs a workflow.
+
+
+### Bounded artifact downloads
+
+> read workflow text, never run it.
+
+
+### Bounded artifact uploads
+
+> reads workflow text, never runs an upload.
+
+
+### TypeScript compiler versions
+
+> A package's `tsc` is version 7; the root resolves `typescript` to the version 6 API (binary `tsc6`).
+
+
+### Name-filtered test runs
+
+> A focused pass proves only those cases; CI supplies package-wide coverage.
+
+
+### Browser-mode test concurrency
+
+> Chromium launch depends on seat permissions.
+
+
+### CI scratch directories
+
+> reads workflow text, not the tests.

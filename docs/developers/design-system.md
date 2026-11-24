@@ -7388,3 +7388,11 @@ appearance has a draft scope under the preview, so Close and Escape ask before d
 Logo, order and page breaks belong to the current captured publication. Preview A4 must be
 regenerated after a presentation edit; Print uses that captured HTML in a frame of its own and
 removes it after `afterprint`. Paper keeps a written declaration key or inline words and no popovers.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Form save mechanics
+
+> Saves stay quiet and disabled until the draft changes, using `draftScopeFor`, `saveActionState` and a save-handler early return (owner, 2026-10-07, A331).

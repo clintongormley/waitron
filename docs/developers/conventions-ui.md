@@ -2721,3 +2721,63 @@ guard and pointer.
 ### Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours, `rem` or `em`
 
 > `scripts/style-token-names.test.ts`, weaker than its name: text match against declarations anywhere.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Native form fields
+
+> it reads string literals.
+
+
+### Address lookup placement
+
+> reads text, not placement or provider.
+
+
+### Help tooltips
+
+> it reads literals as text;
+
+
+### Dashboard draft scopes
+
+> (which resolves `leaveCoordinatorFor`)
+
+
+### Field refusals
+
+> `product.invalid` names a `field`; `content.translation_required` names only a LANGUAGE.
+
+
+### Passive API reads
+
+> automatic pairing renewal uses its own authenticated route.
+
+
+### Pinned row menu columns
+
+> identifies menus only by that literal key;
+
+
+### Style tokens
+
+> (UI package only)
+
+
+### Brand-coloured text
+
+> it reads `color:` declarations as text, in tracked files only;
+
+
+### Reader return and unpair limits
+
+> A deleted reader whose provider registration was unpaired is not brought back; an unpaired reader that was not deleted returns under its id only through a provider-verified Add once the provider lists it again; a new provider reference gets a new id. (owner, 2026-11-10, A1484, "1").
+
+
+### Print-agent confinement
+
+> (no Bluetooth on the runner)
+
+> (reads the profile as TEXT)

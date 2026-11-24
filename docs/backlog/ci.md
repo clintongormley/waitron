@@ -795,6 +795,10 @@ historical wait cause remains unknown; these observations do not measure a
   when the file has grown noticeably, as a loose guide past about 71 KB, per `CLAUDE.md` §7. The campaign watcher checks it on
   its 3-hourly evaluation. A housekeeping check, never a blocker. Receipt excerpts and the pointer guard's limits are retained in the
   [developer topics](../developers/writing-claims.md#root-instruction-receipts-retained-on-2026-10-14).
+  The 24 November sweep moved supporting detail from §§2–3. See the
+  [CI excerpts](../developers/ci-and-gates.md#root-receipts-moved-on-2026-11-24) and the
+  [UI](../developers/conventions-ui.md#root-receipts-moved-on-2026-11-24) and
+  [data](../developers/conventions-data.md#root-receipts-moved-on-2026-11-24) excerpts.
 - **The pointers guard is deliberately narrower than "every pointer"** (#337): it does not check a
   root-level filename such as `eslint.config.js`, nor a bare directory. `CLAUDE.md` §7 says so;
   widen the guard if that gap ever costs something.

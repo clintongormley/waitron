@@ -7387,3 +7387,196 @@ checks the URL before any lookup, and `openAt` checks each address before it dia
 request to `localhost` goes only to a literal loopback address, whatever the resolver answers. The
 spare's bucket-stream pipe (`apps/server/src/spare-pipe.ts`) does not use `openBoxRequest`; it
 connects with `node:tls`.
+
+## Root receipts moved on 2026-11-24
+
+These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243`. The headings identify the original entries.
+
+### Reading live SQLite state
+
+> those paths only.
+
+
+### Saved time zone spelling
+
+> (the latter covers named duties only)
+
+
+### Optional request fields
+
+> an extras list's `maxPicks`, an extras item's `maxQuantity`, the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
+
+
+### Personal data in logs
+
+> judges field names by a word list and named registry types by their names.
+
+
+### Incident alert wording
+
+> it reads literals in hand-listed files.
+
+
+### English code and starter content
+
+> which the guard skips by exact path
+
+
+### Module boundaries
+
+> (it reads text)
+
+
+### Configuration exports
+
+> one export shape.
+
+
+### Workspace dependency cycles
+
+> it reads each `package.json`, not pnpm's own graph.
+
+
+### Resolve shared menu data once
+
+> (one zone snapshot, no per-line resolver)
+
+
+### Allowed table write paths
+
+> it reads TEXT and judges a FILE, not a call chain.
+
+
+### Module settings documents
+
+> they read text.
+
+
+### Two-file transaction order
+
+> since `withTransaction` refuses the node handle at compile time.
+
+
+### Housekeeping on a full disk
+
+> covers only named routes.
+
+
+### Statement refusals and transaction boundaries
+
+> (the last reads text)
+
+> an intervening outside transaction defeats that protection.
+
+
+### Full-disk refusal codes
+
+> stubbed errors, no real `ENOSPC` case.
+
+
+### The spare space file
+
+> reads text.
+
+
+### The backup room note
+
+> reads text, two hand-kept lists.
+
+
+### Start again records
+
+> reads text, never what a listed file does.
+
+
+### Venue folder ownership
+
+> prove the locks, not that every caller takes them.
+
+
+### Scratch state during backup and restore
+
+> reads text.
+
+> Cloud snapshots keep their own staging until the one backup service lands (fl2's explicit exception). A spare's first copy, an admitted mirror's selected handover backup and a spare's followed copy taken for an emergency switch wait in `<state>/pair-copy/` across the restart that places them (A947 3b-6a, A1188 part 0 and A947 4b's exceptions).
+
+
+### Streamed file handles
+
+> this route only.
+
+> A test that reads only an `app.request()` status leaks the same way.
+
+
+### Failed-start cleanup
+
+> covers only named duties.
+
+
+### Database column declarations
+
+> reads imports and forbids only listed builders.
+
+
+### Counting sale correctives
+
+> reads lines of text, not queries.
+
+
+### Quantity and rate scales
+
+> only migration sets opting in are covered.
+
+
+### Append-only table classification
+
+> call shape, not sets.
+
+> Classification alone is not the trigger set; triggers cannot prevent `DROP TABLE`.
+
+
+### The till person header
+
+> only the till, device and schedule mounts' routes.
+
+
+### HTTPS between boxes
+
+> they cannot see a new request path that skips `openBoxRequest`.
+
+> behind `boxExchange`, `boxDownload` and `postToBox`
+
+
+### Module migration requirements
+
+> text scan recognising fixed SQL shapes.
+
+
+### Migration-set ownership
+
+> they pin today's sets and hosted modules.
+
+
+### Schema constraints
+
+> reads built schema.
+
+
+### Starting migration rebuilds
+
+> trusts drizzle-kit.
+
+
+### Migration journal ordering
+
+> only sets with multiple entries.
+
+
+### Checking migration history
+
+> `assertNotAhead` throws `provisioning.database_ahead`; other migrating paths do not carry that check.
+
+
+### Environment variable inventory
+
+> It scans tracked text.
