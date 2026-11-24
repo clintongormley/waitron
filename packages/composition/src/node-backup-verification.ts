@@ -143,7 +143,7 @@ export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
           after: context.after,
           nodeId,
           privateKey,
-          nodeCopyHoldsSource:
+          copyHoldsSource:
             (await sourceRow(copy, "role", nodeId)) !== undefined ||
             (await holdsMasterKey(context.before)) ||
             (await holdsMasterKey(context.after)),

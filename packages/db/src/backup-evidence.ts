@@ -334,7 +334,7 @@ export async function verifyBackupMembershipIdentity(input: {
    * The backup holds a role for this node in its node copy, or a master key in a venue copy, so it
    * is no key-less source.
    */
-  nodeCopyHoldsSource: boolean;
+  copyHoldsSource: boolean;
 }): Promise<boolean> {
   if (!(await hasTable(input.before, "nodes")) || !(await hasTable(input.after, "nodes")))
     return false;
@@ -353,7 +353,7 @@ export async function verifyBackupMembershipIdentity(input: {
       before.public_key === null &&
       before.endorsement === null &&
       after.endorsement === null &&
-      !input.nodeCopyHoldsSource &&
+      !input.copyHoldsSource &&
       (await keylessMembership(input.before, input.nodeId)) &&
       (await keylessMembership(input.after, input.nodeId))
     );
