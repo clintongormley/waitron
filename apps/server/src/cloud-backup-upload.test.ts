@@ -1,9 +1,116 @@
 import { it, expect, vi } from "vitest";
+import { once } from "node:events";
+import type { ServerResponse } from "node:http";
 import { createServer } from "node:https";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { uploadCloudCapture } from "./cloud-backup-upload.js";
+import { uploadCloudCapture, uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import type { CloudCaptureGrant } from "./cloud-backup.js";
+it("sends a signed conditional PUT for bytes and reopens the full file after an upload failure", async () => {
+  const tls = mintSelfSignedServerCert({
+    hostnames: ["localhost"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  const bytes = randomBytes(1024 * 1024);
+  const receipt = { size: bytes.length, digest: createHash("sha256").update(bytes).digest("hex") };
+  const root = await mkdtemp(join(tmpdir(), "cloud-signed-upload-"));
+  const file = join(root, "archive.enc");
+  await writeFile(file, bytes);
+  let status = 200;
+  let stall = false;
+  let received!: (response: ServerResponse) => void;
+  const arrived = new Promise<ServerResponse>((resolve) => {
+    received = resolve;
+  });
+  const requests: (string | undefined)[][] = [];
+  const digests: string[] = [];
+  const server = createServer(
+    { key: tls.serverKeyPem, cert: tls.serverCertPem },
+    async (req, res) => {
+      requests.push([
+        req.method,
+        req.url,
+        req.headers.host,
+        req.headers["content-length"],
+        req.headers["if-none-match"],
+        req.headers.authorization,
+      ]);
+      if (status === 412 || status === 307) {
+        res.writeHead(status, { location: "/redirect-target" }).end();
+        return;
+      }
+      const hash = createHash("sha256");
+      for await (const chunk of req) hash.update(chunk);
+      digests.push(hash.digest("hex"));
+      if (stall) received(res);
+      else res.writeHead(status).end();
+    },
+  );
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const host = `127.0.0.1:${(server.address() as { port: number }).port}`;
+  const id = randomUUID();
+  const target = `/venue/incoming/${id}?X-Amz-Security-Token=abc%2Bdef&X-Amz-Signature=xyz`;
+  const grant = {
+    id,
+    installationId: randomUUID(),
+    venueId: randomUUID(),
+    keyVersion: 1,
+    location: { endpoint: `https://${host}`, bucket: "venue", region: "local" },
+    incomingKey: "incoming/" + id,
+    recoveryKey: "key",
+    uploadUrl: `https://${host}${target}`,
+    expiresAt: new Date(Date.now() + 900000).toISOString(),
+  };
+  const options = { ca: tls.caCertPem };
+  try {
+    await expect(uploadCloudCapture(grant, bytes, options)).resolves.toEqual(receipt);
+    status = 503;
+    await expect(uploadCloudCaptureFile(grant, file, receipt, options)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    status = 201;
+    await expect(uploadCloudCaptureFile(grant, file, receipt, options)).resolves.toEqual(receipt);
+    expect(digests).toEqual(Array(3).fill(receipt.digest));
+    status = 412;
+    await expect(uploadCloudCaptureFile(grant, file, receipt, options)).resolves.toEqual(receipt);
+    status = 307;
+    await expect(uploadCloudCapture(grant, bytes, options)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    await expect(uploadCloudCapture(grant, bytes)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    const wrongObject = { ...grant, uploadUrl: grant.uploadUrl.replace("/incoming/", "/other/") };
+    await expect(uploadCloudCapture(wrongObject, bytes, options)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(requests).toEqual(
+      Array.from({ length: 5 }, () => ["PUT", target, host, String(bytes.length), "*", undefined]),
+    );
+
+    status = 200;
+    stall = true;
+    const controller = new AbortController();
+    const upload = uploadCloudCaptureFile(grant, file, receipt, {
+      ...options,
+      signal: controller.signal,
+    });
+    const refusal = expect(upload).rejects.toMatchObject({ code: "cloud.unavailable" });
+    const closed = once(await arrived, "close");
+    controller.abort();
+    await refusal;
+    await closed;
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((r) => server.close(() => r()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("uploads with capture credentials and a conditional PUT; retries need no read permission", async () => {
   const tls = mintSelfSignedServerCert({
     hostnames: ["localhost"],

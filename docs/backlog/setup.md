@@ -240,6 +240,8 @@ box refuses ciphertext above 2 GiB or expanded archives above 4 GiB with `cloud.
 A timed-out upload keeps its pending ciphertext for retries during the capture's first day.
 In the paired run, check grant renewal, publication within the trial deadline and the deployed
 verifier's time, peak memory and scratch on the representative capture.
+In the storage primary-stop rehearsal, check that the first fresh reservation uses a signed
+upload address, then publish and independently verify the backup within five minutes.
 Record table sizes and comparison time for `payments`, `verifactu_records`, `working_orders`
 and `working_order_lines`. Their comparison orders have at least 64 terms and still require a
 temporary sort. Include samples with individual tables in the hundreds of MB and at the

@@ -6,6 +6,7 @@ import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { reserveCloudCapture, publishCloudCapture } from "./cloud-backup.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
 const captureKeys = new Map<string, string>();
+const signedRequest = '{"upload":"presigned-put-v1"}';
 function grant(values: unknown[], saved: Record<string, unknown>) {
   const r = (saved.view as { registration: { installationId: string; venueId: string } })
     .registration;
@@ -22,38 +23,144 @@ function grant(values: unknown[], saved: Record<string, unknown>) {
     expiresAt: new Date(Date.now() + 900000).toISOString(),
   };
 }
+function signedGrant(values: unknown[], saved: Record<string, unknown>) {
+  const { credentials, ...common } = grant(values, saved);
+  return {
+    ...common,
+    uploadUrl: `${common.location.endpoint}/${common.location.bucket}/${common.incomingKey}?token=${credentials.sessionToken.repeat(1200)}`,
+  };
+}
 it("uses current installation proof and renews the same capture without saving upload secrets", async () => {
+  let signedPayload: unknown;
   const f = await installationFixture(async (v, s, _req, res, sent) => {
-    const state = s as unknown as SavedCloudState;
-    expect(Buffer.from(String(sent.payload), "base64url").toString()).toBe(
-      JSON.stringify([
-        "waitron-cloud-machine-v1",
-        state.origin,
-        "backup-reserve",
-        state.view!.registration!.installationId,
-        v[4],
-        v[5],
-        JSON.stringify(state.lifecycle!.lease),
-        "{}",
-      ]),
-    );
-    res.end(JSON.stringify(grant(v, s)));
+    signedPayload = sent.payload;
+    res.end(JSON.stringify(signedGrant(v, s)));
   });
   try {
     const id = randomUUID();
     const first = await f.client.reserveCapture(id);
     expect(first.id).toBe(id);
     expect(first.incomingKey).toBe("incoming/" + id);
-    expect(f.requests.at(-1)?.[2]).toBe("backup-reserve");
-    expect(f.requests.at(-1)?.[6]).toContain("payload");
-    expect(f.requests.at(-1)?.[7]).toBe("{}");
+    const saved = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
+    const state = JSON.parse(saved) as SavedCloudState;
+    const request = f.requests.at(-1)!;
+    expect(request[2]).toBe("backup-reserve");
+    expect(request[6]).toContain("payload");
+    expect(request[7]).toBe(signedRequest);
+    expect(Buffer.from(String(signedPayload), "base64url").toString()).toBe(
+      JSON.stringify([
+        "waitron-cloud-machine-v1",
+        state.origin,
+        "backup-reserve",
+        state.view!.registration!.installationId,
+        id,
+        request[5],
+        JSON.stringify(state.lifecycle!.lease),
+        signedRequest,
+      ]),
+    );
+    expect(first.uploadUrl).toBe(
+      `https://storage.test/venue-one/incoming/${id}?token=${"token".repeat(1200)}`,
+    );
     const restarted = createCloudConnection(f.options);
     const retried = await restarted.reserveCapture(id);
     expect(retried.id).toBe(id);
     expect(retried.recoveryKey).toBe(first.recoveryKey);
-    const saved = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
-    for (const secret of [first.recoveryKey, '"secretAccessKey"', '"sessionToken"'])
-      expect(saved).not.toContain(secret);
+    const afterRetry = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
+    for (const secret of [
+      first.recoveryKey,
+      '"secretAccessKey"',
+      '"sessionToken"',
+      "token".repeat(1200),
+    ])
+      expect(afterRetry).not.toContain(secret);
+  } finally {
+    await f.close();
+  }
+});
+it("falls back once on the exact reservation refusal from older Cloud versions", async () => {
+  let status = 400;
+  let body: string | undefined;
+  let malformedCredentials = false;
+  const f = await installationFixture(async (v, s, _req, res) => {
+    if (v[7] === "{}" && body === undefined) {
+      const reply = grant(v, s);
+      res.end(
+        JSON.stringify(
+          malformedCredentials
+            ? { ...reply, credentials: { accessKeyId: "x", secretAccessKey: "y" } }
+            : reply,
+        ),
+      );
+    } else res.writeHead(status).end(body ?? '{"error":"invalid_metadata"}');
+  });
+  const sent = (id: string) =>
+    f.requests.filter((v) => v[2] === "backup-reserve" && v[4] === id).map((v) => v[7]);
+  try {
+    const id = randomUUID();
+    await expect(f.client.reserveCapture(id)).resolves.toMatchObject({
+      id,
+      credentials: {
+        accessKeyId: "upload",
+        secretAccessKey: "secret",
+        sessionToken: "token",
+      },
+    });
+    expect(sent(id)).toEqual([signedRequest, "{}"]);
+    malformedCredentials = true;
+    await expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    for (const refusal of [
+      [400, '{"error":"different"}', [signedRequest]],
+      [400, "{", [signedRequest]],
+      [400, '{"error":"invalid_metadata"}' + " ".repeat(65536), [signedRequest]],
+      [503, '{"error":"invalid_metadata"}', [signedRequest]],
+      [400, '{"error":"invalid_metadata"}', [signedRequest, "{}"]],
+    ] as const) {
+      const id = randomUUID();
+      [status, body] = refusal;
+      await expect(f.client.reserveCapture(id)).rejects.toMatchObject({
+        code: "cloud.unavailable",
+      });
+      expect(sent(id)).toEqual(refusal[2]);
+    }
+  } finally {
+    await f.close();
+  }
+});
+it("binds signed grants to the opt-in reply and the reserved HTTPS object", async () => {
+  let change: (v: ReturnType<typeof signedGrant>) => object;
+  let fallback = false;
+  const f = await installationFixture(async (v, s, _req, res) => {
+    if (fallback && v[7] !== "{}") res.writeHead(400).end('{"error":"invalid_metadata"}');
+    else res.end(JSON.stringify(change(signedGrant(v, s))));
+  });
+  const refuse = () =>
+    expect(f.client.reserveCapture(randomUUID())).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  try {
+    for (const edit of [
+      (u: string) => u.replace("https:", "http:"),
+      (u: string) => u.replace("storage.test", "another.test"),
+      (u: string) => u.replace("storage.test", "user:pass@storage.test"),
+      (u: string) => u.replace("incoming/", "other/"),
+      (u: string) => u.split("?")[0],
+      (u: string) => u + "#fragment",
+      (u: string) => u + "x".repeat(16384),
+    ]) {
+      change = (v) => ({ ...v, uploadUrl: edit(v.uploadUrl) });
+      await refuse();
+    }
+    const credentials = { accessKeyId: "upload", secretAccessKey: "secret", sessionToken: "token" };
+    change = (v) => ({ ...v, credentials });
+    await refuse();
+    change = (v) => ({ ...v, uploadUrl: undefined, credentials });
+    await refuse();
+    fallback = true;
+    change = (v) => v;
+    await refuse();
   } finally {
     await f.close();
   }
@@ -64,7 +171,7 @@ it("refuses mismatched or malformed grants and propagates refusal without exposi
     body: string | undefined;
   const f = await installationFixture(async (v, s, _req, res) => {
     res.writeHead(code);
-    res.end(body ?? JSON.stringify({ ...grant(v, s), ...patch }));
+    res.end(body ?? JSON.stringify({ ...signedGrant(v, s), ...patch }));
   });
   try {
     for (const value of [
@@ -76,7 +183,6 @@ it("refuses mismatched or malformed grants and propagates refusal without exposi
       { recoveryKey: "bad" },
       { expiresAt: new Date(0).toISOString() },
       { expiresAt: new Date(Date.now() + 3600000).toISOString() },
-      { credentials: { accessKeyId: "x", secretAccessKey: "y" } },
       { location: { endpoint: "http://storage.test", bucket: "venue-one", region: "local" } },
     ]) {
       patch = value;
@@ -179,7 +285,7 @@ it("waits past Cloud's ten-second storage grant for a reservation, then gives up
   let replyAfter = 0;
   const f = await installationFixture(async (v, s, _req, res) => {
     await new Promise((r) => setTimeout(r, replyAfter));
-    res.end(JSON.stringify(grant(v, s)));
+    res.end(JSON.stringify(signedGrant(v, s)));
   });
   await f.client.refresh();
   const state = JSON.parse(
@@ -277,7 +383,7 @@ it("refuses malformed response bodies, redirects, invalid inputs and missing loc
 });
 it("queues capture requests behind the connection gate", async () => {
   const f = await installationFixture(async (v, s, _req, res) => {
-    res.end(JSON.stringify(grant(v, s)));
+    res.end(JSON.stringify(signedGrant(v, s)));
   });
   try {
     const ids = [randomUUID(), randomUUID()];
@@ -376,7 +482,7 @@ it.each([
   { bytes: 65537, accepted: false },
 ])("bounds valid backup JSON at $bytes bytes", async ({ bytes, accepted }) => {
   const f = await installationFixture(async (values, saved, _req, res) => {
-    const text = JSON.stringify(grant(values, saved));
+    const text = JSON.stringify(signedGrant(values, saved));
     res.end(text + " ".repeat(bytes - Buffer.byteLength(text)));
   });
   try {

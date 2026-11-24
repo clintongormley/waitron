@@ -522,15 +522,18 @@ first. Do not copy the old staff key.
 
 The paired test connection exposes `reserveCapture(id)` and `publishCapture(id, metadata)`.
 Use one UUID for the capture, keep it across retries and create the encrypted archive with
-reserve's `recoveryKey`. `uploadCloudCapture(grant, bytes)` uploads that archive directly
-with the returned temporary storage credentials. Pass the digest/size receipt plus
+reserve's `recoveryKey`. The box asks Cloud for a signed address for a single backup
+object. If Cloud refuses the option with HTTP 400 and `invalid_metadata`, the box repeats
+the reservation once for temporary storage credentials. `uploadCloudCapture(grant, bytes)`
+uploads the archive directly using the resulting grant. Pass the digest/size receipt plus
 `capturedAt`, `retention`, `sourceNodeId` and `modules` to publication.
 
 Capture calls wait for the current connection operation. Reserve renews the installation lease when needed. Cloud chooses the destination
 and archive key version. The client checks the reply's installation, venue and capture IDs,
-requires HTTPS storage, and keeps keys and credentials out of saved connection state.
+requires the signed address to name the reserved object at the returned HTTPS storage origin,
+and keeps keys, signed addresses and credentials out of saved connection state.
 Upload uses a conditional PUT. If a retry finds an existing object, publication checks its
-actual bytes; upload credentials do not need read permission. Publication starts pending
+actual bytes. Publication starts pending
 verification. A trusted Cloud worker checks the restored archive separately.
 
 Keep the same UUID, archive bytes and metadata until publication succeeds. When you enable Cloud
@@ -557,7 +560,7 @@ The fixture is not an operator command for a real venue.
 
 The byte-array uploader accepts at most 512 MiB and has a 30-second request deadline.
 Scheduled captures use `uploadCloudCaptureFile`, which streams the saved archive with a
-deadline capped at fourteen minutes and the temporary credentials’ expiry. Each upload call
+deadline capped at fourteen minutes and by the grant's expiry. Each upload call
 makes one attempt. The next scheduled run retries from the saved file. The upload follows the
 backup job's stop signal so shutdown does not record an upload failure.
 

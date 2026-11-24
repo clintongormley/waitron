@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import type { Readable } from "node:stream";
-import { Agent } from "node:https";
+import { Agent, request } from "node:https";
 import { createHash } from "node:crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { AppError } from "@waitron/shared";
@@ -10,10 +10,46 @@ import {
   MAX_CLOUD_ARCHIVE_BYTES,
   MAX_CLOUD_TRANSFER_MS,
 } from "./cloud-backup-limits.js";
-import type { CloudCaptureGrant } from "./cloud-backup.js";
+import { signedUploadAddress, type CloudCaptureGrant } from "./cloud-backup.js";
 import "./errors.js";
 
 const MAX_BUFFERED_ARCHIVE_BYTES = 512 * 1024 ** 2;
+
+function putSigned(
+  url: URL,
+  body: Uint8Array | Readable,
+  size: number,
+  ca: string | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const put = request(
+      url,
+      {
+        method: "PUT",
+        headers: { "Content-Length": size, "If-None-Match": "*" },
+        ca,
+        rejectUnauthorized: true,
+        signal,
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        // Cloud publication checks the digest and size of an existing object.
+        if ((status >= 200 && status < 300) || status === 412) resolve();
+        else reject(Error());
+        // The status is the whole reply. A refusal can arrive while the file is still streaming.
+        response.destroy();
+        put.destroy();
+      },
+    );
+    put.once("error", reject);
+    if (body instanceof Uint8Array) put.end(body);
+    else {
+      body.once("error", (error) => put.destroy(error));
+      body.pipe(put);
+    }
+  });
+}
 
 async function upload(
   grant: CloudCaptureGrant,
@@ -39,6 +75,18 @@ async function upload(
       size > (body instanceof Uint8Array ? MAX_BUFFERED_ARCHIVE_BYTES : MAX_CLOUD_ARCHIVE_BYTES)
     )
       throw Error();
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    if (grant.uploadUrl !== undefined) {
+      const address = signedUploadAddress(
+        grant.uploadUrl,
+        url,
+        grant.location.bucket,
+        grant.incomingKey,
+      );
+      await putSigned(address, body, size, options.ca, signal);
+      return;
+    }
     client = new S3Client({
       endpoint: grant.location.endpoint,
       region: grant.location.region,
@@ -49,9 +97,6 @@ async function upload(
       // Explicit so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
       requestHandler: { httpsAgent: new Agent({ ca: options.ca, rejectUnauthorized: true }) },
     });
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
-      : AbortSignal.timeout(timeoutMs);
     try {
       await client.send(
         new PutObjectCommand({
@@ -125,7 +170,7 @@ export async function uploadCloudCaptureFile(
     } finally {
       await handle.close();
     }
-    // A retry opens a fresh stream with renewed credentials. The SDK never replays a consumed stream.
+    // A fresh grant needs a fresh stream. A consumed stream cannot be replayed.
     const timeout = Math.min(
       MAX_CLOUD_TRANSFER_MS,
       Date.parse(grant.expiresAt) - Date.now() - CLOUD_GRANT_MARGIN_MS,
