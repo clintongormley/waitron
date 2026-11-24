@@ -1922,14 +1922,13 @@ declare module "@waitron/shared" {
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
-    /** The box waits to confirm its time, for a `StartClockCause`. The time service ends any wait,
-     * for `identity_change` once the new fiscal installation is open; a person ends all but
-     * `identity_change`, and two devices all but that and `future_date_refused`. Thrown as a refusal with no
-     * values. The clock-unconfirmed alert source and the till's clock-check notice source build it
-     * as data, typed as a plain record rather than through this map: both send `agreed`
-     * (`startClockAgreed`) and `cause`; the alert source adds `hostSilent`, that the start check's latest
-     * read of the box's clock service went unanswered, and, for `future_date_refused`, `refusedOn`,
-     * the refused sale's issue date. */
+    /** The box waits to confirm its time, for a `StartClockCause`. The time service or a person ends
+     * any wait, for `identity_change` once the new fiscal installation is open; two devices end all
+     * but that and `future_date_refused`. Thrown as a refusal with no values. The clock-unconfirmed
+     * alert source and the till's clock-check notice source build it as data, typed as a plain
+     * record rather than through this map: both send `agreed` (`startClockAgreed`) and `cause`; the
+     * alert source adds `hostSilent`, that the start check's latest read of the box's clock service
+     * went unanswered, and, for `future_date_refused`, `refusedOn`, the refused sale's issue date. */
     "clock.unconfirmed": { agreed?: number; hostSilent?: boolean };
     /** The box's time is confirmed, but the opening of its new fiscal installation is refused or
      * fails for something else. Raised as an alert only. */

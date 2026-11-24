@@ -6,6 +6,7 @@ import type { ClockStartUp } from "./clock-start-up.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, clockWatchJob, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
+import { createJobRunner } from "./job-runner.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { timeServiceRetry } from "./time-service-retry.js";
 
@@ -515,6 +516,30 @@ describe("the clock watch and an identity change's opening", () => {
     await pass;
     expect(h.startState.heldConfirmation).not.toBeNull();
     expect(h.attemptsInTurn).toHaveLength(1);
+  });
+});
+
+describe("the clock watch's job", () => {
+  it("looks at once when woken, not only at its interval", async () => {
+    const check = vi.fn(async () => {});
+    const runner = createJobRunner({
+      now: () => new Date(START_MS),
+      log: () => {},
+      subscribe: () => () => {},
+    });
+    runner.add(clockWatchJob({ check, halt: () => {}, reanchor: async () => {} }, CLOCK_WATCH_MS));
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(check).not.toHaveBeenCalled();
+      for (const looks of [1, 2]) {
+        runner.wake("clock.watch");
+        await vi.waitFor(() => expect(check).toHaveBeenCalledTimes(looks), { timeout: 2_000 });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(check).toHaveBeenCalledTimes(2);
+    } finally {
+      await runner.stopJobs();
+    }
   });
 });
 

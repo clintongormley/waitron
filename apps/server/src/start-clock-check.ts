@@ -22,10 +22,17 @@ export type StartClockCause = "start" | "future_date_refused" | "clock_jumped" |
 /** Each chain's node and its highest record position, as `recordHeads` reads them. */
 export type ChainHeads = Readonly<Record<string, number>>;
 
-/** A confirmation kept while a new fiscal installation waits to be opened. */
-export interface HeldConfirmation {
-  readonly by: "by_internet";
-  readonly heads: ChainHeads;
+/** A confirmation kept while a new fiscal installation waits to be opened. A person's carries
+ * whether it still stands: it is the one held, and the box's clock has not moved since. */
+export type HeldConfirmation =
+  | { readonly by: "by_internet"; readonly heads: ChainHeads }
+  | { readonly by: "by_person"; readonly heads: ChainHeads; readonly standing: () => boolean };
+
+export interface PersonHold {
+  /** Reads the box's clock as a person confirms it, and answers whether it still stands so. */
+  readonly standing: () => () => boolean;
+  /** Runs as a person's confirmation is held, possibly inside the request's transaction. */
+  readonly onHeld: () => void;
 }
 
 /** Held in memory for one process. Only `backToWaiting` moves a box off `by_internet`. */
@@ -40,13 +47,15 @@ export interface StartClockState {
   readonly refusedOn: string | null;
   /** False while the latest look could not hear from the host's time service. */
   readonly hostAnswers: boolean;
-  /** Whether a person has confirmed the time at any point in this process, whatever since. */
+  /** Whether a person's confirmation has ended a wait, or been given outside one, at any point in
+   * this process, whatever since. One that is only held does not count. */
   readonly confirmedByPerson: boolean;
   unconfirmed(): boolean;
   /** Grows by one each time a wait begins, the start's included. */
   waitsBegun(): number;
   /** Answers false when the box, holding for an identity change, stays waiting: the internet's
-   * confirmation is then held and any other changes nothing. */
+   * confirmation is then held in place of any other, a person's in place of an earlier person's
+   * when the hold keeps one, and any other changes nothing. */
   confirm(by: StartClockConfirmation, heads: ChainHeads): boolean;
   /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. A
    * box waiting because AEAT refused a sale as dated in the future keeps that cause. A held
@@ -61,8 +70,9 @@ export interface StartClockState {
     heads: () => Promise<ChainHeads>,
   ): Promise<ClockWitness[]>;
   noteHost(answers: boolean): void;
-  /** Keeps a waiting box waiting until `releaseIdentityChange`. */
-  holdForIdentityChange(): void;
+  /** Keeps a waiting box waiting until `releaseIdentityChange`. A person's confirmation is held
+   * only when `person` is given. */
+  holdForIdentityChange(person?: PersonHold): void;
   /** The confirmation that ends the wait at `releaseIdentityChange`; null without one. */
   readonly heldConfirmation: HeldConfirmation | null;
   dropHeldConfirmation(): void;
@@ -80,12 +90,23 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
   let waits = 1;
   let confirmedByPerson = false;
   let holding = false;
+  let personHold: PersonHold | undefined;
   let held: HeldConfirmation | null = null;
   const current = (): StartClockStatus => status;
 
   const confirm = (by: StartClockConfirmation, heads: ChainHeads): boolean => {
     if (holding) {
       if (by === "by_internet") held = { by, heads: { ...heads } };
+      if (by === "by_person" && personHold !== undefined && held?.by !== "by_internet") {
+        const stands = personHold.standing();
+        const own: HeldConfirmation = {
+          by,
+          heads: { ...heads },
+          standing: () => held === own && stands(),
+        };
+        held = own;
+        personHold.onHeld();
+      }
       return false;
     }
     if (by === "by_person") confirmedByPerson = true;
@@ -141,8 +162,9 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
     noteHost(answers) {
       hostAnswers = answers;
     },
-    holdForIdentityChange() {
+    holdForIdentityChange(person) {
       holding = true;
+      personHold = person;
     },
     get heldConfirmation() {
       return held;
@@ -158,6 +180,23 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
     },
   };
 }
+
+/** A person's confirmation, and what became of it: it ended the wait or was given outside one, it
+ * is held for an identity change, or it changed nothing. */
+export function confirmByPerson(
+  state: Pick<StartClockState, "confirm" | "heldConfirmation">,
+  heads: ChainHeads,
+): "confirmed" | "held" | "unused" {
+  if (state.confirm("by_person", heads)) return "confirmed";
+  return state.heldConfirmation?.by === "by_person" ? "held" : "unused";
+}
+
+/** The log line of each of `confirmByPerson`'s answers. */
+export const PERSON_CONFIRMATION_EVENTS = {
+  confirmed: "clock_start.confirmed",
+  held: "clock_start.confirmation_held",
+  unused: "clock_start.confirmation_unused",
+} as const;
 
 export interface StartClockCheckDeps {
   readonly state: StartClockState;

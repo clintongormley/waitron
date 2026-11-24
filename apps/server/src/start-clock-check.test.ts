@@ -4,6 +4,7 @@ import { createClockWitnessStore } from "./clock-witnesses.js";
 import {
   backToWaitingForRefusal,
   backToWaitingUnlessSynchronised,
+  confirmByPerson,
   lookAtClockService,
   startClockAgreed,
   startClockCheck,
@@ -464,5 +465,136 @@ describe("holding a confirmation for a new fiscal installation", () => {
     state.holdForIdentityChange();
     state.backToWaiting("future_date_refused", "2027-03-15");
     expect(state).toMatchObject({ cause: "identity_change", refusedOn: null });
+  });
+});
+
+describe("holding a person's confirmation for a new fiscal installation", () => {
+  const LATER: ChainHeads = { "node-a": 9 };
+
+  /** A hold that keeps a person's confirmation, vouched for by `clock.stands` as it was then. */
+  function holding(onConfirmed = () => {}) {
+    const state = startClockState(onConfirmed);
+    const clock = { stands: true, readings: 0 };
+    const onHeld = vi.fn(() => expect(state.heldConfirmation?.by).toBe("by_person"));
+    state.holdForIdentityChange({
+      standing: () => {
+        clock.readings++;
+        return () => clock.stands;
+      },
+      onHeld,
+    });
+    const standing = () => {
+      const held = state.heldConfirmation;
+      if (held?.by !== "by_person") throw new Error("no person's confirmation is held");
+      return held.standing;
+    };
+    return { state, clock, onHeld, standing };
+  }
+
+  it("keeps the box waiting and holds it, with the heads and the clock's reading taken then, and tells it once", () => {
+    const onConfirmed = vi.fn();
+    const h = holding(onConfirmed);
+    expect(h.clock.readings).toBe(0);
+    const heads = { ...HEADS };
+    expect(h.state.confirm("by_person", heads)).toBe(false);
+    heads["node-a"] = 99;
+    expect(h.state).toMatchObject({
+      status: "waiting",
+      cause: "identity_change",
+      mark: null,
+      heldConfirmation: { by: "by_person", heads: HEADS },
+    });
+    expect(h.clock.readings).toBe(1);
+    expect(h.onHeld).toHaveBeenCalledOnce();
+    expect(onConfirmed).not.toHaveBeenCalled();
+    const standing = h.standing();
+    expect(standing()).toBe(true);
+    h.clock.stands = false;
+    expect(standing()).toBe(false);
+    expect(h.clock.readings).toBe(1);
+  });
+
+  it("gives way to the internet's at the next look at a synchronised time service, and never takes its place", async () => {
+    const h = holding();
+    h.state.confirm("by_person", LATER);
+    const standing = h.standing();
+    const l = look(async () => clockServiceAnswer(true), h.state);
+    await lookAtClockService(l.deps);
+    expect(h.state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
+    expect(standing()).toBe(false);
+
+    expect(h.state.confirm("by_person", LATER)).toBe(false);
+    expect(h.state.heldConfirmation).toEqual({ by: "by_internet", heads: HEADS });
+    expect(h.onHeld).toHaveBeenCalledOnce();
+    expect(h.clock.readings).toBe(1);
+  });
+
+  it("stays held at a look at a time service that is not synchronised", async () => {
+    const h = holding();
+    h.state.confirm("by_person", HEADS);
+    await lookAtClockService(look(async () => clockServiceAnswer(false), h.state).deps);
+    expect(h.state.heldConfirmation?.by).toBe("by_person");
+  });
+
+  it("is replaced by a later person's, which alone stands", () => {
+    const h = holding();
+    h.state.confirm("by_person", HEADS);
+    const earlier = h.standing();
+    h.state.confirm("by_person", LATER);
+    expect(h.state.heldConfirmation).toMatchObject({ by: "by_person", heads: LATER });
+    expect(earlier()).toBe(false);
+    expect(h.standing()()).toBe(true);
+    expect(h.onHeld).toHaveBeenCalledTimes(2);
+  });
+
+  it.each<[string, (state: ReturnType<typeof startClockState>) => void]>([
+    ["sent back to waiting", (state) => state.backToWaiting("clock_jumped")],
+    ["dropped", (state) => state.dropHeldConfirmation()],
+  ])("no longer stands once %s, and a person can confirm again", (_label, drop) => {
+    const h = holding();
+    h.state.confirm("by_person", HEADS);
+    const dropped = h.standing();
+    drop(h.state);
+    expect(h.state.heldConfirmation).toBeNull();
+    expect(dropped()).toBe(false);
+
+    h.state.confirm("by_person", LATER);
+    expect(dropped()).toBe(false);
+    expect(h.standing()()).toBe(true);
+  });
+
+  it("ends the wait by a person once released, with the heads it was held with, and only then counts as confirmed by one", () => {
+    const onConfirmed = vi.fn();
+    const h = holding(onConfirmed);
+    h.state.confirm("by_person", HEADS);
+    expect(h.state.confirmedByPerson).toBe(false);
+    h.state.releaseIdentityChange();
+    expect(h.state).toMatchObject({
+      status: "by_person",
+      cause: null,
+      mark: HEADS,
+      heldConfirmation: null,
+      confirmedByPerson: true,
+    });
+    expect(onConfirmed).toHaveBeenCalledOnce();
+  });
+
+  it("holds nothing from devices", async () => {
+    const h = holding();
+    expect(h.state.confirm("by_devices", HEADS)).toBe(false);
+    const agreeing = witnesses(["10.0.0.5", 1_000], ["10.0.0.6", 2_000]);
+    expect(await h.state.confirmDevices(agreeing, async () => HEADS)).toEqual([]);
+    expect(h.state.heldConfirmation).toBeNull();
+    expect(h.onHeld).not.toHaveBeenCalled();
+  });
+
+  it("says what a person's confirmation did", () => {
+    expect(confirmByPerson(startClockState(), HEADS)).toBe("confirmed");
+    const h = holding();
+    expect(confirmByPerson(h.state, HEADS)).toBe("held");
+    h.state.confirm("by_internet", HEADS);
+    expect(confirmByPerson(h.state, HEADS)).toBe("unused");
+    h.state.dropHeldConfirmation();
+    expect(confirmByPerson(h.state, HEADS)).toBe("held");
   });
 });

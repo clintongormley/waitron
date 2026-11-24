@@ -107,12 +107,15 @@ export function identityChangeOpening(
   return {
     latestRefusal: () => latest,
     async attemptIdentityChange() {
-      if (deps.state.heldConfirmation === null) return;
+      const held = deps.state.heldConfirmation;
+      if (held === null) return;
       try {
         const outcome = await deps.backend.openIdentityChange?.(
           deps.nodeId,
           deps.note,
-          { kind: "time-service", read: deps.synchronised },
+          held.by === "by_person"
+            ? { kind: "confirmed-start", standing: held.standing }
+            : { kind: "time-service", read: deps.synchronised },
           deps.mayOpen,
         );
         if (outcome === undefined || outcome === "not-named") {

@@ -17,6 +17,7 @@ import { setSingletonRole } from "@waitron/node-db";
 import { isAppError } from "@waitron/shared";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { ClockWatch } from "./clock-watch.js";
+import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { StartClockState } from "./start-clock-check.js";
 import {
   applyVenueUnderInstallation,
@@ -72,7 +73,16 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
 const built = vi.hoisted(() => ({
   start: undefined as StartClockState | undefined,
   watch: undefined as ClockWatch | undefined,
+  witnesses: undefined as ClockWitnessStore | undefined,
 }));
+vi.mock("./clock-witnesses.js", async (original) => {
+  const actual = await original<typeof import("./clock-witnesses.js")>();
+  return {
+    ...actual,
+    createClockWitnessStore: (...args: Parameters<typeof actual.createClockWitnessStore>) =>
+      (built.witnesses = actual.createClockWitnessStore(...args)),
+  };
+});
 vi.mock("./start-clock-check.js", async (original) => {
   const actual = await original<typeof import("./start-clock-check.js")>();
   return {
@@ -253,7 +263,7 @@ const recordOf = (workingOrderId: string) => filedRecordOf(venue.db, workingOrde
 const installations = () =>
   venue.db.all<{ n: number }>(sql`select count(*) as n from verifactu_identities`)[0]!.n;
 
-async function alerts(): Promise<{ code: string; params: Record<string, unknown> }[]> {
+async function administratorCookie(): Promise<string> {
   const [admin] = await seedPersons(suite.db, {
     displayName: `Alerts administrator ${randomUUID()}`,
     role: "admin",
@@ -263,8 +273,12 @@ async function alerts(): Promise<{ code: string; params: Record<string, unknown>
     startManagementSession(tx, { method: "password", personId: admin!.id }),
   );
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
+  return `waitron_management_session=${session.token}`;
+}
+
+async function alerts(): Promise<{ code: string; params: Record<string, unknown> }[]> {
   const answer = await fetch(`http://127.0.0.1:${httpPort()}/management-api/alerts`, {
-    headers: { cookie: `waitron_management_session=${session.token}` },
+    headers: { cookie: await administratorCookie() },
   });
   expect(answer.status).toBe(200);
   return ((await answer.json()) as { alerts: never }).alerts;
@@ -586,4 +600,108 @@ describe("a chart that changes while the box waits to open its new installation"
       expect(seen.alerts).toEqual([]);
     },
   );
+});
+
+async function post(path: string, cookie: string, body: unknown) {
+  const answer = await fetch(`http://127.0.0.1:${httpPort()}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie,
+      origin: "https://dashboard.example.com",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await answer.text();
+  expect(answer.status, text).toBe(200);
+  return JSON.parse(text) as { challengeId: string; boxAt: string };
+}
+
+async function checkTheTime(aheadMs: number, keep: { keep?: true } = {}) {
+  const { challengeId, boxAt } = await post("/api/box-clock/challenge", venue.cookie, {});
+  const deviceAt = Date.parse(boxAt) + aheadMs;
+  await post("/api/box-clock/confirm", venue.cookie, { challengeId, deviceAt, ...keep });
+}
+
+async function confirmOnBoxStatus() {
+  const cookie = await administratorCookie();
+  const { challengeId } = await post("/api/box/clock-challenge", cookie, {});
+  await post("/api/box/clock-confirm", cookie, { challengeId, asShown: true });
+}
+
+describe("a person who confirms the time while the box waits to open its new installation", () => {
+  it.each<[string, () => Promise<void>, number]>([
+    ["from a till whose time agrees", () => checkTheTime(20_000), 14],
+    ["by keeping the box's time on a till", () => checkTheTime(600_000, { keep: true }), 16],
+    ["on Box status", confirmOnBoxStatus, 18],
+  ])(
+    "%s has it opened by the clock watch, woken, with the time service unsynchronised",
+    async (_label, confirm, minute) => {
+      inMinute(minute);
+      const stateDir = await newStateDir();
+      const producer = await noteTheOtherProducer(stateDir);
+      const before = installations();
+      const seen = await serving({ producer, host: unsynchronisedHost(), stateDir }, async () => {
+        const refused = await sell();
+        await confirm();
+        // Well inside the 15 seconds between the watch's own looks.
+        await vi.waitFor(() => expect(built.start!.status).toBe("by_person"), { timeout: 8_000 });
+        return { refused, sale: await sell(), alerts: await clockAlerts() };
+      });
+
+      expect(seen.refused.status, seen.refused.body).toBe(409);
+      expect(JSON.parse(seen.refused.body)).toEqual(refusedUnconfirmed);
+      expect(seen.sale.status, seen.sale.body).toBe(200);
+      expect(recordOf(seen.sale.workingOrderId)).toEqual({
+        first: 1,
+        producer,
+        installation: expect.stringMatching(/^[0-9A-Z]{5}$/),
+      });
+      expect(installations()).toBe(before + 1);
+      expect(await noteExists(stateDir)).toBe(false);
+      expect(seen.alerts).toEqual([]);
+    },
+    30_000,
+  );
+});
+
+describe("two devices that agree with the box's time", () => {
+  function agree(): void {
+    const at = { wallMs: Date.now(), monoMs: performance.now() };
+    built.witnesses!.noteDevice("till-1", "192.168.10.20", at.wallMs + 1_000, at);
+    built.witnesses!.noteDevice("till-2", "192.168.10.21", at.wallMs + 2_000, at);
+  }
+
+  it("end the wait of a box with no note, the control", async () => {
+    inMinute(20);
+    const stateDir = await newStateDir();
+    const status = await serving(
+      { producer: producerAtHead()!, host: unsynchronisedHost(), stateDir },
+      async () => {
+        agree();
+        await built.watch!.check();
+        return built.start!.status;
+      },
+    );
+    expect(status).toBe("by_devices");
+  });
+
+  it("leave a box that waits to open its new installation waiting, and open nothing", async () => {
+    inMinute(20);
+    const stateDir = await newStateDir();
+    const producer = await noteTheOtherProducer(stateDir);
+    const before = installations();
+    const seen = await serving({ producer, host: unsynchronisedHost(), stateDir }, async () => {
+      agree();
+      await built.watch!.check();
+      return {
+        status: built.start!.status,
+        held: built.start!.heldConfirmation,
+        sale: (await sell()).status,
+      };
+    });
+    expect(seen).toEqual({ status: "waiting", held: null, sale: 409 });
+    expect(installations()).toBe(before);
+    expect(await noteExists(stateDir)).toBe(true);
+  });
 });

@@ -238,7 +238,8 @@ export function clockWatchJob(watch: ClockWatch, intervalMs: number): JobDefinit
     name: "clock.watch",
     applies: () => true,
     firstPassAfterMs: intervalMs,
-    minSleepMs: intervalMs,
+    // Zero, so a wake ends the sleep at once: an unwoken one lasts the interval.
+    minSleepMs: 0,
     maxSleepMs: intervalMs,
     backoff: { firstMs: intervalMs, maxMs: intervalMs },
     async pass({ signal }) {

@@ -475,7 +475,7 @@ import { mountBoxHostApi } from "./box-host-api.js";
 import { collectBoxHealth } from "./box-health.js";
 import { sharedClockServiceReading, timeServiceReader } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
-import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
+import { clockCorrection, clockStanding, latestClockStepFor } from "./clock-correction.js";
 import {
   identityChangeBlocked,
   identityChangeBlockedAlertSource,
@@ -2503,7 +2503,16 @@ async function bootServer(
     const answer = await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId, note));
     if (note !== null && answer?.pending) {
       waitingIdentityChange = note;
-      startClock.holdForIdentityChange();
+      // Asked only once a person confirms, when the correction and the job runner built below exist.
+      startClock.holdForIdentityChange({
+        standing: () =>
+          clockStanding({
+            steps: correction.steps,
+            wall: () => Date.now(),
+            monotonic: boxBoot.elapsed,
+          }),
+        onHeld: () => jobRunner.wake("clock.watch"),
+      });
       log("warn", "identity_change.waiting", { release: note.release });
     } else if (note !== null && answer?.leftover) {
       await deleteLeftoverIdentityChangeNote({

@@ -128,6 +128,26 @@ describe("restarting the time service while the start waits", () => {
     expect(h.retryTimeService).toHaveBeenCalledTimes(1);
   });
 
+  it("asks nothing while a person's confirmation is held, asks again once it is dropped, and never again once it has ended the wait", async () => {
+    const h = harness();
+    h.state.holdForIdentityChange({ standing: () => () => true, onHeld: () => {} });
+    h.state.confirm("by_person", { "node-a": 1 });
+    await h.retry();
+    expect(h.retryTimeService).not.toHaveBeenCalled();
+
+    h.state.dropHeldConfirmation();
+    await h.retry();
+    expect(h.retryTimeService).toHaveBeenCalledTimes(1);
+
+    h.state.confirm("by_person", { "node-a": 1 });
+    h.state.releaseIdentityChange();
+    h.state.backToWaiting("clock_jumped");
+    h.advance(RETRY_SPACING_MS);
+    await h.retry();
+    expect(h.state.status).toBe("waiting");
+    expect(h.retryTimeService).toHaveBeenCalledTimes(1);
+  });
+
   it("does nothing for a host that cannot restart the service", async () => {
     const log = vi.fn<Logger>();
     const retry = timeServiceRetry({

@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -626,6 +626,24 @@ it("changes nothing as the box's date and time stand while a new fiscal installa
   const events = box.logs.map((line) => line.event);
   expect(events.filter((event) => event === "clock_start.confirmation_unused")).toHaveLength(1);
   expect(events).not.toContain("clock_start.confirmed");
+});
+
+it("holds a person's confirmation as the box's date and time stand while a new fiscal installation waits to open, and logs it as held", async () => {
+  const start = startClockState();
+  const onHeld = vi.fn();
+  start.holdForIdentityChange({ standing: () => () => true, onHeld });
+  const box = await stoppedBox(0, { start });
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(start).toMatchObject({ status: "waiting", mark: null });
+  expect(start.heldConfirmation).toMatchObject({ by: "by_person" });
+  expect(onHeld).toHaveBeenCalledOnce();
+  const events = box.logs.map(({ event }) => event);
+  expect(events.filter((event) => event.startsWith("clock_start.confirm"))).toEqual([
+    "clock_start.confirmation_held",
+  ]);
 });
 
 it("confirms a waiting start as the box's date and time stand, setting nothing", async () => {

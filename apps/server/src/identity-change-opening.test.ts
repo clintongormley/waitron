@@ -25,7 +25,7 @@ function opening(
 ) {
   const onConfirmed = vi.fn();
   const state = startClockState(onConfirmed);
-  state.holdForIdentityChange();
+  state.holdForIdentityChange({ standing: () => () => true, onHeld: () => {} });
   if (options.held !== false) state.confirm("by_internet", HEADS);
   const openIdentityChange = vi.fn<Open>(async () => open!());
   const deleteNote = vi.fn(options.deleteNote ?? (async () => {}));
@@ -73,6 +73,41 @@ describe("attemptIdentityChange", () => {
     expect([asked, note, mayOpen]).toEqual([NODE, NOTE, o.mayOpen]);
     expect(clock).toEqual({ kind: "time-service", read: o.synchronised });
   });
+
+  it("gives the seat a person's confirmation as its second clock, standing while it is held, and never asks the time service", async () => {
+    const o = opening(async () => "opened", { held: false });
+    o.state.confirm("by_person", HEADS);
+    let stood: boolean | undefined;
+    o.openIdentityChange.mockImplementationOnce(async (_node, _note, clock) => {
+      stood = clock.kind === "confirmed-start" && clock.standing();
+      return "opened";
+    });
+    await o.attemptIdentityChange();
+    const clock = o.openIdentityChange.mock.calls[0]![2];
+    expect(clock).toEqual({ kind: "confirmed-start", standing: expect.any(Function) });
+    expect(stood).toBe(true);
+    expect(clock.kind === "confirmed-start" && clock.standing()).toBe(false);
+    expect(o.synchronised).not.toHaveBeenCalled();
+    expect(o.state).toMatchObject({ status: "by_person", mark: HEADS, heldConfirmation: null });
+    expect(o.deleteNote).toHaveBeenCalledOnce();
+  });
+
+  it.each(["confirmation_stale", "clock_unconfirmed", "clock_corrected"])(
+    "drops a person's confirmation refused %s, and opens at the next one",
+    async (reason) => {
+      const o = opening(async () => "opened", { held: false });
+      o.state.confirm("by_person", HEADS);
+      o.openIdentityChange.mockRejectedValueOnce(refusedFor(reason));
+      await o.attemptIdentityChange();
+      expect(o.state).toMatchObject({ status: "waiting", heldConfirmation: null });
+      await o.attemptIdentityChange();
+      expect(o.openIdentityChange).toHaveBeenCalledOnce();
+
+      o.state.confirm("by_person", HEADS);
+      await o.attemptIdentityChange();
+      expect(o.state.status).toBe("by_person");
+    },
+  );
 
   it.each(["opened", "nothing-to-open"] as const)(
     "deletes the note and then ends the wait when the seat answers %s",

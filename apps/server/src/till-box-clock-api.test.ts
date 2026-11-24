@@ -608,6 +608,32 @@ it.each([
   },
 );
 
+it.each([
+  ["a keep", 10 * MINUTE, true, ["clock_start.confirmation_held"]],
+  ["a till that agrees", 20_000, false, ["clock_start.confirmation_held"]],
+  // The set's own log line is the clock correction's.
+  ["a set from the till", 2 * DAY, false, []],
+] as const)(
+  "holds a person's confirmation from %s while a new fiscal installation waits to open, and logs it as held",
+  async (_label, aheadMs, keep, logged) => {
+    const { box, start } = await waitingBox();
+    const onHeld = vi.fn();
+    start.holdForIdentityChange({ standing: () => () => true, onHeld });
+    const asked = await ask(box, staffCookie);
+    const answer = await confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + aheadMs,
+      ...(keep ? { keep } : {}),
+    });
+    expect(answer.status).toBe(200);
+    expect(start).toMatchObject({ status: "waiting", mark: null });
+    expect(start.heldConfirmation).toMatchObject({ by: "by_person" });
+    expect(onHeld).toHaveBeenCalledOnce();
+    const events = box.logs.map(({ event }) => event);
+    expect(events.filter((event) => event.startsWith("clock_start.confirm"))).toEqual(logged);
+  },
+);
+
 it("refuses a keep with no stop once the start check turned by the internet after the challenge, and shuts the window", async () => {
   const start = startClockState();
   const box = await stoppedBox(-MINUTE, { start });
