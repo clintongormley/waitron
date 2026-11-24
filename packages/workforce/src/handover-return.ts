@@ -1,9 +1,10 @@
 import "./errors.js";
 import { getTableColumns, sql } from "drizzle-orm";
-import type { Database, Transaction } from "@waitron/db";
+import { foldForUniqueness, type Database, type Transaction } from "@waitron/db";
 import type { ModuleHandoverContribution } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
+import { markAttendanceEntry } from "./staff-activity.js";
 
 /** What a module's return seat is handed as one batch. */
 export type ReturnBatchValue = Parameters<
@@ -154,3 +155,92 @@ export function readWorkforceBatch(raw: ReturnBatchValue): WorkforceReturnBatch 
     refuse();
   return raw as unknown as WorkforceReturnBatch;
 }
+
+async function insertRow(tx: Transaction, table: string, row: ReturnRow) {
+  const entries = Object.entries(row);
+  await tx.run(sql`insert into ${sql.identifier(table)}
+    (${sql.join(
+      entries.map(([key]) => sql.identifier(key)),
+      sql`, `,
+    )})
+    values (${sql.join(
+      entries.map(([, value]) => sql`${value}`),
+      sql`, `,
+    )})`);
+}
+
+function held(tx: Transaction, table: string, id: ReturnRow[string]): ReturnRow | undefined {
+  return tx.all<ReturnRow>(sql`select * from ${sql.identifier(table)} where id = ${id}`)[0];
+}
+
+/** As the fiscal return's `restoreStaff` (packages/fiscal-verifactu/src/handover-return.ts). */
+async function restorePerson(
+  tx: Transaction,
+  batch: WorkforceReturnBatch,
+  id: ReturnRow[string],
+  now: Date,
+) {
+  if (id === null || held(tx, "persons", id)) return;
+  const name = batch.staff.find((person) => person.id === id)!.displayName;
+  await insertRow(tx, "persons", {
+    id,
+    display_name: name,
+    display_name_folded: foldForUniqueness(name),
+    status: "suspended",
+    created_at: now.toISOString(),
+  });
+}
+
+/** As the fiscal return adds a missing device (packages/fiscal-verifactu/src/handover-return.ts). */
+async function restoreDevice(
+  tx: Transaction,
+  batch: WorkforceReturnBatch,
+  id: ReturnRow[string],
+  now: Date,
+) {
+  if (id === null || held(tx, "devices", id)) return;
+  const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
+  await insertRow(tx, "devices", {
+    id,
+    label: batch.devices.find((device) => device.id === id)!.label,
+    device_profile_id: profile!.id!,
+    token_hash: "",
+    active: 0,
+    deleted_at: now.toISOString(),
+    enrolled_at: now.toISOString(),
+  });
+}
+
+/**
+ * Stores a returned batch in chain order inside the caller's transaction, skipping rows already
+ * held, and re-queues the days each stored row touches as an append does.
+ */
+export async function receiveWorkforceBatch(
+  tx: Transaction,
+  _sourceNodeId: string,
+  batch: WorkforceReturnBatch,
+  now: Date,
+): Promise<true> {
+  for (const entry of batch.entries) {
+    if (held(tx, "time_entries", entry.id)) continue;
+    for (const id of staffIds(entry)) await restorePerson(tx, batch, id, now);
+    await restoreDevice(tx, batch, entry.captured_by_device_id, now);
+    await insertRow(tx, "time_entries", entry);
+    await markAttendanceEntry(tx, {
+      id: String(entry.id),
+      eventAt: String(entry.event_at),
+      correctsEntryId: entry.corrects_entry_id as string | null,
+      respondsToEntryId: entry.responds_to_entry_id as string | null,
+    });
+  }
+  return true;
+}
+
+export const WORKFORCE_HANDOVER: ModuleHandoverContribution = {
+  returnRecords: {
+    read: async (tx, source) =>
+      (await readWorkforceReturn(tx, source)) as unknown as ReturnBatchValue[],
+    receive: (tx, source, batch, now) =>
+      receiveWorkforceBatch(tx, source, readWorkforceBatch(batch), now),
+  },
+};
