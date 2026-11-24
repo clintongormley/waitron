@@ -4597,8 +4597,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 2026-11-08: the hook no longer runs root guards, and pull-request results are no longer reused (#2557); see [the current pre-push checks](ci-and-gates.md#the-pre-push-hook) and [scoped tests and full verification](ci-and-gates.md#scoped-tests-and-full-verification).
 
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**. The `root-guards`
-  and `root-process-guards` jobs run it in CI. The root project does
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the
+  `root-guards` job runs unless main reuses verified equal-tree PR CI; the hook runs it on every
+  non-docs push. The root project does
   not typecheck, and a module tested only from there must be in the root `coverage.include` to be
   measured at all, and excluded from its own package's.
 
