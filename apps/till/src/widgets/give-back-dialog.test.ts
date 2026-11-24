@@ -11,13 +11,13 @@ import type {
   GiveBackView,
   GiveBackWrite,
 } from "../api/give-back-types.js";
-import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
 import { GiveBackSession } from "../state/give-back.js";
 import {
   CARD,
   CASH,
   SCOPE,
   VIEW,
+  UNDER_WAY,
   completedFor,
   fakeGiveBackApi,
   previewFor,
@@ -55,6 +55,8 @@ const asksOf = (el: TillGiveBackDialog) =>
 const withView = (over: Partial<GiveBackView>) => fakeGiveBackApi({ ...VIEW, ...over });
 
 const root = (el: TillGiveBackDialog) => el.shadowRoot!;
+const underWay = (el: TillGiveBackDialog) => root(el).querySelector("till-give-back-under-way");
+const heading = (el: TillGiveBackDialog) => root(el).querySelector("wt-dialog")!.heading;
 const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 const choice = (el: TillGiveBackDialog, purpose: string) =>
   root(el).querySelector<HTMLElement>(`[data-choice=${purpose}]`);
@@ -1209,11 +1211,27 @@ describe("sending", () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
       ...completedFor(body),
-      underWay: { id: "correction-1" } as unknown as InvoiceCorrectionView,
+      underWay: UNDER_WAY,
     }));
     const el = await press(api, "card-1");
-    await vi.waitFor(() => expect(root(el).querySelector("[data-under-way]")).not.toBeNull());
-    expect(text(root(el).querySelector("[data-under-way]"))).toContain("Money back under way");
+    await vi.waitFor(() => expect(underWay(el)).not.toBeNull());
+    expect(heading(el)).toBe(t("give_back.under_way"));
+    expect(outcomeText(el)).toContain("€5.00 is back on card ···4242.");
+    expect(underWay(el)!.correction).toBe(UNDER_WAY);
+    expect(root(el).querySelector("[data-check-again]")).toBeNull();
+  });
+
+  it("keeps Check again, not the under-way view, while the rest waits for the card company", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      underWay: UNDER_WAY,
+      rest: { ...body.request, amount: "1.00" },
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    expect(underWay(el)).toBeNull();
+    expect(text(root(el).querySelector("[data-under-way]"))).toBe(t("give_back.under_way"));
   });
 
   it("shows give_back.changed with the new preview, and gives nothing back", async () => {
@@ -1406,5 +1424,33 @@ describe("sending", () => {
       expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
     );
     expect(api.listApprovers).toHaveBeenLastCalledWith(["sale.refund", "sale.rectify"]);
+  });
+});
+
+describe("a give-back still under way", () => {
+  it("opens straight onto what is left to do, titled Money back under way", async () => {
+    const api = withView({ underWay: UNDER_WAY });
+    const { el } = await mount(api);
+
+    expect(heading(el)).toBe(t("give_back.under_way"));
+    expect(choice(el, "goodwill")).toBeNull();
+    const view = underWay(el)!;
+    expect(view.correction).toBe(UNDER_WAY);
+    expect(view.saleId).toBe("sale-1");
+    await vi.waitFor(() =>
+      expect(text(view.shadowRoot!.querySelector("[data-left]"))).toBe(
+        t("give_back.uw_left").replace("{amount}", "€4.00"),
+      ),
+    );
+  });
+
+  it("opens on the choice when what this till saved cannot be read", async () => {
+    localStorage.setItem(
+      `waitron.tender-refund:${JSON.stringify([SCOPE.deviceId, SCOPE.personId])}:${JSON.stringify(["give-back", "sale-1"])}`,
+      "{not json",
+    );
+    const { el } = await mount();
+    expect(choice(el, "goodwill")).not.toBeNull();
+    expect(root(el).querySelector("[data-lost]")).toBeNull();
   });
 });

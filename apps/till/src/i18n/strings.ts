@@ -249,6 +249,41 @@ export const en = {
     "The card company did not make the first refund, so the rest was not sent. Nothing more has gone back.",
   "give_back.under_way": "Money back under way",
   "give_back.done": "Done",
+  "give_back.uw_back": "{back} given back so far, of {gross}.",
+  "give_back.uw_left": "{amount} left to give back.",
+  "give_back.uw_cash": "Give back {amount} in cash",
+  "give_back.uw_cash_hint": "The cash drawer opens.",
+  "give_back.uw_cash_given": "Give the customer {amount} in cash.",
+  "give_back.uw_no_cash":
+    "This till cannot give cash back. Give the cash back from a till that can.",
+  "give_back.uw_card": "Give back {amount} to card {card}",
+  "give_back.uw_card_any": "Give back {amount} to the card",
+  "give_back.uw_card_hint": "It goes back through the card reader.",
+  "give_back.uw_terminal_hint":
+    "You refund it on the separate card terminal, then a supervisor or manager approves recording it with their PIN.",
+  "give_back.uw_card_unread":
+    "The card's payment could not be read, so nothing was sent. Press the card's button again.",
+  "give_back.uw_card_changed":
+    "This card's payment has changed since it was shown, so nothing was sent. Check what is left to give back and press again.",
+  "give_back.uw_card_failed":
+    "The card company did not make the refund, so that money has not gone back. Press the card's button to try again, or give it back another way.",
+  "give_back.uw_approvers_failed":
+    "The people who can approve this could not be read. Nothing has changed. Press the same button again to try again.",
+  "give_back.uw_close": "Close",
+  "give_back.uw_card_waiting":
+    "An earlier card refund on this receipt is still waiting for an answer, so nothing was sent. Press Check again before giving more back to a card.",
+  "give_back.uw_finish": "Finish",
+  "give_back.uw_finish_hint": "Records the {amount} given back.",
+  "give_back.uw_stop": "Stop here",
+  "give_back.uw_stop_hint": "Keeps the {amount} already given back; gives no more back.",
+  "give_back.uw_cancel": "Cancel this money back",
+  "give_back.uw_cancel_hint": "Nothing has gone back yet.",
+  "give_back.uw_finished": "The {amount} given back is recorded.",
+  "give_back.uw_cancelled": "This money back is cancelled. Nothing went back.",
+  "give_back.uw_unknown":
+    "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
+  "give_back.uw_unknown_end":
+    "The box's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "invoice_correction.title": "Correct invoice",
   "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
   "invoice_correction.loading": "Reading the invoice…",
@@ -2684,6 +2719,41 @@ export const es: Record<StringKey, string> = {
     "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más.",
   "give_back.under_way": "Devolución en curso",
   "give_back.done": "Listo",
+  "give_back.uw_back": "Devueltos {back} hasta ahora, de {gross}.",
+  "give_back.uw_left": "Quedan {amount} por devolver.",
+  "give_back.uw_cash": "Devolver {amount} en efectivo",
+  "give_back.uw_cash_hint": "Se abre el cajón.",
+  "give_back.uw_cash_given": "Da al cliente {amount} en efectivo.",
+  "give_back.uw_no_cash":
+    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda.",
+  "give_back.uw_card": "Devolver {amount} a la tarjeta {card}",
+  "give_back.uw_card_any": "Devolver {amount} a la tarjeta",
+  "give_back.uw_card_hint": "Se devuelve con el lector de tarjetas.",
+  "give_back.uw_terminal_hint":
+    "Lo devuelves en el datáfono aparte y luego un responsable o encargado aprueba registrarlo con su PIN.",
+  "give_back.uw_card_unread":
+    "No se ha podido leer el pago con tarjeta, así que no se ha enviado nada. Vuelve a pulsar el botón de la tarjeta.",
+  "give_back.uw_card_changed":
+    "El pago con tarjeta ha cambiado desde que se mostró, así que no se ha enviado nada. Revisa lo que queda por devolver y vuelve a pulsar.",
+  "give_back.uw_card_failed":
+    "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Pulsa el botón de la tarjeta para intentarlo de nuevo o devuélvelo de otra forma.",
+  "give_back.uw_approvers_failed":
+    "No se ha podido leer quién puede aprobarlo. No ha cambiado nada. Vuelve a pulsar el mismo botón para intentarlo de nuevo.",
+  "give_back.uw_close": "Cerrar",
+  "give_back.uw_card_waiting":
+    "Una devolución anterior a tarjeta en este ticket sigue esperando respuesta, así que no se ha enviado nada. Pulsa Comprobar de nuevo antes de devolver más a una tarjeta.",
+  "give_back.uw_finish": "Terminar",
+  "give_back.uw_finish_hint": "Registra los {amount} devueltos.",
+  "give_back.uw_stop": "Terminar aquí",
+  "give_back.uw_stop_hint": "Se quedan los {amount} ya devueltos; no se devuelve más.",
+  "give_back.uw_cancel": "Anular esta devolución",
+  "give_back.uw_cancel_hint": "Aún no se ha devuelto nada.",
+  "give_back.uw_finished": "Los {amount} devueltos quedan registrados.",
+  "give_back.uw_cancelled": "Esta devolución está anulada. No se devolvió nada.",
+  "give_back.uw_unknown":
+    "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
+  "give_back.uw_unknown_end":
+    "No ha llegado la respuesta del servidor. Pulsa Comprobar de nuevo para ver si se hizo antes de pulsar nada más.",
   "invoice_correction.title": "Rectificar factura",
   "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
   "invoice_correction.loading": "Consultando la factura…",

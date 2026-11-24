@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -50,7 +50,7 @@ const positive = (value: string) => compareDecimal(decimal(value), decimal("0"))
 
 /** The separate terminal's step (picture g): staff give the money back there, then confirm. */
 export function terminalStep(
-  ask: GiveBackAsk,
+  ask: Pick<GiveBackAsk, "expected">,
   state: { confirmed: boolean; attempted: boolean; sending: boolean },
   on: { confirm: (checked: boolean) => void; back: () => void; record: () => void },
 ) {
@@ -100,6 +100,7 @@ function outcomeLines(
   outcome: GiveBackOutcome,
   way: GiveBackWay | undefined,
   notice: string | null,
+  underWay: boolean,
 ) {
   const amounts = (state: string, kinds: readonly string[]) =>
     sumOf(
@@ -142,7 +143,7 @@ function outcomeLines(
   if (notice !== null) lines.push(notice);
   return html`<div class="body-step" data-outcome role="status">
     ${
-      outcome.underWay === null
+      outcome.underWay === null || underWay
         ? nothing
         : html`<p class="heading" data-under-way>${t("give_back.under_way")}</p>`
     }
@@ -186,15 +187,19 @@ export const waitsForCard = (outcome: GiveBackOutcome) =>
   (outcome.rest !== null ||
     outcome.parts.some((part) => part.state === "pending" && part.kind !== "correction"));
 
-/** The outcome, with Check again while a card refund waits for the card company. */
+/** The outcome, with Check again while a card refund waits for the card company, or followed by
+ * the under-way view, which brings its own steps. */
 export function doneStep(
   step: Extract<Step, { kind: "done" }>,
   way: GiveBackWay | undefined,
   sending: boolean,
   on: { close: () => void; checkAgain: () => void },
+  underWay?: TemplateResult,
 ) {
+  if (underWay !== undefined)
+    return html`${outcomeLines(step.outcome, way, step.notice, true)}${underWay}`;
   const waits = waitsForCard(step.outcome);
-  return html`${outcomeLines(step.outcome, way, step.notice)}
+  return html`${outcomeLines(step.outcome, way, step.notice, false)}
     <wt-form-actions
       ><wt-button
         slot="cancel"

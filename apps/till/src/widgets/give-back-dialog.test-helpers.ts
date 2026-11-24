@@ -9,6 +9,8 @@ import type {
   GiveBackView,
   GiveBackWay,
 } from "../api/give-back-types.js";
+import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
+import type { RefundableTender } from "../api/tender-refund-types.js";
 
 const reason = (id: string, name: string, noteRequired = false) =>
   ({
@@ -114,6 +116,22 @@ export const previewFor = (request: GiveBackRequest): GiveBackPreview => ({
   manual: false,
 });
 
+/** A correction a give-back left open, with €2.00 of €6.00 back and filing offered. */
+export const UNDER_WAY: InvoiceCorrectionView = {
+  id: "correction-1",
+  saleId: "sale-1",
+  state: "open",
+  gross: "6.00",
+  moneyBack: "2.00",
+  pending: "0.00",
+  left: "4.00",
+  reason: "Complaint",
+  openedAt: "2026-11-13T10:00:00.000Z",
+  correctiveSaleId: null,
+  legs: [],
+  fileNow: { gross: "2.00", vatBreakdown: [{ rate: "10.00", base: "1.82", tax: "0.18" }] },
+};
+
 export const APPROVERS: StaffMember[] = [{ personId: "boss", displayName: "Boss" }];
 export const SCOPE = { deviceId: "device-1", personId: "person-1" };
 
@@ -146,5 +164,36 @@ export function fakeGiveBackApi(view: GiveBackView = VIEW) {
     getTenderRefund: vi.fn<(refundId: string, options: object) => Promise<{ state: string }>>(
       async () => ({ state: "completed" }),
     ),
+    ...underWayStubs(),
+  };
+}
+
+/** The reads and writes the under-way view sends, each answering an open correction. */
+export function underWayStubs(correction: InvoiceCorrectionView = UNDER_WAY) {
+  return {
+    getInvoiceCorrection: vi.fn(async (): Promise<InvoiceCorrectionView> => correction),
+    getRefundableTenders: vi.fn(async (): Promise<RefundableTender[]> => [
+      {
+        tenderId: "cash-1",
+        method: "cash",
+        last4: null,
+        appliedRemaining: "30.00",
+        tipRemaining: "0.00",
+        pendingRefundId: null,
+        manual: false,
+      },
+    ]),
+    fileInvoiceCorrection: vi.fn(async (): Promise<InvoiceCorrectionView> => ({
+      ...correction,
+      state: "filed",
+    })),
+    closeInvoiceCorrection: vi.fn(async (): Promise<InvoiceCorrectionView> => ({
+      ...correction,
+      state: "discarded",
+    })),
+    openInvoiceCorrection: vi.fn<TillApi["openInvoiceCorrection"]>(),
+    giveInvoiceCorrectionCash: vi.fn<TillApi["giveInvoiceCorrectionCash"]>(),
+    refundTransaction: vi.fn<TillApi["refundTransaction"]>(),
+    retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(),
   };
 }

@@ -4,14 +4,16 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { SCOPE, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import { SCOPE, UNDER_WAY, VIEW, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
 class GiveBackLeaveApp extends LitElement {
+  /** What the next app's window reads. */
+  static view = VIEW;
   readonly leave = new LeaveController(this);
-  readonly api = fakeGiveBackApi();
+  readonly api = fakeGiveBackApi(GiveBackLeaveApp.view);
   readonly session = new GiveBackSession(SCOPE, this.api);
   closes = 0;
   override render() {
@@ -31,6 +33,7 @@ beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupWidgets();
   localStorage.clear();
+  GiveBackLeaveApp.view = VIEW;
 });
 
 async function mount() {
@@ -168,4 +171,17 @@ it("Done after the money went back closes without asking", async () => {
   form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
   await expect.poll(() => app.closes).toBe(1);
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
+});
+
+it("closing the under-way view closes the window at once and ends nothing", async () => {
+  GiveBackLeaveApp.view = { ...VIEW, underWay: UNDER_WAY };
+  const { app, form } = await mount();
+  const view = form.shadowRoot!.querySelector("till-give-back-under-way")!;
+  await vi.waitFor(() => expect(view.shadowRoot!.querySelector("[data-close]")).not.toBeNull());
+
+  view.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
+  await vi.waitFor(() => expect(app.closes).toBe(1));
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
+  expect(app.api.closeInvoiceCorrection).not.toHaveBeenCalled();
+  expect(app.api.fileInvoiceCorrection).not.toHaveBeenCalled();
 });

@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
+import { giveBackStyles } from "./give-back-styles.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
@@ -37,7 +38,11 @@ import { unservedDishText } from "./dish-format.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
 import type { GiveBackSession } from "../state/give-back.js";
-import { TenderRefundAttemptError } from "../state/tender-refund.js";
+import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
+import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
+import { TenderRefundAttemptError, type TenderRefundSession } from "../state/tender-refund.js";
+import "./give-back-under-way.js";
+import type { GiveBackUnderWayApi } from "./give-back-under-way.js";
 import "./supervisor-override-dialog.js";
 import {
   approverRefusal,
@@ -55,6 +60,7 @@ import {
   restOutcome,
   stillStarting,
   terminalStep,
+  waitsForCard,
   type Override,
   type Sending,
   type Step,
@@ -62,10 +68,8 @@ import {
 
 type Refusal = ReturnType<typeof refusalOf>;
 
-export type GiveBackApi = Pick<
-  TillApi,
-  "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers"
->;
+export type GiveBackApi = GiveBackUnderWayApi &
+  Pick<TillApi, "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers">;
 export type { GiveBackAsk };
 
 type Draft = {
@@ -101,105 +105,14 @@ const startOf = (line: GiveBackLine) =>
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
-  static override styles = [
-    baseStyles,
-    css`
-      .body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-4);
-      }
-      p {
-        overflow-wrap: anywhere;
-        margin: 0;
-      }
-      fieldset {
-        margin: 0;
-        padding: 0;
-        border: none;
-        min-width: 0;
-      }
-      legend,
-      .heading {
-        font-weight: var(--wt-font-weight-bold);
-        margin-bottom: var(--wt-space-2);
-      }
-      .muted,
-      .reason {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .apart {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-      }
-      .unavailable {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text-muted);
-      }
-      .unavailable .title {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .unavailable .hint {
-        font-size: var(--wt-font-size-sm);
-      }
-      .lines {
-        display: grid;
-        justify-items: start;
-        gap: var(--wt-space-2);
-      }
-      .extra-of {
-        padding-inline-start: var(--wt-space-6);
-      }
-      .free {
-        display: flex;
-        flex-direction: column;
-      }
-      .option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-      }
-      .option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
-      }
-      .summary {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-3) var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-surface);
-      }
-      .error {
-        color: var(--wt-color-danger);
-        font-size: var(--wt-font-size-sm);
-      }
-      .body-step {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-      .total {
-        font-size: var(--wt-font-size-lg);
-        font-weight: var(--wt-font-weight-bold);
-      }
-    `,
-  ];
+  static override styles = [baseStyles, giveBackStyles];
   @property({ attribute: false }) api!: GiveBackApi;
   /** Saves each press before sending it. */
   @property({ attribute: false }) session!: GiveBackSession;
+  /** The under-way view's cash and card parts, each saved before it is sent. */
+  @property({ attribute: false }) corrections!: InvoiceCorrectionSession;
+  @property({ attribute: false }) refunds!: TenderRefundSession;
+  @property({ attribute: false }) capabilities: readonly string[] = [];
   @property() saleId = "";
   @property() invoiceNumber = "";
   @property() namesLocale = "";
@@ -498,15 +411,7 @@ export class TillGiveBackDialog extends LitElement {
   }
   /** A press saved earlier whose answer was lost, or a rest still to follow, opens where it was. */
   #restore(): void {
-    let saved: ReturnType<GiveBackSession["read"]> = null;
-    try {
-      this.session.abandon(this.saleId);
-      saved = this.session.read(this.saleId);
-    } catch (error) {
-      // Unreadable storage refuses the next press, which says so.
-      if (!(error instanceof TenderRefundAttemptError)) throw error;
-    }
-    const { sent, rest } = saved ?? { sent: null, rest: null };
+    const { sent, rest } = this.#saved(true) ?? { sent: null, rest: null };
     if (sent) this.step = lostFor(sent);
     else if (rest)
       this.step = { kind: "done", outcome: restOutcome(rest), way: rest.way, notice: null };
@@ -560,7 +465,7 @@ export class TillGiveBackDialog extends LitElement {
       this.approvers = null;
       this.#approval = undefined;
       const kept = error instanceof TenderRefundAttemptError && error.kind === "locked";
-      const sent = kept ? this.#savedPress() : null;
+      const sent = kept ? (this.#saved()?.sent ?? null) : null;
       this.step = sent
         ? lostFor(sent)
         : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null };
@@ -573,17 +478,19 @@ export class TillGiveBackDialog extends LitElement {
       });
     else this.#refused(refusal);
   }
-  /** The press an earlier send saved, which a changed press may not replace. */
-  #savedPress() {
+  /** What an earlier send saved, first forgetting a first press refused for its PIN when asked;
+   * null when the storage cannot be read, which the next press then says. */
+  #saved(abandon = false) {
     try {
-      return this.session.read(this.saleId)?.sent ?? null;
-    } catch (error) {
-      if (!(error instanceof TenderRefundAttemptError)) throw error;
+      if (abandon) this.session.abandon(this.saleId);
+      return this.session.read(this.saleId);
+    } catch {
       return null;
     }
   }
-  /** Nothing moved: a rest's refusal stays on its outcome; any other goes back to the form, or to
-   * the choice when the window opened on a saved press, with the refusal at the bottom. */
+  /** A rest's refusal stays on its outcome; any other goes back to the form, or to the choice when
+   * the window opened on a saved press, with the refusal at the bottom. Whether the press stays
+   * saved is the session's: while it does, a changed press is refused as locked. */
   #refused(refusal: Refusal): void {
     this.approvers = null;
     this.#approval = undefined;
@@ -923,14 +830,36 @@ export class TillGiveBackDialog extends LitElement {
         },
       );
     const way = this.view!.ways.find((row) => row.way === step.way);
-    return doneStep(step, way, this.sending, {
-      close,
-      checkAgain: () => void this.#checkAgain(step),
-    });
+    const underWay = this.#underWayOf(step);
+    return doneStep(
+      step,
+      way,
+      this.sending,
+      { close, checkAgain: () => void this.#checkAgain(step) },
+      underWay === null ? undefined : this.#underWay(underWay),
+    );
+  }
+  /** The correction a give-back left open, unless a card refund it waits for comes first. */
+  #underWayOf(step: Step | null): InvoiceCorrectionView | null {
+    if (step === null) return this.view?.underWay ?? null;
+    return step.kind === "done" && !waitsForCard(step.outcome) ? step.outcome.underWay : null;
+  }
+  #underWay(correction: InvoiceCorrectionView) {
+    return html`<till-give-back-under-way
+      .api=${this.api}
+      .saleId=${this.saleId}
+      .correction=${correction}
+      .corrections=${this.corrections}
+      .refunds=${this.refunds}
+      .capabilities=${this.capabilities}
+      .close=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+    ></till-give-back-under-way>`;
   }
   #body() {
     if (this.step !== null && (this.view !== null || this.step.kind === "lost"))
       return this.#stepBody(this.step);
+    const underWay = this.#underWayOf(null);
+    if (underWay !== null) return this.#underWay(underWay);
     if (this.view !== null)
       return this.purpose === null ? this.#choices(this.view) : this.#form(this.view, this.purpose);
     if (this.loadRefusal === null)
@@ -950,7 +879,7 @@ export class TillGiveBackDialog extends LitElement {
     return html`<wt-dialog
         ${trackDialog()}
         .open=${this.active}
-        .heading=${t("give_back.title")}
+        .heading=${t(this.#underWayOf(this.step) === null ? "give_back.title" : "give_back.under_way")}
         .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @wt-close=${(event: Event) => this.#closed(event)}
       >

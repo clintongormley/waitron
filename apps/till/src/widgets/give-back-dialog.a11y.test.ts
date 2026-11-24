@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { SCOPE, VIEW, completedFor, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import {
+  SCOPE,
+  UNDER_WAY,
+  VIEW,
+  completedFor,
+  fakeGiveBackApi,
+} from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
@@ -143,5 +149,27 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     const { el } = await mount(api);
     expect(el.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull();
     await expectNoA11yViolations(el);
+  });
+
+  it("has no violations on a give-back still under way, with money back waiting and its steps", async () => {
+    const { el, host } = await mount(
+      fakeGiveBackApi({ ...VIEW, underWay: { ...UNDER_WAY, pending: "1.00" } }),
+    );
+    el.capabilities = ["take-cash"];
+    const view = el.shadowRoot!.querySelector("till-give-back-under-way")!;
+    await vi.waitFor(() =>
+      expect(view.shadowRoot!.querySelector("[data-choice=cash]")).not.toBeNull(),
+    );
+    expect(view.shadowRoot!.querySelector("[data-choice=stop]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the under-way view's ended outcome", async () => {
+    const { el, host } = await mount(
+      fakeGiveBackApi({ ...VIEW, underWay: { ...UNDER_WAY, state: "filed" } }),
+    );
+    const view = el.shadowRoot!.querySelector("till-give-back-under-way")!;
+    await vi.waitFor(() => expect(view.shadowRoot!.querySelector("[data-done]")).not.toBeNull());
+    await expectNoA11yViolations(host);
   });
 });
