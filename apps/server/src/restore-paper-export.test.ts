@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -89,7 +90,9 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
 );
 it("refuses the archive encryption key as node authentication before changing the destination", async () => {
   f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
-  await writeFile(join(f.stateDir, "flows/restore/node-key"), f.encryptionKey);
+  // The archive encryption key, in the staged authority key's 64-hex form.
+  const staged = createHash("sha256").update(f.encryptionKey).digest("hex");
+  await writeFile(join(f.stateDir, "flows/restore/node-key"), staged);
   const destination = await f.seedDestination();
   await writeFile(join(f.stateDir, "trading.env"), "untouched identity");
   const retained = f.journal();
@@ -105,7 +108,7 @@ it("refuses the archive encryption key as node authentication before changing th
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(retained);
   expect(refusal).toMatchObject(expectedRefusal);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.encryptionKey);
+  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(staged);
   expect(
     JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
   ).toHaveProperty("phase", "staged");

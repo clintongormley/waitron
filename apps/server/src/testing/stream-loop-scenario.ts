@@ -336,18 +336,19 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         try {
           if (db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined)
             return undefined;
-          if (serverSecret === undefined) return true;
-          const current = db
-            .prepare(
-              "select check_value as checkValue from master_keys order by number desc limit 1",
-            )
-            .get() as { checkValue: string } | undefined;
-          return current !== undefined &&
+        } finally {
+          db.close();
+        }
+        if (serverSecret === undefined) return true;
+        const restored = await openVenueDatabase(folder, { exclusive: false });
+        try {
+          const current = await readCurrentMasterKey(restored.venue);
+          return current !== null &&
             masterKeyMatches(decodeMasterKeyCode(serverSecret), current.checkValue)
             ? true
             : undefined;
         } finally {
-          db.close();
+          await restored.close();
         }
       } finally {
         await rm(folder, { recursive: true, force: true });

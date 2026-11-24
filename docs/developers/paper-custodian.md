@@ -445,7 +445,7 @@ Use `--action re-register` for a node re-registration, with a matching current-e
 After a confirmed committed attempt, retain the original operation for the host's replay checks;
 the export command refuses to assemble a new operation from a committed or uncertain attempt.
 Exporting an approval does not authenticate its operator. The host still checks the selected
-database's node key and rereads separately configured current outside evidence before activation.
+database's master key and rereads separately configured current outside evidence before activation.
 
 ## Supply a recovery operation to the host
 
@@ -485,7 +485,7 @@ are not included in that refusal.
 For a staged restore, the entry process reads the same environment settings after restart. A
 request may instead carry `recoveryOperation` in its marker. That marker takes precedence over the
 environment's operation file, but it supplies no authentication authority: the entry process must
-still receive the node key and reread the current outside evidence. The key is not copied into
+still receive the master key and reread the current outside evidence. The key is not copied into
 the marker. Inputs that would change when saved as JSON are refused before replacing a staged
 request.
 

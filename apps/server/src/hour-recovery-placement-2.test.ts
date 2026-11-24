@@ -24,7 +24,8 @@ import { invoiceSeries, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
-import { AppError } from "@waitron/shared";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
+import { makeMasterKey } from "@waitron/credentials";
 import { runRestoreHooks, restoreFromArtifact } from "./restore.js";
 import {
   createInteractiveRecoveryPreparation,
@@ -42,6 +43,9 @@ import { createHash } from "node:crypto";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 
+// A master key that decodes but is not the venue's.
+const WRONG_KEY = encodeMasterKeyCode(makeMasterKey());
+
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
     "the default staged %s restore refuses a wrong node key before replacing the destination",
@@ -56,7 +60,7 @@ describe("selected-hour admission before archive placement", () => {
               recoveryKey: "archive password",
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: "wrong node key",
+              nodeRecoverySecret: WRONG_KEY,
             }
           : {
               kind: "stream",
@@ -64,7 +68,7 @@ describe("selected-hour admission before archive placement", () => {
               entries: f.entries,
               environment: "preproduction",
               recoveryOperation,
-              nodeRecoverySecret: "wrong node key",
+              nodeRecoverySecret: WRONG_KEY,
             },
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
@@ -511,7 +515,7 @@ describe("selected-hour admission before archive placement", () => {
       const credentials = {
         environment: "preproduction" as const,
         recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
-        nodeRecoverySecret: reason === "wrong key" ? "wrong node key" : key.secret,
+        nodeRecoverySecret: reason === "wrong key" ? WRONG_KEY : key.secret,
         recoveryContext: {
           selectedSourceId: f.options.selected.sourceId,
           oldBoxGone: reason !== "old seller",

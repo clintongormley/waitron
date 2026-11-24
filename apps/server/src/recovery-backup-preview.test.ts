@@ -1,4 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { hashPassword } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -355,10 +357,11 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     },
     input: { allocation: "opaque", approval: "opaque" },
   };
-  const credential = { recoveryOperation, nodeRecoverySecret: "synthetic staged node key" };
+  const typed = encodeMasterKeyCode(makeMasterKey());
+  const credential = { recoveryOperation, nodeRecoverySecret: typed };
   await stageStreamRestore({ ...selection, ...credential, venueConfirmed: "89890001K" });
   expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
-    "synthetic staged node key",
+    authorityKey(decodeMasterKeyCode(typed)).toString("hex"),
   );
   expect(
     JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request,

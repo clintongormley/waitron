@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { masterKeyAuthorising } from "./operation-authentication.js";
 import * as operations from "./recovery-module-operation.js";
@@ -204,7 +205,7 @@ it.each(["archive", "stream"])(
   },
 );
 
-it.each(["synthetic node credential", "AbCd EfGh JkMn PqRs TuVw XyZ2 3456 789A BcDe F"])(
+it.each(["synthetic node credential", encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345")])(
   "refuses to stage a key that is not a master key (%s)",
   async (nodeRecoverySecret) => {
     const stateDir = await fresh();

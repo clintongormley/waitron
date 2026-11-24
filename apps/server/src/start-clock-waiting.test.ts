@@ -280,20 +280,22 @@ describe("the restore's waiting app: the node recovery key", () => {
 });
 
 describe("the restore's waiting app: the master key as printed on the recovery pack", () => {
-  it("the clock page accepts the master key typed in any case with or without spaces, and refuses the 41-symbol box key", async () => {
+  it.each([
+    ["as printed", KEY],
+    ["in lower case", KEY.toLowerCase()],
+    ["without spaces", KEY.replaceAll(" ", "")],
+    ["in lower case without spaces", KEY.replaceAll(" ", "").toLowerCase()],
+    ["with extra spaces", `  ${KEY.replaceAll(" ", "   ")} `],
+  ])("the clock page accepts the master key typed %s", async (_name, key) => {
     const w = await waiting();
-    for (const key of [
-      KEY,
-      KEY.toLowerCase(),
-      KEY.replaceAll(" ", ""),
-      KEY.replaceAll(" ", "").toLowerCase(),
-      `  ${KEY.replaceAll(" ", "   ")} `,
-    ]) {
-      const res = await w.post("challenge", { key });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ id: expect.any(String) });
-    }
-    for (const key of [STAGED, encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345")]) {
+    const res = await w.post("challenge", { key });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: expect.any(String) });
+  });
+
+  it("the clock page refuses the 41-symbol box key and the staged authority key itself", async () => {
+    const w = await waiting();
+    for (const key of [encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345"), STAGED]) {
       const res = await w.post("challenge", { key });
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(refused);

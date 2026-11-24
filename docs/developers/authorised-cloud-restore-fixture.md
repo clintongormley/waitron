@@ -46,7 +46,7 @@ Build the fixture through its existing setup and helpers:
 2. `archiveHost()` archives that database, builds and encrypts its archive, then calls
    `previewRecoveryArchive`. The resulting source identifier binds recovery to those
    encrypted bytes. It constructs `createSelectedRecoveryPreparation` with that selection,
-   the node key, all composed modules and explicit old-machine-offline and sole-recovery
+   the master key, all composed modules and explicit old-machine-offline and sole-recovery
    facts. It compares clocks and selects the recovery hour through the preparation API.
 3. Keep `f.outcome.input`, `f.options.binding`, `f.roots` and the preparation journal together.
    `archiveCommand(f)` writes the encrypted artifact and the operation JSON, constructs the

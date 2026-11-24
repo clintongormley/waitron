@@ -1,3 +1,5 @@
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -28,6 +30,9 @@ import {
 } from "./restore-request.js";
 import * as requestRuntime from "./restore-request.js";
 import { restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
+
+const DISPOSABLE_KEY = encodeMasterKeyCode(makeMasterKey());
+const DISPOSABLE_STAGED = authorityKey(decodeMasterKeyCode(DISPOSABLE_KEY)).toString("hex");
 
 vi.mock("./backup-verification-target.js", { spy: true });
 const unavailable = "Cloud recovery is unavailable. Try again.";
@@ -399,7 +404,7 @@ it("target mismatch keeps the node credential and never sets placementStarted", 
       },
       input: {},
     },
-    nodeRecoverySecret: "disposable node key",
+    nodeRecoverySecret: DISPOSABLE_KEY,
   });
   const marker = await f.marker();
   f.running.mockReturnValue(target("f".repeat(40)));
@@ -408,7 +413,7 @@ it("target mismatch keeps the node credential and never sets placementStarted", 
   expect(await f.marker()).toBe(marker);
   expect(JSON.parse(await f.marker()).phase).toBe("staged");
   expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
-    "disposable node key",
+    DISPOSABLE_STAGED,
   );
   expect(restore).not.toHaveBeenCalled();
 });
@@ -582,7 +587,7 @@ describe("comparison immediately before real archive placement", () => {
         },
         input: {},
       },
-      nodeRecoverySecret: "disposable node key",
+      nodeRecoverySecret: DISPOSABLE_KEY,
     });
     const marker = await f.marker();
     const before = await f.evidence();
@@ -598,7 +603,7 @@ describe("comparison immediately before real archive placement", () => {
     ).rejects.toThrow(unavailable);
     expect(await f.marker()).toBe(marker);
     expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
-      "disposable node key",
+      DISPOSABLE_STAGED,
     );
     expect(await f.evidence()).toEqual(before);
   });

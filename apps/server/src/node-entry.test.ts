@@ -30,7 +30,8 @@ import { attachmentPath } from "./restore-flow.js";
 import { sql, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { openVenueDatabase, type VenueHolder } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -86,6 +87,7 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
 }
 
 /** Where cases that never read the log file let the entry write it. */
+const STAGED_MASTER_KEY = encodeMasterKeyCode(makeMasterKey());
 const SHARED_LOG_DIR = mkdtempSync(join(tmpdir(), "wt-entry-log-"));
 
 /** The recovery page's log file, one parsed line each. */
@@ -3129,14 +3131,14 @@ describe("a restore's start that waits to confirm its time", () => {
   ) {
     const keyPath = attachmentPath(start.d.stateDir, "node-key");
     await mkdir(dirname(keyPath), { recursive: true });
-    await writeFile(keyPath, "staged-node-key");
+    await writeFile(keyPath, authorityKey(decodeMasterKeyCode(STAGED_MASTER_KEY)).toString("hex"));
     const post = (path: string, body: object) =>
       start.app().request(
         `/restore-clock/${path}`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ key: "staged-node-key", ...body }),
+          body: JSON.stringify({ key: STAGED_MASTER_KEY, ...body }),
         },
         // A phone on the venue's network, not the box's own screen.
         { incoming: { socket: { remoteAddress: "192.0.2.10", remoteFamily: "IPv4" } } },
