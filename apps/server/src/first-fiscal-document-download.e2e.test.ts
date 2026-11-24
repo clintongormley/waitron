@@ -245,9 +245,9 @@ it.each(["en", "es"] as const)(
       );
       await click(`${vf} [data-test=prepare-pdf]`);
       await prove();
-      await page.locator(`${vf} [data-test=download-pdf]`).waitFor();
+      await page.locator(`${vf} wt-master-key-box [data-test=download]`).waitFor();
       const downloadPromise = page.waitForEvent("download");
-      await click(`${vf} [data-test=download-pdf]`);
+      await click(`${vf} wt-master-key-box [data-test=download]`);
       const download = await downloadPromise;
       await download.saveAs(join(receipt, "wizard-original.pdf"));
       await page.evaluate(() => {
@@ -257,7 +257,7 @@ it.each(["en", "es"] as const)(
           return open(target, ...rest);
         };
       });
-      await click(`${vf} [data-test=print-pdf]`);
+      await click(`${vf} wt-master-key-box [data-test=print]`);
       // In this headless Chromium the tab Print opens makes no request, so read the address it was given.
       const printed = Buffer.from(
         await page.evaluate(async () => {
