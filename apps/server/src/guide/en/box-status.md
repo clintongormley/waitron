@@ -352,9 +352,13 @@ kept in time over the internet: the **Clock** row then starts with **The tax age
 sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
 or staff use **Check the time** on a till.
 
+When the **Clock** row says **The new software producer needs a new fiscal installation**, devices
+agreeing with the box do not end the wait either: confirm or correct the time in the same ways. If
+the row then says the box could not open it, and that stays, press **Restart the box**.
+
 The box confirms its time by itself as soon as its [time service](box-status.md#clock-service)
 reaches a time server over the internet, or, unless it waits because
-of a refused sale, once two tills or handhelds that are switched on and connected agree with its
+of a refused sale or a new fiscal installation, once two tills or handhelds that are switched on and connected agree with its
 clock, even at the sign-in screen.
 
 An administrator can confirm it sooner on this page:

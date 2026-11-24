@@ -94,6 +94,7 @@ describe("partOfAlert", () => {
     expect(partOfAlert({ area: "backup", code: "backup.stream_paused" })).toBe("bucket");
     expect(partOfAlert({ area: "fiscal", code: "fiscal.clock_drift" })).toBe("clock");
     expect(partOfAlert({ area: "box", code: "clock.behind_last_sale" })).toBe("clock");
+    expect(partOfAlert({ area: "box", code: "sif.identity_change_blocked" })).toBe("clock");
     expect(partOfAlert({ area: "fiscal", code: "fiscal.submission_delayed" })).toBe("tax");
     expect(partOfAlert({ area: "fiscal", code: "fiscal.awaiting_certificate" })).toBe("tax");
     expect(partOfAlert({ area: "box", code: "storage.space_low" })).toBe("disk");
@@ -706,7 +707,7 @@ describe("the Clock row while the start waits for its time", () => {
   });
   const waitingHealth = (
     hostAnswers: boolean,
-    cause: "start" | "clock_jumped" | "future_date_refused" = "start",
+    cause: "start" | "clock_jumped" | "future_date_refused" | "identity_change" = "start",
   ) =>
     quietHealth({
       clock: {
@@ -759,6 +760,52 @@ describe("the Clock row while the start waits for its time", () => {
       `${es["box_status.clock.waiting_future_date"].replace("{boxAt}", formatIsoMinute(BOX_AT))} ${es["box_status.clock.waiting_host_silent_jumped"]}`,
     );
   });
+
+  it.each([
+    [
+      "en",
+      `The new software producer needs a new fiscal installation, which opens once the box's time is confirmed: no payments are taken until then. The box's clock says ${formatIsoMinute(BOX_AT)}.`,
+      "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
+    ],
+    [
+      "es",
+      es["box_status.clock.waiting_identity_change"].replace("{boxAt}", formatIsoMinute(BOX_AT)),
+      es["box_status.clock.waiting_host_silent_jumped"],
+    ],
+  ])(
+    "says a new fiscal installation opens once the time is confirmed, with no device count, in %s",
+    (locale, line, silent) => {
+      setLocale(locale);
+      expect(
+        row(boxStatusRows(waitingHealth(true, "identity_change"), [UNCONFIRMED]).rows, "clock"),
+      ).toMatchObject({ state: "stopped", line, alerts: [] });
+      expect(
+        row(boxStatusRows(waitingHealth(false, "identity_change"), []).rows, "clock").line,
+      ).toBe(`${line} ${silent}`);
+    },
+  );
+
+  it.each([true, false])(
+    "says what the bell says, not that the time is awaited, once the new fiscal installation is blocked (host answers: %s)",
+    (hostAnswers) => {
+      const blocked = alert("sif.identity_change_blocked", "box", { severity: "error" });
+      const { rows, other } = boxStatusRows(waitingHealth(hostAnswers, "identity_change"), [
+        alert("clock.sync_off", "box", { params: { reason: "off" } }),
+        UNCONFIRMED,
+        blocked,
+      ]);
+      expect(row(rows, "clock")).toMatchObject({
+        state: "stopped",
+        line: "The box could not open its new fiscal installation for the new software producer, so it is not taking payments. It keeps trying. If this stays, open Box status and press Restart the box.",
+      });
+      expect(row(rows, "clock").alerts.map(({ code }) => code)).toEqual([
+        "clock.sync_off",
+        "sif.identity_change_blocked",
+      ]);
+      expect(row(rows, "disk")).toMatchObject({ state: "ok", alerts: [] });
+      expect(other).toBe(0);
+    },
+  );
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {
     expect(row(boxStatusRows(waitingHealth(true), []).rows, "sales")).toMatchObject({

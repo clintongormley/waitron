@@ -55,6 +55,11 @@ start again in the same ways.
 checks the time. · Check the time** is red. Devices agreeing with the box do not start payments
 again: use **Check the time**.
 
+**Payments wait: the box must open new invoice numbering first, once its time is confirmed ·
+Check the time** is red. Devices agreeing with the box do not start payments again: use **Check the
+time**. If the line stays, a manager or administrator can restart the box on the [Box status
+page](box-status.md#restart).
+
 While payments wait, or while the box's clock is wrong or its disk is full, a button that starts
 a payment opens **Payments are paused** instead, saying why; the order stays open. Use **Check the
 time** there when it shows, or **Close** it and pay once the red line has gone.

@@ -2274,7 +2274,7 @@ export interface BoxHealth {
       agreed: number;
       hostAnswers: boolean;
       /** Never null while the box waits. */
-      cause: "start" | "future_date_refused" | "clock_jumped" | null;
+      cause: "start" | "future_date_refused" | "clock_jumped" | "identity_change" | null;
     };
   };
   printers: { id: string; name: string }[];

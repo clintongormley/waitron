@@ -121,11 +121,23 @@ const STOPPED_WORDS: Readonly<Record<string, StringKey>> = {
   "clock.unusable": "box_status.notice.clock_unusable",
 };
 
+/** The box's time is confirmed and a new fiscal installation still does not open. */
+const IDENTITY_CHANGE_BLOCKED = "sif.identity_change_blocked";
+
+export function identityChangeBlocked(alerts: readonly AlertView[]): AlertView | undefined {
+  return alerts.find((alert) => alert.code === IDENTITY_CHANGE_BLOCKED);
+}
+
 export function partOfAlert(alert: Pick<AlertView, "area" | "code">): PartId | null {
   if (alert.area === "printing") return "printers";
   if (alert.area === "card_reader") return "readers";
   if (alert.code.startsWith("backup.stream_")) return "bucket";
-  if (alert.code === "fiscal.clock_drift" || alert.code.startsWith("clock.")) return "clock";
+  if (
+    alert.code === "fiscal.clock_drift" ||
+    alert.code === IDENTITY_CHANGE_BLOCKED ||
+    alert.code.startsWith("clock.")
+  )
+    return "clock";
   if (alert.area === "fiscal") return "tax";
   if (alert.area === "box") return "disk";
   return null;
@@ -201,6 +213,7 @@ function clockOff(id: PartId, health: BoxHealth): boolean {
 const WAITING_LINES: Readonly<Record<string, StringKey>> = {
   clock_jumped: "box_status.clock.waiting_jumped",
   future_date_refused: "box_status.clock.waiting_future_date",
+  identity_change: "box_status.clock.waiting_identity_change",
 };
 
 function lineOf(
@@ -223,6 +236,8 @@ function lineOf(
   if (words !== undefined) return t(STOPPED_WORDS[words.code]!);
   const waiting = id === "clock" ? health.clock.waiting : undefined;
   if (waiting !== undefined) {
+    const blocked = identityChangeBlocked(alerts);
+    if (blocked !== undefined) return alertMessage(blocked.code, blocked.params, currentLocale());
     const key = WAITING_LINES[waiting.cause ?? "start"] ?? "box_status.clock.waiting";
     const line = fill(key, {
       agreed: String(waiting.agreed),

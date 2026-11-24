@@ -24,7 +24,13 @@ import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format
 import { guideHref } from "../help-guide.js";
 import "./upgrade-settings-dialog.js";
 import { wifiRequestError } from "./box-wifi-dialog.js";
-import { boxStatusRows, ssidName, networkOutcome, type PartRow } from "./box-status-rows.js";
+import {
+  boxStatusRows,
+  identityChangeBlocked,
+  ssidName,
+  networkOutcome,
+  type PartRow,
+} from "./box-status-rows.js";
 
 /** The least `formatBytes` writes as "1 MB" rather than "0 MB". */
 const LEAST_TO_FREE = 500_000;
@@ -521,11 +527,11 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
-  #clockActions(health: BoxHealth): TemplateResult | typeof nothing {
+  #clockActions(health: BoxHealth, row: PartRow): TemplateResult | typeof nothing {
     if (!this.#clockCheckNeeded(health)) return nothing;
     if (!this.canCheckClock) return this.#clockAdminSignIn();
     return html`${
-      offersConfirm(health)
+      offersConfirm(health, row)
         ? html`<wt-button
             variant="secondary"
             data-test="clock-confirm"
@@ -823,7 +829,7 @@ export class BoxStatusScreen extends LitElement {
             : nothing
         }
         ${
-          row.id === "clock" && this.canCheckClock && offersConfirm(health)
+          row.id === "clock" && this.canCheckClock && offersConfirm(health, row)
             ? html`<p class="aside" data-test="clock-confirm-help">
                   ${t(
                     this.#clockHostSilent(health)
@@ -872,7 +878,7 @@ export class BoxStatusScreen extends LitElement {
         ${outbox === null ? nothing : this.#retryAction(health)}
         ${this.#screensOf(row).map((screen) => this.#goToButton(screen))}
         ${disk ? this.#freeAction(health) : nothing}
-        ${row.id === "clock" ? this.#clockActions(health) : nothing}
+        ${row.id === "clock" ? this.#clockActions(health, row) : nothing}
       </div>
     </li>`;
   }
@@ -1219,9 +1225,14 @@ function clockDoneWords(done: "set" | "set-sign-in" | "confirmed"): string {
   return done === "set" ? set : `${set} ${t("box_status.clock.admin.set.sign_in_again")}`;
 }
 
-/** A waiting start's time as it stands, which the box refuses before 28-10-2024. */
-function offersConfirm(health: BoxHealth): boolean {
-  return health.clock.waiting !== undefined && !clockUnusable(health);
+/** A waiting start's time as it stands, which the box refuses before 28-10-2024; a blocked row
+ * does not show it. */
+function offersConfirm(health: BoxHealth, row: PartRow): boolean {
+  return (
+    health.clock.waiting !== undefined &&
+    !clockUnusable(health) &&
+    identityChangeBlocked(row.alerts) === undefined
+  );
 }
 
 /** A clock before 28-10-2024. */

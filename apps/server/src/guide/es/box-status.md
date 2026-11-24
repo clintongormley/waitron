@@ -381,9 +381,14 @@ no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacien
 venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
 hora en esta página, o el personal usa **Comprobar la hora** en una caja.
 
+Cuando la fila **Reloj** dice **El productor del software nuevo necesita una nueva instalación
+fiscal**, que los dispositivos coincidan con el servidor tampoco termina la espera: confirma o corrige
+la hora de las mismas maneras. Si la fila dice después que el servidor no ha podido abrirla, y sigue
+así, pulsa **Reiniciar el servidor**.
+
 El servidor confirma su hora por sí solo en cuanto su [servicio de hora](box-status.md#clock-service)
 contacta con un servidor de hora por internet, o, salvo si espera por una venta
-rechazada, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
+rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 
 Un administrador puede confirmarla antes en esta página:

@@ -4706,6 +4706,8 @@ export const en = {
     "The box's clock jumped and it cannot check the time over the internet. Waiting for devices to connect and agree with the box's time ({agreed} of 2 so far): no payments are taken. The box's clock says {boxAt}.",
   "box_status.clock.waiting_future_date":
     "The tax agency refused a sale as dated in the future: no payments are taken until the time is checked. The box's clock says {boxAt}.",
+  "box_status.clock.waiting_identity_change":
+    "The new software producer needs a new fiscal installation, which opens once the box's time is confirmed: no payments are taken until then. The box's clock says {boxAt}.",
   "box_status.clock.waiting_host_silent":
     "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
   "box_status.clock.waiting_host_silent_jumped":
@@ -9597,6 +9599,8 @@ export const es: Record<StringKey, string> = {
     "El reloj del servidor ha saltado y no puede comprobar la hora por internet. Esperando a que se conecten dispositivos y coincidan con la hora del servidor ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del servidor indica {boxAt}.",
   "box_status.clock.waiting_future_date":
     "Hacienda rechazó una venta por tener fecha futura: no se aceptan cobros hasta que se compruebe la hora. El reloj del servidor indica {boxAt}.",
+  "box_status.clock.waiting_identity_change":
+    "El productor del software nuevo necesita una nueva instalación fiscal, que se abre en cuanto se confirme la hora del servidor: hasta entonces no se aceptan cobros. El reloj del servidor indica {boxAt}.",
   "box_status.clock.waiting_host_silent":
     "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque.",
   "box_status.clock.waiting_host_silent_jumped":

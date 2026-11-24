@@ -2259,6 +2259,8 @@ export const en = {
     "Payments wait: the box's clock jumped and it cannot check the time over the internet. Waiting for devices to agree with its time ({agreed} of 2 so far)",
   "staff_notice.clock.unconfirmed_future_date":
     "The tax agency refused a sale because the box's date was ahead. Payments wait until someone checks the time.",
+  "staff_notice.clock.unconfirmed_identity_change":
+    "Payments wait: the box must open new invoice numbering first, once its time is confirmed",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.printer.jobs_waiting": "Printer “{printer}” not printing",
@@ -4570,6 +4572,8 @@ export const es: Record<StringKey, string> = {
     "Los cobros esperan: el reloj del servidor ha saltado y no puede comprobar la hora por internet. Esperando a que los dispositivos coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.clock.unconfirmed_future_date":
     "Hacienda rechazó una venta porque la fecha del servidor iba adelantada. Los cobros esperan hasta que alguien compruebe la hora.",
+  "staff_notice.clock.unconfirmed_identity_change":
+    "Los cobros esperan: el servidor debe abrir antes una numeración de facturas nueva, en cuanto se confirme su hora",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
   "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
   "staff_notice.printer.jobs_waiting": "Impresora «{printer}» no imprime",

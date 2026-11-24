@@ -17,6 +17,7 @@ const WAIT_CAUSES = {
   start: "staff_notice.clock.unconfirmed",
   clock_jumped: "staff_notice.clock.unconfirmed_jumped",
   future_date_refused: "staff_notice.clock.unconfirmed_future_date",
+  identity_change: "staff_notice.clock.unconfirmed_identity_change",
 } as const;
 
 function unknownText(): { main: string; hint: string } {

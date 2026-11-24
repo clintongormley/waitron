@@ -872,6 +872,30 @@ describe("the box waiting for its start's time", () => {
     );
   });
 
+  it.each([
+    [
+      "en",
+      "This version of Waitron has a new software producer, so the box opens a new fiscal installation, with new invoice numbers, as soon as its time is confirmed. Until then it is not taking payments. It confirms by itself once its time service reaches a time server over the internet; tills and handhelds agreeing with its time are not enough for this. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+      "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
+    ],
+    [
+      "es",
+      "Esta versión de Waitron tiene un productor del software nuevo, así que el servidor abre una nueva instalación fiscal, con una numeración de facturas nueva, en cuanto se confirme su hora. Hasta entonces no acepta cobros. La confirma por sí solo en cuanto su servicio de hora contacta con un servidor de hora por internet; para esto no basta con que las cajas o terminales coincidan con su hora. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+      "No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+    ],
+  ])(
+    "says the box waits to open a new fiscal installation, with no device count, in %s",
+    (locale, line, silent) => {
+      const params = { agreed: 1, cause: "identity_change" };
+      expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, locale)).toBe(
+        line,
+      );
+      expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, locale)).toBe(
+        `${line} ${silent}`,
+      );
+    },
+  );
+
   it("says the tax agency refused a sale dated in the future in Spanish", () => {
     const REFUSED_ES =
       "Hacienda rechazó una venta con fecha 2 nov 2026 porque esa fecha era futura cuando se envió, así que el servidor ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.";
