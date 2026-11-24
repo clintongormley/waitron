@@ -1314,11 +1314,13 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "PUT /api/session/locale",
   // Refused inside, after their replay checks, the one place a resend is told from a new sale.
   "POST /api/working-orders/:id/payments",
+  "POST /api/working-orders/:id/item-payments",
   // Save nothing of their own; a refused send-preview would hide the kitchen send's own refusal.
   "POST /api/dead-ends/sale",
   "POST /api/dead-ends/draft",
   "POST /api/dead-ends/order",
   "POST /api/working-orders/:id/payments/preview",
+  "POST /api/working-orders/:id/item-payments/preview",
   "POST /api/working-orders/:id/payments/:submissionId/cancel",
   "POST /api/working-orders/:id/adjustments/preview",
   "POST /api/parties/:id/allergy/send-preview",
