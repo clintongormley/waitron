@@ -185,9 +185,6 @@ async function capture(populate = true) {
     await suite.db.execute(
       sql`insert into verifactu_certificates (id,node_id,installed_at,source,kind,fingerprint,valid_from,valid_until) values ('10000000-0000-4000-8000-000000000004',${node.nodeId},${time},'setup','sello','retained-fingerprint',${time},'2027-10-16T11:00:00.000Z')`,
     );
-    await suite.db.execute(
-      sql`insert into fiscal_certificate_reminders (id,node_id,install_id,stage,person_id,status,claimed_at) values ('10000000-0000-4000-8000-000000000005',${node.nodeId},'10000000-0000-4000-8000-000000000004','warning','10000000-0000-4000-8000-000000000003','sent',${time})`,
-    );
     await withTransaction(suite.db, async (tx) => {
       const personId = await seedPerson(tx, { id: "10000000-0000-4000-8000-000000000003" });
       await appendHistory(tx, {
@@ -334,7 +331,6 @@ it.each([
   ["filing remedy parent", "update verifactu_submissions set case_remedy_registro_id='missing'"],
   ["filing resolution person", "update verifactu_submissions set case_resolved_by='missing'"],
   ["send parent", "update verifactu_submissions set registro_id='missing'"],
-  ["certificate reminder parent", "update fiscal_certificate_reminders set install_id='missing'"],
   ["clock history node parent", "update verifactu_history set node_id='missing'"],
   ["clock history person parent", "update verifactu_history set person_id='missing'"],
 ])("rejects internally damaged %s even when both copies match", async (_name, statement) => {
@@ -391,7 +387,6 @@ it.each([
   "verifactu_submissions",
   "verifactu_sending_state",
   "verifactu_certificates",
-  "fiscal_certificate_reminders",
 ])("retains every captured %s row", async (table) => {
   await capture();
   edit("after", (db) => db.exec(`delete from "${table}"`));
@@ -772,7 +767,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('verifactu_identities','verifactu_history','verifactu_series_conflicts','verifactu_submissions','verifactu_sending_state','verifactu_certificates')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);

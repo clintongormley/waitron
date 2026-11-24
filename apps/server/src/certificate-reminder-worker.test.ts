@@ -1,22 +1,18 @@
 import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { outgoingMail, withTransaction } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
-import {
-  verifactuCertificates,
-  fiscalCertificateReminders,
-} from "@waitron/fiscal-verifactu/src/schema/index.js";
+import { verifactuCertificates } from "@waitron/fiscal-verifactu/src/schema/index.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { CertificateReminderSender } from "./certificate-reminder-email.js";
 import {
   certificateReminderJob,
   runCertificateReminderPass,
 } from "./certificate-reminder-worker.js";
-import type { CloudEmailGrant, CloudEmailOutcome } from "./cloud-email.js";
+import type { CloudEmailGrant } from "./cloud-email.js";
 import { resolveEmailDelivery, type EmailDelivery } from "./email-delivery.js";
 import { realSleep } from "./loop.js";
 import { runTestJob } from "./testing/run-job.js";
@@ -29,8 +25,8 @@ const END = new Date("2026-10-24T22:59:00Z");
 const AMBER = new Date("2026-08-26T10:00:00Z");
 const smtp = { url: "smtp://127.0.0.1:1025", from: "venue@example.test" };
 
+let managerIds: string[];
 let nodeId: string, primary: boolean, now: Date, controller: AbortController;
-let send: ReturnType<typeof vi.fn<CertificateReminderSender>>;
 
 const grant: CloudEmailGrant = {
   id: "d6e27600-db31-47de-b92d-710ff70daff2",
@@ -53,12 +49,10 @@ const deps = () => ({
   isPrimary: () => primary,
   signal: controller.signal,
   resolveDelivery: async (): Promise<EmailDelivery> => ({ mode: "smtp", smtp }),
-  send,
 });
 const pass = (overrides: Partial<ReturnType<typeof deps>> = {}) =>
   runCertificateReminderPass({ ...deps(), ...overrides });
-const reminders = () => suite.db.select().from(fiscalCertificateReminders);
-const recipients = () => send.mock.calls.map(([message]) => message.recipient).sort();
+const reminders = () => suite.db.select().from(outgoingMail);
 
 async function person(displayName: string, values: Partial<PersonSeed>): Promise<string> {
   const [row] = await seedPersons(suite.db, { displayName, ...values });
@@ -69,7 +63,6 @@ beforeEach(async () => {
   primary = true;
   now = AMBER;
   controller = new AbortController();
-  send = vi.fn<CertificateReminderSender>(async () => "sent");
   await seedVenue(suite.db, {
     name: "Madrid",
     timeZone: "Europe/Madrid",
@@ -86,8 +79,10 @@ beforeEach(async () => {
     validFrom: new Date("2026-01-01T00:00:00Z"),
     validUntil: END,
   });
-  await person("Manager", { role: "manager", email: "manager@example.test", locale: "en-GB" });
-  await person("Admin", { role: "admin", email: " admin@example.test ", locale: "es-ES" });
+  managerIds = [
+    await person("Manager", { role: "manager", email: "manager@example.test", locale: "en-GB" }),
+    await person("Admin", { role: "admin", email: " admin@example.test ", locale: "es-ES" }),
+  ];
   await person("Supervisor", { role: "supervisor", email: "supervisor@example.test" });
   await person("Staff", { role: "staff", email: "staff@example.test" });
   await person("Gone", {
@@ -100,52 +95,27 @@ beforeEach(async () => {
 });
 
 describe("certificate reminder pass", () => {
-  it("emails each active manager and admin once at amber, in their language, and none on the next pass", async () => {
-    while ((await pass()).processed);
-    expect(recipients()).toEqual(["admin@example.test", "manager@example.test"]);
-    const byRecipient = new Map(send.mock.calls.map(([m]) => [m.recipient, m]));
-    expect(byRecipient.get("admin@example.test")).toEqual({
-      smtp,
-      recipient: "admin@example.test",
-      subject: "El certificado de la AEAT caduca el 25 oct 2026",
-      text: expect.stringContaining("dentro de 60 día(s)"),
-    });
-    expect(byRecipient.get("manager@example.test")?.subject).toBe(
-      "AEAT certificate expires on 25 Oct 2026",
-    );
-    expect((await reminders()).map((row) => row.status)).toEqual(["sent", "sent"]);
-    send.mockClear();
+  it("queues only active managers and admins with email addresses", async () => {
+    expect(await pass()).toEqual({ processed: true });
+    const queued = await reminders();
+    expect(queued.map(({ personId }) => personId).sort()).toEqual(managerIds.sort());
+    expect(queued.map(({ status }) => status)).toEqual(["pending", "pending"]);
     expect(await pass()).toEqual({ processed: false });
-    expect(send).not.toHaveBeenCalled();
+    expect(await reminders()).toEqual(queued);
   });
 
-  it("writes to a person with no language in the venue's", async () => {
-    await suite.db.delete(persons);
-    await person("Plain", { role: "manager", email: "plain@example.test" });
-    await pass({ venueLanguage: "es" });
-    expect(send.mock.calls[0]![0].subject).toBe("El certificado de la AEAT caduca el 25 oct 2026");
-  });
-
-  it("writes to an en-GB person in English in a Spanish venue", async () => {
-    await pass({ venueLanguage: "es" });
-    const manager = send.mock.calls.find(([m]) => m.recipient === "manager@example.test");
-    expect(manager![0].subject).toBe("AEAT certificate expires on 25 Oct 2026");
-  });
-
-  it("claims nothing when the node stops being primary just before the claim", async () => {
-    let checks = 0;
-    // The pass checks at its start, before each claim, and again inside the claim's transaction.
-    primary = true;
-    expect(await pass({ isPrimary: () => ++checks < 3 })).toEqual({ processed: false });
-    expect(checks).toBe(3);
-    expect(send).not.toHaveBeenCalled();
+  it("queues nothing after the box steps down during delivery resolution", async () => {
+    const resolveDelivery = async (): Promise<EmailDelivery> => {
+      primary = false;
+      return { mode: "smtp", smtp };
+    };
+    expect(await pass({ resolveDelivery })).toEqual({ processed: false });
     expect(await reminders()).toEqual([]);
   });
 
-  it("claims and sends nothing without SMTP", async () => {
+  it("queues nothing without SMTP or Cloud delivery", async () => {
     const resolveDelivery = async (): Promise<EmailDelivery> => ({ mode: "unconfigured" });
     expect(await pass({ resolveDelivery })).toEqual({ processed: false });
-    expect(send).not.toHaveBeenCalled();
     expect(await reminders()).toEqual([]);
   });
 
@@ -154,87 +124,27 @@ describe("certificate reminder pass", () => {
     const resolveDelivery = vi.fn(deps().resolveDelivery);
     expect(await pass({ resolveDelivery })).toEqual({ processed: false });
     expect(resolveDelivery).not.toHaveBeenCalled();
-    expect(send).not.toHaveBeenCalled();
     expect(await reminders()).toEqual([]);
   });
 
   it("does nothing once the signal is aborted", async () => {
     controller.abort();
     expect(await pass()).toEqual({ processed: false });
-    expect(send).not.toHaveBeenCalled();
     expect(await reminders()).toEqual([]);
-  });
-
-  it("stops between recipients when the signal aborts during a send, still reporting that send", async () => {
-    send.mockImplementation(async () => {
-      controller.abort();
-      return "sent";
-    });
-    while ((await pass()).processed);
-    expect(send).toHaveBeenCalledTimes(1);
-    expect((await reminders()).map((row) => row.status)).toEqual(["sent"]);
-  });
-
-  it("reports each rejected send as failed", async () => {
-    send.mockResolvedValue("rejected");
-    await pass();
-    expect((await reminders()).map((row) => row.status)).toEqual(["failed", "failed"]);
-  });
-
-  it("reports each send whose sender throws as unknown", async () => {
-    send.mockRejectedValue(new Error("socket hung up"));
-    await pass();
-    expect((await reminders()).map((row) => row.status)).toEqual(["unknown", "unknown"]);
   });
 });
 
 describe("certificate reminder job", () => {
-  it.each([
-    [AMBER, "2026-08-26T22:00:00.000Z", { stage: "due", date: "2026-10-25", daysLeft: 60 }],
-    [
-      new Date("2026-10-24T23:00:00Z"),
-      "2026-10-25T23:00:00.000Z",
-      { stage: "expired", date: "2026-10-25" },
-    ],
-  ])("sends the certificate facts through Cloud at %s", async (at, expiresAt, facts) => {
-    now = at;
-    await suite.db.delete(persons);
-    await person("Admin", { role: "admin", email: "admin@example.test", locale: "es-ES" });
-    const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => ({ status: "sent" }));
-    await runCertificateReminderPass({
-      ...deps(),
-      resolveDelivery: unconfigured,
-      cloud: { ...cloudDelivery, send: cloudSend },
-    });
-    expect(cloudSend).toHaveBeenCalledExactlyOnceWith(
-      grant,
-      expect.any(String),
-      {
-        class: "certificate_reminder",
-        displayName: "Madrid",
-        locale: "es-ES",
-        timeZone: "Europe/Madrid",
-        recipient: "admin@example.test",
-        expiresAt,
-        facts,
-      },
-      controller.signal,
-    );
-    expect((await reminders()).map(({ status }) => status)).toEqual(["sent"]);
-  });
-
-  it("leaves reminders unclaimed when the Cloud grant cannot be read", async () => {
+  it("queues nothing when the Cloud grant cannot be read", async () => {
     const resolveGrant = vi.fn(async () => {
       throw new Error("Cloud unavailable");
     });
-    const cloudSend = vi.fn();
     await runCertificateReminderPass({
       ...deps(),
       resolveDelivery: unconfigured,
-      cloud: { ...cloudDelivery, resolveGrant, send: cloudSend },
+      cloud: { ...cloudDelivery, resolveGrant },
     });
     expect(resolveGrant).toHaveBeenCalledOnce();
-    expect(cloudSend).not.toHaveBeenCalled();
     expect(await reminders()).toEqual([]);
   });
 
@@ -257,42 +167,15 @@ describe("certificate reminder job", () => {
         if (timing === "during lookup") await save();
         return grant;
       });
-      const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => ({ status: "sent" }));
       await runCertificateReminderPass({
         ...deps(),
         resolveDelivery: () => resolveEmailDelivery(suite.db, ring, false),
-        cloud: { ...cloudDelivery, resolveGrant, send: cloudSend },
+        cloud: { ...cloudDelivery, resolveGrant },
       });
-      expect(cloudSend).not.toHaveBeenCalled();
       expect(resolveGrant).toHaveBeenCalledTimes(timing === "before lookup" ? 0 : 1);
       expect(await reminders()).toEqual([]);
     },
   );
-
-  it.each([
-    [{ status: "rejected", failureCode: "mail.relay_refused", serverRefused: true }, "failed"],
-    [{ status: "unknown", failureCode: "mail.relay_unknown" }, "unknown"],
-  ] as const)("waits an hour after a Cloud send returns %j", async (outcome, status) => {
-    const cloudSend = vi.fn(async (): Promise<CloudEmailOutcome> => outcome);
-    const sleeps: number[] = [];
-    await runTestJob(
-      certificateReminderJob({
-        ...deps(),
-        resolveDelivery: unconfigured,
-        cloud: { ...cloudDelivery, send: cloudSend },
-      }),
-      controller.signal,
-      {
-        sleep: async (ms) => {
-          sleeps.push(ms);
-          controller.abort();
-        },
-      },
-    ).done;
-    expect(sleeps).toEqual([3_600_000]);
-    expect(cloudSend).toHaveBeenCalledOnce();
-    expect((await reminders()).map((row) => row.status)).toEqual([status]);
-  });
 
   it("sleeps 500 ms after work and an hour when idle", async () => {
     const sleeps: number[] = [];
@@ -303,7 +186,7 @@ describe("certificate reminder job", () => {
       },
     }).done;
     expect(sleeps).toEqual([500, 3_600_000]);
-    expect(send).toHaveBeenCalledTimes(2);
+    expect((await reminders()).map(({ status }) => status)).toEqual(["pending", "pending"]);
   });
 
   it("reports a failed pass and carries on after the idle hour", async () => {
@@ -322,7 +205,7 @@ describe("certificate reminder job", () => {
       errorCode: "unknown",
       consecutiveFailures: 1,
     });
-    expect(send).toHaveBeenCalledTimes(2);
+    expect((await reminders()).map(({ status }) => status)).toEqual(["pending", "pending"]);
   });
 
   it("returns promptly when aborted during its hourly sleep", async () => {
@@ -387,12 +270,11 @@ describe("certificate reminder job", () => {
     expect(sleeps).toEqual([3_600_000]);
   });
 
-  it("uses no database, configuration or sender once aborted", async () => {
+  it("checks no delivery configuration once aborted", async () => {
     controller.abort();
     const resolveDelivery = vi.fn(deps().resolveDelivery);
     await runTestJob(certificateReminderJob({ ...deps(), resolveDelivery }), controller.signal)
       .done;
     expect(resolveDelivery).not.toHaveBeenCalled();
-    expect(send).not.toHaveBeenCalled();
   });
 });

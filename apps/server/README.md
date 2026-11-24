@@ -868,6 +868,8 @@ The ones worth grepping for:
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
+  The certificate job queues expiry reminders for managers and administrators. The shared mail
+  sender sends the messages, with saved SMTP taking priority over opted-in Cloud delivery.
 - **`server.listening`** (`info`) — `{ port, environment }`, logged once the HTTP listener has
   actually bound (not merely been asked to). A spare's store listener logs
   `{ listener: spare_store, port }` instead.

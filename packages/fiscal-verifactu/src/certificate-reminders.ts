@@ -1,23 +1,18 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { enqueueMail, readHistoryNodes, type Transaction } from "@waitron/db";
+import { enqueueMail, type Transaction } from "@waitron/db";
 import type { FiscalCertificateReminder } from "@waitron/fiscal";
-import type { NodeId } from "@waitron/shared";
 import {
   calendarDaysLeft,
-  certificateStage,
   localDate,
   nextLocalMidnight,
   reminderPeriod,
   type CertificateStage,
 } from "./certificate-dates.js";
 import { venueTimeZone } from "./certificate-install.js";
-import { latestInstall, latestInstallAmong } from "./certificate-record.js";
-import { fiscalCertificateReminders } from "./schema/certificate-reminders.js";
+import { latestInstall } from "./certificate-record.js";
 
 type Language = "en" | "es";
-type Recipient = { personId: string; email: string; language: Language };
 
-const RETRY_AFTER_MS = 86_400_000;
+const DAY_MS = 86_400_000;
 const DAY_LOCALES: Record<Language, string> = { en: "en-GB", es: "es-ES" };
 
 // The same options `@waitron/dashboard-kit`'s `{x:date}` uses, so the email and the alert write the
@@ -90,22 +85,37 @@ export async function queueReminders(
   return queued;
 }
 
+export async function currentReminderInstall(
+  tx: Transaction,
+  nodeId: string,
+): Promise<string | null> {
+  return (await latestInstall(tx, nodeId))?.id ?? null;
+}
+
 export function wordReminder({
   params,
   language,
   now,
 }: {
-  params: { stage: CertificateStage; validUntil: string; timeZone: string };
+  params: Readonly<Record<string, unknown>>;
   language: Language;
   now: Date;
-}): Omit<FiscalCertificateReminder, "id" | "recipient"> {
-  const { stage, timeZone } = params;
-  const validUntil = new Date(params.validUntil);
+}): FiscalCertificateReminder {
+  const {
+    stage,
+    validUntil: expiry,
+    timeZone,
+  } = params as {
+    stage: CertificateStage;
+    validUntil: string;
+    timeZone: string;
+  };
+  const validUntil = new Date(expiry);
   const date = localDate(validUntil, timeZone);
   const days = calendarDaysLeft(now, validUntil, timeZone);
   const expired = stage === "expired";
   const deadline = expired
-    ? now.getTime() + RETRY_AFTER_MS
+    ? now.getTime() + DAY_MS
     : Math.min(validUntil.getTime(), Date.parse(nextLocalMidnight(now, timeZone)));
   return {
     ...wording(language, expired, formatDay(date, language), days),
@@ -116,111 +126,4 @@ export function wordReminder({
       facts: expired ? { stage: "expired", date } : { stage: "due", date, daysLeft: days },
     },
   };
-}
-
-/** Claims the next expiry email due for the certificate `latestInstall` finds, or `null`. A
- * row left `claimed` or reported `unknown` is never claimed again, so a crashed send is not
- * repeated; a `failed` one is, once its report is more than a day old, also on a box that took
- * over from the one that wrote it. The row keeps the node id it was written with. */
-export async function claimReminder(
-  tx: Transaction,
-  deps: { nodeId: string },
-  recipients: readonly Recipient[],
-  now: Date,
-): Promise<FiscalCertificateReminder | null> {
-  const history = await readHistoryNodes(tx, deps.nodeId as NodeId);
-  const install = await latestInstallAmong(tx, history);
-  if (install === null) return null;
-  const timeZone = await venueTimeZone(tx);
-  const stage = certificateStage(install.kind, now, install.validUntil, timeZone);
-  if (stage === null) return null;
-  const existing = await tx
-    .select()
-    .from(fiscalCertificateReminders)
-    .where(
-      and(
-        inArray(fiscalCertificateReminders.nodeId, history),
-        eq(fiscalCertificateReminders.installId, install.id),
-        eq(fiscalCertificateReminders.stage, stage),
-      ),
-    );
-  const byPerson = new Map(existing.map((row) => [row.personId, row]));
-  const ordered = [...recipients].sort((a, b) =>
-    a.personId < b.personId ? -1 : a.personId > b.personId ? 1 : 0,
-  );
-  for (const recipient of ordered) {
-    const row = byPerson.get(recipient.personId);
-    let claimed: { id: string } | undefined;
-    if (row === undefined) {
-      [claimed] = await tx
-        .insert(fiscalCertificateReminders)
-        .values({
-          nodeId: deps.nodeId,
-          installId: install.id,
-          stage,
-          personId: recipient.personId,
-          status: "claimed",
-          claimedAt: now,
-        })
-        .onConflictDoNothing({
-          target: [
-            fiscalCertificateReminders.installId,
-            fiscalCertificateReminders.stage,
-            fiscalCertificateReminders.personId,
-          ],
-        })
-        .returning({ id: fiscalCertificateReminders.id });
-    } else if (
-      row.status === "failed" &&
-      row.reportedAt !== null &&
-      now.getTime() - row.reportedAt.getTime() > RETRY_AFTER_MS
-    ) {
-      [claimed] = await tx
-        .update(fiscalCertificateReminders)
-        .set({ status: "claimed", claimedAt: now, reportedAt: null })
-        .where(
-          and(
-            inArray(fiscalCertificateReminders.nodeId, history),
-            eq(fiscalCertificateReminders.id, row.id),
-            eq(fiscalCertificateReminders.status, "failed"),
-          ),
-        )
-        .returning({ id: fiscalCertificateReminders.id });
-    }
-    if (claimed === undefined) continue;
-    return {
-      id: claimed.id,
-      recipient: recipient.email,
-      ...wordReminder({
-        params: { stage, validUntil: install.validUntil.toISOString(), timeZone },
-        language: recipient.language,
-        now,
-      }),
-    };
-  }
-  return null;
-}
-
-const STATUS = { sent: "sent", rejected: "failed", unknown: "unknown" } as const;
-
-/** Records how a claimed send ended. A row no longer `claimed`, or one written by a box this one
- * did not take over from, is left as it is. */
-export async function reportReminder(
-  tx: Transaction,
-  deps: { nodeId: string },
-  id: string,
-  outcome: "sent" | "rejected" | "unknown",
-  now: Date,
-): Promise<void> {
-  const history = await readHistoryNodes(tx, deps.nodeId as NodeId);
-  await tx
-    .update(fiscalCertificateReminders)
-    .set({ status: STATUS[outcome], reportedAt: now })
-    .where(
-      and(
-        inArray(fiscalCertificateReminders.nodeId, history),
-        eq(fiscalCertificateReminders.id, id),
-        eq(fiscalCertificateReminders.status, "claimed"),
-      ),
-    );
 }

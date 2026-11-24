@@ -11,7 +11,13 @@ it("keeps diagnosis optional for a read/install certificate contribution", async
     read: async () => ({ state: "saved" }),
     install: async () => ({ outcome: "installed", reason: "installed" }),
     alerts: async () => [],
-    reminders: { claim: async () => null, report: async () => {} },
+    reminders: {
+      queue: async () => 0,
+      current: async () => null,
+      word: () => {
+        throw new Error("No reminder expected");
+      },
+    },
   };
   expect(legacy.diagnose).toBeUndefined();
   expect(legacy.diagnoseInChild).toBeUndefined();

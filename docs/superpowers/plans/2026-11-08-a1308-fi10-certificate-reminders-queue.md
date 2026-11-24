@@ -35,6 +35,11 @@ U4; [3a-ii](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb8
 (`boxAlertMail`, the pattern this owner follows; `reopenMail`, Task 1, which this plan leaves as it is); [jr4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr4-working-time-and-mail.md)
 Task 3 (the decision as a job; it builds against either shape); rules [2026-11-08-a1308-slice-rules.md](2026-11-08-a1308-slice-rules.md).
 
+**Cloud delivery (watcher, 2026-11-24 13:38):** The certificate job checks whether Cloud
+delivery is enabled and a grant is available before queueing without SMTP. The shared sender
+preserves the recipient language, Cloud facts and delivery deadline. Saved SMTP takes priority.
+The queue's retry schedule replaces the old batch pause after a Cloud refusal.
+
 **Base:** `main` after fi9, with slices 3a-ii and 3b landed. Line numbers read at `9c66ef0356`
 (after #2570, which changed `claimReminder` and `reportReminder` to read across the takeover
 history).

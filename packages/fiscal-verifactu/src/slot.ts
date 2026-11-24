@@ -8,7 +8,7 @@ import { VerifactuBackend } from "./backend.js";
 import { runningIdentity } from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
-import { claimReminder, reportReminder } from "./certificate-reminders.js";
+import { queueReminders, currentReminderInstall, wordReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
 import { makeCertificateDiagnosisChild } from "./certificate-diagnosis-child.js";
@@ -126,7 +126,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     read: async (deps, now) => ({ ...(await readCertificateCard(deps, now)) }),
     install: installCertificate,
     alerts: certificateAlerts,
-    reminders: { claim: claimReminder, report: reportReminder },
+    reminders: { queue: queueReminders, current: currentReminderInstall, word: wordReminder },
   },
   outbox: { read: readOutbox },
   declarations: keptDeclarations,

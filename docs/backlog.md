@@ -1479,6 +1479,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Veri*Factu reads the chain head from the latest fiscal record on the box.
   Fiscal history retains verified clock steps and replaces the three old clock-stop tables.
   Fiscal history also retains conflicts found in AEAT replies and lookups.
+  The shared mail queue sends certificate expiry reminders weekly from the warning date and
+  daily during the urgent period and after expiry.
   Orders and Sales can run the receipt helper, receipt line, VAT table, invoice selection,
   Find a bill search and date, bill allocation, receipt figures, receipt issuer, invoice typing and receipt facts suites independently.
   When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,

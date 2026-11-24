@@ -232,7 +232,7 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/box-host-client.test.ts",
   "apps/server/src/cancel-invoiced-order.test.ts",
   "apps/server/src/category-sales-page.test.ts",
-  "apps/server/src/certificate-reminder-email.test.ts",
+  "apps/server/src/certificate-reminder-mail.test.ts",
   "apps/server/src/certificate-reminder-worker.test.ts",
   "apps/server/src/chain-height.test.ts",
   "apps/server/src/chain-height.ts",

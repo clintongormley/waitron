@@ -1832,9 +1832,7 @@ which of three ties it uses: a `node_id` column every read and write names (`joi
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
 rotation reads every populated signing-key group in `box` and `node_pair_link` whole), a seal only a box holding the key ring opens
 (`venue_credentials`, whose ring a joining spare receives from the main box), or rows the
-transaction that wrote them deletes (`change_log`). `verifactu_certificates` and
-`fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read
-and write names as one of `readHistoryNodes(tx, thisNode)`, this box and every box it took over from. Identity has no `local` table: slice-2
+transaction that wrote them deletes (`change_log`). `verifactu_certificates` reads the first tie across `readHistoryNodes(tx, thisNode)`, which lists this box and every box it took over from. Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
 only as its hash (`packages/db/src/classification.ts`; #554, and the owner's decision that a
 login survives a rebuild and a promotion). Pinned,
@@ -5322,7 +5320,7 @@ days"). The backup schedule row below keeps its earlier wording for interval sch
 | Cloud archive destination (`apps/server/src/cloud-archive-target.ts`, `pendingExpired`) | The backup schedule decides when Cloud runs. A pending capture whose publication retry fails expires after a day. | A pending capture more than a day ahead may also be abandoned. | The next scheduled run tries publication once before dropping the expired capture. An interrupted attempt keeps the pending file for the next run. Tests in `cloud-archive-target.test.ts` pin expiry and shutdown. |
 | Content suggestion jobs (`apps/server/src/content-suggestion-runner.ts`, `step`) | the job ends expired | the job lives 400 days, refusing every new run | fixed: a job made more than its 24 hours ahead ends expired (test: `content-suggestion-runner.test.ts`, "made more than 24 hours ahead of the clock") |
 | Pay-period close (`packages/workforce/src/pay-period-close.ts:110`) | a period not yet ended could be closed, append-only | a due period refused `pay_period.not_due` | accepted with a backlog line: no production caller on this tree (only `apps/server/test/attendance-export-fixture.ts:77`) |
-| Certificate reminders (`packages/fiscal-verifactu/src/certificate-dates.ts:46`, `certificate-reminders.ts:107`) | the stage jumps ahead; an expired email may go | warnings stop until the date catches up; a failed send waits 400 days | accepted: a reminder, compared with the certificate's own dates, which a clock set right reads correctly |
+| Certificate reminders (`packages/fiscal-verifactu/src/certificate-dates.ts:46`, `certificate-reminders.ts`) | the next pass computes the stage and period from the new date | the next pass computes the stage and period from the new date | queued rows use the outgoing mail retry and expiry rules above |
 | Crash reports kept (`apps/server/src/free-space-now.ts:218`, `start-space.ts:151`) | deleted the next time space is freed | kept 400 days longer | accepted: diagnostic files only |
 | Staged recovery copy (`apps/server/src/recovery-preparation.ts:436`) | the staging copy is dropped | an hour's timer still drops it | accepted: the original backup is untouched |
 | Device last seen (`recordSighting` in `device-session.ts`, `station-outputs-down.ts:219`, `alert-sources.ts:400`; the stamps' `sightingDue` in `till-session.ts` and `packages/identity/src/device-token.ts`, and the print agent's `last_seen_at` in `packages/printing/src/agent.ts`) | devices may read dark until they next call | stamps not refreshed; dark devices not flagged for 400 days | accepted with a backlog line |
