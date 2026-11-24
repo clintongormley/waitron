@@ -537,6 +537,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",
     es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar.",
   },
+  "give_back.changed": {
+    en: "What can go back on this receipt changed since it was checked. Nothing has been given back. Check the new amounts and press Give back again.",
+    es: "Lo que se puede devolver de este ticket cambió desde que se comprobó. No se ha devuelto nada. Revisa los nuevos importes y vuelve a pulsar Devolver.",
+  },
+  "give_back.refund_failed": {
+    en: "The card company did not make the refund, so that money has not gone back. Open Give money back again to try again or to choose another way.",
+    es: "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+  },
+  "give_back.failed": {
+    en: "The box could not finish this money back. Open Give money back again to see what is left to give back.",
+    es: "El servidor no pudo terminar esta devolución. Vuelve a abrir Devolver dinero para ver lo que queda por devolver.",
+  },
+  "sif.allocation_invalid": {
+    en: "This box is in a fiscal conflict with another box, so no money can go back from it now. Nothing has been given back.",
+    es: "Este servidor tiene un conflicto fiscal con otro servidor, así que ahora no se puede devolver dinero desde él. No se ha devuelto nada.",
+  },
   "sale.correction_not_admitted": {
     en: "This invoice cannot be corrected.",
     es: "Esta factura no se puede rectificar.",

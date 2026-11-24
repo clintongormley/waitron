@@ -212,10 +212,39 @@ export const en = {
   "give_back.submit": "Give back {amount}",
   "give_back.submit_any": "Give back",
   "give_back.preview_failed":
-    "The box could not be reached to check this money back. Nothing has been given back.",
+    "The box could not be reached to check this money back. Nothing has been given back. Press Give back to try again.",
   "give_back.way_not_here": "This device's profile does not give money back this way.",
   "give_back.changed_while_checking":
     "The money back changed while it was being checked. Check what is shown and press Give back again.",
+  "give_back.terminal_heading": "Refund it on the separate card terminal",
+  "give_back.terminal_explain":
+    "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal now, then confirm it here.",
+  "give_back.terminal_done": "I have refunded {amount} on the separate card terminal",
+  "give_back.terminal_required":
+    "Confirm you have refunded the money on the separate card terminal.",
+  "give_back.terminal_pin": "A supervisor or manager then approves recording it with their PIN.",
+  "give_back.terminal_record": "Record the refund",
+  "give_back.sending": "Giving the money back…",
+  "give_back.approvers_failed":
+    "The people who can approve this could not be read. Nothing has been given back. Press Give back to try again.",
+  "give_back.storage":
+    "This device could not save the money back before sending it. Nothing has been given back.",
+  "give_back.lost":
+    "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
+  "give_back.send_again": "Send again",
+  "give_back.done_cash": "{amount} is back in cash.",
+  "give_back.done_card": "{amount} is back on card {card}.",
+  "give_back.done_terminal": "{amount} given back on the separate card terminal is recorded.",
+  "give_back.print_later": "Its money back receipt can be printed from Find a bill.",
+  "give_back.pending": "{amount} is waiting for the card company's answer.",
+  "give_back.rest": "{amount} has not gone back yet: it follows when the card company answers.",
+  "give_back.check_again": "Check again",
+  "give_back.still_waiting":
+    "The card company has not answered yet. Check again later: the rest stays waiting on this till.",
+  "give_back.rest_failed":
+    "The card company did not make the first refund, so the rest was not sent. Nothing more has gone back.",
+  "give_back.under_way": "Money back under way",
+  "give_back.done": "Done",
   "invoice_correction.title": "Correct invoice",
   "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
   "invoice_correction.loading": "Reading the invoice…",
@@ -2614,10 +2643,39 @@ export const es: Record<StringKey, string> = {
   "give_back.submit": "Devolver {amount}",
   "give_back.submit_any": "Devolver",
   "give_back.preview_failed":
-    "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada.",
+    "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
   "give_back.way_not_here": "El perfil de este dispositivo no permite devolver dinero así.",
   "give_back.changed_while_checking":
     "La devolución cambió mientras se comprobaba. Revisa lo que se muestra y vuelve a pulsar Devolver.",
+  "give_back.terminal_heading": "Devuélvelo en el datáfono aparte",
+  "give_back.terminal_explain":
+    "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve ahora {amount} en ese datáfono y luego confírmalo aquí.",
+  "give_back.terminal_done": "He devuelto {amount} en el datáfono aparte",
+  "give_back.terminal_required": "Confirma que has devuelto el dinero en el datáfono aparte.",
+  "give_back.terminal_pin": "Después, un responsable o encargado aprueba registrarlo con su PIN.",
+  "give_back.terminal_record": "Registrar la devolución",
+  "give_back.sending": "Devolviendo el dinero…",
+  "give_back.approvers_failed":
+    "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
+  "give_back.storage":
+    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada.",
+  "give_back.lost":
+    "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
+  "give_back.send_again": "Enviar de nuevo",
+  "give_back.done_cash": "Se han devuelto {amount} en efectivo.",
+  "give_back.done_card": "Se han devuelto {amount} a la tarjeta {card}.",
+  "give_back.done_terminal": "Se han registrado los {amount} devueltos en el datáfono aparte.",
+  "give_back.print_later": "Su ticket de devolución se puede imprimir desde Buscar cuenta.",
+  "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
+  "give_back.rest":
+    "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",
+  "give_back.check_again": "Comprobar de nuevo",
+  "give_back.still_waiting":
+    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde: el resto sigue esperando en este TPV.",
+  "give_back.rest_failed":
+    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más.",
+  "give_back.under_way": "Devolución en curso",
+  "give_back.done": "Listo",
   "invoice_correction.title": "Rectificar factura",
   "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
   "invoice_correction.loading": "Consultando la factura…",

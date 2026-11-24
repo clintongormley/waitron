@@ -1559,3 +1559,25 @@ it("words bill.below_advances with the advances' amount, and without it when non
     "Part of this bill was paid with its own receipt, so it cannot come to less than that. Choose fewer items, or pay by amount.",
   );
 });
+
+it("words Give money back's refusals in both languages, saying nothing went back or what to do", () => {
+  expect(codeMessage("give_back.changed", "en")).toBe(
+    "What can go back on this receipt changed since it was checked. Nothing has been given back. Check the new amounts and press Give back again.",
+  );
+  expect(codeMessage("give_back.changed", "es")).toBe(
+    "Lo que se puede devolver de este ticket cambió desde que se comprobó. No se ha devuelto nada. Revisa los nuevos importes y vuelve a pulsar Devolver.",
+  );
+  expect(codeMessage("give_back.refund_failed", "en")).toBe(
+    "The card company did not make the refund, so that money has not gone back. Open Give money back again to try again or to choose another way.",
+  );
+  expect(codeMessage("give_back.refund_failed", "es")).toBe(
+    "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+  );
+  for (const code of ["give_back.failed", "sif.allocation_invalid"])
+    for (const locale of ["en", "es"]) {
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+      expect(codeMessage(code, locale)).not.toContain(code);
+    }
+  expect(codeMessage("sif.allocation_invalid", "es")).toContain("servidor");
+  expect(codeMessage("sif.allocation_invalid", "es")).not.toContain("equipo");
+});

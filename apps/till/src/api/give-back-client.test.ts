@@ -37,3 +37,31 @@ it("previews a give-back on the encoded receipt with the whole request", async (
     body: JSON.stringify(request),
   });
 });
+
+it("sends a give-back on the encoded receipt with its ids, parts and PIN", async () => {
+  const body = {
+    request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" },
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund" as const, amount: "5.00", way: "cash" }],
+    submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+    override: { personId: "boss", pin: "1234" },
+  };
+  const answer = { parts: [], refusal: null, underWay: null, rest: null };
+  const fetcher = vi.fn().mockResolvedValue(response(answer));
+  expect(await new TillApi("", fetcher).giveBack("sale/1", body)).toEqual(answer);
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/transactions/sale%2F1/give-back", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+});
+
+it("lists the approvers holding every right a give-back needs", async () => {
+  const fetcher = vi.fn().mockResolvedValue(response([]));
+  await new TillApi("", fetcher).listApprovers(["sale.refund", "sale.rectify"]);
+  expect(fetcher.mock.calls[0]![0]).toBe(
+    "/api/adjustment-approvers?permission=sale.refund&permission=sale.rectify",
+  );
+});

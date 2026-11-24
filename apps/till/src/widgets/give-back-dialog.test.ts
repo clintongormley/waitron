@@ -3,8 +3,23 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { GiveBackRequest, GiveBackView } from "../api/give-back-types.js";
-import { CARD, CASH, VIEW, fakeGiveBackApi, previewFor } from "./give-back-dialog.test-helpers.js";
+import type {
+  GiveBackPreview,
+  GiveBackRequest,
+  GiveBackView,
+  GiveBackWrite,
+} from "../api/give-back-types.js";
+import type { InvoiceCorrectionView } from "../api/invoice-correction-types.js";
+import { GiveBackSession } from "../state/give-back.js";
+import {
+  CARD,
+  CASH,
+  SCOPE,
+  VIEW,
+  completedFor,
+  fakeGiveBackApi,
+  previewFor,
+} from "./give-back-dialog.test-helpers.js";
 import "./give-back-dialog.js";
 import type { GiveBackAsk, TillGiveBackDialog } from "./give-back-dialog.js";
 
@@ -12,11 +27,13 @@ beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupWidgets();
   setLocale("en");
+  localStorage.clear();
 });
 
 async function mount(api = fakeGiveBackApi()) {
   const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
     api,
+    session: new GiveBackSession(SCOPE, api),
     saleId: "sale-1",
     invoiceNumber: "A/1042",
     namesLocale: "en",
@@ -138,6 +155,14 @@ describe("the choice", () => {
     await el.updateComplete;
     expect(choice(el, "dishes")).not.toBeNull();
   });
+
+  it("goes back with nothing staged at once", async () => {
+    const { el } = await mount();
+    await choose(el, "dishes");
+    root(el).querySelector<HTMLElement>("[data-back]")!.click();
+    await el.updateComplete;
+    expect(choice(el, "dishes")).not.toBeNull();
+  });
 });
 
 describe("A dish", () => {
@@ -243,6 +268,24 @@ describe("A dish", () => {
       expect(text(root(el).querySelector("[data-summary-total]"))).toBe("€11.00"),
     );
   });
+
+  it("lists a dish given free's priced extras under it", async () => {
+    const { el } = await mount(
+      withView({
+        lines: [
+          ...VIEW.lines,
+          {
+            ...VIEW.lines[2]!,
+            id: "cake-cream",
+            descriptions: { en: "Cream", es: "Nata" },
+            partOf: "cake",
+          },
+        ],
+      }),
+    );
+    await choose(el, "dishes");
+    expect(text(root(el).querySelector("[data-extra-of=cake]"))).toBe("Cream · €1.50");
+  });
 });
 
 describe("How it goes back", () => {
@@ -267,6 +310,26 @@ describe("How it goes back", () => {
     await choose(el, "goodwill");
     expect(amountField(el).value).toBe("");
     expect(text(root(el).querySelector("[data-up-to]"))).toBe("Up to €47.00 can go back.");
+  });
+
+  it("treats a payment this device does not take as held, and picks the next", async () => {
+    const { el } = await mount(withView({ ways: [{ ...CASH, allowedHere: false }, CARD] }));
+    const asks: GiveBackAsk[] = [];
+    el.addEventListener("give-back-submit", (event) =>
+      asks.push((event as CustomEvent<GiveBackAsk>).detail),
+    );
+    await choose(el, "goodwill");
+    expect(way(el, "cash")!.disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
+      t("give_back.way_not_here"),
+    );
+    expect(way(el, "card-1")!.checked).toBe(true);
+    await reason(el, "complaint");
+    await type(el, "5");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(asks).toHaveLength(1));
+    expect(asks[0]!.request.way).toBe("card-1");
   });
 });
 
@@ -358,6 +421,15 @@ describe("the summary", () => {
     await vi.waitFor(() => expect(bottom(el)).toBe(codeMessage("clock.unconfirmed", "en")));
     expect(summary(el)).toBeNull();
   });
+
+  it("says a preview that could not reach the box could not be checked", async () => {
+    const api = fakeGiveBackApi();
+    api.previewGiveBack.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await type(el, "5");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.preview_failed")));
+  });
 });
 
 describe("Give back", () => {
@@ -412,6 +484,32 @@ describe("Give back", () => {
       note: null,
       expected: [{ kind: "refund", amount: "20.00", way: "cash" }],
     });
+  });
+
+  it("hands on the preview's parts with their cancels and dishes", async () => {
+    const api = fakeGiveBackApi();
+    const parts = [
+      { kind: "refund" as const, amount: "20.00", way: "cash", cancellationIds: ["cancel-1"] },
+      { kind: "correction" as const, amount: "5.00", way: "cash", lineIds: ["croquetas"] },
+    ];
+    api.previewGiveBack.mockImplementation(async (_saleId: string, request: GiveBackRequest) => ({
+      ...previewFor(request),
+      parts,
+    }));
+    const { el } = await mount(api);
+    const asks: GiveBackAsk[] = [];
+    el.addEventListener("give-back-submit", (event) =>
+      asks.push((event as CustomEvent<GiveBackAsk>).detail),
+    );
+    await choose(el, "dishes");
+    await tick(el, "paella");
+    await tick(el, "croquetas");
+    await type(el, "25");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(asks).toHaveLength(1));
+    expect(asks[0]!.expected).toEqual(parts);
   });
 });
 
@@ -690,85 +788,418 @@ describe("closing", () => {
   });
 });
 
-describe("fix round 1", () => {
-  it("treats a payment this device does not take as held, and picks the next", async () => {
-    const { el } = await mount(withView({ ways: [{ ...CASH, allowedHere: false }, CARD] }));
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
+describe("sending", () => {
+  type Api = ReturnType<typeof fakeGiveBackApi>;
+  const approval = (el: TillGiveBackDialog) =>
+    root(el).querySelector<HTMLElementTagNameMap["till-supervisor-override-dialog"]>(
+      "till-supervisor-override-dialog",
     );
-    await choose(el, "goodwill");
-    expect(way(el, "cash")!.disabled).toBe(true);
-    expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
-      t("give_back.way_not_here"),
+  async function approve(el: TillGiveBackDialog, pin = "1234") {
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    approval(el)!.dispatchEvent(
+      new CustomEvent("override-confirm", { detail: { personId: "boss", pin } }),
     );
-    expect(way(el, "card-1")!.checked).toBe(true);
-    await reason(el, "complaint");
-    await type(el, "5");
-    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    await el.updateComplete;
+  }
+  const outcomeText = (el: TillGiveBackDialog) => text(root(el).querySelector("[data-outcome]"));
+  const sent = (api: Api, index = 0) => api.giveBack.mock.calls[index]![1];
+  /** As `ready`, with Give back pressed. */
+  async function press(api: Api, wayId = "cash", amount = "5") {
+    const el = await ready(api, wayId, amount);
     submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.request.way).toBe("card-1");
-  });
-
-  it("hands on the preview's parts with their cancels and dishes", async () => {
-    const api = fakeGiveBackApi();
-    const parts = [
-      { kind: "refund" as const, amount: "20.00", way: "cash", cancellationIds: ["cancel-1"] },
-      { kind: "correction" as const, amount: "5.00", way: "cash", lineIds: ["croquetas"] },
-    ];
+    return el;
+  }
+  /** Goodwill of `amount` from `wayId`, its preview answered, not pressed yet. */
+  async function ready(api: Api, wayId = "cash", amount = "5") {
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    if (wayId !== "cash") {
+      way(el, wayId)!.click();
+      await el.updateComplete;
+    }
+    await reason(el, "complaint");
+    await type(el, amount);
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    return el;
+  }
+  const answering = (api: Api, over: Partial<GiveBackPreview>) =>
     api.previewGiveBack.mockImplementation(async (_saleId: string, request: GiveBackRequest) => ({
       ...previewFor(request),
-      parts,
+      ...over,
     }));
-    const { el } = await mount(api);
-    const asks: GiveBackAsk[] = [];
-    el.addEventListener("give-back-submit", (event) =>
-      asks.push((event as CustomEvent<GiveBackAsk>).detail),
-    );
-    await choose(el, "dishes");
-    await tick(el, "paella");
-    await tick(el, "croquetas");
-    await type(el, "25");
-    await reason(el, "complaint");
-    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
-    submit(el).click();
-    await vi.waitFor(() => expect(asks).toHaveLength(1));
-    expect(asks[0]!.expected).toEqual(parts);
+
+  it("gives cash back with no PIN, under saved ids, and says it is back", async () => {
+    const api = fakeGiveBackApi();
+    const el = await press(api);
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    expect(sent(api)).toMatchObject({
+      request: { purpose: "goodwill", amount: "5.00", extra: "0.00", way: "cash" },
+      reasonId: "complaint",
+      note: null,
+      expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+    });
+    expect(Object.values(sent(api).submissionIds)).toHaveLength(4);
+    expect(sent(api).override).toBeUndefined();
+    expect(api.listApprovers).not.toHaveBeenCalled();
+    expect(outcomeText(el)).not.toContain(t("give_back.print_later"));
   });
 
-  it("says a preview that could not reach the box could not be checked", async () => {
+  it("says a card correction's receipt prints from Find a bill, and a cash one's prints itself", async () => {
+    const parts = (way: string): GiveBackPreview["parts"] => [
+      { kind: "correction", amount: "5.00", way, lineIds: [] },
+    ];
+    const card = fakeGiveBackApi();
+    answering(card, { parts: parts("card-1") });
+    const onCard = await press(card, "card-1");
+    await vi.waitFor(() => expect(outcomeText(onCard)).toContain("€5.00 is back on card ···4242."));
+    expect(outcomeText(onCard)).toContain(t("give_back.print_later"));
+    cleanupWidgets();
+    localStorage.clear();
+    const cash = fakeGiveBackApi();
+    answering(cash, { parts: parts("cash") });
+    const inCash = await press(cash);
+    await vi.waitFor(() => expect(outcomeText(inCash)).toContain("€5.00 is back in cash."));
+    expect(outcomeText(inCash)).not.toContain(t("give_back.print_later"));
+  });
+
+  it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();
-    api.previewGiveBack.mockRejectedValue(new TypeError("Failed to fetch"));
+    answering(api, { needs: ["sale.refund", "sale.rectify"] });
+    const el = await press(api);
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund", "sale.rectify"]);
+    expect(approval(el)!.authorizers).toEqual([{ personId: "boss", displayName: "Boss" }]);
+    expect(api.giveBack).not.toHaveBeenCalled();
+    await approve(el);
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    expect(sent(api).override).toEqual({ personId: "boss", pin: "1234" });
+    expect(approval(el)).toBeNull();
+  });
+
+  it("shows a wrong PIN in place and sends the same press again under the same ids", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+    const el = await press(api);
+    await approve(el, "0000");
+    await vi.waitFor(() =>
+      expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "boss" }),
+    );
+    expect(root(el).querySelector("[data-outcome]")).toBeNull();
+    await approve(el, "1234");
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
+  });
+
+  it.each([
+    [{ code: "authorization.not_permitted", permission: "sale.rectify" }, "sale.rectify"],
+    [{ code: "tender.manual_refund_pin_required" }, "sale.refund"],
+  ])(
+    "asks for an approver when the write refuses %o, which the preview did not name",
+    async (refusal, right) => {
+      const api = fakeGiveBackApi();
+      api.giveBack.mockRejectedValueOnce({ ...refusal, status: 403 });
+      const el = await press(api);
+      await approve(el);
+      await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+      expect(api.listApprovers).toHaveBeenCalledWith([right]);
+      expect(sent(api, 1).override).toEqual({ personId: "boss", pin: "1234" });
+    },
+  );
+
+  it("goes back to the form, sending nothing, when the approver step is cancelled", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    const el = await press(api);
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    approval(el)!.dispatchEvent(new CustomEvent("override-cancel"));
+    await el.updateComplete;
+    expect(approval(el)).toBeNull();
+    expect(api.giveBack).not.toHaveBeenCalled();
+    expect(amountField(el).value).toBe("5");
+  });
+
+  it("says the approvers could not be read, and sends nothing", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    api.listApprovers.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const el = await press(api);
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.approvers_failed")));
+    expect(approval(el)).toBeNull();
+    expect(api.giveBack).not.toHaveBeenCalled();
+  });
+
+  it("says the press could not be saved, and sends nothing", async () => {
+    const api = fakeGiveBackApi();
+    const el = await ready(api);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("full");
+    });
+    submit(el).click();
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.storage")));
+    expect(api.giveBack).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the separate terminal's step only once the preview answered, and records it with a PIN", async () => {
+    const api = fakeGiveBackApi({ ...VIEW, ways: [CASH, { ...CARD, manual: true }] });
+    let answer!: (preview: GiveBackPreview) => void;
     const { el } = await mount(api);
     await choose(el, "goodwill");
-    await type(el, "5");
-    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.preview_failed")));
-  });
-
-  it("lists a dish given free's priced extras under it", async () => {
-    const { el } = await mount(
-      withView({
-        lines: [
-          ...VIEW.lines,
-          {
-            ...VIEW.lines[2]!,
-            id: "cake-cream",
-            descriptions: { en: "Cream", es: "Nata" },
-            partOf: "cake",
-          },
-        ],
-      }),
-    );
-    await choose(el, "dishes");
-    expect(text(root(el).querySelector("[data-extra-of=cake]"))).toBe("Cream · €1.50");
-  });
-
-  it("goes back with nothing staged at once", async () => {
-    const { el } = await mount();
-    await choose(el, "dishes");
-    root(el).querySelector<HTMLElement>("[data-back]")!.click();
+    way(el, "card-1")!.click();
     await el.updateComplete;
-    expect(choice(el, "dishes")).not.toBeNull();
+    await reason(el, "complaint");
+    api.previewGiveBack.mockImplementation(
+      (_saleId: string, request: GiveBackRequest) =>
+        new Promise<GiveBackPreview>((resolve) => {
+          answer = (preview) => resolve({ ...preview, parts: previewFor(request).parts });
+        }),
+    );
+    await type(el, "10");
+    submit(el).click();
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-terminal]")).toBeNull();
+    answer({
+      ...previewFor({ purpose: "goodwill", amount: "10.00", extra: "0.00", way: "card-1" }),
+      manual: true,
+    });
+    await vi.waitFor(() => expect(root(el).querySelector("[data-terminal]")).not.toBeNull());
+    const step = text(root(el).querySelector("[data-terminal]"));
+    expect(step).toContain("Refund it on the separate card terminal");
+    expect(step).toContain("€10.00");
+    expect(step).toContain(
+      "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund €10.00 on that terminal now, then confirm it here.",
+    );
+    expect(step).toContain("A supervisor or manager then approves recording it with their PIN.");
+    root(el).querySelector<HTMLElement>("[data-terminal-back]")!.click();
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-terminal]")).toBeNull();
+    submit(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-terminal]")).not.toBeNull());
+    const done = root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "wt-switch[name=terminal-done]",
+    )!;
+    expect(done.label).toBe("I have refunded €10.00 on the separate card terminal *");
+    const record = root(el).querySelector<HTMLElement>("[data-record]")!;
+    record.click();
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-terminal-error]"))).toBe(
+      t("give_back.terminal_required"),
+    );
+    expect(api.listApprovers).not.toHaveBeenCalled();
+    done.shadowRoot!.querySelector("input")!.click();
+    await el.updateComplete;
+    record.click();
+    await approve(el);
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain(
+        "€10.00 given back on the separate card terminal is recorded.",
+      ),
+    );
+    expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"]);
+    expect(sent(api)).toMatchObject({
+      manualConfirmed: true,
+      override: { personId: "boss", pin: "1234" },
+    });
+  });
+
+  it("says a card refund waits for the card company", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 is waiting for the card company's answer."),
+    );
+    expect(root(el).querySelector("[data-check-again]")).toBeNull();
+  });
+
+  const restRequest: GiveBackRequest = {
+    purpose: "goodwill",
+    amount: "3.00",
+    extra: "0.00",
+    way: "card-1",
+  };
+  const withRest = (api: Api) =>
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [
+        { kind: "refund", amount: "2.00", state: "pending", refundId: "refund-1" },
+        { kind: "correction", amount: "3.00", state: "not_started" },
+      ],
+      rest: restRequest,
+    }));
+
+  it("says what follows the card company's answer, and Check again sends it with fresh ids", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain(
+        "€3.00 has not gone back yet: it follows when the card company answers.",
+      ),
+    );
+    expect(outcomeText(el)).toContain("€2.00 is waiting for the card company's answer.");
+    const again = () => root(el).querySelector<HTMLElement>("[data-check-again]")!;
+    again().click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.still_waiting")));
+    expect(api.getTenderRefund).toHaveBeenCalledWith("refund-1", {});
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    again().click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€3.00 is back on card ···4242."));
+    expect(api.previewGiveBack).toHaveBeenLastCalledWith("sale-1", restRequest);
+    expect(sent(api, 1)).toMatchObject({ request: restRequest, reasonId: "complaint" });
+    for (const id of Object.values(sent(api, 1).submissionIds))
+      expect(Object.values(sent(api, 0).submissionIds)).not.toContain(id);
+  });
+
+  it("drops the rest when the card company did not make the first refund", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    api.getTenderRefund.mockResolvedValueOnce({ state: "failed" });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.rest_failed")));
+    expect(root(el).querySelector("[data-check-again]")).toBeNull();
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a rest's refusal on the outcome, with Check again still offered", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    api.giveBack.mockRejectedValueOnce({ code: "give_back.changed", status: 409 });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain(codeMessage("give_back.changed", "en")),
+    );
+    expect(root(el).querySelector("[data-check-again]")).not.toBeNull();
+  });
+
+  it("says Check again could not reach the box", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    api.getTenderRefund.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.preview_failed")));
+  });
+
+  it("says what went back and why the rest did not when a later part is refused", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [
+        { kind: "refund", amount: "2.00", state: "completed", refundId: "refund-1" },
+        { kind: "correction", amount: "3.00", state: "failed" },
+      ],
+      refusal: { code: "give_back.refund_failed", params: {} },
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is back on card ···4242."));
+    expect(outcomeText(el)).toContain(codeMessage("give_back.refund_failed", "en"));
+    expect(root(el).querySelector("[data-check-again]")).toBeNull();
+  });
+
+  it("moves to the under-way view when money is left under way", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      underWay: { id: "correction-1" } as unknown as InvoiceCorrectionView,
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-under-way]")).not.toBeNull());
+    expect(text(root(el).querySelector("[data-under-way]"))).toContain("Money back under way");
+  });
+
+  it("shows give_back.changed with the new preview, and gives nothing back", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({ code: "give_back.changed", status: 409 });
+    const el = await press(api);
+    answering(api, { parts: [{ kind: "refund", amount: "4.00", way: "cash" }] });
+    await vi.waitFor(() => expect(bottom(el)).toBe(codeMessage("give_back.changed", "en")));
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-summary-way]"))).toContain("€4.00"),
+    );
+    expect(root(el).querySelector("[data-outcome]")).toBeNull();
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+  });
+
+  it("shows a wait the read did not show at the bottom, and nothing moves", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({
+      code: "sale.correction_not_admitted",
+      reason: "filing_refused",
+      status: 409,
+    });
+    const el = await press(api);
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(
+        codeMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
+      ),
+    );
+    expect(root(el).querySelector("[data-outcome]")).toBeNull();
+    expect(amountField(el).value).toBe("5");
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("offers to send a lost answer again, under the same ids", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const el = await press(api);
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-lost]"))).toContain(t("give_back.lost")),
+    );
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00 is back in cash."));
+    expect(sent(api, 1).submissionIds).toEqual(sent(api, 0).submissionIds);
+  });
+
+  it("a press sent again and refused goes back to the choice with its sentence", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    api.giveBack.mockRejectedValueOnce({ code: "clock.unconfirmed", status: 409 });
+    const el = await press(api);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-lost]")).not.toBeNull());
+    cleanupWidgets();
+    const { el: reopened } = await mount(api);
+    reopened.shadowRoot!.querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() => expect(choice(reopened, "dishes")).not.toBeNull());
+    expect(bottom(reopened)).toBe(codeMessage("clock.unconfirmed", "en"));
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+  });
+
+  it("opens on a press whose answer was lost, or on a rest still to follow", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const ask = {
+      request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" },
+      reasonId: "complaint",
+      note: null,
+      expected: [{ kind: "refund" as const, amount: "5.00", way: "cash" }],
+    };
+    await expect(new GiveBackSession(SCOPE, api).submit("sale-1", ask)).rejects.toThrow();
+    const { el } = await mount(api);
+    expect(root(el).querySelector("[data-lost]")).not.toBeNull();
+    cleanupWidgets();
+    localStorage.clear();
+    const later = fakeGiveBackApi();
+    withRest(later);
+    await new GiveBackSession(SCOPE, later).submit("sale-1", {
+      ...ask,
+      request: { ...ask.request, way: "card-1" },
+    });
+    const { el: reopened } = await mount(later);
+    expect(outcomeText(reopened)).toContain(
+      "€3.00 has not gone back yet: it follows when the card company answers.",
+    );
+    expect(reopened.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull();
   });
 });

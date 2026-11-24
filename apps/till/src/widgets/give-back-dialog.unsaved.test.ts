@@ -4,18 +4,21 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import { SCOPE, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
 import type { GiveBackAsk, TillGiveBackDialog } from "./give-back-dialog.js";
 
 class GiveBackLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = fakeGiveBackApi();
+  readonly session = new GiveBackSession(SCOPE, this.api);
   closes = 0;
   asks: GiveBackAsk[] = [];
   override render() {
     return html`<till-give-back-dialog
         .api=${this.api}
+        .session=${this.session}
         .saleId=${"s1"}
         .invoiceNumber=${"A/1042"}
         .namesLocale=${"en"}
@@ -27,7 +30,10 @@ class GiveBackLeaveApp extends LitElement {
 }
 customElements.define("give-back-leave-test-app", GiveBackLeaveApp);
 beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  localStorage.clear();
+});
 
 async function mount() {
   const { el: app } = await mountWidget<GiveBackLeaveApp>("give-back-leave-test-app", {});
@@ -121,7 +127,7 @@ it("the choice's Cancel closes at once", async () => {
   expect(app.closes).toBe(1);
 });
 
-it("Back with a ticked dish and a reason asks first, keeps them on Keep and goes back on Discard", async () => {
+it("Back with a ticked dish asks first, keeps it on Keep and goes back on Discard", async () => {
   const { app, form } = await mount();
   await choose(form, "dishes");
   form
@@ -143,4 +149,25 @@ it("Back with a ticked dish and a reason asks first, keeps them on Keep and goes
     .not.toBeNull();
   expect(app.closes).toBe(0);
   expect(unload()).toBe(false);
+});
+
+it("Done after the money went back closes without asking", async () => {
+  const { app, form } = await mount();
+  await choose(form, "goodwill");
+  await type(form, "5");
+  form.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "complaint" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-summary]")).not.toBeNull());
+  form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-outcome]")).not.toBeNull());
+  expect(unload()).toBe(false);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
 });

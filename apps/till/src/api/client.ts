@@ -43,7 +43,14 @@ import type {
   InvoiceCorrectionView,
   OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
-import type { GiveBackPreview, GiveBackRequest, GiveBackView } from "./give-back-types.js";
+import type {
+  GiveBackOutcome,
+  GiveBackPreview,
+  GiveBackRequest,
+  GiveBackView,
+  GiveBackWrite,
+} from "./give-back-types.js";
+type ApproverRight = "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
   ItemPaymentAsk,
@@ -4594,6 +4601,10 @@ export class TillApi {
     );
   }
 
+  giveBack(saleId: string, body: GiveBackWrite): Promise<GiveBackOutcome> {
+    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/give-back`, "POST", body);
+  }
+
   /** `POST /api/transactions/:saleId/corrections`; refused `invoice_correction.already_open`
    * with the open correction's `correctionId`. */
   openInvoiceCorrection(
@@ -5166,12 +5177,14 @@ export class TillApi {
     return this.#request<AdjustmentReason[]>("/api/adjustment-reasons", "GET");
   }
 
+  /** The active people holding every one of `permission`. */
   listApprovers(
-    permission: "adjustment.approve" | "sale.refund" | "sale.rectify" | "node.manage",
+    permission: ApproverRight | readonly ApproverRight[],
     options: ReadOptions = {},
   ): Promise<StaffMember[]> {
+    const rights = typeof permission === "string" ? [permission] : permission;
     return this.#request<StaffMember[]>(
-      `/api/adjustment-approvers?permission=${encodeURIComponent(permission)}`,
+      `/api/adjustment-approvers?${rights.map((right) => `permission=${encodeURIComponent(right)}`).join("&")}`,
       "GET",
       undefined,
       options.signal,

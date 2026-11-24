@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { VIEW, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import { SCOPE, VIEW, completedFor, fakeGiveBackApi } from "./give-back-dialog.test-helpers.js";
+import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
 import type { TillGiveBackDialog } from "./give-back-dialog.js";
 
@@ -10,13 +11,20 @@ beforeEach(() => setLocale("es-ES"));
 afterEach(() => {
   cleanupWidgets();
   setLocale("en");
+  localStorage.clear();
 });
 
 describe.each(["light", "dark"] as const)("give money back accessibility (%s)", (theme) => {
   async function mount(api = fakeGiveBackApi()) {
     const mounted = await mountWidget<TillGiveBackDialog>(
       "till-give-back-dialog",
-      { api, saleId: "s1", invoiceNumber: "A/1042", namesLocale: "es" },
+      {
+        api,
+        session: new GiveBackSession(SCOPE, api),
+        saleId: "s1",
+        invoiceNumber: "A/1042",
+        namesLocale: "es",
+      },
       theme,
     );
     await vi.waitFor(() =>
@@ -35,7 +43,7 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     api.readGiveBack.mockReturnValue(new Promise(() => {}));
     const { host } = await mountWidget<TillGiveBackDialog>(
       "till-give-back-dialog",
-      { api, saleId: "s1", invoiceNumber: "A/1042" },
+      { api, session: new GiveBackSession(SCOPE, api), saleId: "s1", invoiceNumber: "A/1042" },
       theme,
     );
     await expectNoA11yViolations(host);
@@ -107,5 +115,33 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     const { el, host } = await mount();
     await choose(el, "extra");
     await expectNoA11yViolations(host);
+  });
+  const ask = {
+    request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "card-1" },
+    reasonId: "complaint",
+    note: null,
+    expected: [{ kind: "refund" as const, amount: "5.00", way: "card-1" }],
+  };
+
+  it("a press whose answer was lost, offering Send again", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    await expect(new GiveBackSession(SCOPE, api).submit("s1", ask)).rejects.toThrow();
+    const { el } = await mount(api);
+    expect(el.shadowRoot!.querySelector("[data-lost]")).not.toBeNull();
+    await expectNoA11yViolations(el);
+  });
+
+  it("a rest waiting for the card company, offering Check again", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId, body) => ({
+      ...completedFor(body),
+      parts: [{ kind: "refund", amount: "2.00", state: "pending", refundId: "refund-1" }],
+      rest: { ...ask.request, amount: "3.00" },
+    }));
+    await new GiveBackSession(SCOPE, api).submit("s1", ask);
+    const { el } = await mount(api);
+    expect(el.shadowRoot!.querySelector("[data-check-again]")).not.toBeNull();
+    await expectNoA11yViolations(el);
   });
 });

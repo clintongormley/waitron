@@ -19,12 +19,14 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { AdjustmentReason, TillApi } from "../api/client.js";
+import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type {
+  GiveBackAsk,
   GiveBackLine,
   GiveBackPreview,
   GiveBackPurpose,
   GiveBackRequest,
+  GiveBackRight,
   GiveBackView,
   GiveBackWaitReason,
   GiveBackWay,
@@ -34,22 +36,32 @@ import { lineName } from "../screens/till-ticket-view.js";
 import { unservedDishText } from "./dish-format.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
+import type { GiveBackSession } from "../state/give-back.js";
+import { TenderRefundAttemptError } from "../state/tender-refund.js";
+import "./supervisor-override-dialog.js";
+import {
+  approverRefusal,
+  type ApproverRefusal,
+  type OverrideConfirmDetail,
+} from "./supervisor-override-dialog.js";
+import {
+  NEEDS_APPROVER,
+  PIN_REFUSALS,
+  doneStep,
+  lostStep,
+  terminalStep,
+  type Override,
+  type Sending,
+  type Step,
+} from "./give-back-steps.js";
 
 type Refusal = ReturnType<typeof refusalOf>;
 
 export type GiveBackApi = Pick<
   TillApi,
-  "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons"
+  "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers"
 >;
-
-/** What `give-back-submit` carries: the request as previewed, its reason, and the parts the
- * preview answered, which the write refuses to change without saying so. */
-export interface GiveBackAsk {
-  request: GiveBackRequest;
-  reasonId: string;
-  note: string | null;
-  expected: GiveBackPreview["parts"];
-}
+export type { GiveBackAsk };
 
 type Draft = {
   lineIds: string[];
@@ -165,6 +177,15 @@ export class TillGiveBackDialog extends LitElement {
         border-radius: var(--wt-radius-lg);
         background: var(--wt-color-surface);
       }
+      .error {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
+      .body-step {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
       .total {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
@@ -172,6 +193,8 @@ export class TillGiveBackDialog extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: GiveBackApi;
+  /** Saves each press before sending it. */
+  @property({ attribute: false }) session!: GiveBackSession;
   @property() saleId = "";
   @property() invoiceNumber = "";
   @property() namesLocale = "";
@@ -189,6 +212,12 @@ export class TillGiveBackDialog extends LitElement {
   @state() private attempted = false;
   @state() private confirming = false;
   @state() private changedWhileChecking = false;
+  @state() private step: Step | null = null;
+  @state() private sending = false;
+  @state() private sendRefusal: Refusal | null = null;
+  @state() private approvers: StaffMember[] | null = null;
+  @state() private pinError: ApproverRefusal | null = null;
+  #approval?: Sending;
   #previewRequest = 0;
   #lastStep = "";
   #scope?: DraftScope<Draft>;
@@ -198,6 +227,7 @@ export class TillGiveBackDialog extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#restore();
     void this.#load();
     void this.#loadReasons();
     const { scope, coordinator } = draftScopeFor<Draft>(this, {
@@ -322,6 +352,7 @@ export class TillGiveBackDialog extends LitElement {
   }
   #set(change: Partial<Draft>): void {
     this.draft = { ...this.draft, ...change };
+    this.sendRefusal = null;
     this.#scope?.changed();
     if (!("reasonId" in change) && !("note" in change)) void this.#preview();
   }
@@ -412,6 +443,7 @@ export class TillGiveBackDialog extends LitElement {
   async #confirm(): Promise<void> {
     this.attempted = true;
     this.changedWhileChecking = false;
+    this.sendRefusal = null;
     if (this.#errors().size > 0) {
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
@@ -442,7 +474,144 @@ export class TillGiveBackDialog extends LitElement {
     this.dispatchEvent(
       new CustomEvent("give-back-submit", { detail: ask, bubbles: true, composed: true }),
     );
+    if (answer.manual) {
+      this.step = {
+        kind: "terminal",
+        ask,
+        needs: answer.needs,
+        confirmed: false,
+        attempted: false,
+      };
+      return;
+    }
+    await this.#authorized({ ...this.#submitting(ask), rights: answer.needs });
   }
+  #submitting(ask: GiveBackAsk): Omit<Sending, "rights"> {
+    return {
+      send: (override) => this.session.submit(this.saleId, ask, override),
+      way: ask.request.way,
+    };
+  }
+  /** A press saved earlier whose answer was lost, or a rest still to follow, opens where it was. */
+  #restore(): void {
+    let saved: ReturnType<GiveBackSession["read"]> = null;
+    try {
+      saved = this.session.read(this.saleId);
+    } catch {
+      // Unreadable storage refuses the next press, which says so.
+    }
+    if (saved?.sent) this.step = { kind: "lost", way: saved.sent.request.way };
+    else if (saved?.rest)
+      this.step = {
+        kind: "done",
+        outcome: { parts: [], refusal: null, underWay: null, rest: saved.rest.request },
+        way: saved.rest.request.way,
+        notice: null,
+      };
+  }
+  async #record(step: Extract<Step, { kind: "terminal" }>): Promise<void> {
+    if (!step.confirmed) {
+      this.step = { ...step, attempted: true };
+      return;
+    }
+    const ask = { ...step.ask, manualConfirmed: true };
+    // The separate terminal's refund is always confirmed with a PIN (plan 5.4).
+    const rights = [...new Set<GiveBackRight>([...step.needs, "sale.refund"])];
+    await this.#askApprover({ ...this.#submitting(ask), rights });
+  }
+  async #authorized(sending: Sending): Promise<void> {
+    if (sending.rights.length === 0) await this.#send(sending);
+    else await this.#askApprover(sending);
+  }
+  async #askApprover(sending: Sending): Promise<void> {
+    this.#approval = sending;
+    try {
+      this.approvers = await this.api.listApprovers(sending.rights);
+      this.pinError = null;
+    } catch {
+      this.#refused({ code: "approvers" });
+    }
+  }
+  async #send(sending: Sending, override?: Override): Promise<void> {
+    this.sending = true;
+    this.pinError = null;
+    try {
+      const outcome = await sending.send(override);
+      this.approvers = null;
+      this.#approval = undefined;
+      this.#scope?.commit(this.draft);
+      this.step = { kind: "done", outcome, way: sending.way, notice: null };
+    } catch (error) {
+      this.#sendFailed(sending, error, override);
+    } finally {
+      this.sending = false;
+    }
+  }
+  #sendFailed(sending: Sending, error: unknown, override?: Override): void {
+    const refusal =
+      error instanceof TenderRefundAttemptError
+        ? { code: error.kind === "storage" ? "storage" : "network" }
+        : refusalOf(error);
+    if (refusal.code === "network") {
+      this.approvers = null;
+      this.#approval = undefined;
+      this.step = { kind: "lost", way: sending.way };
+    } else if (override !== undefined && PIN_REFUSALS.has(refusal.code))
+      this.pinError = approverRefusal(error, override.personId);
+    else if (override === undefined && NEEDS_APPROVER.has(refusal.code))
+      void this.#askApprover({
+        ...sending,
+        rights: [refusal.permission === "sale.rectify" ? "sale.rectify" : "sale.refund"],
+      });
+    else this.#refused(refusal);
+  }
+  /** Nothing moved: a rest's refusal stays on its outcome; any other goes back to the form, or to
+   * the choice when the window opened on a saved press, with the refusal at the bottom. */
+  #refused(refusal: Refusal): void {
+    this.approvers = null;
+    this.#approval = undefined;
+    const step = this.step;
+    if (step?.kind === "done") {
+      this.step = { ...step, notice: this.#sendRefusalText(refusal) };
+      return;
+    }
+    this.step = null;
+    this.sendRefusal = refusal;
+    if (refusal.code === "give_back.changed") void this.#preview();
+  }
+  #sendRefusalText(refusal: Refusal): string {
+    if (refusal.code === "approvers") return t("give_back.approvers_failed");
+    if (refusal.code === "storage") return t("give_back.storage");
+    return this.#refusalText(refusal, "give_back.preview_failed");
+  }
+  async #checkAgain(step: Extract<Step, { kind: "done" }>, rest: GiveBackRequest): Promise<void> {
+    this.sending = true;
+    let check: Awaited<ReturnType<GiveBackSession["checkRest"]>>;
+    try {
+      check = await this.session.checkRest(this.saleId);
+    } catch (error) {
+      this.step = { ...step, notice: this.#sendRefusalText(refusalOf(error)) };
+      return;
+    } finally {
+      this.sending = false;
+    }
+    if (check.state !== "completed") {
+      const failed = check.state === "failed";
+      this.step = {
+        ...step,
+        notice: t(failed ? "give_back.rest_failed" : "give_back.still_waiting"),
+        outcome: failed ? { ...step.outcome, rest: null } : step.outcome,
+      };
+      return;
+    }
+    const { preview } = check;
+    await this.#authorized({
+      send: (override) => this.session.sendRest(this.saleId, preview, override),
+      rights: preview.needs,
+      way: rest.way,
+    });
+  }
+
   #closed(event: Event): void {
     event.stopPropagation();
     if (event.target !== event.currentTarget) return;
@@ -496,7 +665,10 @@ export class TillGiveBackDialog extends LitElement {
             </div>`
           : html`<div>${shown.map((purpose) => this.#choiceRow(purpose))}</div>`
       }
-      <wt-form-actions>${this.#cancelButton()}</wt-form-actions>`;
+      <wt-form-actions
+        .error=${this.sendRefusal === null ? "" : this.#sendRefusalText(this.sendRefusal)}
+        >${this.#cancelButton()}</wt-form-actions
+      >`;
   }
   #dishText(line: GiveBackLine): string {
     const dishName = lineName(line.descriptions, this.namesLocale);
@@ -686,11 +858,13 @@ export class TillGiveBackDialog extends LitElement {
         .error=${
           own.size > 0
             ? t("form.fix_fields")
-            : refusal !== null && !onAmount
-              ? this.#refusalText(refusal, "give_back.preview_failed")
-              : this.changedWhileChecking
-                ? t("give_back.changed_while_checking")
-                : ""
+            : this.sendRefusal !== null
+              ? this.#sendRefusalText(this.sendRefusal)
+              : refusal !== null && !onAmount
+                ? this.#refusalText(refusal, "give_back.preview_failed")
+                : this.changedWhileChecking
+                  ? t("give_back.changed_while_checking")
+                  : ""
         }
         ><wt-button slot="cancel" variant="secondary" data-back @click=${() => this.#back()}
           >${t("action.back")}</wt-button
@@ -698,8 +872,8 @@ export class TillGiveBackDialog extends LitElement {
         <wt-button
           .variant=${answer !== null && own.size === 0 && this.draft.reasonId !== "" ? "primary" : "secondary"}
           data-submit
-          .loading=${this.confirming}
-          .disabled=${this.confirming || !this.#chosen() || own.size > 0}
+          .loading=${this.confirming || this.sending}
+          .disabled=${this.confirming || this.sending || !this.#chosen() || own.size > 0}
           @click=${() => void this.#confirm()}
           >${
             total === null
@@ -709,7 +883,42 @@ export class TillGiveBackDialog extends LitElement {
         >
       </wt-form-actions>`;
   }
+  #stepBody(step: Step) {
+    const close = () =>
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    if (step.kind === "lost")
+      return lostStep(this.sending, {
+        close,
+        resend: () =>
+          void this.#send({
+            send: (override) => this.session.resend(this.saleId, override),
+            rights: [],
+            way: step.way,
+          }),
+      });
+    if (step.kind === "terminal")
+      return terminalStep(
+        step.ask,
+        { ...step, sending: this.sending },
+        {
+          confirm: (confirmed) => {
+            this.step = { ...step, confirmed };
+          },
+          back: () => {
+            this.step = null;
+          },
+          record: () => void this.#record(step),
+        },
+      );
+    const way = this.view!.ways.find((row) => row.way === step.way);
+    return doneStep(step, way, this.sending, {
+      close,
+      checkAgain: () => void this.#checkAgain(step, step.outcome.rest!),
+    });
+  }
   #body() {
+    if (this.step !== null && (this.view !== null || this.step.kind === "lost"))
+      return this.#stepBody(this.step);
     if (this.view !== null)
       return this.purpose === null ? this.#choices(this.view) : this.#form(this.view, this.purpose);
     if (this.loadRefusal === null)
@@ -727,21 +936,40 @@ export class TillGiveBackDialog extends LitElement {
   }
   override render() {
     return html`<wt-dialog
-      ${trackDialog()}
-      .open=${this.active}
-      .heading=${t("give_back.title")}
-      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
-      @wt-close=${(event: Event) => this.#closed(event)}
-    >
-      <div
-        class="body"
-        @keydown=${(event: KeyboardEvent) =>
-          submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
+        ${trackDialog()}
+        .open=${this.active}
+        .heading=${t("give_back.title")}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        @wt-close=${(event: Event) => this.#closed(event)}
       >
-        <p class="muted">${this.invoiceNumber}</p>
-        ${this.#body()}
-      </div>
-    </wt-dialog>`;
+        <div
+          class="body"
+          @keydown=${(event: KeyboardEvent) =>
+            submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
+        >
+          <p class="muted">${this.invoiceNumber}</p>
+          ${this.#body()}
+        </div> </wt-dialog
+      >${
+        this.approvers === null
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              .authorizers=${this.approvers}
+              .error=${this.pinError}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                if (this.sending) return;
+                this.approvers = null;
+                this.#approval = undefined;
+              }}
+              @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
+                event.stopPropagation();
+                const approval = this.#approval;
+                if (approval !== undefined && !this.sending)
+                  void this.#send(approval, event.detail);
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
   }
 }
 declare global {

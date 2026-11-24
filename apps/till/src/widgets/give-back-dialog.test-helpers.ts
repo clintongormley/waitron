@@ -1,8 +1,10 @@
 import { vi } from "vitest";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type {
   GiveBackLine,
+  GiveBackOutcome,
   GiveBackPreview,
+  GiveBackWrite,
   GiveBackRequest,
   GiveBackView,
   GiveBackWay,
@@ -112,7 +114,23 @@ export const previewFor = (request: GiveBackRequest): GiveBackPreview => ({
   manual: false,
 });
 
-/** An API answering every read at once, and each preview with one part for its whole amount. */
+export const APPROVERS: StaffMember[] = [{ personId: "boss", displayName: "Boss" }];
+export const SCOPE = { deviceId: "device-1", personId: "person-1" };
+
+/** Every part of `body` given back. */
+export const completedFor = (body: GiveBackWrite): GiveBackOutcome => ({
+  parts: body.expected.map((part) => ({
+    kind: part.kind,
+    amount: part.amount,
+    state: "completed",
+  })),
+  refusal: null,
+  underWay: null,
+  rest: null,
+});
+
+/** An API answering every read at once, each preview with one part for its whole amount, and
+ * each give-back with every part given back. */
 export function fakeGiveBackApi(view: GiveBackView = VIEW) {
   return {
     readGiveBack: vi.fn(async (): Promise<GiveBackView> => view),
@@ -121,5 +139,12 @@ export function fakeGiveBackApi(view: GiveBackView = VIEW) {
         previewFor(request),
     ),
     listAdjustmentReasons: vi.fn(async () => REASONS),
+    listApprovers: vi.fn<TillApi["listApprovers"]>(async () => APPROVERS),
+    giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite): Promise<GiveBackOutcome> =>
+      completedFor(body),
+    ),
+    getTenderRefund: vi.fn<(refundId: string, options: object) => Promise<{ state: string }>>(
+      async () => ({ state: "completed" }),
+    ),
   };
 }
