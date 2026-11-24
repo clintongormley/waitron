@@ -132,6 +132,8 @@ export type BillPayConfirmDetail = ReceiptGuestsDetail & {
 export interface PayTaken {
   change: string | null;
   slipPaymentId?: string;
+  /** The bill holding `slipPaymentId` when it is not the dialog's: Pay for items' new bill. */
+  slipBillId?: string;
   pending?: string;
   settled?: true;
   reader?: string;

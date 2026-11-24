@@ -12715,7 +12715,7 @@ export class TillApp extends LitElement {
         .preview=${open.preview}
         .refusal=${open.refusal}
         .taken=${open.taken}
-        .paymentSlip=${this.#paymentSlip(open.billId, open.taken?.pending === undefined ? open.taken?.slipPaymentId : undefined)}
+        .paymentSlip=${this.#paymentSlip(open.taken?.slipBillId ?? open.billId, open.taken?.pending === undefined ? open.taken?.slipPaymentId : undefined)}
         .refunded=${open.refunded}
         .showsRefundAcknowledgment=${this.billRefundAcknowledgment !== null}
         .busy=${open.busy}
@@ -23190,7 +23190,12 @@ export class TillApp extends LitElement {
         preview: null,
         ...(payment.state === "received"
           ? {
-              taken: { change: payment.change, settled: true, slipPaymentId: taken.slipPaymentId },
+              taken: {
+                change: payment.change,
+                settled: true,
+                slipPaymentId: taken.slipPaymentId,
+                ...(taken.slipBillId === undefined ? {} : { slipBillId: taken.slipBillId }),
+              },
               refusal: null,
             }
           : {
@@ -23647,6 +23652,7 @@ export class TillApp extends LitElement {
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     const slipPaymentId = readerMakesSlip ? undefined : result.payment.id;
+    const slipBillId = result.paidOn === undefined ? {} : { slipBillId: result.paidOn };
     if (result.invoice !== undefined) this.captureWarning = result.balance.captureWarning ?? null;
     // At the Counter the new bill's receipt window would start a new sale and drop the order.
     if (result.invoice !== undefined && (own !== undefined || open.surface === "table")) {
@@ -23661,10 +23667,11 @@ export class TillApp extends LitElement {
     }
     const taken: PayTaken =
       result.payment.state === "pending"
-        ? { change: null, pending: result.payment.applied, slipPaymentId }
+        ? { change: null, pending: result.payment.applied, slipPaymentId, ...slipBillId }
         : {
             change: result.payment.change,
             slipPaymentId,
+            ...slipBillId,
             ...(readerName === undefined || result.payment.entry !== "reader"
               ? {}
               : {
