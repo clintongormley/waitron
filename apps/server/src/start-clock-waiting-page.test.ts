@@ -297,20 +297,20 @@ it.each([
         await page.getByLabel(words.keyLabel).fill(other);
         await page.getByRole("button", { name: words.keyContinue }).click();
       } else await choosePack(page, await recoveryPackPdf(other));
-      await expect.poll(() => page.locator("#clock-key-error").isVisible()).toBe(true);
-      expect(await page.locator("#clock-key-error").innerText()).toBe(
-        words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV"),
-      );
+      const wrongLine = words.wrongKey.replace("{keyName}", "2026-11-23 · QZJV");
+      const line = page.locator("#clock-key-error");
+      await expect.poll(() => line.isVisible()).toBe(true);
+      expect(await line.innerText()).toBe(wrongLine);
       expect(await page.locator("#clock-step").isVisible()).toBe(false);
-      // A second wrong key keeps the line.
-      await page.getByLabel(words.keyLabel).fill(other);
-      await page.getByRole("button", { name: words.keyContinue }).click();
-      await expect.poll(() => page.locator("#clock-key-error").isVisible()).toBe(true);
-      // The right key clears it.
+      // The right key clears the line, and a wrong key typed after it names the key again.
       await page.getByLabel(words.keyLabel).fill(KEY);
       await page.getByRole("button", { name: words.keyContinue }).click();
       await expect.poll(() => page.locator("#clock-step").isVisible()).toBe(true);
-      expect(await page.locator("#clock-key-error").isVisible()).toBe(false);
+      expect(await line.isVisible()).toBe(false);
+      await page.getByLabel(words.keyLabel).fill(other);
+      await page.getByRole("button", { name: words.keyContinue }).click();
+      await expect.poll(() => line.isVisible()).toBe(true);
+      expect(await line.innerText()).toBe(wrongLine);
     } finally {
       await rm(named, { recursive: true, force: true });
     }
