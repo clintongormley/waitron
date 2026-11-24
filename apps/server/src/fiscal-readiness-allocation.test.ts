@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { generateKeyPairSync } from "node:crypto";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,7 +16,6 @@ import {
   createPaperAllocationPreparation,
 } from "@waitron/fiscal-verifactu";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuRecords } from "@waitron/fiscal-verifactu/src/schema/verifactu-records.js";
 import {
   paperCustodianFingerprint,
@@ -218,7 +218,7 @@ it("creates the retained preproduction readiness chain from its supplied allocat
       const store = await openVenueDatabase(databaseDir);
       try {
         const identities = await store.venue.select().from(verifactuIdentities);
-        const ledger = await store.venue.select().from(fiscalAllocations);
+        const ledger = await allocationRows(store.venue);
         const records = await store.venue.select().from(verifactuRecords);
         return { identities, ledger, records };
       } finally {

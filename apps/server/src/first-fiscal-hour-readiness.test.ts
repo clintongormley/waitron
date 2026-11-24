@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import { loadKeyRing } from "@waitron/credentials";
 import { taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -277,7 +277,7 @@ it("owned preproduction Live can publish without an accepted authority submissio
   expect(f.published).toEqual([
     expect.objectContaining({ environment: "preproduction", onboardingIntent: "live" }),
   ]);
-  const rows = await venue.db.select().from(fiscalAllocations);
+  const rows = await allocationRows(venue.db);
   expect(rows).toHaveLength(1);
   expect(rows[0]!.environment).toBe("preproduction");
 });
@@ -289,7 +289,7 @@ it("owned production Live still refuses activation without accepted authority re
   });
   expect(f.published).toEqual([]);
   expect(await venue.db.select().from(taxpayer)).toEqual([]);
-  expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(venue.db)).toEqual([]);
   expect((await f.host.store.read())!.status).toBe("consumption-intent");
 });
 
@@ -308,6 +308,6 @@ it("refuses an unusable setup certificate before changing the owned attempt or m
   });
   expect(f.published).toEqual([]);
   expect(await venue.db.select().from(taxpayer)).toEqual([]);
-  expect(await venue.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(venue.db)).toEqual([]);
   expect(await f.host.store.read()).toEqual(before);
 });

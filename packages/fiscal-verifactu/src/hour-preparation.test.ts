@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,7 +18,6 @@ import {
   type HourSelectionStore,
 } from "./hour-selection.js";
 import { createHourPreparation, createHostedHourPreparation } from "./hour-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -200,7 +200,7 @@ it("activates every exact base through the real prepared seed boundary without a
   expect(
     (await suite.db.select().from(verifactuIdentities)).map((row) => row.numeroInstalacion),
   ).toEqual(["0CNNW"]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("a pending settle wait supplies no activation input", async () => {
@@ -246,7 +246,7 @@ it.each(["bases", "scope", "contextKey"] as const)(
             : "changed-module-version",
     };
     await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("event_mismatch"));
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );
 
@@ -257,7 +257,7 @@ it("a changed uploaded identity cannot recreate selection authority", async () =
   const input = structuredClone(selected.input);
   input.allocation.installationIdentity = "0CNPG";
   await expect(f.activate(input)).rejects.toMatchObject(refuse("event_mismatch"));
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("a foreign event cannot use another event's retained hour", async () => {
@@ -303,7 +303,7 @@ it("refuses preparation when the clocks now disagree", async () => {
   if (selected.status !== "selected") throw new Error("selection did not finish");
   f.facts = { ...f.facts, clock: clock(instant, instant + 121_000) };
   await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("clock_disagreement"));
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(0);
+  expect(await allocationRows(suite.db)).toHaveLength(0);
   expect(f.revisions).toHaveLength(2);
 });
 
@@ -328,7 +328,7 @@ it("a different authenticated operator cannot adopt another operator's spent int
       ),
     ).rejects.toMatchObject(refuse("event_mismatch"));
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(f.revisions).toHaveLength(2);
 });
 
@@ -356,7 +356,7 @@ it("a non-transferable uploaded input refuses with the domain code", async () =>
   await expect(f.activate({ allocation: () => undefined })).rejects.toMatchObject(
     refuse("malformed_allocation"),
   );
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["restore", "promote", "reserve"])(
@@ -440,7 +440,7 @@ it("a malformed retained operator cannot supply an activation intent", async () 
   revision.entries[0]!.operatorId = null;
   f.revisions.push(revision);
   await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("history_invalid"));
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("uploaded material without this host's durable intent cannot activate or spend an hour", async () => {
@@ -452,7 +452,7 @@ it("uploaded material without this host's durable intent cannot activate or spen
     refuse("reservation_missing"),
   );
   expect(target.revisions).toEqual([]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("a changed approval cannot ride an otherwise matching saved selection", async () => {
@@ -462,7 +462,7 @@ it("a changed approval cannot ride an otherwise matching saved selection", async
   const input = structuredClone(selected.input);
   input.approval.confirmedAt = "2026-10-16T11:41:00.000Z";
   await expect(f.activate(input)).rejects.toMatchObject(refuse("event_mismatch"));
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("preparation re-reads a name at its own minute before the real writer can run", async () => {
@@ -490,7 +490,7 @@ it("preparation re-reads a name at its own minute before the real writer can run
     ],
   };
   await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("minute_in_use"));
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(f.revisions).toHaveLength(2);
 });
 
@@ -559,7 +559,7 @@ it("the hosted adapter keeps the host scope separate from clock metadata", async
       ),
     ),
   );
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([
+  expect(await allocationRows(suite.db)).toEqual([
     expect.objectContaining({
       taxpayerNif: f.facts.scope.taxpayerNif,
       environment: "preproduction",

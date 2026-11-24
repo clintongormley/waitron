@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
@@ -8,7 +9,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createHourThrowawayAllocation } from "./hour-throwaway-allocation.js";
 import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { createThrowawayAllocation } from "./throwaway-allocation.js";
 const signing = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("node:crypto", async (original) => {
@@ -86,7 +86,7 @@ it("disposable preparation activates every exact hour base through the unchanged
   const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.numeroInstalacion).toBe("0CNNW");
   expect(JSON.stringify(sif)).not.toMatch(/throwaway|custodian|privateKey/);
-  const [row] = await suite.db.select().from(fiscalAllocations);
+  const [row] = await allocationRows(suite.db);
   expect(row!.allocationKey).toMatch(/^throwaway-/);
   expect(row!.allocation).toMatchObject({ environment: "preproduction", source: "hour" });
   expect(JSON.stringify(prepared.input)).not.toMatch(

@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, isNull } from "drizzle-orm";
@@ -10,7 +11,6 @@ import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory } from "./hour-history.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -114,7 +114,7 @@ it("retains the higher retired hour of another node without changing rows or cou
   const before = {
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
   const sources = await read();
   expect(projectHourHistory({ scope, sources })).toMatchObject({
@@ -129,7 +129,7 @@ it("retains the higher retired hour of another node without changing rows or cou
   ).toMatchObject({ greatestSpentMinute: null, contradictions: [] });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before.series);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual(before.sifs);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
+  expect(await allocationRows(suite.db)).toEqual(before.allocations);
 });
 
 it("combines snapshots taken before and after retirement without inventing conflicting rows", async () => {

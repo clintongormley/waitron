@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import {
   external,
@@ -22,7 +23,6 @@ import { describe, expect, it, vi } from "vitest";
 import { invoiceSeries, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { AppError } from "@waitron/shared";
 import { runRestoreHooks, restoreFromArtifact } from "./restore.js";
@@ -219,7 +219,7 @@ describe("selected-hour admission before archive placement", () => {
         { code: "R-0CNQT", nextNumber: 1 },
         { code: "RF-0CNQT", nextNumber: 1 },
       ]);
-      expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      expect(await allocationRows(placed.venue)).toHaveLength(2);
     } finally {
       await placed.close();
     }
@@ -235,7 +235,7 @@ describe("selected-hour admission before archive placement", () => {
     try {
       await advanceSeriesTo(restored.venue, node.nodeId, 917);
       const rows = await restored.venue.select(seriesWithNextNumber).from(invoiceSeries);
-      const allocations = await restored.venue.select().from(fiscalAllocations);
+      const allocations = await allocationRows(restored.venue);
       const journal = await readModulePreparationHistory(f.roots, binding.module);
       vi.setSystemTime(new Date("2026-10-17T14:40:00Z"));
       external.internet.mockClear();
@@ -250,7 +250,7 @@ describe("selected-hour admission before archive placement", () => {
       });
       expect(external.internet).not.toHaveBeenCalled();
       expect(await restored.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(rows);
-      expect(await restored.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      expect(await allocationRows(restored.venue)).toEqual(allocations);
       expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
     } finally {
       await restored.close();
@@ -286,7 +286,7 @@ describe("selected-hour admission before archive placement", () => {
           .filter((row) => row.retiredAt === null)
           .map((row) => row.code),
       ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT", "RF-0CNQT"]);
-      expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      expect(await allocationRows(restored.venue)).toHaveLength(2);
     } finally {
       await restored.close();
     }
@@ -315,7 +315,7 @@ describe("selected-hour admission before archive placement", () => {
     await runner.checkBeforePlacement!(context);
     vi.advanceTimersByTime(31_000);
     await runner.checkBeforePlacement!(context);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect(await allocationRows(suite.db)).toHaveLength(1);
     expect(
       (await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).map(
         (row) => row.nextNumber,
@@ -367,7 +367,7 @@ describe("selected-hour admission before archive placement", () => {
         expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
           123, 123, 123, 123,
         ]);
-        expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+        expect(await allocationRows(restored.venue)).toHaveLength(2);
       } finally {
         await restored.close();
       }
@@ -528,7 +528,7 @@ describe("selected-hour admission before archive placement", () => {
       await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
       await writeFile(join(f.roots.stateDir, "trading.env"), "staged destination identity");
       const previous = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-      const allocations = await suite.db.select().from(fiscalAllocations);
+      const allocations = await allocationRows(suite.db);
       const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
       const journal = await readModulePreparationHistory(f.roots, binding.module);
       if (reason === "offline") boot.id = "after-switch-off";
@@ -552,7 +552,7 @@ describe("selected-hour admission before archive placement", () => {
           expect(await retained.venue.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(
             previous,
           );
-          expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
+          expect(await allocationRows(retained.venue)).toEqual(allocations);
         } finally {
           await retained.close();
         }
@@ -816,7 +816,7 @@ describe("selected-hour admission before archive placement", () => {
         binding: request.binding,
       });
       expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(rows);
-      expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+      expect(await allocationRows(suite.db)).toHaveLength(1);
       const journal = JSON.stringify(await readModulePreparationHistory(f.roots, binding.module));
       expect(journal).not.toContain(key.secret);
       expect(journal).not.toContain("archive password");

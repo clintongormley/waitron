@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { validatePaperCandidates } from "./initial-paper-candidates.js";
 import { declaredHistoryBytes, projectDeclaredHistory } from "./paper-register-history.js";
 import type { DeclaredRegisterHistory, DeclaredReservation } from "./paper-register-protocol.js";
@@ -15,7 +16,6 @@ import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { readCloudAllocationReport } from "./cloud-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { InitialSetupContext } from "@waitron/module";
 import { cloudReceiptFixture } from "../test/cloud-fixture.js";
@@ -319,7 +319,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
           params: { reason: "reservation_untrusted" },
         }),
       );
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     },
   );
   it("retirement retains the Cloud operation and the verified C installation independently of paper names", async () => {
@@ -417,7 +417,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       ),
     );
     expect(replay).toEqual(result);
-    const rows = await suite.db.select().from(fiscalAllocations);
+    const rows = await allocationRows(suite.db);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.approval.operatorId).toBe("planned-local-admin");
     expect(await f.seat.committed(suite.db, f.held, f.input)).toEqual(result);
@@ -585,7 +585,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
       "R-P000008",
       "RF-P000008",
     ]);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+    expect(await allocationRows(suite.db)).toHaveLength(2);
     expect(await readFile(paperPath)).toEqual(Buffer.from(priorBytes));
   });
   it("refuses a matching document declaration whose public-history digest is unrelated to the signed receipt", async () => {
@@ -663,7 +663,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
         prior: null,
       }),
     ).toThrowError(expect.objectContaining({ code: "sif.allocation_invalid" }));
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
   it("refuses recovery isolation flags at the actual first-setup preparation boundary", async () => {
     const f = await setup((p) => Reflect.set(p.approval!, "oldMachineOffline", true));
@@ -678,7 +678,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
         ),
       ),
     ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
   it("does not accept live Cloud-account authority in place of the frozen local administrator", async () => {
     const f = await setup();
@@ -690,7 +690,7 @@ describe("synthetic Cloud receipt through initial setup and the actual activatio
         ),
       ),
     ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 

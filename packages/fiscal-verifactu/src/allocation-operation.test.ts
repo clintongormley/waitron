@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import {
   seriesWithNextNumber,
   advanceSeriesTo,
@@ -21,7 +22,6 @@ import {
   signPaperConsumptionForBlock,
   type PaperAllocation,
 } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { drawEmergencyIdentity, type RecoveryApproval } from "./allocation-envelope.js";
 
@@ -133,7 +133,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    activations: await suite.db.select().from(fiscalAllocations),
+    activations: await allocationRows(suite.db),
   };
 }
 
@@ -244,7 +244,7 @@ it("opens the supplied initial identities without writing scaffold series", asyn
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toHaveLength(4);
-  expect((await suite.db.select().from(fiscalAllocations))[0]!.approval.operatorId).toBe(
+  expect((await allocationRows(suite.db))[0]!.approval.operatorId).toBe(
     "administrator",
   );
 });
@@ -446,7 +446,7 @@ it("detaches submitted signed input before reading the database", async () => {
       await expect(result).resolves.toHaveProperty("series.0.code", "A-P000042");
     }),
   );
-  expect((await suite.db.select().from(fiscalAllocations))[0]!.approval).toEqual(approval);
+  expect((await allocationRows(suite.db))[0]!.approval).toEqual(approval);
 });
 
 it("detaches the host binding before reading the database", async () => {
@@ -547,7 +547,7 @@ it("activates all purposes from opaque module input with the independently authe
   ]);
   const [sif] = await suite.db.select().from(verifactuIdentities);
   expect(sif!.id).toBe(result.sifId);
-  const [retained] = await suite.db.select().from(fiscalAllocations);
+  const [retained] = await allocationRows(suite.db);
   expect(retained!.result).toEqual(result);
   expect(retained!.approval).toEqual(approval);
   expect(retained!.allocation).toEqual(input.allocation);

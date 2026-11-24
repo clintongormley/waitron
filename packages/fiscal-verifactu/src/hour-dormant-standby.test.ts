@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { withInvoiceSeriesGuardDropped } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, isNull, sql } from "drizzle-orm";
@@ -16,7 +17,6 @@ import { FISCAL_OPERATIONS } from "./index.js";
 import { ALLOCATED_FISCAL_STANDBY } from "./allocated-standby.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import {
   createHourDormantPreparation,
   readRetainedHourDormant,
@@ -80,7 +80,7 @@ async function rows() {
     sif: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
     records: await suite.db.select().from(verifactuRecords),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
 }
 async function reserve(source = primary, target = standby) {

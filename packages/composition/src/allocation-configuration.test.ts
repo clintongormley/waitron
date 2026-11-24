@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "./modules.js";
 import { FISCAL_OPERATIONS as historicalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
@@ -194,7 +195,7 @@ it.each([
           code: "sif.allocation_invalid",
           params: { reason: "outside_confirmation_missing" },
         });
-        expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+        expect(await allocationRows(suite.db)).toEqual([]);
         expect(await fixtureSifIdentities(suite.db)).toEqual([]);
       }
     });
@@ -208,14 +209,14 @@ it("requires a separately configured fingerprint even when the submitted files a
       code: "sif.allocation_invalid",
       params: { reason: "reservation_untrusted" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 it("reads the current event file again on the next attempt", async () => {
   await withFiles(async (paths) => {
     configure(paths);
     await attempt();
-    const ledger = await suite.db.select().from(fiscalAllocations);
+    const ledger = await allocationRows(suite.db);
     await writeFile(
       paths.confirmationPath,
       JSON.stringify({ ...confirmation, binding: { ...binding, eventId: "another-event" } }),
@@ -224,7 +225,7 @@ it("reads the current event file again on the next attempt", async () => {
       code: "sif.allocation_invalid",
       params: { reason: "event_mismatch" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
+    expect(await allocationRows(suite.db)).toEqual(ledger);
   });
 });
 
@@ -290,7 +291,7 @@ it("refuses legacy paper input through unconfigured production composition", asy
         params: { reason: "outside_confirmation_missing" },
       });
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([]);
   });
 });
@@ -311,7 +312,7 @@ it("refuses legacy paper input through a configured production host without dura
       });
     });
     expect(history).toEqual([]);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await fixtureSifIdentities(suite.db)).toEqual([]);
   });
 });

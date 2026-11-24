@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import * as envelope from "./allocation-envelope.js";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
 import { deviceId, saleId } from "@waitron/shared";
@@ -97,7 +97,7 @@ it("records a fresh emergency identity outside the backup before activating all 
     expect(data.allocation.source).toBe("emergency");
     expect(data.allocation.installationIdentity).toMatch(/^E[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     const activated = await withTransaction(suite.db, (tx) =>
       activatePreparedModuleAllocation(tx, node, operation),
     );
@@ -115,7 +115,7 @@ it("records a fresh emergency identity outside the backup before activating all 
     "corrective",
     "full_corrective",
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
   const saved = (await incident()).data;
   const template = altaFor(
     { deviceId: deviceId("10000000-0000-4000-8000-000000000001") },
@@ -151,7 +151,7 @@ it("keeps the outside record burned after local rollback and refuses the same ev
     ),
   ).rejects.toThrow("injected interruption before commit");
   const before = await incident();
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   await expect(attempt()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "allocation_consumed" },
@@ -178,7 +178,7 @@ it.each([
     params: { reason },
   });
   expect(await readdir(outside)).toEqual(["current.json"]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("redraws an identity already named in current outside evidence", async () => {
@@ -214,7 +214,7 @@ it("refuses an unavailable incident directory without activating", async () => {
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["invalid-json", "oversized", "directory"])(
@@ -248,7 +248,7 @@ it.each([
       code: "sif.allocation_invalid",
       params: { reason: "event_mismatch" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect(await allocationRows(suite.db)).toHaveLength(1);
   },
 );
 
@@ -286,7 +286,7 @@ it("an emergency preparation given a version 2 approval is refused", async () =>
     params: { reason: "malformed_approval" },
   });
   expect(await readdir(outside)).toEqual(["current.json"]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("refuses a binding carrying the relinquished fact with a version 2 approval", async () => {
@@ -315,7 +315,7 @@ it("refuses a binding carrying the relinquished fact with a version 2 approval",
     params: { reason: "malformed_approval" },
   });
   expect(await readdir(outside)).toEqual(["current.json"]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("cannot burn the same event again by reordering its binding or changing its source", async () => {
@@ -384,7 +384,7 @@ it("leaves a burned event behind and uses a new draw for the next fresh event", 
         withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, operation)),
     ),
   );
-  const [stored] = await suite.db.select().from(fiscalAllocations);
+  const [stored] = await allocationRows(suite.db);
   expect(stored?.installationIdentity).not.toBe(first.allocation.installationIdentity);
   expect(stored?.eventKey).toBe("emergency-restore-2");
   expect((await readdir(outside)).filter((name) => name !== "current.json")).toHaveLength(4);
@@ -396,19 +396,19 @@ it("allows only one of two concurrent attempts to consume the same event", async
   expect(outcomes.filter((outcome) => outcome.status === "rejected")).toMatchObject([
     { reason: { code: "sif.allocation_invalid", params: { reason: "allocation_consumed" } } },
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
   await incident();
 });
 
 it("returns the committed result only after a fresh outside confirmation and an exact local match", async () => {
   const first = await attempt();
-  const before = await suite.db.select().from(fiscalAllocations);
+  const before = await allocationRows(suite.db);
   await writeFile(
     confirmationPath,
     JSON.stringify({ ...confirmation, priorActivation: "committed" }),
   );
   await expect(attempt()).resolves.toEqual(first);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(before);
+  expect(await allocationRows(suite.db)).toEqual(before);
   await incident();
 });
 
@@ -426,7 +426,7 @@ it("refuses a claimed committed attempt when the local activation was lost", asy
     code: "sif.allocation_invalid",
     params: { reason: "prior_activation_requires_replay" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   await incident();
 });
 
@@ -442,6 +442,6 @@ it.each([
       params: { reason },
     });
     expect(await readdir(outside)).toEqual(["current.json"]);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );

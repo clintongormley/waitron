@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -465,7 +466,7 @@ it("the historical paper collector activates independently bound evidence", asyn
     { code: "R-S000001", purpose: "corrective" },
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
-  expect((await suite.db.select().from(fiscalAllocations))[0]?.allocation).toEqual(
+  expect((await allocationRows(suite.db))[0]?.allocation).toEqual(
     f.input.allocation,
   );
 });

@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
@@ -7,7 +8,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { activateModuleAllocation, withCollectedModuleAllocation } from "./allocation-operation.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -87,7 +87,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
 }
 
@@ -221,7 +221,7 @@ it("expires the hour admission at callback exit even while operation authority i
       params: { reason: "outside_confirmation_missing" },
     });
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("refuses expired operation authority at admission", async () => {
@@ -246,7 +246,7 @@ it("rejects paper protocol names from the new hour admission boundary", async ()
     code: "sif.allocation_invalid",
     params: { reason: "source_mismatch" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["2025-12-31T23:59:59.999Z", "2089-10-18T16:32:00.000Z"])(
@@ -258,7 +258,7 @@ it.each(["2025-12-31T23:59:59.999Z", "2089-10-18T16:32:00.000Z"])(
       code: "sif.allocation_invalid",
       params: { reason: "reservation_mismatch" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );
 
@@ -296,7 +296,7 @@ it.each(["missing", "extra", "duplicate", "purpose", "base"])(
       code: "sif.allocation_invalid",
       params: { reason: "series_mismatch" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   },
 );
 
@@ -334,7 +334,7 @@ it("cannot reuse a live token with changed operation input or copied operation a
       },
     );
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("detaches admitted input, binding and base facts before invoking its callback", async () => {
@@ -445,7 +445,7 @@ it("rolls back activation when hour admission expires during the writer's awaite
       params: { reason: "outside_confirmation_missing" },
     });
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
 });
@@ -505,5 +505,5 @@ it.each([
     ),
   ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason } });
   expect(entered).toBe(false);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });

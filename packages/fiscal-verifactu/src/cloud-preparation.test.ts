@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +15,6 @@ import { cloudReceiptFixture } from "../test/cloud-fixture.js";
 import * as fiscal from "./index.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { FISCAL_OPERATIONS } from "./allocation-configuration.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -126,7 +126,7 @@ it("activates the complete Cloud identity through collected local authority and 
     { code: "R-C000042", purpose: "corrective" },
     { code: "RF-C000042", purpose: "full_corrective" },
   ]);
-  const rows = await suite.db.select().from(fiscalAllocations);
+  const rows = await allocationRows(suite.db);
   expect(rows).toHaveLength(1);
   expect(rows[0]?.approval.operatorId).toEqual(operatorId);
   const retained = JSON.parse(await readFile(receiptPath(), "utf8"));
@@ -139,7 +139,7 @@ it("replays only the exact locally committed activation", async () => {
   current.priorActivation = "committed";
   await saveCurrent();
   expect(await activate()).toEqual(first);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 it("keeps the name consumed after a rolled-back attempt and refuses reuse of its old receipt", async () => {
   await expect(
@@ -147,7 +147,7 @@ it("keeps the name consumed after a rolled-back attempt and refuses reuse of its
       throw new Error("transaction interrupted");
     }),
   ).rejects.toThrow("transaction interrupted");
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   await expect(activate()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "uncertain_prior_activation" },
@@ -158,7 +158,7 @@ it("keeps the name consumed after a rolled-back attempt and refuses reuse of its
     code: "sif.allocation_invalid",
     params: { reason: "prior_activation_requires_replay" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 it("refuses a forged packet without burning a local attempt", async () => {
   const held = input();
@@ -177,7 +177,7 @@ it.each(["sourceId", "eventId", "targetNodeId", "operatorId", "receiptId"])(
     else current.binding = { ...binding, [field]: "changed" };
     await saveCurrent();
     await expect(activate()).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await readdir(receiptDirectory)).toEqual([]);
   },
 );
@@ -195,7 +195,7 @@ it("refuses a binding carrying the relinquished fact", async () => {
     code: "sif.allocation_invalid",
     params: { reason: "event_mismatch" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(await readdir(receiptDirectory)).toEqual([]);
 });
 
@@ -446,7 +446,7 @@ it("refuses activation without writable independent receipt storage", async () =
     code: "sif.allocation_invalid",
     params: { reason: "outside_confirmation_missing" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 it.each(["receipt", "reportOperationId"])(
   "refuses a changed retained %s on committed replay",
@@ -586,7 +586,7 @@ it("keeps an already consumed receipt spent when the local environment refuses a
     params: { reason: "environment_mismatch" },
   });
   expect(JSON.parse(await readFile(receiptPath(), "utf8")).receipt.payload.state).toBe("consumed");
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   await expect(activate()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "uncertain_prior_activation" },

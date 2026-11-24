@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { beforeEach, expect, it } from "vitest";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,7 +11,6 @@ import { FISCAL_PROVISIONING } from "./provisioning.js";
 import { FISCAL_RESTORE } from "./restore.js";
 import { registerSif } from "../test/sif-fixture.js";
 import { currentSif } from "./registro-sif.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -38,7 +38,7 @@ async function snapshot() {
   return {
     identities: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
   };
 }
 
@@ -70,7 +70,7 @@ it("the default seed activates exactly the independently supplied identity and p
     { code: "R-S000001", purpose: "corrective" },
     { code: "RF-S000001", purpose: "full_corrective" },
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("the default restore refuses an unprepared operation and retains the live state", async () => {

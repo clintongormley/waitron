@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
@@ -19,7 +20,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { readOperationAuthority, type ModuleOperationInput } from "@waitron/module";
@@ -197,7 +197,7 @@ it("restores through the real key runner, public paper selection and the complet
     const attempt = restore(paths);
     await expect(attempt).resolves.toHaveProperty("seriesId");
     const result = await attempt;
-    const retained = await suite.db.select().from(fiscalAllocations);
+    const retained = await allocationRows(suite.db);
     expect(retained).toHaveLength(1);
     expect(result.reports).toEqual([
       `fiscal-verifactu: activated ${retained[0]!.result.activationEventId}`,
@@ -224,7 +224,7 @@ it("rejects a replacement key before the real restore hook can activate anything
     await expect(restore(paths, true)).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
   });
@@ -264,7 +264,7 @@ it("uses the fiscal restore hook with node-key authentication without recreating
           run,
         ),
     });
-    const retained = await suite.db.select().from(fiscalAllocations);
+    const retained = await allocationRows(suite.db);
     expect(retained).toHaveLength(1);
     expect(retained[0]!.approval).toEqual(approval);
     const expected = retained[0]!.result;

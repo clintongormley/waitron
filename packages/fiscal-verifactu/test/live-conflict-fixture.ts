@@ -1,3 +1,4 @@
+import { allocationRows } from "./allocation-rows.js";
 import { eq } from "drizzle-orm";
 import { invoiceSeries, stampDeployment, withTransaction, type Database } from "@waitron/db";
 import { recordSale } from "@waitron/core";
@@ -11,7 +12,6 @@ import { compareHourClocks } from "../src/hour-clock.js";
 import { VerifactuBackend } from "../src/backend.js";
 import { openFilingCase } from "../src/filing-cases.js";
 import { verifactuSubmissions } from "../src/schema/verifactu-submissions.js";
-import { fiscalAllocations } from "../src/schema/allocations.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
 export const liveConflictNode = {
@@ -109,6 +109,6 @@ export async function seedLiveConflict(
       now: new Date(clock.wall()),
     });
   });
-  const [allocation] = await db.select().from(fiscalAllocations);
+  const [allocation] = await allocationRows(db);
   return { registroId: original.fiscal.recordId, sifId: allocation!.sifId };
 }

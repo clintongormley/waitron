@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,7 +45,7 @@ import {
 import { readPairLink } from "@waitron/node-db";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import {
@@ -262,7 +263,7 @@ function validStandby(): {
 let outsideReservations: unknown[] = [];
 async function allocationSnapshot() {
   return {
-    allocations: await db.select().from(fiscalAllocations),
+    allocations: await allocationRows(db),
     identities: await db.select().from(verifactuIdentities),
     series: await db.select().from(invoiceSeries),
     outsideReservations: structuredClone(outsideReservations),

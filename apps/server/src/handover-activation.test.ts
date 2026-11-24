@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { runBoxEmailDuty } from "./testing/box-email-duty.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
@@ -19,7 +20,6 @@ import {
   type NodeDatabase,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { verifactuIdentities } from "@waitron/fiscal-verifactu/src/schema/verifactu-identities.js";
 import { handoverActivations, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
@@ -278,7 +278,7 @@ const node = (nodeId: string, standing: MembershipNode["standing"]): MembershipN
 });
 
 const operationRow = (store: Store) => readHandoverOperation(store.node, standby.nodeId, OPERATION);
-const allocations = (store: Store) => store.venue.select().from(fiscalAllocations);
+const allocations = (store: Store) => allocationRows(store.venue);
 const activations = (store: Store) => store.venue.select().from(handoverActivations);
 const sifRows = (store: Store) => store.venue.select().from(verifactuIdentities);
 

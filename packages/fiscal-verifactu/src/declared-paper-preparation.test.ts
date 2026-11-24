@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { deployment, invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,7 +19,6 @@ import { FISCAL_INITIAL_SETUP } from "./initial-setup.js";
 import { validatePaperCandidates } from "./initial-paper-candidates.js";
 import { declaredHistoryBytes } from "./paper-register-history.js";
 import type { DeclaredReservation, DeclaredRegisterHistory } from "./paper-register-protocol.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import type { AllocationContext } from "./allocation-envelope.js";
 import { validateAllocationEnvelope } from "./allocation-envelope.js";
@@ -198,7 +198,7 @@ async function attempt(f = fixture(), change?: (value: Fixture["facts"]) => void
   );
 }
 async function noWrites() {
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect((await suite.db.select().from(invoiceSeries)).map((x) => x.code)).toEqual([
     "A",
@@ -221,7 +221,7 @@ it.each(["S", "P"] as const)(
       { code: `R-${prefix}000043`, purpose: "corrective" },
       { code: `RF-${prefix}000043`, purpose: "full_corrective" },
     ]);
-    const [retained] = await suite.db.select().from(fiscalAllocations);
+    const [retained] = await allocationRows(suite.db);
     expect(retained?.allocation).toEqual(f.input.allocation);
     expect(retained?.approval).toEqual(f.input.approval);
     expect(retained?.result).toEqual(result);
@@ -602,7 +602,7 @@ it("replay requires fresh committed confirmation and returns the exact retained 
   });
   const replay = await attempt(f, (x) => Object.assign(x, { priorActivation: "committed" }));
   expect(replay).toEqual(first);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it.each([

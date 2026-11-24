@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, seedInvoiceNumber } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -174,7 +175,7 @@ it("does not enrol a key using the fingerprint in its own file", async () => {
       params: { reason: "reservation_untrusted" },
     });
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 
@@ -185,7 +186,7 @@ it("refuses a private signing key in the public-key file even when its fingerpri
       code: "sif.allocation_invalid",
       params: { reason: "reservation_untrusted" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 
@@ -248,7 +249,7 @@ it.each([
       params: { reason: "outside_confirmation_missing" },
     });
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(
       await suite.db
         .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
@@ -293,7 +294,7 @@ it.each([
         code: "sif.allocation_invalid",
         params: { reason },
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     });
   },
 );
@@ -307,7 +308,7 @@ it.each(["currentRegisterConfirmed", "consumptionConfirmed"])(
         code: "sif.allocation_invalid",
         params: { reason: "outside_confirmation_missing" },
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     });
   },
 );
@@ -318,7 +319,7 @@ it("replays the committed event without recreating series or resetting its count
     await seedInvoiceNumber(suite.db, { nodeId: node.nodeId, seriesId: first.series[0]!.id }, 13);
     const series = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const sifs = await suite.db.select().from(verifactuIdentities);
-    const activations = await suite.db.select().from(fiscalAllocations);
+    const activations = await allocationRows(suite.db);
     await writeFile(
       paths.confirmationPath,
       JSON.stringify({ ...confirmation, priorActivation: "committed" }),
@@ -326,7 +327,7 @@ it("replays the committed event without recreating series or resetting its count
     expect(await attempt(paths)).toEqual(first);
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual(activations);
+    expect(await allocationRows(suite.db)).toEqual(activations);
   });
 });
 
@@ -348,7 +349,7 @@ it("cannot free the outside consumed entry when the local caller rolls back", as
         ),
       ),
     ).rejects.toThrow("caller-rollback");
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(series);
     expect(await readFile(paths.confirmationPath, "utf8")).toBe(external);
@@ -365,7 +366,7 @@ it("refuses an uncertain previous activation", async () => {
       code: "sif.allocation_invalid",
       params: { reason: "uncertain_prior_activation" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 
@@ -405,7 +406,7 @@ it("refuses current confirmation for another allocation in the same block", asyn
       code: "sif.allocation_invalid",
       params: { reason: "reservation_mismatch" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   });
 });
@@ -430,7 +431,7 @@ it.each([{ allocation: null }, { allocation: 42 }, { allocation: {} }, { allocat
         code: "sif.allocation_invalid",
         params: { reason: "reservation_mismatch" },
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     });
   },
 );
@@ -463,7 +464,7 @@ it.each(["custodianPath", "confirmationPath"] as const)(
         code: "sif.allocation_invalid",
         params: { reason },
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     });
   },
 );
@@ -479,7 +480,7 @@ it.each(["binding", "operatorId"] as const)(
         code: "sif.allocation_invalid",
         params: { reason: "event_mismatch" },
       });
-      expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+      expect(await allocationRows(suite.db)).toEqual([]);
     });
   },
 );
@@ -517,7 +518,7 @@ it("rereads custodian keys and refuses a replaced key until independently enroll
       code: "sif.allocation_invalid",
       params: { reason: "reservation_untrusted" },
     });
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
   });
 });
 

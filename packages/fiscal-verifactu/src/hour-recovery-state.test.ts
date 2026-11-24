@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import {
   seriesWithNextNumber,
   advanceSeriesTo,
@@ -16,7 +17,6 @@ import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { VerifactuBackend } from "./backend.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
@@ -130,7 +130,7 @@ it("recognises a matching committed restore without modifying its retained resul
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
   expect((await read()).priorActivation).toBe("committed");
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
 });
 
 it("reads each configured prefix and exact spelling without writing counters", async () => {
@@ -156,7 +156,7 @@ it("reads each configured prefix and exact spelling without writing counters", a
     contradictions: [],
   });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("includes higher retired names on another node under another software identifier", async () => {
@@ -256,7 +256,7 @@ it.each(["standard", "full", "corrective", "full_corrective"])(
       params: { reason: "series_configuration_unsupported" },
     });
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect(await allocationRows(suite.db)).toHaveLength(1);
   },
 );
 
@@ -266,13 +266,13 @@ it("consults an exact committed restore without changing counters or evidence", 
   const operation = { ...binding, action: "restore" };
   await activate(operation, "0CNQR", "2026-10-16T12:40:00.000Z");
   const before = {
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
   };
   expect((await read(operation)).priorActivation).toBe("committed");
   expect({
-    allocations: await suite.db.select().from(fiscalAllocations),
+    allocations: await allocationRows(suite.db),
     series: await suite.db.select(seriesWithNextNumber).from(invoiceSeries),
     sifs: await suite.db.select().from(verifactuIdentities),
   }).toEqual(before);
@@ -280,7 +280,7 @@ it("consults an exact committed restore without changing counters or evidence", 
     code: "sif.allocation_invalid",
     params: { reason: "prior_activation_requires_replay" },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
+  expect(await allocationRows(suite.db)).toEqual(before.allocations);
 });
 
 it("gives a restore's history no time floor", async () => {

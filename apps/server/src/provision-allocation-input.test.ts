@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { FISCAL_OPERATIONS as historicalFiscalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import { generateKeyPairSync } from "node:crypto";
@@ -203,7 +204,7 @@ async function emptyVenue() {
   expect(await suite.db.select().from(nodes)).toEqual([]);
   expect(await suite.db.select().from(persons)).toEqual([]);
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
 }
 async function allocatedVenue() {
@@ -242,7 +243,7 @@ it("returns committed allocated references after an interrupted setup without an
   const result = await establish();
   await advanceSeriesTo(suite.db, NODE, 37);
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-  const ledger = await suite.db.select().from(fiscalAllocations);
+  const ledger = await allocationRows(suite.db);
   await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
   const repeated = await recoverProvisionedVenue(suite.db, {
     environment: "preproduction",
@@ -252,7 +253,7 @@ it("returns committed allocated references after an interrupted setup without an
   expect(repeated.nodeId).toBe(NODE);
   expect(repeated.seriesIds).toEqual(result.seriesIds);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
+  expect(await allocationRows(suite.db)).toEqual(ledger);
 });
 it("rolls back initial activation if the host's final write refuses", async () => {
   await expect(
@@ -427,7 +428,7 @@ it("resumes the actual persisted setup request after a committed venue lost its 
   expect((await send()).status).toBe(500);
   await allocatedVenue();
   const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
-  const ledger = await suite.db.select().from(fiscalAllocations);
+  const ledger = await allocationRows(suite.db);
   await rm(process.env.WAITRON_FISCAL_CONFIRMATION_FILE!);
   const recovered = await send();
   expect(recovered.status).toBe(200);
@@ -439,6 +440,6 @@ it("resumes the actual persisted setup request after a committed venue lost its 
     recoveryPackPdf: expect.any(String),
   });
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
+  expect(await allocationRows(suite.db)).toEqual(ledger);
   expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
 });

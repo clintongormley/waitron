@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -11,7 +12,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
-import { fiscalAllocations, verifactuIdentities } from "@waitron/fiscal-verifactu";
+import { verifactuIdentities } from "@waitron/fiscal-verifactu";
 import { ALL_MODULES } from "./modules.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { writeAllocationInput } from "./testing/allocation-input.js";
@@ -58,7 +59,7 @@ async function rows(db = suite.db) {
   return {
     series: await db.select(seriesWithNextNumber).from(invoiceSeries),
     registrations: await db.select().from(verifactuIdentities),
-    allocations: await db.select().from(fiscalAllocations),
+    allocations: await allocationRows(db),
   };
 }
 it("production restore runner refuses a signed paper input even with its correct key and outside files", async () => {

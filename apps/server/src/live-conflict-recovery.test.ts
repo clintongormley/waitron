@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seriesWithNextNumber } from "@waitron/db/testing/seed.js";
 import { seedLiveConflict } from "@waitron/fiscal-verifactu/test/live-conflict-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -22,7 +23,6 @@ import { recordSale } from "@waitron/core";
 import { FISCAL_ROUTES, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import type { ConflictRef } from "@waitron/fiscal-verifactu/src/conflict-evidence.js";
 import type {
   ConflictAllocationInput,
@@ -244,7 +244,7 @@ it("runs the sessionless real key/clock/activation route and reconciles its comm
       sql`select registro_id, case_cause as cause, case_evidence as evidence, case_opened_at as opened_at, case_open_seq from verifactu_submissions where case_opened_at is not null`,
     ),
   ).toEqual(cases);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
   const reopened = mounted();
   const status = await publicAnswer(
     await reopened.send(request({ oldMachineOffline: false, noParallelRecovery: false })),
@@ -257,7 +257,7 @@ it("runs the sessionless real key/clock/activation route and reconciles its comm
   expect(
     await publicAnswer(await reopened.send(request({ command: { kind: "activate", input } }))),
   ).toEqual(activated);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+  expect(await allocationRows(suite.db)).toHaveLength(2);
   expect(JSON.stringify([...m.log.mock.calls, ...reopened.log.mock.calls])).not.toContain(SECRET);
 });
 it.each([false, "forged"] as const)(
@@ -327,7 +327,7 @@ it("the real admission gate bounds wrong-key work before parsing, verifier reads
   monotonic = 60_000;
   expect((await m.send(request({ recoveryKey: "wrong-key" }))).status).toBe(401);
   expect(hashes).toHaveBeenCalledTimes(61);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 it("a retained uncommitted selection reports restart-required after a process restart", async () => {
   await selected(mounted());
@@ -336,7 +336,7 @@ it("a retained uncommitted selection reports restart-required after a process re
       await mounted().send(request({ oldMachineOffline: false, noParallelRecovery: false })),
     ),
   ).toMatchObject({ kind: "status", event: { kind: "restart-required" } });
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 it("a management cookie cannot authorise without the current key", async () => {
   const m = mounted();
@@ -351,7 +351,7 @@ it("a management cookie cannot authorise without the current key", async () => {
     setRecoveryKeyTx(tx, node.nodeId, identity.hashSecret("replacement"), "key-2", null),
   );
   expect((await m.send(request())).status).toBe(401);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("refuses a third in-flight handler before parsing and releases slots after successful and refused keys", async () => {
@@ -417,7 +417,7 @@ it("refuses a key replaced while comparing clocks and writes no activation", asy
   expect(await refused.json()).toEqual({
     error: { code: "promotion.break_glass_invalid", params: {} },
   });
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("rechecks the current key in the activation commit after preparation", async () => {
@@ -456,7 +456,7 @@ it("rechecks the current key in the activation commit after preparation", async 
     error: { code: "promotion.break_glass_invalid", params: {} },
   });
   expect(suite.db.all(sql`select * from verifactu_identities`)).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it.each([false, true])(
@@ -475,7 +475,7 @@ it.each([false, true])(
               commit: (run) =>
                 scope.commit(async (tx) => {
                   const result = await run(tx);
-                  if (hold && (await tx.select().from(fiscalAllocations)).length === 2) {
+                  if (hold && (await allocationRows(tx)).length === 2) {
                     entered.resolve();
                     await release.promise;
                     if (rollback) throw new Error("synthetic activation rollback");

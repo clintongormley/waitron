@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { mkdtemp, rm, readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +9,6 @@ import { parseModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { verifySecretAsync } from "@waitron/identity";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
@@ -176,14 +176,14 @@ it("requires an explicit kept recovery document before the first fiscal activati
   const f = await fixture();
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("the real hour contribution requires a kept recovery document before activation", async () => {
   const f = await fixture(false);
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 async function documentFixture() {
@@ -438,7 +438,7 @@ it("a replaced manifest invalidates the kept grant before any fiscal write", asy
   }));
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("the owned API saves public recovery bindings and requires explicit kept confirmation", async () => {
@@ -520,13 +520,13 @@ it("reissues an unfinished key without another hour selection and requires a new
   await f.register();
   await f.kept();
   const state = await f.host.store.read();
-  const fiscalBefore = await suite.db.select().from(fiscalAllocations);
+  const fiscalBefore = await allocationRows(suite.db);
   const replacement = await f.host.keys.reissueInitialNodeKey(
     f.owner,
     await f.host.owner.reconfirm(f.owner, PASSWORD, "node-key-reissue"),
   );
   expect(await f.host.store.read()).toEqual(state);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
+  expect(await allocationRows(suite.db)).toEqual(fiscalBefore);
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
   await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
@@ -562,7 +562,7 @@ it("reissues an unfinished key without another hour selection and requires a new
   expect(await f.host.keys.readStage(f.owner)).toEqual(replacement.stage);
   await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
   expect(await f.host.store.read()).toEqual(state);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
+  expect(await allocationRows(suite.db)).toEqual(fiscalBefore);
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
 });
 

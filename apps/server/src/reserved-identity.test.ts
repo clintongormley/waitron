@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -17,7 +18,6 @@ import {
   type StandbyIdentity,
 } from "./reserved-identity.js";
 import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -163,7 +163,7 @@ describe("establishReservedStandbyIdentity", () => {
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
     expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     const series = await suite.db.execute(
       sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
     );
@@ -198,7 +198,7 @@ describe("establishReservedStandbyIdentity", () => {
     const node = await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`);
     expect(node.rows).toEqual([]);
     expect(await readNodeSigningKey(suite.node, RING, standby.nodeId)).toBeNull();
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     const series = await suite.db.execute(
       sql`select 1 from invoice_series where node_id = ${standby.nodeId}`,
     );

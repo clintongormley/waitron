@@ -1,3 +1,4 @@
+import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
@@ -5,7 +6,6 @@ import { verifySecretAsync } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -131,7 +131,7 @@ it("installs the staged named verifier after exact fiscal commit and before trad
   const result = await f.activate();
   expect(result.nodeId).toBe(f.staged.key.nodeId);
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it("browser setup records a readable certificate against its committed node", async () => {

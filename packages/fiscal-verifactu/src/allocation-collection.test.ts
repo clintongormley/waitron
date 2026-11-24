@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { generateKeyPairSync } from "node:crypto";
 import { deployment, invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -158,7 +159,7 @@ async function snapshot() {
   return {
     sifs: await suite.db.select().from(verifactuIdentities),
     series: await suite.db.select().from(invoiceSeries),
-    activations: await suite.db.select().from(fiscalAllocations),
+    activations: await allocationRows(suite.db),
   };
 }
 

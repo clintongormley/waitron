@@ -1,3 +1,4 @@
+import { allocationRows } from "../test/allocation-rows.js";
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
@@ -36,7 +37,6 @@ import {
   signPaperBlock,
   signPaperConsumptionForBlock,
 } from "./paper-evidence.js";
-import { fiscalAllocations } from "./schema/allocations.js";
 import { verifactuIdentities } from "./schema/verifactu-identities.js";
 import { SERIES_BASES } from "@waitron/db/testing/series-bases.js";
 
@@ -222,7 +222,7 @@ it("the setup seed creates exactly the supplied SIF and every purpose without sc
     { code: "R-S000001", purpose: "corrective", nextNumber: 1 },
     { code: "RF-S000001", purpose: "full_corrective", nextNumber: 1 },
   ]);
-  expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  expect(await allocationRows(suite.db)).toHaveLength(1);
 });
 
 it.each(["restore"])(
@@ -261,7 +261,7 @@ it.each(["restore"])(
       { code: "R-P000042", purpose: "corrective", nextNumber: 1 },
       { code: "RF-P000042", purpose: "full_corrective", nextNumber: 1 },
     ]);
-    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
+    expect(await allocationRows(suite.db)).toHaveLength(2);
   },
 );
 
@@ -295,7 +295,7 @@ it("keeps an absent taxpayer as a corrupt-database failure rather than an operat
   expect((error as Error).message).toContain("taxpayer is empty");
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("a restore of a node that never filed leaves its series unchanged", async () => {
@@ -305,7 +305,7 @@ it("a restore of a node that never filed leaves its series unchanged", async () 
   expect(result.series).toBeUndefined();
   expect(result.report).toContain("no live SIF");
   expect(await liveSeries()).toEqual(before);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it("a later host refusal rolls back the complete seeded set", async () => {
@@ -317,7 +317,7 @@ it("a later host refusal rolls back the complete seeded set", async () => {
   ).rejects.toThrow("host-write-refused");
   expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual([]);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["restore", "promote"])(
@@ -326,7 +326,7 @@ it.each(["restore", "promote"])(
     await expect(
       attempt(action, (tx, operation) => seed.run(tx, node, operation)),
     ).rejects.toMatchObject(refusal("event_mismatch"));
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   },
 );
@@ -365,7 +365,7 @@ it.each([
       }
     }),
   ).rejects.toBe(error);
-  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await allocationRows(suite.db)).toEqual([]);
 });
 
 it.each(["setup", "restore"])(
@@ -379,11 +379,11 @@ it.each(["setup", "restore"])(
     await advanceSeriesTo(suite.db, node.nodeId, 37);
     const before = await suite.db.select(seriesWithNextNumber).from(invoiceSeries);
     const sifs = await suite.db.select().from(verifactuIdentities);
-    const ledger = await suite.db.select().from(fiscalAllocations);
+    const ledger = await allocationRows(suite.db);
     expect(await attempt(action, run, { priorActivation: "committed" })).toEqual(first);
     expect(await suite.db.select(seriesWithNextNumber).from(invoiceSeries)).toEqual(before);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual(sifs);
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual(ledger);
+    expect(await allocationRows(suite.db)).toEqual(ledger);
   },
 );
 
@@ -393,7 +393,7 @@ it.each(["setup", "restore"])(
     await expect(
       attempt(action, (tx, operation) => promote(tx, node, operation)),
     ).rejects.toMatchObject(refusal("event_mismatch"));
-    expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+    expect(await allocationRows(suite.db)).toEqual([]);
     expect(await suite.db.select().from(verifactuIdentities)).toEqual([]);
   },
 );
