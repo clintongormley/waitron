@@ -1465,8 +1465,9 @@ declare module "@waitron/shared" {
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
     /**
      * This request could not use the venue’s master key. On a wrong or replaced key, `keyName` is
-     * the name of the current master key of the database checked, when it has one; the binding
-     * refusals carry none.
+     * the name of the current master key of the database checked, when it has one; on the restore
+     * clock routes it is the name staging read from the backup copy and saved beside the key, when
+     * it saved one. The binding refusals carry none.
      */
     "promotion.break_glass_invalid": { keyName?: string };
     /**
